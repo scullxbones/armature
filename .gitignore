@@ -15,6 +15,9 @@ coverage.html
 *.mutations.json
 mutesting-report/
 
+# Git worktrees
+.worktrees/
+
 # IDE / tools
 .vscode/
 .idea/
