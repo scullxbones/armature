@@ -1,0 +1,112 @@
+{
+  "E2-001": {
+    "status": "in-progress",
+    "type": "story",
+    "children": [
+      "E2-001-T1",
+      "E2-001-T2",
+      "E2-001-T3",
+      "E2-001-T4",
+      "E2-001-T5",
+      "E2-001-T6"
+    ],
+    "blocks": [
+      "E2-002",
+      "E2-003",
+      "E2-004"
+    ],
+    "updated": 1773604299,
+    "title": "Implement multi-branch mode"
+  },
+  "E2-001-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E2-001",
+    "blocks": [
+      "E2-001-T3",
+      "E2-001-T4"
+    ],
+    "updated": 1773604198,
+    "title": "Abstract issues directory path resolution by config mode"
+  },
+  "E2-001-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E2-001",
+    "blocks": [
+      "E2-001-T5"
+    ],
+    "updated": 1773604198,
+    "title": "Git worktree management for issues branch"
+  },
+  "E2-001-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E2-001",
+    "blocked_by": [
+      "E2-001-T1"
+    ],
+    "updated": 1773604198,
+    "title": "Route op reads/writes through abstracted path"
+  },
+  "E2-001-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E2-001",
+    "blocked_by": [
+      "E2-001-T1"
+    ],
+    "blocks": [
+      "E2-001-T6"
+    ],
+    "updated": 1773604198,
+    "title": "Materialize pipeline accepts dynamic issues dir"
+  },
+  "E2-001-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E2-001",
+    "blocked_by": [
+      "E2-001-T2"
+    ],
+    "updated": 1773604198,
+    "title": "Init command supports dual-branch mode flag"
+  },
+  "E2-001-T6": {
+    "status": "open",
+    "type": "task",
+    "parent": "E2-001",
+    "blocked_by": [
+      "E2-001-T4"
+    ],
+    "updated": 1773604198,
+    "title": "SingleBranchMode flag derived from config"
+  },
+  "E2-002": {
+    "status": "open",
+    "type": "story",
+    "blocked_by": [
+      "E2-001"
+    ],
+    "updated": 1773604028,
+    "title": "Branch isolation for worker operations"
+  },
+  "E2-003": {
+    "status": "open",
+    "type": "story",
+    "blocked_by": [
+      "E2-001"
+    ],
+    "updated": 1773604028,
+    "title": "Cross-branch merge detection and auto-transition"
+  },
+  "E2-004": {
+    "status": "open",
+    "type": "story",
+    "blocked_by": [
+      "E2-001"
+    ],
+    "updated": 1773604028,
+    "title": "PR-based done-to-merged workflow"
+  }
+}

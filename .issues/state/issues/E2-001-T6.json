@@ -1,0 +1,22 @@
+{
+  "id": "E2-001-T6",
+  "type": "task",
+  "status": "open",
+  "title": "SingleBranchMode flag derived from config",
+  "parent": "E2-001",
+  "children": [],
+  "blocked_by": [
+    "E2-001-T4"
+  ],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "Materialize engine SingleBranchMode is set based on config.Mode instead of hardcoded true. In dual-branch mode, done does not auto-promote to merged.",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b"
+  },
+  "decision_refs": [],
+  "updated": 1773604198
+}

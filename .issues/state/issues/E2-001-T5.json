@@ -1,0 +1,22 @@
+{
+  "id": "E2-001-T5",
+  "type": "task",
+  "status": "open",
+  "title": "Init command supports dual-branch mode flag",
+  "parent": "E2-001",
+  "children": [],
+  "blocked_by": [
+    "E2-001-T2"
+  ],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "trls init --mode dual-branch creates orphan issues branch, sets up worktree, writes config with Mode=dual-branch.",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b"
+  },
+  "decision_refs": [],
+  "updated": 1773604198
+}
