@@ -3,7 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
+	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/trellis/internal/hooks"
+	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +26,30 @@ func newTransitionCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			issuesDir := repoPath + "/.issues"
+
+			// Load config and run pre-transition hooks (non-fatal if config missing)
+			cfg, cfgErr := config.LoadConfig(filepath.Join(issuesDir, "config.json"))
+			if cfgErr == nil {
+				// Get current issue status from materialized index
+				index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json"))
+				currentStatus := ""
+				if entry, ok := index[issueID]; ok {
+					currentStatus = entry.Status
+				}
+
+				hookInput := hooks.HookInput{
+					IssueID:    issueID,
+					FromStatus: currentStatus,
+					ToStatus:   to,
+					WorkerID:   workerID,
+				}
+				if err := hooks.RunPreTransition(&cfg, hookInput); err != nil {
+					return err
+				}
+			}
+
 			op := ops.Op{
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID,

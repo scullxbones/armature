@@ -44,8 +44,12 @@ func newRootCmd() *cobra.Command {
 }
 
 func main() {
-	if err := newRootCmd().Execute(); err != nil {
+	root := newRootCmd()
+	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		if debug, _ := root.PersistentFlags().GetBool("debug"); debug {
+			fmt.Fprintf(os.Stderr, "DEBUG: %+v\n", err)
+		}
 		os.Exit(1)
 	}
 }
