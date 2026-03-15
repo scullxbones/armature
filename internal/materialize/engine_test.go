@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/leanovate/gopter"
+	"github.com/leanovate/gopter/gen"
+	"github.com/leanovate/gopter/prop"
 	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,4 +123,64 @@ func TestMaterializePipeline(t *testing.T) {
 	assert.FileExists(t, filepath.Join(stateDir, "index.json"))
 	assert.FileExists(t, filepath.Join(issuesDir, "task-01.json"))
 	assert.FileExists(t, filepath.Join(stateDir, "checkpoint.json"))
+}
+
+func TestPropRandomOpsNeverCrash(t *testing.T) {
+	params := gopter.DefaultTestParameters()
+	params.MinSuccessfulTests = 500
+
+	properties := gopter.NewProperties(params)
+
+	opTypeGen := gen.OneConstOf(ops.OpCreate, ops.OpClaim, ops.OpHeartbeat,
+		ops.OpTransition, ops.OpNote, ops.OpLink, ops.OpDecision)
+
+	properties.Property("random op sequences never panic", prop.ForAll(
+		func(opType string, targetID string, ts int64) bool {
+			if targetID == "" {
+				return true
+			}
+			state := NewState()
+			state.SingleBranchMode = true
+
+			state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: targetID, Timestamp: ts,
+				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
+
+			state.ApplyOp(ops.Op{Type: opType, TargetID: targetID, Timestamp: ts + 1,
+				WorkerID: "w1", Payload: ops.Payload{TTL: 60, To: "done", Msg: "test",
+					Dep: "other", Rel: "blocked_by", Topic: "t", Choice: "c"}})
+
+			return true
+		},
+		opTypeGen,
+		gen.AlphaString(),
+		gen.Int64Range(0, 1<<50),
+	))
+
+	properties.TestingRun(t)
+}
+
+func TestPropCreateIdempotent(t *testing.T) {
+	params := gopter.DefaultTestParameters()
+	params.MinSuccessfulTests = 100
+
+	properties := gopter.NewProperties(params)
+
+	properties.Property("duplicate creates are idempotent", prop.ForAll(
+		func(id string) bool {
+			if id == "" {
+				return true
+			}
+			state := NewState()
+			op := ops.Op{Type: ops.OpCreate, TargetID: id, Timestamp: 100,
+				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}
+
+			state.ApplyOp(op)
+			state.ApplyOp(op)
+
+			return len(state.Issues) == 1 && state.Issues[id].Title == "T"
+		},
+		gen.AlphaString(),
+	))
+
+	properties.TestingRun(t)
 }
