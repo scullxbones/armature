@@ -57,6 +57,7 @@ func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
 
 	var ops []Op
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

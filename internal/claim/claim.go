@@ -29,6 +29,6 @@ func IsClaimStale(claimedAt, lastHeartbeat int64, ttlMinutes int, now int64) boo
 	if lastHeartbeat > lastActivity {
 		lastActivity = lastHeartbeat
 	}
-	ttlSeconds := int64(ttlMinutes)
+	ttlSeconds := int64(ttlMinutes) * 60
 	return now > lastActivity+ttlSeconds
 }
