@@ -31,3 +31,10 @@ func TestIsClaimStale(t *testing.T) {
 	assert.False(t, IsClaimStale(100, 150, 60, 200))
 	assert.True(t, IsClaimStale(100, 150, 60, 211))
 }
+
+func TestScopeOverlap(t *testing.T) {
+	assert.True(t, ScopesOverlap([]string{"src/auth/**"}, []string{"src/auth/login.go"}))
+	assert.False(t, ScopesOverlap([]string{"src/auth/**"}, []string{"src/api/handler.go"}))
+	assert.True(t, ScopesOverlap([]string{"src/**"}, []string{"src/auth/login.go"}))
+	assert.False(t, ScopesOverlap([]string{}, []string{"src/auth/login.go"}))
+}
