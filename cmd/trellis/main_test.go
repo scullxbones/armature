@@ -307,6 +307,25 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	assert.Contains(t, buf.String(), "Applied")
 }
 
+func TestMaterialize_SingleBranchMode_AfterModeRefactor(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Init repo
+	cmd1 := newRootCmd()
+	cmd1.SetOut(new(bytes.Buffer))
+	cmd1.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd1.Execute())
+
+	// Materialize should still work
+	buf := new(bytes.Buffer)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf)
+	cmd2.SetArgs([]string{"materialize", "--repo", repo})
+	require.NoError(t, cmd2.Execute())
+	assert.Contains(t, buf.String(), "Materialized")
+}
+
 func TestDecomposeContextCommand(t *testing.T) {
 	planData := `{"version":1,"title":"My Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task"}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")

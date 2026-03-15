@@ -24,7 +24,7 @@ func newRenderContextCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			_, err := materialize.Materialize(issuesDir, true)
+			_, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch")
 			if err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}

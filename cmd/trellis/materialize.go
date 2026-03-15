@@ -12,7 +12,7 @@ func newMaterializeCmd() *cobra.Command {
 		Use:   "materialize",
 		Short: "Replay op logs and update materialized state files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := materialize.Materialize(appCtx.IssuesDir, true)
+			result, err := materialize.Materialize(appCtx.IssuesDir, appCtx.Mode == "single-branch")
 			if err != nil {
 				return err
 			}

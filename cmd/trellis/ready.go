@@ -16,7 +16,7 @@ func newReadyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			if _, err := materialize.Materialize(issuesDir, true); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch"); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 
