@@ -10,16 +10,11 @@ import (
 )
 
 func newReadyCmd() *cobra.Command {
-	var repoPath string
-
 	cmd := &cobra.Command{
 		Use:   "ready",
 		Short: "Show tasks ready to be claimed",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
+			issuesDir := appCtx.IssuesDir
 
 			if _, err := materialize.Materialize(issuesDir, true); err != nil {
 				return fmt.Errorf("materialize: %w", err)
@@ -61,6 +56,5 @@ func newReadyCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	return cmd
 }

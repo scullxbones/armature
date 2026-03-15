@@ -9,19 +9,13 @@ import (
 )
 
 func newValidateCmd() *cobra.Command {
-	var repoPath string
 	var ci bool
 
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate the issue graph for consistency",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
-
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, true)
 			if err != nil {
 				return err
 			}
@@ -46,7 +40,6 @@ func newValidateCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	cmd.Flags().BoolVar(&ci, "ci", false, "exit with non-zero status if errors found")
 	return cmd
 }

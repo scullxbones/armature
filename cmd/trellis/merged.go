@@ -8,16 +8,13 @@ import (
 )
 
 func newMergedCmd() *cobra.Command {
-	var repoPath, issueID string
+	var issueID string
 
 	cmd := &cobra.Command{
 		Use:   "merged",
 		Short: "Mark an issue as merged (no-op in single-branch mode)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -33,7 +30,6 @@ func newMergedCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.MarkFlagRequired("issue")
 	return cmd

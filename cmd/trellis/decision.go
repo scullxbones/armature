@@ -9,17 +9,14 @@ import (
 )
 
 func newDecisionCmd() *cobra.Command {
-	var repoPath, issueID, topic, choice, rationale string
+	var issueID, topic, choice, rationale string
 	var affects []string
 
 	cmd := &cobra.Command{
 		Use:   "decision",
 		Short: "Record an architectural decision",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -36,7 +33,6 @@ func newDecisionCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&topic, "topic", "", "decision topic")
 	cmd.Flags().StringVar(&choice, "choice", "", "chosen option")

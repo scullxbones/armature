@@ -4,21 +4,37 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/scullxbones/trellis/internal/config"
 	"github.com/spf13/cobra"
 )
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
+var appCtx *config.Context
+
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "trls",
-		Short: "Trellis — git-native work orchestration",
+		Use:          "trls",
+		Short:        "Trellis — git-native work orchestration",
 		SilenceUsage: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, _ := cmd.Flags().GetString("repo")
+			if repoPath == "" {
+				repoPath = "."
+			}
+			ctx, err := config.ResolveContext(repoPath)
+			if err != nil {
+				return err
+			}
+			appCtx = ctx
+			return nil
+		},
 	}
 
 	root.PersistentFlags().Bool("debug", false, "dump debug diagnostics on error")
 	root.PersistentFlags().String("format", "human", "output format: human, json, agent")
+	root.PersistentFlags().String("repo", "", "repository path (default: current directory)")
 
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newWorkerInitCmd())

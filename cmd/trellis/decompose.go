@@ -10,19 +10,15 @@ import (
 )
 
 func newDecomposeApplyCmd() *cobra.Command {
-	var repoPath string
 	var planPath string
 
 	cmd := &cobra.Command{
 		Use:   "decompose-apply",
 		Short: "Apply a decomposition plan to the issue graph",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
+			issuesDir := appCtx.IssuesDir
 
-			workerID, err := worker.GetWorkerID(repoPath)
+			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -48,26 +44,21 @@ func newDecomposeApplyCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
 	cmd.MarkFlagRequired("plan")
 	return cmd
 }
 
 func newDecomposeRevertCmd() *cobra.Command {
-	var repoPath string
 	var planPath string
 
 	cmd := &cobra.Command{
 		Use:   "decompose-revert",
 		Short: "Revert a decomposition plan from the issue graph",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
+			issuesDir := appCtx.IssuesDir
 
-			workerID, err := worker.GetWorkerID(repoPath)
+			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -93,7 +84,6 @@ func newDecomposeRevertCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
 	cmd.MarkFlagRequired("plan")
 	return cmd
@@ -103,8 +93,9 @@ func newDecomposeContextCmd() *cobra.Command {
 	var planPath string
 
 	cmd := &cobra.Command{
-		Use:   "decompose-context",
-		Short: "Print context summary for a decomposition plan",
+		Use:               "decompose-context",
+		Short:             "Print context summary for a decomposition plan",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plan, err := decompose.ParsePlan(planPath)
 			if err != nil {

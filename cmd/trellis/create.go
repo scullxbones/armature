@@ -9,17 +9,14 @@ import (
 )
 
 func newCreateCmd() *cobra.Command {
-	var repoPath, title, nodeType, parent, id, priority, dod string
+	var title, nodeType, parent, id, priority, dod string
 	var scope []string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new work item",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -54,7 +51,6 @@ func newCreateCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&title, "title", "", "item title")
 	cmd.Flags().StringVar(&nodeType, "type", "task", "item type: epic, story, task")
 	cmd.Flags().StringVar(&parent, "parent", "", "parent node ID")

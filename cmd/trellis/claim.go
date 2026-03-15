@@ -11,17 +11,14 @@ import (
 )
 
 func newClaimCmd() *cobra.Command {
-	var repoPath, issueID string
+	var issueID string
 	var ttl int
 
 	cmd := &cobra.Command{
 		Use:   "claim",
 		Short: "Claim a ready task",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
+			issuesDir := appCtx.IssuesDir
 
 			if _, err := materialize.Materialize(issuesDir, true); err != nil {
 				return err
@@ -36,7 +33,7 @@ func newClaimCmd() *cobra.Command {
 				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -72,7 +69,6 @@ func newClaimCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
 	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
 	cmd.MarkFlagRequired("issue")

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/scullxbones/trellis/internal/config"
 	"github.com/scullxbones/trellis/internal/hooks"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
@@ -13,25 +12,21 @@ import (
 )
 
 func newTransitionCmd() *cobra.Command {
-	var repoPath, issueID, to, outcome, branch, pr string
+	var issueID, to, outcome, branch, pr string
 
 	cmd := &cobra.Command{
 		Use:   "transition",
 		Short: "Transition an issue to a new status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
 
-			issuesDir := repoPath + "/.issues"
+			issuesDir := appCtx.IssuesDir
+			cfg := appCtx.Config
 
-			// Load config and run pre-transition hooks (non-fatal if config missing)
-			cfg, cfgErr := config.LoadConfig(filepath.Join(issuesDir, "config.json"))
-			if cfgErr == nil {
+			{
 				// Get current issue status from materialized index
 				index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json"))
 				currentStatus := ""
@@ -65,7 +60,6 @@ func newTransitionCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&to, "to", "", "target status")
 	cmd.Flags().StringVar(&outcome, "outcome", "", "outcome description")

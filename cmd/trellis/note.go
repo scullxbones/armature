@@ -9,16 +9,13 @@ import (
 )
 
 func newNoteCmd() *cobra.Command {
-	var repoPath, issueID, msg string
+	var issueID, msg string
 
 	cmd := &cobra.Command{
 		Use:   "note",
 		Short: "Add a note to an issue",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -34,7 +31,6 @@ func newNoteCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&msg, "msg", "", "note message")
 	cmd.MarkFlagRequired("issue")

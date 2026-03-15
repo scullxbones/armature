@@ -8,18 +8,11 @@ import (
 )
 
 func newMaterializeCmd() *cobra.Command {
-	var repoPath string
-
 	cmd := &cobra.Command{
 		Use:   "materialize",
 		Short: "Replay op logs and update materialized state files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
-
-			result, err := materialize.Materialize(issuesDir, true)
+			result, err := materialize.Materialize(appCtx.IssuesDir, true)
 			if err != nil {
 				return err
 			}
@@ -33,6 +26,5 @@ func newMaterializeCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	return cmd
 }

@@ -6,16 +6,13 @@ import (
 )
 
 func newReopenCmd() *cobra.Command {
-	var repoPath, issueID string
+	var issueID string
 
 	cmd := &cobra.Command{
 		Use:   "reopen",
 		Short: "Reopen a done or blocked issue",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -27,7 +24,6 @@ func newReopenCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to reopen")
 	cmd.MarkFlagRequired("issue")
 	return cmd

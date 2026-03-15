@@ -15,8 +15,9 @@ func newInitCmd() *cobra.Command {
 	var repoPath string
 
 	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize Trellis in the current repository",
+		Use:               "init",
+		Short:             "Initialize Trellis in the current repository",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repoPath == "" {
 				repoPath = "."

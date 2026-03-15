@@ -16,17 +16,13 @@ func newRenderContextCmd() *cobra.Command {
 		rcIssue  string
 		rcBudget int
 		rcRaw    bool
-		repoPath string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "render-context",
 		Short: "Render assembled context for an issue",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			issuesDir := repoPath + "/.issues"
+			issuesDir := appCtx.IssuesDir
 
 			_, err := materialize.Materialize(issuesDir, true)
 			if err != nil {
@@ -65,7 +61,6 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&rcIssue, "issue", "", "Issue ID (required)")
 	cmd.Flags().IntVar(&rcBudget, "budget", 4000, "Token budget")
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	cmd.MarkFlagRequired("issue")
 
 	return cmd

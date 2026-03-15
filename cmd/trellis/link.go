@@ -9,16 +9,13 @@ import (
 )
 
 func newLinkCmd() *cobra.Command {
-	var repoPath, sourceID, dep, rel string
+	var sourceID, dep, rel string
 
 	cmd := &cobra.Command{
 		Use:   "link",
 		Short: "Add a dependency link between issues",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoPath == "" {
-				repoPath = "."
-			}
-			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -34,7 +31,6 @@ func newLinkCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
 	cmd.Flags().StringVar(&sourceID, "source", "", "source issue ID")
 	cmd.Flags().StringVar(&dep, "dep", "", "dependency issue ID")
 	cmd.Flags().StringVar(&rel, "rel", "blocked_by", "relationship type")

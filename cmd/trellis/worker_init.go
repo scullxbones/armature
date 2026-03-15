@@ -12,8 +12,9 @@ func newWorkerInitCmd() *cobra.Command {
 	var repoPath string
 
 	cmd := &cobra.Command{
-		Use:   "worker-init",
-		Short: "Generate or check worker identity",
+		Use:               "worker-init",
+		Short:             "Generate or check worker identity",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repoPath == "" {
 				repoPath = "."
