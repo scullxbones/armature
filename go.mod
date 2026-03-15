@@ -3,6 +3,7 @@ module github.com/scullxbones/trellis
 go 1.26.1
 
 require (
+	github.com/google/uuid v1.1.2
 	github.com/leanovate/gopter v0.2.10
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.7.0
