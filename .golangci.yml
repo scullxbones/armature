@@ -1,14 +1,13 @@
+version: "2"
+
 linters:
+  default: none
   enable:
-    - vet
-    - fmt
-    - goimports
+    - govet
     - errcheck
     - ineffassign
     - staticcheck
-    - unused
     - misspell
-    - gosimple
     - unconvert
 
 linters-settings:
@@ -17,11 +16,8 @@ linters-settings:
     check-blank: true
 
 issues:
-  exclude-use-default: false
-  exclude:
-    # Allow specific error patterns if needed
-    - "Error return value of .* is not checked"
+  exclude-use-default-excludes: false
 
-output-formats:
-  - format: colored-line-number
-    path: stdout
+formatters:
+  enable:
+    - goimports

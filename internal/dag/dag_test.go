@@ -32,9 +32,9 @@ func TestNoCycleInAcyclicDAG(t *testing.T) {
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
 	task := &Node{ID: "task-1", Title: "Task", Type: "task", Parent: "story-1"}
 
-	d.AddNode(epic)
-	d.AddNode(story)
-	d.AddNode(task)
+	require.NoError(t, d.AddNode(epic))
+	require.NoError(t, d.AddNode(story))
+	require.NoError(t, d.AddNode(task))
 
 	// Set up children relationships
 	epic.Children = []string{"story-1"}
@@ -49,8 +49,8 @@ func TestCycleDetection(t *testing.T) {
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", BlockedBy: []string{"task-2"}}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
 
-	d.AddNode(task1)
-	d.AddNode(task2)
+	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.AddNode(task2))
 
 	assert.True(t, d.HasCycle())
 }
@@ -71,7 +71,9 @@ func TestPropertyNoSelfCycles(t *testing.T) {
 				Type:      "task",
 				BlockedBy: []string{nodeID}, // Self-blocking
 			}
-			d.AddNode(node)
+			if err := d.AddNode(node); err != nil {
+				return false
+			}
 			// A self-blocking node creates a cycle
 			return d.HasCycle()
 		},
@@ -101,8 +103,12 @@ func TestPropertyParentChildConsistency(t *testing.T) {
 
 			parent.Children = []string{childID}
 
-			d.AddNode(parent)
-			d.AddNode(child)
+			if err := d.AddNode(parent); err != nil {
+				return false
+			}
+			if err := d.AddNode(child); err != nil {
+				return false
+			}
 
 			err := d.ValidateParentChild()
 			return err == nil
@@ -130,7 +136,9 @@ func BenchmarkCycleDetection(b *testing.B) {
 			Type:   "task",
 			Parent: parent,
 		}
-		d.AddNode(node)
+		if err := d.AddNode(node); err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()

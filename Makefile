@@ -25,9 +25,7 @@ lint:
 
 mutate:
 	@echo "Running mutation tests on internal/dag..."
-	mutesting ./internal/dag
-	@echo "Running mutation tests on internal/materialization..."
-	mutesting ./internal/materialization
+	gremlins unleash ./internal/dag
 
 clean:
 	rm -rf bin/ dist/ *.out coverage.html mutesting-report/

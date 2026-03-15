@@ -18,7 +18,7 @@ Trellis uses **functional core / hexagonal architecture**:
 
 1. **No mocks in core logic** — if you're mocking, you've put side effects in the core. Refactor.
 2. **Property tests for invariants** — use `gopter` to generate arbitrary op sequences and verify DAG/state consistency
-3. **Mutation testing is enforcement** — run `mutesting` on core packages; all survivors require test fixes
+3. **Mutation testing is enforcement** — run `gremlins` on core packages; all survivors require test fixes
 4. **Integration tests use real I/O** — temp git repos, temp directories; don't mock git or file ops
 5. **Assertions:** Go built-in is fine; add `testify/assert` only if readability matters
 
@@ -40,35 +40,31 @@ Trellis uses **functional core / hexagonal architecture**:
 
 Example: A change to DAG cycle detection logic does not break any test.
 
-1. Run `mutesting` to confirm: `mutesting ./internal/dag`
+1. Run `gremlins` to confirm: `gremlins unleash ./internal/dag`
 2. Write a property test that generates inputs triggering the mutation
 3. Fix the property test to fail on the mutant
-4. Re-run `mutesting`; mutation should now be caught
+4. Re-run `gremlins`; mutation should now be caught
 
 ## Key Commands
 
 ```bash
 # Run tests
-go test ./...
+make test
 
-# Run tests with coverage
-go test -cover ./...
-
-# Generate coverage report
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
+# Run tests with coverage, generates coverage report in `coverage.html`
+make coverage
 
 # Run property tests (runs as part of go test)
 go test -run TestProp ./...
 
-# Run mutation testing on core package
-mutesting ./internal/dag
+# Run mutation testing
+make mutate
 
-# Lint (requires .golangci.yml)
-golangci-lint run ./...
+# Lint
+make lint
 
 # Build CLI
-go build -o bin/trls ./cmd/trellis
+make build
 ```
 
 ## File Organization
