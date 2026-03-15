@@ -1,0 +1,23 @@
+# Go build artifacts
+/bin/
+/dist/
+*.out
+*.a
+*.so
+*.dylib
+
+# Go test coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# Mutation testing reports
+*.mutations.json
+mutesting-report/
+
+# IDE / tools
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
