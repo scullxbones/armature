@@ -1,0 +1,27 @@
+linters:
+  enable:
+    - vet
+    - fmt
+    - goimports
+    - errcheck
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - gosimple
+    - unconvert
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+issues:
+  exclude-use-default: false
+  exclude:
+    # Allow specific error patterns if needed
+    - "Error return value of .* is not checked"
+
+output-formats:
+  - format: colored-line-number
+    path: stdout
