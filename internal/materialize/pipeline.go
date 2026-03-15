@@ -40,7 +40,10 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 
 	var allOps []ops.Op
 	newOffsets := make(map[string]int64)
-	fullReplay := len(cp.ByteOffsets) == 0
+	// Always do a full replay from offset 0 to ensure correct accumulated state.
+	// Incremental reads would require loading prior state before applying new ops.
+	fullReplay := true
+	_ = cp // checkpoint offsets reserved for future optimization
 
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".log") {
@@ -49,8 +52,7 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 		logPath := filepath.Join(opsDir, entry.Name())
 		workerID := ops.WorkerIDFromFilename(logPath)
 
-		offset := cp.ByteOffsets[entry.Name()]
-		logOps, err := ops.ReadLogFromOffset(logPath, offset)
+		logOps, err := ops.ReadLogFromOffset(logPath, 0)
 		if err != nil {
 			return Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
 		}
@@ -135,7 +137,9 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 
 	var allOps []ops.Op
 	newOffsets := make(map[string]int64)
-	fullReplay := len(cp.ByteOffsets) == 0
+	// Always do a full replay from offset 0 to ensure correct accumulated state.
+	fullReplay := true
+	_ = cp // checkpoint offsets reserved for future optimization
 
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".log") {
@@ -144,8 +148,7 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 		logPath := filepath.Join(opsDir, entry.Name())
 		workerID := ops.WorkerIDFromFilename(logPath)
 
-		offset := cp.ByteOffsets[entry.Name()]
-		logOps, err := ops.ReadLogFromOffset(logPath, offset)
+		logOps, err := ops.ReadLogFromOffset(logPath, 0)
 		if err != nil {
 			return nil, Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
 		}

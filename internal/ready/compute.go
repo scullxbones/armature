@@ -31,7 +31,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	var ready []ReadyEntry
 
 	for id, entry := range index {
-		if entry.Type != "task" {
+		if entry.Type != "task" && entry.Type != "feature" {
 			continue
 		}
 		if entry.Status != ops.StatusOpen {

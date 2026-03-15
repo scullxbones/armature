@@ -45,6 +45,23 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 			return count, fmt.Errorf("append op for issue %s: %w", issue.ID, err)
 		}
 		count++
+
+		// Emit link ops for blocked_by relationships.
+		for _, dep := range issue.BlockedBy {
+			linkOp := ops.Op{
+				Type:      ops.OpLink,
+				TargetID:  issue.ID,
+				Timestamp: time.Now().Unix(),
+				WorkerID:  workerID,
+				Payload: ops.Payload{
+					Dep: dep,
+					Rel: "blocked_by",
+				},
+			}
+			if err := ops.AppendOp(logPath, linkOp); err != nil {
+				return count, fmt.Errorf("append link op for issue %s -> %s: %w", issue.ID, dep, err)
+			}
+		}
 	}
 
 	return count, nil
