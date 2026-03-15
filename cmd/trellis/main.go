@@ -33,6 +33,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newTransitionCmd())
 	root.AddCommand(newReopenCmd())
 	root.AddCommand(newMergedCmd())
+	root.AddCommand(newClaimCmd())
 
 	return root
 }

@@ -1,0 +1,80 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	claimPkg "github.com/scullxbones/trellis/internal/claim"
+	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/spf13/cobra"
+)
+
+func newClaimCmd() *cobra.Command {
+	var repoPath, issueID string
+	var ttl int
+
+	cmd := &cobra.Command{
+		Use:   "claim",
+		Short: "Claim a ready task",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if repoPath == "" {
+				repoPath = "."
+			}
+			issuesDir := repoPath + "/.issues"
+
+			if _, err := materialize.Materialize(issuesDir, true); err != nil {
+				return err
+			}
+
+			issue, err := materialize.LoadIssue(fmt.Sprintf("%s/state/issues/%s.json", issuesDir, issueID))
+			if err != nil {
+				return fmt.Errorf("issue %s not found: %w", issueID, err)
+			}
+
+			if issue.Provenance.Confidence == "inferred" {
+				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
+			}
+
+			workerID, logPath, err := resolveWorkerAndLog(repoPath)
+			if err != nil {
+				return err
+			}
+
+			index, _ := materialize.LoadIndex(issuesDir + "/state/index.json")
+			for id, entry := range index {
+				if id == issueID || (entry.Status != "claimed" && entry.Status != "in-progress") {
+					continue
+				}
+				if claimPkg.ScopesOverlap(issue.Scope, entry.Scope) {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: scope overlap with %s (%s)\n", id, entry.Title)
+					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
+						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
+					ops.AppendOp(logPath, noteOp)
+					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
+						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
+					ops.AppendOp(logPath, noteOp2)
+				}
+			}
+
+			op := ops.Op{
+				Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(),
+				WorkerID: workerID, Payload: ops.Payload{TTL: ttl},
+			}
+			if err := ops.AppendOp(logPath, op); err != nil {
+				return err
+			}
+
+			result := map[string]interface{}{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
+			data, _ := json.Marshal(result)
+			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path")
+	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
+	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
+	cmd.MarkFlagRequired("issue")
+	return cmd
+}

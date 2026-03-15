@@ -206,3 +206,16 @@ func TestTransitionCommand(t *testing.T) {
 	err := cmd.Execute()
 	assert.NoError(t, err)
 }
+
+func TestClaimCommand(t *testing.T) {
+	repo := setupRepoWithTask(t) // creates init + task-01
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01"})
+
+	err := cmd.Execute()
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "task-01")
+}
