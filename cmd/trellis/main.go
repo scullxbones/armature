@@ -21,6 +21,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().String("format", "human", "output format: human, json, agent")
 
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newWorkerInitCmd())
 
 	return root
 }
