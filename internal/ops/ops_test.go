@@ -3,6 +3,9 @@ package ops
 import (
 	"testing"
 
+	"github.com/leanovate/gopter"
+	"github.com/leanovate/gopter/gen"
+	"github.com/leanovate/gopter/prop"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,4 +63,46 @@ func TestParseInvalidLine(t *testing.T) {
 
 	_, err = ParseLine([]byte(`["unknown","x",0,"w",{}]`))
 	assert.Error(t, err)
+}
+
+func TestPropOpRoundTrip(t *testing.T) {
+	params := gopter.DefaultTestParameters()
+	params.MinSuccessfulTests = 200
+
+	properties := gopter.NewProperties(params)
+
+	opTypes := gen.OneConstOf(OpCreate, OpClaim, OpHeartbeat, OpTransition,
+		OpNote, OpLink, OpSourceLink, OpSourceFingerprint, OpDAGTransition, OpDecision)
+
+	properties.Property("marshal then parse preserves type, target, timestamp, worker", prop.ForAll(
+		func(opType string, targetID string, ts int64, workerID string) bool {
+			if targetID == "" || workerID == "" {
+				return true // skip empty — not valid ops
+			}
+			op := Op{
+				Type:      opType,
+				TargetID:  targetID,
+				Timestamp: ts,
+				WorkerID:  workerID,
+			}
+			data, err := MarshalOp(op)
+			if err != nil {
+				return false
+			}
+			parsed, err := ParseLine(data)
+			if err != nil {
+				return false
+			}
+			return parsed.Type == op.Type &&
+				parsed.TargetID == op.TargetID &&
+				parsed.Timestamp == op.Timestamp &&
+				parsed.WorkerID == op.WorkerID
+		},
+		opTypes,
+		gen.AlphaString(),
+		gen.Int64(),
+		gen.AlphaString(),
+	))
+
+	properties.TestingRun(t)
 }
