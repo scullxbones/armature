@@ -28,7 +28,11 @@ func ResolveContext(repoPath string) (*Context, error) {
 	case "single-branch":
 		issuesDir = filepath.Join(repoPath, ".issues")
 	case "dual-branch":
-		return nil, errors.New("dual-branch mode not yet implemented")
+		worktreePath, err := readGitConfig(repoPath, "trellis.ops-worktree-path")
+		if err != nil {
+			return nil, fmt.Errorf("dual-branch mode requires trellis.ops-worktree-path to be set: %w", err)
+		}
+		issuesDir = filepath.Join(worktreePath, ".issues")
 	default:
 		return nil, fmt.Errorf("unknown trellis mode: %q", mode)
 	}
@@ -44,6 +48,17 @@ func ResolveContext(repoPath string) (*Context, error) {
 		Mode:      mode,
 		Config:    cfg,
 	}, nil
+}
+
+// readGitConfig reads a single local git config key. Returns error if unset.
+// Note: intentionally does not use git.Client to avoid circular imports.
+func readGitConfig(repoPath, key string) (string, error) {
+	cmd := exec.Command("git", "-C", repoPath, "config", "--local", key)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git config %s: %w", key, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // readGitConfigMode reads trellis.mode from git config. Returns "single-branch" if unset.

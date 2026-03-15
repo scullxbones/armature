@@ -44,16 +44,43 @@ func TestResolveContext_SingleBranch_Default(t *testing.T) {
 	assert.Equal(t, "go", ctx.Config.ProjectType)
 }
 
-func TestResolveContext_DualBranch_ReturnsError(t *testing.T) {
+func TestResolveContext_DualBranch(t *testing.T) {
 	repo := initTestRepo(t)
 
-	// Set dual-branch mode in git config
+	// Simulate a dual-branch setup: create the worktree dir with .issues/ inside
+	worktreePath := filepath.Join(repo, ".trellis")
+	issuesDir := filepath.Join(worktreePath, ".issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+	cfg := DefaultConfig("go")
+	cfg.Mode = "dual-branch"
+	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
+
+	// Set git config keys
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	runGit("config", "trellis.mode", "dual-branch")
+	runGit("config", "trellis.ops-worktree-path", worktreePath)
+
+	ctx, err := ResolveContext(repo)
+	require.NoError(t, err)
+	assert.Equal(t, "dual-branch", ctx.Mode)
+	assert.Equal(t, issuesDir, ctx.IssuesDir)
+	assert.Equal(t, repo, ctx.RepoPath)
+}
+
+func TestResolveContext_DualBranch_MissingWorktreePath(t *testing.T) {
+	repo := initTestRepo(t)
+
+	// Set dual-branch mode but do NOT set ops-worktree-path
 	cmd := exec.Command("git", "-C", repo, "config", "trellis.mode", "dual-branch")
 	require.NoError(t, cmd.Run())
 
 	_, err := ResolveContext(repo)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet implemented")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trellis.ops-worktree-path")
 }
 
 func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
