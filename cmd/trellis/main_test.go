@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -84,8 +85,9 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 	assert.Contains(t, buf.String(), "Worker ID:")
 }
 
-// suppress unused import warning for filepath
+// suppress unused import warning for filepath and strings
 var _ = filepath.Join
+var _ = strings.Contains
 
 func TestInitCommand_SingleBranch(t *testing.T) {
 	repo := initTempRepo(t)
@@ -245,4 +247,77 @@ func TestRenderContextCommand(t *testing.T) {
 	out := buf.String()
 	assert.True(t, strings.Contains(out, "TST-001") || strings.Contains(out, "Test render"),
 		"output should contain issue ID or title, got: %s", out)
+}
+
+func TestValidateCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, cmd2.Execute())
+
+	cmd3 := newRootCmd()
+	cmd3.SetOut(new(bytes.Buffer))
+	cmd3.SetArgs([]string{"materialize", "--repo", repo})
+	require.NoError(t, cmd3.Execute())
+
+	buf := new(bytes.Buffer)
+	cmd4 := newRootCmd()
+	cmd4.SetOut(buf)
+	cmd4.SetArgs([]string{"validate", "--repo", repo})
+
+	err := cmd4.Execute()
+	assert.NoError(t, err)
+}
+
+func TestDecomposeApplyCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	// Init worker so decompose-apply can get a worker ID
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"worker-init", "--repo", repo})
+	require.NoError(t, cmd2.Execute())
+
+	// Write a temp plan file
+	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task"}]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	buf := new(bytes.Buffer)
+	cmd3 := newRootCmd()
+	cmd3.SetOut(buf)
+	cmd3.SetArgs([]string{"decompose-apply", "--repo", repo, "--plan", planFile})
+
+	err := cmd3.Execute()
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "Applied")
+}
+
+func TestDecomposeContextCommand(t *testing.T) {
+	planData := `{"version":1,"title":"My Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task"}]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"decompose-context", "--plan", planFile})
+
+	err := cmd.Execute()
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "My Test Plan")
 }

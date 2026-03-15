@@ -35,6 +35,10 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newMergedCmd())
 	root.AddCommand(newClaimCmd())
 	root.AddCommand(newRenderContextCmd())
+	root.AddCommand(newValidateCmd())
+	root.AddCommand(newDecomposeApplyCmd())
+	root.AddCommand(newDecomposeRevertCmd())
+	root.AddCommand(newDecomposeContextCmd())
 
 	return root
 }
