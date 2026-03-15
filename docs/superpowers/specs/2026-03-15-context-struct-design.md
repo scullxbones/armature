@@ -37,42 +37,64 @@ func ResolveContext(repoPath string) (*Context, error)
 
 A `PersistentPreRunE` on the root command calls `ResolveContext` and stores the result in a package-level `var appCtx *config.Context`.
 
-**Excluded commands** (don't need context): `init`, `version`, `worker-init`, `completion`. These set their own `PersistentPreRunE` that returns nil to skip the root hook (Cobra runs the most-specific `PersistentPreRunE`).
+**Excluded commands** (don't need context, or run before `.issues/` exists): `init`, `version`, `worker-init`, `decompose-context`. These set their own `PersistentPreRunE` that returns nil to skip the root hook (Cobra runs the most-specific `PersistentPreRunE`).
+
+- `init` and `worker-init` are excluded because they run before `.issues/` exists — `ResolveContext` step 4 (load config) would fail.
+- `decompose-context` only parses a plan file and has no repo interaction.
+- `version` needs no project state.
 
 ### Command Changes
 
-Each command that currently computes `issuesDir` switches to reading `appCtx.IssuesDir`:
+**Group 1: Commands that directly construct `issuesDir`** — replace with `appCtx.IssuesDir`:
 
-| File | Current pattern | New pattern |
-|------|----------------|-------------|
-| `claim.go` | `issuesDir := repoPath + "/.issues"` | `appCtx.IssuesDir` |
-| `create.go` | same | same |
-| `transition.go` | same | same |
-| `note.go` | same | same |
-| `heartbeat.go` | same | same |
-| `ready.go` | same | same |
-| `materialize.go` | same | same |
-| `link.go` | same | same |
-| `decision.go` | same | same |
-| `reopen.go` | same | same |
-| `merged.go` | same | same |
-| `validate.go` | same | same |
-| `render_context.go` | same (if exists) | same |
-| `decompose_*.go` | same | same |
+| File | Notes |
+|------|-------|
+| `claim.go` | Also uses `resolveWorkerAndLog` |
+| `ready.go` | |
+| `materialize.go` | |
+| `validate.go` | |
+| `transition.go` | Also uses `resolveWorkerAndLog` |
+| `render_context.go` | |
+| `decompose.go` | Apply and revert subcommands only |
+
+**Group 2: Commands that only use `resolveWorkerAndLog`** — no direct `issuesDir` change needed, updated via helper:
+
+| File |
+|------|
+| `create.go` |
+| `note.go` |
+| `heartbeat.go` |
+| `link.go` |
+| `decision.go` |
+| `reopen.go` |
+| `merged.go` |
+
+All Group 2 commands also have a local `--repo` flag and `repoPath` variable that should be removed (they'll use `appCtx.RepoPath` via the updated helper).
 
 ### `resolveWorkerAndLog` Update
 
+Signature changes from `resolveWorkerAndLog(repoPath string)` to `resolveWorkerAndLog()` — reads both `appCtx.RepoPath` (for `worker.GetWorkerID`) and `appCtx.IssuesDir` (for log path) from the package-level context.
+
 ```go
 // Before:
-logPath := fmt.Sprintf("%s/.issues/ops/%s.log", repoPath, workerID)
+func resolveWorkerAndLog(repoPath string) (string, string, error) {
+    workerID, err := worker.GetWorkerID(repoPath)
+    logPath := fmt.Sprintf("%s/.issues/ops/%s.log", repoPath, workerID)
+}
 
 // After:
-logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, workerID)
+func resolveWorkerAndLog() (string, string, error) {
+    workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+    logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, workerID)
+}
 ```
 
-### `--repo` Flag
+### `--repo` Flag Migration
 
-The `--repo` flag remains on the root command (moved from individual commands). `PersistentPreRunE` reads it before calling `ResolveContext`.
+The `--repo` flag moves from individual commands to a persistent flag on the root command. `PersistentPreRunE` reads it before calling `ResolveContext`.
+
+- Group 1 and Group 2 commands: remove local `--repo` flag, use `appCtx.RepoPath`
+- Excluded commands (`init`, `worker-init`): keep their own local `--repo` flag since they bypass `PersistentPreRunE` and need repo path independently
 
 ## Scope Exclusions
 
@@ -85,4 +107,5 @@ The `--repo` flag remains on the root command (moved from individual commands). 
 
 - **Unit test** `ResolveContext` with a temp git repo: verify single-branch returns correct path, dual-branch returns error stub
 - **Integration tests**: existing command tests continue to pass (single-branch is default)
-- **Regression**: `make test` must pass with zero changes to test files (behavior-preserving refactor)
+- **Excluded commands**: verify `init`, `version`, `worker-init`, `decompose-context` work without a valid `.issues/` directory
+- **Regression**: `make test` must pass (behavior-preserving refactor; test file changes allowed only if tests invoke commands that now trigger `PersistentPreRunE`)
