@@ -120,3 +120,89 @@ func TestInitCommand_Idempotent(t *testing.T) {
 		assert.NoError(t, cmd.Execute())
 	}
 }
+
+func TestMaterializeCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd1 := newRootCmd()
+	cmd1.SetOut(new(bytes.Buffer))
+	cmd1.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd1.Execute())
+
+	buf := new(bytes.Buffer)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf)
+	cmd2.SetArgs([]string{"materialize", "--repo", repo})
+
+	err := cmd2.Execute()
+	assert.NoError(t, err)
+}
+
+func TestReadyCommand_EmptyRepo(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	buf := new(bytes.Buffer)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf)
+	cmd2.SetArgs([]string{"ready", "--repo", repo})
+
+	err := cmd2.Execute()
+	assert.NoError(t, err)
+}
+
+func TestCreateCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	buf := new(bytes.Buffer)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf)
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-99"})
+
+	err := cmd2.Execute()
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "task-99")
+}
+
+// setupRepoWithTask creates a temp repo, runs trls init, and creates a test task.
+func setupRepoWithTask(t *testing.T) string {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, cmd2.Execute())
+
+	return repo
+}
+
+func TestTransitionCommand(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Fixed"})
+
+	err := cmd.Execute()
+	assert.NoError(t, err)
+}

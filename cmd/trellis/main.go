@@ -23,6 +23,16 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newWorkerInitCmd())
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newMaterializeCmd())
+	root.AddCommand(newReadyCmd())
+	root.AddCommand(newCreateCmd())
+	root.AddCommand(newNoteCmd())
+	root.AddCommand(newLinkCmd())
+	root.AddCommand(newDecisionCmd())
+	root.AddCommand(newHeartbeatCmd())
+	root.AddCommand(newTransitionCmd())
+	root.AddCommand(newReopenCmd())
+	root.AddCommand(newMergedCmd())
 
 	return root
 }
