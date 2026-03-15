@@ -163,3 +163,40 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, ops, 0) // rejected — worker ID mismatch
 }
+
+func TestGenerateSchema(t *testing.T) {
+	schema := GenerateSchema()
+	assert.Contains(t, schema, "op_type")
+	assert.Contains(t, schema, "target_id")
+	assert.Contains(t, schema, "timestamp")
+	assert.Contains(t, schema, "worker_id")
+	assert.Contains(t, schema, "payload")
+}
+
+func TestHeartbeatRateLimiter(t *testing.T) {
+	rl := NewRateLimiter()
+
+	// First heartbeat should be allowed
+	assert.True(t, rl.AllowHeartbeat("task-01", 1000))
+
+	// Heartbeat within 60 seconds should be rejected
+	assert.False(t, rl.AllowHeartbeat("task-01", 1030))
+
+	// Heartbeat after 60 seconds should be allowed
+	assert.True(t, rl.AllowHeartbeat("task-01", 1061))
+
+	// Different task should be independent
+	assert.True(t, rl.AllowHeartbeat("task-02", 1030))
+}
+
+func TestCreateRateLimiter(t *testing.T) {
+	rl := NewRateLimiter()
+
+	for i := 0; i < 500; i++ {
+		assert.True(t, rl.AllowCreate())
+	}
+	assert.False(t, rl.AllowCreate()) // 501st should fail
+
+	rl.ResetCreateCount() // simulate commit boundary
+	assert.True(t, rl.AllowCreate())
+}
