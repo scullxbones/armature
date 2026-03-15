@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/leanovate/gopter"
@@ -105,4 +107,59 @@ func TestPropOpRoundTrip(t *testing.T) {
 	))
 
 	properties.TestingRun(t)
+}
+
+func TestLogAppendAndRead(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "Test task", NodeType: "task"}}
+	op2 := Op{Type: OpClaim, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a1",
+		Payload: Payload{TTL: 60}}
+
+	require.NoError(t, AppendOp(logPath, op1))
+	require.NoError(t, AppendOp(logPath, op2))
+
+	ops, err := ReadLog(logPath)
+	require.NoError(t, err)
+	assert.Len(t, ops, 2)
+	assert.Equal(t, OpCreate, ops[0].Type)
+	assert.Equal(t, OpClaim, ops[1].Type)
+}
+
+func TestReadLogFromOffset(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "First", NodeType: "task"}}
+	require.NoError(t, AppendOp(logPath, op1))
+
+	// Get current offset
+	info, _ := os.Stat(logPath)
+	offset := info.Size()
+
+	op2 := Op{Type: OpNote, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a1",
+		Payload: Payload{Msg: "Second"}}
+	require.NoError(t, AppendOp(logPath, op2))
+
+	ops, err := ReadLogFromOffset(logPath, offset)
+	require.NoError(t, err)
+	assert.Len(t, ops, 1)
+	assert.Equal(t, "Second", ops[0].Payload.Msg)
+}
+
+func TestValidateWorkerIDInLog(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	// Op with wrong worker ID
+	op := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b2",
+		Payload: Payload{Title: "Bad", NodeType: "task"}}
+	require.NoError(t, AppendOp(logPath, op))
+
+	ops, err := ReadLogValidated(logPath, "worker-a1")
+	require.NoError(t, err)
+	assert.Len(t, ops, 0) // rejected — worker ID mismatch
 }
