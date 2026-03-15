@@ -34,6 +34,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newReopenCmd())
 	root.AddCommand(newMergedCmd())
 	root.AddCommand(newClaimCmd())
+	root.AddCommand(newRenderContextCmd())
 
 	return root
 }

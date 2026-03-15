@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -218,4 +219,30 @@ func TestClaimCommand(t *testing.T) {
 	err := cmd.Execute()
 	assert.NoError(t, err)
 	assert.Contains(t, buf.String(), "task-01")
+}
+
+func TestRenderContextCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test render", "--type", "task", "--id", "TST-001"})
+	require.NoError(t, cmd2.Execute())
+
+	buf := new(bytes.Buffer)
+	cmd3 := newRootCmd()
+	cmd3.SetOut(buf)
+	cmd3.SetArgs([]string{"render-context", "--repo", repo, "--issue", "TST-001"})
+
+	err := cmd3.Execute()
+	assert.NoError(t, err)
+	out := buf.String()
+	assert.True(t, strings.Contains(out, "TST-001") || strings.Contains(out, "Test render"),
+		"output should contain issue ID or title, got: %s", out)
 }
