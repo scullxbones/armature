@@ -307,6 +307,42 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	assert.Contains(t, buf.String(), "Applied")
 }
 
+func TestInitCommand_DualBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	// An initial commit is required so CreateOrphanBranch can record current branch
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"init", "--dual-branch", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "dual-branch")
+
+	// Worktree should exist at .trellis/
+	assert.DirExists(t, filepath.Join(repo, ".trellis"))
+
+	// .issues/ inside worktree should have config.json with dual-branch mode
+	cfgPath := filepath.Join(repo, ".trellis", ".issues", "config.json")
+	data, err := os.ReadFile(cfgPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "dual-branch")
+
+	// Git config should have mode set
+	modeCmd := exec.Command("git", "-C", repo, "config", "trellis.mode")
+	modeOut, err := modeCmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, "dual-branch\n", string(modeOut))
+
+	// Git config should have worktree path set
+	wtCmd := exec.Command("git", "-C", repo, "config", "trellis.ops-worktree-path")
+	wtOut, err := wtCmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(wtOut), ".trellis")
+}
+
 func TestMaterialize_SingleBranchMode_AfterModeRefactor(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/trellis/internal/git"
 	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/worker"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 
 func newInitCmd() *cobra.Command {
 	var repoPath string
+	var dualBranch bool
 
 	cmd := &cobra.Command{
 		Use:               "init",
@@ -22,16 +24,43 @@ func newInitCmd() *cobra.Command {
 			if repoPath == "" {
 				repoPath = "."
 			}
-			return runInit(cmd, repoPath)
+			return runInit(cmd, repoPath, dualBranch)
 		},
 	}
 
 	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
+	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _trellis branch)")
 	return cmd
 }
 
-func runInit(cmd *cobra.Command, repoPath string) error {
-	issuesDir := filepath.Join(repoPath, ".issues")
+func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
+	gitClient := git.New(repoPath)
+
+	var issuesDir string
+	if dualBranch {
+		// Create orphan branch _trellis (idempotent)
+		if err := gitClient.CreateOrphanBranch("_trellis"); err != nil {
+			return fmt.Errorf("create _trellis branch: %w", err)
+		}
+
+		// Create .trellis/ worktree (idempotent)
+		worktreePath := filepath.Join(repoPath, ".trellis")
+		if err := gitClient.AddWorktree("_trellis", worktreePath); err != nil {
+			return fmt.Errorf("add .trellis worktree: %w", err)
+		}
+
+		// Set git config keys
+		if err := gitClient.SetGitConfig("trellis.mode", "dual-branch"); err != nil {
+			return fmt.Errorf("set trellis.mode: %w", err)
+		}
+		if err := gitClient.SetGitConfig("trellis.ops-worktree-path", worktreePath); err != nil {
+			return fmt.Errorf("set trellis.ops-worktree-path: %w", err)
+		}
+
+		issuesDir = filepath.Join(worktreePath, ".issues")
+	} else {
+		issuesDir = filepath.Join(repoPath, ".issues")
+	}
 
 	// Create directory structure
 	dirs := []string{
@@ -59,6 +88,9 @@ func runInit(cmd *cobra.Command, repoPath string) error {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		projectType := config.DetectProjectType(repoPath)
 		cfg := config.DefaultConfig(projectType)
+		if dualBranch {
+			cfg.Mode = "dual-branch"
+		}
 		if err := config.WriteConfig(configPath, cfg); err != nil {
 			return fmt.Errorf("write config: %w", err)
 		}
@@ -71,6 +103,10 @@ func runInit(cmd *cobra.Command, repoPath string) error {
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in single-branch mode at %s\n", issuesDir)
+	mode := "single-branch"
+	if dualBranch {
+		mode = "dual-branch"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
 	return nil
 }
