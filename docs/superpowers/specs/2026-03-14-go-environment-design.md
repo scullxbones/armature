@@ -147,9 +147,9 @@ Example: A change to DAG cycle detection logic does not break any test.
 
 ## Success Criteria
 
-- [ ] GVM + Go installed and verified
-- [ ] All libraries in `go.mod`
-- [ ] AGENTS.md in repo root
-- [ ] Sample property test for DAG validation passes
+- [x] GVM + Go installed and verified
+- [x] All libraries in `go.mod`
+- [x] AGENTS.md in repo root
+- [x] Sample property test for DAG validation passes
 - [ ] `mutesting` runs on sample test without errors
-- [ ] Coverage report generated via `go tool cover`
+- [x] Coverage report generated via `go tool cover`
