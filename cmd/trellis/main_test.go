@@ -27,6 +27,7 @@ func initTempRepo(t *testing.T) string {
 	run(t, dir, "git", "init")
 	run(t, dir, "git", "config", "user.email", "test@test.com")
 	run(t, dir, "git", "config", "user.name", "Test")
+	run(t, dir, "git", "config", "commit.gpgsign", "false")
 	return dir
 }
 
@@ -84,3 +85,38 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 
 // suppress unused import warning for filepath
 var _ = filepath.Join
+
+func TestInitCommand_SingleBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	// Create an initial commit so git is fully initialized
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"init", "--repo", repo})
+
+	err := cmd.Execute()
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "single-branch")
+
+	// Verify .issues directory structure was created
+	assert.DirExists(t, filepath.Join(repo, ".issues"))
+	assert.DirExists(t, filepath.Join(repo, ".issues", "ops"))
+	assert.DirExists(t, filepath.Join(repo, ".issues", "state"))
+	assert.FileExists(t, filepath.Join(repo, ".issues", "config.json"))
+	assert.FileExists(t, filepath.Join(repo, ".issues", "ops", "SCHEMA"))
+}
+
+func TestInitCommand_Idempotent(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Init twice should not error
+	for i := 0; i < 2; i++ {
+		cmd := newRootCmd()
+		cmd.SetOut(new(bytes.Buffer))
+		cmd.SetArgs([]string{"init", "--repo", repo})
+		assert.NoError(t, cmd.Execute())
+	}
+}
