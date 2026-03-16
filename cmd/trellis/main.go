@@ -49,6 +49,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newTransitionCmd())
 	root.AddCommand(newReopenCmd())
 	root.AddCommand(newMergedCmd())
+	root.AddCommand(newSyncCmd())
 	root.AddCommand(newClaimCmd())
 	root.AddCommand(newRenderContextCmd())
 	root.AddCommand(newValidateCmd())

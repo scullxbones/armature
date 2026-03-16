@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -443,4 +444,53 @@ func TestNote_SingleBranch_ViaAppendOp(t *testing.T) {
 	out, err := runTrls(t, repo, "note", "--issue", "T-001", "--msg", "hello world")
 	require.NoError(t, err)
 	assert.Contains(t, out, "T-001")
+}
+
+func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "some feature", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done",
+		"--branch", "feature/sync-test", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Create and merge the feature branch in the git repo
+	currentBranchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchOut, err := currentBranchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(currentBranchOut))
+
+	run(t, repo, "git", "checkout", "-b", "feature/sync-test")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: sync test work")
+	run(t, repo, "git", "checkout", mainBranch)
+	run(t, repo, "git", "merge", "--no-ff", "feature/sync-test", "-m", "Merge feature/sync-test")
+
+	// Run sync — should auto-transition T-001 to merged
+	out, err := runTrls(t, repo, "sync")
+	require.NoError(t, err)
+	assert.Contains(t, out, "T-001")
+	assert.Contains(t, out, "merged")
+
+	// Verify via materialized state
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	index, err := materialize.LoadIndex(filepath.Join(repo, ".trellis", ".issues", "state", "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "merged", index["T-001"].Status)
 }
