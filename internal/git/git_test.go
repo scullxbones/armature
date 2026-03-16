@@ -198,6 +198,83 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 	assert.False(t, merged)
 }
 
+// TestConcurrentWorkerPush demonstrates what happens when two workers commit
+// to their own log files on _trellis and both try to push to a shared remote.
+// Worker A pushes first (fast-forward, succeeds). Worker B's push is rejected
+// because the remote tip has moved — it must fetch+rebase before pushing.
+func TestConcurrentWorkerPush_SecondPushRejected(t *testing.T) {
+	// Set up a bare remote repo that acts as the shared git server
+	remote := t.TempDir()
+	gitRun := func(dir string, args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v in %s: %s", args, dir, out)
+		return strings.TrimSpace(string(out))
+	}
+	gitRun(remote, "init", "--bare")
+
+	// Clone into two worker repos simulating two independent agents
+	workerA := t.TempDir()
+	workerB := t.TempDir()
+	gitRun(workerA, "clone", remote, ".")
+	gitRun(workerA, "config", "user.email", "a@test.com")
+	gitRun(workerA, "config", "user.name", "Worker A")
+	gitRun(workerA, "config", "commit.gpgsign", "false")
+	gitRun(workerB, "clone", remote, ".")
+	gitRun(workerB, "config", "user.email", "b@test.com")
+	gitRun(workerB, "config", "user.name", "Worker B")
+	gitRun(workerB, "config", "commit.gpgsign", "false")
+
+	// Both workers create the _trellis orphan branch locally (simulating trls init)
+	// and push it to the remote so both start from the same tip
+	gitRun(workerA, "checkout", "--orphan", "_trellis")
+	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _trellis")
+	gitRun(workerA, "push", "-u", "origin", "_trellis")
+	gitRun(workerB, "fetch", "origin")
+	gitRun(workerB, "checkout", "-b", "_trellis", "origin/_trellis")
+	gitRun(workerB, "branch", "--set-upstream-to=origin/_trellis", "_trellis")
+
+	// Worker A writes an op to its own log file and commits
+	opsA := filepath.Join(workerA, "ops")
+	require.NoError(t, os.MkdirAll(opsA, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(opsA, "worker-a.log"), []byte(`{"type":"claim"}`+"\n"), 0644))
+	gitRun(workerA, "add", "ops/worker-a.log")
+	gitRun(workerA, "commit", "-m", "ops: claim E3-001 by worker-a")
+
+	// Worker B writes an op to its own log file and commits (also from the old tip)
+	opsB := filepath.Join(workerB, "ops")
+	require.NoError(t, os.MkdirAll(opsB, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(opsB, "worker-b.log"), []byte(`{"type":"claim"}`+"\n"), 0644))
+	gitRun(workerB, "add", "ops/worker-b.log")
+	gitRun(workerB, "commit", "-m", "ops: claim E3-001 by worker-b")
+
+	// Worker A pushes successfully (fast-forward)
+	gitRun(workerA, "push", "origin", "_trellis")
+
+	// Worker B's push is rejected — remote tip has moved
+	pushB := exec.Command("git", "-C", workerB, "push", "origin", "_trellis")
+	out, err := pushB.CombinedOutput()
+	require.Error(t, err, "expected worker B's push to be rejected, but it succeeded: %s", out)
+	assert.Contains(t, string(out), "rejected", "expected rejection message: %s", out)
+
+	// Worker B must fetch + rebase to make its push fast-forward
+	gitRun(workerB, "fetch", "origin")
+	gitRun(workerB, "rebase", "origin/_trellis")
+
+	// Now worker B's push succeeds
+	gitRun(workerB, "push", "origin", "_trellis")
+
+	// Verify the remote has both workers' log files
+	verify := t.TempDir()
+	gitRun(verify, "clone", remote, ".")
+	gitRun(verify, "checkout", "_trellis")
+	_, errA := os.Stat(filepath.Join(verify, "ops", "worker-a.log"))
+	_, errB := os.Stat(filepath.Join(verify, "ops", "worker-b.log"))
+	assert.NoError(t, errA, "worker-a.log should be present on remote")
+	assert.NoError(t, errB, "worker-b.log should be present on remote")
+}
+
 func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
