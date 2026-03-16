@@ -121,3 +121,27 @@ func (c *Client) ReadGitConfig(key string) (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
+// CommitWorktreeOp stages and commits a single file change within a worktree.
+// The receiver's repoPath must be the worktree root (not the main repo root).
+// relPath is relative to the worktree root. If there is nothing to commit, this is a no-op.
+func (c *Client) CommitWorktreeOp(relPath, message string) error {
+	// Stage the specific file
+	add := exec.Command("git", "-C", c.repoPath, "add", relPath)
+	if out, err := add.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add %s: %w\n%s", relPath, err, out)
+	}
+
+	// Check if there is actually something staged
+	diff := exec.Command("git", "-C", c.repoPath, "diff", "--cached", "--quiet")
+	if err := diff.Run(); err == nil {
+		return nil // nothing staged, no-op
+	}
+
+	// Commit
+	commit := exec.Command("git", "-C", c.repoPath, "commit", "-m", message)
+	if out, err := commit.CombinedOutput(); err != nil {
+		return fmt.Errorf("git commit: %w\n%s", err, out)
+	}
+	return nil
+}

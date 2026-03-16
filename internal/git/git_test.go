@@ -99,3 +99,51 @@ func TestReadGitConfig_Unset(t *testing.T) {
 	_, err := c.ReadGitConfig("trellis.nonexistent")
 	assert.Error(t, err)
 }
+
+func TestCommitWorktreeOp(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	// Create orphan branch and worktree (using E2-001 methods)
+	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	worktreePath := filepath.Join(repo, ".trellis")
+	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
+
+	// Write a file in the worktree
+	opsDir := filepath.Join(worktreePath, ".issues", "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	logFile := filepath.Join(opsDir, "worker-abc.log")
+	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
+
+	// CommitWorktreeOp is called on a client rooted at the worktree
+	wc := git.New(worktreePath)
+	err := wc.CommitWorktreeOp(".issues/ops/worker-abc.log", "ops: append claim for E2-001")
+	require.NoError(t, err)
+
+	// Verify commit exists in the worktree branch
+	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-1")
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "ops: append")
+}
+
+func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	worktreePath := filepath.Join(repo, ".trellis")
+	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
+
+	// Write and commit file first
+	opsDir := filepath.Join(worktreePath, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	logFile := filepath.Join(opsDir, "worker-abc.log")
+	require.NoError(t, os.WriteFile(logFile, []byte("op1\n"), 0644))
+	wc := git.New(worktreePath)
+	require.NoError(t, wc.CommitWorktreeOp("ops/worker-abc.log", "first commit"))
+
+	// Call again without changes — should not error
+	err := wc.CommitWorktreeOp("ops/worker-abc.log", "second commit")
+	assert.NoError(t, err)
+}
