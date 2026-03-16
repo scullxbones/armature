@@ -18,3 +18,5 @@
 ["link","E2-001-T6",1773604198,"936c1188-4116-403f-a5ca-5ed7d9c6bf2b",{"dep":"E2-001-T4","rel":"blocked_by"}]
 ["transition","E2-001",1773604299,"936c1188-4116-403f-a5ca-5ed7d9c6bf2b",{"to":"in-progress"}]
 ["claim","E2-001-T1",1773604307,"936c1188-4116-403f-a5ca-5ed7d9c6bf2b",{"ttl":60}]
+["claim","E2-001-T2",1773617208,"936c1188-4116-403f-a5ca-5ed7d9c6bf2b",{"ttl":3600}]
+["transition","E2-001-T1",1773617356,"936c1188-4116-403f-a5ca-5ed7d9c6bf2b",{"to":"merged"}]

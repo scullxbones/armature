@@ -19,14 +19,15 @@
     "title": "Implement multi-branch mode"
   },
   "E2-001-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E2-001",
     "blocks": [
       "E2-001-T3",
       "E2-001-T4"
     ],
-    "updated": 1773604198,
+    "assignee": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b",
+    "updated": 1773604307,
     "title": "Abstract issues directory path resolution by config mode"
   },
   "E2-001-T2": {
