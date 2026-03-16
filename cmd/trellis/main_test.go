@@ -390,6 +390,41 @@ func TestDecomposeContextCommand(t *testing.T) {
 	assert.Contains(t, buf.String(), "My Test Plan")
 }
 
+func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create an issue
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "test task", "--id", "T-001")
+	require.NoError(t, err)
+
+	// Materialize (reads ops dir, which is in worktree)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Write a note op — should commit to _trellis, not to main
+	_, err = runTrls(t, repo, "note", "--issue", "T-001", "--msg", "dual branch test")
+	require.NoError(t, err)
+
+	// Verify the commit appeared on _trellis branch (inside the worktree)
+	worktreePath := filepath.Join(repo, ".trellis")
+	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-3")
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "ops: note")
+
+	// Verify the main repo's log does NOT contain the ops commit
+	mainCmd := exec.Command("git", "-C", repo, "log", "--oneline", "-5")
+	mainOut, err := mainCmd.Output()
+	require.NoError(t, err)
+	assert.NotContains(t, string(mainOut), "ops: note")
+}
+
 func TestNote_SingleBranch_ViaAppendOp(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
