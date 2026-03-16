@@ -1,7 +1,7 @@
 {
   "id": "E2-001-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Abstract issues directory path resolution by config mode",
   "parent": "E2-001",
   "children": [],
@@ -23,5 +23,5 @@
   "claimed_at": 1773604307,
   "claim_ttl": 60,
   "last_heartbeat": 1773604307,
-  "updated": 1773604307
+  "updated": 1773617356
 }
