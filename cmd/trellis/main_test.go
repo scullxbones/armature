@@ -635,3 +635,58 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	assert.Contains(t, out, "T-001")
 	assert.Contains(t, out, "#42")
 }
+
+func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
+	// Full workflow: init --dual-branch → create → claim → in-progress → done →
+	// status shows awaiting merge → merged --pr → status shows merged
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "feature work", "--id", "F-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "F-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "F-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "F-001", "--to", "done",
+		"--branch", "feature/e2-test", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Status should show done (awaiting merge)
+	statusOut, err := runTrls(t, repo, "status")
+	require.NoError(t, err)
+	assert.Contains(t, statusOut, "awaiting merge")
+	assert.Contains(t, statusOut, "F-001")
+	assert.Contains(t, statusOut, "feature/e2-test")
+
+	// Mark as merged with PR reference
+	mergedOut, err := runTrls(t, repo, "merged", "--issue", "F-001", "--pr", "99")
+	require.NoError(t, err)
+	assert.Contains(t, mergedOut, "F-001")
+	assert.Contains(t, mergedOut, "#99")
+
+	// Materialize and verify final state
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// In dual-branch mode, the issues dir is in the worktree
+	issuesDir := filepath.Join(repo, ".trellis", ".issues")
+	index, err := materialize.LoadIndex(filepath.Join(issuesDir, "state", "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "merged", index["F-001"].Status)
+
+	// Status should no longer show done-awaiting-merge for F-001
+	finalStatus, err := runTrls(t, repo, "status")
+	require.NoError(t, err)
+	assert.NotContains(t, finalStatus, "awaiting merge")
+}
