@@ -145,3 +145,23 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 	}
 	return nil
 }
+
+// BranchMergedInto checks if branch has been fully merged into target.
+// Returns (false, nil) if the branch does not exist, rather than an error.
+func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
+	// Check that branch exists
+	check := exec.Command("git", "-C", c.repoPath, "rev-parse", "--verify", branch)
+	if err := check.Run(); err != nil {
+		return false, nil // branch doesn't exist
+	}
+
+	// Get the tip commit of branch
+	tip := exec.Command("git", "-C", c.repoPath, "rev-parse", branch)
+	tipOut, err := tip.Output()
+	if err != nil {
+		return false, fmt.Errorf("rev-parse %s: %w", branch, err)
+	}
+	sha := strings.TrimSpace(string(tipOut))
+
+	return c.IsCommitOnBranch(sha, target)
+}

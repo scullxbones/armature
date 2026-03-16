@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/git"
@@ -146,4 +147,63 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	// Call again without changes — should not error
 	err := wc.CommitWorktreeOp("ops/worker-abc.log", "second commit")
 	assert.NoError(t, err)
+}
+
+func TestBranchMergedInto_Merged(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	// Detect what branch we're on
+	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(branchOut))
+
+	// Create and merge a feature branch
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("checkout", "-b", "feature/my-work")
+	gitRun("commit", "--allow-empty", "-m", "feat: work")
+	gitRun("checkout", mainBranch)
+	gitRun("merge", "--no-ff", "feature/my-work", "-m", "Merge feature/my-work")
+
+	merged, err := c.BranchMergedInto("feature/my-work", mainBranch)
+	require.NoError(t, err)
+	assert.True(t, merged)
+}
+
+func TestBranchMergedInto_NotMerged(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(branchOut))
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("checkout", "-b", "feature/unmerged")
+	gitRun("commit", "--allow-empty", "-m", "wip")
+	gitRun("checkout", mainBranch)
+
+	merged, err := c.BranchMergedInto("feature/unmerged", mainBranch)
+	require.NoError(t, err)
+	assert.False(t, merged)
+}
+
+func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	// Non-existent branch should return (false, nil) not an error
+	merged, err := c.BranchMergedInto("feature/ghost", "main")
+	assert.NoError(t, err)
+	assert.False(t, merged)
 }
