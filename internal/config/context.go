@@ -10,10 +10,11 @@ import (
 
 // Context holds resolved paths and config for the current trellis session.
 type Context struct {
-	RepoPath  string // resolved repo root
-	IssuesDir string // path to issues directory
-	Mode      string // "single-branch" or "dual-branch"
-	Config    Config // loaded from IssuesDir/config.json
+	RepoPath     string // resolved repo root
+	IssuesDir    string // path to issues directory
+	WorktreePath string // path to .trellis/ worktree; empty in single-branch mode
+	Mode         string // "single-branch" or "dual-branch"
+	Config       Config // loaded from IssuesDir/config.json
 }
 
 // ResolveContext reads git config for mode and resolves the issues directory path.
@@ -24,11 +25,12 @@ func ResolveContext(repoPath string) (*Context, error) {
 	}
 
 	var issuesDir string
+	var worktreePath string
 	switch mode {
 	case "single-branch":
 		issuesDir = filepath.Join(repoPath, ".issues")
 	case "dual-branch":
-		worktreePath, err := readGitConfig(repoPath, "trellis.ops-worktree-path")
+		worktreePath, err = readGitConfig(repoPath, "trellis.ops-worktree-path")
 		if err != nil {
 			return nil, fmt.Errorf("dual-branch mode requires trellis.ops-worktree-path to be set: %w", err)
 		}
@@ -43,10 +45,11 @@ func ResolveContext(repoPath string) (*Context, error) {
 	}
 
 	return &Context{
-		RepoPath:  repoPath,
-		IssuesDir: issuesDir,
-		Mode:      mode,
-		Config:    cfg,
+		RepoPath:     repoPath,
+		IssuesDir:    issuesDir,
+		WorktreePath: worktreePath,
+		Mode:         mode,
+		Config:       cfg,
 	}, nil
 }
 

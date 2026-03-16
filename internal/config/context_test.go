@@ -97,3 +97,37 @@ func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "single-branch", ctx.Mode)
 }
+
+func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
+	repo := initTestRepo(t)
+
+	worktreePath := filepath.Join(repo, ".trellis")
+	issuesDir := filepath.Join(worktreePath, ".issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+	cfg := DefaultConfig("go")
+	cfg.Mode = "dual-branch"
+	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
+
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	runGit("config", "trellis.mode", "dual-branch")
+	runGit("config", "trellis.ops-worktree-path", worktreePath)
+
+	ctx, err := ResolveContext(repo)
+	require.NoError(t, err)
+	assert.Equal(t, worktreePath, ctx.WorktreePath)
+}
+
+func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
+	repo := initTestRepo(t)
+	issuesDir := filepath.Join(repo, ".issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), DefaultConfig("go")))
+
+	ctx, err := ResolveContext(repo)
+	require.NoError(t, err)
+	assert.Equal(t, "", ctx.WorktreePath)
+}
