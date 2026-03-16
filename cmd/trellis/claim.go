@@ -50,7 +50,7 @@ func newClaimCmd() *cobra.Command {
 					appendOp(logPath, noteOp) //nolint:errcheck
 					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
-					ops.AppendOp(logPath, noteOp2)
+					appendOp(logPath, noteOp2) //nolint:errcheck
 				}
 			}
 
