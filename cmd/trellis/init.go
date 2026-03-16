@@ -12,6 +12,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const postMergeHookTemplate = `#!/bin/sh
+# Trellis post-merge hook: auto-detect merged branches and transition done issues to merged.
+# To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
+trls sync
+`
+
 func newInitCmd() *cobra.Command {
 	var repoPath string
 	var dualBranch bool
@@ -81,6 +87,12 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	schemaPath := filepath.Join(issuesDir, "ops", "SCHEMA")
 	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0644); err != nil {
 		return fmt.Errorf("write SCHEMA: %w", err)
+	}
+
+	// Write post-merge hook template
+	hookTemplatePath := filepath.Join(issuesDir, "hooks", "post-merge.sh.template")
+	if err := os.WriteFile(hookTemplatePath, []byte(postMergeHookTemplate), 0644); err != nil {
+		return fmt.Errorf("write post-merge hook template: %w", err)
 	}
 
 	// Detect project type and write config

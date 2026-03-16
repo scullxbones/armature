@@ -494,3 +494,16 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "merged", index["T-001"].Status)
 }
+
+func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	hookPath := filepath.Join(repo, ".issues", "hooks", "post-merge.sh.template")
+	data, err := os.ReadFile(hookPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "trls sync")
+}
