@@ -75,6 +75,8 @@ type IndexEntry struct {
 	Title     string   `json:"title"`
 	Outcome   string   `json:"outcome,omitempty"`
 	Scope     []string `json:"scope,omitempty"`
+	Branch    string   `json:"branch,omitempty"`
+	PR        string   `json:"pr,omitempty"`
 }
 
 type Index map[string]IndexEntry

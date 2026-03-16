@@ -241,6 +241,8 @@ func (s *State) BuildIndex() Index {
 			Title:     issue.Title,
 			Outcome:   issue.Outcome,
 			Scope:     issue.Scope,
+			Branch:    issue.Branch,
+			PR:        issue.PR,
 		}
 	}
 	return index

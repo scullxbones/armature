@@ -184,3 +184,18 @@ func TestPropCreateIdempotent(t *testing.T) {
 
 	properties.TestingRun(t)
 }
+
+func TestBuildIndex_IncludesBranchAndPR(t *testing.T) {
+	s := NewState()
+	s.Issues["T-001"] = &Issue{
+		ID: "T-001", Type: "task", Status: "done",
+		Title: "some task", Branch: "feature/my-work", PR: "42",
+		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
+	}
+
+	index := s.BuildIndex()
+	entry, ok := index["T-001"]
+	require.True(t, ok)
+	assert.Equal(t, "feature/my-work", entry.Branch)
+	assert.Equal(t, "42", entry.PR)
+}
