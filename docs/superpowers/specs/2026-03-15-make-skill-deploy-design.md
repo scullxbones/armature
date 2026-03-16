@@ -70,11 +70,14 @@ compatibility: Designed for Claude Code. Requires the trls binary in scripts/.
 
 ### 2. `make skill` target
 
-Depends on `build`. Recipe:
+Added to `.PHONY`. Depends on `build`. Recipe:
 
 1. `mkdir -p .claude/skills/trls/scripts`
 2. Concatenate `docs/trls-skill-meta.yaml` + `docs/SKILL.md` → `.claude/skills/trls/SKILL.md`
 3. `cp bin/trls .claude/skills/trls/scripts/trls`
+4. `chmod +x .claude/skills/trls/scripts/trls` (ensures executable across all filesystems/umask configs)
+
+**Constraint:** `docs/SKILL.md` must not begin with `---` (a leading YAML delimiter would corrupt the frontmatter block). Currently satisfied — the file begins with `# Trellis AI Worker Interface`.
 
 ### 3. `.gitignore` addition
 
@@ -85,11 +88,14 @@ Depends on `build`. Recipe:
 
 ### 4. `make clean` extension
 
-Extends the existing `clean` target to remove `.claude/skills/trls/`.
+Extends the existing `clean` target to remove `.claude/skills/` (entire directory, not just `trls/`, to stay consistent as additional skills may be added).
 
 ### 5. `make help` update
 
-Adds `make skill` to the help output.
+Adds the following line to the help output:
+```
+  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/
+```
 
 ---
 
