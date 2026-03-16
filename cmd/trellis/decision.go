@@ -23,7 +23,7 @@ func newDecisionCmd() *cobra.Command {
 			op := ops.Op{Type: ops.OpDecision, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{Topic: topic, Choice: choice,
 					Rationale: rationale, Affects: affects}}
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			result := map[string]string{"issue": issueID, "topic": topic, "choice": choice}

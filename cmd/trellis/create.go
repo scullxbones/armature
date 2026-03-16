@@ -40,7 +40,7 @@ func newCreateCmd() *cobra.Command {
 				},
 			}
 
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 

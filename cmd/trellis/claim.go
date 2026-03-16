@@ -47,7 +47,7 @@ func newClaimCmd() *cobra.Command {
 					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: scope overlap with %s (%s)\n", id, entry.Title)
 					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
-					ops.AppendOp(logPath, noteOp)
+					appendOp(logPath, noteOp) //nolint:errcheck
 					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
 					ops.AppendOp(logPath, noteOp2)
@@ -58,7 +58,7 @@ func newClaimCmd() *cobra.Command {
 				Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{TTL: ttl},
 			}
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 

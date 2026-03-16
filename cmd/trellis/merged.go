@@ -22,7 +22,7 @@ func newMergedCmd() *cobra.Command {
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{To: ops.StatusMerged},
 			}
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Note: in single-branch mode, done→merged is automatic. Op recorded for compatibility.\n")

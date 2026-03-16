@@ -12,6 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runTrls invokes the trellis cobra command tree with --repo injected and returns stdout + error.
+func runTrls(t *testing.T, repo string, args ...string) (string, error) {
+	t.Helper()
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetErr(errBuf)
+	root.SetArgs(append(args, "--repo", repo))
+	err := root.Execute()
+	return buf.String(), err
+}
+
 func TestVersionCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
@@ -375,4 +388,24 @@ func TestDecomposeContextCommand(t *testing.T) {
 	err := cmd.Execute()
 	assert.NoError(t, err)
 	assert.Contains(t, buf.String(), "My Test Plan")
+}
+
+func TestNote_SingleBranch_ViaAppendOp(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Init and set up a task
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "test task", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Note on the task
+	out, err := runTrls(t, repo, "note", "--issue", "T-001", "--msg", "hello world")
+	require.NoError(t, err)
+	assert.Contains(t, out, "T-001")
 }

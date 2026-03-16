@@ -21,7 +21,7 @@ func newLinkCmd() *cobra.Command {
 			}
 			op := ops.Op{Type: ops.OpLink, TargetID: sourceID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{Dep: dep, Rel: rel}}
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			result := map[string]string{"source": sourceID, "dep": dep, "rel": rel}

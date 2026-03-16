@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/scullxbones/trellis/internal/git"
+	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/worker"
 )
 
@@ -18,4 +20,13 @@ func resolveWorkerAndLog() (string, string, error) {
 
 func nowEpoch() int64 {
 	return time.Now().Unix()
+}
+
+// appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.
+func appendOp(logPath string, op ops.Op) error {
+	var gc ops.GitCommitter
+	if appCtx.WorktreePath != "" {
+		gc = git.New(appCtx.WorktreePath)
+	}
+	return ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc)
 }

@@ -50,7 +50,7 @@ func newTransitionCmd() *cobra.Command {
 				WorkerID: workerID,
 				Payload:  ops.Payload{To: to, Outcome: outcome, Branch: branch, PR: pr},
 			}
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			result := map[string]string{"issue": issueID, "status": to}

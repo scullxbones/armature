@@ -20,7 +20,7 @@ func newReopenCmd() *cobra.Command {
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{To: ops.StatusOpen},
 			}
-			return ops.AppendOp(logPath, op)
+			return appendOp(logPath, op)
 		},
 	}
 

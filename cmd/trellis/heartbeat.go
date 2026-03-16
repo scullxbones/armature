@@ -21,7 +21,7 @@ func newHeartbeatCmd() *cobra.Command {
 			}
 			op := ops.Op{Type: ops.OpHeartbeat, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID}
-			if err := ops.AppendOp(logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			result := map[string]string{"issue": issueID, "heartbeat": "sent"}
