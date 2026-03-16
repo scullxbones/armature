@@ -95,30 +95,35 @@
     "outcome": "Materialize engine SingleBranchMode flag derived from appCtx.Mode via feat(mode) commit. In dual-branch mode, done does not auto-promote to merged."
   },
   "E2-002": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "blocked_by": [
       "E2-001"
     ],
-    "updated": 1773620209,
-    "title": "Branch isolation for worker operations"
+    "assignee": "0ee1fde3-66ea-4a21-be2b-872e22c61109",
+    "updated": 1773623097,
+    "title": "Branch isolation for worker operations",
+    "outcome": "Branch isolation for worker operations complete. All worker op writes (claim, note, heartbeat, transition, create, link, decision, reopen, merged) route through appendOp/AppendAndCommit. In dual-branch mode, each op is committed to the _trellis branch worktree. Fixed remaining ops.AppendOp call in claim.go scope-overlap path. All tests pass."
   },
   "E2-003": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "blocked_by": [
       "E2-001"
     ],
-    "updated": 1773604028,
-    "title": "Cross-branch merge detection and auto-transition"
+    "assignee": "c2d36434-9b2a-4303-a2ea-f140cbb1db80",
+    "updated": 1773624455,
+    "title": "Cross-branch merge detection and auto-transition",
+    "outcome": "Implemented trls sync command with BranchMergedInto git detection, internal/sync DetectMerges logic, cmd/trellis/sync.go command, and post-merge.sh.template hook. All tests pass."
   },
   "E2-004": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "blocked_by": [
       "E2-001"
     ],
-    "updated": 1773604028,
-    "title": "PR-based done-to-merged workflow"
+    "updated": 1773625149,
+    "title": "PR-based done-to-merged workflow",
+    "outcome": "PR-based done-to-merged workflow: IndexEntry Branch/PR fields, trls status awaiting-merge callout, trls merged done-state validation and --pr flag, full e2e test. All tests pass."
   }
 }

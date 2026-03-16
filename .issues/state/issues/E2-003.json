@@ -1,7 +1,7 @@
 {
   "id": "E2-003",
   "type": "story",
-  "status": "open",
+  "status": "merged",
   "title": "Cross-branch merge detection and auto-transition",
   "children": [],
   "blocked_by": [
@@ -17,5 +17,10 @@
     "source_worker": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b"
   },
   "decision_refs": [],
-  "updated": 1773604028
+  "outcome": "Implemented trls sync command with BranchMergedInto git detection, internal/sync DetectMerges logic, cmd/trellis/sync.go command, and post-merge.sh.template hook. All tests pass.",
+  "claimed_by": "c2d36434-9b2a-4303-a2ea-f140cbb1db80",
+  "claimed_at": 1773624449,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773624449,
+  "updated": 1773624455
 }
