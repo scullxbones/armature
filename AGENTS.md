@@ -97,3 +97,4 @@ trellis/
 - Tests in `internal/<subsystem>/<subsystem>_test.go`
 - Property tests use `gopter` for arbitrary input generation
 - Integration tests use real resources (temp dirs, temp git repos)
+- Wherever possible, use the `trls` skill to dogfood the current project, noting any issues (including UX surprises) that arise in its use

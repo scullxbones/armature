@@ -1,6 +1,6 @@
 {
   "E2-001": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "children": [
       "E2-001-T1",
@@ -15,8 +15,9 @@
       "E2-003",
       "E2-004"
     ],
-    "updated": 1773604299,
-    "title": "Implement multi-branch mode"
+    "updated": 1773622697,
+    "title": "Implement multi-branch mode",
+    "outcome": "Multi-branch mode fully implemented: issues dir path resolution abstracted by config mode, orphan branch/worktree management, all op reads/writes routed through AppendAndCommit for branch isolation, materialize pipeline mode-aware, init supports --dual-branch flag, SingleBranchMode derived from config. AgentSkill for trls also shipped."
   },
   "E2-001-T1": {
     "status": "merged",
@@ -31,28 +32,31 @@
     "title": "Abstract issues directory path resolution by config mode"
   },
   "E2-001-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E2-001",
     "blocks": [
       "E2-001-T5"
     ],
     "assignee": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b",
-    "updated": 1773617208,
-    "title": "Git worktree management for issues branch"
+    "updated": 1773622669,
+    "title": "Git worktree management for issues branch",
+    "outcome": "Added orphan branch, worktree, and git config helpers in internal/git. Init command gained --dual-branch flag that creates _trellis orphan branch and .trellis worktree."
   },
   "E2-001-T3": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E2-001",
     "blocked_by": [
       "E2-001-T1"
     ],
-    "updated": 1773604198,
-    "title": "Route op reads/writes through abstracted path"
+    "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
+    "updated": 1773622679,
+    "title": "Route op reads/writes through abstracted path",
+    "outcome": "All worker op writes now route through AppendAndCommit which handles branch isolation. CommitWorktreeOp added in git adapter. Integration test added for dual-branch op isolation."
   },
   "E2-001-T4": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E2-001",
     "blocked_by": [
@@ -61,36 +65,42 @@
     "blocks": [
       "E2-001-T6"
     ],
-    "updated": 1773604198,
-    "title": "Materialize pipeline accepts dynamic issues dir"
+    "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
+    "updated": 1773622679,
+    "title": "Materialize pipeline accepts dynamic issues dir",
+    "outcome": "Materialize engine SingleBranchMode now derived from appCtx.Mode instead of hardcoded true. WorktreePath added to Context. Pipeline reads ops from correct location based on mode."
   },
   "E2-001-T5": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E2-001",
     "blocked_by": [
       "E2-001-T2"
     ],
-    "updated": 1773604198,
-    "title": "Init command supports dual-branch mode flag"
+    "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
+    "updated": 1773622687,
+    "title": "Init command supports dual-branch mode flag",
+    "outcome": "trls init --dual-branch creates orphan issues branch, sets up .trellis worktree, and writes config with Mode=dual-branch. Implemented in cmd/trellis/main.go."
   },
   "E2-001-T6": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E2-001",
     "blocked_by": [
       "E2-001-T4"
     ],
-    "updated": 1773604198,
-    "title": "SingleBranchMode flag derived from config"
+    "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
+    "updated": 1773622687,
+    "title": "SingleBranchMode flag derived from config",
+    "outcome": "Materialize engine SingleBranchMode flag derived from appCtx.Mode via feat(mode) commit. In dual-branch mode, done does not auto-promote to merged."
   },
   "E2-002": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "blocked_by": [
       "E2-001"
     ],
-    "updated": 1773604028,
+    "updated": 1773620209,
     "title": "Branch isolation for worker operations"
   },
   "E2-003": {

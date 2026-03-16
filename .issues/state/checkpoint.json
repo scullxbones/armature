@@ -1,6 +1,8 @@
 {
   "last_materialized_commit": "",
   "byte_offsets": {
-    "936c1188-4116-403f-a5ca-5ed7d9c6bf2b.log": 4672
+    "0f462b1c-a4e2-4fff-9034-4fa504a79947.log": 95,
+    "936c1188-4116-403f-a5ca-5ed7d9c6bf2b.log": 4672,
+    "9ac4202c-8256-4f5e-8e21-9b5de7840ddb.log": 2118
   }
 }

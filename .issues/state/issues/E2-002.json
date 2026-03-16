@@ -1,7 +1,7 @@
 {
   "id": "E2-002",
   "type": "story",
-  "status": "open",
+  "status": "in-progress",
   "title": "Branch isolation for worker operations",
   "children": [],
   "blocked_by": [
@@ -17,5 +17,5 @@
     "source_worker": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b"
   },
   "decision_refs": [],
-  "updated": 1773604028
+  "updated": 1773620209
 }
