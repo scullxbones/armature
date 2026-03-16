@@ -495,6 +495,66 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	assert.Equal(t, "merged", index["T-001"].Status)
 }
 
+func TestStatus_ShowsInProgressIssue(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "my work", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "in-progress")
+	assert.Contains(t, out, "T-001")
+}
+
+func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Use dual-branch mode so done != merged
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "pending merge", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done",
+		"--branch", "feature/my-pr", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "status")
+	require.NoError(t, err)
+	// In dual-branch mode, done issues should be labeled "awaiting merge"
+	assert.Contains(t, out, "awaiting merge")
+	assert.Contains(t, out, "T-001")
+	assert.Contains(t, out, "feature/my-pr")
+}
+
 func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

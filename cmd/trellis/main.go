@@ -48,6 +48,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newHeartbeatCmd())
 	root.AddCommand(newTransitionCmd())
 	root.AddCommand(newReopenCmd())
+	root.AddCommand(newStatusCmd())
 	root.AddCommand(newMergedCmd())
 	root.AddCommand(newSyncCmd())
 	root.AddCommand(newClaimCmd())
