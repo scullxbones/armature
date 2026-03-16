@@ -1,0 +1,2 @@
+["claim","E2-002",1773622979,"0ee1fde3-66ea-4a21-be2b-872e22c61109",{"ttl":60}]
+["transition","E2-002",1773623097,"0ee1fde3-66ea-4a21-be2b-872e22c61109",{"to":"done","outcome":"Branch isolation for worker operations complete. All worker op writes (claim, note, heartbeat, transition, create, link, decision, reopen, merged) route through appendOp/AppendAndCommit. In dual-branch mode, each op is committed to the _trellis branch worktree. Fixed remaining ops.AppendOp call in claim.go scope-overlap path. All tests pass."}]

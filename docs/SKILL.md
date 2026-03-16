@@ -2,6 +2,16 @@
 
 This document describes the Trellis task management interface for AI agents. Trellis uses an append-only operation log (op log) stored in git to track tasks, with materialized state derived from replaying those ops.
 
+## Invoking `trls`
+
+The `trls` binary is bundled with this skill at `scripts/trls` (relative to the skill root). Use the relative path when running commands:
+
+```
+scripts/trls <command> [flags]
+```
+
+All examples in this document use the bare name `trls` for readability — substitute `scripts/trls` when invoking from an agent context.
+
 ## Overview
 
 Trellis is a lightweight, git-native task tracking system designed for use in automated workflows. Key properties:
@@ -207,16 +217,16 @@ Exceeding these limits will result in an error. Design your workflows to stay wi
 ## Quick Reference
 
 ```
-trls worker-init                                          # register this agent
-trls ready                                               # find work to do
-trls claim --issue ID [--ttl 3600]                       # claim an issue
-trls render-context --issue ID [--budget 4000]           # read context
-trls note --issue ID --msg "..."                         # log progress
-trls decision --issue ID --topic "X" --choice "Y" \
-              --rationale "Z"                            # record a decision
-trls heartbeat --issue ID                                # keep claim alive
-trls transition --issue ID --to done --outcome "..."     # complete work
-trls create --title "X" --type task --parent ID          # create sub-issue
-trls decompose-apply --plan plan.json                    # bulk load issues
-trls validate [--ci]                                     # validate state
+scripts/trls worker-init                                          # register this agent
+scripts/trls ready                                               # find work to do
+scripts/trls claim --issue ID [--ttl 3600]                       # claim an issue
+scripts/trls render-context --issue ID [--budget 4000]           # read context
+scripts/trls note --issue ID --msg "..."                         # log progress
+scripts/trls decision --issue ID --topic "X" --choice "Y" \
+                      --rationale "Z"                            # record a decision
+scripts/trls heartbeat --issue ID                                # keep claim alive
+scripts/trls transition --issue ID --to done --outcome "..."     # complete work
+scripts/trls create --title "X" --type task --parent ID          # create sub-issue
+scripts/trls decompose-apply --plan plan.json                    # bulk load issues
+scripts/trls validate [--ci]                                     # validate state
 ```
