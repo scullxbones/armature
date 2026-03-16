@@ -1,0 +1,9 @@
+---
+name: trls
+description: >
+  Trellis task management interface for AI agents. Use when working in a
+  trellis-managed repo: find actionable work with ready, claim issues, record
+  progress with note/decision/heartbeat, complete work with transition.
+  The trls binary is available at scripts/trls.
+compatibility: Designed for Claude Code. Requires the trls binary in scripts/.
+---
