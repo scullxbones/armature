@@ -567,3 +567,71 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "trls sync")
 }
+
+func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "new task", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Try to merge an open issue in dual-branch mode — should fail with clear error
+	_, err = runTrls(t, repo, "merged", "--issue", "T-001")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "done")
+}
+
+func TestMerged_AcceptsDoneIssue_SingleBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "my task", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// In single-branch mode the validation is skipped — any issue can be passed to merged
+	out, err := runTrls(t, repo, "merged", "--issue", "T-001", "--pr", "123")
+	require.NoError(t, err)
+	assert.Contains(t, out, "T-001")
+}
+
+func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "my task", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Now in done state — merged should accept it
+	out, err := runTrls(t, repo, "merged", "--issue", "T-001", "--pr", "42")
+	require.NoError(t, err)
+	assert.Contains(t, out, "T-001")
+	assert.Contains(t, out, "#42")
+}
