@@ -35,6 +35,15 @@ const (
 	StatusCancelled  = "cancelled"
 )
 
+// ValidTransitionTargets is the set of statuses accepted by the transition command.
+var ValidTransitionTargets = map[string]bool{
+	StatusInProgress: true,
+	StatusDone:       true,
+	StatusMerged:     true,
+	StatusBlocked:    true,
+	StatusCancelled:  true,
+}
+
 // Op represents a single parsed operation from the log.
 type Op struct {
 	Type      string

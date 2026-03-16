@@ -47,4 +47,16 @@ Captured while using trellis to track its own E2 development.
 
 **Impact**: Agents blindly re-executing steps waste time and may inadvertently overwrite correct implementations. The gap that actually existed was easy to miss precisely because it was buried in an otherwise-complete file.
 
-**Recommendation**: Plans should begin with a "current state check" step that diffs the plan's expected starting state against reality before executing any steps. Alternatively, cross-plan notes (like the one in E2-002) should be more prominent, listing which steps are expected to already be complete.
+**File**: `docs/superpowers/plans/`
+
+---
+
+## L5: Skills cannot deliver cross-platform binaries; `SKILL_ROOT` is not exposed to agents
+
+**Observed**: The `trls` AgentSkill bundles the compiled binary at `scripts/trls` (relative to skill root). Agents cannot resolve this path because: (1) Claude Code does not expose `SKILL_ROOT` to agent context at runtime, and (2) the bundled binary is platform-specific — a skill targeting linux/amd64 breaks on darwin/arm64 and vice versa. Fixing path to `bin/trls` (repo-relative) only works inside the trellis repo itself.
+
+**Impact**: Bundled binary delivery via skills is not viable for compiled Go binaries without per-platform skill variants. Agents guess the binary path relative to CWD and fail.
+
+**Recommendation**: Install `trls` to PATH via `make install` (deploys to `~/.local/bin/trls`). Skills should reference bare `trls` and fail clearly if not found. The bundled `scripts/trls` in the skill directory is a dead end for Go binaries. If the Claude Code skills runtime were to inject `SKILL_ROOT` into agent context, bundled scripts would become viable — this is a platform feature request.
+
+**File**: `.claude/skills/trls/SKILL.md`, `Makefile` that diffs the plan's expected starting state against reality before executing any steps. Alternatively, cross-plan notes (like the one in E2-002) should be more prominent, listing which steps are expected to already be complete.

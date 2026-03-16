@@ -224,6 +224,17 @@ func TestTransitionCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestTransitionCommand_InvalidStatus(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in_progress"})
+
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "in_progress")
+}
+
 func TestClaimCommand(t *testing.T) {
 	repo := setupRepoWithTask(t) // creates init + task-01
 

@@ -55,7 +55,11 @@ func TestReadyTask_ParentNotInProgress(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
 	ready := ComputeReady(index, issues)
-	assert.Len(t, ready, 0)
+	for _, r := range ready {
+		if r.Issue == "task-01" {
+			t.Errorf("task-01 should not be ready: parent story-01 is not in-progress")
+		}
+	}
 }
 
 func TestReadyTask_NoParent(t *testing.T) {
@@ -80,6 +84,31 @@ func TestReadyTask_InferredRequiresConfirmation(t *testing.T) {
 	ready := ComputeReady(index, issues)
 	assert.Len(t, ready, 1)
 	assert.True(t, ready[0].RequiresConfirmation)
+}
+
+func TestReadyStory_NoParent_AppearsInQueue(t *testing.T) {
+	index := materialize.Index{
+		"story-01": {Status: "open", Type: "story"},
+	}
+	issues := map[string]*materialize.Issue{
+		"story-01": {ID: "story-01", Status: "open", Type: "story"},
+	}
+	ready := ComputeReady(index, issues)
+	assert.Len(t, ready, 1)
+	assert.Equal(t, "story-01", ready[0].Issue)
+}
+
+func TestReadyStory_ParentInProgress_AppearsInQueue(t *testing.T) {
+	index := materialize.Index{
+		"epic-01":  {Status: "in-progress", Type: "feature"},
+		"story-01": {Status: "open", Type: "story", Parent: "epic-01"},
+	}
+	issues := map[string]*materialize.Issue{
+		"story-01": {ID: "story-01", Status: "open", Type: "story", Parent: "epic-01"},
+	}
+	ready := ComputeReady(index, issues)
+	assert.Len(t, ready, 1)
+	assert.Equal(t, "story-01", ready[0].Issue)
 }
 
 func TestReadyTask_PrioritySort(t *testing.T) {

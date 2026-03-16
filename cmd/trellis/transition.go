@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"github.com/scullxbones/trellis/internal/hooks"
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -18,6 +19,15 @@ func newTransitionCmd() *cobra.Command {
 		Use:   "transition",
 		Short: "Transition an issue to a new status",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !ops.ValidTransitionTargets[to] {
+				valid := []string{}
+				for s := range ops.ValidTransitionTargets {
+					valid = append(valid, s)
+				}
+				sort.Strings(valid)
+				return fmt.Errorf("invalid status %q: valid values are %v", to, valid)
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
