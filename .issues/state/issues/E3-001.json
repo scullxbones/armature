@@ -1,0 +1,30 @@
+{
+  "id": "E3-001",
+  "type": "story",
+  "status": "open",
+  "title": "Push/Sync Layer — remote sync for _trellis branch",
+  "parent": "E3",
+  "children": [
+    "E3-001-T1",
+    "E3-001-T2",
+    "E3-001-T3",
+    "E3-001-T4",
+    "E3-001-T5"
+  ],
+  "blocked_by": [],
+  "blocks": [
+    "E3-004"
+  ],
+  "priority": "high",
+  "definition_of_done": "git.Client has Push and FetchAndRebase. Pusher/PendingPushTracker interfaces defined. AppendCommitAndPush with retry. High/low-stakes commands wired. All tests pass.",
+  "scope": [
+    "internal/git/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

@@ -125,5 +125,293 @@
     "updated": 1773625149,
     "title": "PR-based done-to-merged workflow",
     "outcome": "PR-based done-to-merged workflow: IndexEntry Branch/PR fields, trls status awaiting-merge callout, trls merged done-state validation and --pr flag, full e2e test. All tests pass."
+  },
+  "E3": {
+    "status": "open",
+    "type": "story",
+    "children": [
+      "E3-001",
+      "E3-003",
+      "E3-004",
+      "E3-002",
+      "E3-T13"
+    ],
+    "updated": 1773668289,
+    "title": "E3: Multi-Worker Collaboration",
+    "scope": [
+      "internal/**"
+    ]
+  },
+  "E3-001": {
+    "status": "open",
+    "type": "story",
+    "parent": "E3",
+    "children": [
+      "E3-001-T1",
+      "E3-001-T2",
+      "E3-001-T3",
+      "E3-001-T4",
+      "E3-001-T5"
+    ],
+    "blocks": [
+      "E3-004"
+    ],
+    "updated": 1773668289,
+    "title": "Push/Sync Layer — remote sync for _trellis branch",
+    "scope": [
+      "internal/git/**"
+    ]
+  },
+  "E3-001-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-001",
+    "blocks": [
+      "E3-001-T2"
+    ],
+    "updated": 1773668289,
+    "title": "Add LowStakesPushThreshold to Config",
+    "scope": [
+      "internal/config/**"
+    ]
+  },
+  "E3-001-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-001",
+    "blocked_by": [
+      "E3-001-T1"
+    ],
+    "blocks": [
+      "E3-001-T3"
+    ],
+    "updated": 1773668289,
+    "title": "Add Push and FetchAndRebase to git.Client",
+    "scope": [
+      "internal/git/**"
+    ]
+  },
+  "E3-001-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-001",
+    "blocked_by": [
+      "E3-001-T2"
+    ],
+    "blocks": [
+      "E3-001-T4"
+    ],
+    "updated": 1773668289,
+    "title": "Pusher interface + NoPusher + AppendCommitAndPush",
+    "scope": [
+      "internal/ops/**"
+    ]
+  },
+  "E3-001-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-001",
+    "blocked_by": [
+      "E3-001-T3"
+    ],
+    "blocks": [
+      "E3-001-T5"
+    ],
+    "updated": 1773668289,
+    "title": "PendingPushTracker + FilePushTracker + NoTracker",
+    "scope": [
+      "internal/ops/**"
+    ]
+  },
+  "E3-001-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-001",
+    "blocked_by": [
+      "E3-001-T4"
+    ],
+    "blocks": [
+      "E3-T13"
+    ],
+    "updated": 1773668289,
+    "title": "Wire push deps through command helpers",
+    "scope": [
+      "cmd/trellis/**"
+    ]
+  },
+  "E3-002": {
+    "status": "open",
+    "type": "story",
+    "parent": "E3",
+    "children": [
+      "E3-002-T12"
+    ],
+    "blocked_by": [
+      "E3-004-T9"
+    ],
+    "updated": 1773668289,
+    "title": "Worker Presence — trls workers command",
+    "scope": [
+      "cmd/trellis/**"
+    ]
+  },
+  "E3-002-T12": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-002",
+    "blocked_by": [
+      "E3-004-T9"
+    ],
+    "blocks": [
+      "E3-T13"
+    ],
+    "updated": 1773668289,
+    "title": "trls workers command",
+    "scope": [
+      "cmd/trellis/**"
+    ]
+  },
+  "E3-003": {
+    "status": "open",
+    "type": "story",
+    "parent": "E3",
+    "children": [
+      "E3-003-T6",
+      "E3-003-T7"
+    ],
+    "updated": 1773668289,
+    "title": "Audit Log Viewer — trls log command",
+    "scope": [
+      "internal/audit/**"
+    ]
+  },
+  "E3-003-T6": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-003",
+    "blocks": [
+      "E3-003-T7"
+    ],
+    "updated": 1773668289,
+    "title": "internal/audit/audit.go",
+    "scope": [
+      "internal/audit/**"
+    ]
+  },
+  "E3-003-T7": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-003",
+    "blocked_by": [
+      "E3-003-T6"
+    ],
+    "blocks": [
+      "E3-T13"
+    ],
+    "updated": 1773668289,
+    "title": "trls log command",
+    "scope": [
+      "cmd/trellis/**"
+    ]
+  },
+  "E3-004": {
+    "status": "open",
+    "type": "story",
+    "parent": "E3",
+    "children": [
+      "E3-004-T8",
+      "E3-004-T9",
+      "E3-004-T10",
+      "E3-004-T11"
+    ],
+    "blocked_by": [
+      "E3-001"
+    ],
+    "updated": 1773668289,
+    "title": "Issue Assignment — trls assign/unassign + ready sort",
+    "scope": [
+      "internal/ops/**"
+    ]
+  },
+  "E3-004-T10": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-004",
+    "blocked_by": [
+      "E3-004-T9"
+    ],
+    "blocks": [
+      "E3-T13"
+    ],
+    "updated": 1773668289,
+    "title": "trls assign and trls unassign commands",
+    "scope": [
+      "cmd/trellis/**"
+    ]
+  },
+  "E3-004-T11": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-004",
+    "blocked_by": [
+      "E3-004-T9"
+    ],
+    "blocks": [
+      "E3-T13"
+    ],
+    "updated": 1773668289,
+    "title": "Assignment-aware ready sort in ComputeReady",
+    "scope": [
+      "internal/ready/**"
+    ]
+  },
+  "E3-004-T8": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-004",
+    "blocks": [
+      "E3-004-T9"
+    ],
+    "updated": 1773668289,
+    "title": "OpAssign type registration + schema + log.go OpAssign case",
+    "scope": [
+      "internal/ops/**"
+    ]
+  },
+  "E3-004-T9": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3-004",
+    "blocked_by": [
+      "E3-004-T8"
+    ],
+    "blocks": [
+      "E3-004-T10",
+      "E3-004-T11",
+      "E3-002",
+      "E3-002-T12"
+    ],
+    "updated": 1773668289,
+    "title": "Materialization: AssignedWorker field + applyAssign handler",
+    "scope": [
+      "internal/materialize/**"
+    ]
+  },
+  "E3-T13": {
+    "status": "open",
+    "type": "task",
+    "parent": "E3",
+    "blocked_by": [
+      "E3-001-T5",
+      "E3-003-T7",
+      "E3-004-T10",
+      "E3-004-T11",
+      "E3-002-T12"
+    ],
+    "updated": 1773668289,
+    "title": "Final Integration — build, test, all commands registered",
+    "scope": [
+      "cmd/trellis/**"
+    ]
   }
 }

@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "title": "E3 Multi-Worker Collaboration",
+  "issues": [
+    {
+      "id": "E3",
+      "title": "E3: Multi-Worker Collaboration",
+      "type": "story",
+      "priority": "high",
+      "scope": "internal/**",
+      "dod": "All four sub-stories implemented and tested: push/sync, audit log, worker presence, issue assignment. Atomic release. All tests pass and binary builds."
+    },
+    {
+      "id": "E3-001",
+      "title": "Push/Sync Layer — remote sync for _trellis branch",
+      "type": "story",
+      "parent": "E3",
+      "priority": "high",
+      "scope": "internal/git/**",
+      "dod": "git.Client has Push and FetchAndRebase. Pusher/PendingPushTracker interfaces defined. AppendCommitAndPush with retry. High/low-stakes commands wired. All tests pass."
+    },
+    {
+      "id": "E3-001-T1",
+      "title": "Add LowStakesPushThreshold to Config",
+      "type": "task",
+      "parent": "E3-001",
+      "priority": "high",
+      "scope": "internal/config/**",
+      "dod": "LowStakesPushThreshold int added to Config. DefaultConfig returns 5. Tests pass."
+    },
+    {
+      "id": "E3-001-T2",
+      "title": "Add Push and FetchAndRebase to git.Client",
+      "type": "task",
+      "parent": "E3-001",
+      "priority": "high",
+      "scope": "internal/git/**",
+      "dod": "Push and FetchAndRebase on *Client. Tests: fast-forward succeeds, rejected returns error, FetchAndRebase+Push succeeds after rejection.",
+      "blocked_by": ["E3-001-T1"]
+    },
+    {
+      "id": "E3-001-T3",
+      "title": "Pusher interface + NoPusher + AppendCommitAndPush",
+      "type": "task",
+      "parent": "E3-001",
+      "priority": "high",
+      "scope": "internal/ops/**",
+      "dod": "Pusher interface, NoPusher no-op, AppendCommitAndPush with 4-attempt backoff (1s/2s/4s). Tests: single-branch skips push, dual-branch pushes+resets tracker, all-fail returns error.",
+      "blocked_by": ["E3-001-T2"]
+    },
+    {
+      "id": "E3-001-T4",
+      "title": "PendingPushTracker + FilePushTracker + NoTracker",
+      "type": "task",
+      "parent": "E3-001",
+      "priority": "high",
+      "scope": "internal/ops/**",
+      "dod": "PendingPushTracker interface, FilePushTracker persisting to .issues/state/pending-push-count, NoTracker no-op. Tests: increment/reset, persistence across instances, default threshold.",
+      "blocked_by": ["E3-001-T3"]
+    },
+    {
+      "id": "E3-001-T5",
+      "title": "Wire push deps through command helpers",
+      "type": "task",
+      "parent": "E3-001",
+      "priority": "high",
+      "scope": "cmd/trellis/**",
+      "dod": "initPushDeps, appendHighStakesOp, appendLowStakesOp in helpers.go. PersistentPreRunE calls initPushDeps. High-stakes cmds use appendHighStakesOp; low-stakes use appendLowStakesOp. Full test suite passes.",
+      "blocked_by": ["E3-001-T4"]
+    },
+    {
+      "id": "E3-003",
+      "title": "Audit Log Viewer — trls log command",
+      "type": "story",
+      "parent": "E3",
+      "priority": "high",
+      "scope": "internal/audit/**",
+      "dod": "audit.Load reads/merges/filters op logs, marks losing claims. trls log with --issue/--worker/--since and --json output."
+    },
+    {
+      "id": "E3-003-T6",
+      "title": "internal/audit/audit.go",
+      "type": "task",
+      "parent": "E3-003",
+      "priority": "high",
+      "scope": "internal/audit/**",
+      "dod": "audit.Load: walks ops/*.log, merges by timestamp, applies Filter, marks LostRace via claim.ResolveClaim. Tests: all-ops, filter-by-issue, filter-by-worker, filter-by-since, lost-race, empty-dir."
+    },
+    {
+      "id": "E3-003-T7",
+      "title": "trls log command",
+      "type": "task",
+      "parent": "E3-003",
+      "priority": "high",
+      "scope": "cmd/trellis/**",
+      "dod": "newLogCmd: --issue, --worker, --since flags. Human-readable with [lost race]. --json JSONL with _lost_race. Registered in main.go. Note: OpAssign case in logPayloadSummary added in E3-004-T8.",
+      "blocked_by": ["E3-003-T6"]
+    },
+    {
+      "id": "E3-004",
+      "title": "Issue Assignment — trls assign/unassign + ready sort",
+      "type": "story",
+      "parent": "E3",
+      "priority": "high",
+      "scope": "internal/ops/**",
+      "dod": "OpAssign registered. AssignedWorker in Issue/IndexEntry. applyAssign in engine. trls assign/unassign. Assignment-aware ComputeReady sort.",
+      "blocked_by": ["E3-001"]
+    },
+    {
+      "id": "E3-004-T8",
+      "title": "OpAssign type registration + schema + log.go OpAssign case",
+      "type": "task",
+      "parent": "E3-004",
+      "priority": "high",
+      "scope": "internal/ops/**",
+      "dod": "OpAssign='assign' constant, ValidOpTypes updated, AssignedTo in Payload, schema updated. OpAssign case added to logPayloadSummary in log.go. Tests pass including property round-trip."
+    },
+    {
+      "id": "E3-004-T9",
+      "title": "Materialization: AssignedWorker field + applyAssign handler",
+      "type": "task",
+      "parent": "E3-004",
+      "priority": "high",
+      "scope": "internal/materialize/**",
+      "dod": "AssignedWorker string in Issue and IndexEntry. applyAssign in engine (tolerates unknown issues). BuildIndex maps AssignedWorker. Tests: apply assign, unassign, BuildIndex includes field.",
+      "blocked_by": ["E3-004-T8"]
+    },
+    {
+      "id": "E3-004-T10",
+      "title": "trls assign and trls unassign commands",
+      "type": "task",
+      "parent": "E3-004",
+      "priority": "high",
+      "scope": "cmd/trellis/**",
+      "dod": "assign.go: newAssignCmd (--issue, --worker required) and newUnassignCmd (--issue required). Both use appendHighStakesOp. Registered in main.go.",
+      "blocked_by": ["E3-004-T9"]
+    },
+    {
+      "id": "E3-004-T11",
+      "title": "Assignment-aware ready sort in ComputeReady",
+      "type": "task",
+      "parent": "E3-004",
+      "priority": "high",
+      "scope": "internal/ready/**",
+      "dod": "ComputeReady(index, issues, workerID string, now ...int64). sortReady: assigned-to-me first, unassigned next, other-assigned last. --worker flag on trls ready. Caller in ready.go updated. Tests pass.",
+      "blocked_by": ["E3-004-T9"]
+    },
+    {
+      "id": "E3-002",
+      "title": "Worker Presence — trls workers command",
+      "type": "story",
+      "parent": "E3",
+      "priority": "high",
+      "scope": "cmd/trellis/**",
+      "dod": "trls workers: enumerates workers from ops/*.log, classifies active/idle/stale via claim.IsClaimStale. Human-readable and --json output.",
+      "blocked_by": ["E3-004-T9"]
+    },
+    {
+      "id": "E3-002-T12",
+      "title": "trls workers command",
+      "type": "task",
+      "parent": "E3-002",
+      "priority": "high",
+      "scope": "cmd/trellis/**",
+      "dod": "workers.go: enumerateWorkers from ops/*.log. buildWorkerStatus: active (live claim), stale (all stale), idle (within 2*DefaultTTL window). lastOpTimestampFromLog. Human and --json output. Registered.",
+      "blocked_by": ["E3-004-T9"]
+    },
+    {
+      "id": "E3-T13",
+      "title": "Final Integration — build, test, all commands registered",
+      "type": "task",
+      "parent": "E3",
+      "priority": "high",
+      "scope": "cmd/trellis/**",
+      "dod": "All commands registered (log, assign, unassign, workers). Full test suite passes. Binary builds. --help for all new commands works.",
+      "blocked_by": ["E3-001-T5", "E3-003-T7", "E3-004-T10", "E3-004-T11", "E3-002-T12"]
+    }
+  ]
+}

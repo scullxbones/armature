@@ -1,0 +1,26 @@
+{
+  "id": "E3-001-T5",
+  "type": "task",
+  "status": "open",
+  "title": "Wire push deps through command helpers",
+  "parent": "E3-001",
+  "children": [],
+  "blocked_by": [
+    "E3-001-T4"
+  ],
+  "blocks": [
+    "E3-T13"
+  ],
+  "priority": "high",
+  "definition_of_done": "initPushDeps, appendHighStakesOp, appendLowStakesOp in helpers.go. PersistentPreRunE calls initPushDeps. High-stakes cmds use appendHighStakesOp; low-stakes use appendLowStakesOp. Full test suite passes.",
+  "scope": [
+    "cmd/trellis/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

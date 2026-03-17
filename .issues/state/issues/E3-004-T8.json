@@ -1,0 +1,24 @@
+{
+  "id": "E3-004-T8",
+  "type": "task",
+  "status": "open",
+  "title": "OpAssign type registration + schema + log.go OpAssign case",
+  "parent": "E3-004",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E3-004-T9"
+  ],
+  "priority": "high",
+  "definition_of_done": "OpAssign='assign' constant, ValidOpTypes updated, AssignedTo in Payload, schema updated. OpAssign case added to logPayloadSummary in log.go. Tests pass including property round-trip.",
+  "scope": [
+    "internal/ops/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

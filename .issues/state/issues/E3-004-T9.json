@@ -1,0 +1,29 @@
+{
+  "id": "E3-004-T9",
+  "type": "task",
+  "status": "open",
+  "title": "Materialization: AssignedWorker field + applyAssign handler",
+  "parent": "E3-004",
+  "children": [],
+  "blocked_by": [
+    "E3-004-T8"
+  ],
+  "blocks": [
+    "E3-004-T10",
+    "E3-004-T11",
+    "E3-002",
+    "E3-002-T12"
+  ],
+  "priority": "high",
+  "definition_of_done": "AssignedWorker string in Issue and IndexEntry. applyAssign in engine (tolerates unknown issues). BuildIndex maps AssignedWorker. Tests: apply assign, unassign, BuildIndex includes field.",
+  "scope": [
+    "internal/materialize/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

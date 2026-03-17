@@ -1,0 +1,24 @@
+{
+  "id": "E3-003-T6",
+  "type": "task",
+  "status": "open",
+  "title": "internal/audit/audit.go",
+  "parent": "E3-003",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E3-003-T7"
+  ],
+  "priority": "high",
+  "definition_of_done": "audit.Load: walks ops/*.log, merges by timestamp, applies Filter, marks LostRace via claim.ResolveClaim. Tests: all-ops, filter-by-issue, filter-by-worker, filter-by-since, lost-race, empty-dir.",
+  "scope": [
+    "internal/audit/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

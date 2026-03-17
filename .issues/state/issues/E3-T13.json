@@ -1,0 +1,28 @@
+{
+  "id": "E3-T13",
+  "type": "task",
+  "status": "open",
+  "title": "Final Integration — build, test, all commands registered",
+  "parent": "E3",
+  "children": [],
+  "blocked_by": [
+    "E3-001-T5",
+    "E3-003-T7",
+    "E3-004-T10",
+    "E3-004-T11",
+    "E3-002-T12"
+  ],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "All commands registered (log, assign, unassign, workers). Full test suite passes. Binary builds. --help for all new commands works.",
+  "scope": [
+    "cmd/trellis/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

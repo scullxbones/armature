@@ -1,0 +1,26 @@
+{
+  "id": "E3-001-T4",
+  "type": "task",
+  "status": "open",
+  "title": "PendingPushTracker + FilePushTracker + NoTracker",
+  "parent": "E3-001",
+  "children": [],
+  "blocked_by": [
+    "E3-001-T3"
+  ],
+  "blocks": [
+    "E3-001-T5"
+  ],
+  "priority": "high",
+  "definition_of_done": "PendingPushTracker interface, FilePushTracker persisting to .issues/state/pending-push-count, NoTracker no-op. Tests: increment/reset, persistence across instances, default threshold.",
+  "scope": [
+    "internal/ops/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

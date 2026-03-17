@@ -1,0 +1,26 @@
+{
+  "id": "E3-002-T12",
+  "type": "task",
+  "status": "open",
+  "title": "trls workers command",
+  "parent": "E3-002",
+  "children": [],
+  "blocked_by": [
+    "E3-004-T9"
+  ],
+  "blocks": [
+    "E3-T13"
+  ],
+  "priority": "high",
+  "definition_of_done": "workers.go: enumerateWorkers from ops/*.log. buildWorkerStatus: active (live claim), stale (all stale), idle (within 2*DefaultTTL window). lastOpTimestampFromLog. Human and --json output. Registered.",
+  "scope": [
+    "cmd/trellis/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

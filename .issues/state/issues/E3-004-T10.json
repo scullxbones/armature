@@ -1,0 +1,26 @@
+{
+  "id": "E3-004-T10",
+  "type": "task",
+  "status": "open",
+  "title": "trls assign and trls unassign commands",
+  "parent": "E3-004",
+  "children": [],
+  "blocked_by": [
+    "E3-004-T9"
+  ],
+  "blocks": [
+    "E3-T13"
+  ],
+  "priority": "high",
+  "definition_of_done": "assign.go: newAssignCmd (--issue, --worker required) and newUnassignCmd (--issue required). Both use appendHighStakesOp. Registered in main.go.",
+  "scope": [
+    "cmd/trellis/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

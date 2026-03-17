@@ -1,0 +1,26 @@
+{
+  "id": "E3-004-T11",
+  "type": "task",
+  "status": "open",
+  "title": "Assignment-aware ready sort in ComputeReady",
+  "parent": "E3-004",
+  "children": [],
+  "blocked_by": [
+    "E3-004-T9"
+  ],
+  "blocks": [
+    "E3-T13"
+  ],
+  "priority": "high",
+  "definition_of_done": "ComputeReady(index, issues, workerID string, now ...int64). sortReady: assigned-to-me first, unassigned next, other-assigned last. --worker flag on trls ready. Caller in ready.go updated. Tests pass.",
+  "scope": [
+    "internal/ready/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}

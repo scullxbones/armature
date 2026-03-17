@@ -1,0 +1,26 @@
+{
+  "id": "E3-003-T7",
+  "type": "task",
+  "status": "open",
+  "title": "trls log command",
+  "parent": "E3-003",
+  "children": [],
+  "blocked_by": [
+    "E3-003-T6"
+  ],
+  "blocks": [
+    "E3-T13"
+  ],
+  "priority": "high",
+  "definition_of_done": "newLogCmd: --issue, --worker, --since flags. Human-readable with [lost race]. --json JSONL with _lost_race. Registered in main.go. Note: OpAssign case in logPayloadSummary added in E3-004-T8.",
+  "scope": [
+    "cmd/trellis/**"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
+  },
+  "decision_refs": [],
+  "updated": 1773668289
+}
