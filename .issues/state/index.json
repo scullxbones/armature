@@ -127,7 +127,7 @@
     "outcome": "PR-based done-to-merged workflow: IndexEntry Branch/PR fields, trls status awaiting-merge callout, trls merged done-state validation and --pr flag, full e2e test. All tests pass."
   },
   "E3": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "children": [
       "E3-001",
@@ -136,14 +136,16 @@
       "E3-002",
       "E3-T13"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716865,
     "title": "E3: Multi-Worker Collaboration",
+    "outcome": "All four sub-stories implemented: push/sync (LowStakesPushThreshold, Push/FetchAndRebase on git.Client, Pusher interface, FilePushTracker, wire push deps), audit log (audit.Load, trls log command), worker presence (trls workers command), issue assignment (OpAssign, AssignedWorker materialization, trls assign/unassign, assignment-aware ComputeReady). All tests pass, binary builds.",
     "scope": [
       "internal/**"
     ]
   },
   "E3-001": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "parent": "E3",
     "children": [
@@ -156,27 +158,29 @@
     "blocks": [
       "E3-004"
     ],
-    "updated": 1773668289,
+    "updated": 1773715929,
     "title": "Push/Sync Layer — remote sync for _trellis branch",
     "scope": [
       "internal/git/**"
     ]
   },
   "E3-001-T1": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-001",
     "blocks": [
       "E3-001-T2"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773715924,
     "title": "Add LowStakesPushThreshold to Config",
+    "outcome": "Added LowStakesPushThreshold int field to Config struct with json tag. DefaultConfig returns 5. Tests pass.",
     "scope": [
       "internal/config/**"
     ]
   },
   "E3-001-T2": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-001",
     "blocked_by": [
@@ -185,14 +189,16 @@
     "blocks": [
       "E3-001-T3"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773715989,
     "title": "Add Push and FetchAndRebase to git.Client",
+    "outcome": "Added Push(branch string) and FetchAndRebase(branch string) methods to git.Client. Tests: fast-forward push succeeds, rejected push returns error, FetchAndRebase+Push succeeds after rejection. All pass.",
     "scope": [
       "internal/git/**"
     ]
   },
   "E3-001-T3": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-001",
     "blocked_by": [
@@ -201,14 +207,16 @@
     "blocks": [
       "E3-001-T4"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716048,
     "title": "Pusher interface + NoPusher + AppendCommitAndPush",
+    "outcome": "Added Pusher interface, NoPusher no-op, and AppendCommitAndPush with 4-attempt backoff (0s/2s/4s). Tests: single-branch skips push, dual-branch pushes, all-fail returns error. All pass.",
     "scope": [
       "internal/ops/**"
     ]
   },
   "E3-001-T4": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-001",
     "blocked_by": [
@@ -217,14 +225,16 @@
     "blocks": [
       "E3-001-T5"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716100,
     "title": "PendingPushTracker + FilePushTracker + NoTracker",
+    "outcome": "Added PendingPushTracker interface, FilePushTracker persisting to .issues/state/pending-push-count, and NoTracker no-op. Tests: increment/reset, persistence across instances, default threshold (5). All pass.",
     "scope": [
       "internal/ops/**"
     ]
   },
   "E3-001-T5": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-001",
     "blocked_by": [
@@ -233,14 +243,16 @@
     "blocks": [
       "E3-T13"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716233,
     "title": "Wire push deps through command helpers",
+    "outcome": "Added initPushDeps, appendHighStakesOp, appendLowStakesOp to helpers.go. PersistentPreRunE calls initPushDeps. claim/transition use appendHighStakesOp; note/heartbeat/decision use appendLowStakesOp. Push is best-effort so tests without remotes still pass. Full test suite passes.",
     "scope": [
       "cmd/trellis/**"
     ]
   },
   "E3-002": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "parent": "E3",
     "children": [
@@ -256,7 +268,7 @@
     ]
   },
   "E3-002-T12": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-002",
     "blocked_by": [
@@ -265,14 +277,16 @@
     "blocks": [
       "E3-T13"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716786,
     "title": "trls workers command",
+    "outcome": "Created cmd/trellis/workers.go: enumerateWorkers from ops/*.log, buildWorkerStatus (active=live claim, stale=all stale, idle=within 2*DefaultTTL), lastOpTimestampFromLog. Human and --json JSONL output. Registered in main.go. All tests pass.",
     "scope": [
       "cmd/trellis/**"
     ]
   },
   "E3-003": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "parent": "E3",
     "children": [
@@ -286,20 +300,22 @@
     ]
   },
   "E3-003-T6": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-003",
     "blocks": [
       "E3-003-T7"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716340,
     "title": "internal/audit/audit.go",
+    "outcome": "Created internal/audit/audit.go with Load function: walks ops/*.log, merges by timestamp, applies Filter (by issue/worker/since), marks LostRace via claim.ResolveClaim. Tests: all-ops, filter-by-issue, filter-by-worker, filter-by-since, lost-race, empty-dir, non-existent-dir. All pass.",
     "scope": [
       "internal/audit/**"
     ]
   },
   "E3-003-T7": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-003",
     "blocked_by": [
@@ -308,14 +324,16 @@
     "blocks": [
       "E3-T13"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716399,
     "title": "trls log command",
+    "outcome": "Created cmd/trellis/log.go: newLogCmd with --issue, --worker, --since flags. Human-readable output with [lost race] marker. --json outputs JSONL with _lost_race field. Registered in main.go. logPayloadSummary handles all current op types; OpAssign case to be added in T8.",
     "scope": [
       "cmd/trellis/**"
     ]
   },
   "E3-004": {
-    "status": "open",
+    "status": "merged",
     "type": "story",
     "parent": "E3",
     "children": [
@@ -334,7 +352,7 @@
     ]
   },
   "E3-004-T10": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-004",
     "blocked_by": [
@@ -343,14 +361,16 @@
     "blocks": [
       "E3-T13"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716612,
     "title": "trls assign and trls unassign commands",
+    "outcome": "Created cmd/trellis/assign.go with newAssignCmd (--issue, --worker required) and newUnassignCmd (--issue required). Both use appendHighStakesOp. Registered in main.go. All tests pass.",
     "scope": [
       "cmd/trellis/**"
     ]
   },
   "E3-004-T11": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-004",
     "blocked_by": [
@@ -359,27 +379,31 @@
     "blocks": [
       "E3-T13"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716719,
     "title": "Assignment-aware ready sort in ComputeReady",
+    "outcome": "Updated ComputeReady signature to ComputeReady(index, issues, workerID string, now ...int64). sortReady now uses assignmentTier: assigned-to-me=0, unassigned=1, other-assigned=2. Added --worker flag to trls ready. Updated all test callers. Tests pass including new assignment-aware sort tests.",
     "scope": [
       "internal/ready/**"
     ]
   },
   "E3-004-T8": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-004",
     "blocks": [
       "E3-004-T9"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716491,
     "title": "OpAssign type registration + schema + log.go OpAssign case",
+    "outcome": "Added OpAssign='assign' constant to types.go. Updated ValidOpTypes. Added AssignedTo field to Payload. Updated schema. Added OpAssign case to logPayloadSummary in log.go. Updated property round-trip test to include OpAssign. All tests pass.",
     "scope": [
       "internal/ops/**"
     ]
   },
   "E3-004-T9": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3-004",
     "blocked_by": [
@@ -391,14 +415,16 @@
       "E3-002",
       "E3-002-T12"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716573,
     "title": "Materialization: AssignedWorker field + applyAssign handler",
+    "outcome": "Added AssignedWorker string field to Issue and IndexEntry. Implemented applyAssign in engine (tolerates unknown issues). BuildIndex maps AssignedWorker. Tests: apply assign, unassign, tolerates unknown issue, BuildIndex includes field. All pass.",
     "scope": [
       "internal/materialize/**"
     ]
   },
   "E3-T13": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E3",
     "blocked_by": [
@@ -408,8 +434,10 @@
       "E3-004-T11",
       "E3-002-T12"
     ],
-    "updated": 1773668289,
+    "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+    "updated": 1773716855,
     "title": "Final Integration — build, test, all commands registered",
+    "outcome": "All 13 tasks complete. Commands registered: log, assign, unassign, workers. Full test suite passes (16 packages). Binary builds. --help works for all new commands.",
     "scope": [
       "cmd/trellis/**"
     ]

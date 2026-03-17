@@ -2,7 +2,7 @@ package ops
 
 import "encoding/json"
 
-// Op types — all 10 defined in architecture doc section 3.
+// Op types — all 10 defined in architecture doc section 3, plus OpAssign for E3.
 const (
 	OpCreate            = "create"
 	OpClaim             = "claim"
@@ -14,6 +14,7 @@ const (
 	OpSourceFingerprint = "source-fingerprint"
 	OpDAGTransition     = "dag-transition"
 	OpDecision          = "decision"
+	OpAssign            = "assign"
 )
 
 // ValidOpTypes for validation.
@@ -22,6 +23,7 @@ var ValidOpTypes = map[string]bool{
 	OpTransition: true, OpNote: true, OpLink: true,
 	OpSourceLink: true, OpSourceFingerprint: true,
 	OpDAGTransition: true, OpDecision: true,
+	OpAssign: true,
 }
 
 // Issue statuses.
@@ -103,4 +105,7 @@ type Payload struct {
 	Choice    string   `json:"choice,omitempty"`
 	Rationale string   `json:"rationale,omitempty"`
 	Affects   []string `json:"affects,omitempty"`
+
+	// assign
+	AssignedTo string `json:"assigned_to,omitempty"`
 }

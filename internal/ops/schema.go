@@ -7,7 +7,7 @@ func GenerateSchema() string {
 # Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
 #
 # Position 0: op_type (string) — one of: create, claim, heartbeat, transition,
-#             note, link, source-link, source-fingerprint, dag-transition, decision
+#             note, link, source-link, source-fingerprint, dag-transition, decision, assign
 # Position 1: target_id (string) — issue/node/source ID this op targets
 # Position 2: timestamp (integer) — Unix epoch seconds
 # Position 3: worker_id (string) — UUID of the worker emitting this op
@@ -28,5 +28,6 @@ func GenerateSchema() string {
 #   source-fingerprint: sha, version_id, provider
 #   dag-transition:     to, uncovered_acknowledged
 #   decision:           topic, choice, rationale, affects
+#   assign:             assigned_to (empty string to unassign)
 `
 }

@@ -10,6 +10,8 @@ import (
 )
 
 func newReadyCmd() *cobra.Command {
+	var workerID string
+
 	cmd := &cobra.Command{
 		Use:   "ready",
 		Short: "Show tasks ready to be claimed",
@@ -33,7 +35,7 @@ func newReadyCmd() *cobra.Command {
 				}
 			}
 
-			entries := ready.ComputeReady(index, issues)
+			entries := ready.ComputeReady(index, issues, workerID)
 
 			format, _ := cmd.Flags().GetString("format")
 			if format == "json" || format == "agent" {
@@ -56,5 +58,6 @@ func newReadyCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID for assignment-aware sorting")
 	return cmd
 }

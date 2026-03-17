@@ -146,6 +146,31 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 	return nil
 }
 
+// Push pushes the current branch to origin. Returns an error if the push is
+// rejected (e.g. non-fast-forward).
+func (c *Client) Push(branch string) error {
+	cmd := exec.Command("git", "-C", c.repoPath, "push", "origin", branch)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push origin %s: %w\n%s", branch, err, out)
+	}
+	return nil
+}
+
+// FetchAndRebase fetches from origin and rebases the local branch onto the
+// remote tracking branch. This is used to resolve push rejections.
+func (c *Client) FetchAndRebase(branch string) error {
+	fetch := exec.Command("git", "-C", c.repoPath, "fetch", "origin")
+	if out, err := fetch.CombinedOutput(); err != nil {
+		return fmt.Errorf("git fetch origin: %w\n%s", err, out)
+	}
+	rebase := exec.Command("git", "-C", c.repoPath, "rebase", "origin/"+branch)
+	if out, err := rebase.CombinedOutput(); err != nil {
+		return fmt.Errorf("git rebase origin/%s: %w\n%s", branch, err, out)
+	}
+	return nil
+}
+
 // BranchMergedInto checks if branch has been fully merged into target.
 // Returns (false, nil) if the branch does not exist, rather than an error.
 func (c *Client) BranchMergedInto(branch, target string) (bool, error) {

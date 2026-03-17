@@ -185,6 +185,46 @@ func TestPropCreateIdempotent(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+func TestApplyAssignOp(t *testing.T) {
+	state := NewState()
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
+	state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}})
+	assert.Equal(t, "worker-x", state.Issues["task-01"].AssignedWorker)
+}
+
+func TestApplyUnassignOp(t *testing.T) {
+	state := NewState()
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
+	state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}})
+	state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: ""}})
+	assert.Equal(t, "", state.Issues["task-01"].AssignedWorker)
+}
+
+func TestApplyAssignOp_ToleratesUnknownIssue(t *testing.T) {
+	state := NewState()
+	// No create op — assign should not error
+	err := state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "unknown-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}})
+	assert.NoError(t, err)
+}
+
+func TestBuildIndex_IncludesAssignedWorker(t *testing.T) {
+	s := NewState()
+	s.Issues["T-001"] = &Issue{
+		ID: "T-001", Type: "task", Status: "open", Title: "task",
+		AssignedWorker: "worker-x",
+		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
+	}
+	index := s.BuildIndex()
+	entry := index["T-001"]
+	assert.Equal(t, "worker-x", entry.AssignedWorker)
+}
+
 func TestBuildIndex_IncludesBranchAndPR(t *testing.T) {
 	s := NewState()
 	s.Issues["T-001"] = &Issue{

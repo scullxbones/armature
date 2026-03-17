@@ -1,7 +1,7 @@
 {
   "id": "E3-001-T1",
   "type": "task",
-  "status": "open",
+  "status": "merged",
   "title": "Add LowStakesPushThreshold to Config",
   "parent": "E3-001",
   "children": [],
@@ -20,5 +20,17 @@
     "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
   },
   "decision_refs": [],
-  "updated": 1773668289
+  "outcome": "Added LowStakesPushThreshold int field to Config struct with json tag. DefaultConfig returns 5. Tests pass.",
+  "notes": [
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773715891,
+      "msg": "Scope overlap with E3 detected at claim time"
+    }
+  ],
+  "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+  "claimed_at": 1773715891,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773715891,
+  "updated": 1773715924
 }

@@ -38,6 +38,7 @@ type Issue struct {
 	LastHeartbeat    int64           `json:"last_heartbeat,omitempty"`
 	Branch           string          `json:"branch,omitempty"`
 	PR               string          `json:"pr,omitempty"`
+	AssignedWorker   string          `json:"assigned_worker,omitempty"`
 	Updated          int64           `json:"updated"`
 }
 
@@ -64,19 +65,20 @@ type Decision struct {
 
 // IndexEntry is the denormalized summary stored in index.json.
 type IndexEntry struct {
-	Status    string   `json:"status"`
-	Type      string   `json:"type"`
-	Parent    string   `json:"parent,omitempty"`
-	Children  []string `json:"children,omitempty"`
-	BlockedBy []string `json:"blocked_by,omitempty"`
-	Blocks    []string `json:"blocks,omitempty"`
-	Assignee  string   `json:"assignee,omitempty"`
-	Updated   int64    `json:"updated"`
-	Title     string   `json:"title"`
-	Outcome   string   `json:"outcome,omitempty"`
-	Scope     []string `json:"scope,omitempty"`
-	Branch    string   `json:"branch,omitempty"`
-	PR        string   `json:"pr,omitempty"`
+	Status         string   `json:"status"`
+	Type           string   `json:"type"`
+	Parent         string   `json:"parent,omitempty"`
+	Children       []string `json:"children,omitempty"`
+	BlockedBy      []string `json:"blocked_by,omitempty"`
+	Blocks         []string `json:"blocks,omitempty"`
+	Assignee       string   `json:"assignee,omitempty"`
+	AssignedWorker string   `json:"assigned_worker,omitempty"`
+	Updated        int64    `json:"updated"`
+	Title          string   `json:"title"`
+	Outcome        string   `json:"outcome,omitempty"`
+	Scope          []string `json:"scope,omitempty"`
+	Branch         string   `json:"branch,omitempty"`
+	PR             string   `json:"pr,omitempty"`
 }
 
 type Index map[string]IndexEntry

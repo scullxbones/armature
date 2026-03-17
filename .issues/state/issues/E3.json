@@ -1,7 +1,7 @@
 {
   "id": "E3",
   "type": "story",
-  "status": "open",
+  "status": "merged",
   "title": "E3: Multi-Worker Collaboration",
   "children": [
     "E3-001",
@@ -23,5 +23,52 @@
     "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
   },
   "decision_refs": [],
-  "updated": 1773668289
+  "outcome": "All four sub-stories implemented: push/sync (LowStakesPushThreshold, Push/FetchAndRebase on git.Client, Pusher interface, FilePushTracker, wire push deps), audit log (audit.Load, trls log command), worker presence (trls workers command), issue assignment (OpAssign, AssignedWorker materialization, trls assign/unassign, assignment-aware ComputeReady). All tests pass, binary builds.",
+  "notes": [
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773715891,
+      "msg": "Scope overlap with E3-001-T1 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773715929,
+      "msg": "Scope overlap with E3-001-T2 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773715997,
+      "msg": "Scope overlap with E3-001-T3 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773716059,
+      "msg": "Scope overlap with E3-001-T4 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773716242,
+      "msg": "Scope overlap with E3-003-T6 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773716411,
+      "msg": "Scope overlap with E3-004-T8 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773716508,
+      "msg": "Scope overlap with E3-004-T9 detected at claim time"
+    },
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773716619,
+      "msg": "Scope overlap with E3-004-T11 detected at claim time"
+    }
+  ],
+  "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+  "claimed_at": 1773711118,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773711118,
+  "updated": 1773716865
 }

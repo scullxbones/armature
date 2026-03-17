@@ -28,6 +28,7 @@ func newRootCmd() *cobra.Command {
 				return err
 			}
 			appCtx = ctx
+			initPushDeps()
 			return nil
 		},
 	}
@@ -57,6 +58,10 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDecomposeApplyCmd())
 	root.AddCommand(newDecomposeRevertCmd())
 	root.AddCommand(newDecomposeContextCmd())
+	root.AddCommand(newLogCmd())
+	root.AddCommand(newAssignCmd())
+	root.AddCommand(newUnassignCmd())
+	root.AddCommand(newWorkersCmd())
 
 	return root
 }

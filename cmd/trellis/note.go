@@ -21,7 +21,7 @@ func newNoteCmd() *cobra.Command {
 			}
 			op := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{Msg: msg}}
-			if err := appendOp(logPath, op); err != nil {
+			if err := appendLowStakesOp(logPath, op); err != nil {
 				return err
 			}
 			result := map[string]string{"issue": issueID, "note": "added"}

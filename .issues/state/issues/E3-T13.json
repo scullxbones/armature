@@ -1,7 +1,7 @@
 {
   "id": "E3-T13",
   "type": "task",
-  "status": "open",
+  "status": "merged",
   "title": "Final Integration — build, test, all commands registered",
   "parent": "E3",
   "children": [],
@@ -24,5 +24,10 @@
     "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
   },
   "decision_refs": [],
-  "updated": 1773668289
+  "outcome": "All 13 tasks complete. Commands registered: log, assign, unassign, workers. Full test suite passes (16 packages). Binary builds. --help works for all new commands.",
+  "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+  "claimed_at": 1773716797,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773716797,
+  "updated": 1773716855
 }

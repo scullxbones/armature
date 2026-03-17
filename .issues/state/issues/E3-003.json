@@ -1,7 +1,7 @@
 {
   "id": "E3-003",
   "type": "story",
-  "status": "open",
+  "status": "merged",
   "title": "Audit Log Viewer — trls log command",
   "parent": "E3",
   "children": [

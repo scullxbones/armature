@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Mode        string       `json:"mode"`          // "single-branch" or "dual-branch"
-	ProjectType string       `json:"project_type"`
-	DefaultTTL  int          `json:"default_ttl"`   // minutes
-	TokenBudget int          `json:"token_budget"`
-	Hooks       []HookConfig `json:"hooks"`
+	Mode                   string       `json:"mode"`                     // "single-branch" or "dual-branch"
+	ProjectType            string       `json:"project_type"`
+	DefaultTTL             int          `json:"default_ttl"`              // minutes
+	TokenBudget            int          `json:"token_budget"`
+	LowStakesPushThreshold int          `json:"low_stakes_push_threshold"` // ops before auto-push
+	Hooks                  []HookConfig `json:"hooks"`
 }
 
 type HookConfig struct {
@@ -64,10 +65,11 @@ func DetectProjectType(repoPath string) string {
 // DefaultConfig returns a config with sensible defaults for single-branch mode.
 func DefaultConfig(projectType string) Config {
 	return Config{
-		Mode:        "single-branch",
-		ProjectType: projectType,
-		DefaultTTL:  60,
-		TokenBudget: 1600,
-		Hooks:       []HookConfig{},
+		Mode:                   "single-branch",
+		ProjectType:            projectType,
+		DefaultTTL:             60,
+		TokenBudget:            1600,
+		LowStakesPushThreshold: 5,
+		Hooks:                  []HookConfig{},
 	}
 }

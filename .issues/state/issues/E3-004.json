@@ -1,7 +1,7 @@
 {
   "id": "E3-004",
   "type": "story",
-  "status": "open",
+  "status": "merged",
   "title": "Issue Assignment — trls assign/unassign + ready sort",
   "parent": "E3",
   "children": [

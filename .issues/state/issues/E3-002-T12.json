@@ -1,7 +1,7 @@
 {
   "id": "E3-002-T12",
   "type": "task",
-  "status": "open",
+  "status": "merged",
   "title": "trls workers command",
   "parent": "E3-002",
   "children": [],
@@ -22,5 +22,10 @@
     "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
   },
   "decision_refs": [],
-  "updated": 1773668289
+  "outcome": "Created cmd/trellis/workers.go: enumerateWorkers from ops/*.log, buildWorkerStatus (active=live claim, stale=all stale, idle=within 2*DefaultTTL), lastOpTimestampFromLog. Human and --json JSONL output. Registered in main.go. All tests pass.",
+  "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+  "claimed_at": 1773716726,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773716726,
+  "updated": 1773716786
 }

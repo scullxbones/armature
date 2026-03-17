@@ -35,6 +35,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyLink(op)
 	case ops.OpDecision:
 		return s.applyDecision(op)
+	case ops.OpAssign:
+		return s.applyAssign(op)
 	case ops.OpSourceLink, ops.OpSourceFingerprint, ops.OpDAGTransition:
 		return nil
 	default:
@@ -164,6 +166,17 @@ func (s *State) applyLink(op ops.Op) error {
 	return nil
 }
 
+func (s *State) applyAssign(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		// Tolerate unknown issues (e.g. assign op before create op in log)
+		return nil
+	}
+	issue.AssignedWorker = op.Payload.AssignedTo
+	issue.Updated = op.Timestamp
+	return nil
+}
+
 func (s *State) applyDecision(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
@@ -230,19 +243,20 @@ func (s *State) BuildIndex() Index {
 	index := make(Index, len(s.Issues))
 	for id, issue := range s.Issues {
 		index[id] = IndexEntry{
-			Status:    issue.Status,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  issue.Children,
-			BlockedBy: issue.BlockedBy,
-			Blocks:    issue.Blocks,
-			Assignee:  issue.ClaimedBy,
-			Updated:   issue.Updated,
-			Title:     issue.Title,
-			Outcome:   issue.Outcome,
-			Scope:     issue.Scope,
-			Branch:    issue.Branch,
-			PR:        issue.PR,
+			Status:         issue.Status,
+			Type:           issue.Type,
+			Parent:         issue.Parent,
+			Children:       issue.Children,
+			BlockedBy:      issue.BlockedBy,
+			Blocks:         issue.Blocks,
+			Assignee:       issue.ClaimedBy,
+			AssignedWorker: issue.AssignedWorker,
+			Updated:        issue.Updated,
+			Title:          issue.Title,
+			Outcome:        issue.Outcome,
+			Scope:          issue.Scope,
+			Branch:         issue.Branch,
+			PR:             issue.PR,
 		}
 	}
 	return index

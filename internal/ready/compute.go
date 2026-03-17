@@ -21,7 +21,9 @@ type ReadyEntry struct {
 }
 
 // ComputeReady applies the 4-rule gate and returns a priority-sorted ready queue.
-func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue, now ...int64) []ReadyEntry {
+// workerID is used for assignment-aware sorting: assigned-to-me first, unassigned next,
+// other-assigned last. Pass "" to disable assignment-aware sorting.
+func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue, workerID string, now ...int64) []ReadyEntry {
 	var currentTime int64
 	if len(now) > 0 {
 		currentTime = now[0]
@@ -71,7 +73,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		ready = append(ready, re)
 	}
 
-	sortReady(ready, index)
+	sortReady(ready, index, workerID)
 	return ready
 }
 
@@ -105,8 +107,30 @@ var priorityOrder = map[string]int{
 	"":         4,
 }
 
-func sortReady(entries []ReadyEntry, index materialize.Index) {
+// assignmentTier returns a sort tier for assignment-aware ordering:
+// 0 = assigned to me, 1 = unassigned, 2 = assigned to someone else.
+func assignmentTier(issueID, workerID string, index materialize.Index) int {
+	if workerID == "" {
+		return 1 // no worker context — treat all as unassigned tier
+	}
+	entry := index[issueID]
+	if entry.AssignedWorker == "" {
+		return 1
+	}
+	if entry.AssignedWorker == workerID {
+		return 0
+	}
+	return 2
+}
+
+func sortReady(entries []ReadyEntry, index materialize.Index, workerID string) {
 	sort.SliceStable(entries, func(i, j int) bool {
+		// Assignment tier first
+		ai := assignmentTier(entries[i].Issue, workerID, index)
+		aj := assignmentTier(entries[j].Issue, workerID, index)
+		if ai != aj {
+			return ai < aj
+		}
 		pi := priorityOrder[entries[i].Priority]
 		pj := priorityOrder[entries[j].Priority]
 		if pi != pj {

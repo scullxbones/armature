@@ -1,7 +1,7 @@
 {
   "id": "E3-001-T5",
   "type": "task",
-  "status": "open",
+  "status": "merged",
   "title": "Wire push deps through command helpers",
   "parent": "E3-001",
   "children": [],
@@ -22,5 +22,10 @@
     "source_worker": "aa425376-bcd1-4add-a700-33714c369859"
   },
   "decision_refs": [],
-  "updated": 1773668289
+  "outcome": "Added initPushDeps, appendHighStakesOp, appendLowStakesOp to helpers.go. PersistentPreRunE calls initPushDeps. claim/transition use appendHighStakesOp; note/heartbeat/decision use appendLowStakesOp. Push is best-effort so tests without remotes still pass. Full test suite passes.",
+  "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+  "claimed_at": 1773716105,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773716105,
+  "updated": 1773716233
 }

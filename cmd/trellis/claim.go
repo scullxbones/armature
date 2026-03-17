@@ -58,7 +58,7 @@ func newClaimCmd() *cobra.Command {
 				Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{TTL: ttl},
 			}
-			if err := appendOp(logPath, op); err != nil {
+			if err := appendHighStakesOp(logPath, op); err != nil {
 				return err
 			}
 
