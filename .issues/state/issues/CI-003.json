@@ -1,7 +1,7 @@
 {
   "id": "CI-003",
   "type": "task",
-  "status": "open",
+  "status": "merged",
   "title": "Document make check in AGENTS.md as pre-commit requirement",
   "parent": "CI-001",
   "children": [],
@@ -18,5 +18,5 @@
     "source_worker": "40f8338e-1ef0-4068-bb0c-6eabd69387ec"
   },
   "decision_refs": [],
-  "updated": 1773833662
+  "updated": 1773845954
 }

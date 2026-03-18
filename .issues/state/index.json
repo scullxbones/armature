@@ -13,34 +13,34 @@
     "outcome": "make check target added (lint→test→coverage-check→mutate), GitHub Actions workflow created (.github/workflows/ci.yml) triggering on push/PR, AGENTS.md updated with make check as pre-commit requirement"
   },
   "CI-002": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "CI-001",
     "blocks": [
       "CI-003",
       "CI-004"
     ],
-    "updated": 1773833662,
+    "updated": 1773845946,
     "title": "Add make check target to Makefile"
   },
   "CI-003": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "CI-001",
     "blocked_by": [
       "CI-002"
     ],
-    "updated": 1773833662,
+    "updated": 1773845954,
     "title": "Document make check in AGENTS.md as pre-commit requirement"
   },
   "CI-004": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "CI-001",
     "blocked_by": [
       "CI-002"
     ],
-    "updated": 1773833662,
+    "updated": 1773845954,
     "title": "Create GitHub Actions CI workflow running make check on push and PR"
   },
   "E2-001": {
