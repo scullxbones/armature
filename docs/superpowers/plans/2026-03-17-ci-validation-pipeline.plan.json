@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "title": "CI Validation Pipeline",
+  "issues": [
+    {
+      "id": "CI-001",
+      "title": "CI Validation Pipeline — make check + GitHub Actions",
+      "type": "story",
+      "priority": "high",
+      "dod": "make check runs lint, test, coverage-check, and mutate in order; GitHub Actions workflow runs make check on every push and PR; AGENTS.md documents make check as pre-commit requirement"
+    },
+    {
+      "id": "CI-002",
+      "title": "Add make check target to Makefile",
+      "type": "task",
+      "parent": "CI-001",
+      "priority": "high",
+      "dod": "make --dry-run check outputs lint, test, coverage-check, mutate commands in that order; check appears in .PHONY and help output"
+    },
+    {
+      "id": "CI-003",
+      "title": "Document make check in AGENTS.md as pre-commit requirement",
+      "type": "task",
+      "parent": "CI-001",
+      "priority": "high",
+      "blocked_by": ["CI-002"],
+      "dod": "AGENTS.md has a Before You Commit section between Key Commands and File Organization explaining make check and its four steps"
+    },
+    {
+      "id": "CI-004",
+      "title": "Create GitHub Actions CI workflow running make check on push and PR",
+      "type": "task",
+      "parent": "CI-001",
+      "priority": "high",
+      "blocked_by": ["CI-002"],
+      "dod": ".github/workflows/ci.yml exists, YAML is valid, workflow triggers on push and pull_request, installs golangci-lint and gremlins via go install, runs make check"
+    }
+  ]
+}
