@@ -1,4 +1,4 @@
-.PHONY: test coverage lint clean mutate help skill install
+.PHONY: test coverage coverage-check lint clean mutate help skill install
 
 # Default target
 .DEFAULT_GOAL := help
@@ -7,6 +7,7 @@ help:
 	@echo "Trellis Go build targets:"
 	@echo "  make test       - Run all tests"
 	@echo "  make coverage   - Generate coverage report (coverage.html)"
+	@echo "  make coverage-check - Check coverage meets 80% threshold (fails build if not)"
 	@echo "  make lint       - Run golangci-lint"
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make clean      - Remove build artifacts and test outputs"
@@ -21,6 +22,15 @@ coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
+
+coverage-check:
+	go test -coverprofile=coverage.out ./...
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
+	echo "Total coverage: $${COVERAGE}%"; \
+	if [ $$(echo "$${COVERAGE} < 80" | bc -l) -eq 1 ]; then \
+		echo "FAIL: coverage $${COVERAGE}% is below 80% threshold"; \
+		exit 1; \
+	fi
 
 lint:
 	golangci-lint run ./...
