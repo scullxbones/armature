@@ -1,4 +1,47 @@
 {
+  "CI-001": {
+    "status": "claimed",
+    "type": "story",
+    "children": [
+      "CI-002",
+      "CI-003",
+      "CI-004"
+    ],
+    "assignee": "9145afd3-1593-41ee-93d7-a0d15c89f09c",
+    "updated": 1773833736,
+    "title": "CI Validation Pipeline — make check + GitHub Actions"
+  },
+  "CI-002": {
+    "status": "open",
+    "type": "task",
+    "parent": "CI-001",
+    "blocks": [
+      "CI-003",
+      "CI-004"
+    ],
+    "updated": 1773833662,
+    "title": "Add make check target to Makefile"
+  },
+  "CI-003": {
+    "status": "open",
+    "type": "task",
+    "parent": "CI-001",
+    "blocked_by": [
+      "CI-002"
+    ],
+    "updated": 1773833662,
+    "title": "Document make check in AGENTS.md as pre-commit requirement"
+  },
+  "CI-004": {
+    "status": "open",
+    "type": "task",
+    "parent": "CI-001",
+    "blocked_by": [
+      "CI-002"
+    ],
+    "updated": 1773833662,
+    "title": "Create GitHub Actions CI workflow running make check on push and PR"
+  },
   "E2-001": {
     "status": "merged",
     "type": "story",

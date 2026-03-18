@@ -45,9 +45,22 @@ Example: A change to DAG cycle detection logic does not break any test.
 3. Fix the property test to fail on the mutant
 4. Re-run `gremlins`; mutation should now be caught
 
+## Pre-Commit Requirement
+
+**Always run `make check` before committing.** This runs the full CI validation pipeline:
+
+```bash
+make check   # lint → test → coverage-check → mutate (stops on first failure)
+```
+
+CI (GitHub Actions) runs `make check` on every push and pull request. A passing `make check` locally is the minimum bar for a commit.
+
 ## Key Commands
 
 ```bash
+# Full CI validation (required before committing)
+make check
+
 # Run tests
 make test
 

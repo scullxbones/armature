@@ -1,10 +1,11 @@
-.PHONY: test coverage coverage-check lint clean mutate help skill install
+.PHONY: test coverage coverage-check lint clean mutate check help skill install
 
 # Default target
 .DEFAULT_GOAL := help
 
 help:
 	@echo "Trellis Go build targets:"
+	@echo "  make check      - Run full CI validation: lint, test, coverage-check, mutate"
 	@echo "  make test       - Run all tests"
 	@echo "  make coverage   - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check - Check coverage meets 80% threshold (fails build if not)"
@@ -14,6 +15,8 @@ help:
 	@echo "  make build      - Build CLI binary to ./bin/trls"
 	@echo "  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/trls (adds to PATH)"
+
+check: lint test coverage-check mutate
 
 test:
 	go test -v ./...

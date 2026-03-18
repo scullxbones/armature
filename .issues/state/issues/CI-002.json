@@ -1,0 +1,23 @@
+{
+  "id": "CI-002",
+  "type": "task",
+  "status": "open",
+  "title": "Add make check target to Makefile",
+  "parent": "CI-001",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "CI-003",
+    "CI-004"
+  ],
+  "priority": "high",
+  "definition_of_done": "make --dry-run check outputs lint, test, coverage-check, mutate commands in that order; check appears in .PHONY and help output",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "40f8338e-1ef0-4068-bb0c-6eabd69387ec"
+  },
+  "decision_refs": [],
+  "updated": 1773833662
+}

@@ -1,0 +1,27 @@
+{
+  "id": "CI-001",
+  "type": "story",
+  "status": "claimed",
+  "title": "CI Validation Pipeline — make check + GitHub Actions",
+  "children": [
+    "CI-002",
+    "CI-003",
+    "CI-004"
+  ],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "make check runs lint, test, coverage-check, and mutate in order; GitHub Actions workflow runs make check on every push and PR; AGENTS.md documents make check as pre-commit requirement",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "40f8338e-1ef0-4068-bb0c-6eabd69387ec"
+  },
+  "decision_refs": [],
+  "claimed_by": "9145afd3-1593-41ee-93d7-a0d15c89f09c",
+  "claimed_at": 1773833736,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773833736,
+  "updated": 1773833736
+}

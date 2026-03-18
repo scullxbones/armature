@@ -1,0 +1,22 @@
+{
+  "id": "CI-003",
+  "type": "task",
+  "status": "open",
+  "title": "Document make check in AGENTS.md as pre-commit requirement",
+  "parent": "CI-001",
+  "children": [],
+  "blocked_by": [
+    "CI-002"
+  ],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "AGENTS.md has a Before You Commit section between Key Commands and File Organization explaining make check and its four steps",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "40f8338e-1ef0-4068-bb0c-6eabd69387ec"
+  },
+  "decision_refs": [],
+  "updated": 1773833662
+}
