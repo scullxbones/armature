@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "title": "Test Coverage Hardening — 80% Enforcement and Mutation Efficacy",
+  "issues": [
+    {
+      "id": "TC-001",
+      "title": "Test Coverage Hardening — 80% Enforcement and Mutation Efficacy",
+      "type": "story",
+      "priority": "high",
+      "dod": "Coverage ≥80% enforced via Makefile, mutation efficacy ≥90%, all new tests passing"
+    },
+    {
+      "id": "TC-002",
+      "title": "Add coverage-check target to Makefile enforcing 80% threshold",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "dod": "make coverage-check fails at current 68.2% and will pass once coverage reaches 80%"
+    },
+    {
+      "id": "TC-003",
+      "title": "Cover buildSnippets, buildDecisions, buildNotes, buildSiblingOutcomes in internal/context",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "dod": "All 7 tests pass: UnknownIssue, WithContext, InvalidJSON, BuildDecisions, BuildNotes_WithNotes, TruncatesAtFive, SiblingOutcomes and NoParent"
+    },
+    {
+      "id": "TC-004",
+      "title": "Cover RenderAgent and RenderHuman in internal/context",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "blocked_by": ["TC-003"],
+      "dod": "TestRenderAgent and TestRenderHuman pass; RenderAgent output is valid JSON containing issue ID and layer names"
+    },
+    {
+      "id": "TC-005",
+      "title": "Kill LIVED mutations in context/truncate.go with boundary condition tests",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "blocked_by": ["TC-004"],
+      "dod": "All 4 Truncate boundary tests pass: ExactlyAtBudget, OneBelowBudget, SingleLayer_NeverRemoved, EqualPriority_RemovesHigherIndex"
+    },
+    {
+      "id": "TC-006",
+      "title": "Cover MaterializeAndReturn, appendUnique, RunRollup, and sort helpers in internal/materialize",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "dod": "All tests pass: MaterializeAndReturn_BasicPipeline, EmptyDir, AppendUnique_AddsNew/SkipsDuplicate, RunRollup promotions, ApplyTransition_Reopen, PromoteParent, SortOps"
+    },
+    {
+      "id": "TC-007",
+      "title": "Cover isClaimStale boundaries, depth cycle cap, and assignmentTier in internal/ready",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "dod": "All tests pass: isClaimStale exact boundary/past/zero/heartbeat, depth DeepChain/NoParent/Missing, assignmentTier AssignedToMe/Unassigned/Other/NoWorker"
+    },
+    {
+      "id": "TC-008",
+      "title": "Cover workers command, buildWorkerStatus, and lastOpTimestampFromLog in cmd/trellis",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "dod": "All tests pass: LastOpTimestamp, BuildWorkerStatus_Active/Stale/Idle/Transitioned, WorkersCommand_Empty/WithWorker/JSONOutput"
+    },
+    {
+      "id": "TC-009",
+      "title": "Cover log, assign, heartbeat, decision, link, reopen commands and logPayloadSummary in cmd/trellis",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "blocked_by": ["TC-008"],
+      "dod": "All tests pass: LogCommand_Empty/WithEntries/JSONOutput/FilterByIssue, Assign, Unassign, Heartbeat, Decision, Link, Reopen, LogPayloadSummary"
+    },
+    {
+      "id": "TC-010",
+      "title": "Verify coverage ≥80% via make coverage-check and mutation efficacy ≥85%",
+      "type": "task",
+      "parent": "TC-001",
+      "priority": "high",
+      "blocked_by": ["TC-002", "TC-005", "TC-006", "TC-007", "TC-009"],
+      "dod": "make coverage-check exits 0 with coverage ≥80%; make mutate shows internal efficacy ≥85%"
+    }
+  ]
+}
