@@ -1,6 +1,7 @@
 package ready
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -161,4 +162,83 @@ func TestReadyTask_NoWorkerID_NoAssignmentOrdering(t *testing.T) {
 	// With no workerID, assignment tier is 1 for all, so sort falls back to ID
 	assert.Equal(t, "task-a", ready[0].Issue)
 	assert.Equal(t, "task-b", ready[1].Issue)
+}
+
+func TestIsClaimStale_ExactBoundary_NotStale(t *testing.T) {
+	// claimedAt=0, ttl=1min, now=60 — exactly at boundary, should NOT be stale
+	assert.False(t, isClaimStale(0, 0, 1, 60), "at exact TTL boundary should not be stale")
+}
+
+func TestIsClaimStale_OnePastBoundary_IsStale(t *testing.T) {
+	// now=61 (1 second past 1-minute TTL)
+	assert.True(t, isClaimStale(0, 0, 1, 61))
+}
+
+func TestIsClaimStale_ZeroTTL_NeverStale(t *testing.T) {
+	assert.False(t, isClaimStale(0, 0, 0, 99999))
+}
+
+func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
+	// Claimed at 0, heartbeat at 100, TTL=1min
+	// Without heartbeat: stale at now=61
+	// With heartbeat: not stale until now=160
+	assert.False(t, isClaimStale(0, 100, 1, 130))
+	assert.True(t, isClaimStale(0, 100, 1, 161))
+}
+
+func TestDepth_DeepChain_CapsAt20(t *testing.T) {
+	index := make(materialize.Index)
+	// Build a chain deeper than 20
+	for i := 0; i < 25; i++ {
+		id := fmt.Sprintf("issue-%02d", i)
+		parent := ""
+		if i > 0 {
+			parent = fmt.Sprintf("issue-%02d", i-1)
+		}
+		index[id] = materialize.IndexEntry{Parent: parent}
+	}
+
+	d := depth("issue-24", index)
+	assert.Equal(t, 21, d, "depth should cap at 21 to break cycles")
+}
+
+func TestDepth_NoParent(t *testing.T) {
+	index := materialize.Index{
+		"task-01": {Parent: ""},
+	}
+	assert.Equal(t, 0, depth("task-01", index))
+}
+
+func TestDepth_MissingFromIndex(t *testing.T) {
+	index := materialize.Index{}
+	assert.Equal(t, 0, depth("missing", index))
+}
+
+func TestAssignmentTier_AssignedToMe(t *testing.T) {
+	index := materialize.Index{
+		"T-001": {AssignedWorker: "worker-x"},
+	}
+	assert.Equal(t, 0, assignmentTier("T-001", "worker-x", index))
+}
+
+func TestAssignmentTier_Unassigned(t *testing.T) {
+	index := materialize.Index{
+		"T-001": {AssignedWorker: ""},
+	}
+	assert.Equal(t, 1, assignmentTier("T-001", "worker-x", index))
+}
+
+func TestAssignmentTier_AssignedToOther(t *testing.T) {
+	index := materialize.Index{
+		"T-001": {AssignedWorker: "worker-other"},
+	}
+	assert.Equal(t, 2, assignmentTier("T-001", "worker-x", index))
+}
+
+func TestAssignmentTier_NoWorkerContext(t *testing.T) {
+	index := materialize.Index{
+		"T-001": {AssignedWorker: "worker-x"},
+	}
+	// Empty workerID means no assignment context — treat as unassigned tier
+	assert.Equal(t, 1, assignmentTier("T-001", "", index))
 }
