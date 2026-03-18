@@ -39,13 +39,13 @@ func newDecomposeApplyCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Applied %d issues from plan\n", count)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Applied %d issues from plan\n", count)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
-	cmd.MarkFlagRequired("plan")
+	_ = cmd.MarkFlagRequired("plan")
 	return cmd
 }
 
@@ -79,13 +79,13 @@ func newDecomposeRevertCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Reverted %d issues from plan\n", count)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reverted %d issues from plan\n", count)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
-	cmd.MarkFlagRequired("plan")
+	_ = cmd.MarkFlagRequired("plan")
 	return cmd
 }
 
@@ -101,12 +101,12 @@ func newDecomposeContextCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), decompose.PlanContext(plan))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), decompose.PlanContext(plan))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
-	cmd.MarkFlagRequired("plan")
+	_ = cmd.MarkFlagRequired("plan")
 	return cmd
 }

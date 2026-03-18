@@ -25,7 +25,7 @@ func newWorkerInitCmd() *cobra.Command {
 				if !ok {
 					return fmt.Errorf("no worker ID configured — run 'trls worker-init'")
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Worker ID: %s\n", id)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Worker ID: %s\n", id)
 				return nil
 			}
 
@@ -33,7 +33,7 @@ func newWorkerInitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Worker ID: %s\n", id)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Worker ID: %s\n", id)
 			return nil
 		},
 	}

@@ -65,7 +65,7 @@ func printLogHuman(cmd *cobra.Command, entries []audit.Entry) error {
 			lostRaceStr = " [lost race]"
 		}
 		summary := logPayloadSummary(e.Op)
-		fmt.Fprintf(cmd.OutOrStdout(), "%s  %-20s  %-12s  %-10s  %s%s\n",
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-20s  %-12s  %-10s  %s%s\n",
 			ts, e.WorkerID, e.TargetID, e.Type, summary, lostRaceStr)
 	}
 	return nil
@@ -94,7 +94,7 @@ func printLogJSON(cmd *cobra.Command, entries []audit.Entry) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 	}
 	return nil
 }

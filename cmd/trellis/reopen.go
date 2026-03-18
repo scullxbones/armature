@@ -25,6 +25,6 @@ func newReopenCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to reopen")
-	cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

@@ -49,9 +49,9 @@ func newRenderContextCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), out)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), out)
 			} else {
-				fmt.Fprint(cmd.OutOrStdout(), context.RenderHuman(ctx))
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), context.RenderHuman(ctx))
 			}
 
 			return nil
@@ -61,7 +61,7 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&rcIssue, "issue", "", "Issue ID (required)")
 	cmd.Flags().IntVar(&rcBudget, "budget", 4000, "Token budget")
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
-	cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue")
 
 	return cmd
 }

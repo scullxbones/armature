@@ -69,7 +69,7 @@ func newStatusCmd() *cobra.Command {
 				if status == ops.StatusDone && !singleBranch {
 					label = "done (awaiting merge)"
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
 
 				for _, id := range ids {
 					entry := index[id]
@@ -81,7 +81,7 @@ func newStatusCmd() *cobra.Command {
 						}
 						line += "]"
 					}
-					fmt.Fprintln(cmd.OutOrStdout(), line)
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
 				}
 			}
 

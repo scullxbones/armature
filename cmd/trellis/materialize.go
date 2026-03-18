@@ -17,11 +17,11 @@ func newMaterializeCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Materialized %d issues from %d ops", result.IssueCount, result.OpsProcessed)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Materialized %d issues from %d ops", result.IssueCount, result.OpsProcessed)
 			if result.FullReplay {
-				fmt.Fprint(cmd.OutOrStdout(), " (full replay)")
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), " (full replay)")
 			}
-			fmt.Fprintln(cmd.OutOrStdout())
+			_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			return nil
 		},
 	}

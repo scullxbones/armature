@@ -28,7 +28,7 @@ func newDecisionCmd() *cobra.Command {
 			}
 			result := map[string]string{"issue": issueID, "topic": topic, "choice": choice}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
@@ -38,8 +38,8 @@ func newDecisionCmd() *cobra.Command {
 	cmd.Flags().StringVar(&choice, "choice", "", "chosen option")
 	cmd.Flags().StringVar(&rationale, "rationale", "", "why this choice")
 	cmd.Flags().StringSliceVar(&affects, "affects", nil, "affected scope globs")
-	cmd.MarkFlagRequired("issue")
-	cmd.MarkFlagRequired("topic")
-	cmd.MarkFlagRequired("choice")
+	_ = cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("topic")
+	_ = cmd.MarkFlagRequired("choice")
 	return cmd
 }

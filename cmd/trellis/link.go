@@ -26,7 +26,7 @@ func newLinkCmd() *cobra.Command {
 			}
 			result := map[string]string{"source": sourceID, "dep": dep, "rel": rel}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
@@ -34,7 +34,7 @@ func newLinkCmd() *cobra.Command {
 	cmd.Flags().StringVar(&sourceID, "source", "", "source issue ID")
 	cmd.Flags().StringVar(&dep, "dep", "", "dependency issue ID")
 	cmd.Flags().StringVar(&rel, "rel", "blocked_by", "relationship type")
-	cmd.MarkFlagRequired("source")
-	cmd.MarkFlagRequired("dep")
+	_ = cmd.MarkFlagRequired("source")
+	_ = cmd.MarkFlagRequired("dep")
 	return cmd
 }

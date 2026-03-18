@@ -51,7 +51,7 @@ func TestCheckWorkerID(t *testing.T) {
 	ok, _ := CheckWorkerID(repo)
 	assert.False(t, ok)
 
-	InitWorker(repo)
+	_, _ = InitWorker(repo)
 
 	ok, id := CheckWorkerID(repo)
 	assert.True(t, ok)

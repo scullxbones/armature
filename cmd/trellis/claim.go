@@ -44,7 +44,7 @@ func newClaimCmd() *cobra.Command {
 					continue
 				}
 				if claimPkg.ScopesOverlap(issue.Scope, entry.Scope) {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: scope overlap with %s (%s)\n", id, entry.Title)
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: scope overlap with %s (%s)\n", id, entry.Title)
 					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
 					appendOp(logPath, noteOp) //nolint:errcheck
@@ -64,13 +64,13 @@ func newClaimCmd() *cobra.Command {
 
 			result := map[string]interface{}{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
 	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
-	cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

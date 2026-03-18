@@ -37,7 +37,7 @@ func TestDetectProjectType(t *testing.T) {
 	assert.Equal(t, "unknown", DetectProjectType(dir))
 
 	// Add go.mod
-	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644))
 	assert.Equal(t, "go", DetectProjectType(dir))
 }
 
@@ -45,7 +45,7 @@ func TestDetectProjectTypePriority(t *testing.T) {
 	dir := t.TempDir()
 
 	// Both go.mod and package.json — go wins
-	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
-	os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644))
 	assert.Equal(t, "go", DetectProjectType(dir))
 }

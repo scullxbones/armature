@@ -46,7 +46,7 @@ func newCreateCmd() *cobra.Command {
 
 			result := map[string]string{"id": id, "status": "created"}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
@@ -58,7 +58,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
-	cmd.MarkFlagRequired("title")
+	_ = cmd.MarkFlagRequired("title")
 
 	return cmd
 }

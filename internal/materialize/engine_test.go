@@ -30,10 +30,10 @@ func TestApplyCreateOp(t *testing.T) {
 
 func TestApplyClaimOp(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
 	issue := state.Issues["task-01"]
 	assert.Equal(t, "claimed", issue.Status)
 	assert.Equal(t, "w1", issue.ClaimedBy)
@@ -42,12 +42,12 @@ func TestApplyClaimOp(t *testing.T) {
 
 func TestApplyTransitionOp(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
-	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "Fixed it"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "Fixed it"}}))
 	issue := state.Issues["task-01"]
 	assert.Equal(t, "done", issue.Status)
 	assert.Equal(t, "Fixed it", issue.Outcome)
@@ -55,34 +55,34 @@ func TestApplyTransitionOp(t *testing.T) {
 
 func TestApplyNoteOp(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpNote, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{Msg: "Found edge case"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpNote, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Msg: "Found edge case"}}))
 	assert.Len(t, state.Issues["task-01"].Notes, 1)
 	assert.Equal(t, "Found edge case", state.Issues["task-01"].Notes[0].Msg)
 }
 
 func TestApplyLinkOp(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "A", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 101,
-		WorkerID: "w1", Payload: ops.Payload{Title: "B", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocked_by"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "A", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "B", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocked_by"}}))
 	assert.Contains(t, state.Issues["task-01"].BlockedBy, "task-02")
 	assert.Contains(t, state.Issues["task-02"].Blocks, "task-01")
 }
 
 func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpDecision, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{Topic: "db", Choice: "postgres", Rationale: "mature"}})
-	state.ApplyOp(ops.Op{Type: ops.OpDecision, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w2", Payload: ops.Payload{Topic: "db", Choice: "sqlite", Rationale: "simpler"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpDecision, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Topic: "db", Choice: "postgres", Rationale: "mature"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpDecision, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w2", Payload: ops.Payload{Topic: "db", Choice: "sqlite", Rationale: "simpler"}}))
 	decisions := state.Issues["task-01"].Decisions
 	active := activeDecisionForTopic(decisions, "db")
 	assert.Equal(t, "sqlite", active.Choice)
@@ -91,12 +91,12 @@ func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 func TestSingleBranchAutoMerge(t *testing.T) {
 	state := NewState()
 	state.SingleBranchMode = true
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
-	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "Done"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "Done"}}))
 	assert.Equal(t, "merged", state.Issues["task-01"].Status)
 }
 
@@ -105,16 +105,16 @@ func TestMaterializePipeline(t *testing.T) {
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")
 	issuesDir := filepath.Join(stateDir, "issues")
-	os.MkdirAll(opsDir, 0755)
-	os.MkdirAll(issuesDir, 0755)
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 
 	logPath := filepath.Join(opsDir, "worker-a1.log")
-	ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100,
-		WorkerID: "worker-a1", Payload: ops.Payload{Title: "Epic", NodeType: "epic"}})
-	ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
-		WorkerID: "worker-a1", Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: "epic-01"}})
-	ops.AppendOp(logPath, ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "worker-a1", Payload: ops.Payload{TTL: 60}})
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100,
+		WorkerID: "worker-a1", Payload: ops.Payload{Title: "Epic", NodeType: "epic"}}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "worker-a1", Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: "epic-01"}}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "worker-a1", Payload: ops.Payload{TTL: 60}}))
 
 	result, err := Materialize(dir, true)
 	require.NoError(t, err)
@@ -142,10 +142,10 @@ func TestPropRandomOpsNeverCrash(t *testing.T) {
 			state := NewState()
 			state.SingleBranchMode = true
 
-			state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: targetID, Timestamp: ts,
+			_ = state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: targetID, Timestamp: ts,
 				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
 
-			state.ApplyOp(ops.Op{Type: opType, TargetID: targetID, Timestamp: ts + 1,
+			_ = state.ApplyOp(ops.Op{Type: opType, TargetID: targetID, Timestamp: ts + 1,
 				WorkerID: "w1", Payload: ops.Payload{TTL: 60, To: "done", Msg: "test",
 					Dep: "other", Rel: "blocked_by", Topic: "t", Choice: "c"}})
 
@@ -174,8 +174,8 @@ func TestPropCreateIdempotent(t *testing.T) {
 			op := ops.Op{Type: ops.OpCreate, TargetID: id, Timestamp: 100,
 				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}
 
-			state.ApplyOp(op)
-			state.ApplyOp(op)
+			_ = state.ApplyOp(op)
+			_ = state.ApplyOp(op)
 
 			return len(state.Issues) == 1 && state.Issues[id].Title == "T"
 		},
@@ -187,21 +187,21 @@ func TestPropCreateIdempotent(t *testing.T) {
 
 func TestApplyAssignOp(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}}))
 	assert.Equal(t, "worker-x", state.Issues["task-01"].AssignedWorker)
 }
 
 func TestApplyUnassignOp(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}})
-	state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{AssignedTo: ""}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: "worker-x"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{AssignedTo: ""}}))
 	assert.Equal(t, "", state.Issues["task-01"].AssignedWorker)
 }
 
@@ -218,7 +218,7 @@ func TestBuildIndex_IncludesAssignedWorker(t *testing.T) {
 	s.Issues["T-001"] = &Issue{
 		ID: "T-001", Type: "task", Status: "open", Title: "task",
 		AssignedWorker: "worker-x",
-		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
+		Children:       []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
 	index := s.BuildIndex()
 	entry := index["T-001"]
@@ -245,12 +245,12 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")
 	issuesDir := filepath.Join(stateDir, "issues")
-	os.MkdirAll(opsDir, 0755)
-	os.MkdirAll(issuesDir, 0755)
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 
 	logPath := filepath.Join(opsDir, "worker-b1.log")
-	ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "worker-b1", Payload: ops.Payload{Title: "My Task", NodeType: "task"}})
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "worker-b1", Payload: ops.Payload{Title: "My Task", NodeType: "task"}}))
 
 	state, result, err := MaterializeAndReturn(dir, true)
 	require.NoError(t, err)
@@ -285,17 +285,17 @@ func TestAppendUnique_SkipsDuplicate(t *testing.T) {
 
 func TestRunRollup_PromotesStoryWhenAllChildrenMerged(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}})
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
-		WorkerID: "w1", Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: "story-01"}})
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
 
 	// In single branch mode, done → merged
 	state.SingleBranchMode = true
-	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "done"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "done"}}))
 
 	state.RunRollup()
 	assert.Equal(t, "merged", state.Issues["story-01"].Status)
@@ -303,18 +303,18 @@ func TestRunRollup_PromotesStoryWhenAllChildrenMerged(t *testing.T) {
 
 func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}})
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
-		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}})
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
-		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}}))
 
 	state.SingleBranchMode = true
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
-	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{To: "done"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done"}}))
 
 	state.RunRollup()
 	assert.NotEqual(t, "merged", state.Issues["story-01"].Status, "story should not be merged with open task-02")
@@ -322,14 +322,14 @@ func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
 
 func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
-	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "First attempt done"}})
-	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 400,
-		WorkerID: "w1", Payload: ops.Payload{To: "open"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "First attempt done"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 400,
+		WorkerID: "w1", Payload: ops.Payload{To: "open"}}))
 
 	issue := state.Issues["task-01"]
 	assert.Equal(t, "open", issue.Status)
@@ -339,17 +339,17 @@ func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
 
 func TestPromoteParentToInProgress_SkipsAlreadyInProgress(t *testing.T) {
 	state := NewState()
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}})
-	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task", Parent: "story-01"}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task", Parent: "story-01"}}))
 
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
 	assert.Equal(t, "in-progress", state.Issues["story-01"].Status)
 
-	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w2", Payload: ops.Payload{TTL: 60}})
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w2", Payload: ops.Payload{TTL: 60}}))
 	assert.Equal(t, "in-progress", state.Issues["story-01"].Status)
 }
 

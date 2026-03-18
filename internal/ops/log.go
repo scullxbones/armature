@@ -28,7 +28,7 @@ func AppendOps(logPath string, ops []Op) error {
 	if err != nil {
 		return fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.Write(buf); err != nil {
 		return fmt.Errorf("write to log %s: %w", logPath, err)
@@ -47,7 +47,7 @@ func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, 0); err != nil {

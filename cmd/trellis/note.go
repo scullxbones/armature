@@ -26,14 +26,14 @@ func newNoteCmd() *cobra.Command {
 			}
 			result := map[string]string{"issue": issueID, "note": "added"}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&msg, "msg", "", "note message")
-	cmd.MarkFlagRequired("issue")
-	cmd.MarkFlagRequired("msg")
+	_ = cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("msg")
 	return cmd
 }

@@ -26,12 +26,12 @@ func newHeartbeatCmd() *cobra.Command {
 			}
 			result := map[string]string{"issue": issueID, "heartbeat": "sent"}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
-	cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

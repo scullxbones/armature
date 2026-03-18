@@ -41,7 +41,7 @@ func newSyncCmd() *cobra.Command {
 			}
 
 			if len(mergedIDs) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
 				return nil
 			}
 
@@ -62,10 +62,10 @@ func newSyncCmd() *cobra.Command {
 					},
 				}
 				if err := appendOp(logPath, op); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
 					continue
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 			}
 
 			// Re-materialize so state files reflect the new merged status
@@ -80,4 +80,3 @@ func newSyncCmd() *cobra.Command {
 	cmd.Flags().StringVar(&targetBranch, "into", "", "target branch to check merges against (default: current branch)")
 	return cmd
 }
-

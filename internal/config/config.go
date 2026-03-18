@@ -8,9 +8,9 @@ import (
 )
 
 type Config struct {
-	Mode                   string       `json:"mode"`                     // "single-branch" or "dual-branch"
+	Mode                   string       `json:"mode"` // "single-branch" or "dual-branch"
 	ProjectType            string       `json:"project_type"`
-	DefaultTTL             int          `json:"default_ttl"`              // minutes
+	DefaultTTL             int          `json:"default_ttl"` // minutes
 	TokenBudget            int          `json:"token_budget"`
 	LowStakesPushThreshold int          `json:"low_stakes_push_threshold"` // ops before auto-push
 	Hooks                  []HookConfig `json:"hooks"`

@@ -119,6 +119,6 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	if dualBranch {
 		mode = "dual-branch"
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
 	return nil
 }

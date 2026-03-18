@@ -87,7 +87,7 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"worker-init", "--repo", repo})
-	cmd1.Execute()
+	_ = cmd1.Execute()
 
 	// Then check
 	buf := new(bytes.Buffer)

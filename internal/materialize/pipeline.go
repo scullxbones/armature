@@ -22,7 +22,7 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
-	os.MkdirAll(issuesStateDir, 0755)
+	_ = os.MkdirAll(issuesStateDir, 0755)
 
 	cp, err := LoadCheckpoint(checkpointPath)
 	if err != nil {
@@ -95,7 +95,7 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 	}
 
 	readyPath := filepath.Join(stateDir, "ready.json")
-	os.WriteFile(readyPath, []byte("[]"), 0644)
+	_ = os.WriteFile(readyPath, []byte("[]"), 0644)
 
 	if fullReplay && len(allOps) > 100 {
 		fmt.Fprintf(os.Stderr, "Full replay: processed %d ops across %d issues\n", len(allOps), len(state.Issues))
@@ -120,7 +120,7 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
-	os.MkdirAll(issuesStateDir, 0755)
+	_ = os.MkdirAll(issuesStateDir, 0755)
 
 	cp, err := LoadCheckpoint(checkpointPath)
 	if err != nil {
@@ -191,7 +191,7 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 	}
 
 	readyPath := filepath.Join(stateDir, "ready.json")
-	os.WriteFile(readyPath, []byte("[]"), 0644)
+	_ = os.WriteFile(readyPath, []byte("[]"), 0644)
 
 	if fullReplay && len(allOps) > 100 {
 		fmt.Fprintf(os.Stderr, "Full replay: processed %d ops across %d issues\n", len(allOps), len(state.Issues))

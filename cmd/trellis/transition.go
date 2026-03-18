@@ -65,7 +65,7 @@ func newTransitionCmd() *cobra.Command {
 			}
 			result := map[string]string{"issue": issueID, "status": to}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
@@ -75,7 +75,7 @@ func newTransitionCmd() *cobra.Command {
 	cmd.Flags().StringVar(&outcome, "outcome", "", "outcome description")
 	cmd.Flags().StringVar(&branch, "branch", "", "feature branch name")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number")
-	cmd.MarkFlagRequired("issue")
-	cmd.MarkFlagRequired("to")
+	_ = cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("to")
 	return cmd
 }

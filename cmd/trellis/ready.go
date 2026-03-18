@@ -40,10 +40,10 @@ func newReadyCmd() *cobra.Command {
 			format, _ := cmd.Flags().GetString("format")
 			if format == "json" || format == "agent" {
 				data, _ := json.MarshalIndent(entries, "", "  ")
-				fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				if len(entries) == 0 {
-					fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
 					return nil
 				}
 				for _, e := range entries {
@@ -51,7 +51,7 @@ func newReadyCmd() *cobra.Command {
 					if e.RequiresConfirmation {
 						conf = " [requires confirmation]"
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s  (%s)%s\n", e.Issue, e.Title, e.Priority, conf)
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s  (%s)%s\n", e.Issue, e.Title, e.Priority, conf)
 				}
 			}
 			return nil

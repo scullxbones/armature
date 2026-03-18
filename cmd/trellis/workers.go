@@ -53,13 +53,13 @@ func newWorkersCmd() *cobra.Command {
 			if jsonOut {
 				for _, s := range statuses {
 					data, _ := json.Marshal(s)
-					fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				}
 				return nil
 			}
 
 			if len(statuses) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No workers found.")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No workers found.")
 				return nil
 			}
 			for _, s := range statuses {
@@ -71,7 +71,7 @@ func newWorkersCmd() *cobra.Command {
 				if s.ActiveIssue != "" {
 					active = fmt.Sprintf(" (working on %s)", s.ActiveIssue)
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "  %-40s  %-8s  %s%s\n",
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-40s  %-8s  %s%s\n",
 					s.WorkerID, s.Status, lastSeen, active)
 			}
 			return nil

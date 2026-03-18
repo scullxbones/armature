@@ -31,15 +31,15 @@ func newAssignCmd() *cobra.Command {
 			}
 			result := map[string]string{"issue": issueID, "assigned_to": workerID}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to assign")
 	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID to assign to")
-	cmd.MarkFlagRequired("issue")
-	cmd.MarkFlagRequired("worker")
+	_ = cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("worker")
 	return cmd
 }
 
@@ -66,12 +66,12 @@ func newUnassignCmd() *cobra.Command {
 			}
 			result := map[string]string{"issue": issueID, "assigned_to": ""}
 			data, _ := json.Marshal(result)
-			fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to unassign")
-	cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

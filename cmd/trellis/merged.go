@@ -56,13 +56,13 @@ func newMergedCmd() *cobra.Command {
 			}
 
 			if singleBranch {
-				fmt.Fprintf(cmd.OutOrStdout(), "Note: in single-branch mode, done→merged is automatic. Op recorded for %s.\n", issueID)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: in single-branch mode, done→merged is automatic. Op recorded for %s.\n", issueID)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
 				if pr != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
 				}
-				fmt.Fprintln(cmd.OutOrStdout())
+				_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			}
 			return nil
 		},
@@ -70,6 +70,6 @@ func newMergedCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number or URL")
-	cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

@@ -23,14 +23,14 @@ func newValidateCmd() *cobra.Command {
 			result := validate.Validate(state)
 
 			for _, e := range result.Errors {
-				fmt.Fprintf(cmd.OutOrStdout(), "ERROR: %s\n", e)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "ERROR: %s\n", e)
 			}
 			for _, w := range result.Warnings {
-				fmt.Fprintf(cmd.OutOrStdout(), "WARNING: %s\n", w)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "WARNING: %s\n", w)
 			}
 
 			if result.OK {
-				fmt.Fprintln(cmd.OutOrStdout(), "OK: no issues found")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "OK: no issues found")
 			}
 
 			if ci && len(result.Errors) > 0 {
