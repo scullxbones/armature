@@ -26,8 +26,10 @@ lint:
 	golangci-lint run ./...
 
 mutate:
-	@echo "Running mutation tests on internal/dag..."
-	gremlins unleash ./internal/dag
+	@echo "Running mutation tests on internal..."
+	gremlins unleash ./internal
+	@echo "Running mutation tests on cmd..."
+	gremlins unleash ./cmd
 
 clean:
 	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/
@@ -49,3 +51,6 @@ skill: build
 	cat docs/trls-skill-meta.yaml docs/SKILL.md > .claude/skills/trls/SKILL.md
 	cp bin/trls .claude/skills/trls/scripts/trls
 	chmod +x .claude/skills/trls/scripts/trls
+	mkdir -p .claude/skills/trls-worker
+	cat docs/trls-worker-skill-meta.yaml docs/trls-worker-SKILL.md > .claude/skills/trls-worker/SKILL.md
+	@echo "Deployed trls and trls-worker skills to .claude/skills/"

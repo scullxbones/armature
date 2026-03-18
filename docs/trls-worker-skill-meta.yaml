@@ -1,0 +1,8 @@
+---
+name: trls-worker
+description: >
+  Use when starting work in a trellis-managed repository — picks up ready
+  issues, claims them, assembles context, and drives implementation. Enforces
+  per-task commits and story-level push/PR strategy.
+compatibility: Designed for Claude Code. Requires trls on PATH (run make install).
+---
