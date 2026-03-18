@@ -239,3 +239,138 @@ func TestBuildIndex_IncludesBranchAndPR(t *testing.T) {
 	assert.Equal(t, "feature/my-work", entry.Branch)
 	assert.Equal(t, "42", entry.PR)
 }
+
+func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
+	dir := t.TempDir()
+	opsDir := filepath.Join(dir, "ops")
+	stateDir := filepath.Join(dir, "state")
+	issuesDir := filepath.Join(stateDir, "issues")
+	os.MkdirAll(opsDir, 0755)
+	os.MkdirAll(issuesDir, 0755)
+
+	logPath := filepath.Join(opsDir, "worker-b1.log")
+	ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "worker-b1", Payload: ops.Payload{Title: "My Task", NodeType: "task"}})
+
+	state, result, err := MaterializeAndReturn(dir, true)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.IssueCount)
+	require.NotNil(t, state)
+	assert.Contains(t, state.Issues, "task-01")
+	assert.Equal(t, "My Task", state.Issues["task-01"].Title)
+}
+
+func TestMaterializeAndReturn_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	// No ops dir — should return empty state
+	state, result, err := MaterializeAndReturn(dir, false)
+	require.NoError(t, err)
+	assert.NotNil(t, state)
+	assert.Equal(t, 0, result.IssueCount)
+	assert.Equal(t, 0, result.OpsProcessed)
+}
+
+func TestAppendUnique_AddsNew(t *testing.T) {
+	slice := []string{"a", "b"}
+	result := appendUnique(slice, "c")
+	assert.Equal(t, []string{"a", "b", "c"}, result)
+}
+
+func TestAppendUnique_SkipsDuplicate(t *testing.T) {
+	slice := []string{"a", "b", "c"}
+	result := appendUnique(slice, "b")
+	assert.Equal(t, []string{"a", "b", "c"}, result)
+	assert.Len(t, result, 3, "duplicate should not be added")
+}
+
+func TestRunRollup_PromotesStoryWhenAllChildrenMerged(t *testing.T) {
+	state := NewState()
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}})
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: "story-01"}})
+	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+
+	// In single branch mode, done → merged
+	state.SingleBranchMode = true
+	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "done"}})
+
+	state.RunRollup()
+	assert.Equal(t, "merged", state.Issues["story-01"].Status)
+}
+
+func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
+	state := NewState()
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}})
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}})
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}})
+
+	state.SingleBranchMode = true
+	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done"}})
+
+	state.RunRollup()
+	assert.NotEqual(t, "merged", state.Issues["story-01"].Status, "story should not be merged with open task-02")
+}
+
+func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
+	state := NewState()
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
+	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "First attempt done"}})
+	state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 400,
+		WorkerID: "w1", Payload: ops.Payload{To: "open"}})
+
+	issue := state.Issues["task-01"]
+	assert.Equal(t, "open", issue.Status)
+	assert.Empty(t, issue.Outcome, "outcome should be cleared on reopen")
+	assert.Contains(t, issue.PriorOutcomes, "First attempt done")
+}
+
+func TestPromoteParentToInProgress_SkipsAlreadyInProgress(t *testing.T) {
+	state := NewState()
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}})
+	state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task", Parent: "story-01"}})
+
+	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}})
+	assert.Equal(t, "in-progress", state.Issues["story-01"].Status)
+
+	state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w2", Payload: ops.Payload{TTL: 60}})
+	assert.Equal(t, "in-progress", state.Issues["story-01"].Status)
+}
+
+func TestSortOpsByTimestamp(t *testing.T) {
+	allOps := []ops.Op{
+		{Timestamp: 300, WorkerID: "w1"},
+		{Timestamp: 100, WorkerID: "w1"},
+		{Timestamp: 200, WorkerID: "w1"},
+	}
+	sortOpsByTimestamp(allOps)
+	assert.Equal(t, int64(100), allOps[0].Timestamp)
+	assert.Equal(t, int64(200), allOps[1].Timestamp)
+	assert.Equal(t, int64(300), allOps[2].Timestamp)
+}
+
+func TestSortOpsByTimestamp_StableOnEqualTimestamp(t *testing.T) {
+	allOps := []ops.Op{
+		{Timestamp: 100, WorkerID: "w2", Type: "first"},
+		{Timestamp: 100, WorkerID: "w1", Type: "second"},
+	}
+	sortOpsByTimestamp(allOps)
+	assert.Equal(t, "first", allOps[0].Type)
+	assert.Equal(t, "second", allOps[1].Type)
+}
