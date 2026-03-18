@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -700,4 +701,209 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	finalStatus, err := runTrls(t, repo, "status")
 	require.NoError(t, err)
 	assert.NotContains(t, finalStatus, "awaiting merge")
+}
+
+// TC-008: workers command and helper function tests
+
+func TestLastOpTimestampFromLog_Empty(t *testing.T) {
+	assert.Equal(t, int64(0), lastOpTimestampFromLog(nil))
+	assert.Equal(t, int64(0), lastOpTimestampFromLog([]ops.Op{}))
+}
+
+func TestLastOpTimestampFromLog_ReturnsMax(t *testing.T) {
+	opsList := []ops.Op{
+		{Timestamp: 100},
+		{Timestamp: 500},
+		{Timestamp: 200},
+	}
+	assert.Equal(t, int64(500), lastOpTimestampFromLog(opsList))
+}
+
+func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: 10}}, // TTL 10 min = 600 sec; 900+600=1500 > now(1000) → active
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	assert.Equal(t, "active", status.Status)
+	assert.Equal(t, "T-001", status.ActiveIssue)
+	assert.Equal(t, "worker-a", status.WorkerID)
+}
+
+func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
+	now := int64(10000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: 1}}, // TTL 1 min = 60 sec; 100+60=160 < now(10000) → stale
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	assert.Equal(t, "stale", status.Status)
+	assert.Empty(t, status.ActiveIssue)
+}
+
+func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
+	}
+	// No claims, but recent op — idle within 2*TTL window
+	status := buildWorkerStatus("worker-a", allOps, 1, now) // 2*1min=120s; 1000-900=100 < 120 → idle
+	assert.Equal(t, "idle", status.Status)
+	assert.Equal(t, int64(900), status.LastOpTime)
+}
+
+func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
+	now := int64(10000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: 999}}, // Would be active — but transitioned
+		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a",
+			Payload: ops.Payload{To: "done"}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	assert.NotEqual(t, "active", status.Status)
+}
+
+func TestWorkersCommand_EmptyRepo(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"workers", "--repo", repo})
+
+	err = cmd.Execute()
+	assert.NoError(t, err)
+}
+
+// TC-009: log, assign, heartbeat, decision, link, reopen commands and logPayloadSummary
+
+func TestLogCommand_WithEntries(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "log")
+	require.NoError(t, err)
+	assert.Contains(t, out, "create")
+}
+
+func TestLogCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "log", "--json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"type"`)
+}
+
+func TestLogCommand_FilterByIssue(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "log", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+func TestAssignCommand(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "assign", "--issue", "task-01", "--worker", "worker-abc")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+func TestUnassignCommand(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "assign", "--issue", "task-01", "--worker", "worker-abc")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "unassign", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+func TestHeartbeatCommand(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+func TestDecisionCommand(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "decision", "--issue", "task-01",
+		"--topic", "db", "--choice", "postgres", "--rationale", "mature")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+func TestLinkCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task A", "--id", "T-A")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "T-B")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "link", "--source", "T-A", "--dep", "T-B", "--rel", "blocked_by")
+	require.NoError(t, err)
+	assert.Contains(t, out, "T-A")
+}
+
+func TestReopenCommand(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "reopen", "--issue", "task-01")
+	assert.NoError(t, err)
+}
+
+func TestLogPayloadSummary(t *testing.T) {
+	cases := []struct {
+		op     ops.Op
+		expect string
+	}{
+		{ops.Op{Type: ops.OpCreate, Payload: ops.Payload{Title: "My Task", NodeType: "task"}}, "My Task"},
+		{ops.Op{Type: ops.OpClaim, Payload: ops.Payload{TTL: 60}}, "ttl=60"},
+		{ops.Op{Type: ops.OpHeartbeat}, ""},
+		{ops.Op{Type: ops.OpTransition, Payload: ops.Payload{To: "done", Outcome: "Fixed"}}, "→ done"},
+		{ops.Op{Type: ops.OpNote, Payload: ops.Payload{Msg: "progress"}}, "progress"},
+		{ops.Op{Type: ops.OpLink, Payload: ops.Payload{Rel: "blocked_by", Dep: "T-002"}}, "blocked_by T-002"},
+		{ops.Op{Type: ops.OpDecision, Payload: ops.Payload{Topic: "db", Choice: "pg"}}, "db → pg"},
+		{ops.Op{Type: ops.OpAssign, Payload: ops.Payload{AssignedTo: "worker-x"}}, "→ worker-x"},
+		{ops.Op{Type: ops.OpAssign, Payload: ops.Payload{AssignedTo: ""}}, "unassigned"},
+	}
+	for _, tc := range cases {
+		out := logPayloadSummary(tc.op)
+		assert.Contains(t, out, tc.expect, "op type: %s", tc.op.Type)
+	}
 }
