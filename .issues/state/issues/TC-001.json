@@ -1,0 +1,33 @@
+{
+  "id": "TC-001",
+  "type": "story",
+  "status": "claimed",
+  "title": "Test Coverage Hardening — 80% Enforcement and Mutation Efficacy",
+  "children": [
+    "TC-002",
+    "TC-003",
+    "TC-004",
+    "TC-005",
+    "TC-006",
+    "TC-007",
+    "TC-008",
+    "TC-009",
+    "TC-010"
+  ],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "Coverage ≥80% enforced via Makefile, mutation efficacy ≥90%, all new tests passing",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "acd486e2-c108-4562-b8c7-68535e3a64fe"
+  },
+  "decision_refs": [],
+  "claimed_by": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+  "claimed_at": 1773805336,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773805336,
+  "updated": 1773805336
+}

@@ -1,0 +1,27 @@
+{
+  "id": "TC-007",
+  "type": "task",
+  "status": "merged",
+  "title": "Cover isClaimStale boundaries, depth cycle cap, and assignmentTier in internal/ready",
+  "parent": "TC-001",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "TC-010"
+  ],
+  "priority": "high",
+  "definition_of_done": "All tests pass: isClaimStale exact boundary/past/zero/heartbeat, depth DeepChain/NoParent/Missing, assignmentTier AssignedToMe/Unassigned/Other/NoWorker",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "acd486e2-c108-4562-b8c7-68535e3a64fe"
+  },
+  "decision_refs": [],
+  "outcome": "Added 11 tests: isClaimStale (exact boundary, one-past, zero TTL, heartbeat extension), depth (chain caps at 21, no parent, missing), assignmentTier (self, unassigned, other, empty worker)",
+  "claimed_by": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+  "claimed_at": 1773805427,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773805427,
+  "updated": 1773806003
+}

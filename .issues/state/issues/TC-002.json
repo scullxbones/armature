@@ -1,0 +1,27 @@
+{
+  "id": "TC-002",
+  "type": "task",
+  "status": "merged",
+  "title": "Add coverage-check target to Makefile enforcing 80% threshold",
+  "parent": "TC-001",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "TC-010"
+  ],
+  "priority": "high",
+  "definition_of_done": "make coverage-check fails at current 68.2% and will pass once coverage reaches 80%",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "acd486e2-c108-4562-b8c7-68535e3a64fe"
+  },
+  "decision_refs": [],
+  "outcome": "Added coverage-check target to Makefile; confirmed fails at 68.2% as expected",
+  "claimed_by": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+  "claimed_at": 1773805364,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773805364,
+  "updated": 1773805415
+}

@@ -1,0 +1,24 @@
+{
+  "id": "story-1773804400",
+  "type": "story",
+  "status": "merged",
+  "title": "trls-worker Build Integration and Git Workflow",
+  "children": [
+    "task-1773804403",
+    "task-1773804476"
+  ],
+  "blocked_by": [],
+  "blocks": [],
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b"
+  },
+  "decision_refs": [],
+  "claimed_by": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
+  "claimed_at": 1773804612,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773804612,
+  "updated": 1773804612
+}

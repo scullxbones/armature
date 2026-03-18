@@ -1,0 +1,35 @@
+{
+  "id": "task-1773804403",
+  "type": "task",
+  "status": "merged",
+  "title": "Move trls-worker skill source to docs/ and update Makefile",
+  "parent": "story-1773804400",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b"
+  },
+  "decision_refs": [],
+  "outcome": "Created docs/trls-worker-skill-meta.yaml and updated Makefile skill target to deploy trls-worker alongside trls",
+  "notes": [
+    {
+      "worker_id": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
+      "timestamp": 1773804514,
+      "msg": "Files: create docs/trls-worker-skill-meta.yaml, create docs/trls-worker-SKILL.md (moved from .claude/skills/trls-worker/SKILL.md), modify Makefile. Steps: (1) verify current state with make skill \u0026\u0026 ls .claude/skills/, (2) create docs/trls-worker-skill-meta.yaml with name/description/compatibility fields, (3) defer SKILL.md creation to Task 2, (4) update Makefile skill target to also deploy trls-worker alongside trls, (5) verify with make -n skill, (6) commit: git add Makefile \u0026\u0026 git commit -m 'build: deploy trls-worker skill via make skill'"
+    },
+    {
+      "worker_id": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
+      "timestamp": 1773804713,
+      "msg": "Created docs/trls-worker-skill-meta.yaml and updated Makefile skill target to deploy trls-worker skill. Verified with make -n skill."
+    }
+  ],
+  "claimed_by": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
+  "claimed_at": 1773804676,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773804676,
+  "updated": 1773804724
+}

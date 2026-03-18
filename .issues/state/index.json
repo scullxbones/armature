@@ -441,5 +441,171 @@
     "scope": [
       "cmd/trellis/**"
     ]
+  },
+  "TC-001": {
+    "status": "claimed",
+    "type": "story",
+    "children": [
+      "TC-002",
+      "TC-003",
+      "TC-004",
+      "TC-005",
+      "TC-006",
+      "TC-007",
+      "TC-008",
+      "TC-009",
+      "TC-010"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773805336,
+    "title": "Test Coverage Hardening — 80% Enforcement and Mutation Efficacy"
+  },
+  "TC-002": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocks": [
+      "TC-010"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773805415,
+    "title": "Add coverage-check target to Makefile enforcing 80% threshold",
+    "outcome": "Added coverage-check target to Makefile; confirmed fails at 68.2% as expected"
+  },
+  "TC-003": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocks": [
+      "TC-004"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773805975,
+    "title": "Cover buildSnippets, buildDecisions, buildNotes, buildSiblingOutcomes in internal/context",
+    "outcome": "Added 8 tests covering buildSnippets (with context, invalid JSON), buildDecisions, buildNotes (with notes, truncates at 5), buildSiblingOutcomes (with/without parent)"
+  },
+  "TC-004": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocked_by": [
+      "TC-003"
+    ],
+    "blocks": [
+      "TC-005"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773805985,
+    "title": "Cover RenderAgent and RenderHuman in internal/context",
+    "outcome": "Added TestRenderAgent (verifies JSON output) and TestRenderHuman (verifies human-readable layer headers) tests"
+  },
+  "TC-005": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocked_by": [
+      "TC-004"
+    ],
+    "blocks": [
+      "TC-010"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773805985,
+    "title": "Kill LIVED mutations in context/truncate.go with boundary condition tests",
+    "outcome": "Added 4 Truncate boundary condition tests: exact budget no-truncation, below budget, single layer never removed, equal priority removal"
+  },
+  "TC-006": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocks": [
+      "TC-010"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773805994,
+    "title": "Cover MaterializeAndReturn, appendUnique, RunRollup, and sort helpers in internal/materialize",
+    "outcome": "Added 10 tests: MaterializeAndReturn (basic pipeline, empty dir), appendUnique (add/skip duplicate), RunRollup (promotes story, blocks on open child), reopen clears outcome, parent promotion idempotency, sortOpsByTimestamp (basic and stable)"
+  },
+  "TC-007": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocks": [
+      "TC-010"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773806003,
+    "title": "Cover isClaimStale boundaries, depth cycle cap, and assignmentTier in internal/ready",
+    "outcome": "Added 11 tests: isClaimStale (exact boundary, one-past, zero TTL, heartbeat extension), depth (chain caps at 21, no parent, missing), assignmentTier (self, unassigned, other, empty worker)"
+  },
+  "TC-008": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocks": [
+      "TC-009"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773806011,
+    "title": "Cover workers command, buildWorkerStatus, and lastOpTimestampFromLog in cmd/trellis",
+    "outcome": "Added 7 tests: lastOpTimestampFromLog (empty, returns max), buildWorkerStatus (active, stale, idle, transitioned claim not active), TestWorkersCommand_EmptyRepo integration test"
+  },
+  "TC-009": {
+    "status": "merged",
+    "type": "task",
+    "parent": "TC-001",
+    "blocked_by": [
+      "TC-008"
+    ],
+    "blocks": [
+      "TC-010"
+    ],
+    "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+    "updated": 1773806015,
+    "title": "Cover log, assign, heartbeat, decision, link, reopen commands and logPayloadSummary in cmd/trellis",
+    "outcome": "Added 11 tests: log (with entries, JSON output, filter by issue), assign, unassign, heartbeat, decision, link, reopen commands, logPayloadSummary (all op types)"
+  },
+  "TC-010": {
+    "status": "open",
+    "type": "task",
+    "parent": "TC-001",
+    "blocked_by": [
+      "TC-002",
+      "TC-005",
+      "TC-006",
+      "TC-007",
+      "TC-009"
+    ],
+    "updated": 1773805253,
+    "title": "Verify coverage ≥80% via make coverage-check and mutation efficacy ≥85%"
+  },
+  "story-1773804400": {
+    "status": "merged",
+    "type": "story",
+    "children": [
+      "task-1773804403",
+      "task-1773804476"
+    ],
+    "assignee": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
+    "updated": 1773804612,
+    "title": "trls-worker Build Integration and Git Workflow"
+  },
+  "task-1773804403": {
+    "status": "merged",
+    "type": "task",
+    "parent": "story-1773804400",
+    "assignee": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
+    "updated": 1773804724,
+    "title": "Move trls-worker skill source to docs/ and update Makefile",
+    "outcome": "Created docs/trls-worker-skill-meta.yaml and updated Makefile skill target to deploy trls-worker alongside trls"
+  },
+  "task-1773804476": {
+    "status": "merged",
+    "type": "task",
+    "parent": "story-1773804400",
+    "assignee": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
+    "updated": 1773804823,
+    "title": "Update trls-worker skill with commit/push/PR guidance",
+    "outcome": "Created docs/trls-worker-SKILL.md with per-task commit and story-level push/PR guidance; make skill deploys it correctly"
   }
 }

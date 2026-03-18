@@ -1,0 +1,27 @@
+{
+  "id": "TC-008",
+  "type": "task",
+  "status": "merged",
+  "title": "Cover workers command, buildWorkerStatus, and lastOpTimestampFromLog in cmd/trellis",
+  "parent": "TC-001",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "TC-009"
+  ],
+  "priority": "high",
+  "definition_of_done": "All tests pass: LastOpTimestamp, BuildWorkerStatus_Active/Stale/Idle/Transitioned, WorkersCommand_Empty/WithWorker/JSONOutput",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "acd486e2-c108-4562-b8c7-68535e3a64fe"
+  },
+  "decision_refs": [],
+  "outcome": "Added 7 tests: lastOpTimestampFromLog (empty, returns max), buildWorkerStatus (active, stale, idle, transitioned claim not active), TestWorkersCommand_EmptyRepo integration test",
+  "claimed_by": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+  "claimed_at": 1773805427,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773805427,
+  "updated": 1773806011
+}

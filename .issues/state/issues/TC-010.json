@@ -1,0 +1,26 @@
+{
+  "id": "TC-010",
+  "type": "task",
+  "status": "open",
+  "title": "Verify coverage ≥80% via make coverage-check and mutation efficacy ≥85%",
+  "parent": "TC-001",
+  "children": [],
+  "blocked_by": [
+    "TC-002",
+    "TC-005",
+    "TC-006",
+    "TC-007",
+    "TC-009"
+  ],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "make coverage-check exits 0 with coverage ≥80%; make mutate shows internal efficacy ≥85%",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "acd486e2-c108-4562-b8c7-68535e3a64fe"
+  },
+  "decision_refs": [],
+  "updated": 1773805253
+}

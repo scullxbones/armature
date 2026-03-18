@@ -1,0 +1,29 @@
+{
+  "id": "TC-005",
+  "type": "task",
+  "status": "merged",
+  "title": "Kill LIVED mutations in context/truncate.go with boundary condition tests",
+  "parent": "TC-001",
+  "children": [],
+  "blocked_by": [
+    "TC-004"
+  ],
+  "blocks": [
+    "TC-010"
+  ],
+  "priority": "high",
+  "definition_of_done": "All 4 Truncate boundary tests pass: ExactlyAtBudget, OneBelowBudget, SingleLayer_NeverRemoved, EqualPriority_RemovesHigherIndex",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "acd486e2-c108-4562-b8c7-68535e3a64fe"
+  },
+  "decision_refs": [],
+  "outcome": "Added 4 Truncate boundary condition tests: exact budget no-truncation, below budget, single layer never removed, equal priority removal",
+  "claimed_by": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
+  "claimed_at": 1773805427,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773805427,
+  "updated": 1773805985
+}
