@@ -522,7 +522,7 @@
     "title": "S1: Charm TUI Foundation"
   },
   "E4-S1-T1": {
-    "status": "in-progress",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S1",
     "blocks": [
@@ -530,8 +530,8 @@
       "E4-S1-T3",
       "E4-S1-T5"
     ],
-    "assignee": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7",
-    "updated": 1773890052,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773921088,
     "title": "Add Charm stack dependencies",
     "outcome": "Pre-claimed during E4 plan load — not yet implemented. Worker should implement Charm stack deps.",
     "scope": [
