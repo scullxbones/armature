@@ -556,7 +556,7 @@
     ]
   },
   "E4-S1-T3": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S1",
     "blocked_by": [
@@ -566,21 +566,23 @@
       "E4-S1-T4"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921462,
+    "updated": 1773921508,
     "title": "TTY detection",
+    "outcome": "Created internal/tui/tty.go with IsTerminal() using golang.org/x/term; TestIsTerminalReturnsFalseInTests passes",
     "scope": [
       "internal/tui/tty.go",
       "internal/tui/tty_test.go"
     ]
   },
   "E4-S1-T4": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S1",
     "blocked_by": [
       "E4-S1-T3"
     ],
-    "updated": 1773889540,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773921514,
     "title": "IsInteractive helper",
     "scope": [
       "internal/tui/tty.go",

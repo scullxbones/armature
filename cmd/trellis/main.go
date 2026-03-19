@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/trellis/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,9 @@ func newRootCmd() *cobra.Command {
 		Short:        "Trellis — git-native work orchestration",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			format, _ := cmd.Flags().GetString("format")
+			tui.SetFormat(format)
+
 			repoPath, _ := cmd.Flags().GetString("repo")
 			if repoPath == "" {
 				repoPath = "."
