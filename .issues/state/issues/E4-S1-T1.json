@@ -1,7 +1,7 @@
 {
   "id": "E4-S1-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Add Charm stack dependencies",
   "parent": "E4-S1",
   "children": [],
@@ -22,17 +22,22 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "outcome": "Pre-claimed during E4 plan load — not yet implemented. Worker should implement Charm stack deps.",
+  "outcome": "Added bubbletea v1.3.4, lipgloss v1.1.0, glamour v0.8.0, bubbles v0.20.0 to go.mod; pinned via tools.go blank imports; go build ./... passes",
   "notes": [
     {
       "worker_id": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7",
       "timestamp": 1773890052,
       "msg": "This task was pre-claimed during plan loading. A worker needs to actually implement: go get bubbletea v1.3.4, lipgloss v1.1.0, glamour v0.8.0, bubbles v0.20.0 and verify go build ./... passes."
+    },
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773921359,
+      "msg": "Added bubbletea v1.3.4, lipgloss v1.1.0, glamour v0.8.0, bubbles v0.20.0; go build passes"
     }
   ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773921088,
   "claim_ttl": 60,
   "last_heartbeat": 1773921088,
-  "updated": 1773921088
+  "updated": 1773921371
 }
