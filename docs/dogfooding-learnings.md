@@ -60,3 +60,39 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Install `trls` to PATH via `make install` (deploys to `~/.local/bin/trls`). Skills should reference bare `trls` and fail clearly if not found. The bundled `scripts/trls` in the skill directory is a dead end for Go binaries. If the Claude Code skills runtime were to inject `SKILL_ROOT` into agent context, bundled scripts would become viable — this is a platform feature request.
 
 **File**: `.claude/skills/trls/SKILL.md`, `Makefile` that diffs the plan's expected starting state against reality before executing any steps. Alternatively, cross-plan notes (like the one in E2-002) should be more prominent, listing which steps are expected to already be complete.
+
+---
+
+## L6: Stale claim blocks `trls ready` with no diagnostic
+
+**Observed**: `trls ready` returned "No tasks ready" even though open tasks existed (E4-S1-T2 through T5). The actual cause was E4-S1-T1 held an expired claim from a previous worker session (`0fb9a1c9-...`, stale since 2026-03-19T03:14:12Z). The dependent tasks couldn't surface because their blocker appeared to still be in-progress.
+
+**Impact**: Agent got a false "nothing to do" signal and would have stopped. Required user intervention to diagnose. The `trls workers` output showed the holding worker as `stale`, but there was no connection drawn between the stale worker and the empty ready queue.
+
+**Recommendation**: When `trls ready` returns empty and in-progress issues exist with stale claims, print a diagnostic: e.g. "1 task in-progress with stale claim (E4-S1-T1, claimed by 0fb9a1c9, expired 2h ago) — use `trls claim --issue E4-S1-T1` to steal." Alternatively, auto-expire stale claims when computing the ready queue.
+
+**File**: `internal/ready/compute.go`, `cmd/trellis/ready.go`
+
+---
+
+## L7: `trls-worker` skill not discoverable from project root
+
+**Observed**: The skill is deployed at `trellis/.claude/skills/trls-worker/` but the agent's working directory is `/home/brian/development` (the parent). The Skill tool only surfaces skills from the active project directory, so `trls-worker` was initially not found. The agent fell back to reading the skill file directly from disk before the user pointed out the correct deployment path.
+
+**Impact**: Wasted turn discovering the skill location. Agent attempted to use the wrong skill file (`docs/trls-worker-SKILL.md`) before the correct one was loaded.
+
+**Recommendation**: Skills should be deployed at the repo root (`.claude/skills/`) rather than a subdirectory if the agent's working directory may be the parent. Alternatively, document in the skill meta that the user must `cd` into the trellis repo or open it as the active workspace before invoking.
+
+**File**: `trellis/.claude/skills/trls-worker/`
+
+---
+
+## L8: `worker-init` emits noisy `_encode`/`_decode` warnings
+
+**Observed**: Running `trls worker-init` produced 12 lines of `setValueForKeyFakeAssocArray:27: command not found: _encode` / `valueForKeyFakeAssocArray:28: command not found: _decode` before the actual output. These are non-fatal shell warnings from the zsh completion or git config helper internals.
+
+**Impact**: Output noise erodes agent confidence that the command succeeded. Agents may flag warnings as errors and stop.
+
+**Recommendation**: Suppress or fix the underlying shell compat issue. At minimum, document in the skill that these warnings are harmless so agents don't halt on them.
+
+**File**: `cmd/trellis/worker_init.go` or underlying git config shell helper
