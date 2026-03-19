@@ -1,0 +1,27 @@
+{
+  "id": "E4-S1",
+  "type": "story",
+  "status": "in-progress",
+  "title": "S1: Charm TUI Foundation",
+  "parent": "E4",
+  "children": [
+    "E4-S1-T1",
+    "E4-S1-T2",
+    "E4-S1-T3",
+    "E4-S1-T4",
+    "E4-S1-T5"
+  ],
+  "blocked_by": [],
+  "blocks": [
+    "E4-S4"
+  ],
+  "definition_of_done": "Charm stack added to go.mod, semantic color palette (7 vars), IsTerminal + IsInteractive helpers, Bubbles component wrappers; all tests pass",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889514
+}

@@ -1,0 +1,25 @@
+{
+  "id": "E4-S6-T1",
+  "type": "task",
+  "status": "open",
+  "title": "dag-summary BubbleTea model",
+  "parent": "E4-S6",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E4-S6-T2"
+  ],
+  "definition_of_done": "dagsum.Model with New/Total/Confirmed/Cursor/ConfirmedIDs; ConfirmMsg/SkipMsg handled; TestNewModelHasAllItems, TestConfirmAdvancesCursor, TestAllConfirmedProducesOps, TestSkipDoesNotConfirm pass",
+  "scope": [
+    "internal/tui/dagsum/model.go",
+    "internal/tui/dagsum/keys.go",
+    "internal/tui/dagsum/model_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889610
+}

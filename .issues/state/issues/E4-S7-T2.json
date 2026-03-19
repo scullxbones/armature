@@ -1,0 +1,25 @@
+{
+  "id": "E4-S7-T2",
+  "type": "task",
+  "status": "open",
+  "title": "Traceability coverage computation + traceability.json",
+  "parent": "E4-S7",
+  "children": [],
+  "blocked_by": [
+    "E4-S7-T1"
+  ],
+  "blocks": [],
+  "definition_of_done": "Compute(state) returns Coverage with TotalNodes/CitedNodes/CoveragePct/Uncited; Write/Read to traceability.json; pipeline writes traceability.json; TestCoverage* passes",
+  "scope": [
+    "internal/traceability/traceability.go",
+    "internal/traceability/traceability_test.go",
+    "internal/materialize/pipeline.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889576
+}

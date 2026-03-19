@@ -1,0 +1,28 @@
+{
+  "id": "E4-S4-T5",
+  "type": "task",
+  "status": "open",
+  "title": "Credential config + Confluence/SharePoint providers",
+  "parent": "E4-S4",
+  "children": [],
+  "blocked_by": [
+    "E4-S4-T4"
+  ],
+  "blocks": [
+    "E4-S4-T6"
+  ],
+  "definition_of_done": "ConfluenceProvider and SharePointProvider implemented with httptest; TestConfluenceProviderFetch and TestSharePointProviderFetch pass",
+  "scope": [
+    "internal/sources/config.go",
+    "internal/sources/confluence.go",
+    "internal/sources/sharepoint.go",
+    "internal/sources/providers_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889563
+}

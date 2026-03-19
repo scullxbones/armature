@@ -1,0 +1,25 @@
+{
+  "id": "E4-S7-T1",
+  "type": "task",
+  "status": "open",
+  "title": "source-link and dag-transition op materialization",
+  "parent": "E4-S7",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E4-S7-T2"
+  ],
+  "definition_of_done": "SourceLink type added, Issue.SourceLinks and Provenance.DAGConfirmed fields added, applySourceLink and applyDAGTransition handlers; TestApplySourceLinkOp and TestApplyDAGTransitionOp pass",
+  "scope": [
+    "internal/materialize/state.go",
+    "internal/materialize/engine.go",
+    "internal/materialize/engine_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889576
+}

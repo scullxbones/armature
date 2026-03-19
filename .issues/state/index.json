@@ -486,6 +486,488 @@
       "cmd/trellis/**"
     ]
   },
+  "E4": {
+    "status": "in-progress",
+    "type": "epic",
+    "children": [
+      "E4-S1",
+      "E4-S4",
+      "E4-S7",
+      "E4-S2",
+      "E4-S3",
+      "E4-S5",
+      "E4-S6",
+      "E4-S8",
+      "E4-S9"
+    ],
+    "updated": 1773889756,
+    "title": "E4: TUI + Governance + Sources",
+    "outcome": "E4 epic started: TUI + Governance + Sources implementation begins"
+  },
+  "E4-S1": {
+    "status": "in-progress",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S1-T1",
+      "E4-S1-T2",
+      "E4-S1-T3",
+      "E4-S1-T4",
+      "E4-S1-T5"
+    ],
+    "blocks": [
+      "E4-S4"
+    ],
+    "updated": 1773889514,
+    "title": "S1: Charm TUI Foundation"
+  },
+  "E4-S1-T1": {
+    "status": "in-progress",
+    "type": "task",
+    "parent": "E4-S1",
+    "blocks": [
+      "E4-S1-T2",
+      "E4-S1-T3",
+      "E4-S1-T5"
+    ],
+    "assignee": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7",
+    "updated": 1773890052,
+    "title": "Add Charm stack dependencies",
+    "outcome": "Pre-claimed during E4 plan load — not yet implemented. Worker should implement Charm stack deps.",
+    "scope": [
+      "go.mod",
+      "go.sum"
+    ]
+  },
+  "E4-S1-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S1",
+    "blocked_by": [
+      "E4-S1-T1"
+    ],
+    "updated": 1773889540,
+    "title": "Semantic color palette",
+    "scope": [
+      "internal/tui/colors.go",
+      "internal/tui/colors_test.go"
+    ]
+  },
+  "E4-S1-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S1",
+    "blocked_by": [
+      "E4-S1-T1"
+    ],
+    "blocks": [
+      "E4-S1-T4"
+    ],
+    "updated": 1773889540,
+    "title": "TTY detection",
+    "scope": [
+      "internal/tui/tty.go",
+      "internal/tui/tty_test.go"
+    ]
+  },
+  "E4-S1-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S1",
+    "blocked_by": [
+      "E4-S1-T3"
+    ],
+    "updated": 1773889540,
+    "title": "IsInteractive helper",
+    "scope": [
+      "internal/tui/tty.go",
+      "internal/tui/tty_test.go",
+      "cmd/trellis/main.go"
+    ]
+  },
+  "E4-S1-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S1",
+    "blocked_by": [
+      "E4-S1-T1"
+    ],
+    "updated": 1773889540,
+    "title": "Bubbles component wrappers",
+    "scope": [
+      "internal/tui/components.go"
+    ]
+  },
+  "E4-S2": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S2-T1"
+    ],
+    "blocked_by": [
+      "E4-S7"
+    ],
+    "blocks": [
+      "E4-S3"
+    ],
+    "updated": 1773889519,
+    "title": "S2: Glamour Markdown Render"
+  },
+  "E4-S2-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S2",
+    "updated": 1773889586,
+    "title": "Glamour markdown render upgrade for render-context",
+    "scope": [
+      "internal/context/render.go",
+      "internal/context/context_test.go"
+    ]
+  },
+  "E4-S3": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S3-T1",
+      "E4-S3-T2"
+    ],
+    "blocked_by": [
+      "E4-S2"
+    ],
+    "blocks": [
+      "E4-S5"
+    ],
+    "updated": 1773889519,
+    "title": "S3: Full Validate (W1-W11 + E1-E12)"
+  },
+  "E4-S3-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S3",
+    "blocks": [
+      "E4-S3-T2"
+    ],
+    "updated": 1773889586,
+    "title": "Full validation — W1-W11 warning checks and E2-E12 error checks",
+    "scope": [
+      "internal/validate/validate.go",
+      "internal/validate/validate_test.go"
+    ]
+  },
+  "E4-S3-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S3",
+    "blocked_by": [
+      "E4-S3-T1"
+    ],
+    "updated": 1773889586,
+    "title": "Validate CLI — --scope, --strict, JSON output",
+    "scope": [
+      "cmd/trellis/validate.go"
+    ]
+  },
+  "E4-S4": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S4-T1",
+      "E4-S4-T2",
+      "E4-S4-T3",
+      "E4-S4-T4",
+      "E4-S4-T5",
+      "E4-S4-T6"
+    ],
+    "blocked_by": [
+      "E4-S1"
+    ],
+    "blocks": [
+      "E4-S7"
+    ],
+    "updated": 1773889519,
+    "title": "S4: Source Document Management"
+  },
+  "E4-S4-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S4",
+    "blocks": [
+      "E4-S4-T2",
+      "E4-S4-T3"
+    ],
+    "updated": 1773889560,
+    "title": "Provider interface + manifest types",
+    "scope": [
+      "internal/sources/types.go",
+      "internal/sources/types_test.go"
+    ]
+  },
+  "E4-S4-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S4",
+    "blocked_by": [
+      "E4-S4-T1"
+    ],
+    "blocks": [
+      "E4-S4-T6"
+    ],
+    "updated": 1773889563,
+    "title": "manifest.json persistence",
+    "scope": [
+      "internal/sources/manifest.go",
+      "internal/sources/manifest_test.go"
+    ]
+  },
+  "E4-S4-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S4",
+    "blocked_by": [
+      "E4-S4-T1"
+    ],
+    "blocks": [
+      "E4-S4-T4"
+    ],
+    "updated": 1773889563,
+    "title": "SHA-256 fingerprint helper",
+    "scope": [
+      "internal/sources/fingerprint.go",
+      "internal/sources/fingerprint_test.go"
+    ]
+  },
+  "E4-S4-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S4",
+    "blocked_by": [
+      "E4-S4-T3"
+    ],
+    "blocks": [
+      "E4-S4-T5"
+    ],
+    "updated": 1773889563,
+    "title": "Local filesystem provider",
+    "scope": [
+      "internal/sources/filesystem.go",
+      "internal/sources/filesystem_test.go"
+    ]
+  },
+  "E4-S4-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S4",
+    "blocked_by": [
+      "E4-S4-T4"
+    ],
+    "blocks": [
+      "E4-S4-T6"
+    ],
+    "updated": 1773889563,
+    "title": "Credential config + Confluence/SharePoint providers",
+    "scope": [
+      "internal/sources/config.go",
+      "internal/sources/confluence.go",
+      "internal/sources/sharepoint.go",
+      "internal/sources/providers_test.go"
+    ]
+  },
+  "E4-S4-T6": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S4",
+    "blocked_by": [
+      "E4-S4-T5",
+      "E4-S4-T2"
+    ],
+    "updated": 1773889563,
+    "title": "sources add/sync/verify CLI commands",
+    "scope": [
+      "cmd/trellis/sources.go",
+      "cmd/trellis/main.go"
+    ]
+  },
+  "E4-S5": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S5-T1"
+    ],
+    "blocked_by": [
+      "E4-S3"
+    ],
+    "blocks": [
+      "E4-S6"
+    ],
+    "updated": 1773889519,
+    "title": "S5: Full Decompose-Context"
+  },
+  "E4-S5-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S5",
+    "updated": 1773889610,
+    "title": "Full decompose-context implementation (replaces stub)",
+    "scope": [
+      "internal/decompose/context.go",
+      "internal/decompose/context_stub.go",
+      "internal/decompose/decompose_test.go",
+      "cmd/trellis/decompose.go"
+    ]
+  },
+  "E4-S6": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S6-T1",
+      "E4-S6-T2"
+    ],
+    "blocked_by": [
+      "E4-S5"
+    ],
+    "blocks": [
+      "E4-S8"
+    ],
+    "updated": 1773889519,
+    "title": "S6: DAG Summary TUI"
+  },
+  "E4-S6-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S6",
+    "blocks": [
+      "E4-S6-T2"
+    ],
+    "updated": 1773889610,
+    "title": "dag-summary BubbleTea model",
+    "scope": [
+      "internal/tui/dagsum/model.go",
+      "internal/tui/dagsum/keys.go",
+      "internal/tui/dagsum/model_test.go"
+    ]
+  },
+  "E4-S6-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S6",
+    "blocked_by": [
+      "E4-S6-T1"
+    ],
+    "updated": 1773889610,
+    "title": "dag-summary command + dag-summary.md artifact + non-interactive JSON path",
+    "scope": [
+      "cmd/trellis/dagsum.go",
+      "cmd/trellis/main.go"
+    ]
+  },
+  "E4-S7": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S7-T1",
+      "E4-S7-T2"
+    ],
+    "blocked_by": [
+      "E4-S4"
+    ],
+    "blocks": [
+      "E4-S2"
+    ],
+    "updated": 1773889519,
+    "title": "S7: Traceability"
+  },
+  "E4-S7-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S7",
+    "blocks": [
+      "E4-S7-T2"
+    ],
+    "updated": 1773889576,
+    "title": "source-link and dag-transition op materialization",
+    "scope": [
+      "internal/materialize/state.go",
+      "internal/materialize/engine.go",
+      "internal/materialize/engine_test.go"
+    ]
+  },
+  "E4-S7-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S7",
+    "blocked_by": [
+      "E4-S7-T1"
+    ],
+    "updated": 1773889576,
+    "title": "Traceability coverage computation + traceability.json",
+    "scope": [
+      "internal/traceability/traceability.go",
+      "internal/traceability/traceability_test.go",
+      "internal/materialize/pipeline.go"
+    ]
+  },
+  "E4-S8": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S8-T1"
+    ],
+    "blocked_by": [
+      "E4-S6"
+    ],
+    "blocks": [
+      "E4-S9"
+    ],
+    "updated": 1773889519,
+    "title": "S8: Brownfield Import"
+  },
+  "E4-S8-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S8",
+    "updated": 1773889628,
+    "title": "Brownfield CSV/JSON import parser + import and confirm commands",
+    "scope": [
+      "internal/importbf/import.go",
+      "internal/importbf/import_test.go",
+      "cmd/trellis/import.go",
+      "cmd/trellis/confirm.go",
+      "cmd/trellis/main.go"
+    ]
+  },
+  "E4-S9": {
+    "status": "open",
+    "type": "story",
+    "parent": "E4",
+    "children": [
+      "E4-S9-T1"
+    ],
+    "blocked_by": [
+      "E4-S8"
+    ],
+    "updated": 1773889519,
+    "title": "S9: Stale Review TUI"
+  },
+  "E4-S9-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E4-S9",
+    "updated": 1773889628,
+    "title": "Stale review BubbleTea model + stale-review command",
+    "scope": [
+      "internal/tui/stalereview/model.go",
+      "internal/tui/stalereview/model_test.go",
+      "cmd/trellis/stalereview.go",
+      "cmd/trellis/main.go"
+    ]
+  },
   "TC-001": {
     "status": "merged",
     "type": "story",

@@ -1,0 +1,22 @@
+{
+  "id": "E4-S2-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Glamour markdown render upgrade for render-context",
+  "parent": "E4-S2",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "definition_of_done": "RenderHuman uses Glamour with plain-text fallback; RenderAgent returns JSON; TestRenderHumanContainsLayerContent passes",
+  "scope": [
+    "internal/context/render.go",
+    "internal/context/context_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889586
+}

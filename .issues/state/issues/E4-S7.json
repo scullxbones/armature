@@ -1,0 +1,26 @@
+{
+  "id": "E4-S7",
+  "type": "story",
+  "status": "open",
+  "title": "S7: Traceability",
+  "parent": "E4",
+  "children": [
+    "E4-S7-T1",
+    "E4-S7-T2"
+  ],
+  "blocked_by": [
+    "E4-S4"
+  ],
+  "blocks": [
+    "E4-S2"
+  ],
+  "definition_of_done": "source-link and dag-transition ops materialized, Coverage type computed, traceability.json written by pipeline; all tests pass",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889519
+}

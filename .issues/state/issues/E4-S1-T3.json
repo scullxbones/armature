@@ -1,0 +1,26 @@
+{
+  "id": "E4-S1-T3",
+  "type": "task",
+  "status": "open",
+  "title": "TTY detection",
+  "parent": "E4-S1",
+  "children": [],
+  "blocked_by": [
+    "E4-S1-T1"
+  ],
+  "blocks": [
+    "E4-S1-T4"
+  ],
+  "definition_of_done": "IsTerminal() returns false in test runner; TestIsTerminalReturnsFalseInTests passes",
+  "scope": [
+    "internal/tui/tty.go",
+    "internal/tui/tty_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889540
+}

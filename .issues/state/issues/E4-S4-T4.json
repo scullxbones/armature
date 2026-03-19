@@ -1,0 +1,26 @@
+{
+  "id": "E4-S4-T4",
+  "type": "task",
+  "status": "open",
+  "title": "Local filesystem provider",
+  "parent": "E4-S4",
+  "children": [],
+  "blocked_by": [
+    "E4-S4-T3"
+  ],
+  "blocks": [
+    "E4-S4-T5"
+  ],
+  "definition_of_done": "FilesystemProvider.Fetch reads file, returns content+SHA+empty versionID; TestFilesystem* passes",
+  "scope": [
+    "internal/sources/filesystem.go",
+    "internal/sources/filesystem_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889563
+}

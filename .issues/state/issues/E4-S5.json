@@ -1,0 +1,25 @@
+{
+  "id": "E4-S5",
+  "type": "story",
+  "status": "open",
+  "title": "S5: Full Decompose-Context",
+  "parent": "E4",
+  "children": [
+    "E4-S5-T1"
+  ],
+  "blocked_by": [
+    "E4-S3"
+  ],
+  "blocks": [
+    "E4-S6"
+  ],
+  "definition_of_done": "decompose-context fully implemented: template interpolation, source fetch from cache, --sources/--template/--output/--existing-dag flags; all tests pass",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889519
+}

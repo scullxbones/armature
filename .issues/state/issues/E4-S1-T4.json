@@ -1,0 +1,25 @@
+{
+  "id": "E4-S1-T4",
+  "type": "task",
+  "status": "open",
+  "title": "IsInteractive helper",
+  "parent": "E4-S1",
+  "children": [],
+  "blocked_by": [
+    "E4-S1-T3"
+  ],
+  "blocks": [],
+  "definition_of_done": "IsInteractive() returns false when format=json or not a TTY; SetFormat wired in root PersistentPreRunE; TestIsInteractive* passes",
+  "scope": [
+    "internal/tui/tty.go",
+    "internal/tui/tty_test.go",
+    "cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889540
+}

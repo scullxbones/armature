@@ -1,0 +1,25 @@
+{
+  "id": "E4-S8-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Brownfield CSV/JSON import parser + import and confirm commands",
+  "parent": "E4-S8",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "definition_of_done": "ParseCSV and ParseJSON parse to ImportedIssue with imported provenance; import command emits create+source-link ops; confirm command emits dag-transition op; --format=json output; TestParseCSV/TestParseJSON/TestImportedItemsHaveCorrectProvenance pass",
+  "scope": [
+    "internal/importbf/import.go",
+    "internal/importbf/import_test.go",
+    "cmd/trellis/import.go",
+    "cmd/trellis/confirm.go",
+    "cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889628
+}

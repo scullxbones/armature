@@ -1,0 +1,24 @@
+{
+  "id": "E4-S5-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Full decompose-context implementation (replaces stub)",
+  "parent": "E4-S5",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "definition_of_done": "BuildContext with template interpolation (SOURCES/EXISTING_DAG/PLAN_SCHEMA/CONSTRAINTS), context_stub.go deleted, --sources/--template/--output/--existing-dag flags on CLI; TestDecomposeContext* passes",
+  "scope": [
+    "internal/decompose/context.go",
+    "internal/decompose/context_stub.go",
+    "internal/decompose/decompose_test.go",
+    "cmd/trellis/decompose.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889610
+}

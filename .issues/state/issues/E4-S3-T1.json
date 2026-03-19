@@ -1,0 +1,24 @@
+{
+  "id": "E4-S3-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Full validation — W1-W11 warning checks and E2-E12 error checks",
+  "parent": "E4-S3",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E4-S3-T2"
+  ],
+  "definition_of_done": "All W1-W11 and E2-E12 checks implemented in validate.go with Options/Result types; TestW[0-9]* and TestE[0-9]* tests pass",
+  "scope": [
+    "internal/validate/validate.go",
+    "internal/validate/validate_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889586
+}

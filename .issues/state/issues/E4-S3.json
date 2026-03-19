@@ -1,0 +1,26 @@
+{
+  "id": "E4-S3",
+  "type": "story",
+  "status": "open",
+  "title": "S3: Full Validate (W1-W11 + E1-E12)",
+  "parent": "E4",
+  "children": [
+    "E4-S3-T1",
+    "E4-S3-T2"
+  ],
+  "blocked_by": [
+    "E4-S2"
+  ],
+  "blocks": [
+    "E4-S5"
+  ],
+  "definition_of_done": "All W1-W11 warning checks and E1-E12 error checks implemented, --scope/--strict/JSON output flags on validate command; all tests pass",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889519
+}

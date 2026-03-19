@@ -1,0 +1,29 @@
+{
+  "id": "E4",
+  "type": "epic",
+  "status": "in-progress",
+  "title": "E4: TUI + Governance + Sources",
+  "children": [
+    "E4-S1",
+    "E4-S4",
+    "E4-S7",
+    "E4-S2",
+    "E4-S3",
+    "E4-S5",
+    "E4-S6",
+    "E4-S8",
+    "E4-S9"
+  ],
+  "blocked_by": [],
+  "blocks": [],
+  "definition_of_done": "All 9 stories (S1-S9) done: Charm TUI stack, source document management, traceability, full validation, decompose-context, interactive governance workflows",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "outcome": "E4 epic started: TUI + Governance + Sources implementation begins",
+  "updated": 1773889756
+}

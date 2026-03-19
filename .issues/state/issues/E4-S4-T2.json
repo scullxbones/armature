@@ -1,0 +1,26 @@
+{
+  "id": "E4-S4-T2",
+  "type": "task",
+  "status": "open",
+  "title": "manifest.json persistence",
+  "parent": "E4-S4",
+  "children": [],
+  "blocked_by": [
+    "E4-S4-T1"
+  ],
+  "blocks": [
+    "E4-S4-T6"
+  ],
+  "definition_of_done": "ReadManifest/WriteManifest/WriteCache/ReadCache implemented; TestManifestPersistence and TestReadManifestMissingReturnsEmpty pass",
+  "scope": [
+    "internal/sources/manifest.go",
+    "internal/sources/manifest_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889563
+}

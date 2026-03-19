@@ -1,0 +1,24 @@
+{
+  "id": "E4-S6-T2",
+  "type": "task",
+  "status": "open",
+  "title": "dag-summary command + dag-summary.md artifact + non-interactive JSON path",
+  "parent": "E4-S6",
+  "children": [],
+  "blocked_by": [
+    "E4-S6-T1"
+  ],
+  "blocks": [],
+  "definition_of_done": "dag-summary command registered; non-interactive outputs JSON pending items; interactive runs TUI, emits dag-transition ops, writes dag-summary.md; go build passes",
+  "scope": [
+    "cmd/trellis/dagsum.go",
+    "cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889610
+}

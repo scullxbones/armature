@@ -1,0 +1,24 @@
+{
+  "id": "E4-S9-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Stale review BubbleTea model + stale-review command",
+  "parent": "E4-S9",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "definition_of_done": "stalereview.Model with ReviewItem/ConfirmMsg/FlagMsg/SkipMsg; stale-review command detects SHA-changed sources, runs TUI or outputs JSON; emits note ops for confirmed/flagged; TestNewModelHasItems/TestConfirmRecordsDecision pass; make test passes at ≥80% coverage",
+  "scope": [
+    "internal/tui/stalereview/model.go",
+    "internal/tui/stalereview/model_test.go",
+    "cmd/trellis/stalereview.go",
+    "cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889628
+}

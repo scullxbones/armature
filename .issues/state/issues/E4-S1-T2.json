@@ -1,0 +1,24 @@
+{
+  "id": "E4-S1-T2",
+  "type": "task",
+  "status": "open",
+  "title": "Semantic color palette",
+  "parent": "E4-S1",
+  "children": [],
+  "blocked_by": [
+    "E4-S1-T1"
+  ],
+  "blocks": [],
+  "definition_of_done": "7 lipgloss.Style vars (Critical, Warning, Advisory, OK, Info, Muted, ActionRequired) defined; TestSemanticPalette passes",
+  "scope": [
+    "internal/tui/colors.go",
+    "internal/tui/colors_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889540
+}

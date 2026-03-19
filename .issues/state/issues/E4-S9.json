@@ -1,0 +1,23 @@
+{
+  "id": "E4-S9",
+  "type": "story",
+  "status": "open",
+  "title": "S9: Stale Review TUI",
+  "parent": "E4",
+  "children": [
+    "E4-S9-T1"
+  ],
+  "blocked_by": [
+    "E4-S8"
+  ],
+  "blocks": [],
+  "definition_of_done": "stalereview BubbleTea model, stale-review command with non-interactive JSON path, stale sources detected from manifest SHA comparison; all tests pass",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
+  },
+  "decision_refs": [],
+  "updated": 1773889519
+}
