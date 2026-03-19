@@ -4,3 +4,6 @@
 ["claim","E4-S1-T2",1773921396,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["note","E4-S1-T2",1773921441,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Created internal/tui/colors.go with 7 semantic lipgloss.Style vars (Critical=#FF0000 red, Warning=#FFCC00 yellow, Advisory=#FF8C00 orange, OK=#00CC44 green, Info=#00CCFF cyan, Muted=#808080 grey, ActionRequired=#CC44FF magenta). TestSemanticPalette passes; go build ./... clean."}]
 ["transition","E4-S1-T2",1773921451,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Created internal/tui/colors.go with 7 lipgloss.Style vars (Critical=#FF0000, Warning=#FFCC00, Advisory=#FF8C00, OK=#00CC44, Info=#00CCFF, Muted=#808080, ActionRequired=#CC44FF); TestSemanticPalette passes"}]
+["claim","E4-S1-T3",1773921462,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
+["note","E4-S1-T3",1773921496,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented IsTerminal() in internal/tui/tty.go using golang.org/x/term (already in go.mod). TestIsTerminalReturnsFalseInTests passes; go build ./... clean."}]
+["transition","E4-S1-T3",1773921508,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Created internal/tui/tty.go with IsTerminal() using golang.org/x/term; TestIsTerminalReturnsFalseInTests passes"}]
