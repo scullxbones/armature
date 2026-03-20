@@ -96,3 +96,39 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Suppress or fix the underlying shell compat issue. At minimum, document in the skill that these warnings are harmless so agents don't halt on them.
 
 **File**: `cmd/trellis/worker_init.go` or underlying git config shell helper
+
+---
+
+## L9: Claiming a story blocks its child tasks from `trls ready`
+
+**Observed**: `trls ready` surfaced E4-S4 (a story, not a task) as ready. Running `trls claim --issue E4-S4` set the story to `claimed` status, which blocked E4-S4-T1 through T6 from appearing in `trls ready` — the parent was now claimed by me and the children showed their parent as `[claimed]`.
+
+**Impact**: Claiming the wrong granularity stalls all downstream work. The worker loop skill says to claim tasks, but `trls ready` mixed stories into the queue without signaling they behave differently.
+
+**Recommendation**: Either (a) exclude stories from `trls ready` output (tasks/features only), or (b) print a warning when claiming a story: "Claiming a story will block its child tasks — claim individual tasks instead." Or (c) make claiming a story auto-claim all its ready children instead.
+
+**File**: `internal/ready/compute.go`, `cmd/trellis/claim.go`
+
+---
+
+## L10: `trls unassign` does not fully release a claim — explicit transition required
+
+**Observed**: After claiming E4-S4 by mistake, `trls unassign --issue E4-S4` cleared the `assigned_to` field but left the issue in `claimed` status. Child tasks still showed parent as `[claimed]` and `trls ready` remained empty. A follow-up `trls transition --issue E4-S4 --to in-progress` was required to unblock the queue.
+
+**Impact**: Two-step recovery is non-obvious. `unassign` appears to undo a claim but silently leaves a residual state.
+
+**Recommendation**: `trls unassign` should transition the issue back to `in-progress` (or its prior status) automatically, or at least print: "Issue remains in 'claimed' state — run `trls transition --issue ID --to in-progress` to restore."
+
+**File**: `cmd/trellis/unassign.go`
+
+---
+
+## L11: `trls transition --to open` is rejected — `open` is not a valid transition target
+
+**Observed**: Attempted `trls transition --issue E4-S4 --to open` to undo an accidental claim. Got error: `invalid status "open": valid values are [blocked cancelled done in-progress merged]`. There is no way to return an issue to `open` once it has been moved to `in-progress` or `claimed`.
+
+**Impact**: Agents have no recovery path for accidentally starting an issue. The only options are `in-progress`, `done`, `blocked`, `cancelled`, or `merged` — none of which mean "I didn't mean to touch this."
+
+**Recommendation**: Add `open` as a valid transition target (or alias `reopen` to cover this case for non-done issues too), so agents can undo accidental claims cleanly.
+
+**File**: `cmd/trellis/transition.go`, `internal/ops/types.go`
