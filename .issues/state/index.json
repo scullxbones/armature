@@ -756,7 +756,7 @@
     ]
   },
   "E4-S4-T4": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -766,15 +766,16 @@
       "E4-S4-T5"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967823,
+    "updated": 1773967919,
     "title": "Local filesystem provider",
+    "outcome": "FilesystemProvider.Fetch reads local file; fingerprint computed by caller via Fingerprint(); 6 TestFilesystem* tests pass",
     "scope": [
       "internal/sources/filesystem.go",
       "internal/sources/filesystem_test.go"
     ]
   },
   "E4-S4-T5": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -783,7 +784,8 @@
     "blocks": [
       "E4-S4-T6"
     ],
-    "updated": 1773889563,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773967924,
     "title": "Credential config + Confluence/SharePoint providers",
     "scope": [
       "internal/sources/config.go",

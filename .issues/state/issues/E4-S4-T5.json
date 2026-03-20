@@ -1,7 +1,7 @@
 {
   "id": "E4-S4-T5",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "Credential config + Confluence/SharePoint providers",
   "parent": "E4-S4",
   "children": [],
@@ -24,5 +24,9 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "updated": 1773889563
+  "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+  "claimed_at": 1773967924,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773967924,
+  "updated": 1773967924
 }
