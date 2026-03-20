@@ -871,15 +871,16 @@
     "title": "S6: DAG Summary TUI"
   },
   "E4-S6-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S6",
     "blocks": [
       "E4-S6-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969708,
+    "updated": 1773969859,
     "title": "dag-summary BubbleTea model",
+    "outcome": "dagsum.Model with New/Total/Confirmed/Cursor/ConfirmedIDs; ConfirmMsg/SkipMsg handled; all 4 TestNewModelHasAllItems/TestConfirmAdvancesCursor/TestAllConfirmedProducesOps/TestSkipDoesNotConfirm pass",
     "scope": [
       "internal/tui/dagsum/model.go",
       "internal/tui/dagsum/keys.go",
@@ -887,13 +888,14 @@
     ]
   },
   "E4-S6-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S6",
     "blocked_by": [
       "E4-S6-T1"
     ],
-    "updated": 1773889610,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773969867,
     "title": "dag-summary command + dag-summary.md artifact + non-interactive JSON path",
     "scope": [
       "cmd/trellis/dagsum.go",
