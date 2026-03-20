@@ -1,7 +1,7 @@
 {
   "id": "E4-S4",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "S4: Source Document Management",
   "parent": "E4",
   "children": [
@@ -26,9 +26,10 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "Source Document Management complete: Provider interface, manifest persistence, fingerprinting, filesystem/Confluence/SharePoint providers, sources CLI commands",
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773965419,
   "claim_ttl": 60,
   "last_heartbeat": 1773965419,
-  "updated": 1773967369
+  "updated": 1773968458
 }

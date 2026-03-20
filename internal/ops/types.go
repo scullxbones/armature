@@ -87,10 +87,11 @@ type Payload struct {
 	Rel string `json:"rel,omitempty"`
 
 	// source-link
-	SourceID string `json:"source_id,omitempty"`
-	Section  string `json:"section,omitempty"`
-	Anchor   string `json:"anchor,omitempty"`
-	Quote    string `json:"quote,omitempty"`
+	SourceID  string `json:"source_id,omitempty"`
+	SourceURL string `json:"source_url,omitempty"`
+	Section   string `json:"section,omitempty"`
+	Anchor    string `json:"anchor,omitempty"`
+	Quote     string `json:"quote,omitempty"`
 
 	// source-fingerprint
 	SHA       string `json:"sha,omitempty"`
@@ -98,6 +99,7 @@ type Payload struct {
 	Provider  string `json:"provider,omitempty"`
 
 	// dag-transition
+	Confirmed             bool     `json:"confirmed,omitempty"`
 	UncoveredAcknowledged []string `json:"uncovered_acknowledged,omitempty"`
 
 	// decision

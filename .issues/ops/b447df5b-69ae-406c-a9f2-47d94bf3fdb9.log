@@ -34,3 +34,8 @@
 ["transition","E4-S4-T5",1773968023,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"ConfluenceProvider and SharePointProvider with Bearer/Basic auth; Credentials config; 4 TestProvider* tests pass"}]
 ["claim","E4-S4-T6",1773968028,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["transition","E4-S4-T6",1773968453,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"sources add/sync/verify subcommands in cmd/trellis/sources.go; registered on root; go build passes; trls sources --help shows all 3 subcommands"}]
+["transition","E4-S4",1773968458,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Source Document Management complete: Provider interface, manifest persistence, fingerprinting, filesystem/Confluence/SharePoint providers, sources CLI commands"}]
+["transition","E4-S7",1773968469,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"in-progress"}]
+["claim","E4-S7-T1",1773968475,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
+["note","E4-S7-T1",1773968571,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented source-link and dag-transition op materialization: added SourceLink struct and Issue.SourceLinks field to state.go; added Provenance.DAGConfirmed bool; added SourceURL field to ops.Payload; added applySourceLink and applyDAGTransition handlers to engine.go replacing prior no-ops; added TestApplySourceLinkOp and TestApplyDAGTransitionOp; all tests pass, go build clean."}]
+["transition","E4-S7-T1",1773968588,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"SourceLink type, Issue.SourceLinks, Provenance.DAGConfirmed added; applySourceLink and applyDAGTransition handlers; TestApplySourceLinkOp and TestApplyDAGTransitionOp pass"}]

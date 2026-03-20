@@ -32,6 +32,7 @@ type Issue struct {
 	PriorOutcomes    []string        `json:"prior_outcomes,omitempty"`
 	Notes            []Note          `json:"notes,omitempty"`
 	Decisions        []Decision      `json:"decisions,omitempty"`
+	SourceLinks      []SourceLink    `json:"source_links,omitempty"`
 	ClaimedBy        string          `json:"claimed_by,omitempty"`
 	ClaimedAt        int64           `json:"claimed_at,omitempty"`
 	ClaimTTL         int             `json:"claim_ttl,omitempty"`
@@ -46,6 +47,14 @@ type Provenance struct {
 	Method       string `json:"method"`
 	Confidence   string `json:"confidence"`
 	SourceWorker string `json:"source_worker"`
+	DAGConfirmed bool   `json:"dag_confirmed,omitempty"`
+}
+
+// SourceLink records a reference from an issue to an external source entry.
+type SourceLink struct {
+	SourceEntryID string `json:"source_entry_id"`
+	SourceURL     string `json:"source_url,omitempty"`
+	Title         string `json:"title,omitempty"`
 }
 
 type Note struct {

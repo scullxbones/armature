@@ -37,8 +37,12 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyDecision(op)
 	case ops.OpAssign:
 		return s.applyAssign(op)
-	case ops.OpSourceLink, ops.OpSourceFingerprint, ops.OpDAGTransition:
+	case ops.OpSourceLink:
+		return s.applySourceLink(op)
+	case ops.OpSourceFingerprint:
 		return nil
+	case ops.OpDAGTransition:
+		return s.applyDAGTransition(op)
 	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
@@ -190,6 +194,30 @@ func (s *State) applyDecision(op ops.Op) error {
 		WorkerID:  op.WorkerID,
 		Timestamp: op.Timestamp,
 	})
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applySourceLink(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	issue.SourceLinks = append(issue.SourceLinks, SourceLink{
+		SourceEntryID: op.Payload.SourceID,
+		SourceURL:     op.Payload.SourceURL,
+		Title:         op.Payload.Title,
+	})
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyDAGTransition(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	issue.Provenance.DAGConfirmed = op.Payload.Confirmed
 	issue.Updated = op.Timestamp
 	return nil
 }

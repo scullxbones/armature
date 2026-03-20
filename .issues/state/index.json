@@ -679,7 +679,7 @@
     ]
   },
   "E4-S4": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -697,8 +697,9 @@
       "E4-S7"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967369,
-    "title": "S4: Source Document Management"
+    "updated": 1773968458,
+    "title": "S4: Source Document Management",
+    "outcome": "Source Document Management complete: Provider interface, manifest persistence, fingerprinting, filesystem/Confluence/SharePoint providers, sources CLI commands"
   },
   "E4-S4-T1": {
     "status": "merged",
@@ -796,7 +797,7 @@
     ]
   },
   "E4-S4-T6": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -804,8 +805,9 @@
       "E4-S4-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968028,
+    "updated": 1773968453,
     "title": "sources add/sync/verify CLI commands",
+    "outcome": "sources add/sync/verify subcommands in cmd/trellis/sources.go; registered on root; go build passes; trls sources --help shows all 3 subcommands",
     "scope": [
       "cmd/trellis/sources.go",
       "cmd/trellis/main.go"
@@ -887,7 +889,7 @@
     ]
   },
   "E4-S7": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -900,17 +902,18 @@
     "blocks": [
       "E4-S2"
     ],
-    "updated": 1773889519,
+    "updated": 1773968469,
     "title": "S7: Traceability"
   },
   "E4-S7-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S7",
     "blocks": [
       "E4-S7-T2"
     ],
-    "updated": 1773889576,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773968475,
     "title": "source-link and dag-transition op materialization",
     "scope": [
       "internal/materialize/state.go",

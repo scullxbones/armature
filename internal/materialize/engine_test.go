@@ -185,6 +185,29 @@ func TestPropCreateIdempotent(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+func TestApplySourceLinkOp(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpSourceLink, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{SourceID: "entry-42", SourceURL: "https://example.com/doc", Title: "Ref Doc"}}))
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.SourceLinks, 1)
+	assert.Equal(t, "entry-42", issue.SourceLinks[0].SourceEntryID)
+	assert.Equal(t, "https://example.com/doc", issue.SourceLinks[0].SourceURL)
+	assert.Equal(t, "Ref Doc", issue.SourceLinks[0].Title)
+}
+
+func TestApplyDAGTransitionOp(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	assert.False(t, state.Issues["task-01"].Provenance.DAGConfirmed)
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpDAGTransition, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Confirmed: true}}))
+	assert.True(t, state.Issues["task-01"].Provenance.DAGConfirmed)
+}
+
 func TestApplyAssignOp(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
