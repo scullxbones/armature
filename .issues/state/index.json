@@ -655,28 +655,30 @@
     "title": "S3: Full Validate (W1-W11 + E1-E12)"
   },
   "E4-S3-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S3",
     "blocks": [
       "E4-S3-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969059,
+    "updated": 1773969339,
     "title": "Full validation — W1-W11 warning checks and E2-E12 error checks",
+    "outcome": "Full W1-W11 and E2-E12 validation checks implemented with Options/Result types; all TestW* and TestE* tests pass",
     "scope": [
       "internal/validate/validate.go",
       "internal/validate/validate_test.go"
     ]
   },
   "E4-S3-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S3",
     "blocked_by": [
       "E4-S3-T1"
     ],
-    "updated": 1773889586,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773969354,
     "title": "Validate CLI — --scope, --strict, JSON output",
     "scope": [
       "cmd/trellis/validate.go"
