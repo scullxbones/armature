@@ -1,7 +1,7 @@
 {
   "id": "E4-S7",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "S7: Traceability",
   "parent": "E4",
   "children": [
@@ -22,5 +22,6 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "updated": 1773968469
+  "outcome": "Traceability complete: source-link/dag-transition ops, Coverage computation, traceability.json written by pipeline",
+  "updated": 1773968860
 }

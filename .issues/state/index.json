@@ -608,7 +608,7 @@
     ]
   },
   "E4-S2": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -620,14 +620,15 @@
     "blocks": [
       "E4-S3"
     ],
-    "updated": 1773889519,
+    "updated": 1773968866,
     "title": "S2: Glamour Markdown Render"
   },
   "E4-S2-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S2",
-    "updated": 1773889586,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773968866,
     "title": "Glamour markdown render upgrade for render-context",
     "scope": [
       "internal/context/render.go",
@@ -889,7 +890,7 @@
     ]
   },
   "E4-S7": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -902,8 +903,9 @@
     "blocks": [
       "E4-S2"
     ],
-    "updated": 1773968469,
-    "title": "S7: Traceability"
+    "updated": 1773968860,
+    "title": "S7: Traceability",
+    "outcome": "Traceability complete: source-link/dag-transition ops, Coverage computation, traceability.json written by pipeline"
   },
   "E4-S7-T1": {
     "status": "merged",
@@ -923,15 +925,16 @@
     ]
   },
   "E4-S7-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S7",
     "blocked_by": [
       "E4-S7-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968593,
+    "updated": 1773968854,
     "title": "Traceability coverage computation + traceability.json",
+    "outcome": "Coverage struct with Compute/Write/Read; pipeline writes traceability.json; import cycle resolved via IssueRef adapter; TestCoverage* (3 tests) pass",
     "scope": [
       "internal/traceability/traceability.go",
       "internal/traceability/traceability_test.go",

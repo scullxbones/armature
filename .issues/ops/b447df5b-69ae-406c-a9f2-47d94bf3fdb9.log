@@ -42,3 +42,8 @@
 ["claim","E4-S7-T2",1773968593,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["note","E4-S7-T2",1773968839,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented traceability coverage: Coverage{TotalNodes, CitedNodes, CoveragePct, Uncited []string} in internal/traceability/traceability.go. Compute() accepts []IssueRef (cycle-safe), Write/Read to traceability.json (atomic). Pipeline writes traceability.json after materialization in both Materialize and MaterializeAndReturn. TestCoverageAllCited, TestCoverageNoneCited, TestCoveragePartial all pass. go build ./... clean."}]
 ["transition","E4-S7-T2",1773968854,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Coverage struct with Compute/Write/Read; pipeline writes traceability.json; import cycle resolved via IssueRef adapter; TestCoverage* (3 tests) pass"}]
+["transition","E4-S7",1773968860,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Traceability complete: source-link/dag-transition ops, Coverage computation, traceability.json written by pipeline"}]
+["transition","E4-S2",1773968866,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"in-progress"}]
+["claim","E4-S2-T1",1773968866,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
+["note","E4-S2-T1",1773969018,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Updated RenderHuman in internal/context/render.go to use glamour.Render with ascii style, falling back to plain text on error. All tests pass (go test ./internal/context/...) and build succeeds (go build ./...)."}]
+["transition","E4-S2-T1",1773969045,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"RenderHuman uses glamour.Render with ascii style and plain-text fallback; TestRenderHuman passes"}]

@@ -1,7 +1,7 @@
 {
   "id": "E4-S7-T2",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Traceability coverage computation + traceability.json",
   "parent": "E4-S7",
   "children": [],
@@ -21,9 +21,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "Coverage struct with Compute/Write/Read; pipeline writes traceability.json; import cycle resolved via IssueRef adapter; TestCoverage* (3 tests) pass",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773968839,
+      "msg": "Implemented traceability coverage: Coverage{TotalNodes, CitedNodes, CoveragePct, Uncited []string} in internal/traceability/traceability.go. Compute() accepts []IssueRef (cycle-safe), Write/Read to traceability.json (atomic). Pipeline writes traceability.json after materialization in both Materialize and MaterializeAndReturn. TestCoverageAllCited, TestCoverageNoneCited, TestCoveragePartial all pass. go build ./... clean."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773968593,
   "claim_ttl": 60,
   "last_heartbeat": 1773968593,
-  "updated": 1773968593
+  "updated": 1773968854
 }
