@@ -1,7 +1,7 @@
 {
   "id": "E4-S1-T5",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Bubbles component wrappers",
   "parent": "E4-S1",
   "children": [],
@@ -19,9 +19,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "Created internal/tui/components.go with NewSpinner, NewProgressBar, NewTable, NewViewport; go build passes",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773965339,
+      "msg": "Implemented NewSpinner, NewProgressBar, NewTable, NewViewport constructors in internal/tui/components.go using bubbles v0.20.0. Added missing go.sum entry for charmbracelet/harmonica (transitive dep of bubbles/progress). go build ./internal/tui/... and go build ./... both pass."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773921595,
   "claim_ttl": 60,
   "last_heartbeat": 1773921595,
-  "updated": 1773921595
+  "updated": 1773965386
 }

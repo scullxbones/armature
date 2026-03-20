@@ -505,7 +505,7 @@
     "outcome": "E4 epic started: TUI + Governance + Sources implementation begins"
   },
   "E4-S1": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -518,8 +518,9 @@
     "blocks": [
       "E4-S4"
     ],
-    "updated": 1773889514,
-    "title": "S1: Charm TUI Foundation"
+    "updated": 1773965432,
+    "title": "S1: Charm TUI Foundation",
+    "outcome": "Charm TUI foundation complete: dependencies, semantic colors, TTY detection, IsInteractive helper, Bubbles component wrappers"
   },
   "E4-S1-T1": {
     "status": "merged",
@@ -592,15 +593,16 @@
     ]
   },
   "E4-S1-T5": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S1",
     "blocked_by": [
       "E4-S1-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921595,
+    "updated": 1773965386,
     "title": "Bubbles component wrappers",
+    "outcome": "Created internal/tui/components.go with NewSpinner, NewProgressBar, NewTable, NewViewport; go build passes",
     "scope": [
       "internal/tui/components.go"
     ]
@@ -677,7 +679,7 @@
     ]
   },
   "E4-S4": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -694,18 +696,20 @@
     "blocks": [
       "E4-S7"
     ],
-    "updated": 1773889519,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773967369,
     "title": "S4: Source Document Management"
   },
   "E4-S4-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S4",
     "blocks": [
       "E4-S4-T2",
       "E4-S4-T3"
     ],
-    "updated": 1773889560,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773967375,
     "title": "Provider interface + manifest types",
     "scope": [
       "internal/sources/types.go",
