@@ -4,16 +4,12 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/tui"
 )
 
 type ConfirmMsg struct{}
 type SkipMsg struct{}
-type EmitDAGTransitionMsg struct {
-	IssueID  string
-	WorkerID string
-}
 
 type itemState int
 
@@ -24,22 +20,18 @@ const (
 )
 
 type Model struct {
-	issues   []*materialize.Issue
-	states   []itemState
-	cursor   int
-	workerID string
-	opsDir   string
-	keys     KeyMap
-	done     bool
+	issues []*materialize.Issue
+	states []itemState
+	cursor int
+	keys   KeyMap
+	done   bool
 }
 
-func New(issues []*materialize.Issue, workerID, opsDir string) Model {
+func New(issues []*materialize.Issue) Model {
 	return Model{
-		issues:   issues,
-		states:   make([]itemState, len(issues)),
-		workerID: workerID,
-		opsDir:   opsDir,
-		keys:     DefaultKeyMap(),
+		issues: issues,
+		states: make([]itemState, len(issues)),
+		keys:   DefaultKeyMap(),
 	}
 }
 
@@ -103,16 +95,12 @@ func (m Model) confirm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.states[m.cursor] = itemConfirmed
-	issueID := m.issues[m.cursor].ID
-	cmd := func() tea.Msg {
-		return EmitDAGTransitionMsg{IssueID: issueID, WorkerID: m.workerID}
-	}
 	m.cursor = nextPending(m.states, m.cursor)
 	if m.allReviewed() {
 		m.done = true
-		return m, tea.Sequence(cmd, tea.Quit)
+		return m, tea.Quit
 	}
-	return m, cmd
+	return m, nil
 }
 
 func (m Model) skip() (tea.Model, tea.Cmd) {
@@ -155,17 +143,15 @@ func (m Model) View() string {
 	}
 
 	issue := m.issues[m.cursor]
-	header := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).
-		Render(fmt.Sprintf("[%d/%d] %s", m.cursor+1, len(m.issues), issue.ID))
-	title := lipgloss.NewStyle().Render(issue.Title)
-	typeLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).
-		Render(fmt.Sprintf("type: %s", issue.Type))
+	header := tui.Info.Bold(true).Render(fmt.Sprintf("[%d/%d] %s", m.cursor+1, len(m.issues), issue.ID))
+	title := issue.Title
+	typeLabel := tui.Muted.Render(fmt.Sprintf("type: %s", issue.Type))
 	stateLabel := "pending"
 	switch m.states[m.cursor] {
 	case itemConfirmed:
-		stateLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render("✓ confirmed")
+		stateLabel = tui.OK.Render("✓ confirmed")
 	case itemSkipped:
-		stateLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("→ skipped")
+		stateLabel = tui.Muted.Render("→ skipped")
 	}
 	progress := fmt.Sprintf("Confirmed: %d/%d | enter=confirm  s=skip  q=quit", m.Confirmed(), len(m.issues))
 	return fmt.Sprintf("%s\n%s  %s  %s\n\n%s\n", header, title, typeLabel, stateLabel, progress)

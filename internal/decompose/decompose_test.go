@@ -183,11 +183,12 @@ func TestDecomposeContextNoSources(t *testing.T) {
 
 func TestDecomposeContextWithSources(t *testing.T) {
 	dir := t.TempDir()
+	sourcesDir := filepath.Join(dir, "sources")
 	content := []byte("# PRD\n\nProduct requirements.")
-	require.NoError(t, sources.WriteCache(dir, "prd", content))
+	require.NoError(t, sources.WriteCache(sourcesDir, "prd", content))
 	m := sources.Manifest{}
 	m.Upsert(sources.SourceEntry{ID: "prd", ProviderType: "filesystem"})
-	require.NoError(t, sources.WriteManifest(dir, m))
+	require.NoError(t, sources.WriteManifest(sourcesDir, m))
 
 	plan := &Plan{Title: "My Plan", Issues: []PlanIssue{{ID: "TSK-1", Title: "Task one", Type: "task"}}}
 	ctx, err := BuildContext(ContextParams{

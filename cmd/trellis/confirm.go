@@ -31,6 +31,7 @@ func newConfirmCmd() *cobra.Command {
 				TargetID:  nodeID,
 				Timestamp: nowEpoch(),
 				WorkerID:  workerID,
+				Payload:   ops.Payload{Confirmed: true},
 			}
 			if err := appendLowStakesOp(logPath, o); err != nil {
 				return fmt.Errorf("emit dag-transition op: %w", err)

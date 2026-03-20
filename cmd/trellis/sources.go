@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/sources"
 	"github.com/spf13/cobra"
 )
@@ -84,6 +85,11 @@ func newSourcesSyncCmd() *cobra.Command {
 				return nil
 			}
 
+			workerID, logPath, err := resolveWorkerAndLog()
+			if err != nil {
+				return fmt.Errorf("worker not initialized: %w", err)
+			}
+
 			ctx := context.Background()
 			for id, entry := range manifest.Entries {
 				provider, err := providerForType(entry.ProviderType)
@@ -104,6 +110,20 @@ func newSourcesSyncCmd() *cobra.Command {
 
 				if err := sources.WriteCache(dir, id, data); err != nil {
 					return fmt.Errorf("write cache %s: %w", id, err)
+				}
+
+				o := ops.Op{
+					Type:      ops.OpSourceFingerprint,
+					TargetID:  id,
+					Timestamp: nowEpoch(),
+					WorkerID:  workerID,
+					Payload: ops.Payload{
+						SHA:      entry.Fingerprint,
+						Provider: entry.ProviderType,
+					},
+				}
+				if err := appendLowStakesOp(logPath, o); err != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", id, err)
 				}
 
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", id, entry.Fingerprint[:8])

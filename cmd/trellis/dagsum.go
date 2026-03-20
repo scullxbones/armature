@@ -79,7 +79,7 @@ func newDAGSummaryCmd() *cobra.Command {
 				"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 				cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
 
-			m := dagsum.New(unconfirmed, workerID, "")
+			m := dagsum.New(unconfirmed)
 			p := tea.NewProgram(m)
 			finalModel, err := p.Run()
 			if err != nil {
@@ -94,6 +94,7 @@ func newDAGSummaryCmd() *cobra.Command {
 					TargetID:  id,
 					Timestamp: nowEpoch(),
 					WorkerID:  workerID,
+					Payload:   ops.Payload{Confirmed: true},
 				}
 				if err := appendLowStakesOp(logPath, o); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)

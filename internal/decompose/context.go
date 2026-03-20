@@ -3,6 +3,7 @@ package decompose
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/scullxbones/trellis/internal/sources"
@@ -36,13 +37,14 @@ func BuildContext(params ContextParams) (ContextOutput, error) {
 	}
 
 	if params.IssuesDir != "" && len(params.SourceIDs) > 0 {
-		manifest, err := sources.ReadManifest(params.IssuesDir)
+		sourcesDir := filepath.Join(params.IssuesDir, "sources")
+		manifest, err := sources.ReadManifest(sourcesDir)
 		if err == nil {
 			for _, id := range params.SourceIDs {
 				if _, ok := manifest.Get(id); !ok {
 					continue
 				}
-				data, err := sources.ReadCache(params.IssuesDir, id)
+				data, err := sources.ReadCache(sourcesDir, id)
 				if err != nil || data == nil {
 					continue
 				}

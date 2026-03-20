@@ -26,7 +26,7 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			manifest, err := sources.ReadManifest(issuesDir)
+			manifest, err := sources.ReadManifest(sourcesDir())
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)
 			}
@@ -39,7 +39,7 @@ func newStaleReviewCmd() *cobra.Command {
 			// Detect stale entries.
 			var reviewItems []stalereview.ReviewItem
 			for _, entry := range manifest.Entries {
-				data, err := sources.ReadCache(issuesDir, entry.ID)
+				data, err := sources.ReadCache(sourcesDir(), entry.ID)
 				if err != nil {
 					return fmt.Errorf("read cache for %s: %w", entry.ID, err)
 				}

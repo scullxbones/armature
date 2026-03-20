@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/tui"
 )
 
 type ReviewItem struct {
@@ -95,8 +95,7 @@ func (m Model) View() string {
 		return "Stale review complete.\n"
 	}
 	item := m.items[m.cursor]
-	header := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214")).
-		Render(fmt.Sprintf("[%d/%d] Source changed: %s", m.cursor+1, len(m.items), item.SourceID))
+	header := tui.Warning.Bold(true).Render(fmt.Sprintf("[%d/%d] Source changed: %s", m.cursor+1, len(m.items), item.SourceID))
 	var sb strings.Builder
 	sb.WriteString(header + "\n\n")
 	sb.WriteString("Change: " + item.ChangeSummary + "\n\nAffected issues:\n")

@@ -2,6 +2,7 @@ package validate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +37,7 @@ func Validate(state *materialize.State, opts Options) Result {
 	errors = append(errors, checkE6RequiredFields(targets)...)
 	errors = append(errors, checkE9DoDLength(targets)...)
 	errors = append(errors, checkE10ScopeGlobs(targets)...)
+	// TODO(E4-S3): E11 check not yet implemented — spec definition pending.
 
 	if opts.IssuesDir != "" {
 		errors = append(errors, checkE7E8E12Citations(targets, opts.IssuesDir)...)
@@ -49,6 +51,8 @@ func Validate(state *materialize.State, opts Options) Result {
 	warnings = append(warnings, checkW6ComplexityMismatch(targets)...)
 	warnings = append(warnings, checkW7VagueDoD(targets)...)
 	warnings = append(warnings, checkW8ConflictingDecisions(targets)...)
+	// TODO(E4-S3): W9 stale-heartbeat check not yet implemented —
+	// should warn when a claimed issue's last heartbeat exceeds its ClaimTTL.
 	warnings = append(warnings, checkW11VagueOutcomes(targets)...)
 
 	if opts.RepoPath != "" {
@@ -57,7 +61,8 @@ func Validate(state *materialize.State, opts Options) Result {
 
 	var cov *traceability.Coverage
 	if opts.IssuesDir != "" {
-		c, err := traceability.Read(opts.IssuesDir)
+		tracePath := filepath.Join(opts.IssuesDir, "state", "traceability.json")
+		c, err := traceability.Read(tracePath)
 		if err == nil {
 			cov = &c
 		}
@@ -198,7 +203,12 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir strin
 	var errs []string
 	manifest, err := readManifestForValidate(issuesDir)
 	if err != nil {
-		return nil
+		// Manifest absent or unreadable — citation checks skipped.
+		// Run `trls sources add` to register sources before validating citations.
+		if !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Sprintf("citation check skipped: cannot read source manifest: %v", err))
+		}
+		return errs
 	}
 	for id, issue := range issues {
 		if len(issue.SourceLinks) == 0 {
@@ -215,7 +225,7 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir strin
 }
 
 func readManifestForValidate(issuesDir string) (map[string]struct{}, error) {
-	path := filepath.Join(issuesDir, "state", "sources", "manifest.json")
+	path := filepath.Join(issuesDir, "sources", "manifest.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

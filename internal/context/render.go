@@ -29,7 +29,7 @@ func RenderHuman(ctx *Context) string {
 	}
 	plain := sb.String()
 
-	rendered, err := glamour.Render(plain, "ascii")
+	rendered, err := glamour.Render(plain, "auto")
 	if err != nil {
 		return plain
 	}
