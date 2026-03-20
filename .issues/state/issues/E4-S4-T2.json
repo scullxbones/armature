@@ -1,7 +1,7 @@
 {
   "id": "E4-S4-T2",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "manifest.json persistence",
   "parent": "E4-S4",
   "children": [],
@@ -22,9 +22,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "ReadManifest/WriteManifest/WriteCache/ReadCache in internal/sources/manifest.go; TestManifestPersistence and TestReadManifestMissingReturnsEmpty pass",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773967716,
+      "msg": "Implemented ReadManifest/WriteManifest/WriteCache/ReadCache in internal/sources/manifest.go. ReadManifest returns empty Manifest (no error) when file is absent; WriteManifest writes atomically via temp-file rename. TestManifestPersistence and TestReadManifestMissingReturnsEmpty both pass. go build ./... clean."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773967644,
   "claim_ttl": 60,
   "last_heartbeat": 1773967644,
-  "updated": 1773967644
+  "updated": 1773967741
 }

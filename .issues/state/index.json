@@ -718,7 +718,7 @@
     ]
   },
   "E4-S4-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -728,15 +728,16 @@
       "E4-S4-T6"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967644,
+    "updated": 1773967741,
     "title": "manifest.json persistence",
+    "outcome": "ReadManifest/WriteManifest/WriteCache/ReadCache in internal/sources/manifest.go; TestManifestPersistence and TestReadManifestMissingReturnsEmpty pass",
     "scope": [
       "internal/sources/manifest.go",
       "internal/sources/manifest_test.go"
     ]
   },
   "E4-S4-T3": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -745,7 +746,8 @@
     "blocks": [
       "E4-S4-T4"
     ],
-    "updated": 1773889563,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773967746,
     "title": "SHA-256 fingerprint helper",
     "scope": [
       "internal/sources/fingerprint.go",
