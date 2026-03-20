@@ -854,7 +854,7 @@
     ]
   },
   "E4-S6": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -867,8 +867,9 @@
     "blocks": [
       "E4-S8"
     ],
-    "updated": 1773969708,
-    "title": "S6: DAG Summary TUI"
+    "updated": 1773970417,
+    "title": "S6: DAG Summary TUI",
+    "outcome": "DAG Summary TUI complete: BubbleTea model, dag-summary command, non-interactive JSON, dag-summary.md artifact"
   },
   "E4-S6-T1": {
     "status": "merged",
@@ -888,15 +889,16 @@
     ]
   },
   "E4-S6-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S6",
     "blocked_by": [
       "E4-S6-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969867,
+    "updated": 1773970413,
     "title": "dag-summary command + dag-summary.md artifact + non-interactive JSON path",
+    "outcome": "dag-summary command registered; non-interactive JSON path; interactive TUI with dag-transition ops and dag-summary.md artifact; go build passes",
     "scope": [
       "cmd/trellis/dagsum.go",
       "cmd/trellis/main.go"
@@ -955,7 +957,7 @@
     ]
   },
   "E4-S8": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -967,14 +969,15 @@
     "blocks": [
       "E4-S9"
     ],
-    "updated": 1773889519,
+    "updated": 1773970422,
     "title": "S8: Brownfield Import"
   },
   "E4-S8-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S8",
-    "updated": 1773889628,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773970422,
     "title": "Brownfield CSV/JSON import parser + import and confirm commands",
     "scope": [
       "internal/importbf/import.go",

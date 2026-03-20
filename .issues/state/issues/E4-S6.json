@@ -1,7 +1,7 @@
 {
   "id": "E4-S6",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "S6: DAG Summary TUI",
   "parent": "E4",
   "children": [
@@ -22,5 +22,6 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "updated": 1773969708
+  "outcome": "DAG Summary TUI complete: BubbleTea model, dag-summary command, non-interactive JSON, dag-summary.md artifact",
+  "updated": 1773970417
 }
