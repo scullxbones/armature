@@ -1,7 +1,7 @@
 {
   "id": "E4-S5-T1",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "Full decompose-context implementation (replaces stub)",
   "parent": "E4-S5",
   "children": [],
@@ -20,5 +20,9 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "updated": 1773889610
+  "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+  "claimed_at": 1773969455,
+  "claim_ttl": 60,
+  "last_heartbeat": 1773969455,
+  "updated": 1773969455
 }

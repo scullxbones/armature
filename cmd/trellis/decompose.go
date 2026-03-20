@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/scullxbones/trellis/internal/decompose"
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -91,22 +94,70 @@ func newDecomposeRevertCmd() *cobra.Command {
 
 func newDecomposeContextCmd() *cobra.Command {
 	var planPath string
+	var sourcesFlag string
+	var templateFlag string
+	var outputFlag string
+	var formatFlag string
+	var existingDAGFlag bool
 
 	cmd := &cobra.Command{
 		Use:               "decompose-context",
-		Short:             "Print context summary for a decomposition plan",
+		Short:             "Build decomposition context with template interpolation",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			plan, err := decompose.ParsePlan(planPath)
+			var plan *decompose.Plan
+			if planPath != "" {
+				var err error
+				plan, err = decompose.ParsePlan(planPath)
+				if err != nil {
+					return err
+				}
+			}
+
+			var sourceIDs []string
+			if sourcesFlag != "" {
+				for _, s := range strings.Split(sourcesFlag, ",") {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						sourceIDs = append(sourceIDs, s)
+					}
+				}
+			}
+
+			ctx, err := decompose.BuildContext(decompose.ContextParams{
+				IssuesDir:   appCtx.IssuesDir,
+				Plan:        plan,
+				SourceIDs:   sourceIDs,
+				Template:    templateFlag,
+				ExistingDAG: existingDAGFlag,
+			})
 			if err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), decompose.PlanContext(plan))
+
+			var out []byte
+			if formatFlag == "json" {
+				out, err = json.MarshalIndent(ctx, "", "  ")
+				if err != nil {
+					return err
+				}
+			} else {
+				out = []byte(ctx.PromptTemplate)
+			}
+
+			if outputFlag != "" {
+				return os.WriteFile(outputFlag, out, 0o644)
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
-	_ = cmd.MarkFlagRequired("plan")
+	cmd.Flags().StringVar(&sourcesFlag, "sources", "", "comma-separated source IDs to include")
+	cmd.Flags().StringVar(&templateFlag, "template", "", "prompt template with {{SOURCES}}/{{EXISTING_DAG}}/{{PLAN_SCHEMA}}/{{CONSTRAINTS}} placeholders")
+	cmd.Flags().StringVar(&outputFlag, "output", "", "write output to file instead of stdout")
+	cmd.Flags().StringVar(&formatFlag, "format", "text", "output format: text or json")
+	cmd.Flags().BoolVar(&existingDAGFlag, "existing-dag", false, "include existing DAG issues in context")
 	return cmd
 }

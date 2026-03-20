@@ -638,7 +638,7 @@
     ]
   },
   "E4-S3": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -651,8 +651,9 @@
     "blocks": [
       "E4-S5"
     ],
-    "updated": 1773969059,
-    "title": "S3: Full Validate (W1-W11 + E1-E12)"
+    "updated": 1773969448,
+    "title": "S3: Full Validate (W1-W11 + E1-E12)",
+    "outcome": "Full validation suite complete: W1-W11 warnings, E2-E12 errors, --scope/--strict/--ci flags, JSON output"
   },
   "E4-S3-T1": {
     "status": "merged",
@@ -671,15 +672,16 @@
     ]
   },
   "E4-S3-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S3",
     "blocked_by": [
       "E4-S3-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969354,
+    "updated": 1773969441,
     "title": "Validate CLI — --scope, --strict, JSON output",
+    "outcome": "validate command has --scope, --strict, --ci flags; --format json outputs errors/warnings JSON; coverage output in human mode; go build passes",
     "scope": [
       "cmd/trellis/validate.go"
     ]
@@ -820,7 +822,7 @@
     ]
   },
   "E4-S5": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -832,14 +834,15 @@
     "blocks": [
       "E4-S6"
     ],
-    "updated": 1773889519,
+    "updated": 1773969455,
     "title": "S5: Full Decompose-Context"
   },
   "E4-S5-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S5",
-    "updated": 1773889610,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773969455,
     "title": "Full decompose-context implementation (replaces stub)",
     "scope": [
       "internal/decompose/context.go",

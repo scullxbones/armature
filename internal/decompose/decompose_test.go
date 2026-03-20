@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/sources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -170,4 +171,33 @@ func TestPlanContext(t *testing.T) {
 	result := PlanContext(plan)
 	assert.Contains(t, result, "My Plan")
 	assert.Contains(t, result, "3")
+}
+
+func TestDecomposeContextNoSources(t *testing.T) {
+	plan := &Plan{Title: "Plan", Issues: []PlanIssue{}}
+	ctx, err := BuildContext(ContextParams{Plan: plan})
+	require.NoError(t, err)
+	assert.Empty(t, ctx.Sources)
+	assert.NotEmpty(t, ctx.PlanSchema)
+}
+
+func TestDecomposeContextWithSources(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("# PRD\n\nProduct requirements.")
+	require.NoError(t, sources.WriteCache(dir, "prd", content))
+	m := sources.Manifest{}
+	m.Upsert(sources.SourceEntry{ID: "prd", ProviderType: "filesystem"})
+	require.NoError(t, sources.WriteManifest(dir, m))
+
+	plan := &Plan{Title: "My Plan", Issues: []PlanIssue{{ID: "TSK-1", Title: "Task one", Type: "task"}}}
+	ctx, err := BuildContext(ContextParams{
+		IssuesDir: dir,
+		Plan:      plan,
+		SourceIDs: []string{"prd"},
+		Template:  "Sources: {{SOURCES}}",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, ctx.PromptTemplate, "PRD")
+	assert.Len(t, ctx.Sources, 1)
+	assert.Equal(t, "prd", ctx.Sources[0].ID)
 }

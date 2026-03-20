@@ -1,7 +1,7 @@
 {
   "id": "E4-S3-T2",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Validate CLI — --scope, --strict, JSON output",
   "parent": "E4-S3",
   "children": [],
@@ -19,9 +19,10 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "validate command has --scope, --strict, --ci flags; --format json outputs errors/warnings JSON; coverage output in human mode; go build passes",
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773969354,
   "claim_ttl": 60,
   "last_heartbeat": 1773969354,
-  "updated": 1773969354
+  "updated": 1773969441
 }
