@@ -10,3 +10,6 @@
 ["claim","E4-S1-T4",1773921514,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["note","E4-S1-T4",1773921580,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented IsInteractive helper: added SetFormat(f string) and IsInteractive() bool to internal/tui/tty.go; wired SetFormat into root PersistentPreRunE in cmd/trellis/main.go; added TestIsInteractive* tests covering json/agent/no-TTY cases. All tests pass, build clean."}]
 ["transition","E4-S1-T4",1773921592,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Added SetFormat/IsInteractive to internal/tui/tty.go; wired SetFormat in root PersistentPreRunE; TestIsInteractive* passes"}]
+["claim","E4-S1-T5",1773921595,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
+["note","E4-S1-T5",1773965339,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented NewSpinner, NewProgressBar, NewTable, NewViewport constructors in internal/tui/components.go using bubbles v0.20.0. Added missing go.sum entry for charmbracelet/harmonica (transitive dep of bubbles/progress). go build ./internal/tui/... and go build ./... both pass."}]
+["transition","E4-S1-T5",1773965386,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Created internal/tui/components.go with NewSpinner, NewProgressBar, NewTable, NewViewport; go build passes"}]

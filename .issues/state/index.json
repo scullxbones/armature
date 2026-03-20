@@ -575,15 +575,16 @@
     ]
   },
   "E4-S1-T4": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S1",
     "blocked_by": [
       "E4-S1-T3"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921514,
+    "updated": 1773921592,
     "title": "IsInteractive helper",
+    "outcome": "Added SetFormat/IsInteractive to internal/tui/tty.go; wired SetFormat in root PersistentPreRunE; TestIsInteractive* passes",
     "scope": [
       "internal/tui/tty.go",
       "internal/tui/tty_test.go",
@@ -591,13 +592,14 @@
     ]
   },
   "E4-S1-T5": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S1",
     "blocked_by": [
       "E4-S1-T1"
     ],
-    "updated": 1773889540,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773921595,
     "title": "Bubbles component wrappers",
     "scope": [
       "internal/tui/components.go"
