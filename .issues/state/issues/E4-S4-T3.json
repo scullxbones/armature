@@ -1,7 +1,7 @@
 {
   "id": "E4-S4-T3",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "SHA-256 fingerprint helper",
   "parent": "E4-S4",
   "children": [],
@@ -22,9 +22,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "Fingerprint([]byte) string in internal/sources/fingerprint.go; TestFingerprintKnownValue and TestFingerprintDifferentInputs pass",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773967806,
+      "msg": "Implemented Fingerprint([]byte) string in internal/sources/fingerprint.go using crypto/sha256 and encoding/hex. Added TestFingerprintKnownValue and TestFingerprintDifferentInputs in fingerprint_test.go. All tests pass (go test ./internal/sources/...) and go build ./... succeeds."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773967746,
   "claim_ttl": 60,
   "last_heartbeat": 1773967746,
-  "updated": 1773967746
+  "updated": 1773967816
 }

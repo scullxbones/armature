@@ -737,7 +737,7 @@
     ]
   },
   "E4-S4-T3": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -747,15 +747,16 @@
       "E4-S4-T4"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967746,
+    "updated": 1773967816,
     "title": "SHA-256 fingerprint helper",
+    "outcome": "Fingerprint([]byte) string in internal/sources/fingerprint.go; TestFingerprintKnownValue and TestFingerprintDifferentInputs pass",
     "scope": [
       "internal/sources/fingerprint.go",
       "internal/sources/fingerprint_test.go"
     ]
   },
   "E4-S4-T4": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -764,7 +765,8 @@
     "blocks": [
       "E4-S4-T5"
     ],
-    "updated": 1773889563,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773967823,
     "title": "Local filesystem provider",
     "scope": [
       "internal/sources/filesystem.go",
