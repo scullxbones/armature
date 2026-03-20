@@ -1,7 +1,7 @@
 {
   "id": "E4-S9",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "S9: Stale Review TUI",
   "parent": "E4",
   "children": [
@@ -19,5 +19,6 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "updated": 1773971154
+  "outcome": "Stale Review TUI complete: BubbleTea model, stale-review command, JSON/TUI paths, note op emission",
+  "updated": 1773971661
 }

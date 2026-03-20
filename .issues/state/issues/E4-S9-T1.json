@@ -1,7 +1,7 @@
 {
   "id": "E4-S9-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Stale review BubbleTea model + stale-review command",
   "parent": "E4-S9",
   "children": [],
@@ -20,9 +20,10 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "stalereview.Model with ReviewItem/ConfirmMsg/FlagMsg/SkipMsg; stale-review command with JSON and TUI paths; note ops emitted; TestNewModelHasItems/TestConfirmRecordsDecision pass; all tests pass",
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773971154,
   "claim_ttl": 60,
   "last_heartbeat": 1773971154,
-  "updated": 1773971154
+  "updated": 1773971654
 }

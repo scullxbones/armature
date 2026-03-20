@@ -76,3 +76,5 @@
 ["transition","E4-S9",1773971154,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"in-progress"}]
 ["claim","E4-S9-T1",1773971154,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["transition","E4-S9-T1",1773971654,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"stalereview.Model with ReviewItem/ConfirmMsg/FlagMsg/SkipMsg; stale-review command with JSON and TUI paths; note ops emitted; TestNewModelHasItems/TestConfirmRecordsDecision pass; all tests pass"}]
+["transition","E4-S9",1773971661,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Stale Review TUI complete: BubbleTea model, stale-review command, JSON/TUI paths, note op emission"}]
+["transition","E4",1773971661,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"E4 complete: TUI foundation, source management, traceability, full validation, decompose-context, DAG summary TUI, brownfield import, stale review"}]

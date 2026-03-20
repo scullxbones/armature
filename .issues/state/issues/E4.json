@@ -1,7 +1,7 @@
 {
   "id": "E4",
   "type": "epic",
-  "status": "in-progress",
+  "status": "merged",
   "title": "E4: TUI + Governance + Sources",
   "children": [
     "E4-S1",
@@ -24,6 +24,6 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "outcome": "E4 epic started: TUI + Governance + Sources implementation begins",
-  "updated": 1773889756
+  "outcome": "E4 complete: TUI foundation, source management, traceability, full validation, decompose-context, DAG summary TUI, brownfield import, stale review",
+  "updated": 1773971661
 }
