@@ -124,8 +124,12 @@ func newDecomposeContextCmd() *cobra.Command {
 				}
 			}
 
+			issuesDir := ""
+			if appCtx != nil {
+				issuesDir = appCtx.IssuesDir
+			}
 			ctx, err := decompose.BuildContext(decompose.ContextParams{
-				IssuesDir:   appCtx.IssuesDir,
+				IssuesDir:   issuesDir,
 				Plan:        plan,
 				SourceIDs:   sourceIDs,
 				Template:    templateFlag,

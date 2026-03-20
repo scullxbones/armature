@@ -1,7 +1,7 @@
 {
   "id": "E4-S8-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Brownfield CSV/JSON import parser + import and confirm commands",
   "parent": "E4-S8",
   "children": [],
@@ -21,9 +21,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "ParseCSV/ParseJSON with imported provenance; import/confirm commands registered; TestParseCSV/TestParseJSON/TestImportedItemsHaveCorrectProvenance pass",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773971101,
+      "msg": "Implemented importbf package with ParseCSV/ParseJSON returning ImportedIssue with imported provenance; added import command (CSV/JSON, --source, --dry-run, --format=json); added confirm command emitting dag-transition op; all 3 tests pass, build clean"
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773970422,
   "claim_ttl": 60,
   "last_heartbeat": 1773970422,
-  "updated": 1773970422
+  "updated": 1773971127
 }

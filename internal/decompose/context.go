@@ -55,11 +55,15 @@ func BuildContext(params ContextParams) (ContextOutput, error) {
 	if tmpl == "" {
 		tmpl = defaultTemplate()
 	}
+	planTitle := ""
+	if params.Plan != nil {
+		planTitle = fmt.Sprintf("# Plan: %s\n", params.Plan.Title)
+	}
 	tmpl = strings.ReplaceAll(tmpl, "{{SOURCES}}", buildSourcesBlock(out.Sources))
 	tmpl = strings.ReplaceAll(tmpl, "{{EXISTING_DAG}}", buildDAGBlock(params))
 	tmpl = strings.ReplaceAll(tmpl, "{{PLAN_SCHEMA}}", planSchemaBlock())
 	tmpl = strings.ReplaceAll(tmpl, "{{CONSTRAINTS}}", constraintsBlock())
-	out.PromptTemplate = tmpl
+	out.PromptTemplate = planTitle + tmpl
 
 	return out, nil
 }

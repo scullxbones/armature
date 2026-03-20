@@ -72,3 +72,7 @@
 ["claim","E4-S8-T1",1773970422,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["note","E4-S8-T1",1773971101,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented importbf package with ParseCSV/ParseJSON returning ImportedIssue with imported provenance; added import command (CSV/JSON, --source, --dry-run, --format=json); added confirm command emitting dag-transition op; all 3 tests pass, build clean"}]
 ["transition","E4-S8-T1",1773971127,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"ParseCSV/ParseJSON with imported provenance; import/confirm commands registered; TestParseCSV/TestParseJSON/TestImportedItemsHaveCorrectProvenance pass"}]
+["transition","E4-S8",1773971140,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"Brownfield import complete: CSV/JSON parser, import/confirm commands, --format=json output"}]
+["transition","E4-S9",1773971154,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"in-progress"}]
+["claim","E4-S9-T1",1773971154,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
+["transition","E4-S9-T1",1773971654,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"stalereview.Model with ReviewItem/ConfirmMsg/FlagMsg/SkipMsg; stale-review command with JSON and TUI paths; note ops emitted; TestNewModelHasItems/TestConfirmRecordsDecision pass; all tests pass"}]

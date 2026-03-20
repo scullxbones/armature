@@ -957,7 +957,7 @@
     ]
   },
   "E4-S8": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -969,16 +969,18 @@
     "blocks": [
       "E4-S9"
     ],
-    "updated": 1773970422,
-    "title": "S8: Brownfield Import"
+    "updated": 1773971140,
+    "title": "S8: Brownfield Import",
+    "outcome": "Brownfield import complete: CSV/JSON parser, import/confirm commands, --format=json output"
   },
   "E4-S8-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S8",
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773970422,
+    "updated": 1773971127,
     "title": "Brownfield CSV/JSON import parser + import and confirm commands",
+    "outcome": "ParseCSV/ParseJSON with imported provenance; import/confirm commands registered; TestParseCSV/TestParseJSON/TestImportedItemsHaveCorrectProvenance pass",
     "scope": [
       "internal/importbf/import.go",
       "internal/importbf/import_test.go",
@@ -988,7 +990,7 @@
     ]
   },
   "E4-S9": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -997,14 +999,15 @@
     "blocked_by": [
       "E4-S8"
     ],
-    "updated": 1773889519,
+    "updated": 1773971154,
     "title": "S9: Stale Review TUI"
   },
   "E4-S9-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S9",
-    "updated": 1773889628,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773971154,
     "title": "Stale review BubbleTea model + stale-review command",
     "scope": [
       "internal/tui/stalereview/model.go",

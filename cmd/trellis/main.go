@@ -70,6 +70,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDAGSummaryCmd())
 	root.AddCommand(newImportCmd())
 	root.AddCommand(newConfirmCmd())
+	root.AddCommand(newStaleReviewCmd())
 
 	return root
 }
