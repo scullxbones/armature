@@ -20,7 +20,7 @@ func newValidateCmd() *cobra.Command {
 				return err
 			}
 
-			result := validate.Validate(state)
+			result := validate.Validate(state, validate.Options{IssuesDir: appCtx.IssuesDir, RepoPath: appCtx.RepoPath})
 
 			for _, e := range result.Errors {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "ERROR: %s\n", e)

@@ -1,7 +1,7 @@
 {
   "id": "E4-S2",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "S2: Glamour Markdown Render",
   "parent": "E4",
   "children": [
@@ -21,5 +21,6 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
-  "updated": 1773968866
+  "outcome": "Glamour markdown render with plain-text fallback in RenderHuman; tests pass",
+  "updated": 1773969052
 }

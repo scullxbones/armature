@@ -608,7 +608,7 @@
     ]
   },
   "E4-S2": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -620,23 +620,25 @@
     "blocks": [
       "E4-S3"
     ],
-    "updated": 1773968866,
-    "title": "S2: Glamour Markdown Render"
+    "updated": 1773969052,
+    "title": "S2: Glamour Markdown Render",
+    "outcome": "Glamour markdown render with plain-text fallback in RenderHuman; tests pass"
   },
   "E4-S2-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S2",
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968866,
+    "updated": 1773969045,
     "title": "Glamour markdown render upgrade for render-context",
+    "outcome": "RenderHuman uses glamour.Render with ascii style and plain-text fallback; TestRenderHuman passes",
     "scope": [
       "internal/context/render.go",
       "internal/context/context_test.go"
     ]
   },
   "E4-S3": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E4",
     "children": [
@@ -649,17 +651,18 @@
     "blocks": [
       "E4-S5"
     ],
-    "updated": 1773889519,
+    "updated": 1773969059,
     "title": "S3: Full Validate (W1-W11 + E1-E12)"
   },
   "E4-S3-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S3",
     "blocks": [
       "E4-S3-T2"
     ],
-    "updated": 1773889586,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773969059,
     "title": "Full validation — W1-W11 warning checks and E2-E12 error checks",
     "scope": [
       "internal/validate/validate.go",
