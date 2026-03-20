@@ -1,7 +1,7 @@
 {
   "id": "E4-S4-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Provider interface + manifest types",
   "parent": "E4-S4",
   "children": [],
@@ -21,9 +21,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "Created internal/sources/types.go with Provider interface, SourceEntry, Manifest (Get/Upsert/Marshal/Unmarshal); TestManifestRoundTrip passes",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773967622,
+      "msg": "Implemented internal/sources/types.go: SourceEntry struct (ID, URL, Title, Fingerprint, LastSynced, ProviderType with JSON tags), Manifest struct with Get/Upsert/Marshal/Unmarshal methods, and Provider interface (Fetch/Type). TestManifestRoundTrip passes. go test ./internal/sources/... and go build ./... both pass."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773967375,
   "claim_ttl": 60,
   "last_heartbeat": 1773967375,
-  "updated": 1773967375
+  "updated": 1773967638
 }

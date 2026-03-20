@@ -701,7 +701,7 @@
     "title": "S4: Source Document Management"
   },
   "E4-S4-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S4",
     "blocks": [
@@ -709,15 +709,16 @@
       "E4-S4-T3"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967375,
+    "updated": 1773967638,
     "title": "Provider interface + manifest types",
+    "outcome": "Created internal/sources/types.go with Provider interface, SourceEntry, Manifest (Get/Upsert/Marshal/Unmarshal); TestManifestRoundTrip passes",
     "scope": [
       "internal/sources/types.go",
       "internal/sources/types_test.go"
     ]
   },
   "E4-S4-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -726,7 +727,8 @@
     "blocks": [
       "E4-S4-T6"
     ],
-    "updated": 1773889563,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773967644,
     "title": "manifest.json persistence",
     "scope": [
       "internal/sources/manifest.go",
