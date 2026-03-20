@@ -32,3 +32,5 @@
 ["claim","E4-S4-T5",1773967924,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
 ["note","E4-S4-T5",1773968006,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"msg":"Implemented Credentials struct in config.go, ConfluenceProvider in confluence.go (Bearer + Basic auth), SharePointProvider in sharepoint.go (Bearer auth). Added providers_test.go with TestConfluenceProviderFetch, TestConfluenceProviderFetchBasicAuth, TestSharePointProviderFetch, TestSharePointProviderFetchErrorStatus using net/http/httptest. All tests pass (go test ./internal/sources/...) and go build ./... succeeds."}]
 ["transition","E4-S4-T5",1773968023,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"ConfluenceProvider and SharePointProvider with Bearer/Basic auth; Credentials config; 4 TestProvider* tests pass"}]
+["claim","E4-S4-T6",1773968028,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"ttl":60}]
+["transition","E4-S4-T6",1773968453,"b447df5b-69ae-406c-a9f2-47d94bf3fdb9",{"to":"done","outcome":"sources add/sync/verify subcommands in cmd/trellis/sources.go; registered on root; go build passes; trls sources --help shows all 3 subcommands"}]

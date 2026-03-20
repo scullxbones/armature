@@ -775,7 +775,7 @@
     ]
   },
   "E4-S4-T5": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
@@ -785,8 +785,9 @@
       "E4-S4-T6"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967924,
+    "updated": 1773968023,
     "title": "Credential config + Confluence/SharePoint providers",
+    "outcome": "ConfluenceProvider and SharePointProvider with Bearer/Basic auth; Credentials config; 4 TestProvider* tests pass",
     "scope": [
       "internal/sources/config.go",
       "internal/sources/confluence.go",
@@ -795,14 +796,15 @@
     ]
   },
   "E4-S4-T6": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S4",
     "blocked_by": [
       "E4-S4-T5",
       "E4-S4-T2"
     ],
-    "updated": 1773889563,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773968028,
     "title": "sources add/sync/verify CLI commands",
     "scope": [
       "cmd/trellis/sources.go",

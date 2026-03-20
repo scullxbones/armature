@@ -66,6 +66,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newAssignCmd())
 	root.AddCommand(newUnassignCmd())
 	root.AddCommand(newWorkersCmd())
+	root.AddCommand(newSourcesCmd())
 
 	return root
 }

@@ -1,7 +1,7 @@
 {
   "id": "E4-S4-T5",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Credential config + Confluence/SharePoint providers",
   "parent": "E4-S4",
   "children": [],
@@ -24,9 +24,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "ConfluenceProvider and SharePointProvider with Bearer/Basic auth; Credentials config; 4 TestProvider* tests pass",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773968006,
+      "msg": "Implemented Credentials struct in config.go, ConfluenceProvider in confluence.go (Bearer + Basic auth), SharePointProvider in sharepoint.go (Bearer auth). Added providers_test.go with TestConfluenceProviderFetch, TestConfluenceProviderFetchBasicAuth, TestSharePointProviderFetch, TestSharePointProviderFetchErrorStatus using net/http/httptest. All tests pass (go test ./internal/sources/...) and go build ./... succeeds."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773967924,
   "claim_ttl": 60,
   "last_heartbeat": 1773967924,
-  "updated": 1773967924
+  "updated": 1773968023
 }
