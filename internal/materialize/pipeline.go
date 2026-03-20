@@ -7,12 +7,26 @@ import (
 	"strings"
 
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/traceability"
 )
 
 type Result struct {
 	IssueCount   int
 	OpsProcessed int
 	FullReplay   bool
+}
+
+// toTraceabilityRefs converts the issues map into a slice of traceability.IssueRef
+// without importing materialize from the traceability package (avoiding a cycle).
+func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
+	refs := make([]traceability.IssueRef, 0, len(issues))
+	for id, issue := range issues {
+		refs = append(refs, traceability.IssueRef{
+			ID:              id,
+			SourceLinkCount: len(issue.SourceLinks),
+		})
+	}
+	return refs
 }
 
 // Materialize runs the full materialization pipeline.
@@ -105,6 +119,9 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 	if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
 		return Result{}, fmt.Errorf("write checkpoint: %w", err)
 	}
+
+	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
+	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov)
 
 	return Result{
 		IssueCount:   len(state.Issues),
@@ -201,6 +218,9 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 	if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
 		return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
 	}
+
+	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
+	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov)
 
 	result := Result{
 		IssueCount:   len(state.Issues),

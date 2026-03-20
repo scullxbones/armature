@@ -906,15 +906,16 @@
     "title": "S7: Traceability"
   },
   "E4-S7-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E4-S7",
     "blocks": [
       "E4-S7-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968475,
+    "updated": 1773968588,
     "title": "source-link and dag-transition op materialization",
+    "outcome": "SourceLink type, Issue.SourceLinks, Provenance.DAGConfirmed added; applySourceLink and applyDAGTransition handlers; TestApplySourceLinkOp and TestApplyDAGTransitionOp pass",
     "scope": [
       "internal/materialize/state.go",
       "internal/materialize/engine.go",
@@ -922,13 +923,14 @@
     ]
   },
   "E4-S7-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E4-S7",
     "blocked_by": [
       "E4-S7-T1"
     ],
-    "updated": 1773889576,
+    "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+    "updated": 1773968593,
     "title": "Traceability coverage computation + traceability.json",
     "scope": [
       "internal/traceability/traceability.go",

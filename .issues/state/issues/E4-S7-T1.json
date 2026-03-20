@@ -1,7 +1,7 @@
 {
   "id": "E4-S7-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "source-link and dag-transition op materialization",
   "parent": "E4-S7",
   "children": [],
@@ -21,9 +21,17 @@
     "source_worker": "0fb9a1c9-195f-4c03-84e2-487ad18c69e7"
   },
   "decision_refs": [],
+  "outcome": "SourceLink type, Issue.SourceLinks, Provenance.DAGConfirmed added; applySourceLink and applyDAGTransition handlers; TestApplySourceLinkOp and TestApplyDAGTransitionOp pass",
+  "notes": [
+    {
+      "worker_id": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
+      "timestamp": 1773968571,
+      "msg": "Implemented source-link and dag-transition op materialization: added SourceLink struct and Issue.SourceLinks field to state.go; added Provenance.DAGConfirmed bool; added SourceURL field to ops.Payload; added applySourceLink and applyDAGTransition handlers to engine.go replacing prior no-ops; added TestApplySourceLinkOp and TestApplyDAGTransitionOp; all tests pass, go build clean."
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773968475,
   "claim_ttl": 60,
   "last_heartbeat": 1773968475,
-  "updated": 1773968475
+  "updated": 1773968588
 }
