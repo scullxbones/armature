@@ -22,7 +22,7 @@ type SkipMsg struct{}
 type itemDecision int
 
 const (
-	decisionPending   itemDecision = iota
+	decisionPending itemDecision = iota
 	decisionConfirmed
 	decisionFlagged
 	decisionSkipped
@@ -100,7 +100,7 @@ func (m Model) View() string {
 	sb.WriteString(header + "\n\n")
 	sb.WriteString("Change: " + item.ChangeSummary + "\n\nAffected issues:\n")
 	for _, issue := range item.CitedIssues {
-		sb.WriteString(fmt.Sprintf("  - %s: %s\n", issue.ID, issue.Title))
+		fmt.Fprintf(&sb, "  - %s: %s\n", issue.ID, issue.Title)
 	}
 	sb.WriteString("\nenter=confirm  f=flag  s=skip  q=quit\n")
 	return sb.String()

@@ -310,7 +310,9 @@ func checkW2NoTestCriteria(issues map[string]*materialize.Issue) []string {
 		if issue.Type != "task" || len(issue.Acceptance) == 0 {
 			continue
 		}
-		var criteria []struct{ Type string `json:"type"` }
+		var criteria []struct {
+			Type string `json:"type"`
+		}
 		if err := json.Unmarshal(issue.Acceptance, &criteria); err != nil {
 			continue
 		}

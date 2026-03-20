@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/traceability"
 	"github.com/scullxbones/trellis/internal/tui"
 	"github.com/scullxbones/trellis/internal/tui/dagsum"
-	"github.com/scullxbones/trellis/internal/traceability"
 	"github.com/spf13/cobra"
 )
 
@@ -69,7 +69,7 @@ func newDAGSummaryCmd() *cobra.Command {
 				}
 				out, _ := json.Marshal(map[string]interface{}{
 					"pending_dag_confirmation": pending,
-					"count":                   len(pending),
+					"count":                    len(pending),
 				})
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 				return nil
@@ -120,9 +120,9 @@ func writeDAGSummaryArtifact(issuesDir string, reviewed []*materialize.Issue,
 
 	var sb strings.Builder
 	sb.WriteString("# DAG Summary Review\n\n")
-	sb.WriteString(fmt.Sprintf("**Date:** %s\n\n", time.Now().UTC().Format("2006-01-02T15:04:05Z")))
-	sb.WriteString(fmt.Sprintf("**Traceability:** %.1f%% (%d/%d cited)\n\n",
-		cov.CoveragePct, cov.CitedNodes, cov.TotalNodes))
+	fmt.Fprintf(&sb, "**Date:** %s\n\n", time.Now().UTC().Format("2006-01-02T15:04:05Z"))
+	fmt.Fprintf(&sb, "**Traceability:** %.1f%% (%d/%d cited)\n\n",
+		cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
 	sb.WriteString("## Review Results\n\n")
 	sb.WriteString("| ID | Title | Status |\n|---|---|---|\n")
 	for _, issue := range reviewed {
@@ -130,7 +130,7 @@ func writeDAGSummaryArtifact(issuesDir string, reviewed []*materialize.Issue,
 		if _, ok := confirmedSet[issue.ID]; ok {
 			status = "✓ confirmed"
 		}
-		sb.WriteString(fmt.Sprintf("| %s | %s | %s |\n", issue.ID, issue.Title, status))
+		fmt.Fprintf(&sb, "| %s | %s | %s |\n", issue.ID, issue.Title, status)
 	}
 
 	path := filepath.Join(issuesDir, "state", "dag-summary.md")

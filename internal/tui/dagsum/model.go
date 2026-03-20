@@ -14,7 +14,7 @@ type SkipMsg struct{}
 type itemState int
 
 const (
-	itemPending   itemState = iota
+	itemPending itemState = iota
 	itemConfirmed
 	itemSkipped
 )

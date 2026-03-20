@@ -48,18 +48,18 @@ func WriteManifest(path string, m Manifest) error {
 	tmpPath := tmpFile.Name()
 
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		tmpFile.Close()    //nolint:errcheck
+		os.Remove(tmpPath) //nolint:errcheck
 		return fmt.Errorf("writing manifest temp file: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		os.Remove(tmpPath) //nolint:errcheck
 		return fmt.Errorf("closing manifest temp file: %w", err)
 	}
 
 	dest := filepath.Join(path, manifestFileName)
 	if err := os.Rename(tmpPath, dest); err != nil {
-		os.Remove(tmpPath)
+		os.Remove(tmpPath) //nolint:errcheck
 		return fmt.Errorf("renaming manifest temp file: %w", err)
 	}
 
