@@ -9,7 +9,7 @@ import (
 )
 
 func newCreateCmd() *cobra.Command {
-	var title, nodeType, parent, id, priority, dod string
+	var title, nodeType, parent, id, priority, dod, confidence string
 	var scope []string
 
 	cmd := &cobra.Command{
@@ -37,6 +37,7 @@ func newCreateCmd() *cobra.Command {
 					Scope:            scope,
 					Priority:         priority,
 					DefinitionOfDone: dod,
+					Confidence:       confidence,
 				},
 			}
 
@@ -58,6 +59,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
+	cmd.Flags().StringVar(&confidence, "confidence", "", "confidence level: draft or verified (default verified)")
 	_ = cmd.MarkFlagRequired("title")
 
 	return cmd

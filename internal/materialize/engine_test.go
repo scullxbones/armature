@@ -185,6 +185,36 @@ func TestPropCreateIdempotent(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+func TestApplyCreateOp_DraftConfidence_Propagated(t *testing.T) {
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-draft", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Draft task", NodeType: "task", Confidence: "draft"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "draft", state.Issues["task-draft"].Provenance.Confidence)
+}
+
+func TestApplyCreateOp_NoConfidence_DefaultsToVerified(t *testing.T) {
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-legacy", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Legacy task", NodeType: "task"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "verified", state.Issues["task-legacy"].Provenance.Confidence)
+}
+
+func TestApplyCreateOp_VerifiedConfidence_Propagated(t *testing.T) {
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-verified", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Verified task", NodeType: "task", Confidence: "verified"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "verified", state.Issues["task-verified"].Provenance.Confidence)
+}
+
 func TestApplySourceLinkOp(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,

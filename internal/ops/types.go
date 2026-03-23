@@ -110,4 +110,7 @@ type Payload struct {
 
 	// assign
 	AssignedTo string `json:"assigned_to,omitempty"`
+
+	// create — confidence level: "draft" or "verified" (default "verified" when absent)
+	Confidence string `json:"confidence,omitempty"`
 }

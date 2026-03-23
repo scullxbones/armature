@@ -49,6 +49,9 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 			}
 		}
 		issue := issues[id]
+		if issue != nil && issue.Provenance.Confidence == "draft" {
+			continue
+		}
 		if issue != nil && issue.ClaimedBy != "" {
 			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, currentTime) {
 				continue

@@ -887,6 +887,66 @@ func TestReopenCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a draft task
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft work", "--id", "draft-01", "--confidence", "draft")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+
+	// The draft task should not appear in the ready queue
+	assert.NotContains(t, out, "draft-01")
+}
+
+func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a verified task
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Verified work", "--id", "verified-01", "--confidence", "verified")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+
+	// The verified task should appear in the ready queue
+	assert.Contains(t, out, "verified-01")
+}
+
+func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a task without a confidence flag (legacy behavior)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Legacy task", "--id", "legacy-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+
+	// Task with no confidence field should default to verified and appear in ready
+	assert.Contains(t, out, "legacy-01")
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op

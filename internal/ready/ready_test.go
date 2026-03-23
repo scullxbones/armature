@@ -186,6 +186,45 @@ func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
 	assert.True(t, isClaimStale(0, 100, 1, 161))
 }
 
+func TestReadyTask_DraftConfidence_ExcludedFromReady(t *testing.T) {
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task",
+			Provenance: materialize.Provenance{Confidence: "draft"}},
+	}
+	ready := ComputeReady(index, issues, "")
+	assert.Len(t, ready, 0, "draft task should be excluded from ready queue")
+}
+
+func TestReadyTask_VerifiedConfidence_IncludedInReady(t *testing.T) {
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task",
+			Provenance: materialize.Provenance{Confidence: "verified"}},
+	}
+	ready := ComputeReady(index, issues, "")
+	assert.Len(t, ready, 1, "verified task should appear in ready queue")
+	assert.Equal(t, "task-01", ready[0].Issue)
+}
+
+func TestReadyTask_NoConfidenceField_DefaultsToVerified(t *testing.T) {
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task"},
+	}
+	// Issue with empty confidence — should default to verified (appear in ready)
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task",
+			Provenance: materialize.Provenance{Confidence: ""}},
+	}
+	ready := ComputeReady(index, issues, "")
+	assert.Len(t, ready, 1, "task with no confidence field should default to verified and appear in ready queue")
+	assert.Equal(t, "task-01", ready[0].Issue)
+}
+
 func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 	index := make(materialize.Index)
 	// Build a chain deeper than 20

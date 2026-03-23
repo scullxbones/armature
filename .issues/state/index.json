@@ -1019,7 +1019,7 @@
     ]
   },
   "E5": {
-    "status": "open",
+    "status": "in-progress",
     "type": "epic",
     "children": [
       "E5-S1",
@@ -1028,11 +1028,12 @@
       "E5-S4",
       "E5-S0"
     ],
-    "updated": 1774197393,
-    "title": "E5: Polish, UX Hardening \u0026 User-Facing Docs"
+    "updated": 1774231528,
+    "title": "E5: Polish, UX Hardening \u0026 User-Facing Docs",
+    "outcome": "Starting E5 epic work"
   },
   "E5-S0": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1047,20 +1048,22 @@
       "E5-S3",
       "E5-S4"
     ],
-    "updated": 1774204969,
+    "updated": 1774231532,
     "title": "Draft Confidence Model \u0026 Governance Gate — implement first, dogfood during E5",
+    "outcome": "Starting E5-S0 story work",
     "scope": [
       "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, internal/decompose/apply.go, internal/tui/dagsummary/model.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
     ]
   },
   "E5-S0-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S0",
     "blocks": [
       "E5-S0-T2"
     ],
-    "updated": 1774204969,
+    "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+    "updated": 1774231538,
     "title": "Confidence field in materialized state and draft gate in ready queue",
     "scope": [
       "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, cmd/trellis/main_test.go"

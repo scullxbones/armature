@@ -67,7 +67,7 @@ func (s *State) applyCreate(op ops.Op) error {
 		SourceCitation:   op.Payload.SourceCitation,
 		Provenance: Provenance{
 			Method:       "decomposed",
-			Confidence:   "verified",
+			Confidence:   confidenceOrDefault(op.Payload.Confidence),
 			SourceWorker: op.WorkerID,
 		},
 		Children:     []string{},
@@ -299,6 +299,15 @@ func activeDecisionForTopic(decisions []Decision, topic string) Decision {
 		}
 	}
 	return latest
+}
+
+// confidenceOrDefault returns the confidence value from an op payload,
+// defaulting to "verified" when the field is absent or empty.
+func confidenceOrDefault(confidence string) string {
+	if confidence == "" {
+		return "verified"
+	}
+	return confidence
 }
 
 func appendUnique(slice []string, item string) []string {
