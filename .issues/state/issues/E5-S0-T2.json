@@ -1,0 +1,26 @@
+{
+  "id": "E5-S0-T2",
+  "type": "task",
+  "status": "open",
+  "title": "`dag-transition` op — materialization and thin CLI command",
+  "parent": "E5-S0",
+  "children": [],
+  "blocked_by": [
+    "E5-S0-T1"
+  ],
+  "blocks": [
+    "E5-S0-T3"
+  ],
+  "priority": "high",
+  "definition_of_done": "dag-transition op walks subtree and promotes all draft nodes to verified; trls dag-transition CLI command emits the op; tests pass; make check green",
+  "scope": [
+    "internal/ops/types.go, internal/materialize/materialize.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204969
+}

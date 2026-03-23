@@ -1,0 +1,22 @@
+{
+  "id": "E5-S1-T2",
+  "type": "task",
+  "status": "open",
+  "title": "Stale-claim diagnostic in `trls ready` (L6)",
+  "parent": "E5-S1",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "StaleClaims() unit tests pass; ready prints stale diagnostic to stderr when queue empty; make check green",
+  "scope": [
+    "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

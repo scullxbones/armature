@@ -1,0 +1,26 @@
+{
+  "id": "E5-S3-T4",
+  "type": "task",
+  "status": "open",
+  "title": "`trls context-history` — list issue context at each commit",
+  "parent": "E5-S3",
+  "children": [],
+  "blocked_by": [
+    "E5-S3-T3"
+  ],
+  "blocks": [
+    "E5-S3-T5"
+  ],
+  "priority": "medium",
+  "definition_of_done": "context-history --issue ID lists each commit SHA where issue context changed with timestamp; make check green",
+  "scope": [
+    "cmd/trellis/context_history.go, cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

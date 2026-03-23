@@ -1,0 +1,22 @@
+{
+  "id": "E5-S4-T3",
+  "type": "task",
+  "status": "open",
+  "title": "`docs/commands.md` — complete command reference for every `trls` subcommand",
+  "parent": "E5-S4",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "Every trls subcommand documented with synopsis, flags, examples, and notes; includes all E5 additions (tui, context-history, list, decompose-apply --example)",
+  "scope": [
+    "docs/commands.md"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

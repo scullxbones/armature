@@ -1,0 +1,24 @@
+{
+  "id": "E5-S2-T3",
+  "type": "task",
+  "status": "open",
+  "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
+  "parent": "E5-S2",
+  "children": [],
+  "blocked_by": [
+    "E5-S2-T2"
+  ],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "trls ready on TTY launches BubbleTea selection list; enter claims selected task; --format=json bypasses TUI entirely; make check green",
+  "scope": [
+    "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204969
+}

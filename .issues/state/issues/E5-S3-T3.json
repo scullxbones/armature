@@ -1,0 +1,26 @@
+{
+  "id": "E5-S3-T3",
+  "type": "task",
+  "status": "open",
+  "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
+  "parent": "E5-S3",
+  "children": [],
+  "blocked_by": [
+    "E5-S3-T2"
+  ],
+  "blocks": [
+    "E5-S3-T4"
+  ],
+  "priority": "medium",
+  "definition_of_done": "render-context --issue ID --at \u003csha\u003e returns context as of that SHA; output differs from HEAD on a repo with history; make check green",
+  "scope": [
+    "cmd/trellis/render_context.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

@@ -1,0 +1,26 @@
+{
+  "id": "E5-S0-T3",
+  "type": "task",
+  "status": "open",
+  "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
+  "parent": "E5-S0",
+  "children": [],
+  "blocked_by": [
+    "E5-S0-T2"
+  ],
+  "blocks": [
+    "E5-S0-T4"
+  ],
+  "priority": "high",
+  "definition_of_done": "dag-summary launches BubbleTea checklist; all items must be actioned (y/n/s) before sign-off unlocks; uncited nodes require explicit ID acknowledgment; sign-off emits dag-transition op; q without full sign-off emits no ops; make check green",
+  "scope": [
+    "internal/tui/dagsummary/model.go, internal/tui/dagsummary/model_test.go, cmd/trellis/dag_summary.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204969
+}

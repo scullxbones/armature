@@ -1018,6 +1018,433 @@
       "cmd/trellis/main.go"
     ]
   },
+  "E5": {
+    "status": "open",
+    "type": "epic",
+    "children": [
+      "E5-S1",
+      "E5-S2",
+      "E5-S3",
+      "E5-S4",
+      "E5-S0"
+    ],
+    "updated": 1774197393,
+    "title": "E5: Polish, UX Hardening \u0026 User-Facing Docs"
+  },
+  "E5-S0": {
+    "status": "open",
+    "type": "story",
+    "parent": "E5",
+    "children": [
+      "E5-S0-T1",
+      "E5-S0-T2",
+      "E5-S0-T3",
+      "E5-S0-T4"
+    ],
+    "blocks": [
+      "E5-S1",
+      "E5-S2",
+      "E5-S3",
+      "E5-S4"
+    ],
+    "updated": 1774204969,
+    "title": "Draft Confidence Model \u0026 Governance Gate — implement first, dogfood during E5",
+    "scope": [
+      "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, internal/decompose/apply.go, internal/tui/dagsummary/model.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S0-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S0",
+    "blocks": [
+      "E5-S0-T2"
+    ],
+    "updated": 1774204969,
+    "title": "Confidence field in materialized state and draft gate in ready queue",
+    "scope": [
+      "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S0-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S0",
+    "blocked_by": [
+      "E5-S0-T1"
+    ],
+    "blocks": [
+      "E5-S0-T3"
+    ],
+    "updated": 1774204969,
+    "title": "`dag-transition` op — materialization and thin CLI command",
+    "scope": [
+      "internal/ops/types.go, internal/materialize/materialize.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S0-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S0",
+    "blocked_by": [
+      "E5-S0-T2"
+    ],
+    "blocks": [
+      "E5-S0-T4"
+    ],
+    "updated": 1774204969,
+    "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
+    "scope": [
+      "internal/tui/dagsummary/model.go, internal/tui/dagsummary/model_test.go, cmd/trellis/dag_summary.go"
+    ]
+  },
+  "E5-S0-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S0",
+    "blocked_by": [
+      "E5-S0-T3"
+    ],
+    "updated": 1774204969,
+    "title": "`decompose-apply` emits `confidence: draft` on all created nodes",
+    "scope": [
+      "internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S1": {
+    "status": "open",
+    "type": "story",
+    "parent": "E5",
+    "children": [
+      "E5-S1-T1",
+      "E5-S1-T2",
+      "E5-S1-T3",
+      "E5-S1-T4",
+      "E5-S1-T5",
+      "E5-S1-T6",
+      "E5-S1-T7",
+      "E5-S1-T8"
+    ],
+    "blocked_by": [
+      "E5-S0"
+    ],
+    "updated": 1774204979,
+    "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
+    "scope": [
+      "internal/ops/types.go, internal/ready/stale.go, cmd/trellis/ready.go, cmd/trellis/claim.go, cmd/trellis/assign.go, cmd/trellis/decompose.go, cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/main_test.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S1-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774197393,
+    "title": "Add `open` as valid transition target (L11)",
+    "scope": [
+      "internal/ops/types.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S1-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774197393,
+    "title": "Stale-claim diagnostic in `trls ready` (L6)",
+    "scope": [
+      "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go"
+    ]
+  },
+  "E5-S1-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774197393,
+    "title": "Auto-advance story/epic to `in-progress` when child task claimed (L9)",
+    "scope": [
+      "cmd/trellis/claim.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S1-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774197393,
+    "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
+    "scope": [
+      "cmd/trellis/assign.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S1-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "blocks": [
+      "E5-S1-T6"
+    ],
+    "updated": 1774197393,
+    "title": "`decompose-apply --example` flag for schema discoverability (L12)",
+    "scope": [
+      "cmd/trellis/decompose.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S1-T6": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "blocked_by": [
+      "E5-S1-T5"
+    ],
+    "blocks": [
+      "E5-S1-T7"
+    ],
+    "updated": 1774197393,
+    "title": "`trls list` command with `--type` and `--parent` filters (L13)",
+    "scope": [
+      "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S1-T7": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "blocked_by": [
+      "E5-S1-T6"
+    ],
+    "blocks": [
+      "E5-S1-T8"
+    ],
+    "updated": 1774197645,
+    "title": "`decompose-apply --dry-run` and decompose pipeline documentation in SKILL.md (L14, L15)",
+    "scope": [
+      "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go, .claude/skills/trls/SKILL.md"
+    ]
+  },
+  "E5-S1-T8": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "blocked_by": [
+      "E5-S1-T7"
+    ],
+    "updated": 1774204969,
+    "title": "`decompose-apply` missing architecture flags — `--root`, `--generate-ids`, `--strict`",
+    "scope": [
+      "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S2": {
+    "status": "open",
+    "type": "story",
+    "parent": "E5",
+    "children": [
+      "E5-S2-T1",
+      "E5-S2-T2",
+      "E5-S2-T3"
+    ],
+    "blocked_by": [
+      "E5-S0"
+    ],
+    "updated": 1774204979,
+    "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
+    "scope": [
+      "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go"
+    ]
+  },
+  "E5-S2-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S2",
+    "blocks": [
+      "E5-S2-T2"
+    ],
+    "updated": 1774197393,
+    "title": "Board model — column layout and keyboard navigation",
+    "scope": [
+      "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"
+    ]
+  },
+  "E5-S2-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S2",
+    "blocked_by": [
+      "E5-S2-T1"
+    ],
+    "blocks": [
+      "E5-S2-T3"
+    ],
+    "updated": 1774197393,
+    "title": "`trls tui` CLI command with auto-refresh",
+    "scope": [
+      "cmd/trellis/tui.go, cmd/trellis/main.go"
+    ]
+  },
+  "E5-S2-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S2",
+    "blocked_by": [
+      "E5-S2-T2"
+    ],
+    "updated": 1774204969,
+    "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
+    "scope": [
+      "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go"
+    ]
+  },
+  "E5-S3": {
+    "status": "open",
+    "type": "story",
+    "parent": "E5",
+    "children": [
+      "E5-S3-T1",
+      "E5-S3-T2",
+      "E5-S3-T3",
+      "E5-S3-T4",
+      "E5-S3-T5"
+    ],
+    "blocked_by": [
+      "E5-S0"
+    ],
+    "updated": 1774204979,
+    "title": "Time Travel \u0026 Forensics — reconstruct issue context at any historical commit",
+    "scope": [
+      "internal/git/git.go, internal/git/git_test.go, internal/materialize/atsha.go, internal/materialize/atsha_test.go, cmd/trellis/render_context.go, cmd/trellis/context_history.go, cmd/trellis/main.go"
+    ]
+  },
+  "E5-S3-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S3",
+    "blocks": [
+      "E5-S3-T2"
+    ],
+    "updated": 1774197393,
+    "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
+    "scope": [
+      "internal/git/git.go, internal/git/git_test.go"
+    ]
+  },
+  "E5-S3-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S3",
+    "blocked_by": [
+      "E5-S3-T1"
+    ],
+    "blocks": [
+      "E5-S3-T3"
+    ],
+    "updated": 1774197393,
+    "title": "`MaterializeAtSHA` — replay op log at arbitrary historical commit",
+    "scope": [
+      "internal/materialize/atsha.go, internal/materialize/atsha_test.go"
+    ]
+  },
+  "E5-S3-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S3",
+    "blocked_by": [
+      "E5-S3-T2"
+    ],
+    "blocks": [
+      "E5-S3-T4"
+    ],
+    "updated": 1774197393,
+    "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
+    "scope": [
+      "cmd/trellis/render_context.go"
+    ]
+  },
+  "E5-S3-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S3",
+    "blocked_by": [
+      "E5-S3-T3"
+    ],
+    "blocks": [
+      "E5-S3-T5"
+    ],
+    "updated": 1774197393,
+    "title": "`trls context-history` — list issue context at each commit",
+    "scope": [
+      "cmd/trellis/context_history.go, cmd/trellis/main.go"
+    ]
+  },
+  "E5-S3-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S3",
+    "blocked_by": [
+      "E5-S3-T4"
+    ],
+    "updated": 1774204969,
+    "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
+    "scope": [
+      "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S4": {
+    "status": "open",
+    "type": "story",
+    "parent": "E5",
+    "children": [
+      "E5-S4-T1",
+      "E5-S4-T2",
+      "E5-S4-T3",
+      "E5-S4-T4"
+    ],
+    "blocked_by": [
+      "E5-S0"
+    ],
+    "updated": 1774204979,
+    "title": "User-Facing Documentation — README, getting-started guide, command reference, use-case walkthroughs",
+    "scope": [
+      "README.md, docs/getting-started.md, docs/commands.md, docs/use-cases.md"
+    ]
+  },
+  "E5-S4-T1": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S4",
+    "updated": 1774197393,
+    "title": "`README.md` — project overview, install, and 5-minute quickstart",
+    "scope": [
+      "README.md"
+    ]
+  },
+  "E5-S4-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S4",
+    "updated": 1774197393,
+    "title": "`docs/getting-started.md` — step-by-step guide from install to first agent task",
+    "scope": [
+      "docs/getting-started.md"
+    ]
+  },
+  "E5-S4-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S4",
+    "updated": 1774197393,
+    "title": "`docs/commands.md` — complete command reference for every `trls` subcommand",
+    "scope": [
+      "docs/commands.md"
+    ]
+  },
+  "E5-S4-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S4",
+    "updated": 1774197393,
+    "title": "`docs/use-cases.md` — per-persona workflow walkthroughs",
+    "scope": [
+      "docs/use-cases.md"
+    ]
+  },
   "TC-001": {
     "status": "merged",
     "type": "story",

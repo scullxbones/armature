@@ -1,0 +1,24 @@
+{
+  "id": "E5-S3-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
+  "parent": "E5-S3",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E5-S3-T2"
+  ],
+  "priority": "medium",
+  "definition_of_done": "ListFilesAtCommit, ShowFileAtCommit, LogBranch implemented on git.Client; tests pass against real git repo",
+  "scope": [
+    "internal/git/git.go, internal/git/git_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

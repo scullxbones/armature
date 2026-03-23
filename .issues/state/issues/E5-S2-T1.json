@@ -1,0 +1,24 @@
+{
+  "id": "E5-S2-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Board model — column layout and keyboard navigation",
+  "parent": "E5-S2",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E5-S2-T2"
+  ],
+  "priority": "high",
+  "definition_of_done": "BubbleTea model with open/active/done columns; h/l or arrow key nav between columns; j/k nav within column; enter opens detail viewport; unit tests pass",
+  "scope": [
+    "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

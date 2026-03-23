@@ -1,0 +1,25 @@
+{
+  "id": "E5",
+  "type": "epic",
+  "status": "open",
+  "title": "E5: Polish, UX Hardening \u0026 User-Facing Docs",
+  "children": [
+    "E5-S1",
+    "E5-S2",
+    "E5-S3",
+    "E5-S4",
+    "E5-S0"
+  ],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "All four stories complete; make check green; trls tui renders; forensics commands work; docs site complete",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

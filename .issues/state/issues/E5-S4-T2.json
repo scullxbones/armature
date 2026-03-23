@@ -1,0 +1,22 @@
+{
+  "id": "E5-S4-T2",
+  "type": "task",
+  "status": "open",
+  "title": "`docs/getting-started.md` — step-by-step guide from install to first agent task",
+  "parent": "E5-S4",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "Guide runnable verbatim from a fresh clone; covers solo and dual-branch modes; all commands copy-pasteable",
+  "scope": [
+    "docs/getting-started.md"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

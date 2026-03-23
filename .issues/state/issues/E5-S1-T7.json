@@ -1,0 +1,26 @@
+{
+  "id": "E5-S1-T7",
+  "type": "task",
+  "status": "open",
+  "title": "`decompose-apply --dry-run` and decompose pipeline documentation in SKILL.md (L14, L15)",
+  "parent": "E5-S1",
+  "children": [],
+  "blocked_by": [
+    "E5-S1-T6"
+  ],
+  "blocks": [
+    "E5-S1-T8"
+  ],
+  "priority": "high",
+  "definition_of_done": "--dry-run validates and prints would-be creates without writing ops; SKILL.md has 'Loading a Plan' workflow section; make check green",
+  "scope": [
+    "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go, .claude/skills/trls/SKILL.md"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197645
+}

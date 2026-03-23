@@ -132,3 +132,51 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Add `open` as a valid transition target (or alias `reopen` to cover this case for non-done issues too), so agents can undo accidental claims cleanly.
 
 **File**: `cmd/trellis/transition.go`, `internal/ops/types.go`
+
+---
+
+## L12: `decompose-apply` plan JSON schema is undiscoverable — agents fall back to reading Go source
+
+**Observed**: When loading a plan into trellis via `trls decompose-apply --plan <file>`, the agent had no way to discover the required JSON schema without reading the Go source (`internal/decompose/plan.go`). `trls decompose-apply --help` describes only the `--plan` flag, not the file format. There is no example file, schema reference, or `--schema` flag.
+
+**Impact**: Agents must either guess the format (and fail silently or with a cryptic parse error) or read the implementation source. Both paths are friction. This was observed directly when a session fell back to `find`/`cat` on the Go source instead of using `trls` queries.
+
+**Recommendation**: One or more of: (a) add `trls decompose-apply --example` that prints a minimal valid JSON plan; (b) add a `--schema` flag that prints the JSON schema; (c) document the format in `docs/commands.md` under `trls decompose-apply`; (d) improve the `--help` text to include the schema inline.
+
+**File**: `cmd/trellis/decompose.go`, `internal/decompose/plan.go`, `docs/commands.md`
+
+---
+
+## L13: No `trls list` command — agents fall back to filesystem reads to discover existing issue IDs
+
+**Observed**: Before creating a plan JSON, the agent needed to know which issue IDs already exist (to avoid conflicts) and to understand the naming convention (E4 → E5, E5-S1-T1, etc.). `trls status` lists all issues grouped by status but is not filterable by type, parent, or scope. There is no `trls list` command that supports `--type`, `--parent`, or `--format json` with structured output for programmatic use. The agent fell back to `ls .issues/state/issues/` to read issue IDs from the filesystem.
+
+**Impact**: Agents cannot reliably query the issue graph using `trls` tooling alone. Filesystem reads bypass the op-log abstraction, are fragile, and are exactly the kind of behavior the CLI is meant to prevent.
+
+**Recommendation**: Add a `trls list` command (or extend `trls status`) with: `--type [epic|story|task|feature|bug]` filter, `--parent ID` filter, `--format json` output with full issue fields (id, title, type, status, parent, blocked_by), and optionally `--ids-only` for quick ID enumeration. Agents should be able to answer "what IDs exist under E5?" without touching the filesystem.
+
+**File**: `cmd/trellis/status.go` (or new `cmd/trellis/list.go`), `internal/materialize/`
+
+---
+
+## L14: `trls sources` traceability bypassed — decompose pipeline undiscoverable as a workflow
+
+**Observed**: When loading the E5 plan from `docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md`, the agent skipped `trls sources` entirely and hand-crafted the plan JSON directly from a manual reading of the markdown file. The intended pipeline — `sources add` → `sources sync` → `decompose-context --sources <id> --existing-dag` → AI generates JSON → `decompose-apply` — was never followed. The 21 E5 issues are now loaded with no traceability link back to the source document. The `trls sources` feature provides this link, but it was completely invisible.
+
+**Impact**: Source traceability — the primary value of `trls sources` — was entirely bypassed. The plan document and the loaded issues have no recorded connection. If the plan is updated, `stale-review` cannot surface the drift. Additionally, the manual JSON authoring is slower and more error-prone than the AI-assisted decompose-context path.
+
+**Recommendation**: Make the decompose pipeline a first-class documented workflow. The trls skill (SKILL.md) should include a "Loading a plan" section that walks through: (1) `sources add`, (2) `sources sync`, (3) `decompose-context`, (4) human/AI reviews and edits the JSON, (5) `decompose-apply`. Without this narrative, agents treat the commands as unrelated and skip the connective tissue. Consider also whether `decompose-apply` should require or at least warn when no source is linked to the resulting issues.
+
+**File**: `.claude/skills/trls/SKILL.md`, `cmd/trellis/decompose.go`
+
+---
+
+## L15: `decompose-apply` has no `--dry-run` — agents apply blindly
+
+**Observed**: When running `trls decompose-apply --plan e5-plan.json`, there was no way to preview which issues would be created, what IDs they would get, or whether any conflicts existed before committing. The command applied 21 issues in a single shot with no confirmation step. If the JSON had contained a bad parent ID, duplicate ID, or wrong type, the error would only surface after ops were written.
+
+**Impact**: A malformed plan is hard to recover from — `decompose-revert` exists but requires the same plan file to be intact. An agent cannot audit the plan's effect before applying it, increasing the risk of polluting the op log with bad data.
+
+**Recommendation**: Add `trls decompose-apply --dry-run` that validates the plan against the current graph state and prints what would be created (IDs, types, parents, blocked_by edges) without writing any ops. Also consider `--validate-only` as an alias. This gives agents and humans a chance to catch mistakes before they're committed to the op log.
+
+**File**: `cmd/trellis/decompose.go`, `internal/decompose/apply.go`

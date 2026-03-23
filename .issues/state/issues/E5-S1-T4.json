@@ -1,0 +1,22 @@
+{
+  "id": "E5-S1-T4",
+  "type": "task",
+  "status": "open",
+  "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
+  "parent": "E5-S1",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "unassign on a claimed issue emits transition → open; child tasks become unblocked; make check green",
+  "scope": [
+    "cmd/trellis/assign.go, cmd/trellis/main_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

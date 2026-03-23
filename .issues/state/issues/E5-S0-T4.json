@@ -1,0 +1,24 @@
+{
+  "id": "E5-S0-T4",
+  "type": "task",
+  "status": "open",
+  "title": "`decompose-apply` emits `confidence: draft` on all created nodes",
+  "parent": "E5-S0",
+  "children": [],
+  "blocked_by": [
+    "E5-S0-T3"
+  ],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "All nodes created by decompose-apply have confidence=draft; they do not appear in trls ready until dag-summary sign-off; dogfood test passes; make check green",
+  "scope": [
+    "internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204969
+}

@@ -1,0 +1,24 @@
+{
+  "id": "E5-S1-T8",
+  "type": "task",
+  "status": "open",
+  "title": "`decompose-apply` missing architecture flags — `--root`, `--generate-ids`, `--strict`",
+  "parent": "E5-S1",
+  "children": [],
+  "blocked_by": [
+    "E5-S1-T7"
+  ],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "--strict treats advisory warnings as errors; --generate-ids replaces plan IDs with UUIDs; --root overrides inferred root; tests pass; make check green",
+  "scope": [
+    "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204969
+}

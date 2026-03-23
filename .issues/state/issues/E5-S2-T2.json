@@ -1,0 +1,26 @@
+{
+  "id": "E5-S2-T2",
+  "type": "task",
+  "status": "open",
+  "title": "`trls tui` CLI command with auto-refresh",
+  "parent": "E5-S2",
+  "children": [],
+  "blocked_by": [
+    "E5-S2-T1"
+  ],
+  "blocks": [
+    "E5-S2-T3"
+  ],
+  "priority": "high",
+  "definition_of_done": "trls tui launches board; auto-refreshes every 5s; q quits cleanly; make check green",
+  "scope": [
+    "cmd/trellis/tui.go, cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

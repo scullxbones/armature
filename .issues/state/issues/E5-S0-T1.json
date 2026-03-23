@@ -1,0 +1,24 @@
+{
+  "id": "E5-S0-T1",
+  "type": "task",
+  "status": "open",
+  "title": "Confidence field in materialized state and draft gate in ready queue",
+  "parent": "E5-S0",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E5-S0-T2"
+  ],
+  "priority": "high",
+  "definition_of_done": "draft nodes excluded from trls ready; verified nodes appear normally; existing nodes without confidence field default to verified; tests pass; make check green",
+  "scope": [
+    "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, cmd/trellis/main_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204969
+}

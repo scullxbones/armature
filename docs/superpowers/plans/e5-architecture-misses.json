@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "title": "E5 architecture misses — S0 governance gate + S1/S2/S3 additions",
+  "issues": [
+    {
+      "id": "E5-S0",
+      "title": "Draft Confidence Model & Governance Gate — implement first, dogfood during E5",
+      "type": "story",
+      "scope": "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, internal/decompose/apply.go, internal/tui/dagsummary/model.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "decompose-apply creates draft nodes; draft nodes excluded from ready queue; dag-summary interactive sign-off promotes draft to verified; make check green",
+      "parent": "E5",
+      "blocked_by": [],
+      "notes": [
+        "Architecture section 9: draft confidence model is the governance gate for all decomposition work",
+        "Dogfood by running E5's own dag-summary sign-off after this story lands",
+        "All other E5 stories are blocked on this in spirit — work on them only after S0 is done and signed off"
+      ]
+    },
+    {
+      "id": "E5-S0-T1",
+      "title": "Confidence field in materialized state and draft gate in ready queue",
+      "type": "task",
+      "scope": "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "draft nodes excluded from trls ready; verified nodes appear normally; existing nodes without confidence field default to verified; tests pass; make check green",
+      "parent": "E5-S0",
+      "blocked_by": [],
+      "notes": [
+        "Add ConfidenceDraft, ConfidenceVerified, ConfidenceInferred constants to ops/types.go",
+        "Default empty confidence to verified for backward compat with pre-E5 issues",
+        "Commit: feat(governance): add draft confidence field and ready-gate for unverified nodes"
+      ]
+    },
+    {
+      "id": "E5-S0-T2",
+      "title": "`dag-transition` op — materialization and thin CLI command",
+      "type": "task",
+      "scope": "internal/ops/types.go, internal/materialize/materialize.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "dag-transition op walks subtree and promotes all draft nodes to verified; trls dag-transition CLI command emits the op; tests pass; make check green",
+      "parent": "E5-S0",
+      "blocked_by": ["E5-S0-T1"],
+      "notes": [
+        "Op format: [dag-transition, root_id, ts, worker_id, {to: approved, uncovered_acknowledged: [...]}]",
+        "Walk subtree rooted at target_id; set confidence=verified on all draft descendants",
+        "Commit: feat(governance): add dag-transition op promoting draft subtree to verified"
+      ]
+    },
+    {
+      "id": "E5-S0-T3",
+      "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
+      "type": "task",
+      "scope": "internal/tui/dagsummary/model.go, internal/tui/dagsummary/model_test.go, cmd/trellis/dag_summary.go",
+      "priority": "high",
+      "dod": "dag-summary launches BubbleTea checklist; all items must be actioned (y/n/s) before sign-off unlocks; uncited nodes require explicit ID acknowledgment; sign-off emits dag-transition op; q without full sign-off emits no ops; make check green",
+      "parent": "E5-S0",
+      "blocked_by": ["E5-S0-T2"],
+      "notes": [
+        "Architecture section 9: mechanically impossible to bulk-approve",
+        "Per-item: y=approve, n=flag for re-decomposition, s=skip/defer",
+        "Coverage summary at bottom: cited N/M nodes (X%)",
+        "Commit: feat(governance): wire dag-summary interactive sign-off TUI (architecture section 9)"
+      ]
+    },
+    {
+      "id": "E5-S0-T4",
+      "title": "`decompose-apply` emits `confidence: draft` on all created nodes",
+      "type": "task",
+      "scope": "internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "high",
+      "dod": "All nodes created by decompose-apply have confidence=draft; they do not appear in trls ready until dag-summary sign-off; dogfood test passes; make check green",
+      "parent": "E5-S0",
+      "blocked_by": ["E5-S0-T3"],
+      "notes": [
+        "Include confidence:draft in every create op payload in ApplyPlan",
+        "Dogfood: run decompose-apply on a test plan, run dag-summary, confirm ready queue populates",
+        "Commit: feat(governance): decompose-apply emits draft confidence; requires dag-summary sign-off to claim"
+      ]
+    },
+    {
+      "id": "E5-S1-T8",
+      "title": "`decompose-apply` missing architecture flags — `--root`, `--generate-ids`, `--strict`",
+      "type": "task",
+      "scope": "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "medium",
+      "dod": "--strict treats advisory warnings as errors; --generate-ids replaces plan IDs with UUIDs; --root overrides inferred root; tests pass; make check green",
+      "parent": "E5-S1",
+      "blocked_by": ["E5-S1-T7"],
+      "notes": [
+        "Architecture section 7 specifies these flags — they were always in scope, just missed",
+        "Commit: feat(ux): add decompose-apply --root, --generate-ids, --strict (architecture section 7)"
+      ]
+    },
+    {
+      "id": "E5-S2-T3",
+      "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
+      "type": "task",
+      "scope": "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go",
+      "priority": "medium",
+      "dod": "trls ready on TTY launches BubbleTea selection list; enter claims selected task; --format=json bypasses TUI entirely; make check green",
+      "parent": "E5-S2",
+      "blocked_by": ["E5-S2-T2"],
+      "notes": [
+        "Architecture section 15: ready should be interactive TUI for humans, JSON for agents",
+        "Distinct from trls tui kanban board — this is the task-selection + claim flow",
+        "Commit: feat(tui): add ready interactive TUI for human task selection and claim (architecture section 15)"
+      ]
+    },
+    {
+      "id": "E5-S3-T5",
+      "title": "`trls materialize --exclude-worker <worker-id>` for selective forensic replay",
+      "type": "task",
+      "scope": "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "medium",
+      "dod": "materialize --exclude-worker <id> skips all ops from that worker's log; diagnostic only (no checkpoint update); tests pass; make check green",
+      "parent": "E5-S3",
+      "blocked_by": ["E5-S3-T4"],
+      "notes": [
+        "Architecture section 19: selective replay for diagnosing whether a specific worker introduced corruption",
+        "Read-only diagnostic — does not modify ops branch or checkpoint",
+        "Commit: feat(forensics): add materialize --exclude-worker for selective replay (architecture section 19)"
+      ]
+    }
+  ]
+}

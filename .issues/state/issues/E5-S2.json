@@ -1,0 +1,28 @@
+{
+  "id": "E5-S2",
+  "type": "story",
+  "status": "open",
+  "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
+  "parent": "E5",
+  "children": [
+    "E5-S2-T1",
+    "E5-S2-T2",
+    "E5-S2-T3"
+  ],
+  "blocked_by": [
+    "E5-S0"
+  ],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "trls tui renders open/active/done columns; keyboard nav works; auto-refresh; q quits; make check green",
+  "scope": [
+    "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774204979
+}

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "title": "E5-S1 addendum — L14 and L15 remediations",
+  "issues": [
+    {
+      "id": "E5-S1-T7",
+      "title": "`decompose-apply --dry-run` and decompose pipeline documentation in SKILL.md (L14, L15)",
+      "type": "task",
+      "scope": "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go, .claude/skills/trls/SKILL.md",
+      "priority": "high",
+      "dod": "--dry-run validates and prints would-be creates without writing ops; SKILL.md has 'Loading a Plan' workflow section; make check green",
+      "parent": "E5-S1",
+      "blocked_by": ["E5-S1-T6"],
+      "notes": [
+        "L14: sources pipeline was entirely skipped when loading E5 — SKILL.md must make the workflow discoverable",
+        "L15: no --dry-run meant 21 issues were applied blindly with no preview or conflict check",
+        "Commit: feat(ux): add decompose-apply --dry-run and document decompose pipeline in skill (L14, L15)"
+      ]
+    }
+  ]
+}

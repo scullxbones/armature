@@ -1,0 +1,303 @@
+{
+  "version": 1,
+  "title": "Trellis E5 — Polish, UX Hardening & User-Facing Docs",
+  "issues": [
+    {
+      "id": "E5",
+      "title": "E5: Polish, UX Hardening & User-Facing Docs",
+      "type": "epic",
+      "scope": "",
+      "priority": "high",
+      "dod": "All four stories complete; make check green; trls tui renders; forensics commands work; docs site complete",
+      "parent": "",
+      "blocked_by": [],
+      "notes": [
+        "Four independent stories: S1 UX hardening, S2 interactive TUI board, S3 time-travel forensics, S4 user-facing docs",
+        "Tech stack: Go 1.26, Cobra, BubbleTea 1.3.4, Lip Gloss 1.1.0, Glamour 0.8.0, Bubbles 0.20.0 — no new dependencies",
+        "Run make check before starting any story and again before each commit"
+      ]
+    },
+    {
+      "id": "E5-S1",
+      "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
+      "type": "story",
+      "scope": "internal/ops/types.go, internal/ready/stale.go, cmd/trellis/ready.go, cmd/trellis/claim.go, cmd/trellis/assign.go, cmd/trellis/decompose.go, cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/main_test.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "high",
+      "dod": "L6, L9, L10, L11, L12, L13 all remediated; make check green",
+      "parent": "E5",
+      "blocked_by": [],
+      "notes": [
+        "Fixes: open transition target (L11), stale-claim diagnostic (L6), story-claim auto-advance (L9), unassign claim release (L10)",
+        "Adds: decompose-apply --example flag (L12), trls list command with --type/--parent filters (L13)"
+      ]
+    },
+    {
+      "id": "E5-S1-T1",
+      "title": "Add `open` as valid transition target (L11)",
+      "type": "task",
+      "scope": "internal/ops/types.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass; make check green",
+      "parent": "E5-S1",
+      "blocked_by": [],
+      "notes": [
+        "Add StatusOpen to ValidTransitionTargets in internal/ops/types.go",
+        "Commit: fix(ux): add open as valid transition target (L11)"
+      ]
+    },
+    {
+      "id": "E5-S1-T2",
+      "title": "Stale-claim diagnostic in `trls ready` (L6)",
+      "type": "task",
+      "scope": "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go",
+      "priority": "high",
+      "dod": "StaleClaims() unit tests pass; ready prints stale diagnostic to stderr when queue empty; make check green",
+      "parent": "E5-S1",
+      "blocked_by": [],
+      "notes": [
+        "New StaleClaims() helper in internal/ready/stale.go",
+        "Diagnostic: 'Warning: stale claim(s) may be blocking the queue' with steal instructions",
+        "Commit: fix(ux): print stale-claim diagnostic when ready queue is empty (L6)"
+      ]
+    },
+    {
+      "id": "E5-S1-T3",
+      "title": "Auto-advance story/epic to `in-progress` when child task claimed (L9)",
+      "type": "task",
+      "scope": "cmd/trellis/claim.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "Claiming a task auto-transitions its story/epic parent to in-progress; integration test passes; make check green",
+      "parent": "E5-S1",
+      "blocked_by": [],
+      "notes": [
+        "After claiming, walk up parent chain and emit transition → in-progress for any open/claimed story or epic",
+        "Commit: fix(ux): auto-advance story/epic to in-progress after claiming child task (L9)"
+      ]
+    },
+    {
+      "id": "E5-S1-T4",
+      "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
+      "type": "task",
+      "scope": "cmd/trellis/assign.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "unassign on a claimed issue emits transition → open; child tasks become unblocked; make check green",
+      "parent": "E5-S1",
+      "blocked_by": [],
+      "notes": [
+        "In newUnassignCmd: if issue status is claimed, also emit transition → open op",
+        "Commit: fix(ux): unassign releases claimed status back to open (L10)"
+      ]
+    },
+    {
+      "id": "E5-S1-T5",
+      "title": "`decompose-apply --example` flag for schema discoverability (L12)",
+      "type": "task",
+      "scope": "cmd/trellis/decompose.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "medium",
+      "dod": "trls decompose-apply --example prints valid minimal plan JSON; TestDecomposeApplyExampleFlag passes; make check green",
+      "parent": "E5-S1",
+      "blocked_by": [],
+      "notes": [
+        "When --example set: print embedded example JSON and return nil; --plan not required",
+        "Commit: feat(ux): add decompose-apply --example flag for schema discoverability (L12)"
+      ]
+    },
+    {
+      "id": "E5-S1-T6",
+      "title": "`trls list` command with `--type` and `--parent` filters (L13)",
+      "type": "task",
+      "scope": "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "medium",
+      "dod": "trls list shows all issues; --type and --parent filter correctly; --format json outputs structured data; tests pass; make check green",
+      "parent": "E5-S1",
+      "blocked_by": ["E5-S1-T5"],
+      "notes": [
+        "Human format: ID\\tTYPE\\tSTATUS\\tTITLE tab-separated",
+        "JSON/agent format: array of {id, title, type, status, parent, blocked_by}",
+        "Commit: feat(ux): add trls list command with --type and --parent filters (L13)"
+      ]
+    },
+    {
+      "id": "E5-S2",
+      "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
+      "type": "story",
+      "scope": "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go",
+      "priority": "high",
+      "dod": "trls tui renders open/active/done columns; keyboard nav works; auto-refresh; q quits; make check green",
+      "parent": "E5",
+      "blocked_by": [],
+      "notes": [
+        "Read-only in this iteration — no write operations from TUI",
+        "Tech: BubbleTea 1.3.4, Lip Gloss 1.1.0, Bubbles 0.20.0 — no new deps"
+      ]
+    },
+    {
+      "id": "E5-S2-T1",
+      "title": "Board model — column layout and keyboard navigation",
+      "type": "task",
+      "scope": "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go",
+      "priority": "high",
+      "dod": "BubbleTea model with open/active/done columns; h/l or arrow key nav between columns; j/k nav within column; enter opens detail viewport; unit tests pass",
+      "parent": "E5-S2",
+      "blocked_by": [],
+      "notes": [
+        "Three columns: Open, Active (in-progress+claimed), Done (done+merged+cancelled)",
+        "Workers panel below columns",
+        "Commit: feat(tui): add board model with column layout and keyboard nav (E5-S2-T1)"
+      ]
+    },
+    {
+      "id": "E5-S2-T2",
+      "title": "`trls tui` CLI command with auto-refresh",
+      "type": "task",
+      "scope": "cmd/trellis/tui.go, cmd/trellis/main.go",
+      "priority": "high",
+      "dod": "trls tui launches board; auto-refreshes every 5s; q quits cleanly; make check green",
+      "parent": "E5-S2",
+      "blocked_by": ["E5-S2-T1"],
+      "notes": [
+        "Wire board model into Cobra command; tick message drives refresh",
+        "Commit: feat(tui): add trls tui interactive board command (E5-S2)"
+      ]
+    },
+    {
+      "id": "E5-S3",
+      "title": "Time Travel & Forensics — reconstruct issue context at any historical commit",
+      "type": "story",
+      "scope": "internal/git/git.go, internal/git/git_test.go, internal/materialize/atsha.go, internal/materialize/atsha_test.go, cmd/trellis/render_context.go, cmd/trellis/context_history.go, cmd/trellis/main.go",
+      "priority": "medium",
+      "dod": "render-context --at <sha> and context-history commands work; make check green",
+      "parent": "E5",
+      "blocked_by": [],
+      "notes": [
+        "Reads git object store directly — no new external dependencies",
+        "Adds ListFilesAtCommit, ShowFileAtCommit, LogBranch to git.Client interface"
+      ]
+    },
+    {
+      "id": "E5-S3-T1",
+      "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
+      "type": "task",
+      "scope": "internal/git/git.go, internal/git/git_test.go",
+      "priority": "medium",
+      "dod": "ListFilesAtCommit, ShowFileAtCommit, LogBranch implemented on git.Client; tests pass against real git repo",
+      "parent": "E5-S3",
+      "blocked_by": [],
+      "notes": [
+        "Uses git cat-file and git log — no new dependencies",
+        "Commit: feat(git): add ListFilesAtCommit, ShowFileAtCommit, LogBranch (E5-S3-T1)"
+      ]
+    },
+    {
+      "id": "E5-S3-T2",
+      "title": "`MaterializeAtSHA` — replay op log at arbitrary historical commit",
+      "type": "task",
+      "scope": "internal/materialize/atsha.go, internal/materialize/atsha_test.go",
+      "priority": "medium",
+      "dod": "MaterializeAtSHA(sha) returns materialized state as of that commit; unit tests pass with real git fixtures",
+      "parent": "E5-S3",
+      "blocked_by": ["E5-S3-T1"],
+      "notes": [
+        "Lists op files at SHA via ListFilesAtCommit, reads each via ShowFileAtCommit, replays",
+        "Commit: feat(materialize): add MaterializeAtSHA for forensic context reconstruction (E5-S3-T2)"
+      ]
+    },
+    {
+      "id": "E5-S3-T3",
+      "title": "`render-context --at <sha>` flag for time-travel context",
+      "type": "task",
+      "scope": "cmd/trellis/render_context.go",
+      "priority": "medium",
+      "dod": "render-context --issue ID --at <sha> returns context as of that SHA; output differs from HEAD on a repo with history; make check green",
+      "parent": "E5-S3",
+      "blocked_by": ["E5-S3-T2"],
+      "notes": [
+        "Add --at flag to existing render-context command; if absent, behavior unchanged",
+        "Commit: feat(forensics): add render-context --at <sha> for time-travel context (E5-S3-T3)"
+      ]
+    },
+    {
+      "id": "E5-S3-T4",
+      "title": "`trls context-history` — list issue context at each commit",
+      "type": "task",
+      "scope": "cmd/trellis/context_history.go, cmd/trellis/main.go",
+      "priority": "medium",
+      "dod": "context-history --issue ID lists each commit SHA where issue context changed with timestamp; make check green",
+      "parent": "E5-S3",
+      "blocked_by": ["E5-S3-T3"],
+      "notes": [
+        "Uses LogBranch to walk history, calls MaterializeAtSHA at each commit",
+        "Commit: feat(forensics): add context-history command (E5-S3-T4)"
+      ]
+    },
+    {
+      "id": "E5-S4",
+      "title": "User-Facing Documentation — README, getting-started guide, command reference, use-case walkthroughs",
+      "type": "story",
+      "scope": "README.md, docs/getting-started.md, docs/commands.md, docs/use-cases.md",
+      "priority": "medium",
+      "dod": "All four docs written and cross-linked; README cold-readable; commands.md covers every subcommand including new E5 additions",
+      "parent": "E5",
+      "blocked_by": [],
+      "notes": [
+        "Pure documentation — no code changes",
+        "commands.md must include new E5 commands: trls tui, context-history, list, and decompose-apply --example"
+      ]
+    },
+    {
+      "id": "E5-S4-T1",
+      "title": "`README.md` — project overview, install, and 5-minute quickstart",
+      "type": "task",
+      "scope": "README.md",
+      "priority": "medium",
+      "dod": "README cold-readable by someone unfamiliar with trellis; install path clear; quickstart runnable without other docs",
+      "parent": "E5-S4",
+      "blocked_by": [],
+      "notes": [
+        "Sections: Why Trellis, Install, 5-Minute Quickstart, Documentation index, Key Concepts, License",
+        "Commit: docs: add README with overview, install, and quickstart (E5-S4-T1)"
+      ]
+    },
+    {
+      "id": "E5-S4-T2",
+      "title": "`docs/getting-started.md` — step-by-step guide from install to first agent task",
+      "type": "task",
+      "scope": "docs/getting-started.md",
+      "priority": "medium",
+      "dod": "Guide runnable verbatim from a fresh clone; covers solo and dual-branch modes; all commands copy-pasteable",
+      "parent": "E5-S4",
+      "blocked_by": [],
+      "notes": [
+        "Sections: Prerequisites, init, worker-init, create, work loop, decompose from PRD, monitoring, team setup",
+        "Commit: docs: add getting-started guide (E5-S4-T2)"
+      ]
+    },
+    {
+      "id": "E5-S4-T3",
+      "title": "`docs/commands.md` — complete command reference for every `trls` subcommand",
+      "type": "task",
+      "scope": "docs/commands.md",
+      "priority": "medium",
+      "dod": "Every trls subcommand documented with synopsis, flags, examples, and notes; includes all E5 additions (tui, context-history, list, decompose-apply --example)",
+      "parent": "E5-S4",
+      "blocked_by": [],
+      "notes": [
+        "Addresses L12 documentation gap for decompose-apply plan format",
+        "Commit: docs: add complete command reference (E5-S4-T3)"
+      ]
+    },
+    {
+      "id": "E5-S4-T4",
+      "title": "`docs/use-cases.md` — per-persona workflow walkthroughs",
+      "type": "task",
+      "scope": "docs/use-cases.md",
+      "priority": "medium",
+      "dod": "P1 Lone Wolf, P2 Gatekeeper, P3 Conductor, P4 Wrangler, P5 AI Worker personas all documented; multi-agent conflict scenario covered",
+      "parent": "E5-S4",
+      "blocked_by": [],
+      "notes": [
+        "Commit: docs: add per-persona use case guides (E5-S4-T4)"
+      ]
+    }
+  ]
+}

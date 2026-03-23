@@ -1,0 +1,24 @@
+{
+  "id": "E5-S1-T5",
+  "type": "task",
+  "status": "open",
+  "title": "`decompose-apply --example` flag for schema discoverability (L12)",
+  "parent": "E5-S1",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E5-S1-T6"
+  ],
+  "priority": "medium",
+  "definition_of_done": "trls decompose-apply --example prints valid minimal plan JSON; TestDecomposeApplyExampleFlag passes; make check green",
+  "scope": [
+    "cmd/trellis/decompose.go, cmd/trellis/cmd_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

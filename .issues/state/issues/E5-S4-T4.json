@@ -1,0 +1,22 @@
+{
+  "id": "E5-S4-T4",
+  "type": "task",
+  "status": "open",
+  "title": "`docs/use-cases.md` — per-persona workflow walkthroughs",
+  "parent": "E5-S4",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "priority": "medium",
+  "definition_of_done": "P1 Lone Wolf, P2 Gatekeeper, P3 Conductor, P4 Wrangler, P5 AI Worker personas all documented; multi-agent conflict scenario covered",
+  "scope": [
+    "docs/use-cases.md"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}

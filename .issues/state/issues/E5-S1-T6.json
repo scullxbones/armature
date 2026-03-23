@@ -1,0 +1,26 @@
+{
+  "id": "E5-S1-T6",
+  "type": "task",
+  "status": "open",
+  "title": "`trls list` command with `--type` and `--parent` filters (L13)",
+  "parent": "E5-S1",
+  "children": [],
+  "blocked_by": [
+    "E5-S1-T5"
+  ],
+  "blocks": [
+    "E5-S1-T7"
+  ],
+  "priority": "medium",
+  "definition_of_done": "trls list shows all issues; --type and --parent filter correctly; --format json outputs structured data; tests pass; make check green",
+  "scope": [
+    "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
+  },
+  "decision_refs": [],
+  "updated": 1774197393
+}
