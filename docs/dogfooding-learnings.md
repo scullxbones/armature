@@ -180,3 +180,15 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Add `trls decompose-apply --dry-run` that validates the plan against the current graph state and prints what would be created (IDs, types, parents, blocked_by edges) without writing any ops. Also consider `--validate-only` as an alias. This gives agents and humans a chance to catch mistakes before they're committed to the op log.
 
 **File**: `cmd/trellis/decompose.go`, `internal/decompose/apply.go`
+
+---
+
+## L16: Fresh worker session sees empty ready queue — parent epic/story must be manually transitioned to `in-progress`
+
+**Observed**: Starting a new worker session on a repo where the epic and story are both `open`, `trls ready` returned "No tasks ready" even though the story had ready subtasks with no blockers. Root cause: `ComputeReady` gates tasks on `parent.Status == in-progress`. The parent epic (E5) and story (E5-S0) had never been transitioned, so no tasks surfaced. Required two manual `trls transition --to in-progress` calls (one for the epic, one for the story) before any tasks appeared.
+
+**Impact**: A fresh agent session hits an empty queue with no explanation and would stop, even though work is ready. The agent must know to walk up the parent chain and manually start each ancestor — this is non-obvious and not documented in the worker skill.
+
+**Recommendation**: Fix has two parts: (1) change `ComputeReady` to surface tasks whose parent is `open` (not just `in-progress`) — this removes the bootstrap deadlock; (2) when a task is claimed, auto-transition any `open` ancestor story/epic to `in-progress`. Together these eliminate the manual pre-flight. E5-S1-T3 addresses part (2) but not part (1).
+
+**File**: `internal/ready/compute.go` (parent status gate), `cmd/trellis/claim.go` (auto-advance on claim)
