@@ -1,3 +1,5 @@
+<!-- CANONICAL SOURCE: edit this file, not .claude/skills/trls-worker/SKILL.md — run `make skill` to regenerate the deployed copy -->
+
 # Trellis Worker Loop
 
 Trellis is the source of truth for what to work on and how. Do not read external plan files during execution. `render-context` output is your complete task specification.
@@ -81,21 +83,33 @@ The subagent should:
 
 ```
 trls transition --issue ISSUE-ID --to done --outcome "what was accomplished"
-git add -p   # stage relevant changes
+git add <code files...> .issues/   # always include .issues/ — ops must travel with code
 git commit -m "feat(ISSUE-ID): brief description of what was implemented"
 ```
 
 Record a concrete outcome. Commit immediately after each task — small focused commits are easier to review.
+
+**Always stage `.issues/` alongside code files.** Every `trls` command (claim, transition, note, decision, heartbeat) writes ops to `.issues/`. If you omit `.issues/` from the commit, those ops are left behind and will not be delivered with the code.
 
 **Commit message format:** `<type>(<ISSUE-ID>): <description>`
 Types: `feat`, `fix`, `refactor`, `test`, `docs`
 
 Then return to step 2.
 
-### 6. Story Complete — Push and PR
+### 6. Story Complete — Sync, Push, and PR
 
-When `trls ready` returns empty and the story's tasks are all done, push and open a PR:
+When `trls ready` returns empty and the story's tasks are all done:
 
+**a. Transition the story and commit any remaining `.issues/` changes:**
+```
+trls transition --issue STORY-ID --to done --outcome "story-level summary"
+git status   # check for unstaged .issues/ changes
+git add .issues/ && git commit -m "chore(STORY-ID): sync trellis state"
+```
+
+Story/epic-level transitions, and any notes or decisions recorded between task commits, generate ops that have no code to bundle with. This mop-up commit ensures nothing is left behind before pushing.
+
+**b. Push and open a PR:**
 ```
 git push -u origin HEAD
 # Open a PR targeting your main/base branch
@@ -131,4 +145,6 @@ git push -u origin HEAD
 | Skipping `worker-init` | Required — ops without worker ID will fail |
 | Skipping heartbeat on long tasks | Claim expires after TTL; other workers can steal it |
 | Skipping commit after task | Small commits make review and revert tractable |
+| Omitting `.issues/` from `git add` | Ops left behind, not delivered with code; always include `.issues/` in every commit |
+| No mop-up commit before push | Story/epic transitions and between-task ops never get committed; run `git add .issues/ && git commit` before `git push` |
 | Auto-pushing after every task | Push once per story to avoid noisy remote history |

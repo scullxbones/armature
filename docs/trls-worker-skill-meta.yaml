@@ -5,4 +5,5 @@ description: >
   issues, claims them, assembles context, and drives implementation. Enforces
   per-task commits and story-level push/PR strategy.
 compatibility: Designed for Claude Code. Requires trls on PATH (run make install).
+generated_from: docs/trls-worker-SKILL.md
 ---

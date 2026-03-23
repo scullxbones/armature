@@ -65,5 +65,5 @@ skill: build
 	cp bin/trls .claude/skills/trls/scripts/trls
 	chmod +x .claude/skills/trls/scripts/trls
 	mkdir -p .claude/skills/trls-worker
-	cat docs/trls-worker-skill-meta.yaml docs/trls-worker-SKILL.md > .claude/skills/trls-worker/SKILL.md
+	{ cat docs/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `docs/trls-worker-SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat docs/trls-worker-SKILL.md; } > .claude/skills/trls-worker/SKILL.md
 	@echo "Deployed trls and trls-worker skills to .claude/skills/"
