@@ -1033,7 +1033,7 @@
     "outcome": "Starting E5 epic work"
   },
   "E5-S0": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1048,9 +1048,9 @@
       "E5-S3",
       "E5-S4"
     ],
-    "updated": 1774231532,
+    "updated": 1774234644,
     "title": "Draft Confidence Model \u0026 Governance Gate — implement first, dogfood during E5",
-    "outcome": "Starting E5-S0 story work",
+    "outcome": "Full draft confidence model implemented: confidence field in ops/materialize, draft gate in ready queue, dag-transition op for subtree promotion, dag-summary BubbleTea TUI for per-item sign-off, decompose-apply emits draft on all created nodes",
     "scope": [
       "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, internal/decompose/apply.go, internal/tui/dagsummary/model.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
     ]
@@ -1107,15 +1107,16 @@
     ]
   },
   "E5-S0-T4": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S0",
     "blocked_by": [
       "E5-S0-T3"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774234311,
+    "updated": 1774234626,
     "title": "`decompose-apply` emits `confidence: draft` on all created nodes",
+    "outcome": "decompose-apply now emits confidence=draft on all created nodes; draft nodes excluded from trls ready until dag-transition promotes them; integration test confirms full round-trip; make check green",
     "scope": [
       "internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
     ]

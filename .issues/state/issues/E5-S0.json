@@ -1,7 +1,7 @@
 {
   "id": "E5-S0",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "Draft Confidence Model \u0026 Governance Gate — implement first, dogfood during E5",
   "parent": "E5",
   "children": [
@@ -28,6 +28,6 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "outcome": "Starting E5-S0 story work",
-  "updated": 1774231532
+  "outcome": "Full draft confidence model implemented: confidence field in ops/materialize, draft gate in ready queue, dag-transition op for subtree promotion, dag-summary BubbleTea TUI for per-item sign-off, decompose-apply emits draft on all created nodes",
+  "updated": 1774234644
 }
