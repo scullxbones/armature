@@ -1089,7 +1089,7 @@
     ]
   },
   "E5-S0-T3": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S0",
     "blocked_by": [
@@ -1099,20 +1099,22 @@
       "E5-S0-T4"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774232854,
+    "updated": 1774234298,
     "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
+    "outcome": "BubbleTea dagsummary model with per-item y/n/s actions, uncited-node ID ack requirement, sign-off gate, dag-transition op emission; 22 unit tests; dagsum CLI updated to use draft-confidence collection; make check green",
     "scope": [
       "internal/tui/dagsummary/model.go, internal/tui/dagsummary/model_test.go, cmd/trellis/dag_summary.go"
     ]
   },
   "E5-S0-T4": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S0",
     "blocked_by": [
       "E5-S0-T3"
     ],
-    "updated": 1774204969,
+    "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+    "updated": 1774234311,
     "title": "`decompose-apply` emits `confidence: draft` on all created nodes",
     "scope": [
       "internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"

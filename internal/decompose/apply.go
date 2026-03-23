@@ -38,6 +38,7 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 				Priority:         issue.Priority,
 				DefinitionOfDone: issue.DoD,
 				Parent:           issue.Parent,
+				Confidence:       "draft",
 			},
 		}
 

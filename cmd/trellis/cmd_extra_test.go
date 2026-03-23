@@ -185,6 +185,54 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	assert.Contains(t, out, "Reverted")
 }
 
+// TestDecomposeApply_DraftConfidence verifies that nodes created by decompose-apply
+// have confidence=draft, are hidden from trls ready, and become visible after
+// dag-transition promotes them to verified.
+func TestDecomposeApply_DraftConfidence(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	planData := `{"version":1,"title":"Draft Test","issues":[` +
+		`{"id":"DRF-001","title":"Draft task one","type":"task"},` +
+		`{"id":"DRF-002","title":"Draft task two","type":"task"},` +
+		`{"id":"DRF-003","title":"Draft task three","type":"task"}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	// Apply the plan — all nodes should be created as draft
+	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Applied 3 issues")
+
+	// trls ready should NOT list draft nodes
+	readyOut, err := runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, readyOut, "DRF-001")
+	assert.NotContains(t, readyOut, "DRF-002")
+	assert.NotContains(t, readyOut, "DRF-003")
+
+	// Promote via dag-transition on each root node (they have no parent so promote each)
+	_, err = runTrls(t, repo, "dag-transition", "--issue", "DRF-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "dag-transition", "--issue", "DRF-002")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "dag-transition", "--issue", "DRF-003")
+	require.NoError(t, err)
+
+	// After promotion trls ready should show the tasks
+	readyOut2, err := runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, readyOut2, "DRF-001")
+	assert.Contains(t, readyOut2, "DRF-002")
+	assert.Contains(t, readyOut2, "DRF-003")
+}
+
 func TestSourcesSyncCommand_WithFilesystemSource(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

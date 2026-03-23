@@ -88,6 +88,30 @@ func TestApplyPlan_CreatesOps(t *testing.T) {
 	assert.Len(t, readOps, 2)
 }
 
+func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
+	dir := t.TempDir()
+	workerID := "worker-test"
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "First issue", Type: "task"},
+		},
+	}
+
+	state := materialize.NewState()
+
+	_, err := ApplyPlan(plan, dir, workerID, state)
+	require.NoError(t, err)
+
+	logPath := filepath.Join(dir, workerID+".log")
+	readOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, readOps, 1)
+	assert.Equal(t, "draft", readOps[0].Payload.Confidence, "decompose-apply must emit confidence=draft on all created nodes")
+}
+
 func TestApplyPlan_SkipsExisting(t *testing.T) {
 	dir := t.TempDir()
 	workerID := "worker-test"

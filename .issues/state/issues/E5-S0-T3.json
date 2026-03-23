@@ -1,7 +1,7 @@
 {
   "id": "E5-S0-T3",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
   "parent": "E5-S0",
   "children": [],
@@ -22,9 +22,10 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "BubbleTea dagsummary model with per-item y/n/s actions, uncited-node ID ack requirement, sign-off gate, dag-transition op emission; 22 unit tests; dagsum CLI updated to use draft-confidence collection; make check green",
   "claimed_by": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
   "claimed_at": 1774232854,
   "claim_ttl": 60,
   "last_heartbeat": 1774232854,
-  "updated": 1774232854
+  "updated": 1774234298
 }
