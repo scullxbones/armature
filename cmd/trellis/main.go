@@ -68,6 +68,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newWorkersCmd())
 	root.AddCommand(newSourcesCmd())
 	root.AddCommand(newDAGSummaryCmd())
+	root.AddCommand(newDAGTransitionCmd())
 	root.AddCommand(newImportCmd())
 	root.AddCommand(newConfirmCmd())
 	root.AddCommand(newStaleReviewCmd())

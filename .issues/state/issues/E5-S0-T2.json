@@ -1,7 +1,7 @@
 {
   "id": "E5-S0-T2",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "`dag-transition` op — materialization and thin CLI command",
   "parent": "E5-S0",
   "children": [],
@@ -22,5 +22,9 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774204969
+  "claimed_by": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+  "claimed_at": 1774232151,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774232151,
+  "updated": 1774232151
 }

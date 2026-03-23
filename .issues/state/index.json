@@ -1056,21 +1056,22 @@
     ]
   },
   "E5-S0-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S0",
     "blocks": [
       "E5-S0-T2"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774231538,
+    "updated": 1774232136,
     "title": "Confidence field in materialized state and draft gate in ready queue",
+    "outcome": "Added confidence field to op Payload and materialized Issue; draft gate in ComputeReady excludes draft nodes; existing nodes without confidence default to verified; --confidence flag on trls create; 9 new tests (unit + integration); make check green",
     "scope": [
       "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, cmd/trellis/main_test.go"
     ]
   },
   "E5-S0-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S0",
     "blocked_by": [
@@ -1079,7 +1080,8 @@
     "blocks": [
       "E5-S0-T3"
     ],
-    "updated": 1774204969,
+    "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+    "updated": 1774232151,
     "title": "`dag-transition` op — materialization and thin CLI command",
     "scope": [
       "internal/ops/types.go, internal/materialize/materialize.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
@@ -1161,7 +1163,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774197393,
+    "updated": 1774231746,
     "title": "Auto-advance story/epic to `in-progress` when child task claimed (L9)",
     "scope": [
       "cmd/trellis/claim.go, cmd/trellis/main_test.go"

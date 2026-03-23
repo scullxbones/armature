@@ -1,7 +1,7 @@
 {
   "id": "E5-S0-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Confidence field in materialized state and draft gate in ready queue",
   "parent": "E5-S0",
   "children": [],
@@ -20,9 +20,10 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "Added confidence field to op Payload and materialized Issue; draft gate in ComputeReady excludes draft nodes; existing nodes without confidence default to verified; --confidence flag on trls create; 9 new tests (unit + integration); make check green",
   "claimed_by": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
   "claimed_at": 1774231538,
   "claim_ttl": 60,
   "last_heartbeat": 1774231538,
-  "updated": 1774231538
+  "updated": 1774232136
 }

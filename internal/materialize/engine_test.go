@@ -215,6 +215,80 @@ func TestApplyCreateOp_VerifiedConfidence_Propagated(t *testing.T) {
 	assert.Equal(t, "verified", state.Issues["task-verified"].Provenance.Confidence)
 }
 
+func TestApplyDagTransitionOp_PromotesDraftSubtreeToVerified(t *testing.T) {
+	state := NewState()
+	// Create a root epic with two draft children; one is outside the subtree
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Epic", NodeType: "epic", Confidence: "draft"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story", Parent: "epic-01", Confidence: "draft"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task under story", NodeType: "task", Parent: "story-01", Confidence: "draft"}}))
+	// outside the subtree
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-outside", Timestamp: 103,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Outside task", NodeType: "task", Confidence: "draft"}}))
+
+	// Apply dag-transition with IssueID="epic-01"
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpDAGTransition, TargetID: "epic-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{IssueID: "epic-01"},
+	}))
+
+	assert.Equal(t, "verified", state.Issues["epic-01"].Provenance.Confidence)
+	assert.Equal(t, "verified", state.Issues["story-01"].Provenance.Confidence)
+	assert.Equal(t, "verified", state.Issues["task-01"].Provenance.Confidence)
+	// outside the subtree is unaffected
+	assert.Equal(t, "draft", state.Issues["task-outside"].Provenance.Confidence)
+}
+
+func TestApplyDagTransitionOp_CustomTargetConfidence(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task", Confidence: "draft"}}))
+
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpDAGTransition, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{IssueID: "task-01", To: "verified"},
+	}))
+
+	assert.Equal(t, "verified", state.Issues["task-01"].Provenance.Confidence)
+}
+
+func TestApplyDagTransitionOp_NodesOutsideSubtreeUnaffected(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-A", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Epic A", NodeType: "epic", Confidence: "draft"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-B", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Epic B", NodeType: "epic", Confidence: "draft"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-A1", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A1", NodeType: "task", Parent: "epic-A", Confidence: "draft"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-B1", Timestamp: 103,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B1", NodeType: "task", Parent: "epic-B", Confidence: "draft"}}))
+
+	// Promote only epic-A subtree
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpDAGTransition, TargetID: "epic-A", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{IssueID: "epic-A"},
+	}))
+
+	assert.Equal(t, "verified", state.Issues["epic-A"].Provenance.Confidence)
+	assert.Equal(t, "verified", state.Issues["task-A1"].Provenance.Confidence)
+	assert.Equal(t, "draft", state.Issues["epic-B"].Provenance.Confidence)
+	assert.Equal(t, "draft", state.Issues["task-B1"].Provenance.Confidence)
+}
+
+func TestApplyDagTransitionOp_BackwardCompatExistingConfirmedBehavior(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	assert.False(t, state.Issues["task-01"].Provenance.DAGConfirmed)
+
+	// Old-style op (no IssueID) still sets DAGConfirmed
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpDAGTransition, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Confirmed: true}}))
+	assert.True(t, state.Issues["task-01"].Provenance.DAGConfirmed)
+}
+
 func TestApplySourceLinkOp(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,

@@ -98,7 +98,8 @@ type Payload struct {
 	VersionID string `json:"version_id,omitempty"`
 	Provider  string `json:"provider,omitempty"`
 
-	// dag-transition
+	// dag-transition (confidence promotion)
+	IssueID               string   `json:"issue_id,omitempty"`
 	Confirmed             bool     `json:"confirmed,omitempty"`
 	UncoveredAcknowledged []string `json:"uncovered_acknowledged,omitempty"`
 

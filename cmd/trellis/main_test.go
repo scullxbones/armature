@@ -947,6 +947,54 @@ func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 	assert.Contains(t, out, "legacy-01")
 }
 
+func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a draft task (no parent, so no parent-status gate)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft task", "--id", "task-draft-01", "--confidence", "draft")
+	require.NoError(t, err)
+	// Create a second draft task outside the scope (different ID)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Another draft", "--id", "task-draft-02", "--confidence", "draft")
+	require.NoError(t, err)
+
+	// Confirm task-draft-01 is NOT in the ready queue yet
+	out, err := runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "task-draft-01")
+
+	// Run dag-transition to promote task-draft-01's subtree (just itself here)
+	out, err = runTrls(t, repo, "dag-transition", "--issue", "task-draft-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-draft-01")
+
+	// Now task-draft-01 should appear in the ready queue
+	out, err = runTrls(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-draft-01")
+
+	// task-draft-02 should still be excluded (not in the promoted subtree)
+	assert.NotContains(t, out, "task-draft-02")
+}
+
+func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "dag-transition")
+	assert.Error(t, err)
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op

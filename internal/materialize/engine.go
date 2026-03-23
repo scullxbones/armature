@@ -217,9 +217,33 @@ func (s *State) applyDAGTransition(op ops.Op) error {
 	if !ok {
 		return nil
 	}
+	// New behavior: when IssueID is set, walk the subtree and promote confidence.
+	if op.Payload.IssueID != "" {
+		targetConfidence := op.Payload.To
+		if targetConfidence == "" {
+			targetConfidence = "verified"
+		}
+		s.promoteSubtreeConfidence(op.Payload.IssueID, targetConfidence, op.Timestamp)
+		return nil
+	}
+	// Legacy behavior: set DAGConfirmed flag on the single target issue.
 	issue.Provenance.DAGConfirmed = op.Payload.Confirmed
 	issue.Updated = op.Timestamp
 	return nil
+}
+
+// promoteSubtreeConfidence walks the subtree rooted at rootID and sets
+// Provenance.Confidence to targetConfidence on every node in the subtree.
+func (s *State) promoteSubtreeConfidence(rootID, targetConfidence string, timestamp int64) {
+	root, ok := s.Issues[rootID]
+	if !ok {
+		return
+	}
+	root.Provenance.Confidence = targetConfidence
+	root.Updated = timestamp
+	for _, childID := range root.Children {
+		s.promoteSubtreeConfidence(childID, targetConfidence, timestamp)
+	}
 }
 
 func (s *State) promoteParentToInProgress(parentID string) {
