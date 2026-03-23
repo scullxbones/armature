@@ -1071,7 +1071,7 @@
     ]
   },
   "E5-S0-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S0",
     "blocked_by": [
@@ -1081,14 +1081,15 @@
       "E5-S0-T3"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774232151,
+    "updated": 1774232842,
     "title": "`dag-transition` op — materialization and thin CLI command",
+    "outcome": "dag-transition op reuses OpDAGTransition with IssueID payload field to distinguish subtree-promotion from per-issue DAG-confirmation; promoteSubtreeConfidence walks children recursively; trls dag-transition --issue CLI command; backward-compatible with existing confirmed behavior; 6 new tests; make check green",
     "scope": [
       "internal/ops/types.go, internal/materialize/materialize.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go"
     ]
   },
   "E5-S0-T3": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S0",
     "blocked_by": [
@@ -1097,7 +1098,8 @@
     "blocks": [
       "E5-S0-T4"
     ],
-    "updated": 1774204969,
+    "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+    "updated": 1774232854,
     "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
     "scope": [
       "internal/tui/dagsummary/model.go, internal/tui/dagsummary/model_test.go, cmd/trellis/dag_summary.go"

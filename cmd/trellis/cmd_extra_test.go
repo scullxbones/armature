@@ -79,6 +79,14 @@ func TestSourcesVerifyCommand_EmptyManifest(t *testing.T) {
 func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
+	// Create a draft task so dag-summary has items to report.
+	cmd0 := newRootCmd()
+	cmd0.SetOut(new(bytes.Buffer))
+	cmd0.SetArgs([]string{"create", "--repo", repo,
+		"--title", "Draft feature", "--type", "task", "--id", "draft-01",
+		"--confidence", "draft"})
+	require.NoError(t, cmd0.Execute())
+
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -86,7 +94,7 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 
 	err := cmd.Execute()
 	require.NoError(t, err)
-	// Non-interactive mode with unconfirmed items outputs JSON
+	// Non-interactive mode with draft items outputs JSON
 	assert.Contains(t, buf.String(), "pending_dag_confirmation")
 }
 

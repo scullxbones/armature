@@ -1,7 +1,7 @@
 {
   "id": "E5-S0-T2",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "`dag-transition` op — materialization and thin CLI command",
   "parent": "E5-S0",
   "children": [],
@@ -22,9 +22,27 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "dag-transition op reuses OpDAGTransition with IssueID payload field to distinguish subtree-promotion from per-issue DAG-confirmation; promoteSubtreeConfidence walks children recursively; trls dag-transition --issue CLI command; backward-compatible with existing confirmed behavior; 6 new tests; make check green",
+  "notes": [
+    {
+      "worker_id": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+      "timestamp": 1774232819,
+      "msg": "Implemented dag-transition op: added IssueID to Payload, updated applyDAGTransition to walk subtree via promoteSubtreeConfidence, added newDAGTransitionCmd CLI command, all tests green, make check green at 80.6% coverage"
+    }
+  ],
+  "decisions": [
+    {
+      "topic": "dag-transition op reuse",
+      "choice": "reuse existing OpDAGTransition op type with IssueID payload field to distinguish subtree-promotion from per-issue DAG-confirmation",
+      "rationale": "Adding IssueID to Payload is backward-compatible: existing ops with Confirmed=true and no IssueID keep working unchanged; new ops with IssueID trigger subtree confidence promotion",
+      "affects": null,
+      "worker_id": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
+      "timestamp": 1774232800
+    }
+  ],
   "claimed_by": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
   "claimed_at": 1774232151,
   "claim_ttl": 60,
   "last_heartbeat": 1774232151,
-  "updated": 1774232151
+  "updated": 1774232842
 }
