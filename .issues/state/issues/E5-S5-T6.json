@@ -1,7 +1,7 @@
 {
   "id": "E5-S5-T6",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Update validate command coverage output format (human + JSON)",
   "parent": "E5-S5",
   "children": [],
@@ -23,9 +23,17 @@
     "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
   },
   "decision_refs": [],
+  "outcome": "validate command coverage output updated: simple 'N/M cited' format, extended with source-linked/accepted-risk breakdown; JSON includes coverage object; TestValidateCmd_CoverageOutput_HumanFormat passes; make check green",
+  "notes": [
+    {
+      "worker_id": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+      "timestamp": 1774439125,
+      "msg": "Updated validate command coverage output format: human format now outputs 'N/M cited' (simple) or 'N/M cited (X source-linked, Y accepted-risk)' (extended when accepted-risk\u003e0); JSON output now includes coverage object; added TestValidateCmd_CoverageOutput_HumanFormat test with two subtests; make check green (exit 0)"
+    }
+  ],
   "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
   "claimed_at": 1774438496,
   "claim_ttl": 60,
   "last_heartbeat": 1774438496,
-  "updated": 1774438496
+  "updated": 1774439138
 }

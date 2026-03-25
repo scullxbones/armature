@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -343,4 +344,73 @@ func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
 
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01")
 	assert.Error(t, err)
+}
+
+// setupRepoWithSource creates a repo with a task and a source entry in the manifest,
+// returning the repo path and the source UUID.
+func setupRepoWithSource(t *testing.T) (string, string) {
+	t.Helper()
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	docFile := filepath.Join(repo, "doc.md")
+	require.NoError(t, os.WriteFile(docFile, []byte("# Doc"), 0644))
+
+	out, err := runTrls(t, repo, "sources", "add",
+		"--url", docFile, "--type", "filesystem", "--title", "Doc")
+	require.NoError(t, err)
+
+	// Extract UUID from "added source <uuid> (...)" output
+	parts := strings.Fields(out)
+	require.GreaterOrEqual(t, len(parts), 3, "expected 'added source <uuid> ...' output")
+	sourceID := parts[2]
+	return repo, sourceID
+}
+
+func TestSourceLinkCmd_HappyPath(t *testing.T) {
+	repo, sourceID := setupRepoWithSource(t)
+
+	out, err := runTrls(t, repo, "source-link", "--issue", "task-01", "--source-id", sourceID)
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, sourceID)
+}
+
+func TestSourceLinkCmd_UnknownSourceID(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "source-link", "--issue", "task-01", "--source-id", "00000000-0000-0000-0000-000000000000")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in manifest")
+}
+
+func TestSourceLinkCmd_MissingIssue(t *testing.T) {
+	repo, sourceID := setupRepoWithSource(t)
+
+	_, err := runTrls(t, repo, "source-link", "--source-id", sourceID)
+	require.Error(t, err)
+}
+
+func TestSourceLinkCmd_MissingSourceID(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "source-link", "--issue", "task-01")
+	require.Error(t, err)
+}
+
+func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
+	repo, sourceID := setupRepoWithSource(t)
+
+	_, err := runTrls(t, repo, "source-link", "--issue", "task-01", "--source-id", sourceID)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err := materialize.LoadIssue(filepath.Join(repo, ".issues", "state", "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.NotEmpty(t, issue.SourceLinks, "expected SourceLinks to be non-empty after source-link op")
+	assert.Equal(t, sourceID, issue.SourceLinks[0].SourceEntryID)
 }
