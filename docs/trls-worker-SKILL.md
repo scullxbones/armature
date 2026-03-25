@@ -49,9 +49,9 @@ digraph worker_loop {
 
 ### 1. Initialize
 ```
-trls worker-init
+trls worker-init --check || trls worker-init
 ```
-Run once per agent session. Registers a unique worker ID in git config.
+Run once per machine/clone — the worker ID persists in local git config across sessions. `--check` is a no-op if the ID is already set. Re-running `worker-init` without `--check` generates a new UUID, which is almost never what you want.
 
 ### 2. Find Ready Work
 ```
@@ -78,6 +78,7 @@ The subagent should:
 - Record progress with `trls note --issue ID --msg "..."`
 - Record decisions with `trls decision --issue ID --topic X --choice Y --rationale Z`
 - Call `trls heartbeat --issue ID` for long-running work (max once/minute)
+- **Cite every issue it touches or creates** — before returning, run `trls source-link` for any issue that has a recoverable source doc, or `trls accept-citation --ci` if no source exists. Do not leave issues uncited.
 
 ### 5. Complete and Commit
 
@@ -100,12 +101,15 @@ Then return to step 2.
 
 When `trls ready` returns empty and the story's tasks are all done:
 
-**a. Transition the story and commit any remaining `.issues/` changes:**
+**a. Verify citation coverage, then transition the story:**
 ```
+trls validate   # must show COVERAGE: N/N cited with no ERROR lines
 trls transition --issue STORY-ID --to done --outcome "story-level summary"
 git status   # check for unstaged .issues/ changes
 git add .issues/ && git commit -m "chore(STORY-ID): sync trellis state"
 ```
+
+If `trls validate` shows uncited nodes, source-link or accept-citation them before transitioning.
 
 Story/epic-level transitions, and any notes or decisions recorded between task commits, generate ops that have no code to bundle with. This mop-up commit ensures nothing is left behind before pushing.
 
@@ -142,9 +146,12 @@ git push -u origin HEAD
 | `trls: command not found` | Run `make install`, ensure `~/.local/bin` is on PATH |
 | Reading plan files for task instructions | Use `render-context` output only |
 | Using `in_progress` (underscore) | Use `in-progress` (hyphen) |
-| Skipping `worker-init` | Required — ops without worker ID will fail |
+| Skipping `worker-init` on a fresh clone | Required once per clone — ops without worker ID will fail |
+| Running `worker-init` every session | Generates a new UUID each time, creating phantom workers; use `--check` to verify instead |
 | Skipping heartbeat on long tasks | Claim expires after TTL; other workers can steal it |
 | Skipping commit after task | Small commits make review and revert tractable |
 | Omitting `.issues/` from `git add` | Ops left behind, not delivered with code; always include `.issues/` in every commit |
 | No mop-up commit before push | Story/epic transitions and between-task ops never get committed; run `git add .issues/ && git commit` before `git push` |
 | Auto-pushing after every task | Push once per story to avoid noisy remote history |
+| Leaving issues uncited | Run `trls source-link` or `trls accept-citation --ci` before the subagent returns |
+| Skipping `trls validate` at story close | Citation debt accumulates silently; validate before transitioning the story |
