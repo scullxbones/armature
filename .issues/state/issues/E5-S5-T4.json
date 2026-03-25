@@ -1,7 +1,7 @@
 {
   "id": "E5-S5-T4",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
   "parent": "E5-S5",
   "children": [],
@@ -23,5 +23,9 @@
     "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
   },
   "decision_refs": [],
-  "updated": 1774407055
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774438120,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774438120,
+  "updated": 1774438120
 }

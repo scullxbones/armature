@@ -579,3 +579,38 @@ func TestApplyCitationAccepted_UnknownIssue_NoError(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
+	issues := map[string]*Issue{
+		"task-01": {
+			ID: "task-01",
+			CitationAcceptances: []CitationAcceptance{
+				{WorkerID: "w1", Timestamp: 100},
+				{WorkerID: "w2", Timestamp: 200},
+			},
+		},
+		"task-02": {
+			ID:                  "task-02",
+			CitationAcceptances: nil,
+		},
+	}
+
+	refs := toTraceabilityRefs(issues)
+
+	refsByID := make(map[string]interface{})
+	for _, r := range refs {
+		refsByID[r.ID] = r
+	}
+
+	require.Len(t, refs, 2)
+
+	for _, r := range refs {
+		switch r.ID {
+		case "task-01":
+			assert.Equal(t, 2, r.CitationAcceptanceCount)
+		case "task-02":
+			assert.Equal(t, 0, r.CitationAcceptanceCount)
+		}
+	}
+	_ = refsByID
+}

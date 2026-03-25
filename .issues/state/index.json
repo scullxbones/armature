@@ -1559,7 +1559,7 @@
     ]
   },
   "E5-S5-T3": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1570,14 +1570,15 @@
       "E5-S5-T5"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774436005,
+    "updated": 1774438111,
     "title": "Update traceability — add CitationAcceptanceCount to IssueRef and AcceptedRiskNodes/AcceptedRiskPct to Coverage",
+    "outcome": "Added CitationAcceptanceCount to IssueRef, AcceptedRiskNodes/AcceptedRiskPct to Coverage; Compute updated to track accepted-risk separately; 3 new tests pass; make check green",
     "scope": [
       "internal/traceability/traceability.go, internal/traceability/traceability_test.go"
     ]
   },
   "E5-S5-T4": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1587,7 +1588,8 @@
     "blocks": [
       "E5-S5-T5"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774438120,
     "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
     "scope": [
       "internal/materialize/pipeline.go, internal/materialize/engine_test.go"
