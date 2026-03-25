@@ -73,6 +73,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newConfirmCmd())
 	root.AddCommand(newStaleReviewCmd())
 	root.AddCommand(newAmendCmd())
+	root.AddCommand(newListCmd())
 	root.AddCommand(newSourceLinkCmd())
 	root.AddCommand(newAcceptCitationCmd())
 

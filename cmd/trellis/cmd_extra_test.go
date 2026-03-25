@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -490,4 +491,95 @@ func TestAcceptCitationCmd_MissingRationale(t *testing.T) {
 		"--issue", "task-01",
 		"--ci")
 	require.Error(t, err)
+}
+
+func setupRepoWithStoryAndTask(t *testing.T) string {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"})
+	require.NoError(t, cmd2.Execute())
+
+	cmd3 := newRootCmd()
+	cmd3.SetOut(new(bytes.Buffer))
+	cmd3.SetArgs([]string{"create", "--repo", repo, "--title", "My Task", "--type", "task", "--id", "task-01", "--parent", "story-01"})
+	require.NoError(t, cmd3.Execute())
+
+	cmd4 := newRootCmd()
+	cmd4.SetOut(new(bytes.Buffer))
+	cmd4.SetArgs([]string{"create", "--repo", repo, "--title", "Other Task", "--type", "task", "--id", "task-02"})
+	require.NoError(t, cmd4.Execute())
+
+	return repo
+}
+
+func TestListCmd_NoFilter_ShowsAll(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "story-01")
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "task-02")
+}
+
+func TestListCmd_ParentFilter(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "list", "--parent", "story-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, "story-01")
+	assert.NotContains(t, out, "task-02")
+}
+
+func TestListCmd_TypeFilter(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "list", "--type", "story")
+	require.NoError(t, err)
+	assert.Contains(t, out, "story-01")
+	assert.NotContains(t, out, "task-01")
+	assert.NotContains(t, out, "task-02")
+}
+
+func TestListCmd_ParentAndTypeFilter(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "list", "--parent", "story-01", "--type", "task")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, "task-02")
+}
+
+func TestListCmd_ParentFilter_NoMatch(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "list", "--parent", "nonexistent")
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(out))
+}
+
+func TestListCmd_JSONFormat(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "list", "--parent", "story-01"})
+	require.NoError(t, cmd.Execute())
+
+	var entries []listEntry
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &entries))
+	require.Len(t, entries, 1)
+	assert.Equal(t, "task-01", entries[0].ID)
+	assert.Equal(t, "story-01", entries[0].Parent)
 }
