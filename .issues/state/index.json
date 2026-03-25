@@ -1635,7 +1635,7 @@
     ]
   },
   "E5-S5-T7": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1645,14 +1645,15 @@
       "E5-S5-T9"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774439145,
+    "updated": 1774439519,
     "title": "Implement trls source-link command",
+    "outcome": "trls source-link command implemented: validates source-id against manifest, emits OpSourceLink op; 5 tests pass; make check green",
     "scope": [
       "cmd/trellis/source_link.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
     ]
   },
   "E5-S5-T8": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1662,7 +1663,8 @@
       "E5-S5-T9",
       "E5-S5-T11"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774439525,
     "title": "Implement trls accept-citation command with interactive confirmation and --ci flag",
     "scope": [
       "cmd/trellis/accept_citation.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"

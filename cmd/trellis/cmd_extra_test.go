@@ -414,3 +414,80 @@ func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
 	require.NotEmpty(t, issue.SourceLinks, "expected SourceLinks to be non-empty after source-link op")
 	assert.Equal(t, sourceID, issue.SourceLinks[0].SourceEntryID)
 }
+
+// accept-citation tests
+
+func TestAcceptCitationCmd_CI_HappyPath(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--rationale", "cited because it matches",
+		"--ci")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "cited because it matches")
+}
+
+func TestAcceptCitationCmd_RationaleTooShort(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--rationale", "too short",
+		"--ci")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3 words")
+}
+
+func TestAcceptCitationCmd_TwoWords_Rejected(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--rationale", "only two",
+		"--ci")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3 words")
+}
+
+func TestAcceptCitationCmd_ThreeWords_Accepted(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--rationale", "exactly three words",
+		"--ci")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+func TestAcceptCitationCmd_MissingIssue(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "accept-citation",
+		"--rationale", "some valid rationale here",
+		"--ci")
+	require.Error(t, err)
+}
+
+func TestAcceptCitationCmd_MissingRationale(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--ci")
+	require.Error(t, err)
+}

@@ -1,7 +1,7 @@
 {
   "id": "E5-S5-T7",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Implement trls source-link command",
   "parent": "E5-S5",
   "children": [],
@@ -22,9 +22,17 @@
     "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
   },
   "decision_refs": [],
+  "outcome": "trls source-link command implemented: validates source-id against manifest, emits OpSourceLink op; 5 tests pass; make check green",
+  "notes": [
+    {
+      "worker_id": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+      "timestamp": 1774439505,
+      "msg": "Implemented source-link command in cmd/trellis/source_link.go with --issue and --source-id flags, manifest validation, and source-link op emission. Registered in main.go. Added 5 tests (HappyPath, UnknownSourceID, MissingIssue, MissingSourceID, MakesNodeCited) to cmd_extra_test.go. make check green: 0 lint issues, all tests pass, 80.8% coverage, mutation coverage 86.25%."
+    }
+  ],
   "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
   "claimed_at": 1774439145,
   "claim_ttl": 60,
   "last_heartbeat": 1774439145,
-  "updated": 1774439145
+  "updated": 1774439519
 }

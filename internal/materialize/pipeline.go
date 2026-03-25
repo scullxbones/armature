@@ -231,9 +231,25 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 	return state, result, nil
 }
 
+// opSortKey returns a secondary sort key so that create ops are processed
+// before other op types when timestamps are equal.
+func opSortKey(op ops.Op) int {
+	if op.Type == ops.OpCreate {
+		return 0
+	}
+	return 1
+}
+
 func sortOpsByTimestamp(allOps []ops.Op) {
 	for i := 1; i < len(allOps); i++ {
-		for j := i; j > 0 && allOps[j].Timestamp < allOps[j-1].Timestamp; j-- {
+		for j := i; j > 0; j-- {
+			a, b := allOps[j-1], allOps[j]
+			if a.Timestamp < b.Timestamp {
+				break
+			}
+			if a.Timestamp == b.Timestamp && opSortKey(a) <= opSortKey(b) {
+				break
+			}
 			allOps[j], allOps[j-1] = allOps[j-1], allOps[j]
 		}
 	}
