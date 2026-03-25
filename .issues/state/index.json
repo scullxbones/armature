@@ -1123,7 +1123,7 @@
     ]
   },
   "E5-S1": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1146,10 +1146,11 @@
     ]
   },
   "E5-S1-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774456228,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774474955,
     "title": "Add `open` as valid transition target (L11)",
     "scope": [
       "internal/ops/types.go, cmd/trellis/main_test.go"

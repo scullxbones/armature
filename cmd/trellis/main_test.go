@@ -1057,6 +1057,30 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	})
 }
 
+// TestTransitionToOpen tests that transitioning an in-progress issue back to open succeeds.
+func TestTransitionToOpen(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "in-progress")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "open")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+// TestTransitionToOpenRejectsInvalidAlias tests that a non-canonical alias like "reopened" is rejected.
+func TestTransitionToOpenRejectsInvalidAlias(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "reopened")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reopened")
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op

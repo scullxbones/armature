@@ -43,6 +43,7 @@ const (
 
 // ValidTransitionTargets is the set of statuses accepted by the transition command.
 var ValidTransitionTargets = map[string]bool{
+	StatusOpen:       true,
 	StatusInProgress: true,
 	StatusDone:       true,
 	StatusMerged:     true,

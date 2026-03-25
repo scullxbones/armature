@@ -1,7 +1,7 @@
 {
   "id": "E5-S1",
   "type": "story",
-  "status": "open",
+  "status": "in-progress",
   "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
   "parent": "E5",
   "children": [

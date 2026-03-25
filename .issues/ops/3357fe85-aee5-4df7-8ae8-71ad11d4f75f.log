@@ -174,3 +174,6 @@
 ["source-fingerprint","3778fb64-506f-413e-9d18-1cc218987277",1774471816,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"sha":"73b95d7e0979e47851b937709356d4713fb68a3a4c1fa456cae287e0f2a78fbb","provider":"filesystem"}]
 ["source-fingerprint","1166fce2-5afc-4956-93a7-587dfdd84000",1774471816,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"sha":"e980aaa0cb55deb635012196eb849caea7f13e1ccb5ae9cd88b23876ae345e21","provider":"filesystem"}]
 ["source-fingerprint","398cf593-aa9b-409f-ad44-671fa6d6d7c6",1774471816,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"sha":"e75564090599b5a5473dbc6b31518c993dd5eca6671c4a1c2a592e4a8e2e3278","provider":"filesystem"}]
+["claim","E5-S1-T1",1774474955,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["note","E5-S1-T1",1774477504,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass"}]
+["transition","E5-S1-T1",1774477515,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"Added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass; make check green"}]
