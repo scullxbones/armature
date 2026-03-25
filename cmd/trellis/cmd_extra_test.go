@@ -646,3 +646,114 @@ func TestListCmd_JSONFormat(t *testing.T) {
 	assert.Equal(t, "task-01", entries[0].ID)
 	assert.Equal(t, "story-01", entries[0].Parent)
 }
+
+// TestDecomposeApplyStrict verifies that --strict causes non-zero exit when the
+// plan has advisory warnings (e.g. issues missing DoD), and that without
+// --strict the same plan applies successfully.
+func TestDecomposeApplyStrict(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Plan with issues missing DoD — these should generate advisory warnings.
+	planData := `{"version":1,"title":"Strict Test","issues":[` +
+		`{"id":"STR-001","title":"Task without dod","type":"task"}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	// Without --strict, apply should succeed (warnings are advisory).
+	_, err = runTrls(t, repo, "decompose-apply", "--plan", planFile)
+	require.NoError(t, err, "apply without --strict should succeed even with warnings")
+
+	// With --strict, the same plan applied to a fresh repo should fail.
+	repo2 := initTempRepo(t)
+	run(t, repo2, "git", "commit", "--allow-empty", "-m", "init")
+	_, err = runTrls(t, repo2, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo2, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo2, "decompose-apply", "--plan", planFile, "--strict")
+	assert.Error(t, err, "--strict should cause non-zero exit when warnings exist")
+}
+
+// TestDecomposeApplyGenerateIds verifies that --generate-ids replaces the
+// plan-specified IDs with system-generated UUIDs in the created issues.
+func TestDecomposeApplyGenerateIds(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	planData := `{"version":1,"title":"GenIDs Test","issues":[` +
+		`{"id":"GEN-001","title":"Task one","type":"task"},` +
+		`{"id":"GEN-002","title":"Task two","type":"task","parent":"GEN-001"}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile, "--generate-ids")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Applied 2 issues")
+
+	// The plan IDs must NOT appear in the state after materialization.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	index, err := materialize.LoadIndex(filepath.Join(repo, ".issues", "state", "index.json"))
+	require.NoError(t, err)
+
+	_, hasGEN001 := index["GEN-001"]
+	_, hasGEN002 := index["GEN-002"]
+	assert.False(t, hasGEN001, "GEN-001 should not exist when --generate-ids is used")
+	assert.False(t, hasGEN002, "GEN-002 should not exist when --generate-ids is used")
+
+	// There should be exactly 2 new issues with UUID-like IDs.
+	assert.Len(t, index, 2, "should have exactly 2 issues with generated IDs")
+}
+
+// TestDecomposeApplyRoot verifies that --root overrides the inferred root and
+// attaches top-level plan issues as children of the given root issue.
+func TestDecomposeApplyRoot(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create an existing story to use as root.
+	_, err = runTrls(t, repo, "create", "--title", "Existing Story", "--type", "story", "--id", "root-story-01")
+	require.NoError(t, err)
+
+	// Plan with no parent set — top-level issues should become children of root-story-01.
+	planData := `{"version":1,"title":"Root Test","issues":[` +
+		`{"id":"ROOT-001","title":"Task under root","type":"task"}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile, "--root", "root-story-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Applied 1 issues")
+
+	// After materialization, ROOT-001 should have parent = root-story-01.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	index, err := materialize.LoadIndex(filepath.Join(repo, ".issues", "state", "index.json"))
+	require.NoError(t, err)
+
+	entry, ok := index["ROOT-001"]
+	require.True(t, ok, "ROOT-001 should exist in state")
+	assert.Equal(t, "root-story-01", entry.Parent, "ROOT-001 should have parent=root-story-01 when --root is set")
+}

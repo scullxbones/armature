@@ -1,7 +1,7 @@
 {
   "id": "E5-S1-T7",
   "type": "task",
-  "status": "open",
+  "status": "merged",
   "title": "`decompose-apply --dry-run` and decompose pipeline documentation in SKILL.md (L14, L15)",
   "parent": "E5-S1",
   "children": [],
@@ -29,11 +29,16 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "decompose-apply --dry-run validates plan and prints would-be creates without writing ops; Loading a Plan section added to docs/SKILL.md and regenerated to .claude/skills/trls/SKILL.md; TestDecomposeApplyDryRun passes; make check green",
   "source_links": [
     {
       "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
       "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
     }
   ],
-  "updated": 1774468782
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774479813,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774479813,
+  "updated": 1774480426
 }

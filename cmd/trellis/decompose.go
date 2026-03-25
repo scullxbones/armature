@@ -16,6 +16,9 @@ func newDecomposeApplyCmd() *cobra.Command {
 	var planPath string
 	var exampleFlag bool
 	var dryRunFlag bool
+	var strictFlag bool
+	var generateIDsFlag bool
+	var rootFlag string
 
 	cmd := &cobra.Command{
 		Use:   "decompose-apply",
@@ -82,8 +85,14 @@ func newDecomposeApplyCmd() *cobra.Command {
 				return err
 			}
 
+			applyOpts := decompose.ApplyOptions{
+				Strict:      strictFlag,
+				GenerateIDs: generateIDsFlag,
+				Root:        rootFlag,
+			}
+
 			if dryRunFlag {
-				result, err := decompose.DryRunApplyPlan(plan, state)
+				result, err := decompose.DryRunApplyPlanWithOptions(plan, state, applyOpts)
 				if err != nil {
 					return err
 				}
@@ -100,7 +109,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.ApplyPlan(plan, opsDir, workerID, state)
+			count, err := decompose.ApplyPlanWithOptions(plan, opsDir, workerID, state, applyOpts)
 			if err != nil {
 				return err
 			}
@@ -113,6 +122,9 @@ func newDecomposeApplyCmd() *cobra.Command {
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
 	cmd.Flags().BoolVar(&exampleFlag, "example", false, "print a minimal valid example plan JSON and exit")
 	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "validate and preview what would be created without writing ops")
+	cmd.Flags().BoolVar(&strictFlag, "strict", false, "treat advisory warnings as errors")
+	cmd.Flags().BoolVar(&generateIDsFlag, "generate-ids", false, "replace plan IDs with system-generated UUIDs")
+	cmd.Flags().StringVar(&rootFlag, "root", "", "override inferred root: attach top-level plan issues to this existing issue ID")
 	return cmd
 }
 
