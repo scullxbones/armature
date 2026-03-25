@@ -30,9 +30,15 @@
       "msg": "Implemented source-link command in cmd/trellis/source_link.go with --issue and --source-id flags, manifest validation, and source-link op emission. Registered in main.go. Added 5 tests (HappyPath, UnknownSourceID, MissingIssue, MissingSourceID, MakesNodeCited) to cmd_extra_test.go. make check green: 0 lint issues, all tests pass, 80.8% coverage, mutation coverage 86.25%."
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "ce4eb7ce-96ce-439d-ae2c-9e7ba575ca0e",
+      "source_url": "docs/superpowers/plans/2026-03-23-citation-remediation.md"
+    }
+  ],
   "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
   "claimed_at": 1774439145,
   "claim_ttl": 60,
   "last_heartbeat": 1774439145,
-  "updated": 1774439519
+  "updated": 1774468783
 }

@@ -19,9 +19,15 @@
   },
   "decision_refs": [],
   "outcome": "trls init --dual-branch creates orphan issues branch, sets up .trellis worktree, and writes config with Mode=dual-branch. Implemented in cmd/trellis/main.go.",
+  "source_links": [
+    {
+      "source_entry_id": "7d8cf9b6-1b88-41ca-8f92-6e10d2d68f75",
+      "source_url": "docs/superpowers/plans/2026-03-15-trellis-e1-bootstrap.md"
+    }
+  ],
   "claimed_by": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
   "claimed_at": 1773622683,
   "claim_ttl": 60,
   "last_heartbeat": 1773622683,
-  "updated": 1773622687
+  "updated": 1774465231
 }

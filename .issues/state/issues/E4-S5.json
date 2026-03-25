@@ -22,5 +22,11 @@
   },
   "decision_refs": [],
   "outcome": "Full decompose-context with template interpolation, source cache, and full CLI flags",
-  "updated": 1773969701
+  "source_links": [
+    {
+      "source_entry_id": "1259c48e-867f-4f70-bde6-5a5fdb5cab36",
+      "source_url": "docs/superpowers/plans/2026-03-18-e4-s5-decompose-context.md"
+    }
+  ],
+  "updated": 1774468196
 }

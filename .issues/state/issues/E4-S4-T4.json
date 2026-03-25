@@ -30,9 +30,15 @@
       "msg": "Implemented FilesystemProvider in internal/sources/filesystem.go: Type() returns 'filesystem', Fetch() reads file at entry.URL via os.ReadFile. Provider interface returns []byte; SHA-256 fingerprint is computed by caller via Fingerprint(content) — documented in code. VersionID is empty for local files (no remote versioning). Tests in filesystem_test.go cover: correct Type(), content match, fingerprint correctness, empty versionID pattern, missing-file error, and interface satisfaction. All TestFilesystem* tests pass; go build ./... clean."
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "c53fa767-957f-43d9-a2df-d6232f878dfb",
+      "source_url": "docs/superpowers/plans/2026-03-18-e4-s4-sources.md"
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773967823,
   "claim_ttl": 60,
   "last_heartbeat": 1773967823,
-  "updated": 1773967919
+  "updated": 1774456228
 }

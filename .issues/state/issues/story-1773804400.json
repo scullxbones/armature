@@ -16,9 +16,15 @@
     "source_worker": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b"
   },
   "decision_refs": [],
+  "source_links": [
+    {
+      "source_entry_id": "f818c90d-5915-4df9-8a5a-df3a48981d3e",
+      "source_url": "docs/superpowers/plans/2026-03-17-trls-worker-build-integration.md"
+    }
+  ],
   "claimed_by": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
   "claimed_at": 1773804612,
   "claim_ttl": 60,
   "last_heartbeat": 1773804612,
-  "updated": 1773804612
+  "updated": 1774470109
 }

@@ -32,5 +32,11 @@
       "msg": "Expanded scope per L16: fix has two parts. (1) ComputeReady should surface tasks whose parent is open (not just in-progress) — removes the bootstrap deadlock where a fresh session sees an empty ready queue even though unclaimed tasks exist. (2) When a task is claimed, auto-transition any open ancestor story/epic to in-progress. Current DoD only covers part (2). Update scope to also include internal/ready/compute.go parent-status gate fix."
     }
   ],
-  "updated": 1774406313
+  "source_links": [
+    {
+      "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
+      "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
+    }
+  ],
+  "updated": 1774468782
 }

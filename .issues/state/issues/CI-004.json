@@ -18,5 +18,11 @@
     "source_worker": "40f8338e-1ef0-4068-bb0c-6eabd69387ec"
   },
   "decision_refs": [],
-  "updated": 1773845954
+  "source_links": [
+    {
+      "source_entry_id": "1166fce2-5afc-4956-93a7-587dfdd84000",
+      "source_url": "docs/superpowers/plans/2026-03-17-ci-validation-pipeline.md"
+    }
+  ],
+  "updated": 1774450139
 }

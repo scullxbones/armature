@@ -28,9 +28,15 @@
       "msg": "Implemented confidence=draft on all nodes created by decompose-apply. TDD: wrote failing integration test (TestDecomposeApply_DraftConfidence) and unit test (TestApplyPlan_EmitsDraftConfidence) first, then added Confidence: \"draft\" to Payload in internal/decompose/apply.go. make check green: 0 lint issues, all tests pass, mutation testing 100% efficacy."
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
+      "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
+    }
+  ],
   "claimed_by": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
   "claimed_at": 1774234311,
   "claim_ttl": 60,
   "last_heartbeat": 1774234311,
-  "updated": 1774234626
+  "updated": 1774456228
 }

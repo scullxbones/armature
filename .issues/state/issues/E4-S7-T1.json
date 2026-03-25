@@ -29,9 +29,15 @@
       "msg": "Implemented source-link and dag-transition op materialization: added SourceLink struct and Issue.SourceLinks field to state.go; added Provenance.DAGConfirmed bool; added SourceURL field to ops.Payload; added applySourceLink and applyDAGTransition handlers to engine.go replacing prior no-ops; added TestApplySourceLinkOp and TestApplyDAGTransitionOp; all tests pass, go build clean."
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "cd32a9ac-d9af-4aaa-962e-56372acc2ea2",
+      "source_url": "docs/superpowers/plans/2026-03-18-e4-index.md"
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773968475,
   "claim_ttl": 60,
   "last_heartbeat": 1773968475,
-  "updated": 1773968588
+  "updated": 1774468196
 }

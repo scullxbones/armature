@@ -18,9 +18,15 @@
   },
   "decision_refs": [],
   "outcome": "Implemented trls sync command with BranchMergedInto git detection, internal/sync DetectMerges logic, cmd/trellis/sync.go command, and post-merge.sh.template hook. All tests pass.",
+  "source_links": [
+    {
+      "source_entry_id": "7d8cf9b6-1b88-41ca-8f92-6e10d2d68f75",
+      "source_url": "docs/superpowers/plans/2026-03-15-trellis-e1-bootstrap.md"
+    }
+  ],
   "claimed_by": "c2d36434-9b2a-4303-a2ea-f140cbb1db80",
   "claimed_at": 1773624449,
   "claim_ttl": 60,
   "last_heartbeat": 1773624449,
-  "updated": 1773624455
+  "updated": 1774465231
 }

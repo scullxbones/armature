@@ -8,7 +8,7 @@
       "CI-004"
     ],
     "assignee": "9145afd3-1593-41ee-93d7-a0d15c89f09c",
-    "updated": 1773834784,
+    "updated": 1774467225,
     "title": "CI Validation Pipeline — make check + GitHub Actions",
     "outcome": "make check target added (lint→test→coverage-check→mutate), GitHub Actions workflow created (.github/workflows/ci.yml) triggering on push/PR, AGENTS.md updated with make check as pre-commit requirement"
   },
@@ -20,7 +20,7 @@
       "CI-003",
       "CI-004"
     ],
-    "updated": 1773845946,
+    "updated": 1774467225,
     "title": "Add make check target to Makefile"
   },
   "CI-003": {
@@ -30,7 +30,7 @@
     "blocked_by": [
       "CI-002"
     ],
-    "updated": 1773845954,
+    "updated": 1774467225,
     "title": "Document make check in AGENTS.md as pre-commit requirement"
   },
   "CI-004": {
@@ -40,7 +40,7 @@
     "blocked_by": [
       "CI-002"
     ],
-    "updated": 1773845954,
+    "updated": 1774450139,
     "title": "Create GitHub Actions CI workflow running make check on push and PR"
   },
   "E2-001": {
@@ -59,7 +59,7 @@
       "E2-003",
       "E2-004"
     ],
-    "updated": 1773622697,
+    "updated": 1774465231,
     "title": "Implement multi-branch mode",
     "outcome": "Multi-branch mode fully implemented: issues dir path resolution abstracted by config mode, orphan branch/worktree management, all op reads/writes routed through AppendAndCommit for branch isolation, materialize pipeline mode-aware, init supports --dual-branch flag, SingleBranchMode derived from config. AgentSkill for trls also shipped."
   },
@@ -72,7 +72,7 @@
       "E2-001-T4"
     ],
     "assignee": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b",
-    "updated": 1773617356,
+    "updated": 1774465231,
     "title": "Abstract issues directory path resolution by config mode"
   },
   "E2-001-T2": {
@@ -83,7 +83,7 @@
       "E2-001-T5"
     ],
     "assignee": "936c1188-4116-403f-a5ca-5ed7d9c6bf2b",
-    "updated": 1773622669,
+    "updated": 1774465231,
     "title": "Git worktree management for issues branch",
     "outcome": "Added orphan branch, worktree, and git config helpers in internal/git. Init command gained --dual-branch flag that creates _trellis orphan branch and .trellis worktree."
   },
@@ -95,7 +95,7 @@
       "E2-001-T1"
     ],
     "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
-    "updated": 1773622679,
+    "updated": 1774465231,
     "title": "Route op reads/writes through abstracted path",
     "outcome": "All worker op writes now route through AppendAndCommit which handles branch isolation. CommitWorktreeOp added in git adapter. Integration test added for dual-branch op isolation."
   },
@@ -110,7 +110,7 @@
       "E2-001-T6"
     ],
     "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
-    "updated": 1773622679,
+    "updated": 1774465231,
     "title": "Materialize pipeline accepts dynamic issues dir",
     "outcome": "Materialize engine SingleBranchMode now derived from appCtx.Mode instead of hardcoded true. WorktreePath added to Context. Pipeline reads ops from correct location based on mode."
   },
@@ -122,7 +122,7 @@
       "E2-001-T2"
     ],
     "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
-    "updated": 1773622687,
+    "updated": 1774465231,
     "title": "Init command supports dual-branch mode flag",
     "outcome": "trls init --dual-branch creates orphan issues branch, sets up .trellis worktree, and writes config with Mode=dual-branch. Implemented in cmd/trellis/main.go."
   },
@@ -134,7 +134,7 @@
       "E2-001-T4"
     ],
     "assignee": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
-    "updated": 1773622687,
+    "updated": 1774465231,
     "title": "SingleBranchMode flag derived from config",
     "outcome": "Materialize engine SingleBranchMode flag derived from appCtx.Mode via feat(mode) commit. In dual-branch mode, done does not auto-promote to merged."
   },
@@ -145,7 +145,7 @@
       "E2-001"
     ],
     "assignee": "0ee1fde3-66ea-4a21-be2b-872e22c61109",
-    "updated": 1773623097,
+    "updated": 1774465231,
     "title": "Branch isolation for worker operations",
     "outcome": "Branch isolation for worker operations complete. All worker op writes (claim, note, heartbeat, transition, create, link, decision, reopen, merged) route through appendOp/AppendAndCommit. In dual-branch mode, each op is committed to the _trellis branch worktree. Fixed remaining ops.AppendOp call in claim.go scope-overlap path. All tests pass."
   },
@@ -156,7 +156,7 @@
       "E2-001"
     ],
     "assignee": "c2d36434-9b2a-4303-a2ea-f140cbb1db80",
-    "updated": 1773624455,
+    "updated": 1774465231,
     "title": "Cross-branch merge detection and auto-transition",
     "outcome": "Implemented trls sync command with BranchMergedInto git detection, internal/sync DetectMerges logic, cmd/trellis/sync.go command, and post-merge.sh.template hook. All tests pass."
   },
@@ -166,7 +166,7 @@
     "blocked_by": [
       "E2-001"
     ],
-    "updated": 1773625149,
+    "updated": 1774450139,
     "title": "PR-based done-to-merged workflow",
     "outcome": "PR-based done-to-merged workflow: IndexEntry Branch/PR fields, trls status awaiting-merge callout, trls merged done-state validation and --pr flag, full e2e test. All tests pass."
   },
@@ -181,7 +181,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1774406299,
+    "updated": 1774467211,
     "title": "E3: Multi-Worker Collaboration",
     "outcome": "All four sub-stories implemented: push/sync (LowStakesPushThreshold, Push/FetchAndRebase on git.Client, Pusher interface, FilePushTracker, wire push deps), audit log (audit.Load, trls log command), worker presence (trls workers command), issue assignment (OpAssign, AssignedWorker materialization, trls assign/unassign, assignment-aware ComputeReady). All tests pass, binary builds.",
     "scope": [
@@ -202,7 +202,7 @@
     "blocks": [
       "E3-004"
     ],
-    "updated": 1773715929,
+    "updated": 1774450139,
     "title": "Push/Sync Layer — remote sync for _trellis branch",
     "scope": [
       "internal/git/**"
@@ -216,7 +216,7 @@
       "E3-001-T2"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773715924,
+    "updated": 1774450139,
     "title": "Add LowStakesPushThreshold to Config",
     "outcome": "Added LowStakesPushThreshold int field to Config struct with json tag. DefaultConfig returns 5. Tests pass.",
     "scope": [
@@ -234,7 +234,7 @@
       "E3-001-T3"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773715989,
+    "updated": 1774450139,
     "title": "Add Push and FetchAndRebase to git.Client",
     "outcome": "Added Push(branch string) and FetchAndRebase(branch string) methods to git.Client. Tests: fast-forward push succeeds, rejected push returns error, FetchAndRebase+Push succeeds after rejection. All pass.",
     "scope": [
@@ -252,7 +252,7 @@
       "E3-001-T4"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716048,
+    "updated": 1774467211,
     "title": "Pusher interface + NoPusher + AppendCommitAndPush",
     "outcome": "Added Pusher interface, NoPusher no-op, and AppendCommitAndPush with 4-attempt backoff (0s/2s/4s). Tests: single-branch skips push, dual-branch pushes, all-fail returns error. All pass.",
     "scope": [
@@ -270,7 +270,7 @@
       "E3-001-T5"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716100,
+    "updated": 1774450139,
     "title": "PendingPushTracker + FilePushTracker + NoTracker",
     "outcome": "Added PendingPushTracker interface, FilePushTracker persisting to .issues/state/pending-push-count, and NoTracker no-op. Tests: increment/reset, persistence across instances, default threshold (5). All pass.",
     "scope": [
@@ -288,7 +288,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716233,
+    "updated": 1774467211,
     "title": "Wire push deps through command helpers",
     "outcome": "Added initPushDeps, appendHighStakesOp, appendLowStakesOp to helpers.go. PersistentPreRunE calls initPushDeps. claim/transition use appendHighStakesOp; note/heartbeat/decision use appendLowStakesOp. Push is best-effort so tests without remotes still pass. Full test suite passes.",
     "scope": [
@@ -305,7 +305,7 @@
     "blocked_by": [
       "E3-004-T9"
     ],
-    "updated": 1773668289,
+    "updated": 1774467211,
     "title": "Worker Presence — trls workers command",
     "scope": [
       "cmd/trellis/**"
@@ -322,7 +322,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716786,
+    "updated": 1774467211,
     "title": "trls workers command",
     "outcome": "Created cmd/trellis/workers.go: enumerateWorkers from ops/*.log, buildWorkerStatus (active=live claim, stale=all stale, idle=within 2*DefaultTTL), lastOpTimestampFromLog. Human and --json JSONL output. Registered in main.go. All tests pass.",
     "scope": [
@@ -337,7 +337,7 @@
       "E3-003-T6",
       "E3-003-T7"
     ],
-    "updated": 1773668289,
+    "updated": 1774450139,
     "title": "Audit Log Viewer — trls log command",
     "scope": [
       "internal/audit/**"
@@ -351,7 +351,7 @@
       "E3-003-T7"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716340,
+    "updated": 1774450139,
     "title": "internal/audit/audit.go",
     "outcome": "Created internal/audit/audit.go with Load function: walks ops/*.log, merges by timestamp, applies Filter (by issue/worker/since), marks LostRace via claim.ResolveClaim. Tests: all-ops, filter-by-issue, filter-by-worker, filter-by-since, lost-race, empty-dir, non-existent-dir. All pass.",
     "scope": [
@@ -369,7 +369,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716399,
+    "updated": 1774450139,
     "title": "trls log command",
     "outcome": "Created cmd/trellis/log.go: newLogCmd with --issue, --worker, --since flags. Human-readable output with [lost race] marker. --json outputs JSONL with _lost_race field. Registered in main.go. logPayloadSummary handles all current op types; OpAssign case to be added in T8.",
     "scope": [
@@ -389,7 +389,7 @@
     "blocked_by": [
       "E3-001"
     ],
-    "updated": 1773668289,
+    "updated": 1774467211,
     "title": "Issue Assignment — trls assign/unassign + ready sort",
     "scope": [
       "internal/ops/**"
@@ -406,7 +406,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716612,
+    "updated": 1774467211,
     "title": "trls assign and trls unassign commands",
     "outcome": "Created cmd/trellis/assign.go with newAssignCmd (--issue, --worker required) and newUnassignCmd (--issue required). Both use appendHighStakesOp. Registered in main.go. All tests pass.",
     "scope": [
@@ -424,7 +424,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716719,
+    "updated": 1774467211,
     "title": "Assignment-aware ready sort in ComputeReady",
     "outcome": "Updated ComputeReady signature to ComputeReady(index, issues, workerID string, now ...int64). sortReady now uses assignmentTier: assigned-to-me=0, unassigned=1, other-assigned=2. Added --worker flag to trls ready. Updated all test callers. Tests pass including new assignment-aware sort tests.",
     "scope": [
@@ -439,7 +439,7 @@
       "E3-004-T9"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716491,
+    "updated": 1774467211,
     "title": "OpAssign type registration + schema + log.go OpAssign case",
     "outcome": "Added OpAssign='assign' constant to types.go. Updated ValidOpTypes. Added AssignedTo field to Payload. Updated schema. Added OpAssign case to logPayloadSummary in log.go. Updated property round-trip test to include OpAssign. All tests pass.",
     "scope": [
@@ -460,7 +460,7 @@
       "E3-002-T12"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716573,
+    "updated": 1774467211,
     "title": "Materialization: AssignedWorker field + applyAssign handler",
     "outcome": "Added AssignedWorker string field to Issue and IndexEntry. Implemented applyAssign in engine (tolerates unknown issues). BuildIndex maps AssignedWorker. Tests: apply assign, unassign, tolerates unknown issue, BuildIndex includes field. All pass.",
     "scope": [
@@ -479,7 +479,7 @@
       "E3-002-T12"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716855,
+    "updated": 1774450139,
     "title": "Final Integration — build, test, all commands registered",
     "outcome": "All 13 tasks complete. Commands registered: log, assign, unassign, workers. Full test suite passes (16 packages). Binary builds. --help works for all new commands.",
     "scope": [
@@ -500,7 +500,7 @@
       "E4-S8",
       "E4-S9"
     ],
-    "updated": 1773971661,
+    "updated": 1774456227,
     "title": "E4: TUI + Governance + Sources",
     "outcome": "E4 complete: TUI foundation, source management, traceability, full validation, decompose-context, DAG summary TUI, brownfield import, stale review"
   },
@@ -518,7 +518,7 @@
     "blocks": [
       "E4-S4"
     ],
-    "updated": 1773965432,
+    "updated": 1774468194,
     "title": "S1: Charm TUI Foundation",
     "outcome": "Charm TUI foundation complete: dependencies, semantic colors, TTY detection, IsInteractive helper, Bubbles component wrappers"
   },
@@ -532,7 +532,7 @@
       "E4-S1-T5"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921371,
+    "updated": 1774468194,
     "title": "Add Charm stack dependencies",
     "outcome": "Added bubbletea v1.3.4, lipgloss v1.1.0, glamour v0.8.0, bubbles v0.20.0 to go.mod; pinned via tools.go blank imports; go build ./... passes",
     "scope": [
@@ -548,7 +548,7 @@
       "E4-S1-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921451,
+    "updated": 1774456227,
     "title": "Semantic color palette",
     "outcome": "Created internal/tui/colors.go with 7 lipgloss.Style vars (Critical=#FF0000, Warning=#FFCC00, Advisory=#FF8C00, OK=#00CC44, Info=#00CCFF, Muted=#808080, ActionRequired=#CC44FF); TestSemanticPalette passes",
     "scope": [
@@ -567,7 +567,7 @@
       "E4-S1-T4"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921508,
+    "updated": 1774468195,
     "title": "TTY detection",
     "outcome": "Created internal/tui/tty.go with IsTerminal() using golang.org/x/term; TestIsTerminalReturnsFalseInTests passes",
     "scope": [
@@ -583,7 +583,7 @@
       "E4-S1-T3"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773921592,
+    "updated": 1774468195,
     "title": "IsInteractive helper",
     "outcome": "Added SetFormat/IsInteractive to internal/tui/tty.go; wired SetFormat in root PersistentPreRunE; TestIsInteractive* passes",
     "scope": [
@@ -600,7 +600,7 @@
       "E4-S1-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773965386,
+    "updated": 1774456228,
     "title": "Bubbles component wrappers",
     "outcome": "Created internal/tui/components.go with NewSpinner, NewProgressBar, NewTable, NewViewport; go build passes",
     "scope": [
@@ -620,7 +620,7 @@
     "blocks": [
       "E4-S3"
     ],
-    "updated": 1773969052,
+    "updated": 1774468195,
     "title": "S2: Glamour Markdown Render",
     "outcome": "Glamour markdown render with plain-text fallback in RenderHuman; tests pass"
   },
@@ -629,7 +629,7 @@
     "type": "task",
     "parent": "E4-S2",
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969045,
+    "updated": 1774468195,
     "title": "Glamour markdown render upgrade for render-context",
     "outcome": "RenderHuman uses glamour.Render with ascii style and plain-text fallback; TestRenderHuman passes",
     "scope": [
@@ -651,7 +651,7 @@
     "blocks": [
       "E4-S5"
     ],
-    "updated": 1773969448,
+    "updated": 1774468195,
     "title": "S3: Full Validate (W1-W11 + E1-E12)",
     "outcome": "Full validation suite complete: W1-W11 warnings, E2-E12 errors, --scope/--strict/--ci flags, JSON output"
   },
@@ -663,7 +663,7 @@
       "E4-S3-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969339,
+    "updated": 1774456228,
     "title": "Full validation — W1-W11 warning checks and E2-E12 error checks",
     "outcome": "Full W1-W11 and E2-E12 validation checks implemented with Options/Result types; all TestW* and TestE* tests pass",
     "scope": [
@@ -679,7 +679,7 @@
       "E4-S3-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969441,
+    "updated": 1774468195,
     "title": "Validate CLI — --scope, --strict, JSON output",
     "outcome": "validate command has --scope, --strict, --ci flags; --format json outputs errors/warnings JSON; coverage output in human mode; go build passes",
     "scope": [
@@ -705,7 +705,7 @@
       "E4-S7"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968458,
+    "updated": 1774468195,
     "title": "S4: Source Document Management",
     "outcome": "Source Document Management complete: Provider interface, manifest persistence, fingerprinting, filesystem/Confluence/SharePoint providers, sources CLI commands"
   },
@@ -718,7 +718,7 @@
       "E4-S4-T3"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967638,
+    "updated": 1774468195,
     "title": "Provider interface + manifest types",
     "outcome": "Created internal/sources/types.go with Provider interface, SourceEntry, Manifest (Get/Upsert/Marshal/Unmarshal); TestManifestRoundTrip passes",
     "scope": [
@@ -737,7 +737,7 @@
       "E4-S4-T6"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967741,
+    "updated": 1774468195,
     "title": "manifest.json persistence",
     "outcome": "ReadManifest/WriteManifest/WriteCache/ReadCache in internal/sources/manifest.go; TestManifestPersistence and TestReadManifestMissingReturnsEmpty pass",
     "scope": [
@@ -756,7 +756,7 @@
       "E4-S4-T4"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967816,
+    "updated": 1774468195,
     "title": "SHA-256 fingerprint helper",
     "outcome": "Fingerprint([]byte) string in internal/sources/fingerprint.go; TestFingerprintKnownValue and TestFingerprintDifferentInputs pass",
     "scope": [
@@ -775,7 +775,7 @@
       "E4-S4-T5"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773967919,
+    "updated": 1774456228,
     "title": "Local filesystem provider",
     "outcome": "FilesystemProvider.Fetch reads local file; fingerprint computed by caller via Fingerprint(); 6 TestFilesystem* tests pass",
     "scope": [
@@ -794,7 +794,7 @@
       "E4-S4-T6"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968023,
+    "updated": 1774456228,
     "title": "Credential config + Confluence/SharePoint providers",
     "outcome": "ConfluenceProvider and SharePointProvider with Bearer/Basic auth; Credentials config; 4 TestProvider* tests pass",
     "scope": [
@@ -813,7 +813,7 @@
       "E4-S4-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968453,
+    "updated": 1774468195,
     "title": "sources add/sync/verify CLI commands",
     "outcome": "sources add/sync/verify subcommands in cmd/trellis/sources.go; registered on root; go build passes; trls sources --help shows all 3 subcommands",
     "scope": [
@@ -834,7 +834,7 @@
     "blocks": [
       "E4-S6"
     ],
-    "updated": 1773969701,
+    "updated": 1774468196,
     "title": "S5: Full Decompose-Context",
     "outcome": "Full decompose-context with template interpolation, source cache, and full CLI flags"
   },
@@ -843,7 +843,7 @@
     "type": "task",
     "parent": "E4-S5",
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969694,
+    "updated": 1774468196,
     "title": "Full decompose-context implementation (replaces stub)",
     "outcome": "BuildContext with SOURCES/EXISTING_DAG/PLAN_SCHEMA/CONSTRAINTS interpolation; context_stub.go deleted; --sources/--template/--output/--existing-dag CLI flags; TestDecomposeContext* passes",
     "scope": [
@@ -867,7 +867,7 @@
     "blocks": [
       "E4-S8"
     ],
-    "updated": 1773970417,
+    "updated": 1774456228,
     "title": "S6: DAG Summary TUI",
     "outcome": "DAG Summary TUI complete: BubbleTea model, dag-summary command, non-interactive JSON, dag-summary.md artifact"
   },
@@ -879,7 +879,7 @@
       "E4-S6-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773969859,
+    "updated": 1774468196,
     "title": "dag-summary BubbleTea model",
     "outcome": "dagsum.Model with New/Total/Confirmed/Cursor/ConfirmedIDs; ConfirmMsg/SkipMsg handled; all 4 TestNewModelHasAllItems/TestConfirmAdvancesCursor/TestAllConfirmedProducesOps/TestSkipDoesNotConfirm pass",
     "scope": [
@@ -896,7 +896,7 @@
       "E4-S6-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773970413,
+    "updated": 1774456228,
     "title": "dag-summary command + dag-summary.md artifact + non-interactive JSON path",
     "outcome": "dag-summary command registered; non-interactive JSON path; interactive TUI with dag-transition ops and dag-summary.md artifact; go build passes",
     "scope": [
@@ -918,7 +918,7 @@
     "blocks": [
       "E4-S2"
     ],
-    "updated": 1773968860,
+    "updated": 1774468196,
     "title": "S7: Traceability",
     "outcome": "Traceability complete: source-link/dag-transition ops, Coverage computation, traceability.json written by pipeline"
   },
@@ -930,7 +930,7 @@
       "E4-S7-T2"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968588,
+    "updated": 1774468196,
     "title": "source-link and dag-transition op materialization",
     "outcome": "SourceLink type, Issue.SourceLinks, Provenance.DAGConfirmed added; applySourceLink and applyDAGTransition handlers; TestApplySourceLinkOp and TestApplyDAGTransitionOp pass",
     "scope": [
@@ -947,7 +947,7 @@
       "E4-S7-T1"
     ],
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773968854,
+    "updated": 1774456228,
     "title": "Traceability coverage computation + traceability.json",
     "outcome": "Coverage struct with Compute/Write/Read; pipeline writes traceability.json; import cycle resolved via IssueRef adapter; TestCoverage* (3 tests) pass",
     "scope": [
@@ -969,7 +969,7 @@
     "blocks": [
       "E4-S9"
     ],
-    "updated": 1773971140,
+    "updated": 1774468196,
     "title": "S8: Brownfield Import",
     "outcome": "Brownfield import complete: CSV/JSON parser, import/confirm commands, --format=json output"
   },
@@ -978,7 +978,7 @@
     "type": "task",
     "parent": "E4-S8",
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773971127,
+    "updated": 1774468196,
     "title": "Brownfield CSV/JSON import parser + import and confirm commands",
     "outcome": "ParseCSV/ParseJSON with imported provenance; import/confirm commands registered; TestParseCSV/TestParseJSON/TestImportedItemsHaveCorrectProvenance pass",
     "scope": [
@@ -999,7 +999,7 @@
     "blocked_by": [
       "E4-S8"
     ],
-    "updated": 1773971661,
+    "updated": 1774456228,
     "title": "S9: Stale Review TUI",
     "outcome": "Stale Review TUI complete: BubbleTea model, stale-review command, JSON/TUI paths, note op emission"
   },
@@ -1008,7 +1008,7 @@
     "type": "task",
     "parent": "E4-S9",
     "assignee": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
-    "updated": 1773971654,
+    "updated": 1774456228,
     "title": "Stale review BubbleTea model + stale-review command",
     "outcome": "stalereview.Model with ReviewItem/ConfirmMsg/FlagMsg/SkipMsg; stale-review command with JSON and TUI paths; note ops emitted; TestNewModelHasItems/TestConfirmRecordsDecision pass; all tests pass",
     "scope": [
@@ -1029,7 +1029,7 @@
       "E5-S0",
       "E5-S5"
     ],
-    "updated": 1774231528,
+    "updated": 1774468781,
     "title": "E5: Polish, UX Hardening \u0026 User-Facing Docs",
     "outcome": "Starting E5 epic work"
   },
@@ -1049,7 +1049,7 @@
       "E5-S3",
       "E5-S4"
     ],
-    "updated": 1774234644,
+    "updated": 1774468781,
     "title": "Draft Confidence Model \u0026 Governance Gate — implement first, dogfood during E5",
     "outcome": "Full draft confidence model implemented: confidence field in ops/materialize, draft gate in ready queue, dag-transition op for subtree promotion, dag-summary BubbleTea TUI for per-item sign-off, decompose-apply emits draft on all created nodes",
     "scope": [
@@ -1064,7 +1064,7 @@
       "E5-S0-T2"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774232136,
+    "updated": 1774468781,
     "title": "Confidence field in materialized state and draft gate in ready queue",
     "outcome": "Added confidence field to op Payload and materialized Issue; draft gate in ComputeReady excludes draft nodes; existing nodes without confidence default to verified; --confidence flag on trls create; 9 new tests (unit + integration); make check green",
     "scope": [
@@ -1082,7 +1082,7 @@
       "E5-S0-T3"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774232842,
+    "updated": 1774468781,
     "title": "`dag-transition` op — materialization and thin CLI command",
     "outcome": "dag-transition op reuses OpDAGTransition with IssueID payload field to distinguish subtree-promotion from per-issue DAG-confirmation; promoteSubtreeConfidence walks children recursively; trls dag-transition --issue CLI command; backward-compatible with existing confirmed behavior; 6 new tests; make check green",
     "scope": [
@@ -1100,7 +1100,7 @@
       "E5-S0-T4"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774234298,
+    "updated": 1774468782,
     "title": "`dag-summary` interactive sign-off TUI — per-item acknowledgment, emits dag-transition",
     "outcome": "BubbleTea dagsummary model with per-item y/n/s actions, uncited-node ID ack requirement, sign-off gate, dag-transition op emission; 22 unit tests; dagsum CLI updated to use draft-confidence collection; make check green",
     "scope": [
@@ -1115,7 +1115,7 @@
       "E5-S0-T3"
     ],
     "assignee": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
-    "updated": 1774234626,
+    "updated": 1774456228,
     "title": "`decompose-apply` emits `confidence: draft` on all created nodes",
     "outcome": "decompose-apply now emits confidence=draft on all created nodes; draft nodes excluded from trls ready until dag-transition promotes them; integration test confirms full round-trip; make check green",
     "scope": [
@@ -1139,7 +1139,7 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774204979,
+    "updated": 1774468782,
     "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
     "scope": [
       "internal/ops/types.go, internal/ready/stale.go, cmd/trellis/ready.go, cmd/trellis/claim.go, cmd/trellis/assign.go, cmd/trellis/decompose.go, cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/main_test.go, cmd/trellis/cmd_extra_test.go"
@@ -1149,7 +1149,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774406313,
+    "updated": 1774456228,
     "title": "Add `open` as valid transition target (L11)",
     "scope": [
       "internal/ops/types.go, cmd/trellis/main_test.go"
@@ -1159,7 +1159,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774406313,
+    "updated": 1774468782,
     "title": "Stale-claim diagnostic in `trls ready` (L6)",
     "scope": [
       "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go"
@@ -1169,7 +1169,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774406313,
+    "updated": 1774468782,
     "title": "Auto-advance story/epic to `in-progress` when child task claimed (L9)",
     "scope": [
       "cmd/trellis/claim.go, cmd/trellis/main_test.go"
@@ -1179,7 +1179,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774406314,
+    "updated": 1774468782,
     "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
     "scope": [
       "cmd/trellis/assign.go, cmd/trellis/main_test.go"
@@ -1192,7 +1192,7 @@
     "blocks": [
       "E5-S1-T6"
     ],
-    "updated": 1774406314,
+    "updated": 1774468782,
     "title": "`decompose-apply --example` flag for schema discoverability (L12)",
     "scope": [
       "cmd/trellis/decompose.go, cmd/trellis/cmd_extra_test.go"
@@ -1208,7 +1208,7 @@
     "blocks": [
       "E5-S1-T7"
     ],
-    "updated": 1774406314,
+    "updated": 1774468782,
     "title": "`trls list` command with `--type` and `--parent` filters (L13)",
     "scope": [
       "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
@@ -1224,7 +1224,7 @@
     "blocks": [
       "E5-S1-T8"
     ],
-    "updated": 1774406314,
+    "updated": 1774468782,
     "title": "`decompose-apply --dry-run` and decompose pipeline documentation in SKILL.md (L14, L15)",
     "scope": [
       "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go, .claude/skills/trls/SKILL.md"
@@ -1237,7 +1237,7 @@
     "blocked_by": [
       "E5-S1-T7"
     ],
-    "updated": 1774406314,
+    "updated": 1774468782,
     "title": "`decompose-apply` missing architecture flags — `--root`, `--generate-ids`, `--strict`",
     "scope": [
       "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
@@ -1255,7 +1255,7 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774204979,
+    "updated": 1774468782,
     "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go"
@@ -1268,7 +1268,7 @@
     "blocks": [
       "E5-S2-T2"
     ],
-    "updated": 1774406321,
+    "updated": 1774468782,
     "title": "Board model — column layout and keyboard navigation",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"
@@ -1284,7 +1284,7 @@
     "blocks": [
       "E5-S2-T3"
     ],
-    "updated": 1774406321,
+    "updated": 1774468782,
     "title": "`trls tui` CLI command with auto-refresh",
     "scope": [
       "cmd/trellis/tui.go, cmd/trellis/main.go"
@@ -1297,7 +1297,7 @@
     "blocked_by": [
       "E5-S2-T2"
     ],
-    "updated": 1774406321,
+    "updated": 1774468782,
     "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
     "scope": [
       "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go"
@@ -1317,7 +1317,7 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774204979,
+    "updated": 1774468782,
     "title": "Time Travel \u0026 Forensics — reconstruct issue context at any historical commit",
     "scope": [
       "internal/git/git.go, internal/git/git_test.go, internal/materialize/atsha.go, internal/materialize/atsha_test.go, cmd/trellis/render_context.go, cmd/trellis/context_history.go, cmd/trellis/main.go"
@@ -1330,7 +1330,7 @@
     "blocks": [
       "E5-S3-T2"
     ],
-    "updated": 1774406349,
+    "updated": 1774468782,
     "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
     "scope": [
       "internal/git/git.go, internal/git/git_test.go"
@@ -1346,7 +1346,7 @@
     "blocks": [
       "E5-S3-T3"
     ],
-    "updated": 1774406349,
+    "updated": 1774468782,
     "title": "`MaterializeAtSHA` — replay op log at arbitrary historical commit",
     "scope": [
       "internal/materialize/atsha.go, internal/materialize/atsha_test.go"
@@ -1362,7 +1362,7 @@
     "blocks": [
       "E5-S3-T4"
     ],
-    "updated": 1774406349,
+    "updated": 1774468783,
     "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
     "scope": [
       "cmd/trellis/render_context.go"
@@ -1378,7 +1378,7 @@
     "blocks": [
       "E5-S3-T5"
     ],
-    "updated": 1774406349,
+    "updated": 1774456228,
     "title": "`trls context-history` — list issue context at each commit",
     "scope": [
       "cmd/trellis/context_history.go, cmd/trellis/main.go"
@@ -1391,7 +1391,7 @@
     "blocked_by": [
       "E5-S3-T4"
     ],
-    "updated": 1774406349,
+    "updated": 1774468783,
     "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
     "scope": [
       "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go"
@@ -1410,7 +1410,7 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774204979,
+    "updated": 1774456228,
     "title": "User-Facing Documentation — README, getting-started guide, command reference, use-case walkthroughs",
     "scope": [
       "README.md, docs/getting-started.md, docs/commands.md, docs/use-cases.md"
@@ -1420,7 +1420,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774406358,
+    "updated": 1774468783,
     "title": "`README.md` — project overview, install, and 5-minute quickstart",
     "scope": [
       "README.md"
@@ -1430,7 +1430,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774406358,
+    "updated": 1774468783,
     "title": "`docs/getting-started.md` — step-by-step guide from install to first agent task",
     "scope": [
       "docs/getting-started.md"
@@ -1440,7 +1440,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774406358,
+    "updated": 1774468783,
     "title": "`docs/commands.md` — complete command reference for every `trls` subcommand",
     "scope": [
       "docs/commands.md"
@@ -1450,7 +1450,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774406358,
+    "updated": 1774468783,
     "title": "`docs/use-cases.md` — per-persona workflow walkthroughs",
     "scope": [
       "docs/use-cases.md"
@@ -1475,7 +1475,7 @@
       "E5-S5-T12"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774407185,
+    "updated": 1774456228,
     "title": "Citation Remediation — add source-link/accept-citation commands and remediate 106 uncited nodes",
     "scope": [
       "internal/ops/types.go, internal/materialize/state.go, internal/materialize/engine.go, internal/traceability/traceability.go, internal/materialize/pipeline.go, internal/validate/validate.go, cmd/trellis/validate.go, cmd/trellis/main.go, cmd/trellis/source_link.go, cmd/trellis/accept_citation.go"
@@ -1489,7 +1489,7 @@
       "E5-S5-T2"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774407436,
+    "updated": 1774468783,
     "title": "Register citation-accepted op type and ConfirmedNoninteractively payload field",
     "outcome": "Added OpCitationAccepted constant to ValidOpTypes, ConfirmedNoninteractively bool field to Payload, and TestOpCitationAccepted_RegisteredInValidOpTypes test; make check green",
     "scope": [
@@ -1497,7 +1497,7 @@
     ]
   },
   "E5-S5-T10": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1506,7 +1506,8 @@
     "blocks": [
       "E5-S5-T11"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774468783,
     "title": "Emit source-link ops for all properly-sourceable issues (E2/E3/CI/TC/E4/E5)",
     "scope": [
       ".issues/ops"
@@ -1523,7 +1524,7 @@
     "blocks": [
       "E5-S5-T12"
     ],
-    "updated": 1774407055,
+    "updated": 1774456229,
     "title": "Accept-citation for straggler issues with no recoverable source material",
     "scope": [
       ".issues/ops"
@@ -1536,7 +1537,7 @@
     "blocked_by": [
       "E5-S5-T11"
     ],
-    "updated": 1774407055,
+    "updated": 1774468783,
     "title": "Final verification — make check green and trls validate 106/106 cited"
   },
   "E5-S5-T2": {
@@ -1551,7 +1552,7 @@
       "E5-S5-T4"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774435998,
+    "updated": 1774468783,
     "title": "Add CitationAcceptance struct and CitationAcceptances field to materialize state + engine apply case",
     "outcome": "Added CitationAcceptance struct to state.go, CitationAcceptances field on Issue, applyCitationAccepted method in engine.go; TestApplyCitationAccepted and UnknownIssue_NoError pass; make check green",
     "scope": [
@@ -1570,7 +1571,7 @@
       "E5-S5-T5"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774438111,
+    "updated": 1774456228,
     "title": "Update traceability — add CitationAcceptanceCount to IssueRef and AcceptedRiskNodes/AcceptedRiskPct to Coverage",
     "outcome": "Added CitationAcceptanceCount to IssueRef, AcceptedRiskNodes/AcceptedRiskPct to Coverage; Compute updated to track accepted-risk separately; 3 new tests pass; make check green",
     "scope": [
@@ -1589,7 +1590,7 @@
       "E5-S5-T5"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774438296,
+    "updated": 1774468783,
     "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
     "outcome": "TestToTraceabilityRefs_PopulatesCitationAcceptanceCount added to engine_test.go; pipeline.go already populated CitationAcceptanceCount from T3; make check green",
     "scope": [
@@ -1608,7 +1609,7 @@
       "E5-S5-T6"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774438490,
+    "updated": 1774456228,
     "title": "Update validator — citation-accepted satisfies citation requirement",
     "outcome": "checkE7E8E12Citations updated to treat CitationAcceptances as satisfying citation; 3 new tests pass; make check green",
     "scope": [
@@ -1627,7 +1628,7 @@
       "E5-S5-T8"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774439138,
+    "updated": 1774468783,
     "title": "Update validate command coverage output format (human + JSON)",
     "outcome": "validate command coverage output updated: simple 'N/M cited' format, extended with source-linked/accepted-risk breakdown; JSON includes coverage object; TestValidateCmd_CoverageOutput_HumanFormat passes; make check green",
     "scope": [
@@ -1645,7 +1646,7 @@
       "E5-S5-T9"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774439519,
+    "updated": 1774468783,
     "title": "Implement trls source-link command",
     "outcome": "trls source-link command implemented: validates source-id against manifest, emits OpSourceLink op; 5 tests pass; make check green",
     "scope": [
@@ -1664,7 +1665,7 @@
       "E5-S5-T11"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774445259,
+    "updated": 1774468783,
     "title": "Implement trls accept-citation command with interactive confirmation and --ci flag",
     "outcome": "trls accept-citation command implemented: rationale\u003e=3 words validation, --ci bypasses interactive prompt, emits OpCitationAccepted with ConfirmedNoninteractively; 6 tests pass; make check green",
     "scope": [
@@ -1672,7 +1673,7 @@
     ]
   },
   "E5-S5-T9": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1683,8 +1684,9 @@
       "E5-S5-T10"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774445266,
+    "updated": 1774468783,
     "title": "Register 19 planning docs as citation sources",
+    "outcome": "20 sources registered in manifest: 19 planning docs (docs/ root + docs/superpowers/plans/) + 1 pre-existing E5 plan; trls sources manifest shows 20 entries",
     "scope": [
       ".issues/sources/manifest.json"
     ]
@@ -1704,7 +1706,7 @@
       "TC-010"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773806038,
+    "updated": 1774450139,
     "title": "Test Coverage Hardening — 80% Enforcement and Mutation Efficacy",
     "outcome": "Coverage raised from 68.2% to 81.3%. Makefile coverage-check target added. Tests added for context, materialize, ready, and cmd packages. All 9 subtasks complete."
   },
@@ -1716,7 +1718,7 @@
       "TC-010"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773805415,
+    "updated": 1774450139,
     "title": "Add coverage-check target to Makefile enforcing 80% threshold",
     "outcome": "Added coverage-check target to Makefile; confirmed fails at 68.2% as expected"
   },
@@ -1728,7 +1730,7 @@
       "TC-004"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773805975,
+    "updated": 1774467225,
     "title": "Cover buildSnippets, buildDecisions, buildNotes, buildSiblingOutcomes in internal/context",
     "outcome": "Added 8 tests covering buildSnippets (with context, invalid JSON), buildDecisions, buildNotes (with notes, truncates at 5), buildSiblingOutcomes (with/without parent)"
   },
@@ -1743,7 +1745,7 @@
       "TC-005"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773805985,
+    "updated": 1774467225,
     "title": "Cover RenderAgent and RenderHuman in internal/context",
     "outcome": "Added TestRenderAgent (verifies JSON output) and TestRenderHuman (verifies human-readable layer headers) tests"
   },
@@ -1758,7 +1760,7 @@
       "TC-010"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773805985,
+    "updated": 1774467225,
     "title": "Kill LIVED mutations in context/truncate.go with boundary condition tests",
     "outcome": "Added 4 Truncate boundary condition tests: exact budget no-truncation, below budget, single layer never removed, equal priority removal"
   },
@@ -1770,7 +1772,7 @@
       "TC-010"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773805994,
+    "updated": 1774467226,
     "title": "Cover MaterializeAndReturn, appendUnique, RunRollup, and sort helpers in internal/materialize",
     "outcome": "Added 10 tests: MaterializeAndReturn (basic pipeline, empty dir), appendUnique (add/skip duplicate), RunRollup (promotes story, blocks on open child), reopen clears outcome, parent promotion idempotency, sortOpsByTimestamp (basic and stable)"
   },
@@ -1782,7 +1784,7 @@
       "TC-010"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773806003,
+    "updated": 1774467226,
     "title": "Cover isClaimStale boundaries, depth cycle cap, and assignmentTier in internal/ready",
     "outcome": "Added 11 tests: isClaimStale (exact boundary, one-past, zero TTL, heartbeat extension), depth (chain caps at 21, no parent, missing), assignmentTier (self, unassigned, other, empty worker)"
   },
@@ -1794,7 +1796,7 @@
       "TC-009"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773806011,
+    "updated": 1774467226,
     "title": "Cover workers command, buildWorkerStatus, and lastOpTimestampFromLog in cmd/trellis",
     "outcome": "Added 7 tests: lastOpTimestampFromLog (empty, returns max), buildWorkerStatus (active, stale, idle, transitioned claim not active), TestWorkersCommand_EmptyRepo integration test"
   },
@@ -1809,7 +1811,7 @@
       "TC-010"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773806015,
+    "updated": 1774467226,
     "title": "Cover log, assign, heartbeat, decision, link, reopen commands and logPayloadSummary in cmd/trellis",
     "outcome": "Added 11 tests: log (with entries, JSON output, filter by issue), assign, unassign, heartbeat, decision, link, reopen commands, logPayloadSummary (all op types)"
   },
@@ -1825,7 +1827,7 @@
       "TC-009"
     ],
     "assignee": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
-    "updated": 1773806034,
+    "updated": 1774450139,
     "title": "Verify coverage ≥80% via make coverage-check and mutation efficacy ≥85%",
     "outcome": "make coverage-check passes at 81.3% (was 68.2%). All packages at or above threshold except internal/git (72.6%) and internal/ops (79.4%) which are near-miss but total aggregate meets 80% gate."
   },
@@ -1837,7 +1839,7 @@
       "task-1773804476"
     ],
     "assignee": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
-    "updated": 1773804612,
+    "updated": 1774470109,
     "title": "trls-worker Build Integration and Git Workflow"
   },
   "task-1773804403": {
@@ -1845,7 +1847,7 @@
     "type": "task",
     "parent": "story-1773804400",
     "assignee": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
-    "updated": 1773804724,
+    "updated": 1774470109,
     "title": "Move trls-worker skill source to docs/ and update Makefile",
     "outcome": "Created docs/trls-worker-skill-meta.yaml and updated Makefile skill target to deploy trls-worker alongside trls"
   },
@@ -1854,7 +1856,7 @@
     "type": "task",
     "parent": "story-1773804400",
     "assignee": "5ecda593-1dcb-4a8e-a1db-1b3aa2d54123",
-    "updated": 1773804823,
+    "updated": 1774470109,
     "title": "Update trls-worker skill with commit/push/PR guidance",
     "outcome": "Created docs/trls-worker-SKILL.md with per-task commit and story-level push/PR guidance; make skill deploys it correctly"
   }

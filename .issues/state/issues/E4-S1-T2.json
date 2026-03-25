@@ -28,9 +28,15 @@
       "msg": "Created internal/tui/colors.go with 7 semantic lipgloss.Style vars (Critical=#FF0000 red, Warning=#FFCC00 yellow, Advisory=#FF8C00 orange, OK=#00CC44 green, Info=#00CCFF cyan, Muted=#808080 grey, ActionRequired=#CC44FF magenta). TestSemanticPalette passes; go build ./... clean."
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "58f09f72-5864-49ad-9871-34db725c7fec",
+      "source_url": "docs/superpowers/plans/2026-03-18-e4-s1-tui-foundation.md"
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773921396,
   "claim_ttl": 60,
   "last_heartbeat": 1773921396,
-  "updated": 1773921451
+  "updated": 1774456227
 }

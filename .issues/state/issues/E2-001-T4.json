@@ -21,9 +21,15 @@
   },
   "decision_refs": [],
   "outcome": "Materialize engine SingleBranchMode now derived from appCtx.Mode instead of hardcoded true. WorktreePath added to Context. Pipeline reads ops from correct location based on mode.",
+  "source_links": [
+    {
+      "source_entry_id": "7d8cf9b6-1b88-41ca-8f92-6e10d2d68f75",
+      "source_url": "docs/superpowers/plans/2026-03-15-trellis-e1-bootstrap.md"
+    }
+  ],
   "claimed_by": "9ac4202c-8256-4f5e-8e21-9b5de7840ddb",
   "claimed_at": 1773622676,
   "claim_ttl": 60,
   "last_heartbeat": 1773622676,
-  "updated": 1773622679
+  "updated": 1774465231
 }

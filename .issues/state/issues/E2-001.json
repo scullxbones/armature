@@ -27,5 +27,11 @@
   },
   "decision_refs": [],
   "outcome": "Multi-branch mode fully implemented: issues dir path resolution abstracted by config mode, orphan branch/worktree management, all op reads/writes routed through AppendAndCommit for branch isolation, materialize pipeline mode-aware, init supports --dual-branch flag, SingleBranchMode derived from config. AgentSkill for trls also shipped.",
-  "updated": 1773622697
+  "source_links": [
+    {
+      "source_entry_id": "7d8cf9b6-1b88-41ca-8f92-6e10d2d68f75",
+      "source_url": "docs/superpowers/plans/2026-03-15-trellis-e1-bootstrap.md"
+    }
+  ],
+  "updated": 1774465231
 }

@@ -28,9 +28,15 @@
       "msg": "Scope overlap with E3 detected at claim time"
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "398cf593-aa9b-409f-ad44-671fa6d6d7c6",
+      "source_url": "docs/superpowers/plans/2026-03-16-e3-collaboration.md"
+    }
+  ],
   "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
   "claimed_at": 1773715891,
   "claim_ttl": 60,
   "last_heartbeat": 1773715891,
-  "updated": 1773715924
+  "updated": 1774450139
 }

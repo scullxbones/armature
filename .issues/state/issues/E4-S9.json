@@ -20,5 +20,11 @@
   },
   "decision_refs": [],
   "outcome": "Stale Review TUI complete: BubbleTea model, stale-review command, JSON/TUI paths, note op emission",
-  "updated": 1773971661
+  "source_links": [
+    {
+      "source_entry_id": "cd32a9ac-d9af-4aaa-962e-56372acc2ea2",
+      "source_url": "docs/superpowers/plans/2026-03-18-e4-index.md"
+    }
+  ],
+  "updated": 1774456228
 }

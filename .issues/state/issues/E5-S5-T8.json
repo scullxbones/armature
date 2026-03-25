@@ -31,9 +31,15 @@
       "msg": "Implemented accept-citation command: --issue, --rationale (\u003e=3 words), --ci flags; interactive confirmation via stdin without --ci; ConfirmedNoninteractively set when --ci used; emits OpCitationAccepted op. Added 6 tests (CI happy path, rationale too short, two words rejected, three words accepted, missing issue, missing rationale). Also fixed pre-existing T7 bug: sortOpsByTimestamp now uses create-first secondary sort key to prevent source-link ops from being processed before create ops when timestamps collide. make check green."
     }
   ],
+  "source_links": [
+    {
+      "source_entry_id": "ce4eb7ce-96ce-439d-ae2c-9e7ba575ca0e",
+      "source_url": "docs/superpowers/plans/2026-03-23-citation-remediation.md"
+    }
+  ],
   "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
   "claimed_at": 1774439525,
   "claim_ttl": 60,
   "last_heartbeat": 1774439525,
-  "updated": 1774445259
+  "updated": 1774468783
 }

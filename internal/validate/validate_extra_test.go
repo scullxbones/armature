@@ -61,8 +61,8 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 	}
 
 	manifest := map[string]interface{}{
-		"sources": []map[string]string{
-			{"id": "src-1"},
+		"entries": map[string]map[string]string{
+			"src-1": {"id": "src-1"},
 		},
 	}
 	data, _ := json.Marshal(manifest)
@@ -101,8 +101,8 @@ func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := map[string]interface{}{
-		"sources": []map[string]string{
-			{"id": "src-1"},
+		"entries": map[string]map[string]string{
+			"src-1": {"id": "src-1"},
 		},
 	}
 	data, _ := json.Marshal(manifest)
@@ -147,8 +147,8 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := map[string]interface{}{
-		"sources": []map[string]string{
-			{"id": "src-1"},
+		"entries": map[string]map[string]string{
+			"src-1": {"id": "src-1"},
 		},
 	}
 	data, _ := json.Marshal(manifest)

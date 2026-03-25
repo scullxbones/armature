@@ -27,9 +27,15 @@
   },
   "decision_refs": [],
   "outcome": "Source Document Management complete: Provider interface, manifest persistence, fingerprinting, filesystem/Confluence/SharePoint providers, sources CLI commands",
+  "source_links": [
+    {
+      "source_entry_id": "c53fa767-957f-43d9-a2df-d6232f878dfb",
+      "source_url": "docs/superpowers/plans/2026-03-18-e4-s4-sources.md"
+    }
+  ],
   "claimed_by": "b447df5b-69ae-406c-a9f2-47d94bf3fdb9",
   "claimed_at": 1773965419,
   "claim_ttl": 60,
   "last_heartbeat": 1773965419,
-  "updated": 1773968458
+  "updated": 1774468195
 }

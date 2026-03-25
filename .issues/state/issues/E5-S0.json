@@ -29,5 +29,11 @@
   },
   "decision_refs": [],
   "outcome": "Full draft confidence model implemented: confidence field in ops/materialize, draft gate in ready queue, dag-transition op for subtree promotion, dag-summary BubbleTea TUI for per-item sign-off, decompose-apply emits draft on all created nodes",
-  "updated": 1774234644
+  "source_links": [
+    {
+      "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
+      "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
+    }
+  ],
+  "updated": 1774468781
 }

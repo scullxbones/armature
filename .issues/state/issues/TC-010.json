@@ -23,9 +23,15 @@
   },
   "decision_refs": [],
   "outcome": "make coverage-check passes at 81.3% (was 68.2%). All packages at or above threshold except internal/git (72.6%) and internal/ops (79.4%) which are near-miss but total aggregate meets 80% gate.",
+  "source_links": [
+    {
+      "source_entry_id": "24a31819-05a9-4f9e-b40b-0a0464d99cca",
+      "source_url": "docs/superpowers/plans/2026-03-17-test-coverage-hardening.md"
+    }
+  ],
   "claimed_by": "40f8338e-1ef0-4068-bb0c-6eabd69387ec",
   "claimed_at": 1773806019,
   "claim_ttl": 60,
   "last_heartbeat": 1773806019,
-  "updated": 1773806034
+  "updated": 1774450139
 }

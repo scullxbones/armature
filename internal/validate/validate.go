@@ -10,6 +10,7 @@ import (
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/sources"
 	"github.com/scullxbones/trellis/internal/traceability"
 )
 
@@ -230,22 +231,22 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir strin
 }
 
 func readManifestForValidate(issuesDir string) (map[string]struct{}, error) {
-	path := filepath.Join(issuesDir, "sources", "manifest.json")
-	data, err := os.ReadFile(path)
+	sourcesPath := filepath.Join(issuesDir, "sources")
+	m, err := sources.ReadManifest(sourcesPath)
 	if err != nil {
 		return nil, err
 	}
-	var m struct {
-		Sources []struct {
-			ID string `json:"id"`
-		} `json:"sources"`
+	// ReadManifest returns empty Manifest (not error) when file is absent;
+	// propagate a synthetic ErrNotExist so the caller skips citation checks.
+	if len(m.Entries) == 0 {
+		// Check whether the file actually exists to distinguish absent from empty.
+		if _, statErr := os.Stat(filepath.Join(sourcesPath, "manifest.json")); os.IsNotExist(statErr) {
+			return nil, os.ErrNotExist
+		}
 	}
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
-	}
-	result := make(map[string]struct{}, len(m.Sources))
-	for _, s := range m.Sources {
-		result[s.ID] = struct{}{}
+	result := make(map[string]struct{}, len(m.Entries))
+	for id := range m.Entries {
+		result[id] = struct{}{}
 	}
 	return result, nil
 }

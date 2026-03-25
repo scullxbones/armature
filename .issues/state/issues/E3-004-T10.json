@@ -23,9 +23,15 @@
   },
   "decision_refs": [],
   "outcome": "Created cmd/trellis/assign.go with newAssignCmd (--issue, --worker required) and newUnassignCmd (--issue required). Both use appendHighStakesOp. Registered in main.go. All tests pass.",
+  "source_links": [
+    {
+      "source_entry_id": "398cf593-aa9b-409f-ad44-671fa6d6d7c6",
+      "source_url": "docs/superpowers/plans/2026-03-16-e3-collaboration.md"
+    }
+  ],
   "claimed_by": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
   "claimed_at": 1773716579,
   "claim_ttl": 60,
   "last_heartbeat": 1773716579,
-  "updated": 1773716612
+  "updated": 1774467211
 }

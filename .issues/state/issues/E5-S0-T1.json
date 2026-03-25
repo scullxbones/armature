@@ -21,9 +21,15 @@
   },
   "decision_refs": [],
   "outcome": "Added confidence field to op Payload and materialized Issue; draft gate in ComputeReady excludes draft nodes; existing nodes without confidence default to verified; --confidence flag on trls create; 9 new tests (unit + integration); make check green",
+  "source_links": [
+    {
+      "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
+      "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
+    }
+  ],
   "claimed_by": "c69e037b-ef1d-4875-a05f-f5f0bd436682",
   "claimed_at": 1774231538,
   "claim_ttl": 60,
   "last_heartbeat": 1774231538,
-  "updated": 1774232136
+  "updated": 1774468781
 }
