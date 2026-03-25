@@ -1578,7 +1578,7 @@
     ]
   },
   "E5-S5-T4": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1589,14 +1589,15 @@
       "E5-S5-T5"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774438120,
+    "updated": 1774438296,
     "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
+    "outcome": "TestToTraceabilityRefs_PopulatesCitationAcceptanceCount added to engine_test.go; pipeline.go already populated CitationAcceptanceCount from T3; make check green",
     "scope": [
       "internal/materialize/pipeline.go, internal/materialize/engine_test.go"
     ]
   },
   "E5-S5-T5": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1606,7 +1607,8 @@
     "blocks": [
       "E5-S5-T6"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774438302,
     "title": "Update validator — citation-accepted satisfies citation requirement",
     "scope": [
       "internal/validate/validate.go, internal/validate/validate_extra_test.go"

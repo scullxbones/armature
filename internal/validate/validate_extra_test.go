@@ -94,6 +94,81 @@ func TestValidate_WithRepoPath_PhantomScope(t *testing.T) {
 	assert.True(t, found, "expected phantom scope warning, got: %v", result.Warnings)
 }
 
+func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
+	dir := t.TempDir()
+	sourcesDir := filepath.Join(dir, "sources")
+	if err := os.MkdirAll(sourcesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := map[string]interface{}{
+		"sources": []map[string]string{
+			{"id": "src-1"},
+		},
+	}
+	data, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(sourcesDir, "manifest.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	state := makeState(
+		&materialize.Issue{
+			ID:   "TSK-1",
+			Type: "task",
+			CitationAcceptances: []materialize.CitationAcceptance{
+				{WorkerID: "worker-1", Timestamp: 1234567890},
+			},
+		},
+	)
+	result := Validate(state, Options{IssuesDir: dir})
+	assert.False(t, containsError(result, "uncited node"), "expected no uncited node error for accepted citation, got: %v", result.Errors)
+}
+
+func TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped(t *testing.T) {
+	dir := t.TempDir()
+	// No manifest written — citation check should be skipped entirely.
+	state := makeState(
+		&materialize.Issue{
+			ID:   "TSK-1",
+			Type: "task",
+			CitationAcceptances: []materialize.CitationAcceptance{
+				{WorkerID: "worker-1", Timestamp: 1234567890},
+			},
+		},
+	)
+	result := Validate(state, Options{IssuesDir: dir})
+	assert.False(t, containsError(result, "uncited node"), "expected no citation error when manifest absent, got: %v", result.Errors)
+	assert.False(t, containsError(result, "citation check skipped"), "unexpected citation check skipped error: %v", result.Errors)
+}
+
+func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
+	dir := t.TempDir()
+	sourcesDir := filepath.Join(dir, "sources")
+	if err := os.MkdirAll(sourcesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := map[string]interface{}{
+		"sources": []map[string]string{
+			{"id": "src-1"},
+		},
+	}
+	data, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(sourcesDir, "manifest.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	state := makeState(
+		&materialize.Issue{
+			ID:   "TSK-1",
+			Type: "task",
+			SourceLinks: []materialize.SourceLink{
+				{SourceEntryID: "unknown-src"},
+			},
+		},
+	)
+	result := Validate(state, Options{IssuesDir: dir})
+	assert.True(t, containsError(result, "unknown source"), "expected unknown source error for unregistered source link, got: %v", result.Errors)
+}
+
 func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 	dir := t.TempDir()
 	// Create a Go file that matches the glob

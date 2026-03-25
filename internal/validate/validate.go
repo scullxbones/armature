@@ -216,7 +216,7 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir strin
 		return errs
 	}
 	for id, issue := range issues {
-		if len(issue.SourceLinks) == 0 {
+		if len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0 {
 			errs = append(errs, fmt.Sprintf("uncited node: %s", id))
 			continue
 		}
