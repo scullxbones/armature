@@ -153,3 +153,4 @@
 ["transition","E5-S5-T11",1774470177,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"Zero uncited nodes — T10 already source-linked all 119 issues; trls validate shows COVERAGE: 119/119 cited with no ERROR lines; no accept-citation stragglers needed"}]
 ["claim","E5-S5-T12",1774470191,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["transition","E5-S5-T12",1774470318,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"make check green: lint clean, all tests pass, coverage \u003e=80%, mutation 100% efficacy 86.48% coverage; trls validate COVERAGE: 119/119 cited with no ERROR lines"}]
+["transition","E5-S5",1774470326,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"Citation remediation complete: source-link and accept-citation commands implemented; 20 sources registered; all 119 issues source-linked; trls validate COVERAGE: 119/119 cited; make check green"}]
