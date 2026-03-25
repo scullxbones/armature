@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -54,6 +55,18 @@ func newUnassignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Check current status before unassigning so we can release claimed → open.
+			issuesDir := appCtx.IssuesDir
+			if _, matErr := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch"); matErr != nil {
+				return matErr
+			}
+			index, _ := materialize.LoadIndex(issuesDir + "/state/index.json")
+			currentStatus := ""
+			if entry, ok := index[issueID]; ok {
+				currentStatus = entry.Status
+			}
+
 			op := ops.Op{
 				Type:      ops.OpAssign,
 				TargetID:  issueID,
@@ -64,6 +77,19 @@ func newUnassignCmd() *cobra.Command {
 			if err := appendHighStakesOp(logPath, op); err != nil {
 				return err
 			}
+
+			// If the issue was claimed, release it back to open.
+			if currentStatus == ops.StatusClaimed {
+				transitionOp := ops.Op{
+					Type:      ops.OpTransition,
+					TargetID:  issueID,
+					Timestamp: nowEpoch(),
+					WorkerID:  workerID,
+					Payload:   ops.Payload{To: ops.StatusOpen},
+				}
+				appendOp(logPath, transitionOp) //nolint:errcheck
+			}
+
 			result := map[string]string{"issue": issueID, "assigned_to": ""}
 			data, _ := json.Marshal(result)
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))

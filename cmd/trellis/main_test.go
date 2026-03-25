@@ -1136,6 +1136,64 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	assert.True(t, foundTransitionOp, "claim should emit an explicit transition op for the parent story to in-progress")
 }
 
+// TestUnassignReleasesClaimedToOpen verifies that unassigning a claimed issue
+// emits a transition → open op, so the issue status returns to "open".
+func TestUnassignReleasesClaimedToOpen(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a task and claim it (puts it in "claimed" status)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Unassign Test Task", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Materialize and verify it's "claimed"
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issuesDir := repo + "/.issues"
+	index, loadErr := materialize.LoadIndex(issuesDir + "/state/index.json")
+	require.NoError(t, loadErr)
+	require.Equal(t, ops.StatusClaimed, index["task-01"].Status, "task should be claimed before unassign")
+
+	// Unassign — should release claimed → open
+	_, err = runTrls(t, repo, "unassign", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Verify a transition → open op was emitted
+	opsDir := issuesDir + "/ops"
+	entries, readErr := os.ReadDir(opsDir)
+	require.NoError(t, readErr)
+
+	foundTransitionOp := false
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		logPath := opsDir + "/" + entry.Name()
+		logOps, readOpErr := ops.ReadLog(logPath)
+		require.NoError(t, readOpErr)
+		for _, op := range logOps {
+			if op.Type == ops.OpTransition && op.TargetID == "task-01" && op.Payload.To == ops.StatusOpen {
+				foundTransitionOp = true
+			}
+		}
+	}
+	assert.True(t, foundTransitionOp, "unassign of claimed issue should emit a transition → open op")
+
+	// Also verify the materialized status is now "open"
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	index2, loadErr2 := materialize.LoadIndex(issuesDir + "/state/index.json")
+	require.NoError(t, loadErr2)
+	assert.Equal(t, ops.StatusOpen, index2["task-01"].Status, "task status should be open after unassign")
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op

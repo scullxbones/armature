@@ -1170,11 +1170,13 @@
     ]
   },
   "E5-S1-T3": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774479386,
     "title": "Auto-advance story/epic to `in-progress` when child task claimed (L9)",
+    "outcome": "ComputeReady now surfaces tasks with open parents (removes bootstrap deadlock); claim.go emits transition op to auto-advance open parent to in-progress; tests pass; make check green",
     "scope": [
       "cmd/trellis/claim.go, cmd/trellis/main_test.go"
     ]
