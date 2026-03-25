@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "title": "Citation Remediation — source-link/accept-citation commands + 106 node remediation",
+  "issues": [
+    {
+      "id": "E5-S5",
+      "title": "Citation Remediation — add source-link/accept-citation commands and remediate 106 uncited nodes",
+      "type": "story",
+      "scope": "internal/ops/types.go, internal/materialize/state.go, internal/materialize/engine.go, internal/traceability/traceability.go, internal/materialize/pipeline.go, internal/validate/validate.go, cmd/trellis/validate.go, cmd/trellis/main.go, cmd/trellis/source_link.go, cmd/trellis/accept_citation.go",
+      "priority": "high",
+      "dod": "trls validate reports COVERAGE: 106/106 cited (N source-linked, M accepted-risk) with no ERROR lines; trls source-link and trls accept-citation commands implemented; make check green",
+      "parent": "E5",
+      "blocked_by": [],
+      "notes": [
+        "Adds citation-accepted op type, CitationAcceptance materialize state, two new CLI commands",
+        "Chunk 1 (T1-T6): foundation — op type, materialize, traceability, validation",
+        "Chunk 2 (T7-T8): commands — source-link and accept-citation",
+        "Chunk 3 (T9-T11): retroactive remediation — data-only, requires Chunk 1+2 green",
+        "Spec: docs/superpowers/specs/2026-03-23-citation-remediation-design.md"
+      ]
+    },
+    {
+      "id": "E5-S5-T1",
+      "title": "Register citation-accepted op type and ConfirmedNoninteractively payload field",
+      "type": "task",
+      "scope": "internal/ops/types.go, internal/ops/types_test.go",
+      "priority": "high",
+      "dod": "OpCitationAccepted constant in ValidOpTypes; ConfirmedNoninteractively bool field in Payload; TestOpCitationAccepted_RegisteredInValidOpTypes passes; make check green",
+      "parent": "E5-S5",
+      "blocked_by": [],
+      "notes": [
+        "Create internal/ops/types_test.go (does not exist yet)",
+        "Add OpCitationAccepted = \"citation-accepted\" to constants and ValidOpTypes map",
+        "Add ConfirmedNoninteractively bool json:\"confirmed_noninteractively,omitempty\" to Payload struct",
+        "Payload.Rationale already exists — do not add a duplicate",
+        "Commit: feat(E5-S0-ext): add citation-accepted op type and payload field"
+      ]
+    },
+    {
+      "id": "E5-S5-T2",
+      "title": "Add CitationAcceptance struct and CitationAcceptances field to materialize state + engine apply case",
+      "type": "task",
+      "scope": "internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go",
+      "priority": "high",
+      "dod": "CitationAcceptance struct in state.go; CitationAcceptances []CitationAcceptance field on Issue; applyCitationAccepted method in engine; TestApplyCitationAccepted and TestApplyCitationAccepted_UnknownIssue_NoError pass; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T1"],
+      "notes": [
+        "Add CitationAcceptance struct after SourceLink struct in state.go",
+        "Add CitationAcceptances []CitationAcceptance field after SourceLinks field on Issue",
+        "Add case ops.OpCitationAccepted: return s.applyCitationAccepted(op) in engine Apply switch",
+        "applyCitationAccepted follows same pattern as applySourceLink — direct field mutation on *Issue",
+        "Commit: feat(E5-S0-ext): add CitationAcceptance to materialize state and engine"
+      ]
+    },
+    {
+      "id": "E5-S5-T3",
+      "title": "Update traceability — add CitationAcceptanceCount to IssueRef and AcceptedRiskNodes/AcceptedRiskPct to Coverage",
+      "type": "task",
+      "scope": "internal/traceability/traceability.go, internal/traceability/traceability_test.go",
+      "priority": "high",
+      "dod": "CitationAcceptanceCount int on IssueRef; AcceptedRiskNodes int and AcceptedRiskPct float64 on Coverage; Compute updated; TestCompute_AllSourceLinked, TestCompute_MixedCitation, TestCompute_BothSourceLinkAndAcceptance_CountsAsSourceLinked pass; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T2"],
+      "notes": [
+        "traceability_test.go uses package traceability_test (external) — new tests follow same style",
+        "CitedNodes = source-linked + accepted-risk; AcceptedRiskNodes = accepted-risk only (no source link)",
+        "A node with both SourceLinkCount>0 and CitationAcceptanceCount>0 counts as source-linked, not accepted-risk",
+        "Commit: feat(E5-S0-ext): extend traceability coverage to track accepted-risk citations"
+      ]
+    },
+    {
+      "id": "E5-S5-T4",
+      "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
+      "type": "task",
+      "scope": "internal/materialize/pipeline.go, internal/materialize/engine_test.go",
+      "priority": "high",
+      "dod": "toTraceabilityRefs populates CitationAcceptanceCount from len(issue.CitationAcceptances); TestToTraceabilityRefs_PopulatesCitationAcceptanceCount passes; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T2", "E5-S5-T3"],
+      "notes": [
+        "toTraceabilityRefs is package-private — test must be in package materialize (add to engine_test.go)",
+        "Function is called from both Materialize and MaterializeAndReturn; change the function once",
+        "Commit: feat(E5-S0-ext): populate CitationAcceptanceCount in traceability refs"
+      ]
+    },
+    {
+      "id": "E5-S5-T5",
+      "title": "Update validator — citation-accepted satisfies citation requirement",
+      "type": "task",
+      "scope": "internal/validate/validate.go, internal/validate/validate_extra_test.go",
+      "priority": "high",
+      "dod": "checkE7E8E12Citations treats CitationAcceptances as satisfying citation; TestValidate_CitationAccepted_SatisfiesCitationRequirement, TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped, TestValidate_SourceLinkOnly_ManifestMembershipChecked pass; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T3", "E5-S5-T4"],
+      "notes": [
+        "citation-accepted does not require manifest membership check — only source-link does",
+        "No manifest → citation check skipped entirely (preserve existing behaviour)",
+        "Commit: feat(E5-S0-ext): treat citation-accepted as satisfying citation requirement in validator"
+      ]
+    },
+    {
+      "id": "E5-S5-T6",
+      "title": "Update validate command coverage output format (human + JSON)",
+      "type": "task",
+      "scope": "cmd/trellis/validate.go, cmd/trellis/main_test.go",
+      "priority": "high",
+      "dod": "Human format: 'COVERAGE: N/M cited' (or 'N/M cited (X source-linked, Y accepted-risk)' when accepted-risk>0); JSON format includes coverage object; TestValidateCmd_CoverageOutput_HumanFormat passes; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T5"],
+      "notes": [
+        "Replace the entire if format==json {...} else {...} block in validate.go",
+        "sourceLinked = cov.CitedNodes - cov.AcceptedRiskNodes",
+        "Run make check after T6 — all of Chunk 1 must be green before starting Chunk 2",
+        "Commit: feat(E5-S0-ext): update validate coverage output format"
+      ]
+    },
+    {
+      "id": "E5-S5-T7",
+      "title": "Implement trls source-link command",
+      "type": "task",
+      "scope": "cmd/trellis/source_link.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "high",
+      "dod": "trls source-link --issue ID --source-id UUID emits source-link op; validates source-id exists in manifest; TestSourceLinkCmd_HappyPath, TestSourceLinkCmd_UnknownSourceID, TestSourceLinkCmd_MissingIssue, TestSourceLinkCmd_MissingSourceID, TestSourceLinkCmd_MakesNodeCited pass; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T6"],
+      "notes": [
+        "Create cmd/trellis/source_link.go with newSourceLinkCmd()",
+        "Register in cmd/trellis/main.go",
+        "Unknown source-id returns error 'unknown source'",
+        "Output: 'Linked ISSUE-ID to SOURCE-UUID'",
+        "Commit: feat(E5-S0-ext): add trls source-link command"
+      ]
+    },
+    {
+      "id": "E5-S5-T8",
+      "title": "Implement trls accept-citation command with interactive confirmation and --ci flag",
+      "type": "task",
+      "scope": "cmd/trellis/accept_citation.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go",
+      "priority": "high",
+      "dod": "trls accept-citation --issue ID --rationale TEXT emits citation-accepted op; rationale must be >=3 words; --ci bypasses interactive prompt; TestAcceptCitationCmd_CI_HappyPath, TestAcceptCitationCmd_RationaleTooShort, TestAcceptCitationCmd_TwoWords_Rejected, TestAcceptCitationCmd_ThreeWords_Accepted, TestAcceptCitationCmd_MissingIssue, TestAcceptCitationCmd_MissingRationale pass; make check green",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T6"],
+      "notes": [
+        "Create cmd/trellis/accept_citation.go with newAcceptCitationCmd()",
+        "Register in cmd/trellis/main.go",
+        "Interactive mode: use golang.org/x/term (already in dep graph) for TTY detection",
+        "Interactive prompt: ask user to type issue ID exactly to confirm",
+        "--ci flag skips interactive prompt and sets ConfirmedNoninteractively=true",
+        "Output: 'Citation risk accepted for ISSUE-ID'",
+        "Commit: feat(E5-S0-ext): add trls accept-citation command with interactive confirmation"
+      ]
+    },
+    {
+      "id": "E5-S5-T9",
+      "title": "Register 19 planning docs as citation sources",
+      "type": "task",
+      "scope": ".issues/sources/manifest.json",
+      "priority": "high",
+      "dod": "20 sources registered in manifest (19 new + 1 pre-existing E5 plan); trls sources manifest shows 20 entries; sources manifest committed",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T7", "E5-S5-T8"],
+      "notes": [
+        "Data-only task — all implementation code must be committed and make check green first",
+        "Run: trls sources add --url 'docs/trellis-prd.md' --type filesystem --title 'Trellis PRD'",
+        "Register: E2-001 Multi-Branch Mode, E2-002 Branch Isolation, E2-003 Merge Detection, E2-004 PR Done to Merged",
+        "Register: E3 Collaboration, CI Validation Pipeline, Test Coverage Hardening",
+        "Register: E4 Index, E4-S1 through E4-S9 plans",
+        "Capture UUIDs for use in T10",
+        "Commit: chore(E5-S0-ext): register planning docs as citation sources"
+      ]
+    },
+    {
+      "id": "E5-S5-T10",
+      "title": "Emit source-link ops for all properly-sourceable issues (E2/E3/CI/TC/E4/E5)",
+      "type": "task",
+      "scope": ".issues/ops",
+      "priority": "high",
+      "dod": "source-link ops emitted for all issues in the E2/E3/CI/TC/E4/E5 mapping; trls validate uncited count decreasing to single digits; ops committed",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T9"],
+      "notes": [
+        "Data-only task — run trls source-link --issue ID --source-id UUID for each mapping entry",
+        "Work in order: E2 → E3 → CI/TC → E4 → E5",
+        "Retrieve source UUIDs from manifest, do not hardcode",
+        "After each epic group, check: trls validate 2>&1 | grep -c 'uncited node'",
+        "Commit: chore(E5-S0-ext): emit source-link ops for E2/E3/CI/TC/E4/E5 issues"
+      ]
+    },
+    {
+      "id": "E5-S5-T11",
+      "title": "Accept-citation for straggler issues with no recoverable source material",
+      "type": "task",
+      "scope": ".issues/ops",
+      "priority": "high",
+      "dod": "Zero uncited nodes; trls validate reports COVERAGE: 106/106 cited with no ERROR lines; stragglers committed",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T8", "E5-S5-T10"],
+      "notes": [
+        "Data-only task — identify remaining uncited nodes with: trls validate 2>&1 | grep 'uncited node'",
+        "Expected stragglers: task-1773804403, task-1773804476, story-1773804400",
+        "Rationale: 'Created before planning doc convention existed; no recoverable source material.'",
+        "Use --ci flag if running non-interactively",
+        "Verify: trls validate should show 106/106 cited with no ERROR lines",
+        "Commit: chore(E5-S0-ext): accept-citation for pre-convention issues; 106/106 cited"
+      ]
+    },
+    {
+      "id": "E5-S5-T12",
+      "title": "Final verification — make check green and trls validate 106/106 cited",
+      "type": "task",
+      "scope": "",
+      "priority": "high",
+      "dod": "make check passes (lint + test + coverage >=80% + mutation); trls validate shows COVERAGE: 106/106 cited (N source-linked, M accepted-risk) with no ERROR lines",
+      "parent": "E5-S5",
+      "blocked_by": ["E5-S5-T11"],
+      "notes": [
+        "Run: make check",
+        "Run: ./bin/trls validate",
+        "All four make check stages must be green — do not ignore failures"
+      ]
+    }
+  ]
+}

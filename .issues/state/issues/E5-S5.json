@@ -1,7 +1,7 @@
 {
   "id": "E5-S5",
   "type": "story",
-  "status": "claimed",
+  "status": "merged",
   "title": "Citation Remediation — add source-link/accept-citation commands and remediate 106 uncited nodes",
   "parent": "E5",
   "children": [
@@ -31,6 +31,7 @@
     "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
   },
   "decision_refs": [],
+  "outcome": "Citation remediation complete: source-link and accept-citation commands implemented; 20 sources registered; all 119 issues source-linked; trls validate COVERAGE: 119/119 cited; make check green",
   "source_links": [
     {
       "source_entry_id": "ce4eb7ce-96ce-439d-ae2c-9e7ba575ca0e",
@@ -41,5 +42,5 @@
   "claimed_at": 1774407185,
   "claim_ttl": 60,
   "last_heartbeat": 1774407185,
-  "updated": 1774456228
+  "updated": 1774470326
 }

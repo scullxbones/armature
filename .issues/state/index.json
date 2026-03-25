@@ -1457,7 +1457,7 @@
     ]
   },
   "E5-S5": {
-    "status": "claimed",
+    "status": "merged",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1475,8 +1475,9 @@
       "E5-S5-T12"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774456228,
+    "updated": 1774470326,
     "title": "Citation Remediation — add source-link/accept-citation commands and remediate 106 uncited nodes",
+    "outcome": "Citation remediation complete: source-link and accept-citation commands implemented; 20 sources registered; all 119 issues source-linked; trls validate COVERAGE: 119/119 cited; make check green",
     "scope": [
       "internal/ops/types.go, internal/materialize/state.go, internal/materialize/engine.go, internal/traceability/traceability.go, internal/materialize/pipeline.go, internal/validate/validate.go, cmd/trellis/validate.go, cmd/trellis/main.go, cmd/trellis/source_link.go, cmd/trellis/accept_citation.go"
     ]
@@ -1534,15 +1535,16 @@
     ]
   },
   "E5-S5-T12": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
       "E5-S5-T11"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774470191,
-    "title": "Final verification — make check green and trls validate 106/106 cited"
+    "updated": 1774470318,
+    "title": "Final verification — make check green and trls validate 106/106 cited",
+    "outcome": "make check green: lint clean, all tests pass, coverage \u003e=80%, mutation 100% efficacy 86.48% coverage; trls validate COVERAGE: 119/119 cited with no ERROR lines"
   },
   "E5-S5-T2": {
     "status": "merged",
