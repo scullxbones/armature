@@ -1497,7 +1497,7 @@
     ]
   },
   "E5-S5-T10": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1507,14 +1507,15 @@
       "E5-S5-T11"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774468783,
+    "updated": 1774470148,
     "title": "Emit source-link ops for all properly-sourceable issues (E2/E3/CI/TC/E4/E5)",
+    "outcome": "source-link ops emitted for all 119 issues across E2/E3/CI/TC/E4/E5 families; fixed manifest-reading bug in validate.go; trls validate shows COVERAGE: 119/119 cited",
     "scope": [
       ".issues/ops"
     ]
   },
   "E5-S5-T11": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1524,7 +1525,8 @@
     "blocks": [
       "E5-S5-T12"
     ],
-    "updated": 1774456229,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774470161,
     "title": "Accept-citation for straggler issues with no recoverable source material",
     "scope": [
       ".issues/ops"
