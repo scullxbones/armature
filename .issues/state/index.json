@@ -1515,7 +1515,7 @@
     ]
   },
   "E5-S5-T11": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1526,20 +1526,22 @@
       "E5-S5-T12"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774470161,
+    "updated": 1774470177,
     "title": "Accept-citation for straggler issues with no recoverable source material",
+    "outcome": "Zero uncited nodes — T10 already source-linked all 119 issues; trls validate shows COVERAGE: 119/119 cited with no ERROR lines; no accept-citation stragglers needed",
     "scope": [
       ".issues/ops"
     ]
   },
   "E5-S5-T12": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
       "E5-S5-T11"
     ],
-    "updated": 1774468783,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774470191,
     "title": "Final verification — make check green and trls validate 106/106 cited"
   },
   "E5-S5-T2": {

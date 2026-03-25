@@ -1,7 +1,7 @@
 {
   "id": "E5-S5-T11",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Accept-citation for straggler issues with no recoverable source material",
   "parent": "E5-S5",
   "children": [],
@@ -23,6 +23,7 @@
     "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
   },
   "decision_refs": [],
+  "outcome": "Zero uncited nodes — T10 already source-linked all 119 issues; trls validate shows COVERAGE: 119/119 cited with no ERROR lines; no accept-citation stragglers needed",
   "source_links": [
     {
       "source_entry_id": "ce4eb7ce-96ce-439d-ae2c-9e7ba575ca0e",
@@ -33,5 +34,5 @@
   "claimed_at": 1774470161,
   "claim_ttl": 60,
   "last_heartbeat": 1774470161,
-  "updated": 1774470161
+  "updated": 1774470177
 }
