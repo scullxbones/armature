@@ -37,6 +37,40 @@ trls validate [--ci]                                     # validate op log consi
 
 Valid types: `task`, `feature`, `bug`, `story`
 
+## Loading a Plan
+
+`decompose-apply` bulk-loads a structured plan JSON into the issue graph, creating all issues as `draft` confidence. Draft issues are hidden from `trls ready` until promoted with `dag-transition`.
+
+### Schema
+
+Use `--example` to see the expected JSON structure:
+
+```
+trls decompose-apply --example
+```
+
+The plan has a `version`, `title`, and an `issues` array. Each issue must have `id`, `title`, and `type`. Optional fields include `parent`, `priority`, `dod`, `scope`, and `blocked_by`.
+
+### Workflow
+
+1. **Generate plan JSON** — write or generate a plan matching the schema shown by `--example`.
+2. **Preview with dry-run** — validate the plan and see what would be created without writing anything:
+   ```
+   trls decompose-apply --plan plan.json --dry-run
+   ```
+   Output lists each issue that would be created (`would create: ID (title)`) and a summary count.
+3. **Apply the plan** — write the ops:
+   ```
+   trls decompose-apply --plan plan.json
+   ```
+   Issues already in the graph are skipped automatically.
+4. **Promote from draft** — use `dag-transition` on each root issue to make them visible to workers:
+   ```
+   trls dag-transition --issue ID
+   ```
+
+If you need to undo a plan, use `decompose-revert --plan plan.json`.
+
 ## Citation
 
 Every issue must be linked to a source document or have an accepted-risk rationale before the story is done. Cite as you go — don't leave it for a remediation pass.

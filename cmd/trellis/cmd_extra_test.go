@@ -595,6 +595,42 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 	assert.NotEmpty(t, issues)
 }
 
+func TestDecomposeApplyDryRun(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	planData := `{"version":1,"title":"Dry Run Plan","issues":[` +
+		`{"id":"DRY-001","title":"Dry run task one","type":"task"},` +
+		`{"id":"DRY-002","title":"Dry run task two","type":"task"}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	// Capture ops dir state before dry-run
+	opsDir := filepath.Join(repo, ".issues", "ops")
+	entriesBefore, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile, "--dry-run")
+	require.NoError(t, err)
+
+	// Output must mention the issue IDs (what would be created)
+	assert.Contains(t, out, "DRY-001")
+	assert.Contains(t, out, "DRY-002")
+	// Output must indicate dry-run (e.g. "would create")
+	assert.Contains(t, out, "would create")
+
+	// No new ops files should be written
+	entriesAfter, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	assert.Equal(t, len(entriesBefore), len(entriesAfter), "dry-run must not write any ops files")
+}
+
 func TestListCmd_JSONFormat(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 

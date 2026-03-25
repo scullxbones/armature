@@ -1209,7 +1209,7 @@
     ]
   },
   "E5-S1-T6": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
     "blocked_by": [
@@ -1218,8 +1218,10 @@
     "blocks": [
       "E5-S1-T7"
     ],
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774479807,
     "title": "`trls list` command with `--type` and `--parent` filters (L13)",
+    "outcome": "trls list command implemented with --type, --parent, --format json filters; all TestListCmd_* tests pass; make check green",
     "scope": [
       "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
     ]

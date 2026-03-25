@@ -15,6 +15,7 @@ import (
 func newDecomposeApplyCmd() *cobra.Command {
 	var planPath string
 	var exampleFlag bool
+	var dryRunFlag bool
 
 	cmd := &cobra.Command{
 		Use:   "decompose-apply",
@@ -71,11 +72,6 @@ func newDecomposeApplyCmd() *cobra.Command {
 
 			issuesDir := appCtx.IssuesDir
 
-			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
-			if err != nil {
-				return fmt.Errorf("worker not initialized: %w", err)
-			}
-
 			plan, err := decompose.ParsePlan(planPath)
 			if err != nil {
 				return err
@@ -84,6 +80,23 @@ func newDecomposeApplyCmd() *cobra.Command {
 			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
 			if err != nil {
 				return err
+			}
+
+			if dryRunFlag {
+				result, err := decompose.DryRunApplyPlan(plan, state)
+				if err != nil {
+					return err
+				}
+				for _, entry := range result.WouldCreate {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would create: %s (%s)\n", entry.ID, entry.Title)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issues would be created\n", len(result.WouldCreate))
+				return nil
+			}
+
+			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+			if err != nil {
+				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
 			opsDir := issuesDir + "/ops"
@@ -99,6 +112,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
 	cmd.Flags().BoolVar(&exampleFlag, "example", false, "print a minimal valid example plan JSON and exit")
+	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "validate and preview what would be created without writing ops")
 	return cmd
 }
 
