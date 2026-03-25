@@ -1653,7 +1653,7 @@
     ]
   },
   "E5-S5-T8": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1664,14 +1664,15 @@
       "E5-S5-T11"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774439525,
+    "updated": 1774445259,
     "title": "Implement trls accept-citation command with interactive confirmation and --ci flag",
+    "outcome": "trls accept-citation command implemented: rationale\u003e=3 words validation, --ci bypasses interactive prompt, emits OpCitationAccepted with ConfirmedNoninteractively; 6 tests pass; make check green",
     "scope": [
       "cmd/trellis/accept_citation.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
     ]
   },
   "E5-S5-T9": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1681,7 +1682,8 @@
     "blocks": [
       "E5-S5-T10"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774445266,
     "title": "Register 19 planning docs as citation sources",
     "scope": [
       ".issues/sources/manifest.json"
