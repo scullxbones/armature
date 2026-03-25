@@ -43,6 +43,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applySourceLink(op)
 	case ops.OpSourceFingerprint:
 		return nil
+	case ops.OpCitationAccepted:
+		return s.applyCitationAccepted(op)
 	case ops.OpDAGTransition:
 		return s.applyDAGTransition(op)
 	default:
@@ -230,6 +232,20 @@ func (s *State) applySourceLink(op ops.Op) error {
 		SourceEntryID: op.Payload.SourceID,
 		SourceURL:     op.Payload.SourceURL,
 		Title:         op.Payload.Title,
+	})
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyCitationAccepted(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	issue.CitationAcceptances = append(issue.CitationAcceptances, CitationAcceptance{
+		WorkerID:                  op.WorkerID,
+		Timestamp:                 op.Timestamp,
+		ConfirmedNoninteractively: op.Payload.ConfirmedNoninteractively,
 	})
 	issue.Updated = op.Timestamp
 	return nil

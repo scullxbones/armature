@@ -9,38 +9,39 @@ import (
 
 // Issue represents the full materialized state of a single work item.
 type Issue struct {
-	ID               string          `json:"id"`
-	Type             string          `json:"type"`
-	Status           string          `json:"status"`
-	Title            string          `json:"title"`
-	Parent           string          `json:"parent,omitempty"`
-	Children         []string        `json:"children"`
-	BlockedBy        []string        `json:"blocked_by"`
-	Blocks           []string        `json:"blocks"`
-	Assignee         string          `json:"assignee,omitempty"`
-	Priority         string          `json:"priority,omitempty"`
-	EstComplexity    string          `json:"estimated_complexity,omitempty"`
-	DefinitionOfDone string          `json:"definition_of_done,omitempty"`
-	Scope            []string        `json:"scope"`
-	ContextFiles     []string        `json:"context_files,omitempty"`
-	Acceptance       json.RawMessage `json:"acceptance,omitempty"`
-	Context          json.RawMessage `json:"context,omitempty"`
-	SourceCitation   json.RawMessage `json:"source_citation,omitempty"`
-	Provenance       Provenance      `json:"provenance"`
-	DecisionRefs     []string        `json:"decision_refs"`
-	Outcome          string          `json:"outcome,omitempty"`
-	PriorOutcomes    []string        `json:"prior_outcomes,omitempty"`
-	Notes            []Note          `json:"notes,omitempty"`
-	Decisions        []Decision      `json:"decisions,omitempty"`
-	SourceLinks      []SourceLink    `json:"source_links,omitempty"`
-	ClaimedBy        string          `json:"claimed_by,omitempty"`
-	ClaimedAt        int64           `json:"claimed_at,omitempty"`
-	ClaimTTL         int             `json:"claim_ttl,omitempty"`
-	LastHeartbeat    int64           `json:"last_heartbeat,omitempty"`
-	Branch           string          `json:"branch,omitempty"`
-	PR               string          `json:"pr,omitempty"`
-	AssignedWorker   string          `json:"assigned_worker,omitempty"`
-	Updated          int64           `json:"updated"`
+	ID                  string               `json:"id"`
+	Type                string               `json:"type"`
+	Status              string               `json:"status"`
+	Title               string               `json:"title"`
+	Parent              string               `json:"parent,omitempty"`
+	Children            []string             `json:"children"`
+	BlockedBy           []string             `json:"blocked_by"`
+	Blocks              []string             `json:"blocks"`
+	Assignee            string               `json:"assignee,omitempty"`
+	Priority            string               `json:"priority,omitempty"`
+	EstComplexity       string               `json:"estimated_complexity,omitempty"`
+	DefinitionOfDone    string               `json:"definition_of_done,omitempty"`
+	Scope               []string             `json:"scope"`
+	ContextFiles        []string             `json:"context_files,omitempty"`
+	Acceptance          json.RawMessage      `json:"acceptance,omitempty"`
+	Context             json.RawMessage      `json:"context,omitempty"`
+	SourceCitation      json.RawMessage      `json:"source_citation,omitempty"`
+	Provenance          Provenance           `json:"provenance"`
+	DecisionRefs        []string             `json:"decision_refs"`
+	Outcome             string               `json:"outcome,omitempty"`
+	PriorOutcomes       []string             `json:"prior_outcomes,omitempty"`
+	Notes               []Note               `json:"notes,omitempty"`
+	Decisions           []Decision           `json:"decisions,omitempty"`
+	SourceLinks         []SourceLink         `json:"source_links,omitempty"`
+	CitationAcceptances []CitationAcceptance `json:"citation_acceptances,omitempty"`
+	ClaimedBy           string               `json:"claimed_by,omitempty"`
+	ClaimedAt           int64                `json:"claimed_at,omitempty"`
+	ClaimTTL            int                  `json:"claim_ttl,omitempty"`
+	LastHeartbeat       int64                `json:"last_heartbeat,omitempty"`
+	Branch              string               `json:"branch,omitempty"`
+	PR                  string               `json:"pr,omitempty"`
+	AssignedWorker      string               `json:"assigned_worker,omitempty"`
+	Updated             int64                `json:"updated"`
 }
 
 type Provenance struct {
@@ -70,6 +71,13 @@ type Decision struct {
 	Affects   []string `json:"affects"`
 	WorkerID  string   `json:"worker_id"`
 	Timestamp int64    `json:"timestamp"`
+}
+
+// CitationAcceptance records that a worker accepted a source citation for an issue.
+type CitationAcceptance struct {
+	WorkerID                  string `json:"worker_id"`
+	Timestamp                 int64  `json:"timestamp"`
+	ConfirmedNoninteractively bool   `json:"confirmed_noninteractively,omitempty"`
 }
 
 // IndexEntry is the denormalized summary stored in index.json.

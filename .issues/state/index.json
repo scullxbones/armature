@@ -1482,15 +1482,16 @@
     ]
   },
   "E5-S5-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocks": [
       "E5-S5-T2"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774407273,
+    "updated": 1774407436,
     "title": "Register citation-accepted op type and ConfirmedNoninteractively payload field",
+    "outcome": "Added OpCitationAccepted constant to ValidOpTypes, ConfirmedNoninteractively bool field to Payload, and TestOpCitationAccepted_RegisteredInValidOpTypes test; make check green",
     "scope": [
       "internal/ops/types.go, internal/ops/types_test.go"
     ]
@@ -1539,7 +1540,7 @@
     "title": "Final verification — make check green and trls validate 106/106 cited"
   },
   "E5-S5-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1549,7 +1550,8 @@
       "E5-S5-T3",
       "E5-S5-T4"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774407441,
     "title": "Add CitationAcceptance struct and CitationAcceptances field to materialize state + engine apply case",
     "scope": [
       "internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go"

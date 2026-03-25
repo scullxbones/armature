@@ -552,3 +552,30 @@ func TestApplyAmendOp_UnknownIssue_NoError(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+func TestApplyCitationAccepted(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ConfirmedNoninteractively: true},
+	}))
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.CitationAcceptances, 1)
+	assert.Equal(t, "w1", issue.CitationAcceptances[0].WorkerID)
+	assert.Equal(t, int64(200), issue.CitationAcceptances[0].Timestamp)
+	assert.True(t, issue.CitationAcceptances[0].ConfirmedNoninteractively)
+	assert.Equal(t, int64(200), issue.Updated)
+}
+
+func TestApplyCitationAccepted_UnknownIssue_NoError(t *testing.T) {
+	state := NewState()
+	err := state.ApplyOp(ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "NONEXISTENT", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{ConfirmedNoninteractively: false},
+	})
+	assert.NoError(t, err)
+}
