@@ -185,3 +185,5 @@
 ["transition","E5-S1-T4",1774479574,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"unassign on claimed issue now emits transition → open; TestUnassignReleasesClaimedToOpen passes; make check green"}]
 ["claim","E5-S1-T5",1774479576,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["transition","E5-S1-T5",1774479791,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"decompose-apply --example prints minimal valid plan JSON; TestDecomposeApplyExampleFlag passes; make check green"}]
+["claim","E5-S1-T6",1774479795,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S1-T6",1774479807,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls list command implemented with --type, --parent, --format json filters; all TestListCmd_* tests pass; make check green"}]
