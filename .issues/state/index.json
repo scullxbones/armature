@@ -1540,7 +1540,7 @@
     "title": "Final verification — make check green and trls validate 106/106 cited"
   },
   "E5-S5-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1551,14 +1551,15 @@
       "E5-S5-T4"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774407441,
+    "updated": 1774435998,
     "title": "Add CitationAcceptance struct and CitationAcceptances field to materialize state + engine apply case",
+    "outcome": "Added CitationAcceptance struct to state.go, CitationAcceptances field on Issue, applyCitationAccepted method in engine.go; TestApplyCitationAccepted and UnknownIssue_NoError pass; make check green",
     "scope": [
       "internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go"
     ]
   },
   "E5-S5-T3": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1568,7 +1569,8 @@
       "E5-S5-T4",
       "E5-S5-T5"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774436005,
     "title": "Update traceability — add CitationAcceptanceCount to IssueRef and AcceptedRiskNodes/AcceptedRiskPct to Coverage",
     "scope": [
       "internal/traceability/traceability.go, internal/traceability/traceability_test.go"

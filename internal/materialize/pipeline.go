@@ -22,8 +22,9 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 	refs := make([]traceability.IssueRef, 0, len(issues))
 	for id, issue := range issues {
 		refs = append(refs, traceability.IssueRef{
-			ID:              id,
-			SourceLinkCount: len(issue.SourceLinks),
+			ID:                      id,
+			SourceLinkCount:         len(issue.SourceLinks),
+			CitationAcceptanceCount: len(issue.CitationAcceptances),
 		})
 	}
 	return refs
