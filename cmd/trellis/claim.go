@@ -62,6 +62,20 @@ func newClaimCmd() *cobra.Command {
 				return err
 			}
 
+			// Auto-advance any open ancestor story/epic to in-progress.
+			if parentID := issue.Parent; parentID != "" {
+				if parentEntry, ok := index[parentID]; ok && parentEntry.Status == ops.StatusOpen {
+					advanceOp := ops.Op{
+						Type:      ops.OpTransition,
+						TargetID:  parentID,
+						Timestamp: nowEpoch(),
+						WorkerID:  workerID,
+						Payload:   ops.Payload{To: ops.StatusInProgress},
+					}
+					appendOp(logPath, advanceOp) //nolint:errcheck
+				}
+			}
+
 			result := map[string]interface{}{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
 			data, _ := json.Marshal(result)
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))

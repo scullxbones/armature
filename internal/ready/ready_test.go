@@ -61,6 +61,7 @@ func TestReadyTask_ParentClaimed_AppearsInQueue(t *testing.T) {
 }
 
 func TestReadyTask_ParentNotInProgress(t *testing.T) {
+	// After the bootstrap-deadlock fix, open parent IS allowed — task should be ready.
 	index := materialize.Index{
 		"story-01": {Status: "open", Type: "story"},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01"},
@@ -69,11 +70,33 @@ func TestReadyTask_ParentNotInProgress(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
 	ready := ComputeReady(index, issues, "")
+	found := false
 	for _, r := range ready {
 		if r.Issue == "task-01" {
-			t.Errorf("task-01 should not be ready: parent story-01 is not in-progress")
+			found = true
 		}
 	}
+	assert.True(t, found, "task-01 should be ready: open parent is now allowed (bootstrap fix)")
+}
+
+func TestComputeReady_SurfacesTaskWithOpenParent(t *testing.T) {
+	// Regression test: tasks whose story parent is "open" must appear in the ready queue.
+	// Previously they were gated out, causing a bootstrap deadlock in fresh sessions.
+	index := materialize.Index{
+		"story-01": {Status: "open", Type: "story", Children: []string{"task-01"}},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
+	}
+	ready := ComputeReady(index, issues, "")
+	found := false
+	for _, r := range ready {
+		if r.Issue == "task-01" {
+			found = true
+		}
+	}
+	assert.True(t, found, "task with open parent story should appear in ready queue")
 }
 
 func TestReadyTask_NoParent(t *testing.T) {

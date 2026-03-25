@@ -44,7 +44,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		}
 		if entry.Parent != "" {
 			parentEntry, ok := index[entry.Parent]
-			if !ok || (parentEntry.Status != ops.StatusInProgress && parentEntry.Status != ops.StatusClaimed) {
+			if !ok || (parentEntry.Status != ops.StatusInProgress && parentEntry.Status != ops.StatusClaimed && parentEntry.Status != ops.StatusOpen) {
 				continue
 			}
 		}

@@ -1081,6 +1081,61 @@ func TestTransitionToOpenRejectsInvalidAlias(t *testing.T) {
 	assert.Contains(t, err.Error(), "reopened")
 }
 
+// TestClaimAutoAdvancesParentToInProgress verifies that claiming a task whose parent story
+// is "open" emits an explicit transition op to advance the parent story to "in-progress",
+// so the transition appears durably in the ops log.
+func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a story (parent) and a task (child)
+	_, err = runTrls(t, repo, "create", "--type", "story", "--title", "Parent Story", "--id", "story-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child Task", "--id", "task-01", "--parent", "story-01")
+	require.NoError(t, err)
+
+	// Materialize so state is up to date
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Verify story is "open" before claim
+	issuesDir := repo + "/.issues"
+	index, loadErr := materialize.LoadIndex(issuesDir + "/state/index.json")
+	require.NoError(t, loadErr)
+	require.Equal(t, "open", index["story-01"].Status, "story should start as open")
+
+	// Claim the child task — this should auto-advance the parent story to in-progress
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Check the ops log for an explicit transition op targeting story-01 with to=in-progress.
+	// This verifies claim.go emits a durable op (not just relies on state engine inference).
+	opsDir := issuesDir + "/ops"
+	entries, readErr := os.ReadDir(opsDir)
+	require.NoError(t, readErr)
+
+	foundTransitionOp := false
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		logPath := opsDir + "/" + entry.Name()
+		logOps, readOpErr := ops.ReadLog(logPath)
+		require.NoError(t, readOpErr)
+		for _, op := range logOps {
+			if op.Type == ops.OpTransition && op.TargetID == "story-01" && op.Payload.To == ops.StatusInProgress {
+				foundTransitionOp = true
+			}
+		}
+	}
+	assert.True(t, foundTransitionOp, "claim should emit an explicit transition op for the parent story to in-progress")
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op
