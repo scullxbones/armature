@@ -47,6 +47,19 @@ func TestReadyTask_BlockerMerged(t *testing.T) {
 	assert.Len(t, ready, 1)
 }
 
+func TestReadyTask_ParentClaimed_AppearsInQueue(t *testing.T) {
+	index := materialize.Index{
+		"story-01": {Status: "claimed", Type: "story", Children: []string{"task-01"}},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
+	}
+	ready := ComputeReady(index, issues, "")
+	assert.Len(t, ready, 1, "task should be ready when parent story is claimed")
+	assert.Equal(t, "task-01", ready[0].Issue)
+}
+
 func TestReadyTask_ParentNotInProgress(t *testing.T) {
 	index := materialize.Index{
 		"story-01": {Status: "open", Type: "story"},
