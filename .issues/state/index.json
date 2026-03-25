@@ -1182,11 +1182,13 @@
     ]
   },
   "E5-S1-T4": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774479574,
     "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
+    "outcome": "unassign on claimed issue now emits transition → open; TestUnassignReleasesClaimedToOpen passes; make check green",
     "scope": [
       "cmd/trellis/assign.go, cmd/trellis/main_test.go"
     ]

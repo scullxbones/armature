@@ -14,11 +14,61 @@ import (
 
 func newDecomposeApplyCmd() *cobra.Command {
 	var planPath string
+	var exampleFlag bool
 
 	cmd := &cobra.Command{
 		Use:   "decompose-apply",
 		Short: "Apply a decomposition plan to the issue graph",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if exampleFlag {
+				return nil
+			}
+			// Fall through to root PersistentPreRunE for normal config loading.
+			return cmd.Root().PersistentPreRunE(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if exampleFlag {
+				example := decompose.Plan{
+					Version: 1,
+					Title:   "Example Decomposition Plan",
+					Issues: []decompose.PlanIssue{
+						{
+							ID:    "STORY-001",
+							Title: "User authentication story",
+							Type:  "story",
+						},
+						{
+							ID:        "TASK-001",
+							Title:     "Implement login endpoint",
+							Type:      "task",
+							Parent:    "STORY-001",
+							Priority:  "high",
+							DoD:       "Login endpoint returns JWT on valid credentials",
+							BlockedBy: []string{},
+						},
+						{
+							ID:        "TASK-002",
+							Title:     "Write login integration tests",
+							Type:      "task",
+							Parent:    "STORY-001",
+							Priority:  "medium",
+							DoD:       "Integration tests cover happy path and error cases",
+							BlockedBy: []string{"TASK-001"},
+						},
+					},
+				}
+				out, err := json.MarshalIndent(example, "", "  ")
+				if err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+				return nil
+			}
+
+			if planPath == "" {
+				return fmt.Errorf("required flag \"plan\" not set")
+			}
+
 			issuesDir := appCtx.IssuesDir
 
 			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
@@ -48,7 +98,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
-	_ = cmd.MarkFlagRequired("plan")
+	cmd.Flags().BoolVar(&exampleFlag, "example", false, "print a minimal valid example plan JSON and exit")
 	return cmd
 }
 

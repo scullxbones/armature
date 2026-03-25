@@ -568,6 +568,33 @@ func TestListCmd_ParentFilter_NoMatch(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(out))
 }
 
+func TestDecomposeApplyExampleFlag(t *testing.T) {
+	repo := initTempRepo(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"decompose-apply", "--example", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Output must be valid JSON
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed), "output must be valid JSON")
+
+	// Must contain top-level plan fields
+	assert.Contains(t, parsed, "version")
+	assert.Contains(t, parsed, "title")
+	assert.Contains(t, parsed, "issues")
+
+	// Issues must be a non-empty array
+	issues, ok := parsed["issues"].([]interface{})
+	require.True(t, ok, "issues must be an array")
+	assert.NotEmpty(t, issues)
+}
+
 func TestListCmd_JSONFormat(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
