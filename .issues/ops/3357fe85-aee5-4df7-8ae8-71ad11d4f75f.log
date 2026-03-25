@@ -177,3 +177,5 @@
 ["claim","E5-S1-T1",1774474955,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["note","E5-S1-T1",1774477504,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass"}]
 ["transition","E5-S1-T1",1774477515,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"Added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass; make check green"}]
+["claim","E5-S1-T2",1774477518,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S1-T2",1774477693,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"StaleClaims() function in internal/ready/stale.go returns expired claimed issues; ready.go prints stale diagnostic to stderr when queue empty; 6 unit tests pass; make check green"}]

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ready"
@@ -43,6 +44,18 @@ func newReadyCmd() *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				if len(entries) == 0 {
+					stale := ready.StaleClaims(issues, time.Now())
+					if len(stale) > 0 {
+						_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "# stale claims (TTL expired):")
+						for _, id := range stale {
+							issue := issues[id]
+							workerID := ""
+							if issue != nil {
+								workerID = issue.ClaimedBy
+							}
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "#   %s (claimed by %s)\n", id, workerID)
+						}
+					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
 					return nil
 				}

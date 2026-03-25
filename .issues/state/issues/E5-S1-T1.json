@@ -1,7 +1,7 @@
 {
   "id": "E5-S1-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Add `open` as valid transition target (L11)",
   "parent": "E5-S1",
   "children": [],
@@ -25,6 +25,14 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "Added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass; make check green",
+  "notes": [
+    {
+      "worker_id": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+      "timestamp": 1774477504,
+      "msg": "added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass"
+    }
+  ],
   "source_links": [
     {
       "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
@@ -35,5 +43,5 @@
   "claimed_at": 1774474955,
   "claim_ttl": 60,
   "last_heartbeat": 1774474955,
-  "updated": 1774474955
+  "updated": 1774477515
 }

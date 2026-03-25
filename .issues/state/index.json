@@ -1146,12 +1146,13 @@
     ]
   },
   "E5-S1-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774474955,
+    "updated": 1774477515,
     "title": "Add `open` as valid transition target (L11)",
+    "outcome": "Added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass; make check green",
     "scope": [
       "internal/ops/types.go, cmd/trellis/main_test.go"
     ]
