@@ -1123,7 +1123,7 @@
     ]
   },
   "E5-S1": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1245,14 +1245,16 @@
     ]
   },
   "E5-S1-T8": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
     "blocked_by": [
       "E5-S1-T7"
     ],
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774481675,
     "title": "`decompose-apply` missing architecture flags — `--root`, `--generate-ids`, `--strict`",
+    "outcome": "--strict treats warnings as errors; --generate-ids replaces plan IDs with UUIDs; --root overrides inferred root; 3 new tests pass; make check green",
     "scope": [
       "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
     ]
