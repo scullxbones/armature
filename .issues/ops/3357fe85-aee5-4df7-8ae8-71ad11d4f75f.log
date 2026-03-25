@@ -1,0 +1,4 @@
+["claim","E5-S5",1774407185,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["claim","E5-S5-T1",1774407273,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["note","E5-S5-T1",1774407420,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Added OpCitationAccepted constant (\"citation-accepted\") to types.go, registered it in ValidOpTypes, added ConfirmedNoninteractively bool field to Payload, and created types_test.go with TestOpCitationAccepted_RegisteredInValidOpTypes. make check is green (lint clean, all tests pass, coverage ≥80%, mutation efficacy 100%)."}]
+["transition","E5-S5-T1",1774407436,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"Added OpCitationAccepted constant to ValidOpTypes, ConfirmedNoninteractively bool field to Payload, and TestOpCitationAccepted_RegisteredInValidOpTypes test; make check green"}]

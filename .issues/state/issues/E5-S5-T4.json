@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T4",
+  "type": "task",
+  "status": "open",
+  "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T2",
+    "E5-S5-T3"
+  ],
+  "blocks": [
+    "E5-S5-T5"
+  ],
+  "priority": "high",
+  "definition_of_done": "toTraceabilityRefs populates CitationAcceptanceCount from len(issue.CitationAcceptances); TestToTraceabilityRefs_PopulatesCitationAcceptanceCount passes; make check green",
+  "scope": [
+    "internal/materialize/pipeline.go, internal/materialize/engine_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

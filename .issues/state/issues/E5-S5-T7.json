@@ -1,0 +1,26 @@
+{
+  "id": "E5-S5-T7",
+  "type": "task",
+  "status": "open",
+  "title": "Implement trls source-link command",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T6"
+  ],
+  "blocks": [
+    "E5-S5-T9"
+  ],
+  "priority": "high",
+  "definition_of_done": "trls source-link --issue ID --source-id UUID emits source-link op; validates source-id exists in manifest; TestSourceLinkCmd_HappyPath, TestSourceLinkCmd_UnknownSourceID, TestSourceLinkCmd_MissingIssue, TestSourceLinkCmd_MissingSourceID, TestSourceLinkCmd_MakesNodeCited pass; make check green",
+  "scope": [
+    "cmd/trellis/source_link.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

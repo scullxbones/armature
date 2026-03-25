@@ -16,6 +16,7 @@ const (
 	OpDecision          = "decision"
 	OpAssign            = "assign"
 	OpAmend             = "amend"
+	OpCitationAccepted  = "citation-accepted"
 )
 
 // ValidOpTypes for validation.
@@ -24,8 +25,9 @@ var ValidOpTypes = map[string]bool{
 	OpTransition: true, OpNote: true, OpLink: true,
 	OpSourceLink: true, OpSourceFingerprint: true,
 	OpDAGTransition: true, OpDecision: true,
-	OpAssign: true,
-	OpAmend:  true,
+	OpAssign:           true,
+	OpAmend:            true,
+	OpCitationAccepted: true,
 }
 
 // Issue statuses.
@@ -101,9 +103,10 @@ type Payload struct {
 	Provider  string `json:"provider,omitempty"`
 
 	// dag-transition (confidence promotion)
-	IssueID               string   `json:"issue_id,omitempty"`
-	Confirmed             bool     `json:"confirmed,omitempty"`
-	UncoveredAcknowledged []string `json:"uncovered_acknowledged,omitempty"`
+	IssueID                   string   `json:"issue_id,omitempty"`
+	Confirmed                 bool     `json:"confirmed,omitempty"`
+	ConfirmedNoninteractively bool     `json:"confirmed_noninteractively,omitempty"`
+	UncoveredAcknowledged     []string `json:"uncovered_acknowledged,omitempty"`
 
 	// decision
 	Topic     string   `json:"topic,omitempty"`

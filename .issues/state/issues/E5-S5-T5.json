@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T5",
+  "type": "task",
+  "status": "open",
+  "title": "Update validator — citation-accepted satisfies citation requirement",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T3",
+    "E5-S5-T4"
+  ],
+  "blocks": [
+    "E5-S5-T6"
+  ],
+  "priority": "high",
+  "definition_of_done": "checkE7E8E12Citations treats CitationAcceptances as satisfying citation; TestValidate_CitationAccepted_SatisfiesCitationRequirement, TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped, TestValidate_SourceLinkOnly_ManifestMembershipChecked pass; make check green",
+  "scope": [
+    "internal/validate/validate.go, internal/validate/validate_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

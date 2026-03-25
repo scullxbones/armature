@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T2",
+  "type": "task",
+  "status": "open",
+  "title": "Add CitationAcceptance struct and CitationAcceptances field to materialize state + engine apply case",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T1"
+  ],
+  "blocks": [
+    "E5-S5-T3",
+    "E5-S5-T4"
+  ],
+  "priority": "high",
+  "definition_of_done": "CitationAcceptance struct in state.go; CitationAcceptances []CitationAcceptance field on Issue; applyCitationAccepted method in engine; TestApplyCitationAccepted and TestApplyCitationAccepted_UnknownIssue_NoError pass; make check green",
+  "scope": [
+    "internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

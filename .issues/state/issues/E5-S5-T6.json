@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T6",
+  "type": "task",
+  "status": "open",
+  "title": "Update validate command coverage output format (human + JSON)",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T5"
+  ],
+  "blocks": [
+    "E5-S5-T7",
+    "E5-S5-T8"
+  ],
+  "priority": "high",
+  "definition_of_done": "Human format: 'COVERAGE: N/M cited' (or 'N/M cited (X source-linked, Y accepted-risk)' when accepted-risk\u003e0); JSON format includes coverage object; TestValidateCmd_CoverageOutput_HumanFormat passes; make check green",
+  "scope": [
+    "cmd/trellis/validate.go, cmd/trellis/main_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

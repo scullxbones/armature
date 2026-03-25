@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T8",
+  "type": "task",
+  "status": "open",
+  "title": "Implement trls accept-citation command with interactive confirmation and --ci flag",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T6"
+  ],
+  "blocks": [
+    "E5-S5-T9",
+    "E5-S5-T11"
+  ],
+  "priority": "high",
+  "definition_of_done": "trls accept-citation --issue ID --rationale TEXT emits citation-accepted op; rationale must be \u003e=3 words; --ci bypasses interactive prompt; TestAcceptCitationCmd_CI_HappyPath, TestAcceptCitationCmd_RationaleTooShort, TestAcceptCitationCmd_TwoWords_Rejected, TestAcceptCitationCmd_ThreeWords_Accepted, TestAcceptCitationCmd_MissingIssue, TestAcceptCitationCmd_MissingRationale pass; make check green",
+  "scope": [
+    "cmd/trellis/accept_citation.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

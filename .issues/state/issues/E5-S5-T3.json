@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T3",
+  "type": "task",
+  "status": "open",
+  "title": "Update traceability — add CitationAcceptanceCount to IssueRef and AcceptedRiskNodes/AcceptedRiskPct to Coverage",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T2"
+  ],
+  "blocks": [
+    "E5-S5-T4",
+    "E5-S5-T5"
+  ],
+  "priority": "high",
+  "definition_of_done": "CitationAcceptanceCount int on IssueRef; AcceptedRiskNodes int and AcceptedRiskPct float64 on Coverage; Compute updated; TestCompute_AllSourceLinked, TestCompute_MixedCitation, TestCompute_BothSourceLinkAndAcceptance_CountsAsSourceLinked pass; make check green",
+  "scope": [
+    "internal/traceability/traceability.go, internal/traceability/traceability_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

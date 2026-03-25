@@ -1,0 +1,22 @@
+{
+  "id": "E5-S5-T12",
+  "type": "task",
+  "status": "open",
+  "title": "Final verification — make check green and trls validate 106/106 cited",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T11"
+  ],
+  "blocks": [],
+  "priority": "high",
+  "definition_of_done": "make check passes (lint + test + coverage \u003e=80% + mutation); trls validate shows COVERAGE: 106/106 cited (N source-linked, M accepted-risk) with no ERROR lines",
+  "scope": null,
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T11",
+  "type": "task",
+  "status": "open",
+  "title": "Accept-citation for straggler issues with no recoverable source material",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T8",
+    "E5-S5-T10"
+  ],
+  "blocks": [
+    "E5-S5-T12"
+  ],
+  "priority": "high",
+  "definition_of_done": "Zero uncited nodes; trls validate reports COVERAGE: 106/106 cited with no ERROR lines; stragglers committed",
+  "scope": [
+    ".issues/ops"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

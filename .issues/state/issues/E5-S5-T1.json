@@ -1,0 +1,28 @@
+{
+  "id": "E5-S5-T1",
+  "type": "task",
+  "status": "claimed",
+  "title": "Register citation-accepted op type and ConfirmedNoninteractively payload field",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [],
+  "blocks": [
+    "E5-S5-T2"
+  ],
+  "priority": "high",
+  "definition_of_done": "OpCitationAccepted constant in ValidOpTypes; ConfirmedNoninteractively bool field in Payload; TestOpCitationAccepted_RegisteredInValidOpTypes passes; make check green",
+  "scope": [
+    "internal/ops/types.go, internal/ops/types_test.go"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774407273,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774407273,
+  "updated": 1774407273
+}

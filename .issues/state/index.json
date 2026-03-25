@@ -1026,7 +1026,8 @@
       "E5-S2",
       "E5-S3",
       "E5-S4",
-      "E5-S0"
+      "E5-S0",
+      "E5-S5"
     ],
     "updated": 1774231528,
     "title": "E5: Polish, UX Hardening \u0026 User-Facing Docs",
@@ -1453,6 +1454,223 @@
     "title": "`docs/use-cases.md` — per-persona workflow walkthroughs",
     "scope": [
       "docs/use-cases.md"
+    ]
+  },
+  "E5-S5": {
+    "status": "claimed",
+    "type": "story",
+    "parent": "E5",
+    "children": [
+      "E5-S5-T1",
+      "E5-S5-T2",
+      "E5-S5-T3",
+      "E5-S5-T4",
+      "E5-S5-T5",
+      "E5-S5-T6",
+      "E5-S5-T7",
+      "E5-S5-T8",
+      "E5-S5-T9",
+      "E5-S5-T10",
+      "E5-S5-T11",
+      "E5-S5-T12"
+    ],
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774407185,
+    "title": "Citation Remediation — add source-link/accept-citation commands and remediate 106 uncited nodes",
+    "scope": [
+      "internal/ops/types.go, internal/materialize/state.go, internal/materialize/engine.go, internal/traceability/traceability.go, internal/materialize/pipeline.go, internal/validate/validate.go, cmd/trellis/validate.go, cmd/trellis/main.go, cmd/trellis/source_link.go, cmd/trellis/accept_citation.go"
+    ]
+  },
+  "E5-S5-T1": {
+    "status": "claimed",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocks": [
+      "E5-S5-T2"
+    ],
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774407273,
+    "title": "Register citation-accepted op type and ConfirmedNoninteractively payload field",
+    "scope": [
+      "internal/ops/types.go, internal/ops/types_test.go"
+    ]
+  },
+  "E5-S5-T10": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T9"
+    ],
+    "blocks": [
+      "E5-S5-T11"
+    ],
+    "updated": 1774407055,
+    "title": "Emit source-link ops for all properly-sourceable issues (E2/E3/CI/TC/E4/E5)",
+    "scope": [
+      ".issues/ops"
+    ]
+  },
+  "E5-S5-T11": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T8",
+      "E5-S5-T10"
+    ],
+    "blocks": [
+      "E5-S5-T12"
+    ],
+    "updated": 1774407055,
+    "title": "Accept-citation for straggler issues with no recoverable source material",
+    "scope": [
+      ".issues/ops"
+    ]
+  },
+  "E5-S5-T12": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T11"
+    ],
+    "updated": 1774407055,
+    "title": "Final verification — make check green and trls validate 106/106 cited"
+  },
+  "E5-S5-T2": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T1"
+    ],
+    "blocks": [
+      "E5-S5-T3",
+      "E5-S5-T4"
+    ],
+    "updated": 1774407055,
+    "title": "Add CitationAcceptance struct and CitationAcceptances field to materialize state + engine apply case",
+    "scope": [
+      "internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go"
+    ]
+  },
+  "E5-S5-T3": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T2"
+    ],
+    "blocks": [
+      "E5-S5-T4",
+      "E5-S5-T5"
+    ],
+    "updated": 1774407055,
+    "title": "Update traceability — add CitationAcceptanceCount to IssueRef and AcceptedRiskNodes/AcceptedRiskPct to Coverage",
+    "scope": [
+      "internal/traceability/traceability.go, internal/traceability/traceability_test.go"
+    ]
+  },
+  "E5-S5-T4": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T2",
+      "E5-S5-T3"
+    ],
+    "blocks": [
+      "E5-S5-T5"
+    ],
+    "updated": 1774407055,
+    "title": "Update pipeline toTraceabilityRefs to populate CitationAcceptanceCount",
+    "scope": [
+      "internal/materialize/pipeline.go, internal/materialize/engine_test.go"
+    ]
+  },
+  "E5-S5-T5": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T3",
+      "E5-S5-T4"
+    ],
+    "blocks": [
+      "E5-S5-T6"
+    ],
+    "updated": 1774407055,
+    "title": "Update validator — citation-accepted satisfies citation requirement",
+    "scope": [
+      "internal/validate/validate.go, internal/validate/validate_extra_test.go"
+    ]
+  },
+  "E5-S5-T6": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T5"
+    ],
+    "blocks": [
+      "E5-S5-T7",
+      "E5-S5-T8"
+    ],
+    "updated": 1774407055,
+    "title": "Update validate command coverage output format (human + JSON)",
+    "scope": [
+      "cmd/trellis/validate.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S5-T7": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T6"
+    ],
+    "blocks": [
+      "E5-S5-T9"
+    ],
+    "updated": 1774407055,
+    "title": "Implement trls source-link command",
+    "scope": [
+      "cmd/trellis/source_link.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S5-T8": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T6"
+    ],
+    "blocks": [
+      "E5-S5-T9",
+      "E5-S5-T11"
+    ],
+    "updated": 1774407055,
+    "title": "Implement trls accept-citation command with interactive confirmation and --ci flag",
+    "scope": [
+      "cmd/trellis/accept_citation.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S5-T9": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S5",
+    "blocked_by": [
+      "E5-S5-T7",
+      "E5-S5-T8"
+    ],
+    "blocks": [
+      "E5-S5-T10"
+    ],
+    "updated": 1774407055,
+    "title": "Register 19 planning docs as citation sources",
+    "scope": [
+      ".issues/sources/manifest.json"
     ]
   },
   "TC-001": {

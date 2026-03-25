@@ -1,0 +1,27 @@
+{
+  "id": "E5-S5-T9",
+  "type": "task",
+  "status": "open",
+  "title": "Register 19 planning docs as citation sources",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T7",
+    "E5-S5-T8"
+  ],
+  "blocks": [
+    "E5-S5-T10"
+  ],
+  "priority": "high",
+  "definition_of_done": "20 sources registered in manifest (19 new + 1 pre-existing E5 plan); trls sources manifest shows 20 entries; sources manifest committed",
+  "scope": [
+    ".issues/sources/manifest.json"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}

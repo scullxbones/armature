@@ -1,0 +1,26 @@
+{
+  "id": "E5-S5-T10",
+  "type": "task",
+  "status": "open",
+  "title": "Emit source-link ops for all properly-sourceable issues (E2/E3/CI/TC/E4/E5)",
+  "parent": "E5-S5",
+  "children": [],
+  "blocked_by": [
+    "E5-S5-T9"
+  ],
+  "blocks": [
+    "E5-S5-T11"
+  ],
+  "priority": "high",
+  "definition_of_done": "source-link ops emitted for all issues in the E2/E3/CI/TC/E4/E5 mapping; trls validate uncited count decreasing to single digits; ops committed",
+  "scope": [
+    ".issues/ops"
+  ],
+  "provenance": {
+    "method": "decomposed",
+    "confidence": "verified",
+    "source_worker": "d4bbab1d-95f3-4d49-89e5-3ac2e620cbb0"
+  },
+  "decision_refs": [],
+  "updated": 1774407055
+}
