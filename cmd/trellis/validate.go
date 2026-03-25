@@ -35,10 +35,14 @@ func newValidateCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
-				out, err := json.MarshalIndent(map[string]interface{}{
+				payload := map[string]interface{}{
 					"errors":   result.Errors,
 					"warnings": result.Warnings,
-				}, "", "  ")
+				}
+				if result.Coverage != nil {
+					payload["coverage"] = result.Coverage
+				}
+				out, err := json.MarshalIndent(payload, "", "  ")
 				if err != nil {
 					return err
 				}
@@ -51,8 +55,15 @@ func newValidateCmd() *cobra.Command {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "WARNING: %s\n", w)
 				}
 				if result.Coverage != nil {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "COVERAGE: %.1f%% (%d/%d nodes cited)\n",
-						result.Coverage.CoveragePct, result.Coverage.CitedNodes, result.Coverage.TotalNodes)
+					cov := result.Coverage
+					totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
+					if cov.AcceptedRiskNodes > 0 {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk)\n",
+							totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes)
+					} else {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "COVERAGE: %d/%d cited\n",
+							totalCited, cov.TotalNodes)
+					}
 				}
 				if result.OK {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "OK: no issues found")

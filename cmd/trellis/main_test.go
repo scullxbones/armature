@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -993,6 +996,65 @@ func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
 
 	_, err = runTrls(t, repo, "dag-transition")
 	assert.Error(t, err)
+}
+
+func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
+	// Setup: repo with two issues and a worker
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create two tasks: one will be source-linked, one will remain uncited
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Cited task", "--id", "COV-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Uncited task", "--id", "COV-002")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Get the worker log path so we can inject ops directly
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	logPath := filepath.Join(repo, ".issues", "ops", fmt.Sprintf("%s.log", workerID))
+
+	t.Run("simple format when accepted_risk_nodes is zero", func(t *testing.T) {
+		// Inject a source-link op for COV-001; COV-002 remains uncited (no accepted-risk either)
+		sourceLinkOp := ops.Op{
+			Type:      ops.OpSourceLink,
+			TargetID:  "COV-001",
+			Timestamp: time.Now().UnixMilli(),
+			WorkerID:  workerID,
+			Payload:   ops.Payload{SourceID: "src-abc"},
+		}
+		require.NoError(t, ops.AppendOp(logPath, sourceLinkOp))
+
+		out, err := runTrls(t, repo, "validate")
+		require.NoError(t, err)
+		// 1 source-linked out of 2 total, 0 accepted-risk → simple format
+		assert.Contains(t, out, "COVERAGE: 1/2 cited")
+		assert.NotContains(t, out, "source-linked")
+		assert.NotContains(t, out, "accepted-risk")
+	})
+
+	t.Run("extended format when accepted_risk_nodes is positive", func(t *testing.T) {
+		// Inject a citation-accepted op for COV-002 → makes it accepted-risk
+		citationAcceptedOp := ops.Op{
+			Type:      ops.OpCitationAccepted,
+			TargetID:  "COV-002",
+			Timestamp: time.Now().UnixMilli(),
+			WorkerID:  workerID,
+			Payload:   ops.Payload{Confirmed: true},
+		}
+		require.NoError(t, ops.AppendOp(logPath, citationAcceptedOp))
+
+		out, err := runTrls(t, repo, "validate")
+		require.NoError(t, err)
+		// 1 source-linked + 1 accepted-risk = 2/2 total cited → extended format
+		assert.Contains(t, out, "COVERAGE: 2/2 cited (1 source-linked, 1 accepted-risk)")
+	})
 }
 
 func TestLogPayloadSummary(t *testing.T) {

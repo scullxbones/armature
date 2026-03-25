@@ -1597,7 +1597,7 @@
     ]
   },
   "E5-S5-T5": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1608,14 +1608,15 @@
       "E5-S5-T6"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774438302,
+    "updated": 1774438490,
     "title": "Update validator — citation-accepted satisfies citation requirement",
+    "outcome": "checkE7E8E12Citations updated to treat CitationAcceptances as satisfying citation; 3 new tests pass; make check green",
     "scope": [
       "internal/validate/validate.go, internal/validate/validate_extra_test.go"
     ]
   },
   "E5-S5-T6": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S5",
     "blocked_by": [
@@ -1625,7 +1626,8 @@
       "E5-S5-T7",
       "E5-S5-T8"
     ],
-    "updated": 1774407055,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774438496,
     "title": "Update validate command coverage output format (human + JSON)",
     "scope": [
       "cmd/trellis/validate.go, cmd/trellis/main_test.go"
