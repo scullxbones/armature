@@ -12,11 +12,18 @@
   "scope": [
     "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./internal/ready/... -run TestStaleClaims",
+      "description": "StaleClaims unit tests pass; stale diagnostic shown in ready output"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406313
 }

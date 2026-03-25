@@ -16,11 +16,18 @@
   "scope": [
     "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestList",
+      "description": "trls list shows all issues; --type and --parent filter correctly; --format json outputs structured data"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406314
 }

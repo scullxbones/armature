@@ -14,11 +14,18 @@
   "scope": [
     "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestDecomposeApply",
+      "description": "--strict, --generate-ids, --root flags implemented and tested"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774204969
+  "updated": 1774406314
 }

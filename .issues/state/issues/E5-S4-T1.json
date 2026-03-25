@@ -12,11 +12,17 @@
   "scope": [
     "README.md"
   ],
+  "acceptance": [
+    {
+      "type": "manual_review",
+      "description": "README cold-readable; install path clear; quickstart runnable without other docs"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406358
 }

@@ -14,11 +14,18 @@
   "scope": [
     "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestMaterializeExcludeWorker",
+      "description": "materialize --exclude-worker \u003cid\u003e skips that worker's ops"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774204969
+  "updated": 1774406349
 }

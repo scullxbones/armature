@@ -12,11 +12,18 @@
   "scope": [
     "cmd/trellis/assign.go, cmd/trellis/main_test.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestUnassignReleasesClaimedStatus",
+      "description": "unassign on claimed issue transitions to open; child tasks unblocked"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406314
 }

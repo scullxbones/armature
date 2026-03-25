@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/traceability"
 )
 
@@ -184,6 +185,10 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []string {
 	var errs []string
 	for id, issue := range issues {
 		if issue.Type != "task" {
+			continue
+		}
+		// Terminal-status tasks have already been delivered; skip required-field checks.
+		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}
 		if len(issue.Scope) == 0 {

@@ -16,11 +16,18 @@
   "scope": [
     "cmd/trellis/render_context.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestRenderContextAt",
+      "description": "render-context --at \u003csha\u003e returns context as of that SHA"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406349
 }

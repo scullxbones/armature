@@ -16,11 +16,18 @@
   "scope": [
     "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go, .claude/skills/trls/SKILL.md"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestDecomposeApplyDryRun",
+      "description": "--dry-run validates and prints without writing ops; SKILL.md has workflow section"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197645
+  "updated": 1774406314
 }

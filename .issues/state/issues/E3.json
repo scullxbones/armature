@@ -1,6 +1,6 @@
 {
   "id": "E3",
-  "type": "story",
+  "type": "epic",
   "status": "merged",
   "title": "E3: Multi-Worker Collaboration",
   "children": [
@@ -70,5 +70,5 @@
   "claimed_at": 1773711118,
   "claim_ttl": 60,
   "last_heartbeat": 1773711118,
-  "updated": 1773716865
+  "updated": 1774406299
 }

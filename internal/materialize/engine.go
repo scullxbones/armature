@@ -37,6 +37,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyDecision(op)
 	case ops.OpAssign:
 		return s.applyAssign(op)
+	case ops.OpAmend:
+		return s.applyAmend(op)
 	case ops.OpSourceLink:
 		return s.applySourceLink(op)
 	case ops.OpSourceFingerprint:
@@ -194,6 +196,27 @@ func (s *State) applyDecision(op ops.Op) error {
 		WorkerID:  op.WorkerID,
 		Timestamp: op.Timestamp,
 	})
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyAmend(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	if op.Payload.NodeType != "" {
+		issue.Type = op.Payload.NodeType
+	}
+	if len(op.Payload.Scope) > 0 {
+		issue.Scope = op.Payload.Scope
+	}
+	if len(op.Payload.Acceptance) > 0 && string(op.Payload.Acceptance) != "null" {
+		issue.Acceptance = op.Payload.Acceptance
+	}
+	if op.Payload.DefinitionOfDone != "" {
+		issue.DefinitionOfDone = op.Payload.DefinitionOfDone
+	}
 	issue.Updated = op.Timestamp
 	return nil
 }

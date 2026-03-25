@@ -150,3 +150,30 @@ func TestE6RequiredFields(t *testing.T) {
 	assert.False(t, result.OK)
 	assert.True(t, containsError(result, "missing required field"))
 }
+
+func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "merged"}, // merged — required fields not enforced
+	)
+	result := Validate(state, Options{})
+	assert.True(t, result.OK)
+	assert.False(t, containsError(result, "missing required field"))
+}
+
+func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done"}, // done — required fields not enforced
+	)
+	result := Validate(state, Options{})
+	assert.True(t, result.OK)
+	assert.False(t, containsError(result, "missing required field"))
+}
+
+func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "cancelled"}, // cancelled — required fields not enforced
+	)
+	result := Validate(state, Options{})
+	assert.True(t, result.OK)
+	assert.False(t, containsError(result, "missing required field"))
+}

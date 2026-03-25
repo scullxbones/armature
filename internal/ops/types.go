@@ -15,6 +15,7 @@ const (
 	OpDAGTransition     = "dag-transition"
 	OpDecision          = "decision"
 	OpAssign            = "assign"
+	OpAmend             = "amend"
 )
 
 // ValidOpTypes for validation.
@@ -24,6 +25,7 @@ var ValidOpTypes = map[string]bool{
 	OpSourceLink: true, OpSourceFingerprint: true,
 	OpDAGTransition: true, OpDecision: true,
 	OpAssign: true,
+	OpAmend:  true,
 }
 
 // Issue statuses.

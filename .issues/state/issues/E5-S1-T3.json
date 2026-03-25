@@ -12,6 +12,13 @@
   "scope": [
     "cmd/trellis/claim.go, cmd/trellis/main_test.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./cmd/trellis/ -run TestClaimAutoAdvancesParent",
+      "description": "Claiming a task auto-transitions parent story/epic to in-progress"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
@@ -25,5 +32,5 @@
       "msg": "Expanded scope per L16: fix has two parts. (1) ComputeReady should surface tasks whose parent is open (not just in-progress) — removes the bootstrap deadlock where a fresh session sees an empty ready queue even though unclaimed tasks exist. (2) When a task is claimed, auto-transition any open ancestor story/epic to in-progress. Current DoD only covers part (2). Update scope to also include internal/ready/compute.go parent-status gate fix."
     }
   ],
-  "updated": 1774231746
+  "updated": 1774406313
 }

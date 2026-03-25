@@ -172,7 +172,7 @@
   },
   "E3": {
     "status": "merged",
-    "type": "story",
+    "type": "epic",
     "children": [
       "E3-001",
       "E3-003",
@@ -181,7 +181,7 @@
       "E3-T13"
     ],
     "assignee": "ee18c4e1-6ba5-4aeb-bc18-671f5dc38e4b",
-    "updated": 1773716865,
+    "updated": 1774406299,
     "title": "E3: Multi-Worker Collaboration",
     "outcome": "All four sub-stories implemented: push/sync (LowStakesPushThreshold, Push/FetchAndRebase on git.Client, Pusher interface, FilePushTracker, wire push deps), audit log (audit.Load, trls log command), worker presence (trls workers command), issue assignment (OpAssign, AssignedWorker materialization, trls assign/unassign, assignment-aware ComputeReady). All tests pass, binary builds.",
     "scope": [
@@ -1148,7 +1148,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774197393,
+    "updated": 1774406313,
     "title": "Add `open` as valid transition target (L11)",
     "scope": [
       "internal/ops/types.go, cmd/trellis/main_test.go"
@@ -1158,7 +1158,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774197393,
+    "updated": 1774406313,
     "title": "Stale-claim diagnostic in `trls ready` (L6)",
     "scope": [
       "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go"
@@ -1168,7 +1168,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774231746,
+    "updated": 1774406313,
     "title": "Auto-advance story/epic to `in-progress` when child task claimed (L9)",
     "scope": [
       "cmd/trellis/claim.go, cmd/trellis/main_test.go"
@@ -1178,7 +1178,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774197393,
+    "updated": 1774406314,
     "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
     "scope": [
       "cmd/trellis/assign.go, cmd/trellis/main_test.go"
@@ -1191,7 +1191,7 @@
     "blocks": [
       "E5-S1-T6"
     ],
-    "updated": 1774197393,
+    "updated": 1774406314,
     "title": "`decompose-apply --example` flag for schema discoverability (L12)",
     "scope": [
       "cmd/trellis/decompose.go, cmd/trellis/cmd_extra_test.go"
@@ -1207,7 +1207,7 @@
     "blocks": [
       "E5-S1-T7"
     ],
-    "updated": 1774197393,
+    "updated": 1774406314,
     "title": "`trls list` command with `--type` and `--parent` filters (L13)",
     "scope": [
       "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go"
@@ -1223,7 +1223,7 @@
     "blocks": [
       "E5-S1-T8"
     ],
-    "updated": 1774197645,
+    "updated": 1774406314,
     "title": "`decompose-apply --dry-run` and decompose pipeline documentation in SKILL.md (L14, L15)",
     "scope": [
       "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go, .claude/skills/trls/SKILL.md"
@@ -1236,7 +1236,7 @@
     "blocked_by": [
       "E5-S1-T7"
     ],
-    "updated": 1774204969,
+    "updated": 1774406314,
     "title": "`decompose-apply` missing architecture flags — `--root`, `--generate-ids`, `--strict`",
     "scope": [
       "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
@@ -1267,7 +1267,7 @@
     "blocks": [
       "E5-S2-T2"
     ],
-    "updated": 1774197393,
+    "updated": 1774406321,
     "title": "Board model — column layout and keyboard navigation",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"
@@ -1283,7 +1283,7 @@
     "blocks": [
       "E5-S2-T3"
     ],
-    "updated": 1774197393,
+    "updated": 1774406321,
     "title": "`trls tui` CLI command with auto-refresh",
     "scope": [
       "cmd/trellis/tui.go, cmd/trellis/main.go"
@@ -1296,7 +1296,7 @@
     "blocked_by": [
       "E5-S2-T2"
     ],
-    "updated": 1774204969,
+    "updated": 1774406321,
     "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
     "scope": [
       "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go"
@@ -1329,7 +1329,7 @@
     "blocks": [
       "E5-S3-T2"
     ],
-    "updated": 1774197393,
+    "updated": 1774406349,
     "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
     "scope": [
       "internal/git/git.go, internal/git/git_test.go"
@@ -1345,7 +1345,7 @@
     "blocks": [
       "E5-S3-T3"
     ],
-    "updated": 1774197393,
+    "updated": 1774406349,
     "title": "`MaterializeAtSHA` — replay op log at arbitrary historical commit",
     "scope": [
       "internal/materialize/atsha.go, internal/materialize/atsha_test.go"
@@ -1361,7 +1361,7 @@
     "blocks": [
       "E5-S3-T4"
     ],
-    "updated": 1774197393,
+    "updated": 1774406349,
     "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
     "scope": [
       "cmd/trellis/render_context.go"
@@ -1377,7 +1377,7 @@
     "blocks": [
       "E5-S3-T5"
     ],
-    "updated": 1774197393,
+    "updated": 1774406349,
     "title": "`trls context-history` — list issue context at each commit",
     "scope": [
       "cmd/trellis/context_history.go, cmd/trellis/main.go"
@@ -1390,7 +1390,7 @@
     "blocked_by": [
       "E5-S3-T4"
     ],
-    "updated": 1774204969,
+    "updated": 1774406349,
     "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
     "scope": [
       "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go"
@@ -1419,7 +1419,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774197393,
+    "updated": 1774406358,
     "title": "`README.md` — project overview, install, and 5-minute quickstart",
     "scope": [
       "README.md"
@@ -1429,7 +1429,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774197393,
+    "updated": 1774406358,
     "title": "`docs/getting-started.md` — step-by-step guide from install to first agent task",
     "scope": [
       "docs/getting-started.md"
@@ -1439,7 +1439,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774197393,
+    "updated": 1774406358,
     "title": "`docs/commands.md` — complete command reference for every `trls` subcommand",
     "scope": [
       "docs/commands.md"
@@ -1449,7 +1449,7 @@
     "status": "open",
     "type": "task",
     "parent": "E5-S4",
-    "updated": 1774197393,
+    "updated": 1774406358,
     "title": "`docs/use-cases.md` — per-persona workflow walkthroughs",
     "scope": [
       "docs/use-cases.md"

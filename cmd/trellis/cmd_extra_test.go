@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -303,4 +304,43 @@ func TestImportCommand_DryRun_JSON(t *testing.T) {
 	out, err := runTrls(t, repo, "import", "--dry-run", "--format", "json", csvFile)
 	require.NoError(t, err)
 	assert.Contains(t, out, "dry_run")
+}
+
+func TestAmendCmd_PatchesType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "amend", "--issue", "task-01", "--type", "story")
+	require.NoError(t, err)
+	assert.Contains(t, out, "amended")
+
+	// Materialize and check the type changed
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	index, err := materialize.LoadIndex(filepath.Join(repo, ".issues", "state", "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "story", index["task-01"].Type)
+}
+
+func TestAmendCmd_PatchesAcceptance(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
+	out, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--acceptance", acceptance)
+	require.NoError(t, err)
+	assert.Contains(t, out, "amended")
+
+	// Re-materialize and check validate no longer reports missing acceptance
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	validateOut, _ := runTrls(t, repo, "validate")
+	// After amendment the task should not report missing acceptance
+	assert.NotContains(t, validateOut, "missing required field: acceptance on task task-01")
+}
+
+func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01")
+	assert.Error(t, err)
 }

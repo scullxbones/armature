@@ -12,11 +12,17 @@
   "scope": [
     "docs/use-cases.md"
   ],
+  "acceptance": [
+    {
+      "type": "manual_review",
+      "description": "use-cases.md covers P1-P5 personas; multi-agent conflict scenario documented"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406358
 }

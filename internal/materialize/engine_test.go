@@ -1,6 +1,7 @@
 package materialize
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -500,4 +501,54 @@ func TestSortOpsByTimestamp_StableOnEqualTimestamp(t *testing.T) {
 	sortOpsByTimestamp(allOps)
 	assert.Equal(t, "first", allOps[0].Type)
 	assert.Equal(t, "second", allOps[1].Type)
+}
+
+func TestApplyAmendOp_PatchesType(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "S1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Story", NodeType: "story"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "S1", Timestamp: 200, WorkerID: "w2",
+		Payload: ops.Payload{NodeType: "epic"},
+	}))
+	assert.Equal(t, "epic", state.Issues["S1"].Type)
+}
+
+func TestApplyAmendOp_PatchesAcceptance(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task", NodeType: "task"},
+	}))
+	acceptance := json.RawMessage(`[{"type":"test_passes","cmd":"make check"}]`)
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w2",
+		Payload: ops.Payload{Acceptance: acceptance},
+	}))
+	assert.NotEmpty(t, state.Issues["T1"].Acceptance)
+	assert.Equal(t, string(acceptance), string(state.Issues["T1"].Acceptance))
+}
+
+func TestApplyAmendOp_PatchesScope(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w2",
+		Payload: ops.Payload{Scope: []string{"internal/**"}},
+	}))
+	assert.Equal(t, []string{"internal/**"}, state.Issues["T1"].Scope)
+}
+
+func TestApplyAmendOp_UnknownIssue_NoError(t *testing.T) {
+	state := NewState()
+	err := state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "NONEXISTENT", Timestamp: 100,
+		Payload: ops.Payload{NodeType: "epic"},
+	})
+	assert.NoError(t, err)
 }

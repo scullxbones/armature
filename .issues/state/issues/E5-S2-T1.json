@@ -14,11 +14,18 @@
   "scope": [
     "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"
   ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "cmd": "go test ./... -run TestBoard",
+      "description": "BubbleTea model with three columns, navigation, and detail viewport; unit tests pass"
+    }
+  ],
   "provenance": {
     "method": "decomposed",
     "confidence": "verified",
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
-  "updated": 1774197393
+  "updated": 1774406321
 }
