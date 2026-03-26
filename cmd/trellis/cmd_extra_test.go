@@ -863,3 +863,27 @@ func TestDoctorCmd_Strict(t *testing.T) {
 	_, err = runTrls(t, repo, "doctor", "--strict")
 	assert.Error(t, err, "doctor --strict should fail when uncited issues exist")
 }
+
+// TestReadyParentFilter verifies that trls ready --parent ISSUE-ID returns only
+// descendants of the given issue.
+func TestReadyParentFilter(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	// Without filter: all ready tasks visible (task-01, task-02; story-01 is a story type which may appear).
+	outAll, err := runTrls(t, repo, "ready")
+	require.NoError(t, err)
+	assert.Contains(t, outAll, "task-01")
+	assert.Contains(t, outAll, "task-02")
+
+	// With --parent story-01: only task-01 (child of story-01) should appear.
+	outFiltered, err := runTrls(t, repo, "ready", "--parent", "story-01")
+	require.NoError(t, err)
+	assert.Contains(t, outFiltered, "task-01")
+	assert.NotContains(t, outFiltered, "task-02")
+
+	// With --parent for a non-existent ID: no tasks.
+	outNone, err := runTrls(t, repo, "ready", "--parent", "nonexistent-parent")
+	require.NoError(t, err)
+	assert.NotContains(t, outNone, "task-01")
+	assert.NotContains(t, outNone, "task-02")
+}

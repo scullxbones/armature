@@ -1,7 +1,7 @@
 {
   "id": "E5-S1-T10",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "`trls doctor` command — repo health checks D1-D6",
   "parent": "E5-S1",
   "children": [],
@@ -18,6 +18,7 @@
     "source_worker": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f"
   },
   "decision_refs": [],
+  "outcome": "trls doctor runs D1-D6 checks (git divergence, stale claims, orphaned ops, broken parent refs, dependency cycles, uncited issues); exits non-zero on errors; --strict promotes warnings to errors; --format json works; Repo Health section added to docs/SKILL.md; trls doctor added to worker-init step in docs/trls-worker-SKILL.md; make skill regenerated; all tests pass; make check green",
   "source_links": [
     {
       "source_entry_id": "878f82b7-fce0-4b3b-87d7-3085eb7d335e",
@@ -28,5 +29,5 @@
   "claimed_at": 1774486020,
   "claim_ttl": 60,
   "last_heartbeat": 1774486020,
-  "updated": 1774486020
+  "updated": 1774487426
 }

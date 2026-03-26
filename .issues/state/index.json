@@ -1164,12 +1164,13 @@
     ]
   },
   "E5-S1-T10": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774486020,
+    "updated": 1774487426,
     "title": "`trls doctor` command — repo health checks D1-D6",
+    "outcome": "trls doctor runs D1-D6 checks (git divergence, stale claims, orphaned ops, broken parent refs, dependency cycles, uncited issues); exits non-zero on errors; --strict promotes warnings to errors; --format json works; Repo Health section added to docs/SKILL.md; trls doctor added to worker-init step in docs/trls-worker-SKILL.md; make skill regenerated; all tests pass; make check green",
     "scope": [
       "cmd/trellis/doctor.go, internal/doctor/, cmd/trellis/main_test.go, docs/SKILL.md, docs/trls-worker-SKILL.md"
     ]

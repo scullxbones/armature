@@ -12,6 +12,7 @@ import (
 
 func newReadyCmd() *cobra.Command {
 	var workerID string
+	var filterParent string
 
 	cmd := &cobra.Command{
 		Use:   "ready",
@@ -38,6 +39,18 @@ func newReadyCmd() *cobra.Command {
 
 			entries := ready.ComputeReady(index, issues, workerID)
 
+			// Apply --parent filter: keep only descendants of the given issue.
+			if filterParent != "" {
+				descendants := collectDescendants(filterParent, index)
+				filtered := entries[:0]
+				for _, e := range entries {
+					if descendants[e.Issue] {
+						filtered = append(filtered, e)
+					}
+				}
+				entries = filtered
+			}
+
 			format, _ := cmd.Flags().GetString("format")
 			if format == "json" || format == "agent" {
 				data, _ := json.MarshalIndent(entries, "", "  ")
@@ -49,11 +62,11 @@ func newReadyCmd() *cobra.Command {
 						_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "# stale claims (TTL expired):")
 						for _, id := range stale {
 							issue := issues[id]
-							workerID := ""
+							wid := ""
 							if issue != nil {
-								workerID = issue.ClaimedBy
+								wid = issue.ClaimedBy
 							}
-							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "#   %s (claimed by %s)\n", id, workerID)
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "#   %s (claimed by %s)\n", id, wid)
 						}
 					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
@@ -72,5 +85,27 @@ func newReadyCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID for assignment-aware sorting")
+	cmd.Flags().StringVar(&filterParent, "parent", "", "filter to descendants of this issue ID")
 	return cmd
+}
+
+// collectDescendants returns the set of all descendant IDs of root (not including root itself).
+func collectDescendants(root string, index materialize.Index) map[string]bool {
+	result := make(map[string]bool)
+	queue := []string{root}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		entry, ok := index[current]
+		if !ok {
+			continue
+		}
+		for _, child := range entry.Children {
+			if !result[child] {
+				result[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	return result
 }
