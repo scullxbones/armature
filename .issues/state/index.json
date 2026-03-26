@@ -1359,21 +1359,22 @@
     ]
   },
   "E5-S2-T1": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S2",
     "blocks": [
       "E5-S2-T2"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774492009,
+    "updated": 1774492300,
     "title": "Board model — column layout and keyboard navigation",
+    "outcome": "BubbleTea board model implemented: 3 columns (open/active/done), h/l column nav, j/k item nav, enter opens detail viewport; 20 tests, 95% coverage, make check green",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"
     ]
   },
   "E5-S2-T2": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S2",
     "blocked_by": [
@@ -1382,7 +1383,8 @@
     "blocks": [
       "E5-S2-T3"
     ],
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774492313,
     "title": "`trls tui` CLI command with auto-refresh",
     "scope": [
       "cmd/trellis/tui.go, cmd/trellis/main.go"

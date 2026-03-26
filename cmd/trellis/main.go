@@ -78,6 +78,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newAcceptCitationCmd())
 	root.AddCommand(newShowCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newTUICmd())
 
 	return root
 }

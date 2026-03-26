@@ -3,6 +3,7 @@ package board
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,14 @@ import (
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/tui"
 )
+
+// RefreshMsg carries a new set of issues to reload into the board.
+type RefreshMsg struct {
+	Issues []*materialize.Issue
+}
+
+// tickMsg is fired by the auto-refresh ticker.
+type tickMsg time.Time
 
 // Column indices for the three board states.
 const (
@@ -30,27 +39,51 @@ type Model struct {
 	keys       KeyMap
 	width      int
 	height     int
+	issuesDir  string // non-empty enables auto-refresh every 5s
 }
 
 // New creates a new board Model, distributing issues into columns by status.
 func New(issues []*materialize.Issue, width, height int) Model {
+	return NewWithRefresh(issues, width, height, "")
+}
+
+// NewWithRefresh creates a new board Model with auto-refresh enabled.
+// When issuesDir is non-empty, the model reloads issues every 5 seconds.
+func NewWithRefresh(issues []*materialize.Issue, width, height int, issuesDir string) Model {
 	m := Model{
-		keys:   DefaultKeyMap(),
-		width:  width,
-		height: height,
+		keys:      DefaultKeyMap(),
+		width:     width,
+		height:    height,
+		issuesDir: issuesDir,
 	}
-	// Distribute issues into columns based on status.
+	m = m.distributeIssues(issues)
+	m.viewport = viewport.New(width, height/3)
+	return m
+}
+
+// distributeIssues populates columns from issues, clamping existing cursors.
+func (m Model) distributeIssues(issues []*materialize.Issue) Model {
+	var cols [3][]*materialize.Issue
 	for _, issue := range issues {
 		switch issue.Status {
 		case "open":
-			m.columns[ColOpen] = append(m.columns[ColOpen], issue)
+			cols[ColOpen] = append(cols[ColOpen], issue)
 		case "in-progress":
-			m.columns[ColActive] = append(m.columns[ColActive], issue)
+			cols[ColActive] = append(cols[ColActive], issue)
 		case "done":
-			m.columns[ColDone] = append(m.columns[ColDone], issue)
+			cols[ColDone] = append(cols[ColDone], issue)
 		}
 	}
-	m.viewport = viewport.New(width, height/3)
+	m.columns = cols
+	// Clamp cursors so they remain in-bounds.
+	for i := 0; i < 3; i++ {
+		n := len(m.columns[i])
+		if n == 0 {
+			m.cursors[i] = 0
+		} else if m.cursors[i] >= n {
+			m.cursors[i] = n - 1
+		}
+	}
 	return m
 }
 
@@ -64,11 +97,35 @@ func (m Model) Cursor() int { return m.cursors[m.activeCol] }
 func (m Model) ShowDetail() bool { return m.showDetail }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	if m.issuesDir != "" {
+		return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
+	}
+	return nil
+}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case RefreshMsg:
+		m = m.distributeIssues(msg.Issues)
+		return m, nil
+
+	case tickMsg:
+		state, _, err := materialize.MaterializeAndReturn(m.issuesDir, true)
+		if err == nil {
+			var issues []*materialize.Issue
+			for _, issue := range state.Issues {
+				issues = append(issues, issue)
+			}
+			m = m.distributeIssues(issues)
+		}
+		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
+
 	case tea.KeyMsg:
 		switch {
 		case msg.String() == "q" || msg.String() == "ctrl+c":

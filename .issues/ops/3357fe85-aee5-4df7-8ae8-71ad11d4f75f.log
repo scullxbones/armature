@@ -245,3 +245,7 @@
 ["note","E5-S2-T1",1774492094,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Starting implementation: board model with column layout and keyboard nav"}]
 ["heartbeat","E5-S2-T1",1774492285,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{}]
 ["transition","E5-S2-T1",1774492300,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"BubbleTea board model implemented: 3 columns (open/active/done), h/l column nav, j/k item nav, enter opens detail viewport; 20 tests, 95% coverage, make check green"}]
+["claim","E5-S2-T2",1774492313,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["note","E5-S2-T2",1774492588,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Starting implementation: trls tui CLI command with auto-refresh"}]
+["heartbeat","E5-S2-T2",1774492588,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{}]
+["transition","E5-S2-T2",1774492608,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls tui command implemented: launches board with auto-refresh every 5s via tea.Tick; NewWithRefresh constructor; non-interactive path prints summary; make check green"}]
