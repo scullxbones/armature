@@ -1,7 +1,7 @@
 {
   "id": "E5-S2",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
   "parent": "E5",
   "children": [

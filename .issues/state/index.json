@@ -1341,7 +1341,7 @@
     ]
   },
   "E5-S2": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1392,15 +1392,16 @@
     ]
   },
   "E5-S2-T3": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S2",
     "blocked_by": [
       "E5-S2-T2"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774492625,
+    "updated": 1774492890,
     "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
+    "outcome": "trls ready TUI implemented: BubbleTea selection list on TTY, enter claims selected task, q quits without claiming, --format=json bypasses TUI; 20 tests, 93.8% coverage, make check green",
     "scope": [
       "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go"
     ]
