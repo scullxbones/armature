@@ -80,7 +80,7 @@ Dispatch a subagent with:
 The subagent should:
 - Record progress with `trls note --issue ID --msg "..."`
 - Record decisions with `trls decision --issue ID --topic X --choice Y --rationale Z`
-- Call `trls heartbeat --issue ID` for long-running work (max once/minute)
+- **Call `trls heartbeat --issue ID` for any work taking more than a few minutes — maximum once per minute.** Claims expire after the TTL; without periodic heartbeats another worker may steal the claim. Issue heartbeat calls at natural checkpoints (e.g. after each test run, after each file written).
 - **Cite every issue it touches or creates** — before returning, run `trls source-link` for any issue that has a recoverable source doc, or `trls accept-citation --ci` if no source exists. Do not leave issues uncited.
 
 ### 5. Complete and Commit

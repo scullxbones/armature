@@ -210,3 +210,5 @@
 ["transition","E5-S1-T11",1774487636,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls ready --parent ISSUE-ID returns only descendants of the given issue; collectDescendants BFS walks the index Children lists; TestReadyParentFilter passes; make check green"}]
 ["claim","E5-S1-T12",1774487646,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["transition","E5-S1-T12",1774487747,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"make check now runs make skill as a final step; deployed skill always fresh after check; make check green"}]
+["claim","E5-S1-T13",1774487755,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S1-T13",1774487882,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"Dispatch Subagent section now explicitly instructs subagents to call trls heartbeat --issue ID for long-running work (max once/minute) with explanation of claim expiry; make skill regenerated deployed skill; make check green"}]
