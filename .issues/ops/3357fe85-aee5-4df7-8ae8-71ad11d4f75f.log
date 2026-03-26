@@ -202,3 +202,5 @@
 ["source-link","E5-S1-T11",1774485666,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"source_id":"878f82b7-fce0-4b3b-87d7-3085eb7d335e","source_url":"docs/superpowers/plans/2026-03-25-e5-s1-dogfooding-ux-fixes.md"}]
 ["source-link","E5-S1-T12",1774485666,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"source_id":"878f82b7-fce0-4b3b-87d7-3085eb7d335e","source_url":"docs/superpowers/plans/2026-03-25-e5-s1-dogfooding-ux-fixes.md"}]
 ["source-link","E5-S1-T13",1774485666,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"source_id":"878f82b7-fce0-4b3b-87d7-3085eb7d335e","source_url":"docs/superpowers/plans/2026-03-25-e5-s1-dogfooding-ux-fixes.md"}]
+["claim","E5-S1-T9",1774485820,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S1-T9",1774486011,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls show --issue ISSUE-ID prints human-readable summary (ID, title, type, status, parent, claimed_by, DoD, notes); --format json outputs structured data; TestShowCmd, TestShowCmd_MissingIssue, TestShowCmd_MissingFlag all pass; make check green"}]

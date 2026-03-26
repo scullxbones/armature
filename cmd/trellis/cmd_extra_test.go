@@ -757,3 +757,47 @@ func TestDecomposeApplyRoot(t *testing.T) {
 	require.True(t, ok, "ROOT-001 should exist in state")
 	assert.Equal(t, "root-story-01", entry.Parent, "ROOT-001 should have parent=root-story-01 when --root is set")
 }
+
+// TestShowCmd verifies that trls show --issue prints human-readable summary
+// and that --format json produces structured data.
+func TestShowCmd(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	// Human-readable output
+	out, err := runTrls(t, repo, "show", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "My Task")
+	assert.Contains(t, out, "task")     // type
+	assert.Contains(t, out, "open")     // status
+	assert.Contains(t, out, "story-01") // parent
+
+	// JSON output
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "show", "--issue", "task-01"})
+	require.NoError(t, cmd.Execute())
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &result))
+	assert.Equal(t, "task-01", result["id"])
+	assert.Equal(t, "My Task", result["title"])
+	assert.Equal(t, "task", result["type"])
+	assert.Equal(t, "open", result["status"])
+	assert.Equal(t, "story-01", result["parent"])
+}
+
+func TestShowCmd_MissingIssue(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	_, err := runTrls(t, repo, "show", "--issue", "nonexistent-99")
+	assert.Error(t, err)
+}
+
+func TestShowCmd_MissingFlag(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	_, err := runTrls(t, repo, "show")
+	assert.Error(t, err)
+}

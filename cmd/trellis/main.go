@@ -76,6 +76,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newListCmd())
 	root.AddCommand(newSourceLinkCmd())
 	root.AddCommand(newAcceptCitationCmd())
+	root.AddCommand(newShowCmd())
 
 	return root
 }
