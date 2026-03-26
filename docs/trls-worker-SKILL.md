@@ -50,8 +50,11 @@ digraph worker_loop {
 ### 1. Initialize
 ```
 trls worker-init --check || trls worker-init
+trls doctor
 ```
-Run once per machine/clone — the worker ID persists in local git config across sessions. `--check` is a no-op if the ID is already set. Re-running `worker-init` without `--check` generates a new UUID, which is almost never what you want.
+Run `worker-init` once per machine/clone — the worker ID persists in local git config across sessions. `--check` is a no-op if the ID is already set. Re-running `worker-init` without `--check` generates a new UUID, which is almost never what you want.
+
+Run `trls doctor` after init to verify repo health (no broken parent refs, no orphaned ops, no dependency cycles). Fix any errors before claiming work.
 
 ### 2. Find Ready Work
 ```

@@ -1164,10 +1164,11 @@
     ]
   },
   "E5-S1-T10": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774485665,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774486020,
     "title": "`trls doctor` command — repo health checks D1-D6",
     "scope": [
       "cmd/trellis/doctor.go, internal/doctor/, cmd/trellis/main_test.go, docs/SKILL.md, docs/trls-worker-SKILL.md"
@@ -1306,11 +1307,13 @@
     ]
   },
   "E5-S1-T9": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774485665,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774486011,
     "title": "Fix `trls show` to return human-readable output",
+    "outcome": "trls show --issue ISSUE-ID prints human-readable summary (ID, title, type, status, parent, claimed_by, DoD, notes); --format json outputs structured data; TestShowCmd, TestShowCmd_MissingIssue, TestShowCmd_MissingFlag all pass; make check green",
     "scope": [
       "cmd/trellis/status.go, cmd/trellis/main_test.go"
     ]

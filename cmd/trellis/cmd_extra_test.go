@@ -801,3 +801,65 @@ func TestShowCmd_MissingFlag(t *testing.T) {
 	_, err := runTrls(t, repo, "show")
 	assert.Error(t, err)
 }
+
+// TestDoctorCmd_CleanRepo verifies that trls doctor succeeds on a healthy repo.
+func TestDoctorCmd_CleanRepo(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "doctor")
+	require.NoError(t, err)
+	assert.Contains(t, out, "D2")
+	assert.Contains(t, out, "D3")
+	assert.Contains(t, out, "D4")
+	assert.Contains(t, out, "D5")
+	assert.Contains(t, out, "D6")
+}
+
+// TestDoctorCmd_JSONFormat verifies --format json outputs structured data.
+func TestDoctorCmd_JSONFormat(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "doctor"})
+	require.NoError(t, cmd.Execute())
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &result))
+	assert.Contains(t, result, "checks")
+}
+
+// TestDoctorCmd_BrokenParentRef verifies D4 detects broken parent references.
+func TestDoctorCmd_BrokenParentRef(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a task with a non-existent parent.
+	_, err = runTrls(t, repo, "create",
+		"--title", "Orphan task", "--type", "task", "--id", "orphan-01",
+		"--parent", "nonexistent-parent")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "doctor")
+	assert.Error(t, err, "doctor should fail on broken parent ref (D4 error)")
+	assert.Contains(t, out+err.Error(), "D4")
+}
+
+// TestDoctorCmd_Strict verifies --strict promotes D6 warnings to errors.
+func TestDoctorCmd_Strict(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Without --strict: uncited issues are warnings, should succeed.
+	_, err := runTrls(t, repo, "doctor")
+	require.NoError(t, err, "doctor without --strict should succeed on a repo with uncited issues")
+
+	// With --strict: warnings become errors, should fail.
+	_, err = runTrls(t, repo, "doctor", "--strict")
+	assert.Error(t, err, "doctor --strict should fail when uncited issues exist")
+}

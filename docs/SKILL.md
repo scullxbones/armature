@@ -85,6 +85,29 @@ trls accept-citation --issue ID --rationale TEXT --ci    # accept risk (no sourc
 - `--rationale` must be ≥ 3 words; use `--ci` to skip interactive confirmation.
 - Use `trls validate` to check coverage: `COVERAGE: N/N cited` with no ERROR lines is the goal.
 
+## Repo Health
+
+Run `trls doctor` to check for common repo health issues before pushing or opening a PR.
+
+```
+trls doctor           # run all checks; exits non-zero on errors
+trls doctor --strict  # promote warnings to errors
+trls doctor --format json  # machine-readable output
+```
+
+Checks performed:
+
+| Check | Severity | Description |
+|---|---|---|
+| D1 | warning | Git commits reference issues not in `done`/`merged` state |
+| D2 | warning | Claimed issues with expired TTL (stale claims) |
+| D3 | error | Op files reference issue IDs not in the graph |
+| D4 | error | Issues whose `parent` points to a non-existent ID |
+| D5 | error | `blocked_by` chains that form a dependency cycle |
+| D6 | warning | Issues without source-link or accept-citation |
+
+`trls doctor` exits zero if there are no errors (warnings are advisory). Use `--strict` to treat warnings as errors.
+
 ## Rate Limits
 
 | Operation | Limit |

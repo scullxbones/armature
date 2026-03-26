@@ -1,7 +1,7 @@
 {
   "id": "E5-S1-T10",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "`trls doctor` command — repo health checks D1-D6",
   "parent": "E5-S1",
   "children": [],
@@ -24,5 +24,9 @@
       "source_url": "docs/superpowers/plans/2026-03-25-e5-s1-dogfooding-ux-fixes.md"
     }
   ],
-  "updated": 1774485665
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774486020,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774486020,
+  "updated": 1774486020
 }
