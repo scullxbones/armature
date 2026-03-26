@@ -1145,9 +1145,9 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774488806,
+    "updated": 1774489048,
     "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
-    "outcome": "All 8 tasks complete: open transition target (T1), stale-claim diagnostic (T2), auto-advance parent on claim + ready queue parent gate fix (T3), unassign releases claimed to open (T4), decompose-apply --example (T5), trls list --type/--parent/--json (T6), decompose-apply --dry-run + SKILL.md docs (T7), decompose-apply --root/--generate-ids/--strict (T8); make check green",
+    "outcome": "All 14 tasks complete: T1-T8 UX regressions and discoverability fixes; T9 trls show; T10 trls doctor; T11 ready --parent filter; T12 make skill in make check; T13 heartbeat docs; T14 decompose-apply --schema. make check green.",
     "scope": [
       "internal/ops/types.go, internal/ready/stale.go, cmd/trellis/ready.go, cmd/trellis/claim.go, cmd/trellis/assign.go, cmd/trellis/decompose.go, cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/main_test.go, cmd/trellis/cmd_extra_test.go"
     ]
@@ -1341,7 +1341,7 @@
     ]
   },
   "E5-S2": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1352,20 +1352,21 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774468782,
+    "updated": 1774492009,
     "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go"
     ]
   },
   "E5-S2-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S2",
     "blocks": [
       "E5-S2-T2"
     ],
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774492009,
     "title": "Board model — column layout and keyboard navigation",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go"

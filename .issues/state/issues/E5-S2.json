@@ -1,7 +1,7 @@
 {
   "id": "E5-S2",
   "type": "story",
-  "status": "open",
+  "status": "in-progress",
   "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
   "parent": "E5",
   "children": [
@@ -30,5 +30,5 @@
       "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
     }
   ],
-  "updated": 1774468782
+  "updated": 1774492009
 }
