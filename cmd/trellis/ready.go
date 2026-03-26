@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/ready"
+	"github.com/scullxbones/trellis/internal/tui"
+	readytui "github.com/scullxbones/trellis/internal/tui/ready"
 	"github.com/spf13/cobra"
 )
 
@@ -55,6 +59,35 @@ func newReadyCmd() *cobra.Command {
 			if format == "json" || format == "agent" {
 				data, _ := json.MarshalIndent(entries, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			} else if tui.IsInteractive() {
+				m := readytui.New(entries)
+				p := tea.NewProgram(m)
+				finalModel, err := p.Run()
+				if err != nil {
+					return err
+				}
+				final, ok := finalModel.(readytui.Model)
+				if !ok {
+					return fmt.Errorf("unexpected model type from TUI")
+				}
+				if final.Selected() != "" {
+					workerID, logPath, err := resolveWorkerAndLog()
+					if err != nil {
+						return err
+					}
+					op := ops.Op{
+						Type:      ops.OpClaim,
+						TargetID:  final.Selected(),
+						Timestamp: nowEpoch(),
+						WorkerID:  workerID,
+						Payload:   ops.Payload{TTL: 60},
+					}
+					if err := appendHighStakesOp(logPath, op); err != nil {
+						return err
+					}
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed: %s\n", final.Selected())
+				}
+				return nil
 			} else {
 				if len(entries) == 0 {
 					stale := ready.StaleClaims(issues, time.Now())

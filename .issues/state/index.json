@@ -1374,7 +1374,7 @@
     ]
   },
   "E5-S2-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S2",
     "blocked_by": [
@@ -1384,20 +1384,22 @@
       "E5-S2-T3"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774492313,
+    "updated": 1774492608,
     "title": "`trls tui` CLI command with auto-refresh",
+    "outcome": "trls tui command implemented: launches board with auto-refresh every 5s via tea.Tick; NewWithRefresh constructor; non-interactive path prints summary; make check green",
     "scope": [
       "cmd/trellis/tui.go, cmd/trellis/main.go"
     ]
   },
   "E5-S2-T3": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S2",
     "blocked_by": [
       "E5-S2-T2"
     ],
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774492625,
     "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
     "scope": [
       "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go"
