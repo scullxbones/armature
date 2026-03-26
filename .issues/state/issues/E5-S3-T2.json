@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T2",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "`MaterializeAtSHA` — replay op log at arbitrary historical commit",
   "parent": "E5-S3",
   "children": [],
@@ -35,5 +35,9 @@
       "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
     }
   ],
-  "updated": 1774468782
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774493603,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774493603,
+  "updated": 1774493603
 }

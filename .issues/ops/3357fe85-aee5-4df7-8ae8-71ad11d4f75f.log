@@ -256,3 +256,6 @@
 ["transition","E5-S3",1774493381,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"in-progress"}]
 ["note","E5-S3-T1",1774493567,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Implemented ListFilesAtCommit, ShowFileAtCommit, LogBranch on git.Client; all tests pass; make check green"}]
 ["transition","E5-S3-T1",1774493571,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"ListFilesAtCommit, ShowFileAtCommit, LogBranch implemented on git.Client with tests against real git repo; make check green"}]
+["claim","E5-S3-T2",1774493603,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["note","E5-S3-T2",1774493993,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"MaterializeAtSHA implemented in internal/materialize/atsha.go; 4 tests pass; make check green"}]
+["transition","E5-S3-T2",1774493994,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"MaterializeAtSHA(gc, sha, opsPrefix) implemented; replays op log at arbitrary commit; unit tests with real git fixtures pass; make check green"}]

@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T1",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
   "parent": "E5-S3",
   "children": [],
@@ -27,6 +27,14 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "ListFilesAtCommit, ShowFileAtCommit, LogBranch implemented on git.Client with tests against real git repo; make check green",
+  "notes": [
+    {
+      "worker_id": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+      "timestamp": 1774493567,
+      "msg": "Implemented ListFilesAtCommit, ShowFileAtCommit, LogBranch on git.Client; all tests pass; make check green"
+    }
+  ],
   "source_links": [
     {
       "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
@@ -37,5 +45,5 @@
   "claimed_at": 1774493381,
   "claim_ttl": 60,
   "last_heartbeat": 1774493381,
-  "updated": 1774493381
+  "updated": 1774493571
 }
