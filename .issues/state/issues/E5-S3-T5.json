@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T5",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
   "parent": "E5-S3",
   "children": [],
@@ -33,5 +33,9 @@
       "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
     }
   ],
-  "updated": 1774468783
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774495351,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774495351,
+  "updated": 1774495351
 }

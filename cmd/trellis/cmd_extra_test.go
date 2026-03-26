@@ -928,3 +928,43 @@ func TestReadyParentFilter(t *testing.T) {
 	assert.NotContains(t, outNone, "task-01")
 	assert.NotContains(t, outNone, "task-02")
 }
+
+// TestMaterializeCommand_ExcludeWorker verifies that --exclude-worker skips all
+// ops from that worker's log, yielding zero issues in diagnostic mode.
+func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--title", "Exclude Worker Issue", "--type", "task", "--id", "TST-EX")
+	require.NoError(t, err)
+
+	// Find the worker ID from the ops log filename.
+	opsDir := filepath.Join(repo, ".issues", "ops")
+	entries, readErr := os.ReadDir(opsDir)
+	require.NoError(t, readErr)
+	var workerID string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".log") {
+			workerID = strings.TrimSuffix(e.Name(), ".log")
+			break
+		}
+	}
+	require.NotEmpty(t, workerID, "expected at least one .log file in ops dir")
+
+	// Normal materialize should produce 1 issue.
+	outNormal, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	assert.Contains(t, outNormal, "1 issues")
+
+	// With --exclude-worker, all ops from that worker are skipped.
+	outExclude, err := runTrls(t, repo, "materialize", "--exclude-worker", workerID)
+	require.NoError(t, err)
+	assert.Contains(t, outExclude, "excluding worker")
+	assert.Contains(t, outExclude, "0 issues")
+}

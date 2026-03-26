@@ -231,6 +231,69 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 	return state, result, nil
 }
 
+// MaterializeExcludeWorker replays the op log excluding all ops from the given
+// workerID. This is a diagnostic-only mode: state files and checkpoint are NOT
+// updated. Returns the resulting State and Result.
+func MaterializeExcludeWorker(issuesDir, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
+	opsDir := filepath.Join(issuesDir, "ops")
+
+	entries, err := os.ReadDir(opsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return NewState(), Result{}, nil
+		}
+		return nil, Result{}, fmt.Errorf("read ops dir: %w", err)
+	}
+
+	var allOps []ops.Op
+
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		// Skip the log file belonging to the excluded worker.
+		if strings.Contains(entry.Name(), excludeWorkerID) {
+			continue
+		}
+		logPath := filepath.Join(opsDir, entry.Name())
+		workerID := ops.WorkerIDFromFilename(logPath)
+		if workerID == excludeWorkerID {
+			continue
+		}
+
+		logOps, err := ops.ReadLogFromOffset(logPath, 0)
+		if err != nil {
+			return nil, Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
+		}
+
+		for _, op := range logOps {
+			if op.WorkerID != workerID {
+				continue
+			}
+			allOps = append(allOps, op)
+		}
+	}
+
+	sortOpsByTimestamp(allOps)
+
+	state := NewState()
+	state.SingleBranchMode = singleBranch
+
+	for _, op := range allOps {
+		if err := state.ApplyOp(op); err != nil {
+			continue
+		}
+	}
+
+	state.RunRollup()
+
+	return state, Result{
+		IssueCount:   len(state.Issues),
+		OpsProcessed: len(allOps),
+		FullReplay:   true,
+	}, nil
+}
+
 // opSortKey returns a secondary sort key so that create ops are processed
 // before other op types when timestamps are equal.
 func opSortKey(op ops.Op) int {

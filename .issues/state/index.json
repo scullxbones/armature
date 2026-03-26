@@ -1479,7 +1479,7 @@
     ]
   },
   "E5-S3-T4": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
@@ -1489,20 +1489,22 @@
       "E5-S3-T5"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774495061,
+    "updated": 1774495340,
     "title": "`trls context-history` — list issue context at each commit",
+    "outcome": "context-history --issue ID command implemented; lists SHAs where context changed with timestamp; make check green",
     "scope": [
       "cmd/trellis/context_history.go, cmd/trellis/main.go"
     ]
   },
   "E5-S3-T5": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
       "E5-S3-T4"
     ],
-    "updated": 1774468783,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774495351,
     "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
     "scope": [
       "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go"

@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T4",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "`trls context-history` — list issue context at each commit",
   "parent": "E5-S3",
   "children": [],
@@ -29,6 +29,7 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "context-history --issue ID command implemented; lists SHAs where context changed with timestamp; make check green",
   "source_links": [
     {
       "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
@@ -39,5 +40,5 @@
   "claimed_at": 1774495061,
   "claim_ttl": 60,
   "last_heartbeat": 1774495061,
-  "updated": 1774495061
+  "updated": 1774495340
 }
