@@ -259,3 +259,6 @@
 ["claim","E5-S3-T2",1774493603,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["note","E5-S3-T2",1774493993,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"MaterializeAtSHA implemented in internal/materialize/atsha.go; 4 tests pass; make check green"}]
 ["transition","E5-S3-T2",1774493994,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"MaterializeAtSHA(gc, sha, opsPrefix) implemented; replays op log at arbitrary commit; unit tests with real git fixtures pass; make check green"}]
+["claim","E5-S3-T3",1774494006,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["note","E5-S3-T3",1774495047,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Added --at \u003csha\u003e flag to render-context; uses MaterializeAtSHA internally; test confirms output differs from HEAD"}]
+["transition","E5-S3-T3",1774495047,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"render-context --at \u003csha\u003e flag implemented; time-travel context works; make check green"}]

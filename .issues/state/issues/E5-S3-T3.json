@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T3",
   "type": "task",
-  "status": "open",
+  "status": "claimed",
   "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
   "parent": "E5-S3",
   "children": [],
@@ -35,5 +35,9 @@
       "source_url": "docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md"
     }
   ],
-  "updated": 1774468783
+  "claimed_by": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+  "claimed_at": 1774494006,
+  "claim_ttl": 60,
+  "last_heartbeat": 1774494006,
+  "updated": 1774494006
 }

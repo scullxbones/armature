@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/trellis/internal/context"
+	"github.com/scullxbones/trellis/internal/git"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,7 @@ func newRenderContextCmd() *cobra.Command {
 		rcIssue  string
 		rcBudget int
 		rcRaw    bool
+		rcAt     string
 	)
 
 	cmd := &cobra.Command{
@@ -24,14 +26,29 @@ func newRenderContextCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			_, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch")
-			if err != nil {
-				return fmt.Errorf("materialize: %w", err)
-			}
-
-			state, err := loadStateFromIssuesDir(issuesDir)
-			if err != nil {
-				return fmt.Errorf("load state: %w", err)
+			var state *materialize.State
+			if rcAt != "" {
+				// Time-travel: replay ops as they existed at the given commit SHA.
+				opsRepoPath := appCtx.RepoPath
+				if appCtx.Mode == "dual-branch" && appCtx.WorktreePath != "" {
+					opsRepoPath = appCtx.WorktreePath
+				}
+				gc := git.New(opsRepoPath)
+				opsPrefix := filepath.Join(".issues", "ops")
+				var err error
+				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix)
+				if err != nil {
+					return fmt.Errorf("materialize at %s: %w", rcAt, err)
+				}
+			} else {
+				_, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch")
+				if err != nil {
+					return fmt.Errorf("materialize: %w", err)
+				}
+				state, err = loadStateFromIssuesDir(issuesDir)
+				if err != nil {
+					return fmt.Errorf("load state: %w", err)
+				}
 			}
 
 			ctx, err := context.Assemble(rcIssue, issuesDir, state)
@@ -61,6 +78,7 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().StringVar(&rcIssue, "issue", "", "Issue ID (required)")
 	cmd.Flags().IntVar(&rcBudget, "budget", 4000, "Token budget")
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
+	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
 	_ = cmd.MarkFlagRequired("issue")
 
 	return cmd

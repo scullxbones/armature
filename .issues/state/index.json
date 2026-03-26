@@ -1443,7 +1443,7 @@
     ]
   },
   "E5-S3-T2": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
@@ -1453,14 +1453,15 @@
       "E5-S3-T3"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774493603,
+    "updated": 1774493994,
     "title": "`MaterializeAtSHA` — replay op log at arbitrary historical commit",
+    "outcome": "MaterializeAtSHA(gc, sha, opsPrefix) implemented; replays op log at arbitrary commit; unit tests with real git fixtures pass; make check green",
     "scope": [
       "internal/materialize/atsha.go, internal/materialize/atsha_test.go"
     ]
   },
   "E5-S3-T3": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
@@ -1469,7 +1470,8 @@
     "blocks": [
       "E5-S3-T4"
     ],
-    "updated": 1774468783,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774494006,
     "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
     "scope": [
       "cmd/trellis/render_context.go"

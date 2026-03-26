@@ -278,6 +278,47 @@ func TestRenderContextCommand(t *testing.T) {
 		"output should contain issue ID or title, got: %s", out)
 }
 
+func TestRenderContextCommand_AtSHA(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "TST-AT", "--title", "Time travel test", "--type", "task")
+	require.NoError(t, err)
+
+	// Commit ops so SHA1 captures state after create (issue exists, no notes)
+	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "commit", "-m", "add create op")
+	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err2)
+	sha1 := strings.TrimSpace(string(sha1Out))
+
+	_, err = runTrls(t, repo, "note", "--issue", "TST-AT", "--msg", "note added after sha1")
+	require.NoError(t, err)
+
+	// Commit so HEAD captures the note
+	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "commit", "-m", "add note op")
+	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err2)
+	sha2 := strings.TrimSpace(string(sha2Out))
+
+	// At SHA1: issue exists but has no note
+	out1, err := runTrls(t, repo, "render-context", "--issue", "TST-AT", "--at", sha1)
+	require.NoError(t, err)
+	assert.NotContains(t, out1, "note added after sha1", "SHA1 should not have the note")
+
+	// At SHA2 (HEAD): issue has the note
+	out2, err := runTrls(t, repo, "render-context", "--issue", "TST-AT", "--at", sha2)
+	require.NoError(t, err)
+	assert.Contains(t, out2, "note added after sha1", "SHA2 should contain the note")
+}
+
 func TestValidateCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
