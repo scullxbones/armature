@@ -1,7 +1,7 @@
 {
   "id": "E5-S3",
   "type": "story",
-  "status": "in-progress",
+  "status": "merged",
   "title": "Time Travel \u0026 Forensics — reconstruct issue context at any historical commit",
   "parent": "E5",
   "children": [

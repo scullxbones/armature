@@ -1408,7 +1408,7 @@
     ]
   },
   "E5-S3": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1497,15 +1497,16 @@
     ]
   },
   "E5-S3-T5": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
       "E5-S3-T4"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774495351,
+    "updated": 1774495637,
     "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
+    "outcome": "materialize --exclude-worker flag implemented; diagnostic mode skips ops from specified worker and skips checkpoint update; tests pass; make check green",
     "scope": [
       "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go"
     ]

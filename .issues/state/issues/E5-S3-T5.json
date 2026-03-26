@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T5",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "`trls materialize --exclude-worker \u003cworker-id\u003e` for selective forensic replay",
   "parent": "E5-S3",
   "children": [],
@@ -27,6 +27,7 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "materialize --exclude-worker flag implemented; diagnostic mode skips ops from specified worker and skips checkpoint update; tests pass; make check green",
   "source_links": [
     {
       "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
@@ -37,5 +38,5 @@
   "claimed_at": 1774495351,
   "claim_ttl": 60,
   "last_heartbeat": 1774495351,
-  "updated": 1774495351
+  "updated": 1774495637
 }
