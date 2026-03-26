@@ -171,6 +171,67 @@ func (c *Client) FetchAndRebase(branch string) error {
 	return nil
 }
 
+// LogEntry represents a single git log entry.
+type LogEntry struct {
+	SHA     string
+	Subject string
+	Author  string
+	Date    string
+}
+
+// ListFilesAtCommit returns the list of file paths tracked at the given commit SHA.
+func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
+	cmd := exec.Command("git", "-C", c.repoPath, "ls-tree", "-r", "--name-only", sha)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-tree %s: %w", sha, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []string{}, nil
+	}
+	return strings.Split(raw, "\n"), nil
+}
+
+// ShowFileAtCommit returns the contents of the file at path as it existed at the given commit SHA.
+func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
+	cmd := exec.Command("git", "-C", c.repoPath, "show", sha+":"+path)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git show %s:%s: %w", sha, path, err)
+	}
+	return out, nil
+}
+
+// LogBranch returns up to n log entries from the tip of branch, most recent first.
+func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
+	format := "%H%x00%s%x00%ae%x00%ai"
+	cmd := exec.Command("git", "-C", c.repoPath, "log", branch, fmt.Sprintf("-n%d", n), "--format="+format)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log %s: %w", branch, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []LogEntry{}, nil
+	}
+	lines := strings.Split(raw, "\n")
+	entries := make([]LogEntry, 0, len(lines))
+	for _, line := range lines {
+		parts := strings.Split(line, "\x00")
+		if len(parts) != 4 {
+			continue
+		}
+		entries = append(entries, LogEntry{
+			SHA:     parts[0],
+			Subject: parts[1],
+			Author:  parts[2],
+			Date:    parts[3],
+		})
+	}
+	return entries, nil
+}
+
 // BranchMergedInto checks if branch has been fully merged into target.
 // Returns (false, nil) if the branch does not exist, rather than an error.
 func (c *Client) BranchMergedInto(branch, target string) (bool, error) {

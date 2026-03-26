@@ -1352,8 +1352,9 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774492009,
+    "updated": 1774492907,
     "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
+    "outcome": "trls tui kanban board complete: board model (T1) with 3 columns and keyboard nav; trls tui command with 5s auto-refresh (T2); trls ready interactive TUI with claim (T3); all make check green",
     "scope": [
       "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go"
     ]
@@ -1407,7 +1408,7 @@
     ]
   },
   "E5-S3": {
-    "status": "open",
+    "status": "in-progress",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1420,20 +1421,21 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774468782,
+    "updated": 1774493381,
     "title": "Time Travel \u0026 Forensics — reconstruct issue context at any historical commit",
     "scope": [
       "internal/git/git.go, internal/git/git_test.go, internal/materialize/atsha.go, internal/materialize/atsha_test.go, cmd/trellis/render_context.go, cmd/trellis/context_history.go, cmd/trellis/main.go"
     ]
   },
   "E5-S3-T1": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S3",
     "blocks": [
       "E5-S3-T2"
     ],
-    "updated": 1774468782,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774493381,
     "title": "Git client forensics methods — ListFilesAtCommit, ShowFileAtCommit, LogBranch",
     "scope": [
       "internal/git/git.go, internal/git/git_test.go"

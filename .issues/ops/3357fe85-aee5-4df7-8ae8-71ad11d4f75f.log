@@ -252,3 +252,7 @@
 ["claim","E5-S2-T3",1774492625,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["transition","E5-S2-T3",1774492890,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls ready TUI implemented: BubbleTea selection list on TTY, enter claims selected task, q quits without claiming, --format=json bypasses TUI; 20 tests, 93.8% coverage, make check green"}]
 ["transition","E5-S2",1774492907,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls tui kanban board complete: board model (T1) with 3 columns and keyboard nav; trls tui command with 5s auto-refresh (T2); trls ready interactive TUI with claim (T3); all make check green"}]
+["claim","E5-S3-T1",1774493381,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S3",1774493381,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"in-progress"}]
+["note","E5-S3-T1",1774493567,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Implemented ListFilesAtCommit, ShowFileAtCommit, LogBranch on git.Client; all tests pass; make check green"}]
+["transition","E5-S3-T1",1774493571,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"ListFilesAtCommit, ShowFileAtCommit, LogBranch implemented on git.Client with tests against real git repo; make check green"}]

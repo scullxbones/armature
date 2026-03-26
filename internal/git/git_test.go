@@ -393,3 +393,119 @@ func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, merged)
 }
+
+func TestListFilesAtCommit(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Write two files and commit
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("a"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "beta.txt"), []byte("b"), 0644))
+	gitRun("add", "alpha.txt", "beta.txt")
+	gitRun("commit", "-m", "add files")
+
+	// Get the HEAD SHA
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOut))
+
+	files, err := c.ListFilesAtCommit(sha)
+	require.NoError(t, err)
+	assert.Contains(t, files, "alpha.txt")
+	assert.Contains(t, files, "beta.txt")
+}
+
+func TestListFilesAtCommit_InvalidSHA(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	_, err := c.ListFilesAtCommit("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	assert.Error(t, err)
+}
+
+func TestShowFileAtCommit(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	content := []byte("hello world\n")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "hello.txt"), content, 0644))
+	gitRun("add", "hello.txt")
+	gitRun("commit", "-m", "add hello")
+
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOut))
+
+	got, err := c.ShowFileAtCommit(sha, "hello.txt")
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestShowFileAtCommit_MissingFile(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOut))
+
+	_, err = c.ShowFileAtCommit(sha, "nonexistent.txt")
+	assert.Error(t, err)
+}
+
+func TestLogBranch(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Add two more commits
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "f1.txt"), []byte("1"), 0644))
+	gitRun("add", "f1.txt")
+	gitRun("commit", "-m", "second commit")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "f2.txt"), []byte("2"), 0644))
+	gitRun("add", "f2.txt")
+	gitRun("commit", "-m", "third commit")
+
+	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	branch := strings.TrimSpace(string(branchOut))
+
+	entries, err := c.LogBranch(branch, 2)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, "third commit", entries[0].Subject)
+	assert.Equal(t, "second commit", entries[1].Subject)
+	assert.NotEmpty(t, entries[0].SHA)
+	assert.NotEmpty(t, entries[0].Author)
+	assert.NotEmpty(t, entries[0].Date)
+}
+
+func TestLogBranch_InvalidBranch(t *testing.T) {
+	repo := initTestRepo(t)
+	c := git.New(repo)
+
+	_, err := c.LogBranch("no-such-branch", 10)
+	assert.Error(t, err)
+}
