@@ -1235,6 +1235,62 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	assert.Equal(t, ops.StatusOpen, index2["task-01"].Status, "task status should be open after unassign")
 }
 
+func TestContextHistoryCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "TST-HIST", "--title", "History test issue", "--type", "task")
+	require.NoError(t, err)
+
+	// Commit ops so SHA1 captures creation
+	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "commit", "-m", "ops: create TST-HIST")
+	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err2)
+	sha1 := strings.TrimSpace(string(sha1Out))
+
+	_, err = runTrls(t, repo, "note", "--issue", "TST-HIST", "--msg", "progress note for history")
+	require.NoError(t, err)
+
+	// Commit ops so SHA2 captures note
+	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "commit", "-m", "ops: note TST-HIST")
+	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err2)
+	sha2 := strings.TrimSpace(string(sha2Out))
+
+	out, err := runTrls(t, repo, "context-history", "--issue", "TST-HIST")
+	require.NoError(t, err)
+
+	// Both SHAs should appear in the output (creation + note change both alter context)
+	assert.Contains(t, out, sha1, "output should contain SHA1 (creation)")
+	assert.Contains(t, out, sha2, "output should contain SHA2 (note change)")
+}
+
+func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Commit an empty ops dir
+	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "commit", "-m", "ops: init")
+
+	_, err = runTrls(t, repo, "context-history", "--issue", "NO-SUCH")
+	assert.Error(t, err)
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op

@@ -79,6 +79,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newShowCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newTUICmd())
+	root.AddCommand(newContextHistoryCmd())
 
 	return root
 }

@@ -1,7 +1,7 @@
 {
   "id": "E5-S3-T3",
   "type": "task",
-  "status": "claimed",
+  "status": "merged",
   "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
   "parent": "E5-S3",
   "children": [],
@@ -29,6 +29,14 @@
     "source_worker": "95cf736f-4bc5-4c02-82da-37e5192fb429"
   },
   "decision_refs": [],
+  "outcome": "render-context --at \u003csha\u003e flag implemented; time-travel context works; make check green",
+  "notes": [
+    {
+      "worker_id": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+      "timestamp": 1774495047,
+      "msg": "Added --at \u003csha\u003e flag to render-context; uses MaterializeAtSHA internally; test confirms output differs from HEAD"
+    }
+  ],
   "source_links": [
     {
       "source_entry_id": "1241e468-5c15-4f75-9c29-1a09b42adda7",
@@ -39,5 +47,5 @@
   "claimed_at": 1774494006,
   "claim_ttl": 60,
   "last_heartbeat": 1774494006,
-  "updated": 1774494006
+  "updated": 1774495047
 }

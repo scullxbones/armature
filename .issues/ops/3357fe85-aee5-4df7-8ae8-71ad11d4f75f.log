@@ -262,3 +262,5 @@
 ["claim","E5-S3-T3",1774494006,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["note","E5-S3-T3",1774495047,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"msg":"Added --at \u003csha\u003e flag to render-context; uses MaterializeAtSHA internally; test confirms output differs from HEAD"}]
 ["transition","E5-S3-T3",1774495047,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"render-context --at \u003csha\u003e flag implemented; time-travel context works; make check green"}]
+["claim","E5-S3-T4",1774495061,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S3-T4",1774495340,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"context-history --issue ID command implemented; lists SHAs where context changed with timestamp; make check green"}]

@@ -1461,7 +1461,7 @@
     ]
   },
   "E5-S3-T3": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
@@ -1471,14 +1471,15 @@
       "E5-S3-T4"
     ],
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774494006,
+    "updated": 1774495047,
     "title": "`render-context --at \u003csha\u003e` flag for time-travel context",
+    "outcome": "render-context --at \u003csha\u003e flag implemented; time-travel context works; make check green",
     "scope": [
       "cmd/trellis/render_context.go"
     ]
   },
   "E5-S3-T4": {
-    "status": "open",
+    "status": "claimed",
     "type": "task",
     "parent": "E5-S3",
     "blocked_by": [
@@ -1487,7 +1488,8 @@
     "blocks": [
       "E5-S3-T5"
     ],
-    "updated": 1774456228,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774495061,
     "title": "`trls context-history` — list issue context at each commit",
     "scope": [
       "cmd/trellis/context_history.go, cmd/trellis/main.go"
