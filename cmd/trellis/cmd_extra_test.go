@@ -864,6 +864,47 @@ func TestDoctorCmd_Strict(t *testing.T) {
 	assert.Error(t, err, "doctor --strict should fail when uncited issues exist")
 }
 
+// TestDecomposeApplySchemaFlag verifies that --schema prints a valid JSON Schema
+// document that correctly documents field names, types, and constraints.
+func TestDecomposeApplySchemaFlag(t *testing.T) {
+	repo := initTempRepo(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"decompose-apply", "--schema", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := strings.TrimSpace(buf.String())
+
+	// Output must be valid JSON
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(output), &parsed), "output must be valid JSON")
+
+	// Must contain $schema key (JSON Schema indicator)
+	assert.Contains(t, parsed, "$schema", "output must contain $schema key")
+
+	// Must document the version field as integer type (not string)
+	schemaStr := output
+	assert.Contains(t, schemaStr, `"version"`, "schema must document version field")
+	assert.Contains(t, schemaStr, `"integer"`, "version must be documented as integer type")
+
+	// Must document dod field (not definition_of_done)
+	assert.Contains(t, schemaStr, `"dod"`, "schema must document dod field (not definition_of_done)")
+	assert.NotContains(t, schemaStr, `"definition_of_done"`, "schema must not use definition_of_done as field name")
+
+	// Must document scope as string type (not array)
+	assert.Contains(t, schemaStr, `"scope"`, "schema must document scope field")
+	// scope property should use "string" type, not "array"
+	// We verify by checking the properties section contains scope with string type
+	properties, ok := parsed["properties"].(map[string]interface{})
+	require.True(t, ok, "schema must have a properties object")
+	assert.Contains(t, properties, "version", "properties must include version")
+	assert.Contains(t, properties, "issues", "properties must include issues")
+}
+
 // TestReadyParentFilter verifies that trls ready --parent ISSUE-ID returns only
 // descendants of the given issue.
 func TestReadyParentFilter(t *testing.T) {

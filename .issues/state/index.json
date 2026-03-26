@@ -1123,7 +1123,7 @@
     ]
   },
   "E5-S1": {
-    "status": "merged",
+    "status": "in-progress",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1139,12 +1139,13 @@
       "E5-S1-T10",
       "E5-S1-T11",
       "E5-S1-T12",
-      "E5-S1-T13"
+      "E5-S1-T13",
+      "E5-S1-T14"
     ],
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774481686,
+    "updated": 1774488806,
     "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
     "outcome": "All 8 tasks complete: open transition target (T1), stale-claim diagnostic (T2), auto-advance parent on claim + ready queue parent gate fix (T3), unassign releases claimed to open (T4), decompose-apply --example (T5), trls list --type/--parent/--json (T6), decompose-apply --dry-run + SKILL.md docs (T7), decompose-apply --root/--generate-ids/--strict (T8); make check green",
     "scope": [
@@ -1209,6 +1210,19 @@
     "outcome": "Dispatch Subagent section now explicitly instructs subagents to call trls heartbeat --issue ID for long-running work (max once/minute) with explanation of claim expiry; make skill regenerated deployed skill; make check green",
     "scope": [
       "docs/trls-worker-SKILL.md"
+    ]
+  },
+  "E5-S1-T14": {
+    "status": "claimed",
+    "type": "task",
+    "parent": "E5-S1",
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774488806,
+    "title": "decompose-apply --schema flag for plan JSON schema discoverability",
+    "scope": [
+      "cmd/trellis/decompose.go",
+      "internal/decompose/apply.go",
+      "cmd/trellis/cmd_extra_test.go"
     ]
   },
   "E5-S1-T2": {

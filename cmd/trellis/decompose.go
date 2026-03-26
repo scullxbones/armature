@@ -15,6 +15,7 @@ import (
 func newDecomposeApplyCmd() *cobra.Command {
 	var planPath string
 	var exampleFlag bool
+	var schemaFlag bool
 	var dryRunFlag bool
 	var strictFlag bool
 	var generateIDsFlag bool
@@ -24,13 +25,91 @@ func newDecomposeApplyCmd() *cobra.Command {
 		Use:   "decompose-apply",
 		Short: "Apply a decomposition plan to the issue graph",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if exampleFlag {
+			if exampleFlag || schemaFlag {
 				return nil
 			}
 			// Fall through to root PersistentPreRunE for normal config loading.
 			return cmd.Root().PersistentPreRunE(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if schemaFlag {
+				schema := map[string]interface{}{
+					"$schema":  "https://json-schema.org/draft/2020-12/schema",
+					"title":    "Trellis Decomposition Plan",
+					"type":     "object",
+					"required": []string{"version", "title", "issues"},
+					"properties": map[string]interface{}{
+						"version": map[string]interface{}{
+							"type":        "integer",
+							"description": "Schema version — must be the integer 1, not the string \"1\"",
+							"enum":        []int{1},
+						},
+						"title": map[string]interface{}{
+							"type":        "string",
+							"description": "Human-readable title for the decomposition plan",
+						},
+						"issues": map[string]interface{}{
+							"type":        "array",
+							"description": "Ordered list of issues to create",
+							"items": map[string]interface{}{
+								"type":     "object",
+								"required": []string{"id", "title", "type"},
+								"properties": map[string]interface{}{
+									"id": map[string]interface{}{
+										"type":        "string",
+										"description": "Unique identifier for this issue within the plan",
+									},
+									"title": map[string]interface{}{
+										"type":        "string",
+										"description": "Human-readable title of the issue",
+									},
+									"type": map[string]interface{}{
+										"type":        "string",
+										"enum":        []string{"epic", "story", "task"},
+										"description": "Issue type",
+									},
+									"parent": map[string]interface{}{
+										"type":        "string",
+										"description": "ID of the parent issue (empty for top-level issues)",
+									},
+									"scope": map[string]interface{}{
+										"type":        "string",
+										"description": "Comma-separated file paths this issue is scoped to — stored as a single string, not an array",
+									},
+									"priority": map[string]interface{}{
+										"type":        "string",
+										"enum":        []string{"critical", "high", "medium", "low"},
+										"description": "Issue priority",
+									},
+									"dod": map[string]interface{}{
+										"type":        "string",
+										"description": "Definition of done — field is named 'dod', not 'definition_of_done'",
+									},
+									"blocked_by": map[string]interface{}{
+										"type":        "array",
+										"items":       map[string]interface{}{"type": "string"},
+										"description": "List of issue IDs this issue is blocked by",
+										"nullable":    true,
+									},
+									"notes": map[string]interface{}{
+										"type":        "array",
+										"items":       map[string]interface{}{"type": "string"},
+										"description": "Optional free-text notes",
+										"nullable":    true,
+									},
+								},
+							},
+						},
+					},
+				}
+				out, err := json.MarshalIndent(schema, "", "  ")
+				if err != nil {
+					return err
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+				return nil
+			}
+
 			if exampleFlag {
 				example := decompose.Plan{
 					Version: 1,
@@ -121,6 +200,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
 	cmd.Flags().BoolVar(&exampleFlag, "example", false, "print a minimal valid example plan JSON and exit")
+	cmd.Flags().BoolVar(&schemaFlag, "schema", false, "print a JSON Schema document describing the plan format and exit")
 	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "validate and preview what would be created without writing ops")
 	cmd.Flags().BoolVar(&strictFlag, "strict", false, "treat advisory warnings as errors")
 	cmd.Flags().BoolVar(&generateIDsFlag, "generate-ids", false, "replace plan IDs with system-generated UUIDs")
