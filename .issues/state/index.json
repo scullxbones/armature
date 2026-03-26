@@ -1134,13 +1134,19 @@
       "E5-S1-T5",
       "E5-S1-T6",
       "E5-S1-T7",
-      "E5-S1-T8"
+      "E5-S1-T8",
+      "E5-S1-T9",
+      "E5-S1-T10",
+      "E5-S1-T11",
+      "E5-S1-T12",
+      "E5-S1-T13"
     ],
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774468782,
+    "updated": 1774481686,
     "title": "UX Hardening — fix four dogfooding regressions plus schema and list discoverability",
+    "outcome": "All 8 tasks complete: open transition target (T1), stale-claim diagnostic (T2), auto-advance parent on claim + ready queue parent gate fix (T3), unassign releases claimed to open (T4), decompose-apply --example (T5), trls list --type/--parent/--json (T6), decompose-apply --dry-run + SKILL.md docs (T7), decompose-apply --root/--generate-ids/--strict (T8); make check green",
     "scope": [
       "internal/ops/types.go, internal/ready/stale.go, cmd/trellis/ready.go, cmd/trellis/claim.go, cmd/trellis/assign.go, cmd/trellis/decompose.go, cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/main_test.go, cmd/trellis/cmd_extra_test.go"
     ]
@@ -1155,6 +1161,46 @@
     "outcome": "Added StatusOpen to ValidTransitionTargets; TestTransitionToOpen and TestTransitionToOpenRejectsInvalidAlias pass; make check green",
     "scope": [
       "internal/ops/types.go, cmd/trellis/main_test.go"
+    ]
+  },
+  "E5-S1-T10": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774485665,
+    "title": "`trls doctor` command — repo health checks D1-D6",
+    "scope": [
+      "cmd/trellis/doctor.go, internal/doctor/, cmd/trellis/main_test.go, docs/SKILL.md, docs/trls-worker-SKILL.md"
+    ]
+  },
+  "E5-S1-T11": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774485666,
+    "title": "`--parent` filter on `trls ready`",
+    "scope": [
+      "cmd/trellis/ready.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S1-T12": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774485666,
+    "title": "Add `make skill` to `make check`",
+    "scope": [
+      "Makefile"
+    ]
+  },
+  "E5-S1-T13": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774485666,
+    "title": "Heartbeat instructions in trls-worker subagent prompts",
+    "scope": [
+      "docs/trls-worker-SKILL.md"
     ]
   },
   "E5-S1-T2": {
@@ -1257,6 +1303,16 @@
     "outcome": "--strict treats warnings as errors; --generate-ids replaces plan IDs with UUIDs; --root overrides inferred root; 3 new tests pass; make check green",
     "scope": [
       "cmd/trellis/decompose.go, internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go"
+    ]
+  },
+  "E5-S1-T9": {
+    "status": "open",
+    "type": "task",
+    "parent": "E5-S1",
+    "updated": 1774485665,
+    "title": "Fix `trls show` to return human-readable output",
+    "scope": [
+      "cmd/trellis/status.go, cmd/trellis/main_test.go"
     ]
   },
   "E5-S2": {
