@@ -16,7 +16,7 @@ help:
 	@echo "  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/trls (adds to PATH)"
 
-check: lint test coverage-check mutate
+check: lint test coverage-check mutate skill
 
 test:
 	go test -v ./...

@@ -208,3 +208,5 @@
 ["transition","E5-S1-T10",1774487426,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls doctor runs D1-D6 checks (git divergence, stale claims, orphaned ops, broken parent refs, dependency cycles, uncited issues); exits non-zero on errors; --strict promotes warnings to errors; --format json works; Repo Health section added to docs/SKILL.md; trls doctor added to worker-init step in docs/trls-worker-SKILL.md; make skill regenerated; all tests pass; make check green"}]
 ["claim","E5-S1-T11",1774487441,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["transition","E5-S1-T11",1774487636,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"trls ready --parent ISSUE-ID returns only descendants of the given issue; collectDescendants BFS walks the index Children lists; TestReadyParentFilter passes; make check green"}]
+["claim","E5-S1-T12",1774487646,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
+["transition","E5-S1-T12",1774487747,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"make check now runs make skill as a final step; deployed skill always fresh after check; make check green"}]

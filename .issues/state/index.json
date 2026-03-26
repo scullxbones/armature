@@ -1176,11 +1176,13 @@
     ]
   },
   "E5-S1-T11": {
-    "status": "open",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
-    "updated": 1774485666,
+    "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
+    "updated": 1774487636,
     "title": "`--parent` filter on `trls ready`",
+    "outcome": "trls ready --parent ISSUE-ID returns only descendants of the given issue; collectDescendants BFS walks the index Children lists; TestReadyParentFilter passes; make check green",
     "scope": [
       "cmd/trellis/ready.go, cmd/trellis/cmd_extra_test.go"
     ]
