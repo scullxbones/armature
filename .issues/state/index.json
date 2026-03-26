@@ -1123,7 +1123,7 @@
     ]
   },
   "E5-S1": {
-    "status": "in-progress",
+    "status": "merged",
     "type": "story",
     "parent": "E5",
     "children": [
@@ -1213,12 +1213,13 @@
     ]
   },
   "E5-S1-T14": {
-    "status": "claimed",
+    "status": "merged",
     "type": "task",
     "parent": "E5-S1",
     "assignee": "3357fe85-aee5-4df7-8ae8-71ad11d4f75f",
-    "updated": 1774488806,
+    "updated": 1774489034,
     "title": "decompose-apply --schema flag for plan JSON schema discoverability",
+    "outcome": "decompose-apply --schema prints JSON Schema 2020-12 document with correct types for all plan fields; documents version as integer, scope as string (not array), dod (not definition_of_done); TestDecomposeApplySchemaFlag passes; make check green",
     "scope": [
       "cmd/trellis/decompose.go",
       "internal/decompose/apply.go",

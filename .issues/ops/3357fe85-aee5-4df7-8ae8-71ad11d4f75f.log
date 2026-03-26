@@ -218,3 +218,4 @@
 ["claim","E5-S1-T14",1774488806,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"ttl":60}]
 ["transition","E5-S1",1774488806,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"in-progress"}]
 ["transition","E5-S1-T14",1774489034,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"decompose-apply --schema prints JSON Schema 2020-12 document with correct types for all plan fields; documents version as integer, scope as string (not array), dod (not definition_of_done); TestDecomposeApplySchemaFlag passes; make check green"}]
+["transition","E5-S1",1774489048,"3357fe85-aee5-4df7-8ae8-71ad11d4f75f",{"to":"done","outcome":"All 14 tasks complete: T1-T8 UX regressions and discoverability fixes; T9 trls show; T10 trls doctor; T11 ready --parent filter; T12 make skill in make check; T13 heartbeat docs; T14 decompose-apply --schema. make check green."}]
