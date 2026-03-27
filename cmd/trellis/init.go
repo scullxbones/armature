@@ -12,6 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const issuesGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
+# Never commit. See architecture.md §2 (Directory Structure).
+state/
+`
+
 const postMergeHookTemplate = `#!/bin/sh
 # Trellis post-merge hook: auto-detect merged branches and transition done issues to merged.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
@@ -81,6 +86,12 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return fmt.Errorf("create directory %s: %w", d, err)
 		}
+	}
+
+	// Write .gitignore to prevent state/ from being committed
+	gitignorePath := filepath.Join(issuesDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0644); err != nil {
+		return fmt.Errorf("write .issues/.gitignore: %w", err)
 	}
 
 	// Write SCHEMA file

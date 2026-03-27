@@ -129,6 +129,22 @@ func TestInitCommand_SingleBranch(t *testing.T) {
 	assert.FileExists(t, filepath.Join(repo, ".issues", "ops", "SCHEMA"))
 }
 
+func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	gitignorePath := filepath.Join(repo, ".issues", ".gitignore")
+	assert.FileExists(t, gitignorePath)
+	content, err := os.ReadFile(gitignorePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "state/")
+}
+
 func TestInitCommand_Idempotent(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
