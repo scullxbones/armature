@@ -1421,8 +1421,9 @@
     "blocked_by": [
       "E5-S0"
     ],
-    "updated": 1774493381,
+    "updated": 1774495652,
     "title": "Time Travel \u0026 Forensics — reconstruct issue context at any historical commit",
+    "outcome": "Time Travel \u0026 Forensics complete: ListFilesAtCommit/ShowFileAtCommit/LogBranch on git.Client; MaterializeAtSHA for historical op replay; render-context --at \u003csha\u003e flag; context-history command; materialize --exclude-worker diagnostic flag",
     "scope": [
       "internal/git/git.go, internal/git/git_test.go, internal/materialize/atsha.go, internal/materialize/atsha_test.go, cmd/trellis/render_context.go, cmd/trellis/context_history.go, cmd/trellis/main.go"
     ]
