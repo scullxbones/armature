@@ -1567,3 +1567,62 @@ func TestInitCommand_AlreadyInitialized(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "already")
 }
+
+// TestLogSlot_EnvVar verifies that TRLS_LOG_SLOT routes ops to a slotted log file.
+func TestLogSlot_EnvVar(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	t.Setenv("TRLS_LOG_SLOT", "beta")
+
+	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "slotted note")
+	require.NoError(t, err)
+
+	// The slotted file must exist; the plain file must NOT contain this note
+	opsDir := filepath.Join(repo, ".issues", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+
+	var slottedFile, plainFile string
+	for _, e := range entries {
+		name := e.Name()
+		if strings.Contains(name, "~beta") {
+			slottedFile = filepath.Join(opsDir, name)
+		} else if strings.HasSuffix(name, ".log") {
+			plainFile = filepath.Join(opsDir, name)
+		}
+	}
+
+	require.NotEmpty(t, slottedFile, "expected a ~beta.log file to exist")
+	slottedContent, err := os.ReadFile(slottedFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(slottedContent), "slotted note")
+
+	if plainFile != "" {
+		plainContent, _ := os.ReadFile(plainFile)
+		assert.NotContains(t, string(plainContent), "slotted note",
+			"plain log must not contain the slotted note")
+	}
+}
+
+// TestLogSlot_Empty_UsesPlainLog verifies that an empty TRLS_LOG_SLOT uses the normal log path.
+func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	t.Setenv("TRLS_LOG_SLOT", "") // explicitly empty
+
+	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".issues", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), "~",
+			"no slotted file should exist when TRLS_LOG_SLOT is empty")
+	}
+}

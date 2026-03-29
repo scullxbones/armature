@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/scullxbones/trellis/internal/git"
@@ -20,7 +21,11 @@ func resolveWorkerAndLog() (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
-	logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, workerID)
+	logName := workerID
+	if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
+		logName = workerID + "~" + slot
+	}
+	logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, logName)
 	return workerID, logPath, nil
 }
 
