@@ -43,8 +43,9 @@ func newShowCmd() *cobra.Command {
 					Status     string   `json:"status"`
 					Parent     string   `json:"parent,omitempty"`
 					ClaimedBy  string   `json:"claimed_by,omitempty"`
-					DoD        string   `json:"definition_of_done,omitempty"`
-					Scope      []string `json:"scope,omitempty"`
+					DoD        string          `json:"definition_of_done,omitempty"`
+					Acceptance json.RawMessage `json:"acceptance,omitempty"`
+					Scope      []string        `json:"scope,omitempty"`
 					Notes      []string `json:"notes,omitempty"`
 					Outcome    string   `json:"outcome,omitempty"`
 					AssignedTo string   `json:"assigned_worker,omitempty"`
@@ -61,6 +62,7 @@ func newShowCmd() *cobra.Command {
 					Parent:     issue.Parent,
 					ClaimedBy:  issue.ClaimedBy,
 					DoD:        issue.DefinitionOfDone,
+					Acceptance: issue.Acceptance,
 					Scope:      issue.Scope,
 					Notes:      noteTexts,
 					Outcome:    issue.Outcome,
@@ -88,6 +90,12 @@ func newShowCmd() *cobra.Command {
 			}
 			if issue.DefinitionOfDone != "" {
 				_, _ = fmt.Fprintf(w, "DoD:       %s\n", issue.DefinitionOfDone)
+			}
+			if len(issue.Acceptance) > 0 && string(issue.Acceptance) != "null" {
+				compact, err := json.Marshal(json.RawMessage(issue.Acceptance))
+				if err == nil {
+					_, _ = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
+				}
 			}
 			if len(issue.Scope) > 0 {
 				_, _ = fmt.Fprintf(w, "Scope:     %s\n", strings.Join(issue.Scope, ", "))

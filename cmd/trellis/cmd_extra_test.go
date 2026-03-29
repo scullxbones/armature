@@ -297,6 +297,29 @@ func TestValidateCommand_JSON(t *testing.T) {
 	assert.Contains(t, out, "{")
 }
 
+func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Amend task-01 to have scope pointing to a non-existent file
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
+	require.NoError(t, err)
+
+	out, _ := runTrls(t, repo, "validate")
+	assert.Contains(t, out, "INFO: phantom scope", "phantom scope should appear as INFO")
+	assert.NotContains(t, out, "WARNING: phantom scope", "phantom scope should not appear as WARNING")
+}
+
+func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "validate", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"infos"`, "JSON output should include infos field")
+}
+
 func TestImportCommand_DryRun_JSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -786,6 +809,27 @@ func TestShowCmd(t *testing.T) {
 	assert.Equal(t, "task", result["type"])
 	assert.Equal(t, "open", result["status"])
 	assert.Equal(t, "story-01", result["parent"])
+}
+
+func TestShowCmd_DisplaysAcceptance(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--acceptance", acceptance)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Human-readable output includes acceptance
+	out, err := runTrls(t, repo, "show", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Acceptance:", "human output should show Acceptance field")
+	assert.Contains(t, out, "test_passes", "human output should include acceptance criteria content")
+
+	// JSON output includes acceptance field
+	jsonOut, err := runTrls(t, repo, "show", "--issue", "task-01", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, jsonOut, `"acceptance"`, "JSON output should include acceptance field")
 }
 
 func TestShowCmd_MissingIssue(t *testing.T) {

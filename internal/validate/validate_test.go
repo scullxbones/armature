@@ -92,6 +92,15 @@ func TestW1ScopeOverlap(t *testing.T) {
 	assert.True(t, containsWarning(result, "scope overlap"))
 }
 
+func TestW1ScopeOverlap_SuppressedByBlockedBy(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-B"}},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-A"}},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when one sibling blocks the other")
+}
+
 func TestW2NoTestCriteria(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{
@@ -101,6 +110,17 @@ func TestW2NoTestCriteria(t *testing.T) {
 	)
 	result := Validate(state, Options{})
 	assert.True(t, containsWarning(result, "no test criteria"))
+}
+
+func TestW2NoTestCriteria_ManualReviewSatisfies(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{
+			ID: "TSK-1", Type: "task",
+			Acceptance: json.RawMessage(`[{"type":"manual_review","description":"docs reviewed"}]`),
+		},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsWarning(result, "no test criteria"), "manual_review should satisfy test criteria requirement")
 }
 
 func TestW7VagueDoD(t *testing.T) {

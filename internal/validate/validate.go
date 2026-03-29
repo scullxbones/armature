@@ -25,11 +25,12 @@ type Result struct {
 	OK       bool
 	Errors   []string
 	Warnings []string
+	Infos    []string
 	Coverage *traceability.Coverage
 }
 
 func Validate(state *materialize.State, opts Options) Result {
-	var errors, warnings []string
+	var errors, warnings, infos []string
 
 	targets := issueSubset(state, opts.ScopeID)
 
@@ -58,7 +59,7 @@ func Validate(state *materialize.State, opts Options) Result {
 	warnings = append(warnings, checkW11VagueOutcomes(targets)...)
 
 	if opts.RepoPath != "" {
-		warnings = append(warnings, checkW10PhantomScope(targets, opts.RepoPath)...)
+		infos = append(infos, checkW10PhantomScope(targets, opts.RepoPath)...)
 	}
 
 	var cov *traceability.Coverage
@@ -75,7 +76,7 @@ func Validate(state *materialize.State, opts Options) Result {
 		warnings = nil
 	}
 
-	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Coverage: cov}
+	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: cov}
 }
 
 func issueSubset(state *materialize.State, scopeID string) map[string]*materialize.Issue {
@@ -285,15 +286,35 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		for i := 0; i < len(siblings); i++ {
 			for j := i + 1; j < len(siblings); j++ {
 				overlap := scopeIntersection(siblings[i].Scope, siblings[j].Scope)
-				if len(overlap) > 0 {
-					warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
-						siblings[i].ID, siblings[j].ID, strings.Join(overlap, ", ")))
+				if len(overlap) == 0 {
+					continue
 				}
+				if hasSerialDependency(siblings[i], siblings[j]) {
+					continue
+				}
+				warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
+					siblings[i].ID, siblings[j].ID, strings.Join(overlap, ", ")))
 			}
 		}
 	}
 	_ = state
 	return warns
+}
+
+// hasSerialDependency returns true if a blocks b or b blocks a,
+// meaning the two tasks execute serially and a shared scope is intentional.
+func hasSerialDependency(a, b *materialize.Issue) bool {
+	for _, id := range a.Blocks {
+		if id == b.ID {
+			return true
+		}
+	}
+	for _, id := range b.Blocks {
+		if id == a.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func scopeIntersection(a, b []string) []string {
@@ -324,7 +345,7 @@ func checkW2NoTestCriteria(issues map[string]*materialize.Issue) []string {
 		}
 		hasTest := false
 		for _, c := range criteria {
-			if c.Type == "test_passes" {
+			if c.Type == "test_passes" || c.Type == "manual_review" {
 				hasTest = true
 				break
 			}

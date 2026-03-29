@@ -38,6 +38,7 @@ func newValidateCmd() *cobra.Command {
 				payload := map[string]interface{}{
 					"errors":   result.Errors,
 					"warnings": result.Warnings,
+					"infos":    result.Infos,
 				}
 				if result.Coverage != nil {
 					payload["coverage"] = result.Coverage
@@ -53,6 +54,9 @@ func newValidateCmd() *cobra.Command {
 				}
 				for _, w := range result.Warnings {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "WARNING: %s\n", w)
+				}
+				for _, i := range result.Infos {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO: %s\n", i)
 				}
 				if result.Coverage != nil {
 					cov := result.Coverage

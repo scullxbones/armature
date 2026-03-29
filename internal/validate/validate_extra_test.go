@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -84,14 +85,23 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 	assert.True(t, found, "expected uncited node error, got: %v", result.Errors)
 }
 
-func TestValidate_WithRepoPath_PhantomScope(t *testing.T) {
+func containsInfo(r Result, substr string) bool {
+	for _, i := range r.Infos {
+		if strings.Contains(strings.ToLower(i), strings.ToLower(substr)) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
 	dir := t.TempDir()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"nonexistent/**/*.go"}},
 	)
 	result := Validate(state, Options{RepoPath: dir})
-	found := containsWarning(result, "phantom scope")
-	assert.True(t, found, "expected phantom scope warning, got: %v", result.Warnings)
+	assert.True(t, containsInfo(result, "phantom scope"), "expected phantom scope in Infos, got: %v", result.Infos)
+	assert.False(t, containsWarning(result, "phantom scope"), "expected phantom scope NOT in Warnings, got: %v", result.Warnings)
 }
 
 func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
@@ -179,6 +189,6 @@ func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"*.go"}},
 	)
 	result := Validate(state, Options{RepoPath: dir})
-	found := containsWarning(result, "phantom scope")
-	assert.False(t, found, "expected no phantom scope warning for existing file, got: %v", result.Warnings)
+	assert.False(t, containsWarning(result, "phantom scope"), "expected no phantom scope warning for existing file, got: %v", result.Warnings)
+	assert.False(t, containsInfo(result, "phantom scope"), "expected no phantom scope info for existing file, got: %v", result.Infos)
 }

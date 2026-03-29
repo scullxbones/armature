@@ -49,7 +49,14 @@ Use `--example` to see the expected JSON structure:
 trls decompose-apply --example
 ```
 
-The plan has a `version`, `title`, and an `issues` array. Each issue must have `id`, `title`, and `type`. Optional fields include `parent`, `priority`, `dod`, `scope`, and `blocked_by`.
+The plan has a `version`, `title`, and an `issues` array. Each issue must have `id`, `title`, and `type`. Optional fields include `parent`, `priority`, and `blocked_by`.
+
+**Tasks require these three fields or `trls validate` will ERROR:**
+- `dod` — definition of done (non-empty string)
+- `scope` — files this task touches (non-empty string; use `(new)` suffix for files to be created)
+- `acceptance` — JSON array of strings, e.g. `["TestFoo passes", "go build clean"]`
+
+> Note: `--example` omits `acceptance`; add it manually to every task entry in the plan JSON.
 
 ### Workflow
 
@@ -69,6 +76,25 @@ The plan has a `version`, `title`, and an `issues` array. Each issue must have `
    trls dag-transition --issue ID
    ```
 
+5. **Register the source document and link every new issue** — all issues must be cited or `trls validate` will ERROR:
+   ```
+   trls sources add --url PATH --title "TEXT" --type filesystem
+   trls sources sync                           # fetch and fingerprint
+   trls sources verify                         # confirm all OK, none MISSING
+   trls source-link --issue ID --source-id UUID   # repeat for every new issue
+   ```
+   If no source doc exists, use `accept-citation` per issue instead:
+   ```
+   trls accept-citation --issue ID --rationale "TEXT" --ci
+   ```
+
+6. **Validate to green** — run `trls validate` and resolve all ERRORs and WARNINGs before the plan load is complete. `INFO: phantom scope` lines for not-yet-created files may be ignored.
+
+   Scope overlap WARNINGs must be resolved by adding a dependency so the two tasks execute serially:
+   ```
+   trls link --source ISSUE-A --dep ISSUE-B   # A is blocked_by B; eliminates parallel execution
+   ```
+
 If you need to undo a plan, use `decompose-revert --plan plan.json`.
 
 ## Citation
@@ -76,7 +102,9 @@ If you need to undo a plan, use `decompose-revert --plan plan.json`.
 Every issue must be linked to a source document or have an accepted-risk rationale before the story is done. Cite as you go — don't leave it for a remediation pass.
 
 ```
-trls sources add --path PATH [--label TEXT]              # register a source document
+trls sources add --url PATH --title "TEXT" --type filesystem  # register a source document
+trls sources sync                                         # fetch and fingerprint all sources
+trls sources verify                                       # confirm all sources show OK (not MISSING)
 trls source-link --issue ID --source-id UUID             # link issue to a registered source
 trls accept-citation --issue ID --rationale TEXT --ci    # accept risk (no source exists)
 ```

@@ -158,3 +158,5 @@ git push -u origin HEAD
 | Auto-pushing after every task | Push once per story to avoid noisy remote history |
 | Leaving issues uncited | Run `trls source-link` or `trls accept-citation --ci` before the subagent returns |
 | Skipping `trls validate` at story close | Citation debt accumulates silently; validate before transitioning the story |
+| Scope overlap WARNING on `trls validate` | Add `trls link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
+| MISSING entries in `trls sources verify` | Run `trls sources sync` to fetch and fingerprint; re-run `trls sources verify` until all show OK |
