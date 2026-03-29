@@ -200,3 +200,18 @@ func TestCreateRateLimiter(t *testing.T) {
 	rl.ResetCreateCount() // simulate commit boundary
 	assert.True(t, rl.AllowCreate())
 }
+
+func TestWorkerIDFromFilename_PlainLog(t *testing.T) {
+	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85.log"))
+}
+
+func TestWorkerIDFromFilename_SlottedLog(t *testing.T) {
+	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85~a.log"))
+	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85~slot-99.log"))
+}
+
+func TestWorkerIDFromFilename_BasenameOnly(t *testing.T) {
+	// no directory prefix
+	assert.Equal(t, "worker-x", WorkerIDFromFilename("worker-x.log"))
+	assert.Equal(t, "worker-x", WorkerIDFromFilename("worker-x~b.log"))
+}

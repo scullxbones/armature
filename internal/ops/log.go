@@ -89,8 +89,13 @@ func ReadLogValidated(logPath string, expectedWorkerID string) ([]Op, error) {
 }
 
 // WorkerIDFromFilename extracts the worker ID from a log filename.
-// "worker-a1.log" -> "worker-a1"
+// Plain log:   "3357fe85.log"   -> "3357fe85"
+// Slotted log: "3357fe85~a.log" -> "3357fe85"  (slot suffix stripped)
 func WorkerIDFromFilename(logPath string) string {
 	base := filepath.Base(logPath)
-	return strings.TrimSuffix(base, ".log")
+	name := strings.TrimSuffix(base, ".log")
+	if idx := strings.Index(name, "~"); idx >= 0 {
+		name = name[:idx]
+	}
+	return name
 }
