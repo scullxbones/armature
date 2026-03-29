@@ -13,6 +13,7 @@ type Context struct {
 	RepoPath     string // resolved repo root
 	IssuesDir    string // path to issues directory
 	WorktreePath string // path to .trellis/ worktree; empty in single-branch mode
+	StateDir     string // path to runtime state directory
 	Mode         string // "single-branch" or "dual-branch"
 	Config       Config // loaded from IssuesDir/config.json
 }

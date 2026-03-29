@@ -131,3 +131,10 @@ func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "", ctx.WorktreePath)
 }
+
+func TestContextStateDir(t *testing.T) {
+	ctx := &Context{
+		StateDir: "/tmp/trellis-state",
+	}
+	assert.Equal(t, "/tmp/trellis-state", ctx.StateDir)
+}
