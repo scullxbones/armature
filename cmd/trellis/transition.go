@@ -63,9 +63,14 @@ func newTransitionCmd() *cobra.Command {
 			if err := appendHighStakesOp(logPath, op); err != nil {
 				return err
 			}
-			result := map[string]string{"issue": issueID, "status": to}
-			data, _ := json.Marshal(result)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if format == "json" || format == "agent" {
+				result := map[string]string{"issue": issueID, "status": to}
+				data, _ := json.Marshal(result)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s → %s\n", issueID, to)
+			}
 			return nil
 		},
 	}

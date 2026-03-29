@@ -1478,3 +1478,92 @@ func TestWriteDAGSummaryArtifact_CreatesFile(t *testing.T) {
 	assert.Contains(t, content, "skipped/rejected")
 	assert.Contains(t, content, "75.0%")
 }
+
+// UX: heartbeat should emit plain text in human mode, not JSON
+func TestHeartbeatCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"heartbeat"`, "default format should not be JSON")
+}
+
+// UX: heartbeat with --format json should still return JSON for agent consumers
+func TestHeartbeatCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"heartbeat"`)
+	assert.Contains(t, out, "task-01")
+}
+
+// UX: note should emit plain text in human mode, not JSON
+func TestNoteCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"note"`, "default format should not be JSON")
+}
+
+// UX: note with --format json should still return JSON
+func TestNoteCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"note"`)
+	assert.Contains(t, out, "task-01")
+}
+
+// UX: transition should emit plain text in human mode, not JSON
+func TestTransitionCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "completed")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"status"`, "default format should not be JSON")
+}
+
+// UX: transition with --format json should still return JSON
+func TestTransitionCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "completed", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"status"`)
+	assert.Contains(t, out, "task-01")
+}
+
+// UX: trls init run a second time should print an "already initialized" message
+func TestInitCommand_AlreadyInitialized(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	assert.Contains(t, out, "already")
+}

@@ -36,9 +36,21 @@ coverage-check:
 	fi
 
 lint:
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found. Install with:"; \
+		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		echo "Then ensure ~/go/bin is on your PATH."; \
+		exit 1; \
+	}
 	golangci-lint run ./...
 
 mutate:
+	@command -v gremlins >/dev/null 2>&1 || { \
+		echo "gremlins not found. Install with:"; \
+		echo "  go install github.com/go-gremlins/gremlins/cmd/gremlins@latest"; \
+		echo "Then ensure ~/go/bin is on your PATH."; \
+		exit 1; \
+	}
 	@echo "Running mutation tests on internal..."
 	gremlins unleash ./internal
 	@echo "Running mutation tests on cmd..."

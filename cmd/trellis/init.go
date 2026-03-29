@@ -137,6 +137,14 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	if dualBranch {
 		mode = "dual-branch"
 	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
+
+	// Detect whether this was a fresh init or an idempotent re-run by checking
+	// if the ops directory already existed before we ran MkdirAll.
+	opsDir := filepath.Join(issuesDir, "ops")
+	if entries, err := os.ReadDir(opsDir); err == nil && len(entries) > 0 {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Trellis already initialized in %s mode at %s\n", mode, issuesDir)
+	} else {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
+	}
 	return nil
 }
