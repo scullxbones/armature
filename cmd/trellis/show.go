@@ -37,18 +37,18 @@ func newShowCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
 				type showJSON struct {
-					ID         string   `json:"id"`
-					Title      string   `json:"title"`
-					Type       string   `json:"type"`
-					Status     string   `json:"status"`
-					Parent     string   `json:"parent,omitempty"`
-					ClaimedBy  string   `json:"claimed_by,omitempty"`
+					ID         string          `json:"id"`
+					Title      string          `json:"title"`
+					Type       string          `json:"type"`
+					Status     string          `json:"status"`
+					Parent     string          `json:"parent,omitempty"`
+					ClaimedBy  string          `json:"claimed_by,omitempty"`
 					DoD        string          `json:"definition_of_done,omitempty"`
 					Acceptance json.RawMessage `json:"acceptance,omitempty"`
 					Scope      []string        `json:"scope,omitempty"`
-					Notes      []string `json:"notes,omitempty"`
-					Outcome    string   `json:"outcome,omitempty"`
-					AssignedTo string   `json:"assigned_worker,omitempty"`
+					Notes      []string        `json:"notes,omitempty"`
+					Outcome    string          `json:"outcome,omitempty"`
+					AssignedTo string          `json:"assigned_worker,omitempty"`
 				}
 				noteTexts := make([]string, 0, len(issue.Notes))
 				for _, n := range issue.Notes {
@@ -92,7 +92,7 @@ func newShowCmd() *cobra.Command {
 				_, _ = fmt.Fprintf(w, "DoD:       %s\n", issue.DefinitionOfDone)
 			}
 			if len(issue.Acceptance) > 0 && string(issue.Acceptance) != "null" {
-				compact, err := json.Marshal(json.RawMessage(issue.Acceptance))
+				compact, err := json.Marshal(issue.Acceptance)
 				if err == nil {
 					_, _ = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
 				}
