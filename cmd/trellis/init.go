@@ -45,6 +45,13 @@ func newInitCmd() *cobra.Command {
 }
 
 func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
+	// Resolve repoPath to an absolute path so stored paths are never relative.
+	absRepoPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		return fmt.Errorf("resolve repo path: %w", err)
+	}
+	repoPath = absRepoPath
+
 	gitClient := git.New(repoPath)
 
 	var issuesDir string

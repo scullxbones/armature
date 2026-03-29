@@ -12,6 +12,7 @@ import (
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/traceability"
 	"github.com/scullxbones/trellis/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1307,6 +1308,43 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestInitDualBranchIdempotent(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// First init --dual-branch should succeed
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err, "first dual-branch init should succeed")
+
+	// Second init --dual-branch should also succeed (idempotent)
+	_, err = runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err, "second dual-branch init should succeed (idempotent)")
+
+	// The stored worktree path should be absolute (not relative).
+	// This matters most when the user runs from the repo root without --repo
+	// (repoPath defaults to "."), so we verify that even with "." as repo,
+	// the git config records an absolute path.
+	buf := new(bytes.Buffer)
+	dotCmd := newRootCmd()
+	dotCmd.SetOut(buf)
+	// Change working directory to repo so "." refers to it
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(repo))
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	// Re-init using "." as repo path — simulates running trls init --dual-branch in the repo root
+	dotCmd.SetArgs([]string{"init", "--dual-branch", "--repo", "."})
+	err = dotCmd.Execute()
+	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")
+
+	wtCmd := exec.Command("git", "-C", repo, "config", "trellis.ops-worktree-path")
+	wtOut, err := wtCmd.Output()
+	require.NoError(t, err)
+	storedPath := strings.TrimSpace(string(wtOut))
+	assert.True(t, filepath.IsAbs(storedPath), "stored worktree path should be absolute, got: %s", storedPath)
+}
+
 func TestLogPayloadSummary(t *testing.T) {
 	cases := []struct {
 		op     ops.Op
@@ -1326,4 +1364,117 @@ func TestLogPayloadSummary(t *testing.T) {
 		out := logPayloadSummary(tc.op)
 		assert.Contains(t, out, tc.expect, "op type: %s", tc.op.Type)
 	}
+}
+
+func TestProviderForType_KnownTypes(t *testing.T) {
+	cases := []string{"filesystem", "confluence", "sharepoint"}
+	for _, typ := range cases {
+		p, err := providerForType(typ)
+		assert.NoError(t, err, "type %q should be recognized", typ)
+		assert.NotNil(t, p, "provider for %q should not be nil", typ)
+	}
+}
+
+func TestProviderForType_UnknownType(t *testing.T) {
+	_, err := providerForType("unknown-type")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown provider type")
+}
+
+func TestReadyCommand_ParentFilter(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create parent and two children
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Parent", "--id", "parent-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child A", "--id", "child-a", "--parent", "parent-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Unrelated", "--id", "unrelated-01")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "ready", "--format", "json", "--parent", "parent-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "child-a")
+	assert.NotContains(t, out, "unrelated-01")
+}
+
+func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Text format task", "--id", "text-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "ready", "--format", "text")
+	require.NoError(t, err)
+	assert.Contains(t, out, "text-01")
+}
+
+func TestCollectDraftSubtree_ReturnsNilForUnknownRoot(t *testing.T) {
+	state := materialize.NewState()
+	result := collectDraftSubtree(state, "nonexistent")
+	assert.Nil(t, result)
+}
+
+func TestCollectDraftSubtree_ReturnsDraftIssuesInSubtree(t *testing.T) {
+	state := materialize.NewState()
+	state.Issues["root"] = &materialize.Issue{
+		ID: "root", Provenance: materialize.Provenance{Confidence: "draft"},
+		Children: []string{"child-1", "child-2"},
+	}
+	state.Issues["child-1"] = &materialize.Issue{
+		ID: "child-1", Provenance: materialize.Provenance{Confidence: "draft"},
+	}
+	state.Issues["child-2"] = &materialize.Issue{
+		ID: "child-2", Provenance: materialize.Provenance{Confidence: "verified"},
+	}
+
+	result := collectDraftSubtree(state, "root")
+	ids := make([]string, len(result))
+	for i, iss := range result {
+		ids[i] = iss.ID
+	}
+	assert.Contains(t, ids, "root")
+	assert.Contains(t, ids, "child-1")
+	assert.NotContains(t, ids, "child-2")
+}
+
+func TestWriteDAGSummaryArtifact_CreatesFile(t *testing.T) {
+	issuesDir := t.TempDir()
+	stateDir := filepath.Join(issuesDir, "state")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	reviewed := []*materialize.Issue{
+		{ID: "T-001", Title: "First issue"},
+		{ID: "T-002", Title: "Second issue"},
+	}
+	approvedIDs := []string{"T-001"}
+	cov := traceability.Coverage{CoveragePct: 75.0, CitedNodes: 3, TotalNodes: 4}
+
+	err := writeDAGSummaryArtifact(issuesDir, reviewed, approvedIDs, cov)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(stateDir, "dag-summary.md"))
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "T-001")
+	assert.Contains(t, content, "T-002")
+	assert.Contains(t, content, "approved")
+	assert.Contains(t, content, "skipped/rejected")
+	assert.Contains(t, content, "75.0%")
 }
