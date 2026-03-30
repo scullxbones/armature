@@ -93,3 +93,6 @@
 ["claim","TASK-11",1774840294,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","TASK-11",1774840342,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Renamed NewFilePushTracker param to stateDir and updated helper and tests."}]
 ["transition","STORY-SECONDARY",1774840386,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Completed propagation of worker-specific StateDir through all secondary components (list, show, status, merged, sync, validate, doctor, render-context, and push tracker)."}]
+["claim","TASK-12",1774842512,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","TASK-12",1774842663,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Direct dependencies required for upcoming TUI redesign."}]
+["transition","TASK-12",1774842668,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added fsnotify and clipboard as direct dependencies."}]
