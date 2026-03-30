@@ -57,7 +57,7 @@ mutate:
 	gremlins unleash ./cmd
 
 clean:
-	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/
+	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/
 	go clean -testcache
 
 build:
@@ -78,4 +78,10 @@ skill: build
 	chmod +x .claude/skills/trls/scripts/trls
 	mkdir -p .claude/skills/trls-worker
 	{ cat docs/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `docs/trls-worker-SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat docs/trls-worker-SKILL.md; } > .claude/skills/trls-worker/SKILL.md
-	@echo "Deployed trls and trls-worker skills to .claude/skills/"
+	mkdir -p .gemini/skills/trls/scripts
+	cat docs/trls-skill-meta.yaml docs/SKILL.md > .gemini/skills/trls/SKILL.md
+	cp bin/trls .gemini/skills/trls/scripts/trls
+	chmod +x .gemini/skills/trls/scripts/trls
+	mkdir -p .gemini/skills/trls-worker
+	{ cat docs/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `docs/trls-worker-SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat docs/trls-worker-SKILL.md; } > .gemini/skills/trls-worker/SKILL.md
+	@echo "Deployed trls and trls-worker skills to .claude/skills/ and .gemini/skills/"

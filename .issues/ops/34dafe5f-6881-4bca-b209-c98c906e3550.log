@@ -74,3 +74,7 @@
 ["transition","DF-S3",1774836978,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["transition","DF-S3-T1",1774837059,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"added Story Board view to trls list --parent"}]
 ["transition","DF-S3",1774837067,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"completed enhanced Story Board view for trls list"}]
+["claim","DF-S4-T2",1774837102,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","DF-S4",1774837102,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["transition","DF-S4-T1",1774837144,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"documented bundled transition + commit workflow in worker skill and updated examples to use positional IDs"}]
+["transition","DF-S4-T2",1774837149,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"added Batch Strategy section to worker skill and updated Makefile to deploy to .gemini/skills/"}]

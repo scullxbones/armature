@@ -64,8 +64,8 @@ Lists unblocked, unclaimed issues. If empty, all work is done or blocked — sto
 
 ### 3. Claim and Assemble Context
 ```
-trls claim --issue ISSUE-ID
-trls render-context --issue ISSUE-ID --budget 4000
+trls claim ISSUE-ID
+trls render-context ISSUE-ID --budget 4000
 ```
 Claim before reading context. The `render-context` output is your complete task specification — it contains the issue description, definition of done, blocker outcomes, parent chain, decisions, and notes.
 
@@ -78,20 +78,26 @@ Dispatch a subagent with:
 - The `trls` skill loaded for API reference
 
 The subagent should:
-- Record progress with `trls note --issue ID --msg "..."`
-- Record decisions with `trls decision --issue ID --topic X --choice Y --rationale Z`
-- **Call `trls heartbeat --issue ID` for any work taking more than a few minutes — maximum once per minute.** Claims expire after the TTL; without periodic heartbeats another worker may steal the claim. Issue heartbeat calls at natural checkpoints (e.g. after each test run, after each file written).
+- Record progress with `trls note ID --msg "..."`
+- Record decisions with `trls decision ID --topic X --choice Y --rationale Z`
+- **Call `trls heartbeat ID` for any work taking more than a few minutes — maximum once per minute.** Claims expire after the TTL; without periodic heartbeats another worker may steal the claim. Issue heartbeat calls at natural checkpoints (e.g. after each test run, after each file written).
 - **Cite every issue it touches or creates** — before returning, run `trls source-link` for any issue that has a recoverable source doc, or `trls accept-citation --ci` if no source exists. Do not leave issues uncited.
 
 ### 5. Complete and Commit
 
 ```
-trls transition --issue ISSUE-ID --to done --outcome "what was accomplished"
+trls transition ISSUE-ID --to done --outcome "what was accomplished"
 git add <code files...> .issues/   # always include .issues/ — ops must travel with code
 git commit -m "feat(ISSUE-ID): brief description of what was implemented"
 ```
 
 Record a concrete outcome. Commit immediately after each task — small focused commits are easier to review.
+
+**Pro-tip: Bundled Workflow**
+To avoid forgetting `.issues/` or the commit, combine these into a single command or use a shell alias:
+```bash
+trls transition ISSUE-ID --to done --outcome "..." && git add . .issues/ && git commit -m "feat(ISSUE-ID): ..."
+```
 
 **Always stage `.issues/` alongside code files.** Every `trls` command (claim, transition, note, decision, heartbeat) writes ops to `.issues/`. If you omit `.issues/` from the commit, those ops are left behind and will not be delivered with the code.
 
@@ -107,7 +113,7 @@ When `trls ready` returns empty and the story's tasks are all done:
 **a. Verify citation coverage, then transition the story:**
 ```
 trls validate   # must show COVERAGE: N/N cited with no ERROR lines
-trls transition --issue STORY-ID --to done --outcome "story-level summary"
+trls transition STORY-ID --to done --outcome "story-level summary"
 git status   # check for unstaged .issues/ changes
 git add .issues/ && git commit -m "chore(STORY-ID): sync trellis state"
 ```
@@ -169,6 +175,22 @@ the ops log, each subagent must write to its own log slot:
 forgetting to unset it — orchestrator ops land in a slot file and may not be
 seen by `trls ready` until materialization catches up.
 
+## Batch Strategy (Advanced)
+
+When a task involves a large number of files (e.g. refactoring 10+ files), do not
+attempt to process them all in a single turn. This leads to incomplete work and
+high token usage. Instead:
+
+1.  **Build a Manifest:** Use `grep --names-only` or `glob` to find all files that
+    need changes. Save this list to a temporary file or a note.
+2.  **Process in Chunks:** Process the files in small batches (e.g. 3-5 files at a
+    time).
+3.  **Verify each Chunk:** Run tests/linting after each chunk to ensure no
+    regressions were introduced.
+4.  **Heartbeat:** Call `trls heartbeat ID` after each chunk.
+5.  **Final Review:** Once all files are processed, run a final global check
+    before transitioning the task to `done`.
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -183,7 +205,9 @@ seen by `trls ready` until materialization catches up.
 | Omitting `.issues/` from `git add` | Ops left behind, not delivered with code; always include `.issues/` in every commit |
 | No mop-up commit before push | Story/epic transitions and between-task ops never get committed; run `git add .issues/ && git commit` before `git push` |
 | Auto-pushing after every task | Push once per story to avoid noisy remote history |
-| Leaving issues uncited | Run `trls source-link` or `trls accept-citation --ci` before the subagent returns |
+| Leave issues uncited | Run `trls source-link` or `trls accept-citation --ci` before the subagent returns |
+| Repeating `transition` then `commit` manually | Use a bundled command or alias: `trls transition ID ... && git add . .issues/ && git commit -m ...` |
 | Skipping `trls validate` at story close | Citation debt accumulates silently; validate before transitioning the story |
+
 | Scope overlap WARNING on `trls validate` | Add `trls link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
 | MISSING entries in `trls sources verify` | Run `trls sources sync` to fetch and fingerprint; re-run `trls sources verify` until all show OK |
