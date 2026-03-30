@@ -105,3 +105,5 @@
 ["claim","TASK-15",1774842960,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","TASK-15",1774843111,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built internal/tui/app/ root model with tab bar and screen delegation."}]
 ["transition","TASK-15",1774843116,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/app/ root model."}]
+["citation-accepted","TASK-16",1774843140,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built internal/tui/dagtree/ screen with tree rendering and filtering."}]
+["transition","TASK-16",1774843146,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/dagtree/ screen."}]
