@@ -129,3 +129,8 @@
 ["claim","E5-S4-T3",1774844194,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","E5-S4-T3",1774844492,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Command reference documentation created as requested."}]
 ["transition","E5-S4-T3",1774844497,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created docs/commands.md with complete command reference."}]
+["claim","E5-S4-T4",1774869656,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["heartbeat","E5-S4-T4",1774869704,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["decision","E5-S4-T4",1774869708,"34dafe5f-6881-4bca-b209-c98c906e3550",{"topic":"doc-structure","choice":"one section per persona with command sequences","rationale":"mirrors getting-started style, gives readers clear context for their role"}]
+["note","E5-S4-T4",1774869800,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Wrote docs/use-cases.md with all five persona sections (P1-P5) and multi-agent conflict resolution section; mirrors getting-started.md style with real command sequences"}]
+["transition","E5-S4-T4",1774869818,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created docs/use-cases.md with workflow walkthroughs for all five personas (P1 Lone Wolf, P2 Gatekeeper, P3 Conductor, P4 Wrangler, P5 AI Worker) and a multi-agent conflict resolution scenario."}]
