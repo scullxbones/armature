@@ -102,3 +102,6 @@
 ["claim","TASK-14",1774842824,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","TASK-14",1774842928,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built the internal/tui/detail overlay model as requested."}]
 ["transition","TASK-14",1774842937,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/detail/ overlay model."}]
+["claim","TASK-15",1774842960,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","TASK-15",1774843111,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built internal/tui/app/ root model with tab bar and screen delegation."}]
+["transition","TASK-15",1774843116,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/app/ root model."}]
