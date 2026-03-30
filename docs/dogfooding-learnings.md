@@ -252,3 +252,51 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Add a "Batch Strategy" section to the worker skill instructing agents to build a manifest (e.g. `grep --names-only`) and process in small, verified chunks rather than attempting all at once.
 
 **File**: `.claude/skills/trls-worker/SKILL.md`
+
+---
+
+## L22: `trls doctor` flags `source-fingerprint` ops as orphaned
+
+**Observed**: `trls doctor` D3 check flagged `source-fingerprint` ops because they use source UUIDs as `TargetID`, which are not present in the issue index.
+
+**Impact**: Mandatory "fix doctor errors" requirement in `trls-worker` loop blocked work on actual features until the CLI itself was patched.
+
+**Recommendation**: Exclude `source-fingerprint` ops from the D3 orphaned ops check, or verify them against the source manifest instead of the issue index.
+
+**File**: `internal/doctor/doctor.go`
+
+---
+
+## L23: Plan/Reality drift in task scope
+
+**Observed**: Several tasks (e.g., TASK-06) had Definitions of Done that requested changes already implemented in previous blocking tasks (likely TASK-05).
+
+**Impact**: Extra context and turn counts spent searching for "hidden" hardcoded paths that were already removed, causing confusion and redundant effort.
+
+**Recommendation**: Re-verify task DoD against the codebase state at the time of parent story decomposition or just before task creation.
+
+**File**: `STORY-SECONDARY`, `TASK-06`
+
+---
+
+## L24: CLI auto-format detection breaks existing integration tests
+
+**Observed**: When `GEMINI_CLI` is set, `trls` defaults to machine-readable formats. Existing integration tests in `main_test.go` that assert on human-readable output (e.g., checking if a string does *not* contain "status") fail in agent environments.
+
+**Impact**: Agents see existing tests failing unrelated to their changes, causing doubt about codebase stability.
+
+**Recommendation**: Tests should explicitly set the expected format (e.g., `cmd.Root().PersistentFlags().Set("format", "human")`) rather than relying on the default, especially in CI/Agent environments.
+
+**File**: `cmd/trellis/main_test.go`, `cmd/trellis/main.go`
+
+---
+
+## L25: Missing "Implicit" Tests in Codebase
+
+**Observed**: Definitions of Done often required passing specific new tests (e.g., `TestSecondaryStatePaths`) that were not yet present in the repo.
+
+**Impact**: Agents spend time searching for missing files before realizing they are responsible for creating them from scratch.
+
+**Recommendation**: Task descriptions should explicitly state "Create and pass a new test named X" rather than just "Test X passes" if the test doesn't exist.
+
+**File**: `STORY-SECONDARY`, `TASK-06`, `TASK-07`

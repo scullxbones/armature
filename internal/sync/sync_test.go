@@ -50,9 +50,9 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 	ids, err := trellissync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"T-001"}, ids)
-	}
+}
 
-	func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
+func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 	dir := t.TempDir()
 	issuesStateDir := filepath.Join(dir, "state", "issues")
 	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
@@ -68,9 +68,9 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 	ids, err := trellissync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
 	require.NoError(t, err)
 	assert.Empty(t, ids)
-	}
+}
 
-	func TestDetectMerges_EmptyDir(t *testing.T) {
+func TestDetectMerges_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	// No state/issues dir — should return nil, nil
 
@@ -78,9 +78,9 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 	ids, err := trellissync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
 	assert.NoError(t, err)
 	assert.Empty(t, ids)
-	}
+}
 
-	func TestSyncDetectMergesUsesStateDir(t *testing.T) {
+func TestSyncDetectMergesUsesStateDir(t *testing.T) {
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "specific-state")
 	issuesStateDir := filepath.Join(stateDir, "issues")
@@ -98,4 +98,4 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 	ids, err := trellissync.DetectMerges("unused", stateDir, "main", mc)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"T-001"}, ids)
-	}
+}

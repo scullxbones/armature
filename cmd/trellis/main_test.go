@@ -1549,7 +1549,7 @@ func TestHeartbeatCommand_HumanOutput(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01")
+	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01", "--format", "human")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, `"heartbeat"`, "default format should not be JSON")
@@ -1575,7 +1575,7 @@ func TestNoteCommand_HumanOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update")
+	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update", "--format", "human")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, `"note"`, "default format should not be JSON")
@@ -1599,7 +1599,7 @@ func TestTransitionCommand_HumanOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "completed")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "completed", "--format", "human")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, `"status"`, "default format should not be JSON")

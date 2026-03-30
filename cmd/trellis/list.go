@@ -76,6 +76,9 @@ func newListCmd() *cobra.Command {
 			}
 
 			if filterParent != "" {
+				if len(ids) == 0 {
+					return nil
+				}
 				// Story Board view (table format)
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE")
 				for _, id := range ids {

@@ -49,7 +49,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	_ = os.Remove(filepath.Join(repo, ".issues", "index.json"))
 
 	// 4. Verify secondary commands work using ONLY the worker-specific state
-	
+
 	// list
 	out, err := runTrls(t, repo, "list")
 	require.NoError(t, err)
