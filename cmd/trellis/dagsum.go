@@ -66,7 +66,12 @@ func newDAGSummaryCmd() *cobra.Command {
 				return nil
 			}
 
-			if !tui.IsInteractive() {
+			format, _ := cmd.Flags().GetString("format")
+			if format == "human" && !tui.IsTerminal() {
+				format = "agent"
+			}
+
+			if format == "json" || format == "agent" {
 				type pendingItem struct {
 					IssueID string `json:"issue_id"`
 					Title   string `json:"title"`
@@ -80,15 +85,33 @@ func newDAGSummaryCmd() *cobra.Command {
 						Status:  issue.Status,
 					})
 				}
-				out, _ := json.Marshal(map[string]interface{}{
+				data, _ := json.MarshalIndent(map[string]interface{}{
 					"pending_dag_confirmation": pending,
 					"count":                    len(pending),
-				})
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+				}, "", "  ")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				return nil
+			}
+
+			if !tui.IsTerminal() {
+				// Human-readable summary for non-TTY (format == "human")
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+					"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
+					cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pending DAG Confirmation:")
+				for _, issue := range draftIssues {
+					_, isUncited := uncitedSet[issue.ID]
+					cited := "cited"
+					if isUncited {
+						cited = "uncited"
+					}
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s (%s)\n", issue.ID, issue.Title, cited)
+				}
 				return nil
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+
 				"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 				cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
 

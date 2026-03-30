@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -84,7 +85,12 @@ func newStaleReviewCmd() *cobra.Command {
 				return nil
 			}
 
-			if !tui.IsInteractive() {
+			format, _ := cmd.Flags().GetString("format")
+			if format == "human" && !tui.IsTerminal() {
+				format = "agent"
+			}
+
+			if format == "json" || format == "agent" {
 				type staleSource struct {
 					SourceID      string   `json:"source_id"`
 					ChangeSummary string   `json:"change_summary"`
@@ -102,11 +108,24 @@ func newStaleReviewCmd() *cobra.Command {
 						CitedIssues:   ids,
 					})
 				}
-				out, _ := json.Marshal(map[string]interface{}{
+				data, _ := json.MarshalIndent(map[string]interface{}{
 					"stale_sources": staleSources,
 					"count":         len(staleSources),
-				})
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+				}, "", "  ")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				return nil
+			}
+
+			if !tui.IsTerminal() {
+				// Human-readable summary for non-TTY (format == "human")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Stale Sources:")
+				for _, item := range reviewItems {
+					var ids []string
+					for _, issue := range item.CitedIssues {
+						ids = append(ids, issue.ID)
+					}
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s) cites: %s\n", item.SourceID, item.ChangeSummary, strings.Join(ids, ", "))
+				}
 				return nil
 			}
 
