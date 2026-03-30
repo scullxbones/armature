@@ -92,3 +92,4 @@
 ["transition","TASK-10",1774840284,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Renamed context.Assemble param issuesDir to stateDir and updated helper functions and callsites."}]
 ["claim","TASK-11",1774840294,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","TASK-11",1774840342,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Renamed NewFilePushTracker param to stateDir and updated helper and tests."}]
+["transition","STORY-SECONDARY",1774840386,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Completed propagation of worker-specific StateDir through all secondary components (list, show, status, merged, sync, validate, doctor, render-context, and push tracker)."}]
