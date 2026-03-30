@@ -96,3 +96,6 @@
 ["claim","TASK-12",1774842512,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","TASK-12",1774842663,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Direct dependencies required for upcoming TUI redesign."}]
 ["transition","TASK-12",1774842668,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added fsnotify and clipboard as direct dependencies."}]
+["claim","TASK-13",1774842695,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","TASK-13",1774842780,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Defining Screen interface for TUI redesign."}]
+["transition","TASK-13",1774842788,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Defined Screen interface in internal/tui/screen.go."}]
