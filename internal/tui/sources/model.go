@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/tui"
 )
@@ -76,8 +75,11 @@ func (m *Model) rebuild() {
 
 	sourceMap := make(map[string][]string)
 	for _, issue := range m.state.Issues {
-		if issue.SourceLink != "" {
-			sourceMap[issue.SourceLink] = append(sourceMap[issue.SourceLink], issue.ID)
+		for _, link := range issue.SourceLinks {
+			id := link.SourceEntryID
+			if id != "" {
+				sourceMap[id] = append(sourceMap[id], issue.ID)
+			}
 		}
 	}
 
