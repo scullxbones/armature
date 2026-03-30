@@ -208,6 +208,9 @@ func checkD3OrphanedOps(issuesDir string, index materialize.Index) Finding {
 			continue
 		}
 		for _, op := range logOps {
+			if op.Type == ops.OpSourceFingerprint {
+				continue
+			}
 			if op.TargetID != "" {
 				targetIDs = append(targetIDs, op.TargetID)
 			}

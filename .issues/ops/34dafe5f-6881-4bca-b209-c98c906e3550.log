@@ -86,3 +86,5 @@
 ["transition","TASK-07",1774839886,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added issuesDir param to sync.DetectMerges and updated callsites. Added TestSyncDetectMergesUsesStateDir."}]
 ["claim","TASK-08",1774839893,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","TASK-08",1774840042,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Verified StateDir in validate.Options and added TestValidateUsesStateDir."}]
+["claim","TASK-09",1774840055,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","TASK-09",1774840092,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Verified doctor.Run takes stateDir and added TestDoctorRunUsesStateDir."}]

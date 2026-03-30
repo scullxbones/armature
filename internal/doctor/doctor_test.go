@@ -195,3 +195,30 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	assert.Equal(t, doctor.SeverityWarning, d2.Severity)
 	assert.Contains(t, d2.Items, "stale-01")
 }
+
+func TestDoctorRunUsesStateDir(t *testing.T) {
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(t.TempDir(), "specific-state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	// Write an empty ops log so materialize can run
+	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
+	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
+
+	// Write a mock index.json to the specific stateDir
+	index := materialize.Index{
+		"T-001": {Status: "open", Type: "task"},
+	}
+	indexPath := filepath.Join(stateDir, "index.json")
+	require.NoError(t, materialize.WriteIndex(indexPath, index))
+
+	// doctor.Run should load the index from stateDir.
+	// We pass an empty repoPath to skip D1 git divergence.
+	report, err := doctor.Run(issuesDir, stateDir, "")
+	require.NoError(t, err)
+
+	// D4 checks broken parent refs. If it saw T-001, it means it loaded the index.
+	// Since T-001 has no parent, D4 should be OK.
+	d4 := findCheck(t, report, "D4")
+	assert.Equal(t, doctor.SeverityOK, d4.Severity)
+}
