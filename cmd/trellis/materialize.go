@@ -15,7 +15,7 @@ func newMaterializeCmd() *cobra.Command {
 		Short: "Replay op logs and update materialized state files",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if excludeWorker != "" {
-				_, result, err := materialize.MaterializeExcludeWorker(appCtx.IssuesDir, excludeWorker, appCtx.Mode == "single-branch")
+				_, result, err := materialize.MaterializeExcludeWorker(appCtx.IssuesDir, appCtx.StateDir, excludeWorker, appCtx.Mode == "single-branch")
 				if err != nil {
 					return err
 				}
@@ -23,7 +23,7 @@ func newMaterializeCmd() *cobra.Command {
 				return nil
 			}
 
-			result, err := materialize.Materialize(appCtx.IssuesDir, appCtx.Mode == "single-branch")
+			result, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, appCtx.Mode == "single-branch")
 			if err != nil {
 				return err
 			}

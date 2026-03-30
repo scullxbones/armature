@@ -80,20 +80,20 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 }
 
 // Run executes all health checks and returns a Report.
-func Run(issuesDir string, repoPath string) (Report, error) {
+func Run(issuesDir string, stateDir string, repoPath string) (Report, error) {
 	singleBranch := true // single-branch is the default for doctor
 
-	if _, err := materialize.Materialize(issuesDir, singleBranch); err != nil {
+	if _, err := materialize.Materialize(issuesDir, stateDir, singleBranch); err != nil {
 		return Report{}, fmt.Errorf("materialize: %w", err)
 	}
 
-	index, err := materialize.LoadIndex(filepath.Join(issuesDir, "state", "index.json"))
+	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))
 	if err != nil {
 		return Report{}, fmt.Errorf("load index: %w", err)
 	}
 
 	// Load all issues for detailed checks.
-	allIssues, err := loadAllIssues(issuesDir, index)
+	allIssues, err := loadAllIssues(stateDir, index)
 	if err != nil {
 		return Report{}, fmt.Errorf("load issues: %w", err)
 	}
@@ -110,10 +110,10 @@ func Run(issuesDir string, repoPath string) (Report, error) {
 	return Report{Checks: checks}, nil
 }
 
-func loadAllIssues(issuesDir string, index materialize.Index) (map[string]*materialize.Issue, error) {
+func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materialize.Issue, error) {
 	result := make(map[string]*materialize.Issue, len(index))
 	for id := range index {
-		path := filepath.Join(issuesDir, "state", "issues", id+".json")
+		path := filepath.Join(stateDir, "issues", id+".json")
 		issue, err := materialize.LoadIssue(path)
 		if err != nil {
 			if os.IsNotExist(err) {

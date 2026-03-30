@@ -21,7 +21,7 @@ func newSyncCmd() *cobra.Command {
 			singleBranch := appCtx.Mode == "single-branch"
 
 			// Materialize to ensure state files are up to date
-			if _, err := materialize.Materialize(issuesDir, singleBranch); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 
@@ -35,7 +35,7 @@ func newSyncCmd() *cobra.Command {
 			}
 
 			gc := git.New(appCtx.RepoPath)
-			mergedIDs, err := trellissync.DetectMerges(issuesDir, targetBranch, gc)
+			mergedIDs, err := trellissync.DetectMerges(appCtx.StateDir, targetBranch, gc)
 			if err != nil {
 				return fmt.Errorf("detect merges: %w", err)
 			}
@@ -69,7 +69,7 @@ func newSyncCmd() *cobra.Command {
 			}
 
 			// Re-materialize so state files reflect the new merged status
-			if _, err := materialize.Materialize(issuesDir, singleBranch); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
 				return fmt.Errorf("re-materialize: %w", err)
 			}
 

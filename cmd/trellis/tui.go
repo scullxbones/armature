@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -16,8 +17,9 @@ func newTUICmd() *cobra.Command {
 		Short: "Interactive kanban board with auto-refresh",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
+			stateDir := filepath.Join(appCtx.IssuesDir, "state", ".tui")
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, stateDir, true)
 			if err != nil {
 				return err
 			}
@@ -32,7 +34,7 @@ func newTUICmd() *cobra.Command {
 				return nil
 			}
 
-			m := board.NewWithRefresh(issues, 0, 0, issuesDir)
+			m := board.NewWithRefresh(issues, 0, 0, issuesDir, stateDir)
 			p := tea.NewProgram(m, tea.WithAltScreen())
 			_, err = p.Run()
 			return err

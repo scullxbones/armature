@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	claimPkg "github.com/scullxbones/trellis/internal/claim"
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -20,11 +21,11 @@ func newClaimCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			if _, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch"); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); err != nil {
 				return err
 			}
 
-			issue, err := materialize.LoadIssue(fmt.Sprintf("%s/state/issues/%s.json", issuesDir, issueID))
+			issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", issueID+".json"))
 			if err != nil {
 				return fmt.Errorf("issue %s not found: %w", issueID, err)
 			}
@@ -38,7 +39,7 @@ func newClaimCmd() *cobra.Command {
 				return err
 			}
 
-			index, _ := materialize.LoadIndex(issuesDir + "/state/index.json")
+			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
 			for id, entry := range index {
 				if id == issueID || (entry.Status != "claimed" && entry.Status != "in-progress") {
 					continue

@@ -14,10 +14,10 @@ type MergeChecker interface {
 	BranchMergedInto(branch, target string) (bool, error)
 }
 
-// DetectMerges scans all issues in issuesDir/state/issues/ and returns the IDs
+// DetectMerges scans all issues in stateDir/issues/ and returns the IDs
 // of done issues whose Branch has been merged into targetBranch.
-func DetectMerges(issuesDir, targetBranch string, mc MergeChecker) ([]string, error) {
-	issuesStateDir := filepath.Join(issuesDir, "state", "issues")
+func DetectMerges(stateDir, targetBranch string, mc MergeChecker) ([]string, error) {
+	issuesStateDir := filepath.Join(stateDir, "issues")
 	entries, err := os.ReadDir(issuesStateDir)
 	if err != nil {
 		if os.IsNotExist(err) {

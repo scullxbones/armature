@@ -20,11 +20,11 @@ func newMergedCmd() *cobra.Command {
 			singleBranch := appCtx.Mode == "single-branch"
 
 			// Materialize to get current state
-			if _, err := materialize.Materialize(issuesDir, singleBranch); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 
-			index, err := materialize.LoadIndex(filepath.Join(issuesDir, "state", "index.json"))
+			index, err := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
 			if err != nil {
 				return fmt.Errorf("load index: %w", err)
 			}

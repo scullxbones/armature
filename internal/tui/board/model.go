@@ -40,21 +40,23 @@ type Model struct {
 	width      int
 	height     int
 	issuesDir  string // non-empty enables auto-refresh every 5s
+	stateDir   string
 }
 
 // New creates a new board Model, distributing issues into columns by status.
 func New(issues []*materialize.Issue, width, height int) Model {
-	return NewWithRefresh(issues, width, height, "")
+	return NewWithRefresh(issues, width, height, "", "")
 }
 
 // NewWithRefresh creates a new board Model with auto-refresh enabled.
 // When issuesDir is non-empty, the model reloads issues every 5 seconds.
-func NewWithRefresh(issues []*materialize.Issue, width, height int, issuesDir string) Model {
+func NewWithRefresh(issues []*materialize.Issue, width, height int, issuesDir string, stateDir string) Model {
 	m := Model{
 		keys:      DefaultKeyMap(),
 		width:     width,
 		height:    height,
 		issuesDir: issuesDir,
+		stateDir:  stateDir,
 	}
 	m = m.distributeIssues(issues)
 	m.viewport = viewport.New(width, height/3)
@@ -114,7 +116,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		state, _, err := materialize.MaterializeAndReturn(m.issuesDir, true)
+		state, _, err := materialize.MaterializeAndReturn(m.issuesDir, m.stateDir, true)
 		if err == nil {
 			var issues []*materialize.Issue
 			for _, issue := range state.Issues {

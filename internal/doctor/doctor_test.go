@@ -139,7 +139,7 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, "")
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "")
 	require.NoError(t, err)
 	// All checks should be OK on an empty repo.
 	for _, f := range report.Checks {
@@ -162,7 +162,7 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, op))
 
-	report, err := doctor.Run(issuesDir, "")
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "")
 	require.NoError(t, err)
 
 	// D3 should be an error since ghost-issue-01 is not in the graph.
@@ -188,7 +188,7 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{createOp, claimOp}))
 
-	report, err := doctor.Run(issuesDir, "")
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "")
 	require.NoError(t, err)
 
 	d2 := findCheck(t, report, "D2")

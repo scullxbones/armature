@@ -24,11 +24,11 @@ func newShowCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
 
-			if _, err := materialize.Materialize(issuesDir, singleBranch); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
 				return err
 			}
 
-			issuePath := filepath.Join(issuesDir, "state", "issues", issueID+".json")
+			issuePath := filepath.Join(appCtx.StateDir, "issues", issueID+".json")
 			issue, err := materialize.LoadIssue(issuePath)
 			if err != nil {
 				return fmt.Errorf("issue %q not found", issueID)

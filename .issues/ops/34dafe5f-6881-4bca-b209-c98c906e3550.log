@@ -15,3 +15,5 @@
 ["transition","LGSLT",1774830137,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Implemented parallel log slots via TRLS_LOG_SLOT env var, enabling conflict-free parallel subagents."}]
 ["claim","TASK-04",1774832811,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","TASK-04",1774833006,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Set appCtx.StateDir in PersistentPreRunE and added TestAppCtxStateDirSet to verify behavior with and without worker ID."}]
+["claim","TASK-05",1774833017,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","TASK-05",1774834027,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Updated Materialize, MaterializeAndReturn, MaterializeExcludeWorker, and DetectMerges to take explicit stateDir. Updated all 16+ callsites in cmd/trellis and internal/ components. Fixed tests to use worker-specific state directories."}]

@@ -47,7 +47,7 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 		"feature/merged-work": true,
 	}}
 
-	ids, err := trellissync.DetectMerges(dir, "main", mc)
+	ids, err := trellissync.DetectMerges(filepath.Join(dir, "state"), "main", mc)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"T-001"}, ids)
 }
@@ -65,7 +65,7 @@ func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 
 	mc := &fakeMergeChecker{merged: map[string]bool{}}
 
-	ids, err := trellissync.DetectMerges(dir, "main", mc)
+	ids, err := trellissync.DetectMerges(filepath.Join(dir, "state"), "main", mc)
 	require.NoError(t, err)
 	assert.Empty(t, ids)
 }
@@ -75,7 +75,7 @@ func TestDetectMerges_EmptyDir(t *testing.T) {
 	// No state/issues dir — should return nil, nil
 
 	mc := &fakeMergeChecker{merged: map[string]bool{}}
-	ids, err := trellissync.DetectMerges(dir, "main", mc)
+	ids, err := trellissync.DetectMerges(filepath.Join(dir, "state"), "main", mc)
 	assert.NoError(t, err)
 	assert.Empty(t, ids)
 }

@@ -31,9 +31,8 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 }
 
 // Materialize runs the full materialization pipeline.
-func Materialize(issuesDir string, singleBranch bool) (Result, error) {
+func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) {
 	opsDir := filepath.Join(issuesDir, "ops")
-	stateDir := filepath.Join(issuesDir, "state")
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -132,9 +131,8 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 }
 
 // MaterializeAndReturn runs the full materialization pipeline and returns the resulting State.
-func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, error) {
+func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State, Result, error) {
 	opsDir := filepath.Join(issuesDir, "ops")
-	stateDir := filepath.Join(issuesDir, "state")
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -234,7 +232,7 @@ func MaterializeAndReturn(issuesDir string, singleBranch bool) (*State, Result, 
 // MaterializeExcludeWorker replays the op log excluding all ops from the given
 // workerID. This is a diagnostic-only mode: state files and checkpoint are NOT
 // updated. Returns the resulting State and Result.
-func MaterializeExcludeWorker(issuesDir, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
+func MaterializeExcludeWorker(issuesDir, stateDir, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
 	opsDir := filepath.Join(issuesDir, "ops")
 
 	entries, err := os.ReadDir(opsDir)

@@ -345,7 +345,7 @@ func TestRefreshMsg_PreservesCursorWhenValid(t *testing.T) {
 
 func TestNewWithRefresh(t *testing.T) {
 	issues := makeIssues()
-	m := NewWithRefresh(issues, 120, 40, "/some/dir")
+	m := NewWithRefresh(issues, 120, 40, "/some/dir", "/some/state/dir")
 	if m.issuesDir != "/some/dir" {
 		t.Errorf("expected issuesDir='/some/dir', got %q", m.issuesDir)
 	}
@@ -353,7 +353,7 @@ func TestNewWithRefresh(t *testing.T) {
 
 func TestInitWithRefresh_ReturnsCmd(t *testing.T) {
 	issues := makeIssues()
-	m := NewWithRefresh(issues, 120, 40, "/some/dir")
+	m := NewWithRefresh(issues, 120, 40, "/some/dir", "/some/state/dir")
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("expected non-nil cmd from Init when issuesDir is set")

@@ -32,12 +32,12 @@ func newDAGSummaryCmd() *cobra.Command {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return err
 			}
 
-			tracePath := filepath.Join(issuesDir, "state", "traceability.json")
+			tracePath := filepath.Join(appCtx.StateDir, "traceability.json")
 			cov, _ := traceability.Read(tracePath)
 
 			// Build a set of uncited IDs for fast lookup.
@@ -134,7 +134,7 @@ func newDAGSummaryCmd() *cobra.Command {
 				}
 			}
 
-			if err := writeDAGSummaryArtifact(issuesDir, draftIssues, approvedIDs, cov); err != nil {
+			if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
 			}
 
@@ -171,7 +171,7 @@ func collectDraftSubtree(state *materialize.State, rootID string) []*materialize
 	return result
 }
 
-func writeDAGSummaryArtifact(issuesDir string, reviewed []*materialize.Issue,
+func writeDAGSummaryArtifact(stateDir string, reviewed []*materialize.Issue,
 	approvedIDs []string, cov traceability.Coverage) error {
 
 	approvedSet := make(map[string]struct{}, len(approvedIDs))
@@ -194,7 +194,7 @@ func writeDAGSummaryArtifact(issuesDir string, reviewed []*materialize.Issue,
 		fmt.Fprintf(&sb, "| %s | %s | %s |\n", issue.ID, issue.Title, status)
 	}
 
-	path := filepath.Join(issuesDir, "state", "dag-summary.md")
+	path := filepath.Join(stateDir, "dag-summary.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}

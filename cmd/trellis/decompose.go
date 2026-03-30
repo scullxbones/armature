@@ -159,7 +159,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 				return err
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return err
 			}
@@ -227,7 +227,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 				return err
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return err
 			}

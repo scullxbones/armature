@@ -18,6 +18,7 @@ type Options struct {
 	ScopeID   string
 	Strict    bool
 	IssuesDir string
+	StateDir  string
 	RepoPath  string
 }
 
@@ -63,8 +64,8 @@ func Validate(state *materialize.State, opts Options) Result {
 	}
 
 	var cov *traceability.Coverage
-	if opts.IssuesDir != "" {
-		tracePath := filepath.Join(opts.IssuesDir, "state", "traceability.json")
+	if opts.StateDir != "" {
+		tracePath := filepath.Join(opts.StateDir, "traceability.json")
 		c, err := traceability.Read(tracePath)
 		if err == nil {
 			cov = &c

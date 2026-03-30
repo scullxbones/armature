@@ -18,6 +18,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// getTestStateDir returns the absolute path to the worker-specific state directory.
+func getTestStateDir(t *testing.T, repo string) string {
+	t.Helper()
+	issuesDir := filepath.Join(repo, ".issues")
+	// If dual-branch, issuesDir is in the worktree
+	if data, err := os.ReadFile(filepath.Join(repo, ".issues", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
+		issuesDir = filepath.Join(repo, ".trellis", ".issues")
+	} else if data, err := os.ReadFile(filepath.Join(repo, ".trellis", ".issues", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
+		// already in worktree case? No, config.ResolveContext handles this.
+		// For simplicity, let's just check if .trellis/.issues exists.
+		if _, err := os.Stat(filepath.Join(repo, ".trellis", ".issues")); err == nil {
+			issuesDir = filepath.Join(repo, ".trellis", ".issues")
+		}
+	}
+
+	workerID, _ := worker.GetWorkerID(repo)
+	if workerID == "" {
+		workerID = "default"
+	}
+	return filepath.Join(issuesDir, "state", workerID)
+}
+
 // runTrls invokes the trellis cobra command tree with --repo injected and returns stdout + error.
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
@@ -563,7 +585,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	// Verify via materialized state
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	index, err := materialize.LoadIndex(filepath.Join(repo, ".trellis", ".issues", "state", "index.json"))
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, err)
 	assert.Equal(t, "merged", index["T-001"].Status)
 }
@@ -752,9 +774,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// In dual-branch mode, the issues dir is in the worktree
-	issuesDir := filepath.Join(repo, ".trellis", ".issues")
-	index, err := materialize.LoadIndex(filepath.Join(issuesDir, "state", "index.json"))
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, err)
 	assert.Equal(t, "merged", index["F-001"].Status)
 
@@ -1095,9 +1115,16 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create two tasks: one will be source-linked, one will remain uncited
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Cited task", "--id", "COV-001")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Cited task", "--id", "COV-001",
+		"--scope", "main.go", "--dod", "done")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Uncited task", "--id", "COV-002")
+	_, err = runTrls(t, repo, "amend", "--issue", "COV-001", "--acceptance", `[{"type":"test_passes"}]`)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Uncited task", "--id", "COV-002",
+		"--scope", "main.go", "--dod", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "COV-002", "--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1191,8 +1218,7 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify story is "open" before claim
-	issuesDir := repo + "/.issues"
-	index, loadErr := materialize.LoadIndex(issuesDir + "/state/index.json")
+	index, loadErr := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, loadErr)
 	require.Equal(t, "open", index["story-01"].Status, "story should start as open")
 
@@ -1202,7 +1228,11 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 
 	// Check the ops log for an explicit transition op targeting story-01 with to=in-progress.
 	// This verifies claim.go emits a durable op (not just relies on state engine inference).
-	opsDir := issuesDir + "/ops"
+	issuesDir := filepath.Join(repo, ".issues")
+	if _, err := os.Stat(filepath.Join(repo, ".trellis")); err == nil {
+		issuesDir = filepath.Join(repo, ".trellis", ".issues")
+	}
+	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
 	require.NoError(t, readErr)
 
@@ -1243,8 +1273,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	// Materialize and verify it's "claimed"
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	issuesDir := repo + "/.issues"
-	index, loadErr := materialize.LoadIndex(issuesDir + "/state/index.json")
+	index, loadErr := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, loadErr)
 	require.Equal(t, ops.StatusClaimed, index["task-01"].Status, "task should be claimed before unassign")
 
@@ -1253,7 +1282,11 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify a transition → open op was emitted
-	opsDir := issuesDir + "/ops"
+	issuesDir := filepath.Join(repo, ".issues")
+	if _, err := os.Stat(filepath.Join(repo, ".trellis")); err == nil {
+		issuesDir = filepath.Join(repo, ".trellis", ".issues")
+	}
+	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
 	require.NoError(t, readErr)
 
@@ -1262,7 +1295,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 		if !strings.HasSuffix(entry.Name(), ".log") {
 			continue
 		}
-		logPath := opsDir + "/" + entry.Name()
+		logPath := filepath.Join(opsDir, entry.Name())
 		logOps, readOpErr := ops.ReadLog(logPath)
 		require.NoError(t, readOpErr)
 		for _, op := range logOps {
@@ -1276,7 +1309,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	// Also verify the materialized status is now "open"
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	index2, loadErr2 := materialize.LoadIndex(issuesDir + "/state/index.json")
+	index2, loadErr2 := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, loadErr2)
 	assert.Equal(t, ops.StatusOpen, index2["task-01"].Status, "task status should be open after unassign")
 }
@@ -1495,7 +1528,7 @@ func TestWriteDAGSummaryArtifact_CreatesFile(t *testing.T) {
 	approvedIDs := []string{"T-001"}
 	cov := traceability.Coverage{CoveragePct: 75.0, CitedNodes: 3, TotalNodes: 4}
 
-	err := writeDAGSummaryArtifact(issuesDir, reviewed, approvedIDs, cov)
+	err := writeDAGSummaryArtifact(stateDir, reviewed, approvedIDs, cov)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(filepath.Join(stateDir, "dag-summary.md"))

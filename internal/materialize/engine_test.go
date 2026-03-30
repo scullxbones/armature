@@ -117,7 +117,7 @@ func TestMaterializePipeline(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
 		WorkerID: "worker-a1", Payload: ops.Payload{TTL: 60}}))
 
-	result, err := Materialize(dir, true)
+	result, err := Materialize(dir, filepath.Join(dir, "state"), true)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.IssueCount)
 
@@ -380,7 +380,7 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "worker-b1", Payload: ops.Payload{Title: "My Task", NodeType: "task"}}))
 
-	state, result, err := MaterializeAndReturn(dir, true)
+	state, result, err := MaterializeAndReturn(dir, filepath.Join(dir, "state"), true)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	require.NotNil(t, state)
@@ -391,7 +391,7 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 func TestMaterializeAndReturn_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	// No ops dir — should return empty state
-	state, result, err := MaterializeAndReturn(dir, false)
+	state, result, err := MaterializeAndReturn(dir, filepath.Join(dir, "state"), false)
 	require.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.IssueCount)

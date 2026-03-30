@@ -15,7 +15,7 @@ func newConfirmCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID := args[0]
-			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return err
 			}

@@ -20,7 +20,7 @@ func newValidateCmd() *cobra.Command {
 		Use:   "validate",
 		Short: "Validate the issue graph for consistency",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return err
 			}
@@ -29,6 +29,7 @@ func newValidateCmd() *cobra.Command {
 				ScopeID:   scope,
 				Strict:    strict,
 				IssuesDir: appCtx.IssuesDir,
+				StateDir:  appCtx.StateDir,
 				RepoPath:  appCtx.RepoPath,
 			}
 			result := validate.Validate(state, opts)

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,18 +25,18 @@ func newReadyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			if _, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch"); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 
-			index, err := materialize.LoadIndex(issuesDir + "/state/index.json")
+			index, err := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
 			if err != nil {
 				return err
 			}
 
 			issues := make(map[string]*materialize.Issue)
 			for id := range index {
-				issue, err := materialize.LoadIssue(fmt.Sprintf("%s/state/issues/%s.json", issuesDir, id))
+				issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", id+".json"))
 				if err == nil {
 					issues[id] = &issue
 				}

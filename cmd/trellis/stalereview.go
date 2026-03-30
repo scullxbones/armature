@@ -31,7 +31,7 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("read manifest: %w", err)
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, true)
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}

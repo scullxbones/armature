@@ -41,11 +41,11 @@ func newRenderContextCmd() *cobra.Command {
 					return fmt.Errorf("materialize at %s: %w", rcAt, err)
 				}
 			} else {
-				_, err := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch")
+				_, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch")
 				if err != nil {
 					return fmt.Errorf("materialize: %w", err)
 				}
-				state, err = loadStateFromIssuesDir(issuesDir)
+				state, err = loadStateFromStateDir(appCtx.StateDir)
 				if err != nil {
 					return fmt.Errorf("load state: %w", err)
 				}
@@ -84,9 +84,9 @@ func newRenderContextCmd() *cobra.Command {
 	return cmd
 }
 
-// loadStateFromIssuesDir reads all materialized issue JSON files and builds a State.
-func loadStateFromIssuesDir(issuesDir string) (*materialize.State, error) {
-	stateIssuesDir := filepath.Join(issuesDir, "state", "issues")
+// loadStateFromStateDir reads all materialized issue JSON files and builds a State.
+func loadStateFromStateDir(stateDir string) (*materialize.State, error) {
+	stateIssuesDir := filepath.Join(stateDir, "issues")
 	state := materialize.NewState()
 
 	entries, err := os.ReadDir(stateIssuesDir)

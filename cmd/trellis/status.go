@@ -29,11 +29,11 @@ func newStatusCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
 
-			if _, err := materialize.Materialize(issuesDir, singleBranch); err != nil {
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
 				return err
 			}
 
-			index, err := materialize.LoadIndex(filepath.Join(issuesDir, "state", "index.json"))
+			index, err := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
 			if err != nil {
 				return err
 			}

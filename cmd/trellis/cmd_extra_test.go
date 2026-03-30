@@ -341,7 +341,7 @@ func TestAmendCmd_PatchesType(t *testing.T) {
 	// Materialize and check the type changed
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	index, err := materialize.LoadIndex(filepath.Join(repo, ".issues", "state", "index.json"))
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, err)
 	assert.Equal(t, "story", index["task-01"].Type)
 }
@@ -433,7 +433,7 @@ func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	issue, err := materialize.LoadIssue(filepath.Join(repo, ".issues", "state", "issues", "task-01.json"))
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
 	require.NoError(t, err)
 	require.NotEmpty(t, issue.SourceLinks, "expected SourceLinks to be non-empty after source-link op")
 	assert.Equal(t, sourceID, issue.SourceLinks[0].SourceEntryID)
@@ -731,7 +731,7 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	index, err := materialize.LoadIndex(filepath.Join(repo, ".issues", "state", "index.json"))
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, err)
 
 	_, hasGEN001 := index["GEN-001"]
@@ -773,7 +773,7 @@ func TestDecomposeApplyRoot(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	index, err := materialize.LoadIndex(filepath.Join(repo, ".issues", "state", "index.json"))
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
 	require.NoError(t, err)
 
 	entry, ok := index["ROOT-001"]

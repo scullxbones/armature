@@ -18,7 +18,7 @@ func newDoctorCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			repoPath := appCtx.RepoPath
 
-			report, err := doctor.Run(issuesDir, repoPath)
+			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath)
 			if err != nil {
 				return err
 			}

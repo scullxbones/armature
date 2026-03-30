@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
@@ -58,10 +59,10 @@ func newUnassignCmd() *cobra.Command {
 
 			// Check current status before unassigning so we can release claimed → open.
 			issuesDir := appCtx.IssuesDir
-			if _, matErr := materialize.Materialize(issuesDir, appCtx.Mode == "single-branch"); matErr != nil {
+			if _, matErr := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); matErr != nil {
 				return matErr
 			}
-			index, _ := materialize.LoadIndex(issuesDir + "/state/index.json")
+			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
 			currentStatus := ""
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status

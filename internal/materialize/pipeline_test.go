@@ -38,7 +38,7 @@ func TestMaterialize_SlottedLogsIncluded(t *testing.T) {
 		Payload: ops.Payload{To: "done", Outcome: "finished"},
 	}))
 
-	result, err := Materialize(dir, true)
+	result, err := Materialize(dir, filepath.Join(dir, "state"), true)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	assert.Equal(t, 3, result.OpsProcessed)
@@ -75,7 +75,7 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 	}))
 
 	// Exclude worker-a: task-01 should not appear as done (or at all)
-	state, result, err := MaterializeExcludeWorker(dir, workerA, true)
+	state, result, err := MaterializeExcludeWorker(dir, filepath.Join(dir, "state"), workerA, true)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount, "only worker-b's issue should be present")
 	_, hasTaskOne := state.Issues["task-01"]
