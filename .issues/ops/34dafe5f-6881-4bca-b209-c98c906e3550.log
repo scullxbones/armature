@@ -126,3 +126,6 @@
 ["claim","E5-S4-T2",1774844021,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","E5-S4-T2",1774844120,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Created docs/getting-started.md guide for Trellis."}]
 ["transition","E5-S4-T2",1774844125,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created docs/getting-started.md with step-by-step guide."}]
+["claim","E5-S4-T3",1774844194,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","E5-S4-T3",1774844492,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Command reference documentation created as requested."}]
+["transition","E5-S4-T3",1774844497,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created docs/commands.md with complete command reference."}]
