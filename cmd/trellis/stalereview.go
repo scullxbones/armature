@@ -86,10 +86,6 @@ func newStaleReviewCmd() *cobra.Command {
 			}
 
 			format, _ := cmd.Flags().GetString("format")
-			if format == "human" && !tui.IsTerminal() {
-				format = "agent"
-			}
-
 			if format == "json" || format == "agent" {
 				type staleSource struct {
 					SourceID      string   `json:"source_id"`

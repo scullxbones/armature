@@ -67,10 +67,6 @@ func newDAGSummaryCmd() *cobra.Command {
 			}
 
 			format, _ := cmd.Flags().GetString("format")
-			if format == "human" && !tui.IsTerminal() {
-				format = "agent"
-			}
-
 			if format == "json" || format == "agent" {
 				type pendingItem struct {
 					IssueID string `json:"issue_id"`
