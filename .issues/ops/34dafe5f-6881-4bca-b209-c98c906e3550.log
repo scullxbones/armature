@@ -88,3 +88,5 @@
 ["transition","TASK-08",1774840042,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Verified StateDir in validate.Options and added TestValidateUsesStateDir."}]
 ["claim","TASK-09",1774840055,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","TASK-09",1774840092,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Verified doctor.Run takes stateDir and added TestDoctorRunUsesStateDir."}]
+["claim","TASK-10",1774840100,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","TASK-10",1774840284,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Renamed context.Assemble param issuesDir to stateDir and updated helper functions and callsites."}]

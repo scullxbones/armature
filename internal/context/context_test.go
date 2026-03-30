@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const stateDir = "/tmp/fake"
+
 func TestAssembleContext_CoreSpec(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
@@ -26,7 +28,7 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 		DecisionRefs:     []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 	require.NotEmpty(t, ctx.Layers)
 
@@ -64,7 +66,7 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", "/tmp/fake", state)
+	ctx, err := Assemble("TST-A", stateDir, state)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -102,7 +104,7 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-C", "/tmp/fake", state)
+	ctx, err := Assemble("TST-C", stateDir, state)
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -142,7 +144,7 @@ func TestAssembleContext_Truncation(t *testing.T) {
 
 func TestAssembleContext_UnknownIssue(t *testing.T) {
 	state := materialize.NewState()
-	_, err := Assemble("MISSING-001", "/tmp/fake", state)
+	_, err := Assemble("MISSING-001", stateDir, state)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "MISSING-001")
 }
@@ -161,7 +163,7 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var snippetsLayer *Layer
@@ -190,7 +192,7 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -216,7 +218,7 @@ func TestBuildDecisions(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var decLayer *Layer
@@ -249,7 +251,7 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -282,7 +284,7 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -335,7 +337,7 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-B", "/tmp/fake", state)
+	ctx, err := Assemble("TST-B", stateDir, state)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -364,7 +366,7 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", "/tmp/fake", state)
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {

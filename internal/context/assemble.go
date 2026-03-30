@@ -25,7 +25,7 @@ type Context struct {
 }
 
 // Assemble builds a 7-layer context for the given issue from state.
-func Assemble(issueID string, issuesDir string, state *materialize.State) (*Context, error) {
+func Assemble(issueID string, stateDir string, state *materialize.State) (*Context, error) {
 	issue, ok := state.Issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
@@ -40,10 +40,10 @@ func Assemble(issueID string, issuesDir string, state *materialize.State) (*Cont
 	layers = append(layers, buildSnippets(issue))
 
 	// Layer 3: blocker_outcomes
-	layers = append(layers, buildBlockerOutcomes(issue, issuesDir, state))
+	layers = append(layers, buildBlockerOutcomes(issue, stateDir, state))
 
 	// Layer 4: parent_chain
-	layers = append(layers, buildParentChain(issue, issuesDir, state))
+	layers = append(layers, buildParentChain(issue, stateDir, state))
 
 	// Layer 5: decisions
 	layers = append(layers, buildDecisions(issue))
@@ -52,7 +52,7 @@ func Assemble(issueID string, issuesDir string, state *materialize.State) (*Cont
 	layers = append(layers, buildNotes(issue))
 
 	// Layer 7: sibling_outcomes
-	layers = append(layers, buildSiblingOutcomes(issue, issuesDir, state))
+	layers = append(layers, buildSiblingOutcomes(issue, stateDir, state))
 
 	sort.Slice(layers, func(i, j int) bool {
 		return layers[i].Priority < layers[j].Priority
@@ -101,7 +101,7 @@ func buildSnippets(issue *materialize.Issue) Layer {
 	return Layer{Name: "snippets", Priority: 2, Content: strings.Join(lines, "\n")}
 }
 
-func buildBlockerOutcomes(issue *materialize.Issue, issuesDir string, state *materialize.State) Layer {
+func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	if len(issue.BlockedBy) == 0 {
 		return Layer{Name: "blocker_outcomes", Priority: 3, Content: ""}
 	}
@@ -114,7 +114,7 @@ func buildBlockerOutcomes(issue *materialize.Issue, issuesDir string, state *mat
 			}
 		} else {
 			// Try loading from disk
-			path := filepath.Join(issuesDir, "state", "issues", blockerID+".json")
+			path := filepath.Join(stateDir, "issues", blockerID+".json")
 			if b, err := materialize.LoadIssue(path); err == nil && b.Outcome != "" {
 				outcome = b.Outcome
 			}
@@ -125,7 +125,7 @@ func buildBlockerOutcomes(issue *materialize.Issue, issuesDir string, state *mat
 	return Layer{Name: "blocker_outcomes", Priority: 3, Content: content}
 }
 
-func buildParentChain(issue *materialize.Issue, issuesDir string, state *materialize.State) Layer {
+func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	var lines []string
 	currentParentID := issue.Parent
 	for i := 0; i < 3 && currentParentID != ""; i++ {
@@ -136,7 +136,7 @@ func buildParentChain(issue *materialize.Issue, issuesDir string, state *materia
 			parentStatus = parent.Status
 			nextParentID = parent.Parent
 		} else {
-			path := filepath.Join(issuesDir, "state", "issues", parentID+".json")
+			path := filepath.Join(stateDir, "issues", parentID+".json")
 			if p, err := materialize.LoadIssue(path); err == nil {
 				parentTitle = p.Title
 				parentStatus = p.Status
@@ -185,7 +185,7 @@ func buildNotes(issue *materialize.Issue) Layer {
 	return Layer{Name: "notes", Priority: 6, Content: content}
 }
 
-func buildSiblingOutcomes(issue *materialize.Issue, issuesDir string, state *materialize.State) Layer {
+func buildSiblingOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	if issue.Parent == "" {
 		return Layer{Name: "sibling_outcomes", Priority: 7, Content: ""}
 	}
@@ -193,7 +193,7 @@ func buildSiblingOutcomes(issue *materialize.Issue, issuesDir string, state *mat
 	if parent, ok := state.Issues[issue.Parent]; ok {
 		children = parent.Children
 	} else {
-		path := filepath.Join(issuesDir, "state", "issues", issue.Parent+".json")
+		path := filepath.Join(stateDir, "issues", issue.Parent+".json")
 		if p, err := materialize.LoadIssue(path); err == nil {
 			children = p.Children
 		}
@@ -209,7 +209,7 @@ func buildSiblingOutcomes(issue *materialize.Issue, issuesDir string, state *mat
 			sibStatus = sib.Status
 			sibOutcome = sib.Outcome
 		} else {
-			path := filepath.Join(issuesDir, "state", "issues", sibID+".json")
+			path := filepath.Join(stateDir, "issues", sibID+".json")
 			if s, err := materialize.LoadIssue(path); err == nil {
 				sibStatus = s.Status
 				sibOutcome = s.Outcome

@@ -59,7 +59,7 @@ func newRenderContextCmd() *cobra.Command {
 				}
 			}
 
-			ctx, err := context.Assemble(rcIssue, issuesDir, state)
+			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state)
 			if err != nil {
 				return fmt.Errorf("assemble context: %w", err)
 			}
