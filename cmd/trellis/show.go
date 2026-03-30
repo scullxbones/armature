@@ -14,11 +14,15 @@ func newShowCmd() *cobra.Command {
 	var issueID string
 
 	cmd := &cobra.Command{
-		Use:   "show",
+		Use:   "show [issue-id]",
 		Short: "Show a human-readable summary of a single issue",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
 			if issueID == "" {
-				return fmt.Errorf("--issue flag is required")
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
 			issuesDir := appCtx.IssuesDir
@@ -113,7 +117,7 @@ func newShowCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to show (required)")
+	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to show")
 
 	return cmd
 }

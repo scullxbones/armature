@@ -16,9 +16,17 @@ func newClaimCmd() *cobra.Command {
 	var ttl int
 
 	cmd := &cobra.Command{
-		Use:   "claim",
+		Use:   "claim [issue-id]",
 		Short: "Claim a ready task",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			issuesDir := appCtx.IssuesDir
 
 			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); err != nil {
@@ -86,6 +94,5 @@ func newClaimCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
 	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
-	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

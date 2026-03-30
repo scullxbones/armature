@@ -192,3 +192,63 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Fix has two parts: (1) change `ComputeReady` to surface tasks whose parent is `open` (not just `in-progress`) — this removes the bootstrap deadlock; (2) when a task is claimed, auto-transition any `open` ancestor story/epic to `in-progress`. Together these eliminate the manual pre-flight. E5-S1-T3 addresses part (2) but not part (1).
 
 **File**: `internal/ready/compute.go` (parent status gate), `cmd/trellis/claim.go` (auto-advance on claim)
+
+---
+
+## L17: Flag-heavy ID arguments increase command noise
+
+**Observed**: Commands like `trls show`, `trls claim`, and `trls transition` require the `--issue` flag for the primary target ID.
+
+**Impact**: Higher token usage and more typing/boilerplate for every operation. Standard CLI patterns often allow positional IDs for primary targets.
+
+**Recommendation**: Support positional arguments for issue IDs while keeping the flag for backward compatibility or explicit disambiguation.
+
+**File**: `cmd/trellis/`
+
+---
+
+## L18: `trls ready` hangs in non-TTY/agent environments
+
+**Observed**: `trls ready` defaults to an interactive TUI. In an agent environment (like Gemini CLI), this causes the command to hang or timeout because there is no human to provide input for the TUI.
+
+**Impact**: Agents fail to get work without explicit `--format agent` or `--format json` flags, which are easy to forget or discover.
+
+**Recommendation**: Auto-detect TTY status. If `stdout` is not a TTY, default to a machine-readable format like `agent`.
+
+**File**: `cmd/trellis/ready.go`
+
+---
+
+## L19: Lack of aggregated "Story Board" view makes tracking progress hard
+
+**Observed**: `trls list --parent ID` shows children, but doesn't provide a high-level view of progress (outcomes, claims, blockers) for the whole story at once in a single output.
+
+**Impact**: Users/agents must run `trls show` on every child to understand the current state of a story, leading to high turn counts and context usage.
+
+**Recommendation**: Add a "board" or "summary" view that aggregates child statuses, outcomes, and current claims for a given parent in a table format.
+
+**File**: `cmd/trellis/`
+
+---
+
+## L20: `trls-worker` loop is repetitive: transition then commit
+
+**Observed**: The standard workflow involves `trls transition` followed immediately by `git add <files> .issues/` and `git commit`.
+
+**Impact**: High repetition and risk of forgetting to include `.issues/` in the commit, leaving trellis state behind. This happened multiple times during E5-S3 execution.
+
+**Recommendation**: The `trls-worker` skill should suggest a helper or the CLI should provide a bundled command that handles both transition and commit in one go, automatically including the op files.
+
+**File**: `.claude/skills/trls-worker/SKILL.md`
+
+---
+
+## L21: Sub-agents struggle with large batch refactors without explicit strategy
+
+**Observed**: The `generalist` sub-agent often completed only a few files of a 16+ file batch task (like TASK-05) before returning, even when instructed to do "all".
+
+**Impact**: Requires multiple turns and manual verification by the main agent to ensure complete coverage across all files.
+
+**Recommendation**: Add a "Batch Strategy" section to the worker skill instructing agents to build a manifest (e.g. `grep --names-only`) and process in small, verified chunks rather than attempting all at once.
+
+**File**: `.claude/skills/trls-worker/SKILL.md`

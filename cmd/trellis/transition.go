@@ -16,9 +16,17 @@ func newTransitionCmd() *cobra.Command {
 	var issueID, to, outcome, branch, pr string
 
 	cmd := &cobra.Command{
-		Use:   "transition",
+		Use:   "transition [issue-id]",
 		Short: "Transition an issue to a new status",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			if !ops.ValidTransitionTargets[to] {
 				valid := []string{}
 				for s := range ops.ValidTransitionTargets {
@@ -80,7 +88,6 @@ func newTransitionCmd() *cobra.Command {
 	cmd.Flags().StringVar(&outcome, "outcome", "", "outcome description")
 	cmd.Flags().StringVar(&branch, "branch", "", "feature branch name")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number")
-	_ = cmd.MarkFlagRequired("issue")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
 }
