@@ -97,7 +97,7 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 		if err != nil {
 			continue
 		}
-		result[workerID] = logOps
+		result[workerID] = append(result[workerID], logOps...)
 	}
 	return result, nil
 }

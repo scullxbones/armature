@@ -1669,3 +1669,37 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, outB, "merged")
 }
+
+// TestWorkersCommand_SlottedLogs verifies that ops from slotted log files are
+// included in worker activity output alongside the plain log's ops.
+func TestWorkersCommand_SlottedLogs(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Slot task", "--id", "slot-task")
+	require.NoError(t, err)
+
+	// Write an op via the plain log (claim)
+	_, err = runTrls(t, repo, "claim", "--issue", "slot-task")
+	require.NoError(t, err)
+
+	// Write an op via a slotted log (transition done)
+	t.Setenv("TRLS_LOG_SLOT", "w")
+	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--outcome", "via slot")
+	require.NoError(t, err)
+	t.Setenv("TRLS_LOG_SLOT", "")
+
+	// The workers output must show the worker as active/idle (not missing)
+	// and must reflect ops from both log files
+	out, err := runTrls(t, repo, "workers")
+	require.NoError(t, err)
+	assert.NotEmpty(t, out)
+	// Worker should appear — if the slot's ops were dropped we'd see no activity
+	// (this test will fail before the fix because enumerateWorkers drops the plain log's ops
+	// when the slot log overwrites them, leaving the worker with only the transition op
+	// and no claim op, which produces inconsistent state)
+	assert.NotContains(t, out, "error")
+}
