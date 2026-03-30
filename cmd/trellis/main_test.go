@@ -1626,3 +1626,46 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 			"no slotted file should exist when TRLS_LOG_SLOT is empty")
 	}
 }
+
+// TestLogSlot_ReplayIncludesSlottedOps verifies that ops written to a slotted log
+// are included in materialised state alongside ops from the plain log.
+func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task A", "--id", "task-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "task-b")
+	require.NoError(t, err)
+
+	// Slot "one" transitions task-a to done
+	t.Setenv("TRLS_LOG_SLOT", "one")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--outcome", "slot one")
+	require.NoError(t, err)
+
+	// Slot "two" transitions task-b to done
+	t.Setenv("TRLS_LOG_SLOT", "two")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-b")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--outcome", "slot two")
+	require.NoError(t, err)
+
+	// Unset slot so materialize uses the main context
+	t.Setenv("TRLS_LOG_SLOT", "")
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Both tasks must appear as merged (in single-branch mode done auto-transitions to merged)
+	outA, err := runTrls(t, repo, "show", "--issue", "task-a")
+	require.NoError(t, err)
+	assert.Contains(t, outA, "merged")
+
+	outB, err := runTrls(t, repo, "show", "--issue", "task-b")
+	require.NoError(t, err)
+	assert.Contains(t, outB, "merged")
+}
