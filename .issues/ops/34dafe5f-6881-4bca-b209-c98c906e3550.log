@@ -99,3 +99,6 @@
 ["claim","TASK-13",1774842695,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","TASK-13",1774842780,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Defining Screen interface for TUI redesign."}]
 ["transition","TASK-13",1774842788,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Defined Screen interface in internal/tui/screen.go."}]
+["claim","TASK-14",1774842824,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","TASK-14",1774842928,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built the internal/tui/detail overlay model as requested."}]
+["transition","TASK-14",1774842937,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/detail/ overlay model."}]
