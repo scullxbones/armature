@@ -2,11 +2,14 @@ package validate
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func makeState(issues ...*materialize.Issue) *materialize.State {
@@ -196,4 +199,19 @@ func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
 	result := Validate(state, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
+}
+
+func TestValidateUsesStateDir(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	// Write a mock traceability.json
+	cov := `{"cited_nodes": 1, "total_nodes": 1, "coverage_pct": 100}`
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "traceability.json"), []byte(cov), 0644))
+
+	state := makeState(&materialize.Issue{ID: "A"})
+	result := Validate(state, Options{StateDir: stateDir})
+	assert.NotNil(t, result.Coverage)
+	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }
