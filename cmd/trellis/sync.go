@@ -35,7 +35,7 @@ func newSyncCmd() *cobra.Command {
 			}
 
 			gc := git.New(appCtx.RepoPath)
-			mergedIDs, err := trellissync.DetectMerges(appCtx.StateDir, targetBranch, gc)
+			mergedIDs, err := trellissync.DetectMerges(issuesDir, appCtx.StateDir, targetBranch, gc)
 			if err != nil {
 				return fmt.Errorf("detect merges: %w", err)
 			}

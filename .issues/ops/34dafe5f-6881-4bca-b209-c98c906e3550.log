@@ -82,3 +82,5 @@
 ["claim","TASK-06",1774839632,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","STORY-SECONDARY",1774839632,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["transition","TASK-06",1774839812,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Verified that list, show, status, merged, dag-summary, and render-context use appCtx.StateDir; Added TestSecondaryStatePaths integration test."}]
+["claim","TASK-07",1774839827,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","TASK-07",1774839886,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added issuesDir param to sync.DetectMerges and updated callsites. Added TestSyncDetectMergesUsesStateDir."}]
