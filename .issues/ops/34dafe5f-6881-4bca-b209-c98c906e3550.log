@@ -63,3 +63,4 @@
 ["heartbeat","DF-S1-T2",1774836659,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["note","DF-S1-T2",1774836664,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"completed all secondary commands"}]
 ["transition","DF-S1-T2",1774836672,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"updated all secondary single-issue commands (note, decision, amend, source-link, accept-citation, reopen, heartbeat) to support positional ID"}]
+["transition","DF-S1",1774836716,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"completed support for positional issue IDs across all relevant commands"}]
