@@ -59,3 +59,7 @@
 ["transition","DF-S1",1774836399,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["claim","DF-S1-T1",1774836463,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","DF-S1-T1",1774836468,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"implemented positional ID support for show, claim, and transition"}]
+["claim","DF-S1-T2",1774836513,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["heartbeat","DF-S1-T2",1774836659,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["note","DF-S1-T2",1774836664,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"completed all secondary commands"}]
+["transition","DF-S1-T2",1774836672,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"updated all secondary single-issue commands (note, decision, amend, source-link, accept-citation, reopen, heartbeat) to support positional ID"}]

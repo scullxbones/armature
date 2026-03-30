@@ -13,9 +13,17 @@ func newDecisionCmd() *cobra.Command {
 	var affects []string
 
 	cmd := &cobra.Command{
-		Use:   "decision",
+		Use:   "decision [issue-id]",
 		Short: "Record an architectural decision",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -38,7 +46,6 @@ func newDecisionCmd() *cobra.Command {
 	cmd.Flags().StringVar(&choice, "choice", "", "chosen option")
 	cmd.Flags().StringVar(&rationale, "rationale", "", "why this choice")
 	cmd.Flags().StringSliceVar(&affects, "affects", nil, "affected scope globs")
-	_ = cmd.MarkFlagRequired("issue")
 	_ = cmd.MarkFlagRequired("topic")
 	_ = cmd.MarkFlagRequired("choice")
 	return cmd

@@ -12,9 +12,17 @@ func newNoteCmd() *cobra.Command {
 	var issueID, msg string
 
 	cmd := &cobra.Command{
-		Use:   "note",
+		Use:   "note [issue-id]",
 		Short: "Add a note to an issue",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -38,7 +46,6 @@ func newNoteCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&msg, "msg", "", "note message")
-	_ = cmd.MarkFlagRequired("issue")
 	_ = cmd.MarkFlagRequired("msg")
 	return cmd
 }

@@ -13,9 +13,17 @@ func newAmendCmd() *cobra.Command {
 	var scope []string
 
 	cmd := &cobra.Command{
-		Use:   "amend",
+		Use:   "amend [issue-id]",
 		Short: "Amend fields on an existing issue (type, scope, acceptance, definition_of_done)",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -62,6 +70,5 @@ func newAmendCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
-	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

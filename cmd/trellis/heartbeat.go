@@ -12,9 +12,17 @@ func newHeartbeatCmd() *cobra.Command {
 	var issueID string
 
 	cmd := &cobra.Command{
-		Use:   "heartbeat",
+		Use:   "heartbeat [issue-id]",
 		Short: "Send heartbeat for an active claim",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -37,6 +45,5 @@ func newHeartbeatCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
-	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

@@ -13,9 +13,17 @@ func newSourceLinkCmd() *cobra.Command {
 	var issueID, sourceID string
 
 	cmd := &cobra.Command{
-		Use:   "source-link",
+		Use:   "source-link [issue-id]",
 		Short: "Link an issue to a source entry in the manifest",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			dir := sourcesDir()
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
@@ -55,7 +63,6 @@ func newSourceLinkCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to link")
 	cmd.Flags().StringVar(&sourceID, "source-id", "", "UUID of the source entry in the manifest")
-	_ = cmd.MarkFlagRequired("issue")
 	_ = cmd.MarkFlagRequired("source-id")
 	return cmd
 }
