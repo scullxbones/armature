@@ -107,3 +107,5 @@
 ["transition","TASK-15",1774843116,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/app/ root model."}]
 ["citation-accepted","TASK-16",1774843140,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built internal/tui/dagtree/ screen with tree rendering and filtering."}]
 ["transition","TASK-16",1774843146,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/dagtree/ screen."}]
+["citation-accepted","TASK-17",1774843259,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implementing the Workers screen as requested."}]
+["transition","TASK-17",1774843269,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/workers/ screen."}]
