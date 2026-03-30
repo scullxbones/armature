@@ -109,3 +109,6 @@
 ["transition","TASK-16",1774843146,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/dagtree/ screen."}]
 ["citation-accepted","TASK-17",1774843259,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implementing the Workers screen as requested."}]
 ["transition","TASK-17",1774843269,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/workers/ screen."}]
+["claim","TASK-18",1774843296,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","TASK-18",1774843412,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built internal/tui/tuivalidate/ screen with validation results rendering."}]
+["transition","TASK-18",1774843417,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/tuivalidate/ screen."}]
