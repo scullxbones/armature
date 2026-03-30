@@ -14,9 +14,17 @@ func newAssignCmd() *cobra.Command {
 	var issueID, workerID string
 
 	cmd := &cobra.Command{
-		Use:   "assign",
+		Use:   "assign [issue-id]",
 		Short: "Assign an issue to a worker",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			myWorkerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -40,7 +48,6 @@ func newAssignCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to assign")
 	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID to assign to")
-	_ = cmd.MarkFlagRequired("issue")
 	_ = cmd.MarkFlagRequired("worker")
 	return cmd
 }
@@ -49,9 +56,17 @@ func newUnassignCmd() *cobra.Command {
 	var issueID string
 
 	cmd := &cobra.Command{
-		Use:   "unassign",
+		Use:   "unassign [issue-id]",
 		Short: "Remove worker assignment from an issue",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" && len(args) > 0 {
+				issueID = args[0]
+			}
+			if issueID == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -99,6 +114,5 @@ func newUnassignCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to unassign")
-	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

@@ -21,9 +21,17 @@ func newRenderContextCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "render-context",
+		Use:   "render-context [issue-id]",
 		Short: "Render assembled context for an issue",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if rcIssue == "" && len(args) > 0 {
+				rcIssue = args[0]
+			}
+			if rcIssue == "" {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
 			issuesDir := appCtx.IssuesDir
 
 			var state *materialize.State
@@ -75,12 +83,10 @@ func newRenderContextCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&rcIssue, "issue", "", "Issue ID (required)")
+	cmd.Flags().StringVar(&rcIssue, "issue", "", "Issue ID")
 	cmd.Flags().IntVar(&rcBudget, "budget", 4000, "Token budget")
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
 	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
-	_ = cmd.MarkFlagRequired("issue")
-
 	return cmd
 }
 
