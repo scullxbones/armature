@@ -13,3 +13,5 @@
 ["claim","LGSLT-5",1774829702,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","LGSLT-5",1774830106,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Documented TRLS_LOG_SLOT convention in trls-worker skill."}]
 ["transition","LGSLT",1774830137,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Implemented parallel log slots via TRLS_LOG_SLOT env var, enabling conflict-free parallel subagents."}]
+["claim","TASK-04",1774832811,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","TASK-04",1774833006,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Set appCtx.StateDir in PersistentPreRunE and added TestAppCtxStateDirSet to verify behavior with and without worker ID."}]

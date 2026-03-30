@@ -766,6 +766,35 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 
 // TC-008: workers command and helper function tests
 
+func TestAppCtxStateDirSet(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Init trellis (which also inits worker ID)
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	// Case 1: No worker ID set (manually unset it)
+	run(t, repo, "git", "config", "--local", "--unset", "trellis.worker-id")
+	_, err = runTrls(t, repo, "status")
+	require.NoError(t, err)
+	require.NotNil(t, appCtx)
+	expectedDefault := filepath.Join(repo, ".issues", "state", "default")
+	assert.Equal(t, expectedDefault, appCtx.StateDir)
+
+	// Case 2: Worker ID set
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "status")
+	require.NoError(t, err)
+	require.NotNil(t, appCtx)
+	expectedWorker := filepath.Join(repo, ".issues", "state", workerID)
+	assert.Equal(t, expectedWorker, appCtx.StateDir)
+}
+
 func TestLastOpTimestampFromLog_Empty(t *testing.T) {
 	assert.Equal(t, int64(0), lastOpTimestampFromLog(nil))
 	assert.Equal(t, int64(0), lastOpTimestampFromLog([]ops.Op{}))

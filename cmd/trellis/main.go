@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/scullxbones/trellis/internal/config"
 	"github.com/scullxbones/trellis/internal/tui"
+	"github.com/scullxbones/trellis/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +33,11 @@ func newRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			workerID, _ := worker.GetWorkerID(repoPath)
+			if workerID == "" {
+				workerID = "default"
+			}
+			ctx.StateDir = filepath.Join(ctx.IssuesDir, "state", workerID)
 			appCtx = ctx
 			initPushDeps()
 			return nil
