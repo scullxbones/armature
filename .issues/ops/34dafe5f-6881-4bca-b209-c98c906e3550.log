@@ -123,3 +123,6 @@
 ["transition","E5-S4",1774843821,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["citation-accepted","E5-S4-T1",1774843904,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Initial README.md creation with project overview and quickstart."}]
 ["transition","E5-S4-T1",1774843921,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Updated README.md with overview, install, and quickstart."}]
+["claim","E5-S4-T2",1774844021,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","E5-S4-T2",1774844120,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Created docs/getting-started.md guide for Trellis."}]
+["transition","E5-S4-T2",1774844125,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created docs/getting-started.md with step-by-step guide."}]
