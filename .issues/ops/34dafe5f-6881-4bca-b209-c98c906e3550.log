@@ -115,3 +115,6 @@
 ["claim","TASK-19",1774843425,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","TASK-19",1774843554,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Built internal/tui/sources/ screen with sources aggregation rendering."}]
 ["transition","TASK-19",1774843559,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Built internal/tui/sources/ screen."}]
+["claim","TASK-20",1774843566,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["citation-accepted","TASK-20",1774843768,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Wired new TUI and deleted old board package."}]
+["transition","TASK-20",1774843773,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Wired new TUI and deleted old board package."}]
