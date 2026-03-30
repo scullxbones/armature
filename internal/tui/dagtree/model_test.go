@@ -151,3 +151,75 @@ func TestHelpBarContainsKeyHints(t *testing.T) {
 		t.Errorf("help bar missing j/k hint, got: %q", h)
 	}
 }
+
+func TestDAGTreeViewClipsToHeight(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 4)
+	m.SetState(makeState(
+		&materialize.Issue{ID: "T1", Status: "open", Title: "Task 1"},
+		&materialize.Issue{ID: "T2", Status: "open", Title: "Task 2"},
+		&materialize.Issue{ID: "T3", Status: "open", Title: "Task 3"},
+		&materialize.Issue{ID: "T4", Status: "open", Title: "Task 4"},
+		&materialize.Issue{ID: "T5", Status: "open", Title: "Task 5"},
+		&materialize.Issue{ID: "T6", Status: "open", Title: "Task 6"},
+	))
+	v := m.View()
+	lines := strings.Split(strings.TrimRight(v, "\n"), "\n")
+	if len(lines) > 4 {
+		t.Errorf("expected at most 4 lines for height=4, got %d:\n%s", len(lines), v)
+	}
+}
+
+func TestDAGTreeViewScrollsToKeepCursorVisible(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 3)
+	m.SetState(makeState(
+		&materialize.Issue{ID: "T1", Status: "open", Title: "Task 1"},
+		&materialize.Issue{ID: "T2", Status: "open", Title: "Task 2"},
+		&materialize.Issue{ID: "T3", Status: "open", Title: "Task 3"},
+		&materialize.Issue{ID: "T4", Status: "open", Title: "Task 4"},
+		&materialize.Issue{ID: "T5", Status: "open", Title: "Task 5"},
+	))
+	// Move cursor down past the visible window (height=3, so T4 is off-screen initially)
+	for i := 0; i < 3; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	}
+	v := m.View()
+	if !strings.Contains(v, "T4") {
+		t.Errorf("cursor row T4 should be visible after scrolling down, got:\n%s", v)
+	}
+	if strings.Contains(v, "T1") {
+		t.Errorf("T1 should have scrolled off screen, got:\n%s", v)
+	}
+}
+
+func TestDAGTreeViewScrollsBackUpWithCursor(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 3)
+	m.SetState(makeState(
+		&materialize.Issue{ID: "T1", Status: "open", Title: "Task 1"},
+		&materialize.Issue{ID: "T2", Status: "open", Title: "Task 2"},
+		&materialize.Issue{ID: "T3", Status: "open", Title: "Task 3"},
+		&materialize.Issue{ID: "T4", Status: "open", Title: "Task 4"},
+		&materialize.Issue{ID: "T5", Status: "open", Title: "Task 5"},
+	))
+	// Scroll down to T5
+	for i := 0; i < 4; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	}
+	// Scroll back up to T1
+	for i := 0; i < 4; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	}
+	v := m.View()
+	lines := strings.Split(strings.TrimRight(v, "\n"), "\n")
+	if len(lines) > 3 {
+		t.Errorf("expected at most 3 lines, got %d:\n%s", len(lines), v)
+	}
+	if !strings.Contains(v, "T1") {
+		t.Errorf("T1 should be visible after scrolling back to top, got:\n%s", v)
+	}
+	if strings.Contains(v, "T5") {
+		t.Errorf("T5 should have scrolled off screen when back at top, got:\n%s", v)
+	}
+}

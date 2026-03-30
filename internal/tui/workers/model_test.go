@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -87,5 +88,40 @@ func TestWorkersHelpBar(t *testing.T) {
 	help := m.HelpBar()
 	if !strings.Contains(help, "j/k move") {
 		t.Errorf("expected help bar to contain j/k move, got: %s", help)
+	}
+}
+
+func makeWorkersState(workerIDs ...string) *materialize.State {
+	issues := make(map[string]*materialize.Issue)
+	for i, id := range workerIDs {
+		issueID := fmt.Sprintf("T%d", i+1)
+		issues[issueID] = &materialize.Issue{ID: issueID, Title: "Task", ClaimedBy: id}
+	}
+	return &materialize.State{Issues: issues}
+}
+
+func TestWorkersViewClipsToHeight(t *testing.T) {
+	m := New()
+	m.SetSize(120, 2)
+	// Each worker renders at least 2 lines (worker row + issue row), 4 workers → 8+ lines
+	m.SetState(makeWorkersState("worker-a", "worker-b", "worker-c", "worker-d"))
+	v := m.View()
+	lines := strings.Split(strings.TrimRight(v, "\n"), "\n")
+	if len(lines) > 2 {
+		t.Errorf("expected at most 2 lines for height=2, got %d:\n%s", len(lines), v)
+	}
+}
+
+func TestWorkersViewScrollsToKeepCursorVisible(t *testing.T) {
+	m := New()
+	m.SetSize(120, 3)
+	// Create 5 workers, each with one issue: each worker row = 1 line (worker) + 1 line (issue) + 1 blank = 3 lines
+	m.SetState(makeWorkersState("worker-a", "worker-b", "worker-c", "worker-d", "worker-e"))
+	// Move cursor down past height
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	v := m.View()
+	if strings.Contains(v, "worker-a") {
+		t.Errorf("worker-a should have scrolled off when cursor moves down, got:\n%s", v)
 	}
 }

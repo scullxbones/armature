@@ -19,11 +19,12 @@ type WorkerInfo struct {
 
 // Model implements tui.Screen for the Workers screen.
 type Model struct {
-	state   *materialize.State
-	workers []WorkerInfo
-	cursor  int
-	width   int
-	height  int
+	state        *materialize.State
+	workers      []WorkerInfo
+	cursor       int
+	scrollOffset int
+	width        int
+	height       int
 }
 
 // New creates a new Workers screen model.
@@ -64,6 +65,7 @@ func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
+
 		}
 	}
 	return m, nil
@@ -79,7 +81,9 @@ func (m *Model) View() string {
 	}
 
 	var lines []string
+	workerStart := make([]int, len(m.workers))
 	for i, w := range m.workers {
+		workerStart[i] = len(lines)
 		workerRow := fmt.Sprintf("👷 %s", tui.Info.Render(w.ID))
 		if i == m.cursor {
 			workerRow = lipgloss.NewStyle().Background(lipgloss.Color("39")).
@@ -91,6 +95,25 @@ func (m *Model) View() string {
 		}
 		lines = append(lines, "")
 	}
+
+	// Clip to viewport height when height is set.
+	if m.height > 0 && len(lines) > m.height {
+		// Scroll to keep cursor worker visible.
+		cursorLine := workerStart[m.cursor]
+		if cursorLine < m.scrollOffset {
+			m.scrollOffset = cursorLine
+		}
+		if cursorLine >= m.scrollOffset+m.height {
+			m.scrollOffset = cursorLine - m.height + 1
+		}
+		start := m.scrollOffset
+		end := start + m.height
+		if end > len(lines) {
+			end = len(lines)
+		}
+		lines = lines[start:end]
+	}
+
 	return strings.Join(lines, "\n")
 }
 

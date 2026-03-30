@@ -24,8 +24,8 @@ const (
 	ScreenSources                  // 4
 )
 
-// refreshMsg triggers a re-materialisation.
-type refreshMsg struct{}
+// RefreshMsg triggers a re-materialisation.
+type RefreshMsg struct{}
 
 // fetchMsg triggers a git fetch.
 type fetchMsg struct{}
@@ -33,8 +33,8 @@ type fetchMsg struct{}
 // pollTickMsg is sent by the fallback poll ticker.
 type pollTickMsg time.Time
 
-// watcherReadyMsg is sent when fsnotify watcher is started.
-type watcherReadyMsg struct{ watcher *fsnotify.Watcher }
+// WatcherReadyMsg is sent when fsnotify watcher is started.
+type WatcherReadyMsg struct{ Watcher *fsnotify.Watcher }
 
 // stateUpdatedMsg is sent when materialization result is ready.
 type stateUpdatedMsg struct{ state *materialize.State }
@@ -105,6 +105,7 @@ func (m Model) Init() tea.Cmd {
 	}
 	cmds = append(cmds, m.startWatcher())
 	cmds = append(cmds, m.scheduleFetch())
+	cmds = append(cmds, func() tea.Msg { return RefreshMsg{} })
 	return tea.Batch(cmds...)
 }
 
@@ -119,7 +120,7 @@ func (m Model) startWatcher() tea.Cmd {
 			_ = w.Close()
 			return pollTickMsg(time.Now())
 		}
-		return watcherReadyMsg{watcher: w}
+		return WatcherReadyMsg{Watcher: w}
 	}
 }
 
@@ -194,11 +195,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-	case watcherReadyMsg:
-		m.watcher = msg.watcher
+	case WatcherReadyMsg:
+		m.watcher = msg.Watcher
 		m.liveMode = true
 		return m, m.listenForChanges()
-	case refreshMsg:
+	case RefreshMsg:
+		if m.liveMode {
+			return m, tea.Batch(m.doRefresh(), m.listenForChanges())
+		}
 		return m, m.doRefresh()
 	case pollTickMsg:
 		return m, tea.Batch(m.doRefresh(), tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
@@ -225,7 +229,7 @@ func (m Model) listenForChanges() tea.Cmd {
 			_ = event
 			// Debounce: 200ms delay before re-materialize.
 			time.Sleep(200 * time.Millisecond)
-			return refreshMsg{}
+			return RefreshMsg{}
 		case err, ok := <-m.watcher.Errors:
 			if !ok || err != nil {
 				return nil

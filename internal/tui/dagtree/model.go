@@ -21,14 +21,15 @@ type visibleNode struct {
 
 // Model implements app.Screen for the DAG tree view.
 type Model struct {
-	state    *materialize.State
-	visible  []visibleNode
-	expanded map[string]bool
-	cursor   int
-	filter   string
-	width    int
-	height   int
-	detail   detail.Model
+	state        *materialize.State
+	visible      []visibleNode
+	expanded     map[string]bool
+	cursor       int
+	scrollOffset int
+	filter       string
+	width        int
+	height       int
+	detail       detail.Model
 }
 
 func New() *Model {
@@ -74,10 +75,12 @@ func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		case "j", "down":
 			if m.cursor < len(m.visible)-1 {
 				m.cursor++
+				m.clampScroll()
 			}
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
+				m.clampScroll()
 			}
 		case "l", "right":
 			if m.cursor < len(m.visible) {
@@ -109,12 +112,36 @@ func (m *Model) View() string {
 	for i := range m.visible {
 		lines = append(lines, m.renderNode(i))
 	}
+
+	// Clip to viewport height when height is set.
+	if m.height > 0 && len(lines) > m.height {
+		start := m.scrollOffset
+		end := start + m.height
+		if end > len(lines) {
+			end = len(lines)
+		}
+		lines = lines[start:end]
+	}
+
 	tree := strings.Join(lines, "\n")
 
 	if m.detail.IsOpen() {
 		return m.renderWithOverlay(tree)
 	}
 	return tree
+}
+
+// clampScroll adjusts scrollOffset to keep cursor within the visible window.
+func (m *Model) clampScroll() {
+	if m.height <= 0 {
+		return
+	}
+	if m.cursor < m.scrollOffset {
+		m.scrollOffset = m.cursor
+	}
+	if m.cursor >= m.scrollOffset+m.height {
+		m.scrollOffset = m.cursor - m.height + 1
+	}
 }
 
 func (m *Model) renderNode(idx int) string {
