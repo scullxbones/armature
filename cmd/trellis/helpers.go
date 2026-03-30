@@ -49,7 +49,7 @@ func initPushDeps() {
 		Branch:  "_trellis",
 		Backoff: nil, // use defaults: 1s, 2s, 4s
 	}
-	appTracker = ops.NewFilePushTracker(appCtx.IssuesDir)
+	appTracker = ops.NewFilePushTracker(appCtx.StateDir)
 }
 
 // appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.

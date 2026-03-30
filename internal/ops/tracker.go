@@ -31,10 +31,10 @@ type FilePushTracker struct {
 	Path string
 }
 
-// NewFilePushTracker creates a FilePushTracker writing to issuesDir/state/pending-push-count.
-func NewFilePushTracker(issuesDir string) *FilePushTracker {
+// NewFilePushTracker creates a FilePushTracker writing to stateDir/pending-push-count.
+func NewFilePushTracker(stateDir string) *FilePushTracker {
 	return &FilePushTracker{
-		Path: filepath.Join(issuesDir, "state", "pending-push-count"),
+		Path: filepath.Join(stateDir, "pending-push-count"),
 	}
 }
 

@@ -86,8 +86,8 @@ func TestFilePushTracker_DefaultThreshold(t *testing.T) {
 	assert.Equal(t, threshold, n)
 }
 
-func TestFilePushTracker_Path(t *testing.T) {
+func TestTrackerUsesStateDir(t *testing.T) {
 	dir := t.TempDir()
 	tr := ops.NewFilePushTracker(dir)
-	assert.Equal(t, filepath.Join(dir, "state", "pending-push-count"), tr.Path)
+	assert.Equal(t, filepath.Join(dir, "pending-push-count"), tr.Path)
 }
