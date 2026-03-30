@@ -142,6 +142,33 @@ git push -u origin HEAD
 - Check issue types: `ready` shows `task`, `feature`, and `story` types
 - All work may genuinely be complete
 
+## Parallel Subagents (Advanced)
+
+By default the worker loop is sequential: claim → dispatch → commit → repeat.
+When tasks are **independent** (no shared files, no ordering dependency), you can
+dispatch subagents in parallel using git worktrees. To avoid merge conflicts on
+the ops log, each subagent must write to its own log slot:
+
+    # Set before dispatching each subagent
+    export TRLS_LOG_SLOT=a   # subagent A
+    export TRLS_LOG_SLOT=b   # subagent B
+
+**Rules:**
+- The orchestrator always runs with `TRLS_LOG_SLOT` **unset** (claims and story
+  transitions go to the plain `<worker-id>.log`).
+- Each parallel subagent sets a distinct, short slot name (`a`, `b`, `c`, or the
+  issue ID) before invoking any `trls` command.
+- Slot names must be unique within a parallel batch — reusing a slot across two
+  concurrent agents defeats the purpose.
+- Slot files (`<worker-id>~<slot>.log`) are permanent. They are committed
+  alongside code files exactly like the plain log: `git add .issues/ code/`.
+- After the batch, run `trls validate` and `make check` from the orchestrator
+  (with `TRLS_LOG_SLOT` unset) before pushing.
+
+**Common mistake:** Setting `TRLS_LOG_SLOT` in the orchestrator's shell and
+forgetting to unset it — orchestrator ops land in a slot file and may not be
+seen by `trls ready` until materialization catches up.
+
 ## Common Mistakes
 
 | Mistake | Fix |
