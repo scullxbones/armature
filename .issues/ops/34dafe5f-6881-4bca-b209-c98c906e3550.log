@@ -119,3 +119,7 @@
 ["citation-accepted","TASK-20",1774843768,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Wired new TUI and deleted old board package."}]
 ["transition","TASK-20",1774843773,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Wired new TUI and deleted old board package."}]
 ["transition","STORY-TUI",1774843806,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Completed the TUI redesign including DAG tree, Workers, Validate, and Sources screens. Fixed semantic color palette and isolated worker state directories."}]
+["claim","E5-S4-T1",1774843821,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","E5-S4",1774843821,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["citation-accepted","E5-S4-T1",1774843904,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Initial README.md creation with project overview and quickstart."}]
+["transition","E5-S4-T1",1774843921,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Updated README.md with overview, install, and quickstart."}]
