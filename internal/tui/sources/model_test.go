@@ -8,6 +8,54 @@ import (
 	"github.com/scullxbones/trellis/internal/tui/sources"
 )
 
+func TestSourcesInit(t *testing.T) {
+	m := sources.New()
+	if cmd := m.Init(); cmd != nil {
+		t.Error("Init should return nil")
+	}
+}
+
+func TestSourcesSetSize(t *testing.T) {
+	m := sources.New()
+	m.SetSize(80, 24) // must not panic
+}
+
+func TestSourcesHelpBar(t *testing.T) {
+	m := sources.New()
+	h := m.HelpBar()
+	if !strings.Contains(h, "q quit") {
+		t.Errorf("help bar missing q quit, got: %s", h)
+	}
+}
+
+func TestSourcesUpdate(t *testing.T) {
+	m := sources.New()
+	screen, cmd := m.Update(nil)
+	if screen == nil {
+		t.Error("Update should return the model")
+	}
+	if cmd != nil {
+		t.Error("Update should return nil cmd")
+	}
+}
+
+func TestSourcesNilStateView(t *testing.T) {
+	m := sources.New()
+	v := m.View()
+	if !strings.Contains(v, "No state available") {
+		t.Errorf("expected nil-state message, got: %s", v)
+	}
+}
+
+func TestSourcesEmptySourcesView(t *testing.T) {
+	m := sources.New()
+	m.SetState(materialize.NewState())
+	v := m.View()
+	if !strings.Contains(v, "No sources cited") {
+		t.Errorf("expected empty-sources message, got: %s", v)
+	}
+}
+
 func TestSourcesScreen(t *testing.T) {
 	m := sources.New()
 	state := materialize.NewState()

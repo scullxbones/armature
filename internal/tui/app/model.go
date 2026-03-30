@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
 	"github.com/scullxbones/trellis/internal/materialize"
@@ -18,10 +18,10 @@ import (
 type ScreenID int
 
 const (
-	ScreenDAGTree ScreenID = iota // 1
-	ScreenWorkers                 // 2
-	ScreenValidate                // 3
-	ScreenSources                 // 4
+	ScreenDAGTree  ScreenID = iota // 1
+	ScreenWorkers                  // 2
+	ScreenValidate                 // 3
+	ScreenSources                  // 4
 )
 
 // refreshMsg triggers a re-materialisation.
@@ -116,7 +116,7 @@ func (m Model) startWatcher() tea.Cmd {
 		}
 		opsDir := filepath.Join(m.issuesDir, "ops")
 		if err := w.Add(opsDir); err != nil {
-			w.Close()
+			_ = w.Close()
 			return pollTickMsg(time.Now())
 		}
 		return watcherReadyMsg{watcher: w}
@@ -266,9 +266,9 @@ func (m Model) View() string {
 // nilScreen is a placeholder Screen used before real screens are injected.
 type nilScreen struct{}
 
-func (nilScreen) Init() tea.Cmd                             { return nil }
+func (nilScreen) Init() tea.Cmd                            { return nil }
 func (n nilScreen) Update(_ tea.Msg) (tui.Screen, tea.Cmd) { return n, nil }
-func (nilScreen) View() string                              { return "" }
-func (nilScreen) HelpBar() string                           { return "" }
-func (nilScreen) SetSize(_, _ int)                          {}
-func (nilScreen) SetState(_ *materialize.State)             {}
+func (nilScreen) View() string                             { return "" }
+func (nilScreen) HelpBar() string                          { return "" }
+func (nilScreen) SetSize(_, _ int)                         {}
+func (nilScreen) SetState(_ *materialize.State)            {}

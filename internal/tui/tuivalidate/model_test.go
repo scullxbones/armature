@@ -8,6 +8,45 @@ import (
 	"github.com/scullxbones/trellis/internal/tui/tuivalidate"
 )
 
+func TestValidateInit(t *testing.T) {
+	m := tuivalidate.New()
+	if cmd := m.Init(); cmd != nil {
+		t.Error("Init should return nil")
+	}
+}
+
+func TestValidateSetSize(t *testing.T) {
+	m := tuivalidate.New()
+	m.SetSize(80, 24) // must not panic
+}
+
+func TestValidateHelpBar(t *testing.T) {
+	m := tuivalidate.New()
+	h := m.HelpBar()
+	if !strings.Contains(h, "q quit") {
+		t.Errorf("help bar missing q quit, got: %s", h)
+	}
+}
+
+func TestValidateUpdate(t *testing.T) {
+	m := tuivalidate.New()
+	screen, cmd := m.Update(nil)
+	if screen == nil {
+		t.Error("Update should return the model")
+	}
+	if cmd != nil {
+		t.Error("Update should return nil cmd")
+	}
+}
+
+func TestValidateNilStateView(t *testing.T) {
+	m := tuivalidate.New()
+	v := m.View()
+	if !strings.Contains(v, "No state available") {
+		t.Errorf("expected nil-state message, got: %s", v)
+	}
+}
+
 func TestValidateScreenRendersIssues(t *testing.T) {
 	m := tuivalidate.New()
 	state := materialize.NewState()

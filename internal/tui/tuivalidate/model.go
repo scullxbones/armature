@@ -3,7 +3,7 @@ package tuivalidate
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/tui"
 	"github.com/scullxbones/trellis/internal/validate"

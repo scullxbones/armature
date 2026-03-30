@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/tui"
 )
@@ -61,7 +61,7 @@ func (m *Model) View() string {
 	}
 
 	for _, row := range m.sources {
-		b.WriteString(fmt.Sprintf("%s: %s\n", tui.Info.Render(row.id), strings.Join(row.issues, ", ")))
+		fmt.Fprintf(&b, "%s: %s\n", tui.Info.Render(row.id), strings.Join(row.issues, ", "))
 	}
 
 	return b.String()

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/tui/dagtree"
 )
@@ -15,6 +16,77 @@ func makeState(issues ...*materialize.Issue) *materialize.State {
 		s.Issues[i.ID] = &issueCopy
 	}
 	return s
+}
+
+func TestDAGTreeInit(t *testing.T) {
+	m := dagtree.New()
+	if cmd := m.Init(); cmd != nil {
+		t.Error("Init should return nil")
+	}
+}
+
+func TestDAGTreeNilStateView(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 40)
+	v := m.View()
+	if !strings.Contains(v, "No state available") {
+		t.Errorf("expected nil-state message, got: %s", v)
+	}
+}
+
+func TestDAGTreeGlyphInProgress(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 40)
+	m.SetState(makeState(&materialize.Issue{ID: "T1", Status: "in-progress", Title: "Active"}))
+	v := m.View()
+	if !strings.Contains(v, "▶") {
+		t.Errorf("in-progress node should show ▶, got:\n%s", v)
+	}
+}
+
+func TestDAGTreeGlyphCancelled(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 40)
+	m.SetState(makeState(&materialize.Issue{ID: "T1", Status: "cancelled", Title: "Cancelled"}))
+	v := m.View()
+	if !strings.Contains(v, "—") {
+		t.Errorf("cancelled node should show —, got:\n%s", v)
+	}
+}
+
+func TestDAGTreeGlyphDefault(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 40)
+	m.SetState(makeState(&materialize.Issue{ID: "T1", Status: "open", Title: "Open task"}))
+	v := m.View()
+	if !strings.Contains(v, "○") {
+		t.Errorf("open node should show ○, got:\n%s", v)
+	}
+}
+
+func TestDAGTreeUpdate_CursorNavigation(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 40)
+	m.SetState(makeState(
+		&materialize.Issue{ID: "E1", Type: "epic", Status: "open", Title: "Epic"},
+		&materialize.Issue{ID: "E2", Type: "epic", Status: "open", Title: "Epic 2"},
+	))
+	// Move down
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	// Move up
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	// Boundary: cannot go above 0
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	// Expand/collapse
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+}
+
+func TestDAGTreeUpdate_OpenDetail(t *testing.T) {
+	m := dagtree.New()
+	m.SetSize(120, 40)
+	m.SetState(makeState(&materialize.Issue{ID: "E1", Status: "open", Title: "Epic"}))
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 }
 
 func TestViewContainsIssueIDs(t *testing.T) {
