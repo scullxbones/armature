@@ -292,3 +292,4 @@
 ["citation-accepted","task-1774956949",1774956962,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Discovered during E6 dogfooding: planned hooks not yet implemented; branch-awareness bug found in pre-commit hook we wrote"}]
 ["claim","E6-S2-T1",1774957553,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","E6-S2",1774957554,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["note","E6-S2-T1",1774958154,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Implemented single-pass topological sort algorithm. All tests passing. Benchmark: 10k issues in ~410µs (well under 100ms threshold)."}]
