@@ -58,10 +58,23 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 
 	var allOps []ops.Op
 	newOffsets := make(map[string]int64)
-	// Always do a full replay from offset 0 to ensure correct accumulated state.
-	// Incremental reads would require loading prior state before applying new ops.
-	fullReplay := true
-	_ = cp // checkpoint offsets reserved for future optimization
+	// Detect incremental vs full replay based on checkpoint
+	fullReplay := len(cp.ByteOffsets) == 0
+	var state *State
+
+	// For incremental replay, load prior state from issuesStateDir
+	if !fullReplay {
+		loadedIssues, err := LoadAllIssues(issuesStateDir)
+		if err != nil {
+			return Result{}, fmt.Errorf("load prior state: %w", err)
+		}
+		state = NewState()
+		state.Issues = loadedIssues
+		state.SingleBranchMode = singleBranch
+	} else {
+		state = NewState()
+		state.SingleBranchMode = singleBranch
+	}
 
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".log") {
@@ -70,7 +83,15 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 		logPath := filepath.Join(opsDir, entry.Name())
 		workerID := ops.WorkerIDFromFilename(logPath)
 
-		logOps, err := ops.ReadLogFromOffset(logPath, 0)
+		// Get the offset from checkpoint (0 if not present for this log)
+		offset := int64(0)
+		if cp.ByteOffsets != nil {
+			if savedOffset, ok := cp.ByteOffsets[entry.Name()]; ok {
+				offset = savedOffset
+			}
+		}
+
+		logOps, err := ops.ReadLogFromOffset(logPath, offset)
 		if err != nil {
 			return Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
 		}
@@ -89,9 +110,6 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 	}
 
 	sortOpsByTimestamp(allOps)
-
-	state := NewState()
-	state.SingleBranchMode = singleBranch
 
 	for _, op := range allOps {
 		if err := state.ApplyOp(op); err != nil {
@@ -159,9 +177,23 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 
 	var allOps []ops.Op
 	newOffsets := make(map[string]int64)
-	// Always do a full replay from offset 0 to ensure correct accumulated state.
-	fullReplay := true
-	_ = cp // checkpoint offsets reserved for future optimization
+	// Detect incremental vs full replay based on checkpoint
+	fullReplay := len(cp.ByteOffsets) == 0
+	var state *State
+
+	// For incremental replay, load prior state from issuesStateDir
+	if !fullReplay {
+		loadedIssues, err := LoadAllIssues(issuesStateDir)
+		if err != nil {
+			return nil, Result{}, fmt.Errorf("load prior state: %w", err)
+		}
+		state = NewState()
+		state.Issues = loadedIssues
+		state.SingleBranchMode = singleBranch
+	} else {
+		state = NewState()
+		state.SingleBranchMode = singleBranch
+	}
 
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".log") {
@@ -170,7 +202,15 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 		logPath := filepath.Join(opsDir, entry.Name())
 		workerID := ops.WorkerIDFromFilename(logPath)
 
-		logOps, err := ops.ReadLogFromOffset(logPath, 0)
+		// Get the offset from checkpoint (0 if not present for this log)
+		offset := int64(0)
+		if cp.ByteOffsets != nil {
+			if savedOffset, ok := cp.ByteOffsets[entry.Name()]; ok {
+				offset = savedOffset
+			}
+		}
+
+		logOps, err := ops.ReadLogFromOffset(logPath, offset)
 		if err != nil {
 			return nil, Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
 		}
@@ -189,9 +229,6 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 	}
 
 	sortOpsByTimestamp(allOps)
-
-	state := NewState()
-	state.SingleBranchMode = singleBranch
 
 	for _, op := range allOps {
 		if err := state.ApplyOp(op); err != nil {
