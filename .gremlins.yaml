@@ -1,0 +1,15 @@
+unleash:
+  # Limit parallel workers to avoid WSL2 system saturation.
+  # 16 workers (nproc) causes all test processes to contend for CPU/disk,
+  # pushing individual test runs past the timeout threshold.
+  workers: 4
+
+  # Extra headroom for variable execution time on WSL2.
+  # Default of 3 is too tight when 4 workers share the system.
+  timeout-coefficient: 5
+
+  # Quality gates (ratchet: only raise, never lower).
+  # threshold-mcover: % of mutation sites reachable by tests (analogous to code coverage).
+  # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
+  threshold-mcover: 85
+  threshold-efficacy: 70

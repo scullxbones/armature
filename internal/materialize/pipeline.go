@@ -1,9 +1,11 @@
 package materialize
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/scullxbones/trellis/internal/ops"
@@ -302,16 +304,10 @@ func opSortKey(op ops.Op) int {
 }
 
 func sortOpsByTimestamp(allOps []ops.Op) {
-	for i := 1; i < len(allOps); i++ {
-		for j := i; j > 0; j-- {
-			a, b := allOps[j-1], allOps[j]
-			if a.Timestamp < b.Timestamp {
-				break
-			}
-			if a.Timestamp == b.Timestamp && opSortKey(a) <= opSortKey(b) {
-				break
-			}
-			allOps[j], allOps[j-1] = allOps[j-1], allOps[j]
+	slices.SortStableFunc(allOps, func(a, b ops.Op) int {
+		if n := cmp.Compare(a.Timestamp, b.Timestamp); n != 0 {
+			return n
 		}
-	}
+		return cmp.Compare(opSortKey(a), opSortKey(b))
+	})
 }

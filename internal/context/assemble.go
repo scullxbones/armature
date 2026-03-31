@@ -128,7 +128,10 @@ func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *mate
 func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	var lines []string
 	currentParentID := issue.Parent
-	for i := 0; i < 3 && currentParentID != ""; i++ {
+	for range 3 {
+		if currentParentID == "" {
+			break
+		}
 		parentID := currentParentID
 		var parentTitle, parentStatus, nextParentID string
 		if parent, ok := state.Issues[parentID]; ok {

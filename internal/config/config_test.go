@@ -10,6 +10,7 @@ import (
 )
 
 func TestConfigRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
 
@@ -31,6 +32,7 @@ func TestConfigRoundTrip(t *testing.T) {
 }
 
 func TestDetectProjectType(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	// No marker files — unknown
@@ -42,6 +44,7 @@ func TestDetectProjectType(t *testing.T) {
 }
 
 func TestDetectProjectTypePriority(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	// Both go.mod and package.json — go wins

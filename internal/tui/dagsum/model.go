@@ -126,9 +126,9 @@ func (m Model) allReviewed() bool {
 }
 
 func nextPending(states []itemState, current int) int {
-	for i := current + 1; i < len(states); i++ {
-		if states[i] == itemPending {
-			return i
+	for i, s := range states[current+1:] {
+		if s == itemPending {
+			return current + 1 + i
 		}
 	}
 	return current

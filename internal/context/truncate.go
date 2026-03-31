@@ -20,9 +20,9 @@ func Truncate(ctx *Context, tokenBudget int) *Context {
 	for totalChars() > charBudget && len(layers) > 1 {
 		// Find index of layer with highest Priority number (lowest importance)
 		maxIdx := 0
-		for i := 1; i < len(layers); i++ {
-			if layers[i].Priority > layers[maxIdx].Priority {
-				maxIdx = i
+		for i, layer := range layers[1:] {
+			if layer.Priority > layers[maxIdx].Priority {
+				maxIdx = i + 1
 			}
 		}
 		layers = append(layers[:maxIdx], layers[maxIdx+1:]...)

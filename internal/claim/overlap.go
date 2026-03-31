@@ -1,6 +1,9 @@
 package claim
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+)
 
 // ScopesOverlap checks if two scope glob lists have any overlap.
 func ScopesOverlap(scopeA, scopeB []string) bool {
@@ -30,12 +33,11 @@ func globOverlaps(a, b string) bool {
 }
 
 func extractDir(pattern string) string {
-	for i := len(pattern) - 1; i >= 0; i-- {
-		if pattern[i] == '/' {
-			return pattern[:i]
-		}
+	i := strings.LastIndexByte(pattern, '/')
+	if i < 0 {
+		return ""
 	}
-	return ""
+	return pattern[:i]
 }
 
 func hasPrefix(s, prefix string) bool {

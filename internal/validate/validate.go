@@ -284,17 +284,17 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		byParent[issue.Parent] = append(byParent[issue.Parent], issue)
 	}
 	for _, siblings := range byParent {
-		for i := 0; i < len(siblings); i++ {
-			for j := i + 1; j < len(siblings); j++ {
-				overlap := scopeIntersection(siblings[i].Scope, siblings[j].Scope)
+		for i, sib := range siblings {
+			for _, other := range siblings[i+1:] {
+				overlap := scopeIntersection(sib.Scope, other.Scope)
 				if len(overlap) == 0 {
 					continue
 				}
-				if hasSerialDependency(siblings[i], siblings[j]) {
+				if hasSerialDependency(sib, other) {
 					continue
 				}
 				warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
-					siblings[i].ID, siblings[j].ID, strings.Join(overlap, ", ")))
+					sib.ID, other.ID, strings.Join(overlap, ", ")))
 			}
 		}
 	}

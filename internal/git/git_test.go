@@ -30,6 +30,7 @@ func initTestRepo(t *testing.T) string {
 }
 
 func TestCreateOrphanBranch(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -50,6 +51,7 @@ func TestCreateOrphanBranch(t *testing.T) {
 }
 
 func TestCreateOrphanBranch_Idempotent(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -66,6 +68,7 @@ func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 }
 
 func TestAddWorktree(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -82,6 +85,7 @@ func TestAddWorktree(t *testing.T) {
 }
 
 func TestSetAndReadGitConfig(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -94,6 +98,7 @@ func TestSetAndReadGitConfig(t *testing.T) {
 }
 
 func TestReadGitConfig_Unset(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -102,6 +107,7 @@ func TestReadGitConfig_Unset(t *testing.T) {
 }
 
 func TestCommitWorktreeOp(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -129,6 +135,7 @@ func TestCommitWorktreeOp(t *testing.T) {
 }
 
 func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -150,6 +157,7 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 }
 
 func TestBranchMergedInto_Merged(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -176,6 +184,7 @@ func TestBranchMergedInto_Merged(t *testing.T) {
 }
 
 func TestBranchMergedInto_NotMerged(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -203,6 +212,7 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 // Worker A pushes first (fast-forward, succeeds). Worker B's push is rejected
 // because the remote tip has moved — it must fetch+rebase before pushing.
 func TestConcurrentWorkerPush_SecondPushRejected(t *testing.T) {
+	t.Parallel()
 	// Set up a bare remote repo that acts as the shared git server
 	remote := t.TempDir()
 	gitRun := func(dir string, args ...string) string {
@@ -310,6 +320,7 @@ func setupTwoWorkerRepos(t *testing.T) (string, string, string) {
 }
 
 func TestPush_FastForward_Succeeds(t *testing.T) {
+	t.Parallel()
 	_, workerA, _ := setupTwoWorkerRepos(t)
 	cA := git.New(workerA)
 
@@ -327,6 +338,7 @@ func TestPush_FastForward_Succeeds(t *testing.T) {
 }
 
 func TestPush_Rejected_ReturnsError(t *testing.T) {
+	t.Parallel()
 	_, workerA, workerB := setupTwoWorkerRepos(t)
 
 	// Worker A makes a commit and pushes
@@ -355,6 +367,7 @@ func TestPush_Rejected_ReturnsError(t *testing.T) {
 }
 
 func TestFetchAndRebase_Then_Push_Succeeds(t *testing.T) {
+	t.Parallel()
 	_, workerA, workerB := setupTwoWorkerRepos(t)
 
 	// Worker A pushes first
@@ -385,6 +398,7 @@ func TestFetchAndRebase_Then_Push_Succeeds(t *testing.T) {
 }
 
 func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -395,6 +409,7 @@ func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 }
 
 func TestListFilesAtCommit(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -423,6 +438,7 @@ func TestListFilesAtCommit(t *testing.T) {
 }
 
 func TestListFilesAtCommit_InvalidSHA(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -431,6 +447,7 @@ func TestListFilesAtCommit_InvalidSHA(t *testing.T) {
 }
 
 func TestShowFileAtCommit(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -456,6 +473,7 @@ func TestShowFileAtCommit(t *testing.T) {
 }
 
 func TestShowFileAtCommit_MissingFile(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -469,6 +487,7 @@ func TestShowFileAtCommit_MissingFile(t *testing.T) {
 }
 
 func TestLogBranch(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
@@ -503,6 +522,7 @@ func TestLogBranch(t *testing.T) {
 }
 
 func TestLogBranch_InvalidBranch(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := git.New(repo)
 

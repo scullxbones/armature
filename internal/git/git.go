@@ -18,9 +18,18 @@ func New(repoPath string) *Client {
 	return &Client{repoPath: repoPath}
 }
 
+// cmd builds a non-interactive git command rooted at the client's repo path.
+// GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
+func (c *Client) cmd(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"-C", c.repoPath}, args...)
+	cmd := exec.Command("git", fullArgs...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
+	return cmd
+}
+
 // CurrentBranch returns the current git branch name.
 func (c *Client) CurrentBranch() (string, error) {
-	cmd := exec.Command("git", "-C", c.repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
@@ -30,7 +39,7 @@ func (c *Client) CurrentBranch() (string, error) {
 
 // CommitMessage returns the commit message for a given SHA.
 func (c *Client) CommitMessage(sha string) (string, error) {
-	cmd := exec.Command("git", "-C", c.repoPath, "log", "-1", "--pretty=%B", sha)
+	cmd := c.cmd("log", "-1", "--pretty=%B", sha)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get commit message for %s: %w", sha, err)
@@ -40,7 +49,7 @@ func (c *Client) CommitMessage(sha string) (string, error) {
 
 // IsCommitOnBranch checks if a commit is reachable on a branch.
 func (c *Client) IsCommitOnBranch(sha, branch string) (bool, error) {
-	cmd := exec.Command("git", "-C", c.repoPath, "merge-base", "--is-ancestor", sha, branch)
+	cmd := c.cmd("merge-base", "--is-ancestor", sha, branch)
 	err := cmd.Run()
 	if err == nil {
 		return true, nil
@@ -56,13 +65,13 @@ func (c *Client) IsCommitOnBranch(sha, branch string) (bool, error) {
 // If the branch already exists, this is a no-op. Always returns to the original branch.
 func (c *Client) CreateOrphanBranch(branch string) error {
 	// Check if branch already exists — idempotent fast-path
-	check := exec.Command("git", "-C", c.repoPath, "rev-parse", "--verify", branch)
+	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err == nil {
 		return nil
 	}
 
 	// Capture current branch name so we can return to it explicitly
-	headCmd := exec.Command("git", "-C", c.repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	headCmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")
 	headOut, err := headCmd.Output()
 	if err != nil {
 		return fmt.Errorf("get current branch: %w", err)
@@ -70,20 +79,20 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	priorBranch := strings.TrimSpace(string(headOut))
 
 	// Create orphan branch and make an empty initial commit
-	orphanCmd := exec.Command("git", "-C", c.repoPath, "checkout", "--orphan", branch)
+	orphanCmd := c.cmd("checkout", "--orphan", branch)
 	if out, err := orphanCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout --orphan %s: %w\n%s", branch, err, out)
 	}
 	// Clear the index; ignore exit code 1 (nothing to remove on an empty repo)
-	rmCmd := exec.Command("git", "-C", c.repoPath, "rm", "-rf", "--quiet", ".")
+	rmCmd := c.cmd("rm", "-rf", "--quiet", ".")
 	rmCmd.Run() //nolint:errcheck
-	commitCmd := exec.Command("git", "-C", c.repoPath, "commit", "--allow-empty", "-m", "chore: init trellis issues branch")
+	commitCmd := c.cmd("commit", "--allow-empty", "-m", "chore: init trellis issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit on orphan branch: %w\n%s", err, out)
 	}
 
 	// Return to the original branch by name (not `checkout -` which may fail on fresh repos)
-	restore := exec.Command("git", "-C", c.repoPath, "checkout", priorBranch)
+	restore := c.cmd("checkout", priorBranch)
 	if out, err := restore.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout %s: %w\n%s", priorBranch, err, out)
 	}
@@ -96,7 +105,7 @@ func (c *Client) AddWorktree(branch, path string) error {
 	if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
 		return nil // already a worktree
 	}
-	cmd := exec.Command("git", "-C", c.repoPath, "worktree", "add", path, branch)
+	cmd := c.cmd("worktree", "add", path, branch)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree add: %w\n%s", err, out)
 	}
@@ -105,7 +114,7 @@ func (c *Client) AddWorktree(branch, path string) error {
 
 // SetGitConfig sets a local git config key to value.
 func (c *Client) SetGitConfig(key, value string) error {
-	cmd := exec.Command("git", "-C", c.repoPath, "config", "--local", key, value)
+	cmd := c.cmd("config", "--local", key, value)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git config set %s: %w\n%s", key, err, out)
 	}
@@ -114,7 +123,7 @@ func (c *Client) SetGitConfig(key, value string) error {
 
 // ReadGitConfig reads a local git config key. Returns error if unset.
 func (c *Client) ReadGitConfig(key string) (string, error) {
-	cmd := exec.Command("git", "-C", c.repoPath, "config", "--local", key)
+	cmd := c.cmd("config", "--local", key)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git config get %s: %w", key, err)
@@ -127,19 +136,19 @@ func (c *Client) ReadGitConfig(key string) (string, error) {
 // relPath is relative to the worktree root. If there is nothing to commit, this is a no-op.
 func (c *Client) CommitWorktreeOp(relPath, message string) error {
 	// Stage the specific file
-	add := exec.Command("git", "-C", c.repoPath, "add", relPath)
+	add := c.cmd("add", relPath)
 	if out, err := add.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add %s: %w\n%s", relPath, err, out)
 	}
 
 	// Check if there is actually something staged
-	diff := exec.Command("git", "-C", c.repoPath, "diff", "--cached", "--quiet")
+	diff := c.cmd("diff", "--cached", "--quiet")
 	if err := diff.Run(); err == nil {
 		return nil // nothing staged, no-op
 	}
 
 	// Commit
-	commit := exec.Command("git", "-C", c.repoPath, "commit", "-m", message)
+	commit := c.cmd("commit", "-m", message)
 	if out, err := commit.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit: %w\n%s", err, out)
 	}
@@ -149,7 +158,7 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 // Push pushes the current branch to origin. Returns an error if the push is
 // rejected (e.g. non-fast-forward).
 func (c *Client) Push(branch string) error {
-	cmd := exec.Command("git", "-C", c.repoPath, "push", "origin", branch)
+	cmd := c.cmd("push", "origin", branch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git push origin %s: %w\n%s", branch, err, out)
@@ -160,11 +169,11 @@ func (c *Client) Push(branch string) error {
 // FetchAndRebase fetches from origin and rebases the local branch onto the
 // remote tracking branch. This is used to resolve push rejections.
 func (c *Client) FetchAndRebase(branch string) error {
-	fetch := exec.Command("git", "-C", c.repoPath, "fetch", "origin")
+	fetch := c.cmd("fetch", "origin")
 	if out, err := fetch.CombinedOutput(); err != nil {
 		return fmt.Errorf("git fetch origin: %w\n%s", err, out)
 	}
-	rebase := exec.Command("git", "-C", c.repoPath, "rebase", "origin/"+branch)
+	rebase := c.cmd("rebase", "origin/"+branch)
 	if out, err := rebase.CombinedOutput(); err != nil {
 		return fmt.Errorf("git rebase origin/%s: %w\n%s", branch, err, out)
 	}
@@ -181,7 +190,7 @@ type LogEntry struct {
 
 // ListFilesAtCommit returns the list of file paths tracked at the given commit SHA.
 func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
-	cmd := exec.Command("git", "-C", c.repoPath, "ls-tree", "-r", "--name-only", sha)
+	cmd := c.cmd("ls-tree", "-r", "--name-only", sha)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-tree %s: %w", sha, err)
@@ -195,7 +204,7 @@ func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
 
 // ShowFileAtCommit returns the contents of the file at path as it existed at the given commit SHA.
 func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
-	cmd := exec.Command("git", "-C", c.repoPath, "show", sha+":"+path)
+	cmd := c.cmd("show", sha+":"+path)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git show %s:%s: %w", sha, path, err)
@@ -206,7 +215,7 @@ func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
 // LogBranch returns up to n log entries from the tip of branch, most recent first.
 func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	format := "%H%x00%s%x00%ae%x00%ai"
-	cmd := exec.Command("git", "-C", c.repoPath, "log", branch, fmt.Sprintf("-n%d", n), "--format="+format)
+	cmd := c.cmd("log", branch, fmt.Sprintf("-n%d", n), "--format="+format)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log %s: %w", branch, err)
@@ -236,13 +245,13 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 // Returns (false, nil) if the branch does not exist, rather than an error.
 func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	// Check that branch exists
-	check := exec.Command("git", "-C", c.repoPath, "rev-parse", "--verify", branch)
+	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err != nil {
 		return false, nil // branch doesn't exist
 	}
 
 	// Get the tip commit of branch
-	tip := exec.Command("git", "-C", c.repoPath, "rev-parse", branch)
+	tip := c.cmd("rev-parse", branch)
 	tipOut, err := tip.Output()
 	if err != nil {
 		return false, fmt.Errorf("rev-parse %s: %w", branch, err)

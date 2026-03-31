@@ -28,6 +28,7 @@ func initTestRepo(t *testing.T) string {
 }
 
 func TestResolveContext_SingleBranch_Default(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 
 	// Create .issues/config.json so LoadConfig works
@@ -45,6 +46,7 @@ func TestResolveContext_SingleBranch_Default(t *testing.T) {
 }
 
 func TestResolveContext_DualBranch(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 
 	// Simulate a dual-branch setup: create the worktree dir with .issues/ inside
@@ -72,6 +74,7 @@ func TestResolveContext_DualBranch(t *testing.T) {
 }
 
 func TestResolveContext_DualBranch_MissingWorktreePath(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 
 	// Set dual-branch mode but do NOT set ops-worktree-path
@@ -84,6 +87,7 @@ func TestResolveContext_DualBranch_MissingWorktreePath(t *testing.T) {
 }
 
 func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 
 	cmd := exec.Command("git", "-C", repo, "config", "trellis.mode", "single-branch")
@@ -99,6 +103,7 @@ func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
 }
 
 func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 
 	worktreePath := filepath.Join(repo, ".trellis")
@@ -122,6 +127,7 @@ func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
 }
 
 func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	issuesDir := filepath.Join(repo, ".issues")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
@@ -133,6 +139,7 @@ func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
 }
 
 func TestContextStateDir(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		StateDir: "/tmp/trellis-state",
 	}

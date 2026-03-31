@@ -47,16 +47,20 @@ func (a *AppendCommitAndPush) Push(logPath, worktreePath string, op Op, gc GitCo
 		backoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 	}
 
+	// First attempt — no backoff needed.
 	var lastErr error
-	for attempt := 0; attempt <= len(backoff); attempt++ {
-		if attempt > 0 {
-			// Fetch and rebase before retrying
-			if err := a.Pusher.FetchAndRebase(a.Branch); err != nil {
-				return fmt.Errorf("fetch+rebase before push attempt %d: %w", attempt+1, err)
-			}
-			time.Sleep(backoff[attempt-1])
-		}
+	if err := a.Pusher.Push(a.Branch); err == nil {
+		return nil
+	} else {
+		lastErr = err
+	}
 
+	// Retries: fetch+rebase, sleep, push.
+	for attempt, delay := range backoff {
+		if err := a.Pusher.FetchAndRebase(a.Branch); err != nil {
+			return fmt.Errorf("fetch+rebase before push attempt %d: %w", attempt+2, err)
+		}
+		time.Sleep(delay)
 		if err := a.Pusher.Push(a.Branch); err == nil {
 			return nil
 		} else {

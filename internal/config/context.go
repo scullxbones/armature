@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -54,10 +55,19 @@ func ResolveContext(repoPath string) (*Context, error) {
 	}, nil
 }
 
+// nonInteractiveGitCmd builds a git command with GIT_TERMINAL_PROMPT=0 to prevent
+// blocking on credential prompts. Note: intentionally does not use git.Client to avoid circular imports.
+func nonInteractiveGitCmd(repoPath string, args ...string) *exec.Cmd {
+	fullArgs := append([]string{"-C", repoPath}, args...)
+	cmd := exec.Command("git", fullArgs...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
+	return cmd
+}
+
 // readGitConfig reads a single local git config key. Returns error if unset.
 // Note: intentionally does not use git.Client to avoid circular imports.
 func readGitConfig(repoPath, key string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "config", "--local", key)
+	cmd := nonInteractiveGitCmd(repoPath, "config", "--local", key)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git config %s: %w", key, err)
@@ -67,7 +77,7 @@ func readGitConfig(repoPath, key string) (string, error) {
 
 // readGitConfigMode reads trellis.mode from git config. Returns "single-branch" if unset.
 func readGitConfigMode(repoPath string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "config", "trellis.mode")
+	cmd := nonInteractiveGitCmd(repoPath, "config", "trellis.mode")
 	out, err := cmd.Output()
 	if err != nil {
 		// Exit code 1 means key not set — default to single-branch

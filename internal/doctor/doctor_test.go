@@ -14,6 +14,7 @@ import (
 )
 
 func TestRun_CleanRepo(t *testing.T) {
+	t.Parallel()
 	// Run creates a temp issues dir so we need a helper.
 	// We test the internal checks directly.
 	t.Run("D4_NoBrokenParents", func(t *testing.T) {
@@ -87,6 +88,7 @@ func TestRun_CleanRepo(t *testing.T) {
 }
 
 func TestReport_HasErrors(t *testing.T) {
+	t.Parallel()
 	r := doctor.Report{
 		Checks: []doctor.Finding{
 			{Check: "D4", Severity: doctor.SeverityError, Message: "broken"},
@@ -96,6 +98,7 @@ func TestReport_HasErrors(t *testing.T) {
 }
 
 func TestReport_HasWarnings(t *testing.T) {
+	t.Parallel()
 	r := doctor.Report{
 		Checks: []doctor.Finding{
 			{Check: "D6", Severity: doctor.SeverityWarning, Message: "uncited"},
@@ -133,6 +136,7 @@ func initIssuesDir(t *testing.T) string {
 }
 
 func TestRun_Integration_EmptyRepo(t *testing.T) {
+	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
 	// Write an empty ops log so materialize can run
@@ -148,6 +152,7 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 }
 
 func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
+	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
 	// Write a note op that references an issue that was never created (no create op).
@@ -172,6 +177,7 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 }
 
 func TestRun_Integration_D2_StaleClaims(t *testing.T) {
+	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
 	// Create an issue and claim it with TTL=1 (already expired)
@@ -197,6 +203,7 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 }
 
 func TestDoctorRunUsesStateDir(t *testing.T) {
+	t.Parallel()
 	issuesDir := initIssuesDir(t)
 	stateDir := filepath.Join(t.TempDir(), "specific-state")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
