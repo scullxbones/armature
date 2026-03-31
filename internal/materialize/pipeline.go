@@ -38,7 +38,9 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
-	_ = os.MkdirAll(issuesStateDir, 0755)
+	if err := os.MkdirAll(issuesStateDir, 0755); err != nil {
+		return Result{}, fmt.Errorf("create state dir: %w", err)
+	}
 
 	cp, err := LoadCheckpoint(checkpointPath)
 	if err != nil {
@@ -138,7 +140,9 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
-	_ = os.MkdirAll(issuesStateDir, 0755)
+	if err := os.MkdirAll(issuesStateDir, 0755); err != nil {
+		return nil, Result{}, fmt.Errorf("create state dir: %w", err)
+	}
 
 	cp, err := LoadCheckpoint(checkpointPath)
 	if err != nil {
