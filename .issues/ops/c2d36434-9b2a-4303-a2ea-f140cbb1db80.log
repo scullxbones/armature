@@ -1,4 +1,0 @@
-["claim","E2-003",1773624449,"c2d36434-9b2a-4303-a2ea-f140cbb1db80",{"ttl":60}]
-["transition","E2-003",1773624455,"c2d36434-9b2a-4303-a2ea-f140cbb1db80",{"to":"in-progress"}]
-["transition","E2-003",1773624455,"c2d36434-9b2a-4303-a2ea-f140cbb1db80",{"to":"done","outcome":"Implemented trls sync command with BranchMergedInto git detection, internal/sync DetectMerges logic, cmd/trellis/sync.go command, and post-merge.sh.template hook. All tests pass."}]
-["transition","E2-004",1773625149,"c2d36434-9b2a-4303-a2ea-f140cbb1db80",{"to":"done","outcome":"PR-based done-to-merged workflow: IndexEntry Branch/PR fields, trls status awaiting-merge callout, trls merged done-state validation and --pr flag, full e2e test. All tests pass."}]
