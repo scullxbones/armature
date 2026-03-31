@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Issue represents the full materialized state of a single work item.
@@ -116,6 +117,35 @@ func LoadIssue(path string) (Issue, error) {
 	}
 	var issue Issue
 	return issue, json.Unmarshal(data, &issue)
+}
+
+// LoadAllIssues loads all previously materialized issues from the given directory.
+// Returns a map of issueID -> *Issue and an error if reading fails.
+func LoadAllIssues(issuesDir string) (map[string]*Issue, error) {
+	issues := make(map[string]*Issue)
+
+	entries, err := os.ReadDir(issuesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return issues, nil
+		}
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		issueID := strings.TrimSuffix(entry.Name(), ".json")
+		issuePath := filepath.Join(issuesDir, entry.Name())
+		issue, err := LoadIssue(issuePath)
+		if err != nil {
+			return nil, fmt.Errorf("load issue %s: %w", issueID, err)
+		}
+		issues[issueID] = &issue
+	}
+
+	return issues, nil
 }
 
 func WriteIndex(path string, index Index) error {
