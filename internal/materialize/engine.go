@@ -299,31 +299,71 @@ func (s *State) promoteParentToInProgress(parentID string) {
 }
 
 // RunRollup promotes stories/epics to done/merged when all children are merged.
+// Uses a single-pass topological sort algorithm achieving O(n) time complexity.
+// Algorithm: compute in-degree (unmerged children count) for each parent,
+// start with parents that have all merged children, and propagate promotions upward.
 func (s *State) RunRollup() {
-	changed := true
-	for changed {
-		changed = false
-		for _, issue := range s.Issues {
-			if issue.Type == "task" {
-				continue
+	// Compute initial in-degree (unmerged children count) for each parent
+	inDegree := make(map[string]int)
+	queue := make([]string, 0)
+
+	// First pass: count unmerged children for all non-task parents
+	for _, issue := range s.Issues {
+		if issue.Type == "task" || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled || len(issue.Children) == 0 {
+			continue
+		}
+
+		unmergedCount := 0
+		for _, childID := range issue.Children {
+			child, ok := s.Issues[childID]
+			if !ok || child.Status != ops.StatusMerged {
+				unmergedCount++
 			}
-			if issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled {
-				continue
-			}
-			if len(issue.Children) == 0 {
-				continue
-			}
-			allMerged := true
-			for _, childID := range issue.Children {
-				child, ok := s.Issues[childID]
-				if !ok || child.Status != ops.StatusMerged {
-					allMerged = false
-					break
+		}
+		inDegree[issue.ID] = unmergedCount
+
+		// If all children are merged, add to queue for processing
+		if unmergedCount == 0 {
+			queue = append(queue, issue.ID)
+		}
+	}
+
+	// Second pass: process queue (topological sort, bottom-up)
+	// Each issue in the queue has all children merged
+	for len(queue) > 0 {
+		issueID := queue[0]
+		queue = queue[1:]
+
+		issue, ok := s.Issues[issueID]
+		if !ok {
+			continue
+		}
+
+		// Promote this issue to merged
+		if issue.Status != ops.StatusMerged {
+			issue.Status = ops.StatusMerged
+
+			// Check parent: decrement its in-degree
+			if issue.Parent != "" {
+				parent, ok := s.Issues[issue.Parent]
+				if !ok {
+					continue
 				}
-			}
-			if allMerged && issue.Status != ops.StatusMerged {
-				issue.Status = ops.StatusMerged
-				changed = true
+
+				// Skip if parent is a task or already terminal
+				if parent.Type == "task" || parent.Status == ops.StatusMerged || parent.Status == ops.StatusCancelled || len(parent.Children) == 0 {
+					continue
+				}
+
+				// Decrement parent's in-degree
+				if count, ok := inDegree[parent.ID]; ok {
+					inDegree[parent.ID] = count - 1
+
+					// If parent now has all children merged, add to queue
+					if inDegree[parent.ID] == 0 {
+						queue = append(queue, parent.ID)
+					}
+				}
 			}
 		}
 	}

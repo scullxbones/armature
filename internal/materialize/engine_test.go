@@ -614,3 +614,79 @@ func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 	}
 	_ = refsByID
 }
+
+// BenchmarkRunRollup_10kIssues benchmarks the rollup operation on a large hierarchy.
+// This test demonstrates that RunRollup should complete in O(n) time.
+// With the previous O(n²) implementation, 10k issues would take too long.
+func BenchmarkRunRollup_10kIssues(b *testing.B) {
+	state := NewState()
+	state.SingleBranchMode = true
+
+	// Create a 3-level hierarchy: 1 epic -> 100 stories -> 100 tasks per story
+	// Total: ~10,101 issues
+	timestamp := int64(100)
+
+	// Create epic
+	epicID := "epic-0"
+	require.NoError(b, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: epicID, Timestamp: timestamp, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Epic", NodeType: "epic"},
+	}))
+	timestamp++
+
+	// Create stories under epic
+	storyIDs := make([]string, 100)
+	for i := 0; i < 100; i++ {
+		storyID := "story-" + string(rune('0'+i/10)) + string(rune('0'+i%10))
+		storyIDs[i] = storyID
+		require.NoError(b, state.ApplyOp(ops.Op{
+			Type: ops.OpCreate, TargetID: storyID, Timestamp: timestamp, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Story " + string(rune('0'+i/10)) + string(rune('0'+i%10)), NodeType: "story", Parent: epicID},
+		}))
+		timestamp++
+	}
+
+	// Create tasks under each story
+	taskIDs := make([][]string, 100)
+	for si := 0; si < 100; si++ {
+		taskIDs[si] = make([]string, 100)
+		for ti := 0; ti < 100; ti++ {
+			taskID := "task-" + string(rune('0'+si/10)) + string(rune('0'+si%10)) + "-" + string(rune('0'+ti/10)) + string(rune('0'+ti%10))
+			taskIDs[si][ti] = taskID
+			require.NoError(b, state.ApplyOp(ops.Op{
+				Type: ops.OpCreate, TargetID: taskID, Timestamp: timestamp, WorkerID: "w1",
+				Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: storyIDs[si]},
+			}))
+			timestamp++
+		}
+	}
+
+	// Mark all tasks as done, which becomes merged in single branch mode
+	for si := 0; si < 100; si++ {
+		for ti := 0; ti < 100; ti++ {
+			taskID := taskIDs[si][ti]
+			require.NoError(b, state.ApplyOp(ops.Op{
+				Type: ops.OpClaim, TargetID: taskID, Timestamp: timestamp, WorkerID: "w1",
+				Payload: ops.Payload{TTL: 60},
+			}))
+			timestamp++
+			require.NoError(b, state.ApplyOp(ops.Op{
+				Type: ops.OpTransition, TargetID: taskID, Timestamp: timestamp, WorkerID: "w1",
+				Payload: ops.Payload{To: "done"},
+			}))
+			timestamp++
+		}
+	}
+
+	// Now run the benchmark
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		state.RunRollup()
+	}
+	b.StopTimer()
+
+	// Verify that the epic is merged (all children promoted)
+	if state.Issues[epicID].Status != "merged" {
+		b.Fatalf("epic should be merged after rollup, got %s", state.Issues[epicID].Status)
+	}
+}
