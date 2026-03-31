@@ -3,7 +3,6 @@ package sources
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -33,29 +32,9 @@ func (p *SharePointProvider) Type() string {
 // It makes an HTTP GET request to baseURL + entry.URL using Bearer
 // authentication from the configured Credentials Token.
 func (p *SharePointProvider) Fetch(ctx context.Context, entry SourceEntry) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+entry.URL, nil)
+	body, err := fetchHTTP(ctx, p.client, p.baseURL+entry.URL, p.creds)
 	if err != nil {
-		return nil, fmt.Errorf("sharepoint provider: create request: %w", err)
+		return nil, fmt.Errorf("sharepoint provider: %w", err)
 	}
-
-	if p.creds.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+p.creds.Token)
-	}
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("sharepoint provider: fetch %q: %w", entry.URL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("sharepoint provider: fetch %q: unexpected status %d", entry.URL, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("sharepoint provider: read body %q: %w", entry.URL, err)
-	}
-
 	return body, nil
 }

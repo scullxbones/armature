@@ -201,6 +201,29 @@ func TestCreateRateLimiter(t *testing.T) {
 	assert.True(t, rl.AllowCreate())
 }
 
+// TestReadLogFromOffset_ManyOps verifies that ReadLogFromOffset correctly reads
+// a log containing many ops. This also exercises the pre-allocated slice path.
+func TestReadLogFromOffset_ManyOps(t *testing.T) {
+	const count = 200
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-many.log")
+
+	for i := 0; i < count; i++ {
+		op := Op{
+			Type:      OpNote,
+			TargetID:  "task-01",
+			Timestamp: int64(i + 1),
+			WorkerID:  "worker-many",
+			Payload:   Payload{Msg: "note"},
+		}
+		require.NoError(t, AppendOp(logPath, op))
+	}
+
+	result, err := ReadLogFromOffset(logPath, 0)
+	require.NoError(t, err)
+	assert.Len(t, result, count)
+}
+
 func TestWorkerIDFromFilename_PlainLog(t *testing.T) {
 	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85.log"))
 }

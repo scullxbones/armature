@@ -10,6 +10,51 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMaterialize_MkdirAllErrorPropagated verifies that when os.MkdirAll fails
+// (because the state directory cannot be created), Materialize returns an error.
+func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root; permission restrictions do not apply")
+	}
+	dir := t.TempDir()
+	// Make the stateDir's parent read-only so os.MkdirAll cannot create subdirs
+	readOnlyDir := filepath.Join(dir, "readonly")
+	require.NoError(t, os.Mkdir(readOnlyDir, 0555))
+	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0755) })
+
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	stateDir := filepath.Join(readOnlyDir, "state")
+
+	_, err := Materialize(issuesDir, stateDir, false)
+	if err == nil {
+		t.Fatal("expected error when MkdirAll fails, got nil")
+	}
+}
+
+// TestMaterializeAndReturn_MkdirAllErrorPropagated verifies that MaterializeAndReturn
+// also propagates the MkdirAll error.
+func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root; permission restrictions do not apply")
+	}
+	dir := t.TempDir()
+	readOnlyDir := filepath.Join(dir, "readonly")
+	require.NoError(t, os.Mkdir(readOnlyDir, 0555))
+	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0755) })
+
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	stateDir := filepath.Join(readOnlyDir, "state")
+
+	_, _, err := MaterializeAndReturn(issuesDir, stateDir, false)
+	if err == nil {
+		t.Fatal("expected error when MkdirAll fails, got nil")
+	}
+}
+
 // TestMaterialize_SlottedLogsIncluded verifies that ops in <worker>~slot.log files
 // are included in a normal Materialize call.
 func TestMaterialize_SlottedLogsIncluded(t *testing.T) {

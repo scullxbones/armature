@@ -3,7 +3,6 @@ package sources
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -34,31 +33,9 @@ func (p *ConfluenceProvider) Type() string {
 // uses Bearer authentication; otherwise it falls back to Basic auth using
 // Username and Password.
 func (p *ConfluenceProvider) Fetch(ctx context.Context, entry SourceEntry) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+entry.URL, nil)
+	body, err := fetchHTTP(ctx, p.client, p.baseURL+entry.URL, p.creds)
 	if err != nil {
-		return nil, fmt.Errorf("confluence provider: create request: %w", err)
+		return nil, fmt.Errorf("confluence provider: %w", err)
 	}
-
-	if p.creds.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+p.creds.Token)
-	} else if p.creds.Username != "" || p.creds.Password != "" {
-		req.SetBasicAuth(p.creds.Username, p.creds.Password)
-	}
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("confluence provider: fetch %q: %w", entry.URL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("confluence provider: fetch %q: unexpected status %d", entry.URL, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("confluence provider: read body %q: %w", entry.URL, err)
-	}
-
 	return body, nil
 }
