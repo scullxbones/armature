@@ -179,6 +179,71 @@ func TestRevertPlan_SkipsNonOpen(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
+// --- E6-S3-T3: DryRunRevertPlan tests ---
+
+func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "First issue", Type: "task"},
+			{ID: "PLAN-002", Title: "Second issue", Type: "task"},
+		},
+	}
+
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
+	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "open"}
+
+	result, err := DryRunRevertPlan(plan, state)
+	require.NoError(t, err)
+	assert.Len(t, result.WouldCancel, 2)
+	ids := []string{result.WouldCancel[0].ID, result.WouldCancel[1].ID}
+	assert.Contains(t, ids, "PLAN-001")
+	assert.Contains(t, ids, "PLAN-002")
+}
+
+func TestDryRunRevertPlan_SkipsNonOpen(t *testing.T) {
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "First issue", Type: "task"},
+			{ID: "PLAN-002", Title: "Second issue", Type: "task"},
+		},
+	}
+
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
+	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "done"}
+
+	result, err := DryRunRevertPlan(plan, state)
+	require.NoError(t, err)
+	assert.Len(t, result.WouldCancel, 1)
+	assert.Equal(t, "PLAN-001", result.WouldCancel[0].ID)
+}
+
+func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
+	dir := t.TempDir()
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues:  []PlanIssue{{ID: "PLAN-001", Title: "Issue", Type: "task"}},
+	}
+
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
+
+	_, err := DryRunRevertPlan(plan, state)
+	require.NoError(t, err)
+
+	// Verify no files were written
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
 // --- Task 27: PlanContext tests ---
 
 func TestPlanContext(t *testing.T) {

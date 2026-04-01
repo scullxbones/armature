@@ -12,6 +12,7 @@ import (
 
 func newSyncCmd() *cobra.Command {
 	var targetBranch string
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -42,6 +43,14 @@ func newSyncCmd() *cobra.Command {
 
 			if len(mergedIDs) == 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
+				return nil
+			}
+
+			if dryRun {
+				for _, id := range mergedIDs {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would transition: %s -> merged\n", id)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issue(s) would be transitioned to merged\n", len(mergedIDs))
 				return nil
 			}
 
@@ -78,5 +87,6 @@ func newSyncCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&targetBranch, "into", "", "target branch to check merges against (default: current branch)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print which issues would be transitioned without writing ops")
 	return cmd
 }
