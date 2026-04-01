@@ -337,3 +337,4 @@
 ["note","E6-S6",1775044132,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: Wave 1 T3 agent wrote directly to the main worktree despite being dispatched with isolation:worktree. The agent's result had no worktree tag in the notification, unlike T4a which showed a proper .claude/worktrees/agent-* path. Agents working in main worktree causes branch management complexity for the coordinator."}]
 ["note","E6-S3-T2",1775044219,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E3-002 detected at claim time"}]
 ["note","E3-002",1775044219,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S3-T2 detected at claim time"}]
+["note","E6-S3-T2",1775044219,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S3-T4 detected at claim time"}]
