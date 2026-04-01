@@ -307,3 +307,4 @@
 ["citation-accepted","task-1774969637",1774973547,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"splitfrom E6-S3-T4 to enable parallel execution; new package has no source doc"}]
 ["create","bug-1774973553",1774973553,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"No 'trls unlink' command — cannot remove erroneous blocked_by dependencies","parent":"E6-S6","type":"bug"}]
 ["note","E6-S3-T1",1775043138,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E3-002 detected at claim time"}]
+["note","E3-002",1775043138,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S3-T1 detected at claim time"}]
