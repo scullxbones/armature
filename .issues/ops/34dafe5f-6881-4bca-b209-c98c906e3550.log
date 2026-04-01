@@ -310,3 +310,4 @@
 ["note","E3-002",1775043138,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S3-T1 detected at claim time"}]
 ["claim","E6-S3-T1",1775043138,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","E6-S3",1775043139,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["note","E6-S3-T3",1775043143,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E3-002 detected at claim time"}]
