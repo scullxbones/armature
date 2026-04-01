@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1853,6 +1854,265 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	outB, err := runTrls(t, repo, "show", "--issue", "task-b")
 	require.NoError(t, err)
 	assert.Contains(t, outB, "merged")
+}
+
+// ── Format flag tests for commands standardised in E6-S3-T2 ──────────────────
+
+// create: human text when --format human
+func TestCreateCommand_HumanOutput(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "create", "--format", "human", "--type", "task", "--title", "Human task", "--id", "human-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "human-01")
+	assert.NotContains(t, out, `"id"`, "human format should not be JSON")
+}
+
+// create: JSON when --format json
+func TestCreateCommand_JSONOutput(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "create", "--format", "json", "--type", "task", "--title", "JSON task", "--id", "json-01")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "json-01", result["id"])
+	assert.Equal(t, "created", result["status"])
+}
+
+// claim: human text when --format human
+func TestClaimCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "claim", "--format", "human", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"claimed_by"`, "human format should not be JSON")
+}
+
+// claim: JSON when --format json
+func TestClaimCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "claim", "--format", "json", "--issue", "task-01")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "task-01", result["issue"])
+	assert.NotNil(t, result["claimed_by"])
+}
+
+// decision: human text when --format human
+func TestDecisionCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "decision", "--format", "human", "--issue", "task-01",
+		"--topic", "arch", "--choice", "monolith", "--rationale", "simple")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"topic"`, "human format should not be JSON")
+}
+
+// decision: JSON when --format json
+func TestDecisionCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "decision", "--format", "json", "--issue", "task-01",
+		"--topic", "arch", "--choice", "monolith", "--rationale", "simple")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "task-01", result["issue"])
+	assert.Equal(t, "arch", result["topic"])
+	assert.Equal(t, "monolith", result["choice"])
+}
+
+// link: human text when --format human
+func TestLinkCommand_HumanOutput(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task A", "--id", "link-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "link-b")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "link", "--format", "human", "--source", "link-a", "--dep", "link-b")
+	require.NoError(t, err)
+	assert.Contains(t, out, "link-a")
+	assert.NotContains(t, out, `"source"`, "human format should not be JSON")
+}
+
+// link: JSON when --format json
+func TestLinkCommand_JSONOutput(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task A", "--id", "linkj-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "linkj-b")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "link", "--format", "json", "--source", "linkj-a", "--dep", "linkj-b")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "linkj-a", result["source"])
+	assert.Equal(t, "linkj-b", result["dep"])
+}
+
+// amend: human text when --format human
+func TestAmendCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "amend", "--format", "human", "--issue", "task-01", "--dod", "new dod")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"status"`, "human format should not be JSON")
+}
+
+// amend: JSON when --format json
+func TestAmendCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "amend", "--format", "json", "--issue", "task-01", "--dod", "new dod")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "task-01", result["issue"])
+	assert.Equal(t, "amended", result["status"])
+}
+
+// assign: human text when --format human
+func TestAssignCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "assign", "--format", "human", "--issue", "task-01", "--worker", "worker-abc")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"assigned_to"`, "human format should not be JSON")
+}
+
+// assign: JSON when --format json
+func TestAssignCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "assign", "--format", "json", "--issue", "task-01", "--worker", "worker-abc")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "task-01", result["issue"])
+	assert.Equal(t, "worker-abc", result["assigned_to"])
+}
+
+// unassign: human text when --format human
+func TestUnassignCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "assign", "--issue", "task-01", "--worker", "worker-abc")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "unassign", "--format", "human", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, `"assigned_to"`, "human format should not be JSON")
+}
+
+// unassign: JSON when --format json
+func TestUnassignCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "assign", "--issue", "task-01", "--worker", "worker-abc")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "unassign", "--format", "json", "--issue", "task-01")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "task-01", result["issue"])
+}
+
+// workers: human text when --format human
+func TestWorkersCommand_HumanOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "workers", "--format", "human")
+	require.NoError(t, err)
+	assert.NotContains(t, out, `"worker_id"`, "human format should not be JSON")
+}
+
+// workers: JSON when --format json (replaces --json)
+func TestWorkersCommand_FormatJSON(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "workers", "--format", "json")
+	require.NoError(t, err)
+	// output is JSONL — parse first line
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	require.NotEmpty(t, lines)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &result))
+	assert.NotNil(t, result["worker_id"])
+	assert.NotNil(t, result["status"])
+}
+
+// workers: --json flag still works for backward compatibility
+func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "workers", "--json")
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	require.NotEmpty(t, lines)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &result))
+	assert.NotNil(t, result["worker_id"])
 }
 
 // TestWorkersCommand_SlottedLogs verifies that ops from slotted log files are

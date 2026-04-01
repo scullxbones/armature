@@ -39,9 +39,14 @@ func newAssignCmd() *cobra.Command {
 			if err := appendHighStakesOp(logPath, op); err != nil {
 				return err
 			}
-			result := map[string]string{"issue": issueID, "assigned_to": workerID}
-			data, _ := json.Marshal(result)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if format == "json" || format == "agent" {
+				result := map[string]string{"issue": issueID, "assigned_to": workerID}
+				data, _ := json.Marshal(result)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned %s to %s\n", issueID, workerID)
+			}
 			return nil
 		},
 	}
@@ -106,9 +111,14 @@ func newUnassignCmd() *cobra.Command {
 				appendOp(logPath, transitionOp) //nolint:errcheck
 			}
 
-			result := map[string]string{"issue": issueID, "assigned_to": ""}
-			data, _ := json.Marshal(result)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if format == "json" || format == "agent" {
+				result := map[string]string{"issue": issueID, "assigned_to": ""}
+				data, _ := json.Marshal(result)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned %s\n", issueID)
+			}
 			return nil
 		},
 	}

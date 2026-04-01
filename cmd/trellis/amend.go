@@ -58,9 +58,14 @@ func newAmendCmd() *cobra.Command {
 			if err := appendLowStakesOp(logPath, op); err != nil {
 				return err
 			}
-			result := map[string]string{"issue": issueID, "status": "amended"}
-			data, _ := json.Marshal(result)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if format == "json" || format == "agent" {
+				result := map[string]string{"issue": issueID, "status": "amended"}
+				data, _ := json.Marshal(result)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Amended %s\n", issueID)
+			}
 			return nil
 		},
 	}
