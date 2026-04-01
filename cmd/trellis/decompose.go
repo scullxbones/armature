@@ -210,17 +210,13 @@ func newDecomposeApplyCmd() *cobra.Command {
 
 func newDecomposeRevertCmd() *cobra.Command {
 	var planPath string
+	var dryRunFlag bool
 
 	cmd := &cobra.Command{
 		Use:   "decompose-revert",
 		Short: "Revert a decomposition plan from the issue graph",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
-
-			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
-			if err != nil {
-				return fmt.Errorf("worker not initialized: %w", err)
-			}
 
 			plan, err := decompose.ParsePlan(planPath)
 			if err != nil {
@@ -230,6 +226,23 @@ func newDecomposeRevertCmd() *cobra.Command {
 			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
 				return err
+			}
+
+			if dryRunFlag {
+				result, err := decompose.DryRunRevertPlan(plan, state)
+				if err != nil {
+					return err
+				}
+				for _, entry := range result.WouldCancel {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would cancel: %s (%s)\n", entry.ID, entry.Title)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issue(s) would be cancelled\n", len(result.WouldCancel))
+				return nil
+			}
+
+			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+			if err != nil {
+				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
 			opsDir := issuesDir + "/ops"
@@ -244,6 +257,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
+	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "print which nodes would be removed without writing ops")
 	_ = cmd.MarkFlagRequired("plan")
 	return cmd
 }

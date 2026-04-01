@@ -11,7 +11,8 @@ if [ "$current_branch" = "_trellis" ]; then
   exit 0
 fi
 
-if git diff --cached --name-only | grep -q '\.issues/ops/'; then
+# Only block additions/modifications — deletions are allowed (cleanup commits).
+if git diff --cached --name-only --diff-filter=AM | grep -q '\.issues/ops/'; then
   echo "ERROR: Refusing to commit .issues/ops/ changes on a code branch."
   echo "In dual-branch mode, ops are written directly to the _trellis branch."
   echo "If you are migrating to dual-branch mode, run: trls init --dual-branch"

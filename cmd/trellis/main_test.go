@@ -590,6 +590,129 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	assert.Equal(t, "merged", index["T-001"].Status)
 }
 
+func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "some feature", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done",
+		"--branch", "feature/sync-dryrun-test", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Create and merge the feature branch
+	currentBranchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchOut, err := currentBranchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(currentBranchOut))
+
+	run(t, repo, "git", "checkout", "-b", "feature/sync-dryrun-test")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: dry-run test work")
+	run(t, repo, "git", "checkout", mainBranch)
+	run(t, repo, "git", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
+
+	// Count ops before dry-run
+	issuesDir := filepath.Join(repo, ".trellis", ".issues")
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
+	statBefore, _ := os.Stat(logPath)
+
+	// Run sync --dry-run: should print plan and exit 0
+	out, err := runTrls(t, repo, "sync", "--dry-run")
+	require.NoError(t, err)
+	assert.Contains(t, out, "T-001")
+	assert.Contains(t, out, "dry-run")
+
+	// Verify state was NOT changed — status should still be "done" not "merged"
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "done", index["T-001"].Status)
+
+	// Verify ops log was not grown (no ops written)
+	statAfter, _ := os.Stat(logPath)
+	if statBefore != nil && statAfter != nil {
+		assert.Equal(t, statBefore.Size(), statAfter.Size(), "ops log should not grow with --dry-run")
+	}
+
+	// Running sync --dry-run again should be idempotent
+	out2, err := runTrls(t, repo, "sync", "--dry-run")
+	require.NoError(t, err)
+	assert.Equal(t, out, out2)
+}
+
+func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Write a plan file
+	planContent := `{
+		"version": 1,
+		"title": "Test Plan",
+		"issues": [
+			{"id": "PLAN-001", "title": "First issue", "type": "task", "dod": "done"},
+			{"id": "PLAN-002", "title": "Second issue", "type": "task", "dod": "done"}
+		]
+	}`
+	planPath := filepath.Join(repo, "test-plan.json")
+	require.NoError(t, os.WriteFile(planPath, []byte(planContent), 0o644))
+
+	// Apply plan first
+	_, err = runTrls(t, repo, "decompose-apply", "--plan", planPath)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Count ops before dry-run
+	issuesDir := filepath.Join(repo, ".issues")
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
+	statBefore, err := os.Stat(logPath)
+	require.NoError(t, err)
+
+	// Run decompose-revert --dry-run: should print removal plan and exit 0
+	out, err := runTrls(t, repo, "decompose-revert", "--plan", planPath, "--dry-run")
+	require.NoError(t, err)
+	assert.Contains(t, out, "PLAN-001")
+	assert.Contains(t, out, "PLAN-002")
+	assert.Contains(t, out, "dry-run")
+
+	// Verify ops log was not grown
+	statAfter, err := os.Stat(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, statBefore.Size(), statAfter.Size(), "ops log should not grow with --dry-run")
+
+	// Verify materialized state unchanged — both issues still "open"
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "open", index["PLAN-001"].Status)
+	assert.Equal(t, "open", index["PLAN-002"].Status)
+}
+
 func TestStatus_ShowsInProgressIssue(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
