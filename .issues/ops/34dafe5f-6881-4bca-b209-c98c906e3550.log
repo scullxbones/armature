@@ -320,3 +320,4 @@
 ["note","E6-S3-T4",1775043158,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S3-T1 detected at claim time"}]
 ["note","E6-S3-T1",1775043158,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S3-T4 detected at claim time"}]
 ["claim","E6-S3-T4",1775043158,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","E6-S6",1775043161,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: when dispatching parallel agents via worktrees, passing task ID explicitly in the prompt is better UX than having agents run 'trls ready' — agents don't need discovery when the coordinator already knows the assignment"}]
