@@ -10,6 +10,30 @@ func TestIsTerminalReturnsFalseInTests(t *testing.T) {
 	}
 }
 
+func TestSetNonInteractive(t *testing.T) {
+	SetNonInteractive(true)
+	t.Cleanup(func() { SetNonInteractive(false) })
+	if !IsNonInteractive() {
+		t.Error("expected IsNonInteractive() to return true after SetNonInteractive(true)")
+	}
+}
+
+func TestIsNonInteractive_DefaultFalse(t *testing.T) {
+	SetNonInteractive(false)
+	t.Cleanup(func() { SetNonInteractive(false) })
+	if IsNonInteractive() {
+		t.Error("expected IsNonInteractive() to return false by default")
+	}
+}
+
+func TestIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
+	SetNonInteractive(true)
+	t.Cleanup(func() { SetNonInteractive(false) })
+	if IsInteractive() {
+		t.Error("expected IsInteractive() to return false when non-interactive is set")
+	}
+}
+
 func TestIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
 	SetFormat("json")
 	t.Cleanup(func() { SetFormat("") })

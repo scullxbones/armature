@@ -57,7 +57,7 @@ func newReadyCmd() *cobra.Command {
 			}
 
 			format, _ := cmd.Flags().GetString("format")
-			if format == "json" || format == "agent" {
+			if format == "json" || format == "agent" || tui.IsNonInteractive() {
 				data, _ := json.MarshalIndent(entries, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else if tui.IsInteractive() {

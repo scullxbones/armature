@@ -29,6 +29,14 @@ func newRootCmd() *cobra.Command {
 			}
 			tui.SetFormat(format)
 
+			// Auto-set --non-interactive when --format=agent or non-TTY.
+			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
+			if !nonInteractive && (format == "agent" || !tui.IsTerminal()) {
+				nonInteractive = true
+				_ = cmd.Flags().Set("non-interactive", "true")
+			}
+			tui.SetNonInteractive(nonInteractive)
+
 			repoPath, _ := cmd.Flags().GetString("repo")
 			if repoPath == "" {
 				repoPath = "."
@@ -51,6 +59,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().Bool("debug", false, "dump debug diagnostics on error")
 	root.PersistentFlags().String("format", "human", "output format: human, json, agent")
 	root.PersistentFlags().String("repo", "", "repository path (default: current directory)")
+	root.PersistentFlags().Bool("non-interactive", false, "skip TUI and emit structured output (auto-set when --format=agent or non-TTY)")
 
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newWorkerInitCmd())

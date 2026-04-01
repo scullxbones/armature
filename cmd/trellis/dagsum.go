@@ -20,6 +20,7 @@ import (
 
 func newDAGSummaryCmd() *cobra.Command {
 	var issueID string
+	var approveAll bool
 
 	cmd := &cobra.Command{
 		Use:   "dag-summary",
@@ -62,12 +63,48 @@ func newDAGSummaryCmd() *cobra.Command {
 			})
 
 			if len(draftIssues) == 0 {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.")
+				format, _ := cmd.Flags().GetString("format")
+				if format == "json" || format == "agent" || tui.IsNonInteractive() {
+					data, _ := json.MarshalIndent(map[string]interface{}{
+						"pending_dag_confirmation": []interface{}{},
+						"count":                    0,
+						"approve_all":              approveAll,
+					}, "", "  ")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				} else {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.")
+				}
 				return nil
 			}
 
 			format, _ := cmd.Flags().GetString("format")
-			if format == "json" || format == "agent" {
+			if format == "json" || format == "agent" || tui.IsNonInteractive() {
+				// In non-interactive mode, --approve-all emits ops for all draft items.
+				if approveAll && len(draftIssues) > 0 {
+					approvedIDs := make([]string, 0, len(draftIssues))
+					for _, issue := range draftIssues {
+						approvedIDs = append(approvedIDs, issue.ID)
+					}
+					for _, id := range approvedIDs {
+						o := ops.Op{
+							Type:      ops.OpDAGTransition,
+							TargetID:  id,
+							Timestamp: nowEpoch(),
+							WorkerID:  workerID,
+							Payload: ops.Payload{
+								IssueID: id,
+								To:      "verified",
+							},
+						}
+						if err := appendLowStakesOp(logPath, o); err != nil {
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
+						}
+					}
+					if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
+					}
+				}
+
 				type pendingItem struct {
 					IssueID string `json:"issue_id"`
 					Title   string `json:"title"`
@@ -84,6 +121,7 @@ func newDAGSummaryCmd() *cobra.Command {
 				data, _ := json.MarshalIndent(map[string]interface{}{
 					"pending_dag_confirmation": pending,
 					"count":                    len(pending),
+					"approve_all":              approveAll,
 				}, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
@@ -162,6 +200,7 @@ func newDAGSummaryCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "root issue ID of the subtree to review (default: all draft nodes)")
+	cmd.Flags().BoolVar(&approveAll, "approve-all", false, "approve all pending draft items (non-interactive only)")
 	return cmd
 }
 
