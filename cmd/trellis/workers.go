@@ -50,7 +50,8 @@ func newWorkersCmd() *cobra.Command {
 				return statuses[i].WorkerID < statuses[j].WorkerID
 			})
 
-			if jsonOut {
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if jsonOut || format == "json" || format == "agent" {
 				for _, s := range statuses {
 					data, _ := json.Marshal(s)
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
