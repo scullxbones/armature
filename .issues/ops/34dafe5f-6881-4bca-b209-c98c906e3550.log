@@ -342,3 +342,4 @@
 ["claim","E6-S3-T2",1775044219,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","E6-S3-T2",1775044282,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E6-S3-T2",1775045976,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","E6-S3-T2",1775045982,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Standardized --format flag across 8 commands: create, claim, decision, link, amend, assign, unassign emit human text by default and JSON when --format json/agent; workers migrated from --json to --format with backward compat --json kept; 17 new TDD tests written; make check green"}]
