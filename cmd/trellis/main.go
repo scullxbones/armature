@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/trellis/internal/exitcodes"
 	"github.com/scullxbones/trellis/internal/tui"
 	"github.com/scullxbones/trellis/internal/worker"
 	"github.com/spf13/cobra"
@@ -107,10 +108,17 @@ func newRootCmd() *cobra.Command {
 func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		code := classifyError(err)
+		format, _ := root.PersistentFlags().GetString("format")
+		if format == "json" || format == "agent" {
+			writeJSONError(os.Stderr, err.Error(), code)
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		if debug, _ := root.PersistentFlags().GetBool("debug"); debug {
 			fmt.Fprintf(os.Stderr, "DEBUG: %+v\n", err)
 		}
-		os.Exit(1)
+		os.Exit(code.Int())
 	}
+	os.Exit(exitcodes.ExitSuccess.Int())
 }

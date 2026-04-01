@@ -1,14 +1,68 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/scullxbones/trellis/internal/exitcodes"
 	"github.com/scullxbones/trellis/internal/git"
 	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/worker"
 )
+
+// jsonErrorPayload is the structured JSON error format emitted to stderr when
+// --format=json or --format=agent is active.
+type jsonErrorPayload struct {
+	Error    string `json:"error"`
+	Code     string `json:"code"`
+	ExitCode int    `json:"exit_code"`
+}
+
+// writeJSONError writes a structured JSON error to w.
+// The format is: {"error": "...", "code": "...", "exit_code": N}
+func writeJSONError(w io.Writer, msg string, code exitcodes.Code) {
+	payload := jsonErrorPayload{
+		Error:    msg,
+		Code:     code.String(),
+		ExitCode: code.Int(),
+	}
+	b, _ := json.Marshal(payload)
+	fmt.Fprintln(w, string(b)) //nolint:errcheck // writing to stderr; nothing useful to do on failure
+}
+
+// classifyError maps a Go error to the most specific exitcodes.Code.
+// It performs simple substring matching on the error message.
+func classifyError(err error) exitcodes.Code {
+	if err == nil {
+		return exitcodes.ExitSuccess
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "not found"):
+		return exitcodes.ExitNotFound
+	case strings.Contains(msg, "already claimed"),
+		strings.Contains(msg, "already exists"),
+		strings.Contains(msg, "conflict"):
+		return exitcodes.ExitConflict
+	case strings.Contains(msg, "invalid") && strings.Contains(msg, "transition"):
+		return exitcodes.ExitInvalidState
+	case strings.Contains(msg, "invalid state"),
+		strings.Contains(msg, "broken") && strings.Contains(msg, "dep"):
+		return exitcodes.ExitInvalidState
+	case strings.Contains(msg, "usage") || strings.Contains(msg, "required flag"):
+		return exitcodes.ExitUsageError
+	case strings.Contains(msg, "permission denied") ||
+		strings.Contains(msg, "no such file") ||
+		strings.Contains(msg, "i/o error"):
+		return exitcodes.ExitIOError
+	default:
+		return exitcodes.ExitGeneralError
+	}
+}
 
 // pushDeps holds push-related dependencies set up by initPushDeps.
 var (
