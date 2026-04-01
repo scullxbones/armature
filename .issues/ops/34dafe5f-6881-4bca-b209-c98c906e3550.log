@@ -324,3 +324,4 @@
 ["note","E6-S6",1775043166,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: trls note does not accept positional message arg — only --msg flag works. The skill docs show 'trls note \u003cid\u003e \"message\"' which fails with 'accepts at most 1 arg'. This will trip up agents following the skill pattern."}]
 ["heartbeat","E6-S3-T1",1775043184,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E6-S3-T3",1775043189,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["note","E6-S3-T3",1775043193,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"TDD: writing failing tests first for sync --dry-run and decompose-revert --dry-run"}]
