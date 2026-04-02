@@ -2148,3 +2148,55 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	// and no claim op, which produces inconsistent state)
 	assert.NotContains(t, out, "error")
 }
+
+// TestCommandGroups verifies that all commands are assigned to the correct cobra groups
+func TestCommandGroups(t *testing.T) {
+	root := newRootCmd()
+
+	// Verify the four required groups exist
+	requiredGroups := []string{"workflow", "dag", "sync", "admin"}
+	groupMap := make(map[string]bool)
+	for _, group := range root.Groups() {
+		groupMap[group.ID] = true
+	}
+
+	for _, groupID := range requiredGroups {
+		assert.True(t, groupMap[groupID], "group %q not found in root command groups", groupID)
+	}
+
+	// Verify all commands have a GroupID set
+	for _, cmd := range root.Commands() {
+		assert.NotEmpty(t, cmd.GroupID, "command %q missing GroupID", cmd.Name())
+	}
+
+	// Verify expected commands are in the correct groups
+	commandsByGroup := make(map[string]map[string]bool)
+	for _, cmd := range root.Commands() {
+		if commandsByGroup[cmd.GroupID] == nil {
+			commandsByGroup[cmd.GroupID] = make(map[string]bool)
+		}
+		commandsByGroup[cmd.GroupID][cmd.Name()] = true
+	}
+
+	// Expected commands per group (subset of all commands)
+	workflowExpected := []string{"ready", "claim", "transition", "unassign", "reopen", "heartbeat", "note", "decision", "amend", "confirm", "assign"}
+	dagExpected := []string{"dag-summary", "dag-transition", "link"}
+	syncExpected := []string{"sync", "merged", "materialize", "import", "stale-review"}
+	adminExpected := []string{"worker-init", "workers", "init", "create", "validate", "doctor", "version", "show", "list", "status", "log", "render-context", "source-link", "sources", "accept-citation", "context-history"}
+
+	for groupID, expectedCmds := range map[string][]string{
+		"workflow": workflowExpected,
+		"dag":      dagExpected,
+		"sync":     syncExpected,
+		"admin":    adminExpected,
+	} {
+		for _, expectedCmd := range expectedCmds {
+			assert.True(t, commandsByGroup[groupID][expectedCmd], "command %q not found in group %q", expectedCmd, groupID)
+		}
+	}
+
+	// Verify each group has at least one command
+	for _, groupID := range requiredGroups {
+		assert.Greater(t, len(commandsByGroup[groupID]), 0, "group %q has no commands", groupID)
+	}
+}
