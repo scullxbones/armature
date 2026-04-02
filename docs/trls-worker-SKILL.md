@@ -101,6 +101,13 @@ trls transition ISSUE-ID --to done --outcome "..." && git add . .issues/ && git 
 
 **Always stage `.issues/` alongside code files.** Every `trls` command (claim, transition, note, decision, heartbeat) writes ops to `.issues/`. If you omit `.issues/` from the commit, those ops are left behind and will not be delivered with the code.
 
+**Dual-branch mode exception:** If `git config --local trellis.mode` returns
+`dual-branch`, ops are automatically committed to the `_trellis` branch by
+each `trls` command — they do **not** appear as pending changes in the code
+worktree. **Omit `.issues/` from `git add`.** Including it stages stale data
+from the code branch's (unused) `.issues/` copy and will fail the pre-commit
+guard.
+
 **Commit message format:** `<type>(<ISSUE-ID>): <description>`
 Types: `feat`, `fix`, `refactor`, `test`, `docs`
 
@@ -175,6 +182,31 @@ the ops log, each subagent must write to its own log slot:
 forgetting to unset it — orchestrator ops land in a slot file and may not be
 seen by `trls ready` until materialization catches up.
 
+### When Claude Code is the Dispatcher
+
+The pattern above assumes the orchestrator is itself a shell-running agent that
+can `export` env vars before spawning subprocesses. When **Claude Code dispatches
+agents via the Agent tool** (not via trls-worker), each agent runs in its own
+isolated shell — the coordinator's environment is never inherited.
+
+**The slot cannot be set by the coordinator's `export`. It must be embedded
+verbatim in each agent's prompt.**
+
+Coordinator checklist at dispatch time:
+
+1. Assign a unique slot to each agent before writing the prompts:
+   `T1 → slot=t1`, `T2 → slot=t2`, or use the short issue ID.
+2. Include this line as the **first instruction** in each agent's prompt:
+   ```
+   Before running any trls command, run: export TRLS_LOG_SLOT=<assigned-slot>
+   ```
+3. Keep the coordinator's own shell free of `TRLS_LOG_SLOT` — orchestrator
+   ops (claims, story transitions) must go to the plain `<worker-id>.log`.
+
+If you forget to assign slots, all parallel agents collapse into one log file.
+Ops are still recorded correctly, but per-agent attribution is lost and
+concurrent `AppendAndCommit` calls may race on the `_trellis` branch.
+
 ## Batch Strategy (Advanced)
 
 When a task involves a large number of files (e.g. refactoring 10+ files), do not
@@ -202,7 +234,9 @@ high token usage. Instead:
 | Running `worker-init` every session | Generates a new UUID each time, creating phantom workers; use `--check` to verify instead |
 | Skipping heartbeat on long tasks | Claim expires after TTL; other workers can steal it |
 | Skipping commit after task | Small commits make review and revert tractable |
-| Omitting `.issues/` from `git add` | Ops left behind, not delivered with code; always include `.issues/` in every commit |
+| Omitting `.issues/` from `git add` | Ops left behind, not delivered with code; always include `.issues/` in every commit (single-branch mode only) |
+| Including `.issues/` in `git add` in dual-branch mode | Stages stale data; ops are already on `_trellis` branch — omit `.issues/` from code commits |
+| Forgetting `TRLS_LOG_SLOT` when dispatching via Agent tool | All parallel agents share one log; embed `export TRLS_LOG_SLOT=<slot>` as the first line of each agent's prompt |
 | No mop-up commit before push | Story/epic transitions and between-task ops never get committed; run `git add .issues/ && git commit` before `git push` |
 | Auto-pushing after every task | Push once per story to avoid noisy remote history |
 | Leave issues uncited | Run `trls source-link` or `trls accept-citation --ci` before the subagent returns |
