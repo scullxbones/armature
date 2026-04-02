@@ -7,3 +7,4 @@
 ["claim","E6-S4-T1",1775170227,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","E6-S4-T1",1775173613,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","E6-S4-T1",1775173675,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added four cobra command groups (workflow, dag, sync, admin); all 39 commands assigned GroupIDs; trls --help shows grouped output; make check green"}]
+["citation-accepted","E6-S4-T1",1775173686,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implemented command groups to improve CLI usability"}]
