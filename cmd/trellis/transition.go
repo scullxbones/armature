@@ -18,7 +18,17 @@ func newTransitionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "transition [issue-id]",
 		Short: "Transition an issue to a new status",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Move an issue to a new status (e.g., from in-progress to done or merged).
+
+Valid status transitions depend on the current status and workflow rules. Provide the target
+status with --to (required). You may optionally record an outcome description, branch name,
+or PR number to document the completion context.`,
+		Example: `  # Transition an issue to done with an outcome
+  $ trls transition E6-S4-T2 --to done --outcome "Implemented all required features"
+
+  # Transition to merged and record the PR number
+  $ trls transition --issue E6-S4-T2 --to merged --pr 1234`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]

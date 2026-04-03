@@ -19,6 +19,23 @@ func newValidateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate the issue graph for consistency",
+		Long: `Check the issue graph for structural consistency and traceability coverage.
+
+This command validates parent-child relationships, dependency links, field requirements,
+and coverage metrics (% of issues cited in documentation). Errors prevent merges in CI mode.
+Warnings highlight potential issues. Use --ci to exit non-zero on errors, or --strict to
+treat warnings as errors. Use --scope to validate only a subtree.`,
+		Example: `  # Validate the full issue graph
+  $ trls validate
+
+  # Validate with strict mode (warnings become errors)
+  $ trls validate --strict
+
+  # Exit non-zero in CI if any errors found
+  $ trls validate --ci
+
+  # Validate only a specific subtree
+  $ trls validate --scope parent-issue-id`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, appCtx.StateDir, true)
 			if err != nil {

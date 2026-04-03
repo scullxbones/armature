@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1011,4 +1012,31 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, outExclude, "excluding worker")
 	assert.Contains(t, outExclude, "0 issues")
+}
+
+// TestCommandLongAndExampleFields verifies that high-priority commands have
+// non-empty Long and Example fields for comprehensive help documentation.
+func TestCommandLongAndExampleFields(t *testing.T) {
+	type commandTest struct {
+		name string
+		cmd  *cobra.Command
+	}
+
+	tests := []commandTest{
+		{"ready", newReadyCmd()},
+		{"claim", newClaimCmd()},
+		{"transition", newTransitionCmd()},
+		{"dag-summary", newDAGSummaryCmd()},
+		{"decompose-apply", newDecomposeApplyCmd()},
+		{"link", newLinkCmd()},
+		{"sync", newSyncCmd()},
+		{"validate", newValidateCmd()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotEmpty(t, tt.cmd.Long, "%s command must have non-empty Long field", tt.name)
+			assert.NotEmpty(t, tt.cmd.Example, "%s command must have non-empty Example field", tt.name)
+		})
+	}
 }

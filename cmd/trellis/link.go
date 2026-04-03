@@ -14,6 +14,20 @@ func newLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "link",
 		Short: "Add a dependency link between issues",
+		Long: `Create a dependency relationship between two issues.
+
+Link one issue (source) to another (dependency) with a specified relationship type.
+Valid relationship types include: depends-on (source depends on dependency), blocks
+(source blocks dependency), and relates-to (informational connection). Links establish
+the DAG structure and help identify blocking dependencies.`,
+		Example: `  # Source depends on another issue
+  $ trls link --source E6-S4-T2 --dep E6-S4-T1 --rel depends-on
+
+  # Source blocks another issue
+  $ trls link --source E6-S4-T1 --dep E6-S4-T3 --rel blocks
+
+  # Informational relationship
+  $ trls link --source E6-S4-T2 --dep E5-S2-T1 --rel relates-to`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {

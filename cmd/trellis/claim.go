@@ -18,7 +18,20 @@ func newClaimCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "claim [issue-id]",
 		Short: "Claim a ready task",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Claim an issue to assign it to the current worker.
+
+Claiming an issue marks it as assigned to your worker ID and sets a TTL (time-to-live).
+If the TTL expires without progress, the claim becomes stale and may be reassigned.
+This command also detects and warns about scope overlaps with concurrently claimed issues.`,
+		Example: `  # Claim an issue by ID
+  $ trls claim E6-S4-T2
+
+  # Claim with a custom TTL of 120 minutes
+  $ trls claim --issue E6-S4-T2 --ttl 120
+
+  # Claim using flag style
+  $ trls claim --issue another-task-id`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]

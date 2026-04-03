@@ -25,6 +25,20 @@ func newDAGSummaryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dag-summary",
 		Short: "Interactive TUI for reviewing and signing off DAG items",
+		Long: `Review and approve draft nodes in the issue DAG (Directed Acyclic Graph).
+
+This command presents an interactive TUI for signing off on draft nodes that have been
+inferred or awaiting confirmation. You can review traceability coverage, accept/reject
+individual items, and generate a sign-off artifact. Use --approve-all in non-interactive
+mode (agents) to auto-approve all pending draft items.`,
+		Example: `  # Open interactive TUI to review and approve draft nodes
+  $ trls dag-summary
+
+  # Review only draft nodes in a subtree
+  $ trls dag-summary --issue parent-task-id
+
+  # Auto-approve all draft items in agent mode
+  $ trls dag-summary --approve-all --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
