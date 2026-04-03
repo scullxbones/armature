@@ -2,3 +2,4 @@
 ["note","E3-002",1775210456,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S4-T3 detected at claim time"}]
 ["claim","E6-S4-T3",1775210456,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","E6-S4-T3",1775211260,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","E6-S4-T3",1775219620,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"claim exits 1 on scope overlap without --force; --force flag added to proceed with warning; unassign --help documents auto-transition side effect; claim --help documents parent auto-advance; make check green"}]
