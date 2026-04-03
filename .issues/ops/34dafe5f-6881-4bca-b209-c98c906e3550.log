@@ -357,3 +357,4 @@
 ["note","E6-S6",1775221345,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: worktree agents (isolation:worktree) commit directly to main in the worktree and fast-forward onto main on cleanup — no feature branch survives, making story-level PRs impossible after push; need either a coordinator-owned feature branch that agents push to, or a post-wave merge step before pushing to origin"}]
 ["note","E6-S6",1775224774,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: make check output is too large to capture inline (~105KB); coordinator had to grep a saved file to find pass/fail summary; a make check-summary target (lint+test+coverage+mutate pass/fail only, no verbose output) would make CI-style checks practical in agent loops"}]
 ["amend","bug-1774960994",1775225174,"34dafe5f-6881-4bca-b209-c98c906e3550",{"type":"task"}]
+["amend","bug-1774960995",1775225174,"34dafe5f-6881-4bca-b209-c98c906e3550",{"type":"task"}]
