@@ -378,3 +378,4 @@
 ["amend","task-1775168172",1775225220,"34dafe5f-6881-4bca-b209-c98c906e3550",{"acceptance":["trls accept-citation --force skips confirmation prompt","trls accept-citation --non-interactive behaves identically to --force"]}]
 ["citation-accepted","E6",1775225231,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"source document removed from manifest; accepting as dogfooding work tracked in-session"}]
 ["citation-accepted","E6-S1",1775225231,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"source document removed from manifest; accepting as dogfooding work tracked in-session"}]
+["citation-accepted","E6-S1-T1",1775225231,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"source document removed from manifest; accepting as dogfooding work tracked in-session"}]
