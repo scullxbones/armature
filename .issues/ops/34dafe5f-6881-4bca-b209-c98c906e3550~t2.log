@@ -2,3 +2,4 @@
 ["note","E3-002",1775173743,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S4-T2 detected at claim time"}]
 ["claim","E6-S4-T2",1775173743,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","E6-S4-T2",1775209745,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","E6-S4-T2",1775210249,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added Long and Example fields to 8 commands (ready, claim, transition, dagsum, decompose-apply, link, sync, validate); trls ready --help shows multi-line description; link --help documents --rel values; make check green with 81.6% coverage"}]
