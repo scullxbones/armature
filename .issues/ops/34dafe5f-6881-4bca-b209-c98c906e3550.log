@@ -369,3 +369,4 @@
 ["citation-accepted","task-1775168164",1775225199,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"dogfooding issue created in-session without source document"}]
 ["citation-accepted","task-1775168168",1775225199,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"dogfooding issue created in-session without source document"}]
 ["citation-accepted","task-1775168172",1775225199,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"dogfooding issue created in-session without source document"}]
+["amend","task-1774961009",1775225220,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/trellis/transition.go"],"acceptance":["trls transition --to done without open PR exits 1","trls transition --to done --force proceeds with warning"],"definition_of_done":"trls transition --to done fails with exit 1 unless --force is set or a PR exists for the current branch"}]
