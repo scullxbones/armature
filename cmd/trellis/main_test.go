@@ -2149,6 +2149,111 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	assert.NotContains(t, out, "error")
 }
 
+// TestClaimCommand_ScopeOverlapExitsWithoutForce verifies that claim exits 1 when scope overlap detected
+func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Initialize trellis
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	// Initialize worker
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create first task with scope
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+
+	// Create a second task with overlapping scope
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	// Claim the first task
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Attempt to claim the second task without --force should fail with exit code 1
+	// Capture both stdout and stderr
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetErr(errBuf)
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
+
+	err = root.Execute()
+	assert.Error(t, err, "claim should fail when scope overlaps without --force flag")
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "overlap", "error output should mention scope overlap")
+}
+
+// TestClaimCommand_ScopeOverlapWithForceProceeds verifies that claim --force proceeds and warns to stderr
+func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Initialize trellis
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	// Initialize worker
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create first task with scope
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+
+	// Create a second task with overlapping scope
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	// Claim the first task
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Claim the second task with --force should succeed despite overlap
+	out, err := runTrls(t, repo, "claim", "--issue", "task-02", "--force")
+	assert.NoError(t, err, "claim --force should succeed despite scope overlap")
+	assert.Contains(t, out, "task-02", "output should contain the claimed issue ID")
+}
+
+// TestUnassignHelp verifies unassign --help mentions auto-transition side effect
+func TestUnassignHelp(t *testing.T) {
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"unassign", "--help"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	out := buf.String()
+	assert.Contains(t, out, "claimed", "help should mention claimed status")
+	assert.Contains(t, out, "open", "help should mention open status or auto-transition")
+}
+
+// TestClaimHelp verifies claim --help mentions auto-advance of parent story
+func TestClaimHelp(t *testing.T) {
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{"claim", "--help"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	out := buf.String()
+	assert.Contains(t, out, "parent", "help should mention parent")
+	assert.Contains(t, out, "progress", "help should mention progress or auto-advance")
+}
+
 // TestCommandGroups verifies that all commands are assigned to the correct cobra groups
 func TestCommandGroups(t *testing.T) {
 	root := newRootCmd()

@@ -63,7 +63,11 @@ func newUnassignCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unassign [issue-id]",
 		Short: "Remove worker assignment from an issue",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Unassign an issue to release its worker assignment.
+
+If the issue was claimed, it will automatically transition back to open status.
+This allows the issue to be claimed again by another worker.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]

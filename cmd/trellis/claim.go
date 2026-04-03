@@ -14,6 +14,7 @@ import (
 func newClaimCmd() *cobra.Command {
 	var issueID string
 	var ttl int
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "claim [issue-id]",
@@ -22,12 +23,16 @@ func newClaimCmd() *cobra.Command {
 
 Claiming an issue marks it as assigned to your worker ID and sets a TTL (time-to-live).
 If the TTL expires without progress, the claim becomes stale and may be reassigned.
-This command also detects and warns about scope overlaps with concurrently claimed issues.`,
+This command also detects and warns about scope overlaps with concurrently claimed issues.
+When you claim a task, its parent story (if open) is automatically advanced to in-progress.`,
 		Example: `  # Claim an issue by ID
   $ trls claim E6-S4-T2
 
   # Claim with a custom TTL of 120 minutes
   $ trls claim --issue E6-S4-T2 --ttl 120
+
+  # Claim despite scope overlap warning
+  $ trls claim E6-S4-T2 --force
 
   # Claim using flag style
   $ trls claim --issue another-task-id`,
@@ -66,7 +71,12 @@ This command also detects and warns about scope overlaps with concurrently claim
 					continue
 				}
 				if claimPkg.ScopesOverlap(issue.Scope, entry.Scope) {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: scope overlap with %s (%s)\n", id, entry.Title)
+					msg := fmt.Sprintf("scope overlap with %s (%s)", id, entry.Title)
+					if !force {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s\n", msg)
+						return fmt.Errorf("cannot claim %s: %s — use --force to override", issueID, msg)
+					}
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
 					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
 					appendOp(logPath, noteOp) //nolint:errcheck
@@ -112,5 +122,6 @@ This command also detects and warns about scope overlaps with concurrently claim
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
 	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
+	cmd.Flags().BoolVar(&force, "force", false, "override scope overlap warning and proceed with claim")
 	return cmd
 }
