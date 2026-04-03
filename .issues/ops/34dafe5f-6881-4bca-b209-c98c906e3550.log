@@ -360,3 +360,4 @@
 ["amend","bug-1774960995",1775225174,"34dafe5f-6881-4bca-b209-c98c906e3550",{"type":"task"}]
 ["amend","bug-1774973553",1775225175,"34dafe5f-6881-4bca-b209-c98c906e3550",{"type":"task"}]
 ["citation-accepted","bug-1774960994",1775225199,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"dogfooding issue created in-session without source document"}]
+["citation-accepted","bug-1774960995",1775225199,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"dogfooding issue created in-session without source document"}]
