@@ -300,3 +300,99 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: Task descriptions should explicitly state "Create and pass a new test named X" rather than just "Test X passes" if the test doesn't exist.
 
 **File**: `STORY-SECONDARY`, `TASK-06`, `TASK-07`
+
+---
+
+## L26: Story-level transitions silently skipped when tasks complete
+
+**Observed**: During E3, E6-S2, and E6-S3 execution, agents transitioned all tasks to done but never transitioned the parent story. Stories remained `in-progress` indefinitely with all children done — a state `trls status` surfaced but which nothing prevented.
+
+**Impact**: `trls status` showed phantom in-progress work. Coordinator had to manually close out E3-001/002/003/004, E6-S2, and E6-S3 in a later session. State drift makes the board untrustworthy.
+
+**Recommendation**: When `trls transition <TASK> --to done` makes all siblings done but the parent story is still `in-progress`, emit a prominent warning to stderr with the exact remediation command: `trls transition STORY-ID --to done --outcome "..."`. This should be impossible to miss.
+
+**File**: `cmd/trellis/transition.go`
+
+---
+
+## L27: `trls create` requires a follow-up `trls amend` — not a 1-liner
+
+**Observed**: `trls create` accepts `--dod`, `--scope`, and `--title` but not `--acceptance`. Creating a fully-specified task always required a second `trls amend --acceptance '[...]'` call. Separately, extracting the new issue ID from the JSON output required a `python3 -c "import json..."` pipe.
+
+**Impact**: Every task creation costs two commands plus a scripting step. In a batch of 4+ tasks this produced incorrect ID extraction (all four IDs collapsed to one), resulting in acceptance criteria from task 4 overwriting task 1. Wasted tokens and produced bad data.
+
+**Recommendation**: (1) Add `--acceptance` to `trls create` for parity with `trls amend`. (2) Add `--field id` output selector to return only the new ID. (3) Add `--source <id-or-path>` to apply a source-link at creation time, eliminating the follow-up `trls source-link` call. A fully-specified, cited task should be expressible in one command.
+
+**File**: `cmd/trellis/create.go`
+
+---
+
+## L28: Scripting required for basic field extraction and output filtering
+
+**Observed**: Throughout E6 execution, agents resorted to `python3`, `grep`, and `awk` for: extracting single fields from `trls show` JSON output; filtering `trls status` to a single status group; filtering `trls validate` to only ERROR lines; extracting IDs from `trls create` output.
+
+**Impact**: Extra tool calls, token usage, and fragile pipelines. Shell loops for multi-ID operations (e.g. `for id in ...; do trls accept-citation $id; done`) are a consistent source of bugs.
+
+**Recommendation**: Add `--field <name>` to all read commands (`show`, `create`, `transition`, `ready`). Add `--status` and `--parent` filter flags to `trls status`. These cover the vast majority of scripting observed. The goal: no python or awk needed for any routine trellis operation.
+
+**File**: `cmd/trellis/show.go`, `cmd/trellis/create.go`, `cmd/trellis/status.go`, `cmd/trellis/helpers.go`
+
+---
+
+## L29: `trls create --source` missing — citation always requires a second command
+
+**Observed**: The correct citation workflow (create issue → `trls source-link`) required two commands per issue. In practice, agents skipped `source-link` and used `accept-citation --ci` instead, producing accepted-risk citations with boilerplate rationales rather than real source links.
+
+**Impact**: Traceability bypassed by default because the right path is harder than the wrong path. Bulk `accept-citation` loops produced noise data, not meaningful audit records.
+
+**Recommendation**: Add `--source <source-id-or-path>` to `trls create`. Resolves against the manifest by URL/path if a string is given. Issue is born fully cited via `source-link`, not accepted-risk. Makes the correct traceability path the zero-friction path.
+
+**File**: `cmd/trellis/create.go`, `cmd/trellis/source_link.go`
+
+---
+
+## L30: Stale agent worktrees nested inside the repo pollute gopls
+
+**Observed**: Claude Code's `isolation: worktree` feature creates worktrees under `.claude/worktrees/` inside the repo. After multiple parallel agent sessions, 8 stale worktrees accumulated. gopls analyzed Go files in these worktrees (which were at mid-implementation states on different branches) and surfaced their compiler errors as if they were in the main workspace. This produced false `undefined: writeJSONError`, `undefined: tui.IsNonInteractive` diagnostics after every agent wave, requiring a `go build` verification step each time.
+
+**Impact**: Coordinator spent extra turns verifying that compile errors were phantom. Eroded trust in IDE diagnostics.
+
+**Recommendation**: (1) Add `.claude/worktrees/` and `.trellis/` to `.gitignore`. (2) Configure gopls `build.directoryFilters` to exclude these paths (`.vscode/settings.json`). (3) Claude Code should prune completed worktrees automatically. Implemented in this session — see `chore(ops)` commit.
+
+**File**: `.gitignore`, `.vscode/settings.json`
+
+---
+
+## L31: Source retirement leaves orphaned citations with no repair path
+
+**Observed**: Source `dee6f489-a75b-46be-9f36-a1a99ec113ad` was removed from the manifest at some point during E6. All 25+ issues that had been `source-link`ed to it began showing `ERROR: unknown source: dee6f489...` in `trls validate`. Running `trls accept-citation --ci` on each added a new accepted-risk citation alongside the old broken one — validate continued to report the error because the orphaned citation op is immutable in the append-only log.
+
+**Impact**: `trls validate` had 25 permanent non-fixable ERROR lines. Coverage was 202/202 but errors could not be cleared with existing tooling.
+
+**Recommendation**: (1) `trls validate` should treat an accepted-risk citation as superseding any earlier orphaned source citation for the same issue. (2) Add a `trls sources retire --replace-citations-with <new-source-id>` command for graceful source migration. Workaround: restore the source entry directly in `manifest.json` with the original UUID.
+
+**File**: `cmd/trellis/validate.go`, `internal/validate/validate.go`, `cmd/trellis/sources.go`
+
+---
+
+## L32: Parallel agents dispatched sequentially after interruption
+
+**Observed**: Wave 1 of E6-S4 called for T1 and T2 to be dispatched simultaneously (no file overlap). After the first dispatch attempt was rejected by the user, the coordinator fell into sequential mode — dispatching T1, waiting for completion, then dispatching T2. The parallel execution plan was silently abandoned.
+
+**Impact**: Wave 1 took roughly twice as long as necessary. The coordinator had no self-check that forced re-reading the wave plan before re-dispatching.
+
+**Recommendation**: Before dispatching any wave, the coordinator should explicitly verify: "All Wave N agents are in this message." The `dispatching-parallel-agents` skill should include a pre-dispatch checklist item that forces this confirmation. An interruption should reset to the plan, not to sequential mode.
+
+**File**: `.claude/skills/` (dispatching-parallel-agents skill)
+
+---
+
+## L33: Worktree agents commit directly to main — story-level PRs impossible
+
+**Observed**: Claude Code's `isolation: worktree` agents committed their work and fast-forwarded those commits directly onto `main` when the worktree was cleaned up. By the time the story was complete and it was time to open a PR, all three task commits were already on `origin/main` with no feature branch surviving.
+
+**Impact**: Story-level PR workflow (one PR per story, reviewed before merge) is broken when using worktree isolation. The coordinator cannot open a PR because there is no branch to target.
+
+**Recommendation**: The coordinator should create a feature branch before dispatching agents (`git checkout -b story/E6-S4`), and agents should commit to that branch. Alternatively, the task prompt template should include `git checkout -b feat/ISSUE-ID` as the first git operation. Add this as an explicit step in the trls-worker skill for the parallel dispatch pattern.
+
+**File**: `docs/trls-worker-SKILL.md`
