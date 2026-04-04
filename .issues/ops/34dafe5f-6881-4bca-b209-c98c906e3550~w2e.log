@@ -12,3 +12,4 @@
 ["note","bug-1774960995",1775322776,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775168164 detected at claim time"}]
 ["claim","task-1775168164",1775322776,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","task-1775168164",1775338468,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","task-1775168164",1775338471,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"sources add warns on relative paths; sources sync emits error on unreachable filesystem paths instead of silently skipping"}]
