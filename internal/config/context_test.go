@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -144,4 +145,34 @@ func TestContextStateDir(t *testing.T) {
 		StateDir: "/tmp/trellis-state",
 	}
 	assert.Equal(t, "/tmp/trellis-state", ctx.StateDir)
+}
+
+func TestResolveContext_GitWorktree_SingleBranch(t *testing.T) {
+	t.Parallel()
+	// Create a "parent" repo that will be the actual git repo
+	parentRepo := initTestRepo(t)
+
+	// Create parent repo's .issues directory
+	parentIssuesDir := filepath.Join(parentRepo, ".issues")
+	require.NoError(t, os.MkdirAll(parentIssuesDir, 0755))
+	require.NoError(t, WriteConfig(filepath.Join(parentIssuesDir, "config.json"), DefaultConfig("go")))
+
+	// Create a worktree checkout directory (simulates git worktree add)
+	worktreeCheckout := filepath.Join(parentRepo, "worktree-checkout")
+	require.NoError(t, os.MkdirAll(worktreeCheckout, 0755))
+
+	// In a git worktree, .git is a FILE (not directory) containing "gitdir: <path>"
+	// The gitdir typically points to .git/worktrees/<name> in the parent repo
+	gitdirPath := filepath.Join(parentRepo, ".git", "worktrees", "test-wt")
+	require.NoError(t, os.MkdirAll(gitdirPath, 0755))
+	gitFileContent := fmt.Sprintf("gitdir: %s\n", gitdirPath)
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeCheckout, ".git"), []byte(gitFileContent), 0644))
+
+	// When ResolveContext is called from the worktree checkout path,
+	// it should detect that .git is a file and resolve IssuesDir relative to parentRepo
+	ctx, err := ResolveContext(worktreeCheckout)
+	require.NoError(t, err)
+	assert.Equal(t, parentRepo, ctx.RepoPath)
+	assert.Equal(t, parentIssuesDir, ctx.IssuesDir)
+	assert.Equal(t, "single-branch", ctx.Mode)
 }
