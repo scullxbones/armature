@@ -471,3 +471,4 @@
 ["source-link","task-1775311802",1775312236,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"3778fb64-506f-413e-9d18-1cc218987277","source_url":"docs/dogfooding-learnings.md"}]
 ["amend","task-1775311802",1775312263,"34dafe5f-6881-4bca-b209-c98c906e3550",{"acceptance":["trls show E6-S4 --field status prints: done","trls create ... --field id returns only the new ID","invalid field name returns clear error","--field works on show, create, transition, ready","make check green"]}]
 ["citation-accepted","task-1775311816",1775312264,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"cancelled task — replaced by task-1775312202"}]
+["amend","task-1775311790",1775312276,"34dafe5f-6881-4bca-b209-c98c906e3550",{"acceptance":["trls create --acceptance produces fully-specified task in one call","no follow-up trls amend needed after create","make check green"]}]
