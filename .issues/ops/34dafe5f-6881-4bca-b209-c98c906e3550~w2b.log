@@ -13,3 +13,4 @@
 ["claim","bug-1774960995",1775322776,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","bug-1774960995",1775339631,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","bug-1774960995",1775339634,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"blocker_outcomes layer now shows current issue status alongside outcome for unambiguous blocker resolution signal"}]
+["citation-accepted","bug-1774960995",1775339641,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implementation adds status field to blocker_outcomes for unambiguous signal"}]
