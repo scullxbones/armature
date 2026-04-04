@@ -473,3 +473,4 @@
 ["citation-accepted","task-1775311816",1775312264,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"cancelled task — replaced by task-1775312202"}]
 ["amend","task-1775311790",1775312276,"34dafe5f-6881-4bca-b209-c98c906e3550",{"acceptance":["trls create --acceptance produces fully-specified task in one call","no follow-up trls amend needed after create","make check green"]}]
 ["source-fingerprint","1241e468-5c15-4f75-9c29-1a09b42adda7",1775312429,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"b19acf157c20a20e763264867fd9a770ec3e8626849f35b5e1c59827337377c6","provider":"filesystem"}]
+["source-fingerprint","24a31819-05a9-4f9e-b40b-0a0464d99cca",1775312429,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"5a896e0368b38dca9c2ec1b4ec050fa60777eb2bc954817b2935e79964c5ff1a","provider":"filesystem"}]
