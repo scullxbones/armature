@@ -91,6 +91,12 @@ plan, or --schema to view the JSON schema.`,
 										"type":        "string",
 										"description": "Comma-separated file paths this issue is scoped to — stored as a single string, not an array",
 									},
+									"acceptance": map[string]interface{}{
+										"type":        "array",
+										"description": "Array of acceptance criteria for this issue (passed to issue state as-is)",
+										"items":       map[string]interface{}{"type": "object"},
+										"nullable":    true,
+									},
 									"priority": map[string]interface{}{
 										"type":        "string",
 										"enum":        []string{"critical", "high", "medium", "low"},

@@ -8,15 +8,16 @@ import (
 
 // PlanIssue represents a single issue in a plan file.
 type PlanIssue struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Type      string   `json:"type"`
-	Scope     string   `json:"scope"`
-	Priority  string   `json:"priority"`
-	DoD       string   `json:"dod"`
-	Parent    string   `json:"parent"`
-	BlockedBy []string `json:"blocked_by"`
-	Notes     []string `json:"notes"`
+	ID         string          `json:"id"`
+	Title      string          `json:"title"`
+	Type       string          `json:"type"`
+	Scope      string          `json:"scope"`
+	Priority   string          `json:"priority"`
+	DoD        string          `json:"dod"`
+	Parent     string          `json:"parent"`
+	BlockedBy  []string        `json:"blocked_by"`
+	Notes      []string        `json:"notes"`
+	Acceptance json.RawMessage `json:"acceptance,omitempty"`
 }
 
 // Plan represents a parsed plan file.
