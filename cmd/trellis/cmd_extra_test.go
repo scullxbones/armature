@@ -632,6 +632,34 @@ func TestAcceptCitationCmd_MissingRationale(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestAcceptCitationCmd_Force_SkipsPrompt(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--rationale", "cited because it matches",
+		"--force")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "cited because it matches")
+}
+
+func TestAcceptCitationCmd_NonInteractive_SkipsPrompt(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--rationale", "cited because it matches",
+		"--non-interactive")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "cited because it matches")
+}
+
 func setupRepoWithStoryAndTask(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
