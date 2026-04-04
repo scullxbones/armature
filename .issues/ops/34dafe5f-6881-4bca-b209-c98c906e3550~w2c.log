@@ -13,3 +13,4 @@
 ["claim","bug-1774973553",1775322775,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","bug-1774973553",1775338998,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","bug-1774973553",1775339018,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added trls unlink command to remove erroneous blocked_by dependencies"}]
+["citation-accepted","bug-1774973553",1775339032,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implemented unlink operation to support removing erroneous dependencies"}]
