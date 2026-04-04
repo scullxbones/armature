@@ -291,3 +291,67 @@ func TestDecomposeContextWithSources(t *testing.T) {
 	assert.Len(t, ctx.Sources, 1)
 	assert.Equal(t, "prd", ctx.Sources[0].ID)
 }
+
+// --- E6-S6-T1: acceptance field tests ---
+
+func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
+	dir := t.TempDir()
+	workerID := "worker-test"
+
+	acceptance := json.RawMessage(`[{"type":"test_passes","cmd":"make check"}]`)
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{
+				ID:         "PLAN-001",
+				Title:      "First issue",
+				Type:       "task",
+				Acceptance: acceptance,
+			},
+		},
+	}
+
+	state := materialize.NewState()
+
+	count, err := ApplyPlan(plan, dir, workerID, state)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	logPath := filepath.Join(dir, workerID+".log")
+	readOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, readOps, 1)
+	assert.Equal(t, string(acceptance), string(readOps[0].Payload.Acceptance), "acceptance field should be imported from plan")
+}
+
+func TestApplyPlan_HandlesEmptyAcceptance(t *testing.T) {
+	dir := t.TempDir()
+	workerID := "worker-test"
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{
+				ID:    "PLAN-001",
+				Title: "First issue",
+				Type:  "task",
+				// Acceptance not set
+			},
+		},
+	}
+
+	state := materialize.NewState()
+
+	count, err := ApplyPlan(plan, dir, workerID, state)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	logPath := filepath.Join(dir, workerID+".log")
+	readOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, readOps, 1)
+	// When acceptance is not provided, it should be empty or null
+	assert.Equal(t, "", string(readOps[0].Payload.Acceptance), "acceptance should be empty when not provided")
+}

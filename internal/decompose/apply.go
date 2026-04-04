@@ -165,6 +165,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 				Priority:         issue.Priority,
 				DefinitionOfDone: issue.DoD,
 				Parent:           issue.Parent,
+				Acceptance:       issue.Acceptance,
 				Confidence:       "draft",
 			},
 		}
