@@ -1998,6 +1998,64 @@ func TestLinkCommand_JSONOutput(t *testing.T) {
 	assert.Equal(t, "linkj-b", result["dep"])
 }
 
+// unlink: remove a blocked_by dependency
+func TestUnlinkCommand(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task A", "--id", "unlink-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "unlink-b")
+	require.NoError(t, err)
+
+	// First, link unlink-a to unlink-b
+	_, err = runTrls(t, repo, "link", "--source", "unlink-a", "--dep", "unlink-b", "--rel", "blocked_by")
+	require.NoError(t, err)
+
+	// Materialize to verify the link was applied
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Unlink unlink-a from unlink-b
+	out, err := runTrls(t, repo, "unlink", "--source", "unlink-a", "--dep", "unlink-b")
+	require.NoError(t, err)
+	assert.Contains(t, out, "unlink-a")
+	assert.Contains(t, out, "unlink-b")
+
+	// Materialize again to verify the dependency was removed
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+}
+
+// unlink: JSON output when --format json
+func TestUnlinkCommand_JSONOutput(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task A", "--id", "unlinkj-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "unlinkj-b")
+	require.NoError(t, err)
+
+	// Link first
+	_, err = runTrls(t, repo, "link", "--source", "unlinkj-a", "--dep", "unlinkj-b", "--rel", "blocked_by")
+	require.NoError(t, err)
+
+	// Unlink with JSON output
+	out, err := runTrls(t, repo, "unlink", "--format", "json", "--source", "unlinkj-a", "--dep", "unlinkj-b")
+	require.NoError(t, err)
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Equal(t, "unlinkj-a", result["source"])
+	assert.Equal(t, "unlinkj-b", result["dep"])
+}
+
 // amend: human text when --format human
 func TestAmendCommand_HumanOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)
