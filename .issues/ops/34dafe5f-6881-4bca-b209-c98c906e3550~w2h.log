@@ -13,3 +13,4 @@
 ["note","task-1774956949",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with bug-1774973553 detected at claim time"}]
 ["note","bug-1774973553",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1774956949 detected at claim time"}]
 ["note","task-1774956949",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775168168 detected at claim time"}]
+["note","task-1775168168",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1774956949 detected at claim time"}]
