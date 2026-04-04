@@ -433,3 +433,4 @@
 ["transition","E3-002",1775311056,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"trls workers command: enumerates workers from ops/*.log, classifies active/idle/stale via claim.IsClaimStale, human-readable and --json output"}]
 ["transition","E3-003",1775311057,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Audit log complete: internal/audit/audit.Load, trls log command implemented"}]
 ["transition","E3-004",1775311057,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Issue assignment complete: OpAssign type, AssignedWorker materialization, trls assign/unassign commands, assignment-aware ComputeReady sort"}]
+["transition","E6-S2",1775311058,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Materialization performance complete: single-pass topological rollup replacing O(n²) approach, checkpoint-based incremental materialization"}]
