@@ -14,7 +14,7 @@ import (
 )
 
 func newTransitionCmd() *cobra.Command {
-	var issueID, to, outcome, branch, pr string
+	var issueID, to, outcome, branch, pr, fieldFlag string
 	var force bool
 
 	cmd := &cobra.Command{
@@ -112,6 +112,21 @@ This enforces branch + PR discipline.`,
 				}
 			}
 
+			// If --field flag is set, extract and print only the requested field
+			if fieldFlag != "" {
+				// Create a minimal issue object with just the transition result
+				// to extract the field from
+				transitionResult := &materialize.Issue{
+					ID:     issueID,
+					Status: to,
+				}
+				fields := extractFieldsFromIssue(transitionResult, fieldFlag)
+				for _, field := range fields {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
+				}
+				return nil
+			}
+
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "status": to}
@@ -129,6 +144,7 @@ This enforces branch + PR discipline.`,
 	cmd.Flags().StringVar(&outcome, "outcome", "", "outcome description")
 	cmd.Flags().StringVar(&branch, "branch", "", "feature branch name")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number")
+	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status)")
 	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
