@@ -27,3 +27,4 @@
 ["transition","task-1774956949",1775339109,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"post-commit, post-merge, prepare-commit-msg templates created and installed; all branch-aware, skipping on _trellis"}]
 ["transition","task-1775168150",1775339119,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"pre-commit.sh.template detects current branch; if != _trellis AND staged files include .issues/ops/, abort with clear error; dual-branch mode check prevents blocking single-branch mode"}]
 ["citation-accepted","task-1774956949",1775339134,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implementation complete: all hook templates created and installed"}]
+["citation-accepted","task-1775168150",1775339134,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implementation complete: pre-commit hook blocks ops commits on code branches"}]
