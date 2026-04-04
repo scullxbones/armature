@@ -529,3 +529,4 @@
 ["note","bug-1774960995",1775318170,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with E6-S6-T1 detected at claim time"}]
 ["note","E6-S6-T1",1775318170,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with bug-1774960995 detected at claim time"}]
 ["claim","bug-1774960995",1775318170,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","bug-1774973553",1775318171,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with bug-1774960995 detected at claim time"}]
