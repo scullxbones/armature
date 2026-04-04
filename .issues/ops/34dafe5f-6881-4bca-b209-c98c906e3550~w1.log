@@ -1,3 +1,4 @@
 ["note","1774961009",1775316882,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"starting PR check implementation with TDD"}]
 ["transition","1774961009",1775317838,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Implemented PR enforcement check in transition --to done; main/master branch blocked without --force flag; tested with 3 passing tests"}]
 ["transition","1775311449",1775317838,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Implemented warning when all siblings are done but parent story still in-progress; uses index to check status; prints remediation command"}]
+["transition","1774960994",1775317839,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Updated trls-worker-SKILL.md with clear documentation on branch + PR discipline; enforced by transition command"}]
