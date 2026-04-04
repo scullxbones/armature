@@ -17,9 +17,10 @@ mutesting-report/
 
 # Git worktrees
 .worktrees/
+.trellis/
 
 # IDE / tools
-.vscode/
+.vscode/*.code-workspace
 .idea/
 *.swp
 *.swo

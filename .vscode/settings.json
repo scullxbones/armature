@@ -1,0 +1,8 @@
+{
+  "gopls": {
+    "build.directoryFilters": [
+      "-/.claude/worktrees",
+      "-/.trellis"
+    ]
+  }
+}
