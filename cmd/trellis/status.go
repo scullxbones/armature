@@ -22,6 +22,9 @@ var statusOrder = map[string]int{
 }
 
 func newStatusCmd() *cobra.Command {
+	var statusFilter string
+	var parentFilter string
+
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show issues grouped by status",
@@ -38,9 +41,26 @@ func newStatusCmd() *cobra.Command {
 				return err
 			}
 
+			// Filter index based on --status and --parent flags
+			filteredIndex := index
+			if statusFilter != "" || parentFilter != "" {
+				filteredIndex = make(map[string]materialize.IndexEntry)
+				for id, entry := range index {
+					// Apply --status filter
+					if statusFilter != "" && entry.Status != statusFilter {
+						continue
+					}
+					// Apply --parent filter
+					if parentFilter != "" && entry.Parent != parentFilter {
+						continue
+					}
+					filteredIndex[id] = entry
+				}
+			}
+
 			// Group by status
 			groups := make(map[string][]string)
-			for id, entry := range index {
+			for id, entry := range filteredIndex {
 				groups[entry.Status] = append(groups[entry.Status], id)
 			}
 
@@ -72,7 +92,7 @@ func newStatusCmd() *cobra.Command {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
 
 				for _, id := range ids {
-					entry := index[id]
+					entry := filteredIndex[id]
 					line := fmt.Sprintf("  %-12s  %s", id, entry.Title)
 					if status == ops.StatusDone && !singleBranch && entry.Branch != "" {
 						line += fmt.Sprintf("  [branch: %s", entry.Branch)
@@ -88,5 +108,9 @@ func newStatusCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&statusFilter, "status", "", "filter to show only issues with this status")
+	cmd.Flags().StringVar(&parentFilter, "parent", "", "filter to show only issues under this parent ID")
+
 	return cmd
 }

@@ -12,6 +12,7 @@ import (
 
 func newShowCmd() *cobra.Command {
 	var issueID string
+	var fieldFlag string
 
 	cmd := &cobra.Command{
 		Use:   "show [issue-id]",
@@ -36,6 +37,15 @@ func newShowCmd() *cobra.Command {
 			issue, err := materialize.LoadIssue(issuePath)
 			if err != nil {
 				return fmt.Errorf("issue %q not found", issueID)
+			}
+
+			// If --field flag is set, extract and print only the requested fields
+			if fieldFlag != "" {
+				fields := extractFieldsFromIssue(&issue, fieldFlag)
+				for _, field := range fields {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
+				}
+				return nil
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -118,6 +128,7 @@ func newShowCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to show")
+	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status or status,outcome,title)")
 
 	return cmd
 }

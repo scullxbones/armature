@@ -10,6 +10,7 @@ import (
 
 	"github.com/scullxbones/trellis/internal/exitcodes"
 	"github.com/scullxbones/trellis/internal/git"
+	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/scullxbones/trellis/internal/worker"
 )
@@ -172,4 +173,48 @@ func appendLowStakesOp(logPath string, op ops.Op) error {
 		appTracker.Reset() //nolint:errcheck
 	}
 	return nil
+}
+
+// extractFieldsFromIssue extracts specified fields from an Issue and returns their values
+// as a slice of strings in the order requested. For unknown fields, returns empty string.
+// Fields are comma-separated (e.g., "status,title,outcome").
+func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string {
+	if issue == nil {
+		return []string{}
+	}
+
+	fields := strings.Split(fieldList, ",")
+	var result []string
+
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		var value string
+		switch field {
+		case "id":
+			value = issue.ID
+		case "title":
+			value = issue.Title
+		case "type":
+			value = issue.Type
+		case "status":
+			value = issue.Status
+		case "parent":
+			value = issue.Parent
+		case "outcome":
+			value = issue.Outcome
+		case "scope":
+			value = strings.Join(issue.Scope, ",")
+		case "priority":
+			value = issue.Priority
+		case "assigned_worker":
+			value = issue.AssignedWorker
+		case "claimed_by":
+			value = issue.ClaimedBy
+		default:
+			value = ""
+		}
+		result = append(result, value)
+	}
+
+	return result
 }
