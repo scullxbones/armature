@@ -108,16 +108,25 @@ func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *mate
 	var lines []string
 	for _, blockerID := range issue.BlockedBy {
 		outcome := "outcome unknown"
+		var status string
 		if blocker, ok := state.Issues[blockerID]; ok {
+			status = blocker.Status
 			if blocker.Outcome != "" {
 				outcome = blocker.Outcome
 			}
 		} else {
 			// Try loading from disk
 			path := filepath.Join(stateDir, "issues", blockerID+".json")
-			if b, err := materialize.LoadIssue(path); err == nil && b.Outcome != "" {
-				outcome = b.Outcome
+			if b, err := materialize.LoadIssue(path); err == nil {
+				status = b.Status
+				if b.Outcome != "" {
+					outcome = b.Outcome
+				}
 			}
+		}
+		// Include status alongside outcome for unambiguous signal
+		if outcome == "outcome unknown" && status != "" {
+			outcome = fmt.Sprintf("%s (outcome unknown)", status)
 		}
 		lines = append(lines, fmt.Sprintf("- %s: %s", blockerID, outcome))
 	}

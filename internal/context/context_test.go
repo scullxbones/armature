@@ -80,6 +80,88 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 	assert.Contains(t, blockerLayer.Content, "fixed")
 }
 
+func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *testing.T) {
+	state := materialize.NewState()
+	state.Issues["TST-B"] = &materialize.Issue{
+		ID:           "TST-B",
+		Title:        "Blocking task in progress",
+		Type:         "task",
+		Status:       "in-progress",
+		Outcome:      "",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{"TST-A"},
+		DecisionRefs: []string{},
+	}
+	state.Issues["TST-A"] = &materialize.Issue{
+		ID:           "TST-A",
+		Title:        "Main issue",
+		Type:         "task",
+		Status:       "open",
+		BlockedBy:    []string{"TST-B"},
+		Blocks:       []string{},
+		Children:     []string{},
+		DecisionRefs: []string{},
+	}
+
+	ctx, err := Assemble("TST-A", stateDir, state)
+	require.NoError(t, err)
+
+	var blockerLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "blocker_outcomes" {
+			blockerLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, blockerLayer)
+	// For an in-progress blocker with no outcome, should show the status
+	assert.Contains(t, blockerLayer.Content, "TST-B")
+	assert.Contains(t, blockerLayer.Content, "in-progress")
+}
+
+func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
+	state := materialize.NewState()
+	state.Issues["TST-B"] = &materialize.Issue{
+		ID:           "TST-B",
+		Title:        "Blocking task",
+		Type:         "task",
+		Status:       "done",
+		Outcome:      "fixed with edge-case handling",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{"TST-A"},
+		DecisionRefs: []string{},
+	}
+	state.Issues["TST-A"] = &materialize.Issue{
+		ID:           "TST-A",
+		Title:        "Main issue",
+		Type:         "task",
+		Status:       "open",
+		BlockedBy:    []string{"TST-B"},
+		Blocks:       []string{},
+		Children:     []string{},
+		DecisionRefs: []string{},
+	}
+
+	ctx, err := Assemble("TST-A", stateDir, state)
+	require.NoError(t, err)
+
+	var blockerLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "blocker_outcomes" {
+			blockerLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, blockerLayer)
+	// When outcome is available, should show outcome (not status)
+	assert.Contains(t, blockerLayer.Content, "TST-B")
+	assert.Contains(t, blockerLayer.Content, "fixed with edge-case handling")
+	// Outcome should be present, status should not interfere
+	assert.NotContains(t, blockerLayer.Content, "outcome unknown")
+}
+
 func TestAssembleContext_ParentChain(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["TST-P"] = &materialize.Issue{
