@@ -1,0 +1,20 @@
+#!/bin/sh
+# Trellis prepare-commit-msg hook: prepend active claim ID to commit message.
+# Branch-aware: skips on _trellis since ops logs use automated messages.
+# To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
+
+# Skip on _trellis branch where ops logs use automated messages
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$current_branch" = "_trellis" ]; then
+  exit 0
+fi
+
+# Get the active claim ID
+claim_id=$(trls show active-claim --field id 2>/dev/null)
+
+# If there's an active claim, prepend it to the commit message
+if [ -n "$claim_id" ]; then
+  commit_msg_file=$1
+  original_msg=$(cat "$commit_msg_file")
+  echo "$claim_id: $original_msg" > "$commit_msg_file"
+fi

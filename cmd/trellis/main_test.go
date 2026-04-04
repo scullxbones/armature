@@ -800,6 +800,107 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	assert.Contains(t, string(data), "trls sync")
 }
 
+func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	hookPath := filepath.Join(repo, ".issues", "hooks", "post-commit.sh.template")
+	data, err := os.ReadFile(hookPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "trls heartbeat")
+	assert.Contains(t, content, "trls push-ops")
+}
+
+func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	hookPath := filepath.Join(repo, ".issues", "hooks", "prepare-commit-msg.sh.template")
+	data, err := os.ReadFile(hookPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "claim")
+	assert.Contains(t, content, "prepare-commit-msg")
+}
+
+func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	// Check that all three hook templates are installed to .git/hooks/
+	postCommitPath := filepath.Join(repo, ".git", "hooks", "post-commit")
+	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
+	prepareCommitMsgPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+
+	assert.FileExists(t, postCommitPath)
+	assert.FileExists(t, postMergePath)
+	assert.FileExists(t, prepareCommitMsgPath)
+
+	// Check that hooks are executable
+	info, err := os.Stat(postCommitPath)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0111 != 0, "post-commit hook should be executable")
+
+	info, err = os.Stat(postMergePath)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0111 != 0, "post-merge hook should be executable")
+
+	info, err = os.Stat(prepareCommitMsgPath)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0111 != 0, "prepare-commit-msg hook should be executable")
+}
+
+func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init", "--dual-branch")
+	require.NoError(t, err)
+
+	// Check that hooks are installed to .git/hooks/
+	postCommitPath := filepath.Join(repo, ".git", "hooks", "post-commit")
+	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
+	prepareCommitMsgPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+	preCommitPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
+
+	assert.FileExists(t, postCommitPath)
+	assert.FileExists(t, postMergePath)
+	assert.FileExists(t, prepareCommitMsgPath)
+	assert.FileExists(t, preCommitPath)
+}
+
+func TestInit_HooksAreBranchAware(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	// Check that post-commit hook contains branch awareness logic
+	postCommitPath := filepath.Join(repo, ".git", "hooks", "post-commit")
+	data, err := os.ReadFile(postCommitPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "_trellis")
+
+	// Check that post-merge hook contains branch awareness logic
+	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
+	data, err = os.ReadFile(postMergePath)
+	require.NoError(t, err)
+	content = string(data)
+	assert.Contains(t, content, "_trellis")
+}
+
 func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
