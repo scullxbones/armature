@@ -573,3 +573,4 @@
 ["transition","E6-S6-T1",1775339649,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"decompose-apply now imports acceptance array from plan JSON and persists to issue state"}]
 ["note","task-1775311802",1775341692,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1774961009 detected at claim time"}]
 ["note","task-1774961009",1775341692,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311802 detected at claim time"}]
+["note","task-1775311802",1775341692,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with bug-1774960994 detected at claim time"}]
