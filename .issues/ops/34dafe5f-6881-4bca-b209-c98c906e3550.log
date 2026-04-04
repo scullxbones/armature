@@ -496,3 +496,4 @@
 ["source-fingerprint","cd32a9ac-d9af-4aaa-962e-56372acc2ea2",1775312430,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"468d28a4980b1a32955dd419861c1b7645c5ad87fcbd2229e25889797e94a5dd","provider":"filesystem"}]
 ["source-fingerprint","d290e7a5-e410-4359-b53d-827ead188ae4",1775312430,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"742bde2f46becf56487f1ad6ff717ac288cf406e0e3c1c1474bc16e65a12838a","provider":"filesystem"}]
 ["source-fingerprint","1065bf3d-e29e-4ff3-8ce6-aa3f0ff374f6",1775312430,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"567b2bd50a9712cacb934d8563253c0892be3b9ccd132d8a682d15e64aa9f70d","provider":"filesystem"}]
+["note","E6-S6",1775313604,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: trls show only accepts one arg at a time — add multi-issue support so you can check status of a batch (e.g. trls show id1 id2 id3) without looping"}]
