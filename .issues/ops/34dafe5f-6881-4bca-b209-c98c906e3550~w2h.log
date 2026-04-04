@@ -24,3 +24,4 @@
 ["claim","task-1775168150",1775322779,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","task-1774956949",1775339102,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","task-1775168150",1775339102,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","task-1774956949",1775339109,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"post-commit, post-merge, prepare-commit-msg templates created and installed; all branch-aware, skipping on _trellis"}]
