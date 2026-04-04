@@ -1,5 +1,5 @@
 #!/bin/sh
-# Trellis pre-commit hook: block ops log commits on code branches.
+# Trellis pre-commit hook: block ops log commits on code branches in dual-branch mode.
 # In dual-branch mode, ops live on _trellis — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
@@ -8,6 +8,12 @@
 # Allow commits on _trellis — that's exactly where ops belong.
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [ "$current_branch" = "_trellis" ]; then
+  exit 0
+fi
+
+# Only block in dual-branch mode; check if config says dual-branch
+if ! grep -q '"mode".*"dual-branch"' .issues/config.json 2>/dev/null; then
+  # Single-branch mode allows ops/ commits
   exit 0
 fi
 

@@ -19,8 +19,86 @@ state/
 
 const postMergeHookTemplate = `#!/bin/sh
 # Trellis post-merge hook: auto-detect merged branches and transition done issues to merged.
+# Branch-aware: skips on _trellis since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
+
+# Skip on _trellis branch where ops logs are committed directly
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$current_branch" = "_trellis" ]; then
+  exit 0
+fi
+
 trls sync
+`
+
+const postCommitHookTemplate = `#!/bin/sh
+# Trellis post-commit hook: emit heartbeat and push ops in dual-branch mode.
+# Branch-aware: skips on _trellis since ops are committed directly there.
+# To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+
+# Skip on _trellis branch where ops logs are committed directly
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$current_branch" = "_trellis" ]; then
+  exit 0
+fi
+
+# Send heartbeat for active claim (if any)
+trls heartbeat 2>/dev/null
+
+# In dual-branch mode, push ops logs after each commit
+if grep -q '"mode".*"dual-branch"' .issues/config.json 2>/dev/null; then
+  trls push-ops 2>/dev/null
+fi
+`
+
+const prepareCommitMsgHookTemplate = `#!/bin/sh
+# Trellis prepare-commit-msg hook: prepend active claim ID to commit message.
+# Branch-aware: skips on _trellis since ops logs use automated messages.
+# To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
+
+# Skip on _trellis branch where ops logs use automated messages
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$current_branch" = "_trellis" ]; then
+  exit 0
+fi
+
+# Get the active claim ID
+claim_id=$(trls show active-claim --field id 2>/dev/null)
+
+# If there's an active claim, prepend it to the commit message
+if [ -n "$claim_id" ]; then
+  commit_msg_file=$1
+  original_msg=$(cat "$commit_msg_file")
+  echo "$claim_id: $original_msg" > "$commit_msg_file"
+fi
+`
+
+const preCommitHookTemplate = `#!/bin/sh
+# Trellis pre-commit hook: block ops log commits on code branches in dual-branch mode.
+# In dual-branch mode, ops live on _trellis — never on a code branch.
+# To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#
+# This is defense-in-depth; .issues/.gitignore also blocks ops/ from being staged.
+
+# Allow commits on _trellis — that's exactly where ops belong.
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$current_branch" = "_trellis" ]; then
+  exit 0
+fi
+
+# Only block in dual-branch mode; check if config says dual-branch
+if ! grep -q '"mode".*"dual-branch"' .issues/config.json 2>/dev/null; then
+  # Single-branch mode allows ops/ commits
+  exit 0
+fi
+
+# Only block additions/modifications — deletions are allowed (cleanup commits).
+if git diff --cached --name-only --diff-filter=AM | grep -q '\.issues/ops/'; then
+  echo "ERROR: Refusing to commit .issues/ops/ changes on a code branch."
+  echo "In dual-branch mode, ops are written directly to the _trellis branch."
+  echo "If you are migrating to dual-branch mode, run: trls init --dual-branch"
+  exit 1
+fi
 `
 
 func newInitCmd() *cobra.Command {
@@ -42,6 +120,43 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _trellis branch)")
 	return cmd
+}
+
+// installHooks copies hook templates from .issues/hooks/ to .git/hooks/ and makes them executable.
+// In dual-branch mode, the templates are in the worktree's .issues/hooks/.
+func installHooks(repoPath string, issuesDir string) error {
+	hooksDir := filepath.Join(issuesDir, "hooks")
+	gitHooksDir := filepath.Join(repoPath, ".git", "hooks")
+
+	// Create .git/hooks directory if it doesn't exist
+	if err := os.MkdirAll(gitHooksDir, 0755); err != nil {
+		return fmt.Errorf("create .git/hooks directory: %w", err)
+	}
+
+	// List of hooks to install
+	hooks := []string{"pre-commit", "post-commit", "post-merge", "prepare-commit-msg"}
+
+	for _, hook := range hooks {
+		templatePath := filepath.Join(hooksDir, hook+".sh.template")
+		hookPath := filepath.Join(gitHooksDir, hook)
+
+		// Read template content
+		content, err := os.ReadFile(templatePath)
+		if err != nil {
+			// If template doesn't exist, skip (it might not be needed for this mode)
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("read hook template %s: %w", hook, err)
+		}
+
+		// Write hook to .git/hooks/ with executable permissions
+		if err := os.WriteFile(hookPath, content, 0755); err != nil {
+			return fmt.Errorf("install hook %s: %w", hook, err)
+		}
+	}
+
+	return nil
 }
 
 func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
@@ -107,10 +222,24 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 		return fmt.Errorf("write SCHEMA: %w", err)
 	}
 
-	// Write post-merge hook template
-	hookTemplatePath := filepath.Join(issuesDir, "hooks", "post-merge.sh.template")
-	if err := os.WriteFile(hookTemplatePath, []byte(postMergeHookTemplate), 0644); err != nil {
-		return fmt.Errorf("write post-merge hook template: %w", err)
+	// Write hook templates to .issues/hooks/
+	hookTemplates := map[string]string{
+		"post-merge.sh.template":       postMergeHookTemplate,
+		"post-commit.sh.template":      postCommitHookTemplate,
+		"prepare-commit-msg.sh.template": prepareCommitMsgHookTemplate,
+		"pre-commit.sh.template":       preCommitHookTemplate,
+	}
+
+	for hookName, hookContent := range hookTemplates {
+		hookTemplatePath := filepath.Join(issuesDir, "hooks", hookName)
+		if err := os.WriteFile(hookTemplatePath, []byte(hookContent), 0644); err != nil {
+			return fmt.Errorf("write hook template %s: %w", hookName, err)
+		}
+	}
+
+	// Install hooks from templates to .git/hooks/
+	if err := installHooks(repoPath, issuesDir); err != nil {
+		return fmt.Errorf("install hooks: %w", err)
 	}
 
 	// Detect project type and write config
