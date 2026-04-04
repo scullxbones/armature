@@ -33,6 +33,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyNote(op)
 	case ops.OpLink:
 		return s.applyLink(op)
+	case ops.OpUnlink:
+		return s.applyUnlink(op)
 	case ops.OpDecision:
 		return s.applyDecision(op)
 	case ops.OpAssign:
@@ -168,6 +170,21 @@ func (s *State) applyLink(op ops.Op) error {
 		source.BlockedBy = appendUnique(source.BlockedBy, op.Payload.Dep)
 		if dep, ok := s.Issues[op.Payload.Dep]; ok {
 			dep.Blocks = appendUnique(dep.Blocks, op.TargetID)
+		}
+	}
+	source.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyUnlink(op ops.Op) error {
+	source, ok := s.Issues[op.TargetID]
+	if !ok {
+		return fmt.Errorf("unlink: source issue %s not found", op.TargetID)
+	}
+	if op.Payload.Rel == "blocked_by" {
+		source.BlockedBy = removeString(source.BlockedBy, op.Payload.Dep)
+		if dep, ok := s.Issues[op.Payload.Dep]; ok {
+			dep.Blocks = removeString(dep.Blocks, op.TargetID)
 		}
 	}
 	source.Updated = op.Timestamp
@@ -420,4 +437,14 @@ func appendUnique(slice []string, item string) []string {
 		}
 	}
 	return append(slice, item)
+}
+
+func removeString(slice []string, item string) []string {
+	result := []string{}
+	for _, s := range slice {
+		if s != item {
+			result = append(result, s)
+		}
+	}
+	return result
 }

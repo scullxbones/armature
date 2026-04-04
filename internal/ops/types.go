@@ -10,6 +10,7 @@ const (
 	OpTransition        = "transition"
 	OpNote              = "note"
 	OpLink              = "link"
+	OpUnlink            = "unlink"
 	OpSourceLink        = "source-link"
 	OpSourceFingerprint = "source-fingerprint"
 	OpDAGTransition     = "dag-transition"
@@ -22,7 +23,7 @@ const (
 // ValidOpTypes for validation.
 var ValidOpTypes = map[string]bool{
 	OpCreate: true, OpClaim: true, OpHeartbeat: true,
-	OpTransition: true, OpNote: true, OpLink: true,
+	OpTransition: true, OpNote: true, OpLink: true, OpUnlink: true,
 	OpSourceLink: true, OpSourceFingerprint: true,
 	OpDAGTransition: true, OpDecision: true,
 	OpAssign:           true,

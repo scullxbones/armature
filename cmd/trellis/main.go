@@ -150,6 +150,10 @@ func newRootCmd() *cobra.Command {
 	linkCmd.GroupID = "dag"
 	root.AddCommand(linkCmd)
 
+	unlinkCmd := newUnlinkCmd()
+	unlinkCmd.GroupID = "dag"
+	root.AddCommand(unlinkCmd)
+
 	// Sync commands
 	syncCmd := newSyncCmd()
 	syncCmd.GroupID = "sync"
