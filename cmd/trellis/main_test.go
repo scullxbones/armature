@@ -2683,3 +2683,18 @@ func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
 	assert.Contains(t, out2, `"note"`)
 	assert.Contains(t, out2, "task-01")
 }
+
+// TestTransitionCommand_WithFieldFlag verifies that --field extracts a single field
+// from transition output without needing post-processing.
+func TestTransitionCommand_WithFieldFlag(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Transition to done and extract just the status field
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force", "--outcome", "completed", "--field", "status")
+	require.NoError(t, err)
+
+	// Output should be just "done" (the status value), nothing else
+	assert.Equal(t, "done\n", out)
+}
