@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/scullxbones/trellis/internal/git"
 	"github.com/scullxbones/trellis/internal/hooks"
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/scullxbones/trellis/internal/ops"
@@ -14,6 +15,7 @@ import (
 
 func newTransitionCmd() *cobra.Command {
 	var issueID, to, outcome, branch, pr string
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "transition [issue-id]",
@@ -22,12 +24,18 @@ func newTransitionCmd() *cobra.Command {
 
 Valid status transitions depend on the current status and workflow rules. Provide the target
 status with --to (required). You may optionally record an outcome description, branch name,
-or PR number to document the completion context.`,
+or PR number to document the completion context.
+
+When transitioning to done, you cannot be on main/master branch unless you use --force.
+This enforces branch + PR discipline.`,
 		Example: `  # Transition an issue to done with an outcome
   $ trls transition E6-S4-T2 --to done --outcome "Implemented all required features"
 
   # Transition to merged and record the PR number
-  $ trls transition --issue E6-S4-T2 --to merged --pr 1234`,
+  $ trls transition --issue E6-S4-T2 --to merged --pr 1234
+
+  # Override branch check with --force
+  $ trls transition E6-S4-T2 --to done --outcome "..." --force`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issueID == "" && len(args) > 0 {
@@ -46,6 +54,20 @@ or PR number to document the completion context.`,
 				return fmt.Errorf("invalid status %q: valid values are %v", to, valid)
 			}
 
+			// Check branch discipline when transitioning to done (unless --force)
+			if to == "done" && !force {
+				repoPath := appCtx.RepoPath
+				gc := git.New(repoPath)
+				currentBranch, err := gc.CurrentBranch()
+				if err == nil {
+					// Only reject if we successfully detected we're on main/master
+					if currentBranch == "main" || currentBranch == "master" {
+						return fmt.Errorf("cannot transition to done while on %s branch: create a feature branch and open a PR\nUse --force to override", currentBranch)
+					}
+				}
+				// If we can't determine the branch, allow the transition (graceful degradation)
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -54,23 +76,23 @@ or PR number to document the completion context.`,
 			issuesDir := appCtx.IssuesDir
 			cfg := appCtx.Config
 
-			{
-				// Get current issue status from materialized index
-				index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json"))
-				currentStatus := ""
-				if entry, ok := index[issueID]; ok {
-					currentStatus = entry.Status
-				}
+			// Get current issue status from materialized index and load index entries for all issues
+			index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json"))
+			currentStatus := ""
+			var currentEntry *materialize.IndexEntry
+			if entry, ok := index[issueID]; ok {
+				currentStatus = entry.Status
+				currentEntry = &entry
+			}
 
-				hookInput := hooks.HookInput{
-					IssueID:    issueID,
-					FromStatus: currentStatus,
-					ToStatus:   to,
-					WorkerID:   workerID,
-				}
-				if err := hooks.RunPreTransition(&cfg, hookInput); err != nil {
-					return err
-				}
+			hookInput := hooks.HookInput{
+				IssueID:    issueID,
+				FromStatus: currentStatus,
+				ToStatus:   to,
+				WorkerID:   workerID,
+			}
+			if err := hooks.RunPreTransition(&cfg, hookInput); err != nil {
+				return err
 			}
 
 			op := ops.Op{
@@ -81,6 +103,15 @@ or PR number to document the completion context.`,
 			if err := appendHighStakesOp(logPath, op); err != nil {
 				return err
 			}
+
+			// After successful transition, check if we should warn about parent story
+			if to == "done" && currentEntry != nil && currentEntry.Parent != "" {
+				if err := checkAndWarnParentStoryStatus(index, issueID, cmd); err != nil {
+					// Log the error but don't fail the transition
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not check parent story status: %v\n", err)
+				}
+			}
+
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "status": to}
@@ -98,6 +129,59 @@ or PR number to document the completion context.`,
 	cmd.Flags().StringVar(&outcome, "outcome", "", "outcome description")
 	cmd.Flags().StringVar(&branch, "branch", "", "feature branch name")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number")
+	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
+}
+
+// checkAndWarnParentStoryStatus checks if all sibling tasks will be done after this transition,
+// and the parent is still in-progress. Prints a warning to stderr if so.
+func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID string, cmd *cobra.Command) error {
+	currentEntry, ok := index[currentIssueID]
+	if !ok {
+		return fmt.Errorf("current issue not found in index: %s", currentIssueID)
+	}
+
+	parentID := currentEntry.Parent
+	if parentID == "" {
+		return nil
+	}
+
+	parentEntry, ok := index[parentID]
+	if !ok {
+		return fmt.Errorf("parent issue not found: %s", parentID)
+	}
+
+	// Check if parent is still in-progress
+	if parentEntry.Status != "in-progress" {
+		return nil
+	}
+
+	// Check if all siblings are done or will be done after this transition.
+	// We assume the current issue is transitioning to done.
+	allSiblingsDone := true
+	for _, siblingID := range parentEntry.Children {
+		siblingEntry, ok := index[siblingID]
+		if !ok {
+			continue
+		}
+		// If this is the current issue being transitioned, assume it will be done
+		if siblingID == currentIssueID {
+			continue
+		}
+		// Otherwise, check if the sibling is already done
+		if siblingEntry.Status != "done" {
+			allSiblingsDone = false
+			break
+		}
+	}
+
+	if allSiblingsDone {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "\n"+
+			"WARNING: All tasks under %s are done but the story is still in-progress.\n"+
+			"Run: trls transition %s --to done --outcome \"...\"\n\n",
+			parentID, parentID)
+	}
+
+	return nil
 }
