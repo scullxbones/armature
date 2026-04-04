@@ -444,3 +444,4 @@
 ["amend","task-1775311449",1775311449,"34dafe5f-6881-4bca-b209-c98c906e3550",{"acceptance":["trls status --status in-progress shows only in-progress issues","trls status --parent E6 shows only E6 descendants","trls status --status done --parent E6-S4 shows only done E6-S4 tasks","make check green"]}]
 ["create","task-1775311458",1775311458,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"test","parent":"E6-S6","type":"task"}]
 ["transition","task-1775311458",1775311469,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"cancelled","outcome":"test task"}]
+["create","task-1775311522",1775311522,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"Review trls ready usage: coordinator-push vs agent-pull model","parent":"E6-S6","type":"task","scope":["cmd/trellis/ready.go","docs/trls-worker-SKILL.md"],"definition_of_done":"documented recommendation on coordinator-push vs agent-pull; any gaps in trls ready UX identified and filed as follow-on tasks"}]
