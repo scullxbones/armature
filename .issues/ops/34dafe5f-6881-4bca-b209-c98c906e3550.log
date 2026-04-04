@@ -513,3 +513,4 @@
 ["claim","bug-1774960994",1775316539,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","task-1775168156",1775318160,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","task-1775168150",1775318162,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","E6-S6-T1",1775318169,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311449 detected at claim time"}]
