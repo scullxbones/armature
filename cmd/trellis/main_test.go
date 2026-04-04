@@ -2543,3 +2543,42 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 	// Should NOT contain warning about story since sibling is still pending
 	assert.NotContains(t, errOut, "story-02")
 }
+
+// TestNoteCommand_PositionalArgs verifies that positional args work: trls note <id> <message>
+func TestNoteCommand_PositionalArgs(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Test with positional args: note task-01 "message"
+	out, err := runTrls(t, repo, "note", "task-01", "progress from positional args")
+	require.NoError(t, err, "note with positional args should succeed")
+	assert.Contains(t, out, "task-01")
+
+	// Verify it works with JSON format too
+	out, err = runTrls(t, repo, "note", "task-01", "another message", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"note"`)
+	assert.Contains(t, out, "task-01")
+}
+
+// TestNoteCommand_PositionalArgs_EquivalentToFlags verifies positional args work identically to --issue/--msg flags
+func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Call with flags
+	out1, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "message via flags", "--format", "json")
+	require.NoError(t, err)
+
+	// Call with positional args
+	out2, err := runTrls(t, repo, "note", "task-01", "message via positional", "--format", "json")
+	require.NoError(t, err)
+
+	// Both should have similar structure (both JSON with "note" key)
+	assert.Contains(t, out1, `"note"`)
+	assert.Contains(t, out1, "task-01")
+	assert.Contains(t, out2, `"note"`)
+	assert.Contains(t, out2, "task-01")
+}
