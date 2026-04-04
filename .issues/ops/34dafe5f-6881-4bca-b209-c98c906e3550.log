@@ -464,3 +464,4 @@
 ["amend","task-1775312202",1775312208,"34dafe5f-6881-4bca-b209-c98c906e3550",{"acceptance":["trls create --source docs/dogfooding-learnings.md creates and source-links in one call","--source accepts source ID or manifest URL/path","created issue shows as source-linked in trls validate (not accepted-risk)","make check green"]}]
 ["source-link","task-1775312202",1775312208,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"3778fb64-506f-413e-9d18-1cc218987277","source_url":"docs/dogfooding-learnings.md"}]
 ["source-link","task-1775311449",1775312235,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"3778fb64-506f-413e-9d18-1cc218987277","source_url":"docs/dogfooding-learnings.md"}]
+["source-link","task-1775311522",1775312236,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"3778fb64-506f-413e-9d18-1cc218987277","source_url":"docs/dogfooding-learnings.md"}]
