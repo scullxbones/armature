@@ -85,11 +85,19 @@ The subagent should:
 
 ### 5. Complete and Commit
 
+Before completing work, ensure you are on a **feature branch** (not main/master):
+```
+git checkout -b feat/ISSUE-ID    # Create feature branch before starting
+```
+
+Then complete the task:
 ```
 trls transition ISSUE-ID --to done --outcome "what was accomplished"
 git add <code files...> .issues/   # always include .issues/ — ops must travel with code
 git commit -m "feat(ISSUE-ID): brief description of what was implemented"
 ```
+
+**Branch + PR discipline:** `trls transition --to done` will fail if you are on the main or master branch (unless you use `--force`). This enforcement ensures all work goes through feature branches and pull requests for review. The `--force` flag should only be used in exceptional cases (e.g., emergency hotfixes to main).
 
 Record a concrete outcome. Commit immediately after each task — small focused commits are easier to review.
 
@@ -242,6 +250,8 @@ high token usage. Instead:
 | Leave issues uncited | Run `trls source-link` or `trls accept-citation --ci` before the subagent returns |
 | Repeating `transition` then `commit` manually | Use a bundled command or alias: `trls transition ID ... && git add . .issues/ && git commit -m ...` |
 | Skipping `trls validate` at story close | Citation debt accumulates silently; validate before transitioning the story |
+| Pushing directly to main branch | Create a feature branch first: `git checkout -b feat/ISSUE-ID` before starting work |
+| Transitioning to done while on main | `trls transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |
 
 | Scope overlap WARNING on `trls validate` | Add `trls link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
 | MISSING entries in `trls sources verify` | Run `trls sources sync` to fetch and fingerprint; re-run `trls sources verify` until all show OK |
