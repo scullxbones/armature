@@ -499,3 +499,4 @@
 ["note","E6-S6",1775313604,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: trls show only accepts one arg at a time — add multi-issue support so you can check status of a batch (e.g. trls show id1 id2 id3) without looping"}]
 ["claim","task-1775311528",1775313899,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","E6-S6",1775313900,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["note","task-1775311533",1775313906,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311528 detected at claim time"}]
