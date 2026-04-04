@@ -12,3 +12,4 @@
 ["note","E6-S6-T1",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775168172 detected at claim time"}]
 ["note","task-1775168172",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with bug-1774960994 detected at claim time"}]
 ["note","bug-1774960994",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775168172 detected at claim time"}]
+["note","task-1775168172",1775322778,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311449 detected at claim time"}]
