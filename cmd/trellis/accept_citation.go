@@ -12,7 +12,7 @@ import (
 
 func newAcceptCitationCmd() *cobra.Command {
 	var issueID, rationale string
-	var ci bool
+	var ci, force, nonInteractive bool
 
 	cmd := &cobra.Command{
 		Use:   "accept-citation [issue-id]",
@@ -31,7 +31,10 @@ func newAcceptCitationCmd() *cobra.Command {
 				return fmt.Errorf("rationale must be at least 3 words (got %d)", len(words))
 			}
 
-			if !ci {
+			// Determine if we should skip the interactive prompt
+			skipPrompt := ci || force || nonInteractive
+
+			if !skipPrompt {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 					"Accept citation for issue %q with rationale: %q\nConfirm? [y/N]: ", issueID, rationale)
 				scanner := bufio.NewScanner(cmd.InOrStdin())
@@ -54,7 +57,7 @@ func newAcceptCitationCmd() *cobra.Command {
 				WorkerID:  workerID,
 				Payload: ops.Payload{
 					Rationale:                 rationale,
-					ConfirmedNoninteractively: ci,
+					ConfirmedNoninteractively: skipPrompt,
 				},
 			}
 			if err := appendLowStakesOp(logPath, op); err != nil {
@@ -64,7 +67,7 @@ func newAcceptCitationCmd() *cobra.Command {
 			result := map[string]interface{}{
 				"issue":                      issueID,
 				"rationale":                  rationale,
-				"confirmed_noninteractively": ci,
+				"confirmed_noninteractively": skipPrompt,
 			}
 			data, _ := json.Marshal(result)
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
@@ -75,6 +78,8 @@ func newAcceptCitationCmd() *cobra.Command {
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to accept citation for")
 	cmd.Flags().StringVar(&rationale, "rationale", "", "rationale for accepting the citation (>=3 words)")
 	cmd.Flags().BoolVar(&ci, "ci", false, "bypass interactive prompt (non-interactive/CI mode)")
+	cmd.Flags().BoolVar(&force, "force", false, "skip confirmation prompt and proceed (alias for --ci)")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "skip confirmation prompt and proceed (alias for --ci)")
 	_ = cmd.MarkFlagRequired("rationale")
 	return cmd
 }
