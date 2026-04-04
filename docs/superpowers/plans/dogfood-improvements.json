@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "title": "Dogfooding Improvements (L17-L21)",
+  "issues": [
+    {
+      "id": "DF",
+      "title": "Dogfooding Improvements",
+      "type": "epic"
+    },
+    {
+      "id": "DF-S1",
+      "title": "Support Positional Arguments for Issue IDs (L17)",
+      "type": "story",
+      "parent": "DF",
+      "dod": "All commands that target a single issue (show, claim, transition, link, etc.) support positional ID arguments; help text updated; existing --issue flag still works for backward compatibility."
+    },
+    {
+      "id": "DF-S1-T1",
+      "title": "Update trls show, claim, and transition to support positional ID",
+      "type": "task",
+      "parent": "DF-S1",
+      "scope": "cmd/trellis/show.go, cmd/trellis/claim.go, cmd/trellis/transition.go",
+      "dod": "trls show <id>, trls claim <id>, and trls transition <id> --to <status> all work without --issue flag."
+    },
+    {
+      "id": "DF-S1-T2",
+      "title": "Update secondary single-issue commands to support positional ID",
+      "type": "task",
+      "parent": "DF-S1",
+      "scope": "cmd/trellis/note.go, cmd/trellis/decision.go, cmd/trellis/amend.go, cmd/trellis/confirm.go, cmd/trellis/source_link.go, cmd/trellis/accept_citation.go, cmd/trellis/reopen.go, cmd/trellis/heartbeat.go",
+      "dod": "All single-issue targeting commands support positional IDs."
+    },
+    {
+      "id": "DF-S2",
+      "title": "Smart TTY Detection for Interactive Commands (L18)",
+      "type": "story",
+      "parent": "DF",
+      "dod": "Interactive commands (ready, dag-summary, stale-review) automatically default to non-interactive mode when stdout is not a TTY; no more hangs in agent environments."
+    },
+    {
+      "id": "DF-S2-T1",
+      "title": "Implement TTY detection and update trls ready",
+      "type": "task",
+      "parent": "DF-S2",
+      "scope": "internal/tui/tui.go, cmd/trellis/ready.go",
+      "dod": "trls ready defaults to --format agent when piped or run in non-TTY."
+    },
+    {
+      "id": "DF-S2-T2",
+      "title": "Update dag-summary and stale-review for TTY detection",
+      "type": "task",
+      "parent": "DF-S2",
+      "scope": "cmd/trellis/dagsum.go, cmd/trellis/stalereview.go",
+      "dod": "dag-summary and stale-review skip TUI and output summary when in non-TTY."
+    },
+    {
+      "id": "DF-S3",
+      "title": "Enhanced aggregated views for Story tracking (L19)",
+      "type": "story",
+      "parent": "DF",
+      "dod": "A single command provides an overview of a story's progress, including child statuses and outcomes."
+    },
+    {
+      "id": "DF-S3-T1",
+      "title": "Add Story Board view to trls list",
+      "type": "task",
+      "parent": "DF-S3",
+      "scope": "cmd/trellis/list.go",
+      "dod": "trls list --parent <id> includes Status, Outcome, and ClaimedBy columns in a table format."
+    },
+    {
+      "id": "DF-S4",
+      "title": "Improve Worker Skill for efficiency and reliability (L20, L21)",
+      "type": "story",
+      "parent": "DF",
+      "dod": "trls-worker skill updated with best practices for loop efficiency and large batch processing."
+    },
+    {
+      "id": "DF-S4-T1",
+      "title": "Document bundled 'transition + commit' workflow in skill",
+      "type": "task",
+      "parent": "DF-S4",
+      "scope": "docs/trls-worker-SKILL.md",
+      "dod": "Skill includes explicit recommendation for bundling trellis transition with git commit to avoid state lag."
+    },
+    {
+      "id": "DF-S4-T2",
+      "title": "Add 'Batch Strategy' section to worker skill",
+      "type": "task",
+      "parent": "DF-S4",
+      "scope": "docs/trls-worker-SKILL.md",
+      "dod": "Skill instructs agents on how to handle large tasks by building manifests and processing in chunks."
+    }
+  ]
+}
