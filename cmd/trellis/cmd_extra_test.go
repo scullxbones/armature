@@ -298,6 +298,121 @@ func TestValidateCommand_JSON(t *testing.T) {
 	assert.Contains(t, out, "{")
 }
 
+// Test extractFieldsFromIssue helper function
+func TestExtractFieldsFromIssue_SingleField(t *testing.T) {
+	issue := &materialize.Issue{
+		ID:     "task-01",
+		Title:  "Test task",
+		Status: "open",
+		Type:   "task",
+		Parent: "E6",
+	}
+
+	fields := extractFieldsFromIssue(issue, "status")
+	assert.Equal(t, []string{"open"}, fields)
+}
+
+func TestExtractFieldsFromIssue_MultipleFields(t *testing.T) {
+	issue := &materialize.Issue{
+		ID:      "task-01",
+		Title:   "Test task",
+		Status:  "open",
+		Type:    "task",
+		Parent:  "E6",
+		Outcome: "Fixed bug",
+	}
+
+	fields := extractFieldsFromIssue(issue, "status,outcome,title")
+	assert.Equal(t, []string{"open", "Fixed bug", "Test task"}, fields)
+}
+
+func TestExtractFieldsFromIssue_UnknownField(t *testing.T) {
+	issue := &materialize.Issue{
+		ID:    "task-01",
+		Title: "Test task",
+	}
+
+	fields := extractFieldsFromIssue(issue, "unknown")
+	assert.Equal(t, []string{""}, fields)
+}
+
+func TestExtractFieldsFromIssue_MixedKnownAndUnknown(t *testing.T) {
+	issue := &materialize.Issue{
+		ID:     "task-01",
+		Title:  "Test task",
+		Status: "open",
+	}
+
+	fields := extractFieldsFromIssue(issue, "status,unknown,title")
+	assert.Equal(t, []string{"open", "", "Test task"}, fields)
+}
+
+// Test trls show --field flag
+func TestShowCommand_WithFieldFlag_SingleField(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, "open\n", out)
+}
+
+func TestShowCommand_WithFieldFlag_MultipleFields(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "show", "task-01", "--field", "status,title")
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	assert.Equal(t, 2, len(lines))
+	assert.Equal(t, "open", lines[0])
+	assert.Equal(t, "Test task", lines[1])
+}
+
+// Test trls status --status filter
+func TestStatusCommand_WithStatusFilter(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create another task in different status
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"})
+	require.NoError(t, cmd.Execute())
+
+	// Transition task-02 to in-progress
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02"})
+	require.NoError(t, cmd2.Execute())
+
+	// Test filtering by status
+	out, err := runTrls(t, repo, "status", "--status", "open")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, "task-02") // Should not include claimed task
+}
+
+// Test trls status --parent filter
+func TestStatusCommand_WithParentFilter(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a parent task
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"})
+	require.NoError(t, cmd.Execute())
+
+	// Create a child task
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-child", "--parent", "E6"})
+	require.NoError(t, cmd2.Execute())
+
+	// Test filtering by parent
+	out, err := runTrls(t, repo, "status", "--parent", "E6")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-child")
+	assert.NotContains(t, out, "task-01") // Should not include task without parent
+}
+
 func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
