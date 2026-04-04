@@ -224,10 +224,10 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 
 	// Write hook templates to .issues/hooks/
 	hookTemplates := map[string]string{
-		"post-merge.sh.template":       postMergeHookTemplate,
-		"post-commit.sh.template":      postCommitHookTemplate,
+		"post-merge.sh.template":         postMergeHookTemplate,
+		"post-commit.sh.template":        postCommitHookTemplate,
 		"prepare-commit-msg.sh.template": prepareCommitMsgHookTemplate,
-		"pre-commit.sh.template":       preCommitHookTemplate,
+		"pre-commit.sh.template":         preCommitHookTemplate,
 	}
 
 	for hookName, hookContent := range hookTemplates {

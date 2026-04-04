@@ -588,7 +588,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	run(t, repo, "git", "checkout", "-b", "feature/sync-test")
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: sync test work")
 	run(t, repo, "git", "checkout", mainBranch)
-	run(t, repo, "git", "merge", "--no-ff", "feature/sync-test", "-m", "Merge feature/sync-test")
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-test", "-m", "Merge feature/sync-test")
 
 	// Run sync — should auto-transition T-001 to merged
 	out, err := runTrls(t, repo, "sync")
@@ -637,7 +637,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	run(t, repo, "git", "checkout", "-b", "feature/sync-dryrun-test")
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: dry-run test work")
 	run(t, repo, "git", "checkout", mainBranch)
-	run(t, repo, "git", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
 
 	// Count ops before dry-run
 	issuesDir := filepath.Join(repo, ".trellis", ".issues")
