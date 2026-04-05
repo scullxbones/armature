@@ -9,7 +9,7 @@ import (
 )
 
 func newCreateCmd() *cobra.Command {
-	var title, nodeType, parent, id, priority, dod, confidence string
+	var title, nodeType, parent, id, priority, dod, confidence, acceptanceJSON string
 	var scope []string
 
 	cmd := &cobra.Command{
@@ -25,20 +25,30 @@ func newCreateCmd() *cobra.Command {
 				id = fmt.Sprintf("%s-%d", nodeType, nowEpoch())
 			}
 
+			payload := ops.Payload{
+				Title:            title,
+				NodeType:         nodeType,
+				Parent:           parent,
+				Scope:            scope,
+				Priority:         priority,
+				DefinitionOfDone: dod,
+				Confidence:       confidence,
+			}
+
+			if acceptanceJSON != "" {
+				var raw json.RawMessage
+				if err := json.Unmarshal([]byte(acceptanceJSON), &raw); err != nil {
+					return fmt.Errorf("invalid --acceptance JSON: %w", err)
+				}
+				payload.Acceptance = raw
+			}
+
 			op := ops.Op{
 				Type:      ops.OpCreate,
 				TargetID:  id,
 				Timestamp: nowEpoch(),
 				WorkerID:  workerID,
-				Payload: ops.Payload{
-					Title:            title,
-					NodeType:         nodeType,
-					Parent:           parent,
-					Scope:            scope,
-					Priority:         priority,
-					DefinitionOfDone: dod,
-					Confidence:       confidence,
-				},
+				Payload:   payload,
 			}
 
 			if err := appendOp(logPath, op); err != nil {
@@ -65,6 +75,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
 	cmd.Flags().StringVar(&confidence, "confidence", "", "confidence level: draft or verified (default verified)")
+	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
 	_ = cmd.MarkFlagRequired("title")
 
 	return cmd

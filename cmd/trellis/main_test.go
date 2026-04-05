@@ -2739,6 +2739,40 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	assert.Contains(t, ids, "show-j2")
 }
 
+// TestCreateCommand_WithAcceptanceFlag verifies that --acceptance on create produces a
+// fully-specified task without requiring a follow-up trls amend.
+func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	acceptanceJSON := `[{"type":"test_passes","description":"all tests green"}]`
+	out, err := runTrls(t, repo, "create",
+		"--title", "Feature with acceptance",
+		"--type", "task",
+		"--id", "acc-01",
+		"--acceptance", acceptanceJSON,
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out, "acc-01")
+
+	// Materialize to verify acceptance was captured in the create op without a follow-up amend.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	stateDir := getTestStateDir(t, repo)
+	issuePath := filepath.Join(stateDir, "issues", "acc-01.json")
+	issue, err := materialize.LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.NotEmpty(t, issue.Acceptance, "acceptance should be set from --acceptance flag on create")
+
+	var criteria []map[string]interface{}
+	require.NoError(t, json.Unmarshal(issue.Acceptance, &criteria))
+	require.Len(t, criteria, 1)
+	assert.Equal(t, "test_passes", criteria[0]["type"])
+}
+
 // TestTransitionCommand_WithFieldFlag verifies that --field extracts a single field
 // from transition output without needing post-processing.
 func TestTransitionCommand_WithFieldFlag(t *testing.T) {
