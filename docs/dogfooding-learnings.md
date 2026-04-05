@@ -423,6 +423,18 @@ Captured while using trellis to track its own E2 development.
 
 ---
 
+## L37: `trls sync` misses squash/rebase-merged PRs — false "not merged" detection
+
+**Observed**: After merging four PRs via GitHub's squash-merge strategy, `trls sync` reported "No merged branches detected" and `git merge-base --is-ancestor origin/<branch> origin/main` returned false for all four branches. The implementation commits were present on `main` (visible in `git log`), but the branch tips were not direct ancestors after squash rebase, breaking the ancestry check.
+
+**Impact**: `trls sync` is effectively a no-op on repos that use squash or rebase merge strategies. The `done → merged` transition must be performed manually with `trls merged` for every affected issue, which defeats the purpose of auto-detection.
+
+**Recommendation**: `trls sync` should fall back to commit-message matching when ancestry check fails: scan `git log main` for commit messages containing the issue ID and treat a match as evidence of merge. Alternatively, check the GitHub API for PR merge state (`gh pr list --state merged`) rather than relying solely on git ancestry. The current ancestry check should remain as the fast path; message-scan or API check as the slow fallback.
+
+**File**: `internal/sync/sync.go`, `cmd/trellis/sync.go`
+
+---
+
 ## L35: Parallel subagents work without LSP — expensive write→check→fix loops
 
 **Observed**: Subagents dispatched to `/tmp/trellis-w2*` worktrees have no gopls connection. The coordinator's LSP session can reach worktree files (verified via hover on `/tmp/trellis-w3/`), but subagents launched via the Agent tool run as headless processes with no IDE. Every compilation or lint error requires a full `make check` cycle (~20–30s) rather than instant inline feedback. w2h introduced a goimports violation in `init.go` that passed `make check` inside its worktree (where goimports had already run) but failed after merge into main.
