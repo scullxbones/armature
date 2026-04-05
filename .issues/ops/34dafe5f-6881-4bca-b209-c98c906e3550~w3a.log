@@ -6,3 +6,4 @@
 ["note","task-1774961009",1775349912,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775348372 detected at claim time"}]
 ["claim","task-1775348372",1775349912,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","task-1775348372",1775351569,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added trls hook run command with native Go logic for all four git hooks (pre-commit, post-commit, post-merge, prepare-commit-msg); shell templates can now delegate to trls hook run instead of embedding shell logic","branch":"feat/task-1775348372-hook-run","pr":"https://github.com/scullxbones/trellis/pull/8"}]
+["source-link","task-1775348372",1775351575,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"3778fb64-506f-413e-9d18-1cc218987277","source_url":"docs/dogfooding-learnings.md"}]
