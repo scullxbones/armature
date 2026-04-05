@@ -626,3 +626,4 @@
 ["transition","E6-S6",1775355826,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"all dogfooding issues found during E6 resolved: E6-S6-T1 (accept-citation --force), bug-1774960994 (PR discipline), task-1774961009 (transition PR gate), task-1775311449 (story-done warning)"}]
 ["transition","story-1773804400",1775355827,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"trls-worker skill updated with commit/push/PR guidance (task-1773804403, task-1773804476 both done)"}]
 ["transition","E5-S4",1775355831,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"all four user-facing docs completed: README.md, docs/getting-started.md, docs/commands.md, docs/use-cases.md"}]
+["transition","DF",1775355832,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"all dogfooding improvement stories delivered: positional args (S1), TTY detection (S2), story board (S3), worker skill improvements (S4)"}]
