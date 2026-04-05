@@ -2787,3 +2787,79 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 	// Output should be just "done" (the status value), nothing else
 	assert.Equal(t, "done\n", out)
 }
+
+// TestCreateCommand_WithSourceFlag verifies that --source on create emits both a
+// create op and a source-link op in a single invocation, so the issue is fully
+// cited without a follow-up source-link command.
+func TestCreateCommand_WithSourceFlag(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a temporary file to use as a filesystem source.
+	tmpFile := filepath.Join(t.TempDir(), "dogfooding-learnings.md")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("# Dogfooding Learnings\n"), 0600))
+
+	// Register the source in the manifest.
+	out, err := runTrls(t, repo, "sources", "add", "--url", tmpFile, "--type", "filesystem", "--title", "Learnings")
+	require.NoError(t, err)
+
+	// Extract the source UUID from "added source <uuid> ..." output.
+	parts := strings.Fields(strings.TrimSpace(out))
+	require.GreaterOrEqual(t, len(parts), 3, "expected 'added source <uuid> ...' in output: %s", out)
+	sourceID := parts[2]
+
+	t.Run("by source UUID", func(t *testing.T) {
+		_, err := runTrls(t, repo, "create",
+			"--title", "Source linked task (by id)",
+			"--type", "task",
+			"--id", "src-id-01",
+			"--source", sourceID,
+		)
+		require.NoError(t, err)
+
+		// Materialize and confirm the issue exists.
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+
+		// Validate: the issue should NOT appear as "uncited node" — it is source-linked.
+		validateOut, err := runTrls(t, repo, "validate")
+		require.NoError(t, err)
+		assert.NotContains(t, validateOut, "uncited node: src-id-01", "source-linked issue should not appear as uncited")
+		assert.Contains(t, validateOut, "COVERAGE: ", "coverage line should be present")
+		// Coverage total-cited should be ≥ 1.
+		assert.NotContains(t, validateOut, "COVERAGE: 0/", "at least one issue should be cited")
+	})
+
+	t.Run("by source URL/path", func(t *testing.T) {
+		_, err := runTrls(t, repo, "create",
+			"--title", "Source linked task (by path)",
+			"--type", "task",
+			"--id", "src-url-01",
+			"--source", tmpFile,
+		)
+		require.NoError(t, err)
+
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+
+		validateOut, err := runTrls(t, repo, "validate")
+		require.NoError(t, err)
+		assert.NotContains(t, validateOut, "uncited node: src-url-01", "source-linked issue should not appear as uncited")
+		assert.NotContains(t, validateOut, "COVERAGE: 0/", "at least one issue should be cited")
+	})
+
+	t.Run("unknown source ref returns error", func(t *testing.T) {
+		_, err := runTrls(t, repo, "create",
+			"--title", "Bad source task",
+			"--type", "task",
+			"--id", "src-bad-01",
+			"--source", "nonexistent-source-ref",
+		)
+		require.Error(t, err, "should fail when source ref is not found in manifest")
+		assert.Contains(t, err.Error(), "not found")
+	})
+}
