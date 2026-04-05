@@ -820,3 +820,4 @@
 ["transition","task-1775348396",1775356760,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","task-1774969637",1775389325,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"internal/exitcodes package implemented as part of E6-S3-T4 (commit 437114d); ExitSuccess/GeneralError/UsageError/NotFound/Conflict/IOError/InvalidState constants defined with String() and Int() methods; all cmd error paths use these constants"}]
 ["transition","task-1774969637",1775389327,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["claim","task-1775311522",1775389453,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
