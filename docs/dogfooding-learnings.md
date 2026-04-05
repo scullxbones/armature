@@ -411,6 +411,18 @@ Captured while using trellis to track its own E2 development.
 
 ---
 
+## L36: No `trls rollup` command — parent status drift requires manual triage
+
+**Observed**: After a status-audit pass, 9 issues required manual transitions: 4 tasks whose implementation commits were on `main` but status was still `claimed`; 3 stories/epics whose children were all `done` but the parent was still `open` or `in-progress`; 2 stories with stale `claimed` status whose child tasks had all completed. `trls doctor` caught the stale-claim cases (D2) and git-divergence cases (D1), but missed the pure rollup failures (e.g., `E5-S4`, `DF`, `story-1773804400`) where all children were terminal but no stale claim or git reference triggered a check.
+
+**Impact**: Status drift accumulates silently between audit passes. Coordinators must manually walk the hierarchy to find parents that should have advanced. The existing auto-advance-on-claim (E5-S1-T3) advances parents to `in-progress` when a child is claimed, but there is no corresponding auto-advance-to-done when all children complete. This gap means story and epic statuses routinely lag behind reality.
+
+**Recommendation**: Add a `trls rollup [--apply]` command that walks the DAG bottom-up, identifies any story or epic whose children are all in terminal states (`done`, `merged`, `cancelled`) but the parent is not, and reports (or with `--apply`, transitions) them. Optionally integrate this check into the post-transition path: after any task transitions to `done`, check if all siblings are terminal and emit a warning or auto-advance the parent.
+
+**File**: `cmd/trellis/rollup.go` (new), `internal/materialize/`, `cmd/trellis/transition.go`
+
+---
+
 ## L35: Parallel subagents work without LSP — expensive write→check→fix loops
 
 **Observed**: Subagents dispatched to `/tmp/trellis-w2*` worktrees have no gopls connection. The coordinator's LSP session can reach worktree files (verified via hover on `/tmp/trellis-w3/`), but subagents launched via the Agent tool run as headless processes with no IDE. Every compilation or lint error requires a full `make check` cycle (~20–30s) rather than instant inline feedback. w2h introduced a goimports violation in `init.go` that passed `make check` inside its worktree (where goimports had already run) but failed after merge into main.
