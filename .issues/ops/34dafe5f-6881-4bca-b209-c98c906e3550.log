@@ -823,3 +823,4 @@
 ["claim","task-1775311522",1775389453,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","task-1775311790",1775389457,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311522 detected at claim time"}]
 ["note","task-1775311522",1775389457,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311790 detected at claim time"}]
+["claim","task-1775311790",1775389457,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
