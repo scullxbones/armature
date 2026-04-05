@@ -1,3 +1,4 @@
 ["note","task-1775348387",1775349919,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with bug-1774960994 detected at claim time"}]
 ["note","bug-1774960994",1775349919,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775348387 detected at claim time"}]
 ["claim","task-1775348387",1775349919,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","task-1775348387",1775351697,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Documented per-worktree go.work setup and coordinator LSP pre-merge review in trls-worker-SKILL.md, with two new Common Mistakes rows for L34/L35 gaps.","branch":"feat/task-1775348387-worktree-lsp","pr":"https://github.com/scullxbones/trellis/pull/9"}]
