@@ -224,6 +224,10 @@ func newRootCmd() *cobra.Command {
 	doctorCmd.GroupID = "admin"
 	root.AddCommand(doctorCmd)
 
+	hookCmd := newHookCmd()
+	hookCmd.GroupID = "admin"
+	root.AddCommand(hookCmd)
+
 	tuiCmd := newTUICmd()
 	tuiCmd.GroupID = "admin"
 	root.AddCommand(tuiCmd)
