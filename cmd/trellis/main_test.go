@@ -2690,6 +2690,55 @@ func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
 	assert.Contains(t, out2, "task-01")
 }
 
+// TestShowCommand_MultipleIDs verifies that trls show accepts multiple positional
+// issue IDs and outputs all of them separated by "---".
+func TestShowCommand_MultipleIDs(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	// Create two tasks
+	_, err = runTrls(t, repo, "create", "--id", "show-a", "--title", "Show Task A", "--type", "task")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "show-b", "--title", "Show Task B", "--type", "task")
+	require.NoError(t, err)
+
+	// Show both in a single call using positional args
+	out, err := runTrls(t, repo, "show", "show-a", "show-b")
+	require.NoError(t, err)
+
+	// Both issue IDs must appear in output
+	assert.Contains(t, out, "show-a")
+	assert.Contains(t, out, "show-b")
+	// Output must contain a separator between them
+	assert.Contains(t, out, "---")
+}
+
+// TestShowCommand_MultipleIDs_JSON verifies that --format json with multiple IDs
+// outputs a JSON array.
+func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "show-j1", "--title", "JSON Task 1", "--type", "task")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "show-j2", "--title", "JSON Task 2", "--type", "task")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "show", "--format", "json", "show-j1", "show-j2")
+	require.NoError(t, err)
+
+	var results []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &results))
+	require.Len(t, results, 2)
+	ids := []string{results[0]["id"].(string), results[1]["id"].(string)}
+	assert.Contains(t, ids, "show-j1")
+	assert.Contains(t, ids, "show-j2")
+}
+
 // TestTransitionCommand_WithFieldFlag verifies that --field extracts a single field
 // from transition output without needing post-processing.
 func TestTransitionCommand_WithFieldFlag(t *testing.T) {
