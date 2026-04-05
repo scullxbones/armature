@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/trellis/internal/sources"
 	"github.com/spf13/cobra"
 )
 
 func newCreateCmd() *cobra.Command {
-	var title, nodeType, parent, id, priority, dod, confidence, acceptanceJSON string
+	var title, nodeType, parent, id, priority, dod, confidence, acceptanceJSON, sourceRef string
 	var scope []string
 
 	cmd := &cobra.Command{
@@ -55,6 +57,50 @@ func newCreateCmd() *cobra.Command {
 				return err
 			}
 
+			// If --source was provided, resolve it from the manifest and emit a
+			// source-link op so the issue is fully cited in a single invocation.
+			if sourceRef != "" {
+				dir := sourcesDir()
+				manifest, err := sources.ReadManifest(dir)
+				if err != nil {
+					return fmt.Errorf("read manifest: %w", err)
+				}
+
+				var entry *sources.SourceEntry
+				var resolvedID string
+
+				// Treat the ref as a UUID first; fall back to URL/path lookup.
+				if _, parseErr := uuid.Parse(sourceRef); parseErr == nil {
+					e, ok := manifest.Get(sourceRef)
+					if !ok {
+						return fmt.Errorf("source %q not found in manifest", sourceRef)
+					}
+					entry = e
+					resolvedID = sourceRef
+				} else {
+					e, ok := manifest.GetByURL(sourceRef)
+					if !ok {
+						return fmt.Errorf("source %q not found in manifest", sourceRef)
+					}
+					entry = e
+					resolvedID = entry.ID
+				}
+
+				slOp := ops.Op{
+					Type:      ops.OpSourceLink,
+					TargetID:  id,
+					Timestamp: nowEpoch(),
+					WorkerID:  workerID,
+					Payload: ops.Payload{
+						SourceID:  resolvedID,
+						SourceURL: entry.URL,
+					},
+				}
+				if err := appendLowStakesOp(logPath, slOp); err != nil {
+					return err
+				}
+			}
+
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"id": id, "status": "created"}
@@ -76,6 +122,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
 	cmd.Flags().StringVar(&confidence, "confidence", "", "confidence level: draft or verified (default verified)")
 	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
+	cmd.Flags().StringVar(&sourceRef, "source", "", "source ID (UUID) or URL/path to source-link at creation time")
 	_ = cmd.MarkFlagRequired("title")
 
 	return cmd

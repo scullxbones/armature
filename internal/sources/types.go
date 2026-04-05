@@ -34,6 +34,21 @@ func (m *Manifest) Get(id string) (*SourceEntry, bool) {
 	return &e, true
 }
 
+// GetByURL returns the first SourceEntry whose URL matches the given value,
+// along with a boolean indicating whether it was found.
+func (m *Manifest) GetByURL(url string) (*SourceEntry, bool) {
+	if m.Entries == nil {
+		return nil, false
+	}
+	for _, e := range m.Entries {
+		if e.URL == url {
+			entry := e
+			return &entry, true
+		}
+	}
+	return nil, false
+}
+
 // Upsert inserts or replaces the SourceEntry in the manifest.
 func (m *Manifest) Upsert(entry SourceEntry) {
 	if m.Entries == nil {
