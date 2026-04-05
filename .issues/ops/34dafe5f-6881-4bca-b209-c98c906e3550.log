@@ -586,3 +586,4 @@
 ["create","task-1775348372",1775348372,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"trls hook run: native hook runner to replace shell template logic","parent":"E6-S6","type":"task"}]
 ["create","task-1775348372",1775348372,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"Parallel agent dev env: per-worktree go.work and coordinator LSP pre-merge review","parent":"E6-S6","type":"task"}]
 ["create","task-1775348372",1775348372,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"trls show: accept multiple issue IDs as positional arguments","parent":"E6-S6","type":"task"}]
+["create","task-1775348387",1775348387,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"Parallel agent dev env: per-worktree go.work and coordinator LSP pre-merge review","parent":"E6-S6","type":"task"}]
