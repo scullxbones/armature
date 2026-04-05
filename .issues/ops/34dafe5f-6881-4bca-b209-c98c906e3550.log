@@ -591,3 +591,4 @@
 ["amend","task-1775348372",1775348403,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/trellis/hook.go (new)"," .issues/hooks/post-commit.sh.template"," .issues/hooks/post-merge.sh.template"," .issues/hooks/prepare-commit-msg.sh.template"," .issues/hooks/pre-commit.sh.template"]}]
 ["amend","task-1775348387",1775348404,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["docs/trls-worker-SKILL.md"," dispatcher workflow (coordinator pattern)"]}]
 ["amend","task-1775348396",1775348405,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/trellis/show.go"," cmd/trellis/main_test.go"]}]
+["source-fingerprint","cd32a9ac-d9af-4aaa-962e-56372acc2ea2",1775348409,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"468d28a4980b1a32955dd419861c1b7645c5ad87fcbd2229e25889797e94a5dd","provider":"filesystem"}]
