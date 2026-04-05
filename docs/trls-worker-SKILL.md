@@ -215,6 +215,64 @@ If you forget to assign slots, all parallel agents collapse into one log file.
 Ops are still recorded correctly, but per-agent attribution is lost and
 concurrent `AppendAndCommit` calls may race on the `_trellis` branch.
 
+### Parallel Dev Environment: go.work and Coordinator LSP Review
+
+Subagents dispatched to isolated worktrees have no IDE or LSP connection. Every
+compilation or lint error requires a full `make check` cycle (~20–30 s) rather
+than instant inline feedback. Two complementary mitigations reduce this cost.
+
+**1. Per-worktree go.work — fast `gopls` feedback inside the agent**
+
+Before dispatching each subagent, write a minimal `go.work` file into the
+worktree root (the file is gitignored):
+
+```bash
+# Coordinator writes this once per worktree before dispatch
+cat > /tmp/trellis-w<slot>/go.work <<'EOF'
+go 1.22
+
+use .
+EOF
+```
+
+With `go.work` present, the subagent can run:
+
+```bash
+gopls check ./...   # fast per-file feedback, no make required
+```
+
+This catches import-path and format errors (e.g. `goimports` violations) in
+seconds rather than after a full test suite run.
+
+**go.work must be gitignored.** Add `/go.work` (and `/go.work.sum`) to the
+worktree's `.gitignore` (or the repo's root `.gitignore`) so it is never staged.
+
+**2. Coordinator LSP review before merging**
+
+After all subagents return and before merging their branches, the coordinator
+runs `gopls diagnostics` on every file changed in the wave:
+
+```bash
+# From coordinator shell — runs against files in each worktree
+for wt in /tmp/trellis-w<slot1> /tmp/trellis-w<slot2>; do
+    gopls diagnostics "$wt"/... 2>/dev/null
+done
+```
+
+Any ERROR-level diagnostic (undefined symbol, import cycle, format violation)
+must be fixed before merging. This catches issues that pass `make check` inside
+an agent's isolated worktree but fail after the branches are merged together
+(e.g. a `goimports` ordering that was locally correct but conflicts with a
+symbol renamed in a sibling agent's branch).
+
+**Coordinator checklist before merge:**
+
+1. All subagents have returned and committed.
+2. Run `gopls diagnostics` on each worktree's changed files — fix any ERRORs.
+3. Merge branches into the story feature branch.
+4. Run `make check` once on the merged result.
+5. Push only after `make check` is green.
+
 ## Batch Strategy (Advanced)
 
 When a task involves a large number of files (e.g. refactoring 10+ files), do not
@@ -255,3 +313,5 @@ high token usage. Instead:
 
 | Scope overlap WARNING on `trls validate` | Add `trls link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
 | MISSING entries in `trls sources verify` | Run `trls sources sync` to fetch and fingerprint; re-run `trls sources verify` until all show OK |
+| No go.work in parallel worktrees | Agents have no LSP; write a minimal `go.work` (`use .`) into each worktree before dispatch so `gopls check ./...` works |
+| Coordinator skips LSP review before merge | Run `gopls diagnostics` on each worktree's changed files after agents return; catches format/import errors before they land on the merged branch |
