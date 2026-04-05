@@ -7,3 +7,4 @@
 ["note","task-1775348396",1775349924,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775311449 detected at claim time"}]
 ["note","task-1775311449",1775349924,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775348396 detected at claim time"}]
 ["claim","task-1775348396",1775349924,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","task-1775348396",1775351744,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Extended trls show to accept multiple issue IDs as positional args with --- separator for human output and array for JSON output.","branch":"feat/task-1775348396-show-multi","pr":"https://github.com/scullxbones/trellis/pull/10"}]
