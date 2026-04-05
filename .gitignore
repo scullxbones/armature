@@ -31,3 +31,5 @@ mutesting-report/
 
 .gemini/
 gha-creds-*.json
+
+.claude/worktrees/
