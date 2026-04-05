@@ -630,3 +630,4 @@
 ["transition","E5",1775355836,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"all E5 stories delivered: draft confidence model (S0), UX hardening (S1), TUI board (S2), time-travel forensics (S3), docs (S4), citation remediation (S5)"}]
 ["transition","CI-001",1775356414,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","CI-002",1775356414,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","CI-003",1775356414,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
