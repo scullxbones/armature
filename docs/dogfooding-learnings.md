@@ -396,3 +396,27 @@ Captured while using trellis to track its own E2 development.
 **Recommendation**: The coordinator should create a feature branch before dispatching agents (`git checkout -b story/E6-S4`), and agents should commit to that branch. Alternatively, the task prompt template should include `git checkout -b feat/ISSUE-ID` as the first git operation. Add this as an explicit step in the trls-worker skill for the parallel dispatch pattern.
 
 **File**: `docs/trls-worker-SKILL.md`
+
+---
+
+## L34: Shell hook templates expose missing native `trls hook run` command
+
+**Observed**: The four hook templates added in E6-S6 (post-commit, post-merge, prepare-commit-msg, pre-commit) contain non-trivial shell logic: branch detection (`git symbolic-ref`), dual-branch mode detection (reading `.issues/config.json`), active claim ID lookup, and staged-file inspection. This logic is duplicated in shell rather than owned by trls. The templates call `trls` for the actual ops but must wrap it in shell scaffolding that is hard to test and fragile when `trls` is not on PATH.
+
+**Impact**: Hook templates are verbose, brittle, and untestable in Go. Adding a new hook requires authoring shell logic that mirrors logic already inside `trls`. The w2h agent spent the most tokens of any Wave 2 agent (84,803 / 83 tool uses) largely due to this scaffolding overhead.
+
+**Recommendation**: Add a `trls hook run <hookname>` native subcommand. Each hookname (`post-commit`, `post-merge`, `prepare-commit-msg`, `pre-commit`) maps to native Go logic that owns branch detection, mode detection, and claim lookup. Shell templates become trivial one-liners (`trls hook run post-commit`), are testable in Go, and degrade gracefully when `trls` is missing (single exit-code check rather than scattered shell guards).
+
+**File**: `cmd/trellis/hook.go` (new), `.issues/hooks/*.sh.template`
+
+---
+
+## L35: Parallel subagents work without LSP — expensive write→check→fix loops
+
+**Observed**: Subagents dispatched to `/tmp/trellis-w2*` worktrees have no gopls connection. The coordinator's LSP session can reach worktree files (verified via hover on `/tmp/trellis-w3/`), but subagents launched via the Agent tool run as headless processes with no IDE. Every compilation or lint error requires a full `make check` cycle (~20–30s) rather than instant inline feedback. w2h introduced a goimports violation in `init.go` that passed `make check` inside its worktree (where goimports had already run) but failed after merge into main.
+
+**Impact**: Each fix-loop consumes ~500–800 tokens of output reading plus the tool calls to edit and re-run. Across 8 parallel agents averaging 2–3 check cycles each, this accounts for a significant fraction of the wave's token spend. Post-merge lint failures require an extra coordinator fix pass.
+
+**Recommendation**: Two complementary mitigations: (1) At dispatch time, write a minimal `go.work` file (`use .`) into each worktree (gitignored) — this allows agents to run `gopls check ./...` for fast per-file feedback before the full make check suite. (2) The coordinator should run `gopls diagnostics` (via LSP tool) on all changed files after agents return and before merging, catching import/format issues at merge time rather than after.
+
+**File**: `docs/trls-worker-SKILL.md`, dispatcher workflow
