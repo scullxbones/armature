@@ -2483,8 +2483,11 @@ func TestCommandGroups(t *testing.T) {
 func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	defaultBranchOut, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	require.NoError(t, err)
+	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
-	_, err := runTrls(t, repo, "init")
+	_, err = runTrls(t, repo, "init")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2497,8 +2500,8 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "task-01")
 	require.NoError(t, err)
 
-	// Ensure we're on main branch by default
-	run(t, repo, "git", "checkout", "-q", "main")
+	// Ensure we're on the default branch (main or master depending on git config)
+	run(t, repo, "git", "checkout", "-q", defaultBranch)
 
 	// Try to transition to done without --force; should fail
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "test")
@@ -2511,8 +2514,11 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	defaultBranchOut, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	require.NoError(t, err)
+	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
-	_, err := runTrls(t, repo, "init")
+	_, err = runTrls(t, repo, "init")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2524,8 +2530,8 @@ func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "task-01b")
 	require.NoError(t, err)
 
-	// Ensure we're on main branch
-	run(t, repo, "git", "checkout", "-q", "main")
+	// Ensure we're on the default branch (main or master depending on git config)
+	run(t, repo, "git", "checkout", "-q", defaultBranch)
 
 	// Transition with --force should succeed
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01b", "--to", "done", "--outcome", "test", "--force")
