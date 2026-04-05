@@ -585,3 +585,4 @@
 ["note","E6-S6",1775345864,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"dogfooding: goimports violation in init.go from w2h was caught by make check after merge — agent passed make check in its own worktree (where goimports ran fresh) but the merged result had a formatting issue. Could be addressed by running goimports on all modified files as part of coordinator merge step."}]
 ["create","task-1775348372",1775348372,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"trls hook run: native hook runner to replace shell template logic","parent":"E6-S6","type":"task"}]
 ["create","task-1775348372",1775348372,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"Parallel agent dev env: per-worktree go.work and coordinator LSP pre-merge review","parent":"E6-S6","type":"task"}]
+["create","task-1775348372",1775348372,"34dafe5f-6881-4bca-b209-c98c906e3550",{"title":"trls show: accept multiple issue IDs as positional arguments","parent":"E6-S6","type":"task"}]
