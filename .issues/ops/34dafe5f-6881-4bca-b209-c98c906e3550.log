@@ -836,3 +836,4 @@
 ["claim","task-1775312202",1775400666,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","task-1775312202",1775401475,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Implemented --source flag on trls create; accepts source UUID or URL/path; adds GetByURL to Manifest; emits source-link op atomically after create op; all tests pass, make check green; PR #12 open."}]
 ["claim","task-1775389519",1776029477,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","E6",1776029478,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
