@@ -62,14 +62,14 @@ trls transition --issue TASK-001 --to done \
 Check the project overview at any time.
 
 ```bash
-trls status
+trls list --group
 ```
 
 ### Notes for Lone Wolf
 
 - No branch protection means there is no PR step. Tasks move directly from `done` to complete.
 - Keep the workflow lightweight: `ready` → `claim` → work → `transition`.
-- If you need to pause and come back, `trls status` shows exactly where everything stands.
+- If you need to pause and come back, `trls list --group` shows exactly where everything stands.
 
 ---
 
@@ -136,7 +136,7 @@ When the PR is merged to `main`, Trellis detects the merge automatically and pro
 
 - Never use `--to merged` manually. Trellis watches for the merge commit and handles promotion automatically.
 - The `_trellis` orphan branch and `.trellis/` worktree are managed by Trellis — do not edit them directly.
-- `trls status` shows which tasks are `done` (PR open) vs `merged` (code landed).
+- `trls list --group` shows which tasks are `done` (PR open) vs `merged` (code landed).
 
 ---
 
@@ -193,8 +193,8 @@ trls render-context TASK-023
 Once agents are running, watch progress.
 
 ```bash
-trls status
-# Shows: ready, in-progress, done, merged, blocked counts
+trls list --group
+# Shows issues bucketed under === in-progress ===, === done ===, === open ===, etc.
 ```
 
 Check for tasks that have been claimed but have not had a heartbeat in a while (stale tasks).
@@ -284,7 +284,7 @@ Check overall system health.
 
 ```bash
 trls validate
-trls status
+trls list --group
 ```
 
 Review stale claims and decide whether to release them.
@@ -426,8 +426,8 @@ trls claim TASK-100
 The Conductor can watch conflict events in real time.
 
 ```bash
-trls status
-# Shows current claim holders, timestamps, and any recent conflict resolutions
+trls list --group
+# Shows current claim holders and issue status across the project
 ```
 
 If a conflict resolution produced an unexpected outcome (e.g., the wrong agent won), the Conductor can intervene by releasing the claim and re-queuing the task.

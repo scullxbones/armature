@@ -352,18 +352,26 @@ Add a dependency link between issues.
 
 ## list
 
-List issues with optional `--type` and `--parent` filters.
+List issues with optional filters. In non-TTY environments (agent context) the output is a JSON array automatically.
 
 **Synopsis:**
 `trls list [flags]`
 
 **Flags:**
+- `--group`: Group issues under `=== STATUS ===` section headers sorted by workflow priority (human output only).
 - `--parent string`: Filter by parent issue ID.
-- `--type string`: Filter by issue type (task, story, feature, bug).
+- `--status string`: Filter by status: `open`, `in-progress`, `done`, `merged`, `cancelled`, `blocked`.
+- `--type string`: Filter by issue type: `task`, `story`, `feature`, `bug`.
 
-**Example:**
+**Examples:**
 ```bash
-trls list --type story --parent EPIC-001
+# Flat list — in agent context this is JSON automatically
+trls list --status done
+trls list --status open --parent STORY-001
+
+# Grouped human overview
+trls list --group
+trls list --group --parent EPIC-001
 ```
 
 ---
@@ -468,12 +476,13 @@ Reopen a done or blocked issue.
 
 ## show
 
-Show a human-readable summary of a single issue.
+Show a human-readable summary of one or more issues.
 
 **Synopsis:**
-`trls show [issue-id] [flags]`
+`trls show [issue-id ...] [flags]`
 
 **Flags:**
+- `--field string`: Extract a single field value (e.g. `status`, `title`).
 - `--issue string`: Issue ID to show.
 
 ---
@@ -519,15 +528,6 @@ Review sources whose cached content has changed since last sync.
 
 ---
 
-## status
-
-Show issues grouped by status.
-
-**Synopsis:**
-`trls status [flags]`
-
----
-
 ## sync
 
 Detect merged branches and auto-transition done issues to merged.
@@ -556,7 +556,7 @@ Transition an issue to a new status.
 
 **Example:**
 ```bash
-trls transition TASK-001 --to in_progress --branch feature/login
+trls transition TASK-001 --to in-progress --branch feature/login
 ```
 
 ---

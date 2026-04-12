@@ -95,4 +95,4 @@ In dual-branch mode, Trellis will automatically detect when your PR is merged to
 | `trls claim` | Start working on a task |
 | `trls render-context` | Get task-specific context |
 | `trls transition` | Move task to a new status |
-| `trls status` | Show project overview |
+| `trls list --group` | Show project overview grouped by status |
