@@ -368,49 +368,67 @@ func TestShowCommand_WithFieldFlag_MultipleFields(t *testing.T) {
 }
 
 // Test trls status --status filter
-func TestStatusCommand_WithStatusFilter(t *testing.T) {
+func TestListCmd_Group_ShowsStatusHeaders(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "--format", "human", "list", "--group")
+	require.NoError(t, err)
+	assert.Contains(t, out, "=== open ===")
+	assert.Contains(t, out, "story-01")
+	assert.Contains(t, out, "task-01")
+}
+
+func TestListCmd_Group_WithStatusFilter(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Create another task in different status
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"})
 	require.NoError(t, cmd.Execute())
 
-	// Transition task-02 to in-progress
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02"})
 	require.NoError(t, cmd2.Execute())
 
-	// Test filtering by status
-	out, err := runTrls(t, repo, "status", "--status", "open")
+	out, err := runTrls(t, repo, "--format", "human", "list", "--group", "--status", "open")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
-	assert.NotContains(t, out, "task-02") // Should not include claimed task
+	assert.NotContains(t, out, "task-02")
 }
 
-// Test trls status --parent filter
-func TestStatusCommand_WithParentFilter(t *testing.T) {
+func TestListCmd_Group_WithParentFilter(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Create a parent task
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"})
 	require.NoError(t, cmd.Execute())
 
-	// Create a child task
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-child", "--parent", "E6"})
 	require.NoError(t, cmd2.Execute())
 
-	// Test filtering by parent
-	out, err := runTrls(t, repo, "status", "--parent", "E6")
+	out, err := runTrls(t, repo, "--format", "human", "list", "--group", "--parent", "E6")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-child")
-	assert.NotContains(t, out, "task-01") // Should not include task without parent
+	assert.NotContains(t, out, "task-01")
+}
+
+func TestListCmd_Group_JSONIgnoresGroupFlag(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "list", "--group"})
+	require.NoError(t, cmd.Execute())
+
+	var entries []listEntry
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &entries),
+		"--group must not break JSON output")
+	assert.NotEmpty(t, entries)
 }
 
 func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
@@ -701,7 +719,7 @@ func TestListCmd_NoFilter_ShowsAll(t *testing.T) {
 func TestListCmd_ParentFilter(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	out, err := runTrls(t, repo, "list", "--parent", "story-01")
+	out, err := runTrls(t, repo, "--format", "human", "list", "--parent", "story-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, "story-01")
@@ -730,7 +748,7 @@ func TestListCmd_ParentAndTypeFilter(t *testing.T) {
 func TestListCmd_ParentFilter_NoMatch(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	out, err := runTrls(t, repo, "list", "--parent", "nonexistent")
+	out, err := runTrls(t, repo, "--format", "human", "list", "--parent", "nonexistent")
 	require.NoError(t, err)
 	assert.Empty(t, strings.TrimSpace(out))
 }
@@ -812,6 +830,55 @@ func TestListCmd_JSONFormat(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "task-01", entries[0].ID)
 	assert.Equal(t, "story-01", entries[0].Parent)
+}
+
+func TestListCmd_StatusFilter(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	// Transition task-01 to done so we have two distinct statuses
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done", "--outcome", "completed", "--force")
+	require.NoError(t, err)
+
+	// After transition on a repo with git history, merge-detection advances to merged.
+	// --status merged should include task-01 but not task-02 (still open)
+	out, err := runTrls(t, repo, "list", "--status", "merged")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.NotContains(t, out, "task-02")
+
+	// --status open should include task-02 but not task-01
+	out, err = runTrls(t, repo, "list", "--status", "open")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-02")
+	assert.NotContains(t, out, "task-01")
+}
+
+func TestListCmd_HumanShowsStatus(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	out, err := runTrls(t, repo, "list")
+	require.NoError(t, err)
+	// Human output should include a status value alongside each issue
+	assert.Contains(t, out, "open")
+}
+
+func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"--format", "agent", "--repo", repo, "list"})
+	require.NoError(t, cmd.Execute())
+
+	var entries []listEntry
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &entries),
+		"agent format must emit valid JSON")
+	assert.NotEmpty(t, entries)
 }
 
 // TestDecomposeApplyStrict verifies that --strict causes non-zero exit when the

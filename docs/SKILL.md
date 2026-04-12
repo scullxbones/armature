@@ -30,12 +30,27 @@ trls render-context --issue ID [--budget 4000]           # assemble task context
 
 ```
 trls create --title "X" --type task --parent ID          # create sub-issue
-trls list [--parent ID] [--type TYPE]                    # list issues with optional filters
+trls list [--parent ID] [--type TYPE] [--status STATUS]  # flat list with optional filters
+trls list --group [filters...]                           # group by status with section headers (human)
 trls decompose-apply --plan plan.json                    # bulk load issues
 trls validate [--ci]                                     # validate op log consistency
 ```
 
 Valid types: `task`, `feature`, `bug`, `story`
+
+Valid `--status` values: `open`, `in-progress`, `done`, `merged`, `cancelled`, `blocked`
+
+**For agents:** `--format agent` is auto-set in non-TTY environments and emits a JSON array — filter and consume directly without shell post-processing:
+```
+trls list --status done                    # [{id, type, status, title, outcome, ...}, ...]
+trls list --status done --parent STORY-ID  # scoped to one story
+```
+
+**For humans:** `--group` buckets issues under `=== STATUS ===` headers sorted by workflow priority:
+```
+trls list --group
+trls list --group --parent STORY-ID
+```
 
 ## Loading a Plan
 

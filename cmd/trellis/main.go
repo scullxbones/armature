@@ -184,10 +184,6 @@ func newRootCmd() *cobra.Command {
 	validateCmd.GroupID = "admin"
 	root.AddCommand(validateCmd)
 
-	statusCmd := newStatusCmd()
-	statusCmd.GroupID = "admin"
-	root.AddCommand(statusCmd)
-
 	renderContextCmd := newRenderContextCmd()
 	renderContextCmd.GroupID = "admin"
 	root.AddCommand(renderContextCmd)

@@ -60,8 +60,8 @@ func TestSecondaryStatePaths(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "Test Issue")
 
-	// status
-	out, err = runTrls(t, repo, "status")
+	// list
+	out, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.Contains(t, out, "TASK-1")
 

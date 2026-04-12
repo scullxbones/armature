@@ -748,7 +748,7 @@ func TestStatus_ShowsInProgressIssue(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "status")
+	out, err := runTrls(t, repo, "--format", "human", "list", "--group")
 	require.NoError(t, err)
 	assert.Contains(t, out, "in-progress")
 	assert.Contains(t, out, "T-001")
@@ -779,7 +779,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "status")
+	out, err := runTrls(t, repo, "--format", "human", "list", "--group")
 	require.NoError(t, err)
 	// In dual-branch mode, done issues should be labeled "awaiting merge"
 	assert.Contains(t, out, "awaiting merge")
@@ -996,7 +996,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Status should show done (awaiting merge)
-	statusOut, err := runTrls(t, repo, "status")
+	statusOut, err := runTrls(t, repo, "--format", "human", "list", "--group")
 	require.NoError(t, err)
 	assert.Contains(t, statusOut, "awaiting merge")
 	assert.Contains(t, statusOut, "F-001")
@@ -1016,8 +1016,8 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "merged", index["F-001"].Status)
 
-	// Status should no longer show done-awaiting-merge for F-001
-	finalStatus, err := runTrls(t, repo, "status")
+	// list --group should no longer show done-awaiting-merge for F-001
+	finalStatus, err := runTrls(t, repo, "--format", "human", "list", "--group")
 	require.NoError(t, err)
 	assert.NotContains(t, finalStatus, "awaiting merge")
 }
@@ -1034,7 +1034,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 
 	// Case 1: No worker ID set (manually unset it)
 	run(t, repo, "git", "config", "--local", "--unset", "trellis.worker-id")
-	_, err = runTrls(t, repo, "status")
+	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
 	expectedDefault := filepath.Join(repo, ".issues", "state", "default")
@@ -1046,7 +1046,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "status")
+	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
 	expectedWorker := filepath.Join(repo, ".issues", "state", workerID)
@@ -2459,7 +2459,7 @@ func TestCommandGroups(t *testing.T) {
 	workflowExpected := []string{"ready", "claim", "transition", "unassign", "reopen", "heartbeat", "note", "decision", "amend", "confirm", "assign"}
 	dagExpected := []string{"dag-summary", "dag-transition", "link"}
 	syncExpected := []string{"sync", "merged", "materialize", "import", "stale-review"}
-	adminExpected := []string{"worker-init", "workers", "init", "create", "validate", "doctor", "version", "show", "list", "status", "log", "render-context", "source-link", "sources", "accept-citation", "context-history"}
+	adminExpected := []string{"worker-init", "workers", "init", "create", "validate", "doctor", "version", "show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history"}
 
 	for groupID, expectedCmds := range map[string][]string{
 		"workflow": workflowExpected,

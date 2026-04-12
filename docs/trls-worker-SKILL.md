@@ -62,6 +62,13 @@ trls ready
 ```
 Lists unblocked, unclaimed issues. If empty, all work is done or blocked — stop.
 
+To inspect broader state without claiming (e.g. to check what's done or blocked), use `trls list`. In non-TTY environments the output is JSON automatically:
+```
+trls list --status done       # completed tasks — JSON array in agent context
+trls list --status blocked    # blocked tasks — diagnose before claiming
+trls list --parent STORY-ID   # all tasks under a story with their statuses
+```
+
 ### 3. Claim and Assemble Context
 ```
 trls claim ISSUE-ID

@@ -7,8 +7,20 @@ import (
 	"sort"
 
 	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/trellis/internal/ops"
 	"github.com/spf13/cobra"
 )
+
+// statusOrder defines display priority for --group output — lower number appears first.
+var statusOrder = map[string]int{
+	ops.StatusInProgress: 0,
+	ops.StatusClaimed:    1,
+	ops.StatusDone:       2,
+	ops.StatusOpen:       3,
+	ops.StatusBlocked:    4,
+	ops.StatusMerged:     5,
+	ops.StatusCancelled:  6,
+}
 
 type listEntry struct {
 	ID        string `json:"id"`
@@ -23,10 +35,12 @@ type listEntry struct {
 func newListCmd() *cobra.Command {
 	var filterParent string
 	var filterType string
+	var filterStatus string
+	var group bool
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List issues with optional --type and --parent filters",
+		Short: "List issues with optional --type, --parent, and --status filters",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
@@ -47,12 +61,15 @@ func newListCmd() *cobra.Command {
 				if filterType != "" && entry.Type != filterType {
 					continue
 				}
+				if filterStatus != "" && entry.Status != filterStatus {
+					continue
+				}
 				ids = append(ids, id)
 			}
 			sort.Strings(ids)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" {
+			if format == "json" || format == "agent" {
 				entries := make([]listEntry, 0, len(ids))
 				for _, id := range ids {
 					e := index[id]
@@ -72,6 +89,50 @@ func newListCmd() *cobra.Command {
 				}
 				data, _ := json.MarshalIndent(entries, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				return nil
+			}
+
+			if group {
+				groups := make(map[string][]string)
+				for _, id := range ids {
+					s := index[id].Status
+					groups[s] = append(groups[s], id)
+				}
+				statuses := make([]string, 0, len(groups))
+				for s := range groups {
+					statuses = append(statuses, s)
+				}
+				sort.Slice(statuses, func(i, j int) bool {
+					oi, ok1 := statusOrder[statuses[i]]
+					oj, ok2 := statusOrder[statuses[j]]
+					if !ok1 {
+						oi = 99
+					}
+					if !ok2 {
+						oj = 99
+					}
+					return oi < oj
+				})
+				for _, status := range statuses {
+					label := status
+					if status == ops.StatusDone && appCtx.Mode != "single-branch" {
+						label = "done (awaiting merge)"
+					}
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
+					sort.Strings(groups[status])
+					for _, id := range groups[status] {
+						e := index[id]
+						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
+						if status == ops.StatusDone && appCtx.Mode != "single-branch" && e.Branch != "" {
+							line += fmt.Sprintf("  [branch: %s", e.Branch)
+							if e.PR != "" {
+								line += fmt.Sprintf(", PR: #%s", e.PR)
+							}
+							line += "]"
+						}
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+					}
+				}
 				return nil
 			}
 
@@ -99,7 +160,7 @@ func newListCmd() *cobra.Command {
 
 			for _, id := range ids {
 				entry := index[id]
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-12s  %s\n", id, entry.Title)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-12s  %-14s  %s\n", id, entry.Status, entry.Title)
 			}
 			return nil
 		},
@@ -107,6 +168,8 @@ func newListCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&filterParent, "parent", "", "filter by parent issue ID")
 	cmd.Flags().StringVar(&filterType, "type", "", "filter by issue type (task, story, feature, bug)")
+	cmd.Flags().StringVar(&filterStatus, "status", "", "filter by status (open, in-progress, done, merged, cancelled, blocked)")
+	cmd.Flags().BoolVar(&group, "group", false, "group issues by status with section headers (human format only)")
 
 	return cmd
 }
