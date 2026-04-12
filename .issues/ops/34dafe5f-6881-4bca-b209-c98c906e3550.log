@@ -841,3 +841,4 @@
 ["note","task-1775389531",1776029481,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775389519 detected at claim time"}]
 ["note","task-1775389519",1776029481,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Scope overlap with task-1775389531 detected at claim time"}]
 ["claim","task-1775389531",1776029481,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","task-1775389519",1776029719,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added AssignedWorker string field to ReadyEntry struct; populated from index entry; JSON tag assigned_worker; two new unit tests added"}]
