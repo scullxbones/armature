@@ -18,6 +18,7 @@ type ReadyEntry struct {
 	Scope                []string `json:"scope,omitempty"`
 	EstComplexity        string   `json:"estimated_complexity,omitempty"`
 	RequiresConfirmation bool     `json:"requires_confirmation,omitempty"`
+	AssignedWorker       string   `json:"assigned_worker,omitempty"`
 }
 
 // ComputeReady applies the 4-rule gate and returns a priority-sorted ready queue.
@@ -59,10 +60,11 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		}
 
 		re := ReadyEntry{
-			Issue:  id,
-			Type:   entry.Type,
-			Parent: entry.Parent,
-			Title:  entry.Title,
+			Issue:          id,
+			Type:           entry.Type,
+			Parent:         entry.Parent,
+			Title:          entry.Title,
+			AssignedWorker: entry.AssignedWorker,
 		}
 		if issue != nil {
 			re.Priority = issue.Priority

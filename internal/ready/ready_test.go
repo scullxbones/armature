@@ -277,6 +277,36 @@ func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 	assert.Equal(t, 21, d, "depth should cap at 21 to break cycles")
 }
 
+func TestComputeReady_AssignedWorkerFieldPopulated(t *testing.T) {
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task", AssignedWorker: "worker-x"},
+		"task-02": {Status: "open", Type: "task", AssignedWorker: ""},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task"},
+		"task-02": {ID: "task-02", Status: "open", Type: "task"},
+	}
+	result := ComputeReady(index, issues, "")
+	entryMap := make(map[string]ReadyEntry)
+	for _, e := range result {
+		entryMap[e.Issue] = e
+	}
+	assert.Equal(t, "worker-x", entryMap["task-01"].AssignedWorker)
+	assert.Equal(t, "", entryMap["task-02"].AssignedWorker)
+}
+
+func TestComputeReady_AssignedWorkerFromIndex_EvenWithNoIssueEntry(t *testing.T) {
+	// AssignedWorker comes from the index entry (authoritative), not the issues map.
+	// Even when issues map has no entry, the index assignment is preserved.
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task", AssignedWorker: "worker-x"},
+	}
+	issues := map[string]*materialize.Issue{} // no issue entry
+	result := ComputeReady(index, issues, "")
+	assert.Len(t, result, 1)
+	assert.Equal(t, "worker-x", result[0].AssignedWorker)
+}
+
 func TestDepth_NoParent(t *testing.T) {
 	index := materialize.Index{
 		"task-01": {Parent: ""},
