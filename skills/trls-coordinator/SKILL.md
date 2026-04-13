@@ -273,26 +273,37 @@ Repeat the loop from step 2.
 
 When `trls ready` returns empty and all tasks are `done`:
 
-### 1. Final validation
-```bash
-trls validate   # must show COVERAGE: N/N cited with no ERROR lines
-```
-Resolve any uncited issues before continuing.
+### 1. Run the Auditor (pre-merge gate)
 
-### 2. Repo health check
-```bash
-trls doctor --strict   # warnings as errors
+Dispatch the **trls-auditor** skill as a subagent before any story transition.
+The auditor is a five-step pre-merge gate — it must give all-clear before you
+proceed.
+
+**Invoke via the `Skill` tool:**
+```
+Skill("trls-auditor")
 ```
 
-### 3. Transition the story
+The auditor checks, in order:
+1. Citation integrity (`trls validate` — zero ERRORs, `COVERAGE: N/N cited`)
+2. Source freshness (`trls sources verify` — zero MISSING)
+3. Outcome quality (concrete outcomes against acceptance criteria for each done task)
+4. Scope overlap (`trls validate --strict` — zero overlap warnings)
+5. Repo health (`trls doctor --strict` — exit zero)
+
+**Do not proceed to step 2 until the auditor reports all five checks green.**
+If the auditor flags issues, return them to the relevant workers for remediation,
+then re-run the auditor before continuing.
+
+### 2. Transition the story
 ```bash
 trls transition STORY-ID --to done --outcome "brief summary of what was delivered"
 ```
 
-`trls transition` will error if any uncited issues remain — run `trls validate`
-first.
+`trls transition` will error if any uncited issues remain — the auditor in step 1
+should have caught this.
 
-### 4. Commit trellis ops (single-branch mode only)
+### 3. Commit trellis ops (single-branch mode only)
 
 In single-branch mode, story and epic transitions generate ops that need a
 mop-up commit:
@@ -305,7 +316,7 @@ In **dual-branch mode** (`git config --local trellis.mode` returns `dual-branch`
 ops are automatically committed to the `_trellis` branch. Omit `.issues/` from
 the code commit; include only code files if any remain unstaged.
 
-### 5. Push and open PR
+### 4. Push and open PR
 ```bash
 git push -u origin HEAD
 # Open a PR targeting your main/base branch
