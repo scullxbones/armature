@@ -963,3 +963,4 @@
 ["claim","E6-DOCFIX1-T3",1776119603,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","task-auto-serial-claim",1776119607,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"task-auto-serial-claim is a dogfooding task created in-session to track auto-serial claim behavior; no external source document exists"}]
 ["transition","E6-DOCFIX1-T3",1776119615,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added accept-citation for task-auto-serial-claim; trls doctor D6 now passes with no uncited issues"}]
+["transition","E6-DOCFIX1",1776119632,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Fixed D3 phantom IDs in op logs; restored missing source UUID dee6f489; added trls doctor --verbose for actionable D3/D6 context; added uncited-issue warning on trls transition --to done"}]
