@@ -1,0 +1,6 @@
+name: trls-auditor
+description: >
+  Use when verifying completed work before story sign-off — checks citation
+  coverage, source UUID integrity, outcome quality, and repo health. Runs
+  validate, sources verify, render-context, and doctor --strict.
+compatibility: Designed for Claude Code and Gemini CLI. Requires trls on PATH.
