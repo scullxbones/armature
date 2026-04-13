@@ -261,6 +261,37 @@ func TestReadyTask_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 	assert.Equal(t, "task-01", ready[0].Issue)
 }
 
+func TestFilterByAssignedTo_ReturnsMatchingEntries(t *testing.T) {
+	entries := []ReadyEntry{
+		{Issue: "task-a", AssignedWorker: "worker-x"},
+		{Issue: "task-b", AssignedWorker: "worker-y"},
+		{Issue: "task-c", AssignedWorker: "worker-x"},
+		{Issue: "task-d", AssignedWorker: ""},
+	}
+	result := FilterByAssignedTo(entries, "worker-x")
+	assert.Len(t, result, 2)
+	ids := []string{result[0].Issue, result[1].Issue}
+	assert.Contains(t, ids, "task-a")
+	assert.Contains(t, ids, "task-c")
+}
+
+func TestFilterByAssignedTo_EmptyWorkerID_ReturnsAll(t *testing.T) {
+	entries := []ReadyEntry{
+		{Issue: "task-a", AssignedWorker: "worker-x"},
+		{Issue: "task-b", AssignedWorker: ""},
+	}
+	result := FilterByAssignedTo(entries, "")
+	assert.Len(t, result, 2)
+}
+
+func TestFilterByAssignedTo_NoMatches_ReturnsEmpty(t *testing.T) {
+	entries := []ReadyEntry{
+		{Issue: "task-a", AssignedWorker: "worker-x"},
+	}
+	result := FilterByAssignedTo(entries, "worker-z")
+	assert.Len(t, result, 0)
+}
+
 func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 	index := make(materialize.Index)
 	// Build a chain deeper than 20
