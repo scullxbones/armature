@@ -2903,3 +2903,86 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 		assert.Contains(t, err.Error(), "not found")
 	})
 }
+
+// TestTransitionToDone_UncitedIssue_PrintsWarning verifies that transitioning an uncited
+// issue to done prints a warning to stderr mentioning source-link and accept-citation,
+// but still exits 0.
+func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Uncited task", "--id", "uncited-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Create a feature branch so branch check passes
+	run(t, repo, "git", "checkout", "-q", "-b", "feat/uncited-test")
+
+	// Transition to done without --force and without any citation — should warn but exit 0
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-01", "--to", "done", "--outcome", "done")
+	require.NoError(t, err, "transition should succeed (exit 0) even for uncited issue")
+	assert.Contains(t, stderr, "WARNING", "should print WARNING on stderr for uncited issue")
+	assert.Contains(t, stderr, "source citation", "warning should mention source citation")
+	assert.Contains(t, stderr, "source-link", "warning should direct user to trls source-link")
+	assert.Contains(t, stderr, "accept-citation", "warning should direct user to trls accept-citation")
+}
+
+// TestTransitionToDone_UncitedIssue_ForceSupportsWarning verifies that --force suppresses
+// the uncited warning entirely.
+func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Force uncited task", "--id", "uncited-force-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Create a feature branch so branch check passes
+	run(t, repo, "git", "checkout", "-q", "-b", "feat/uncited-force-test")
+
+	// Transition with --force should suppress the uncited warning
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-force-01", "--to", "done", "--force", "--outcome", "done")
+	require.NoError(t, err)
+	assert.NotContains(t, stderr, "WARNING", "no WARNING should appear when --force is used")
+	assert.NotContains(t, stderr, "source citation", "no citation warning when --force is used")
+}
+
+// TestTransitionToDone_CitedIssue_NoWarning verifies that a cited issue (with accept-citation)
+// does not trigger any warning when transitioning to done.
+func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Cited task", "--id", "cited-01")
+	require.NoError(t, err)
+
+	// Accept citation so the issue is cited
+	_, err = runTrls(t, repo, "accept-citation", "--issue", "cited-01", "--rationale", "no source doc exists for this task", "--ci")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Create a feature branch so branch check passes
+	run(t, repo, "git", "checkout", "-q", "-b", "feat/cited-test")
+
+	// Transition to done — cited issue should produce no warning
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "cited-01", "--to", "done", "--outcome", "done")
+	require.NoError(t, err)
+	assert.NotContains(t, stderr, "WARNING", "no WARNING should appear for a cited issue")
+	assert.NotContains(t, stderr, "source citation", "no citation warning for a cited issue")
+}

@@ -143,7 +143,7 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "")
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false)
 	require.NoError(t, err)
 	// All checks should be OK on an empty repo.
 	for _, f := range report.Checks {
@@ -167,7 +167,7 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, op))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "")
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false)
 	require.NoError(t, err)
 
 	// D3 should be an error since ghost-issue-01 is not in the graph.
@@ -194,12 +194,54 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{createOp, claimOp}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "")
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false)
 	require.NoError(t, err)
 
 	d2 := findCheck(t, report, "D2")
 	assert.Equal(t, doctor.SeverityWarning, d2.Severity)
 	assert.Contains(t, d2.Items, "stale-01")
+}
+
+func TestRun_Integration_D3_Verbose_ShowsFileAndLine(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	logPath := filepath.Join(issuesDir, "ops", "worker-verbose.log")
+	op := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "ghost-verbose-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-verbose",
+		Payload:   ops.Payload{Msg: "orphaned note"},
+	}
+	require.NoError(t, ops.AppendOp(logPath, op))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", true)
+	require.NoError(t, err)
+
+	d3 := findCheck(t, report, "D3")
+	assert.Equal(t, doctor.SeverityError, d3.Severity)
+	// Regular items unchanged — just the orphaned ID
+	assert.Contains(t, d3.Items, "ghost-verbose-01")
+	// VerboseItems should include file name and line number
+	require.NotEmpty(t, d3.VerboseItems)
+	assert.Contains(t, d3.VerboseItems[0], "worker-verbose.log")
+	assert.Contains(t, d3.VerboseItems[0], "ghost-verbose-01")
+}
+
+func TestRun_Integration_Verbose_CleanRepo_NoExtraOutput(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	workerLog := filepath.Join(issuesDir, "ops", "worker-clean.log")
+	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", true)
+	require.NoError(t, err)
+
+	for _, f := range report.Checks {
+		assert.Empty(t, f.VerboseItems, "no verbose items on clean repo for check %s", f.Check)
+	}
 }
 
 func TestDoctorRunUsesStateDir(t *testing.T) {
@@ -221,7 +263,7 @@ func TestDoctorRunUsesStateDir(t *testing.T) {
 
 	// doctor.Run should load the index from stateDir.
 	// We pass an empty repoPath to skip D1 git divergence.
-	report, err := doctor.Run(issuesDir, stateDir, "")
+	report, err := doctor.Run(issuesDir, stateDir, "", false)
 	require.NoError(t, err)
 
 	// D4 checks broken parent refs. If it saw T-001, it means it loaded the index.
