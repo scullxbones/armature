@@ -2986,3 +2986,82 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 	assert.NotContains(t, stderr, "WARNING", "no WARNING should appear for a cited issue")
 	assert.NotContains(t, stderr, "source citation", "no citation warning for a cited issue")
 }
+
+// TestSourceLinkCommand_MultiIssue verifies that --issue can be repeated to link
+// multiple issues to the same source in a single invocation.
+func TestSourceLinkCommand_MultiIssue(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Register a filesystem source.
+	tmpFile := filepath.Join(t.TempDir(), "plan.md")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("# Plan\n"), 0600))
+	out, err := runTrls(t, repo, "sources", "add", "--url", tmpFile, "--type", "filesystem", "--title", "Plan")
+	require.NoError(t, err)
+	parts := strings.Fields(strings.TrimSpace(out))
+	require.GreaterOrEqual(t, len(parts), 3)
+	sourceID := parts[2]
+
+	// Create two tasks.
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Multi-link task A", "--id", "ml-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Multi-link task B", "--id", "ml-b")
+	require.NoError(t, err)
+
+	// Link both issues in one invocation.
+	out, err = runTrls(t, repo, "source-link",
+		"--issue", "ml-a",
+		"--issue", "ml-b",
+		"--source-id", sourceID,
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out, "ml-a")
+	assert.Contains(t, out, "ml-b")
+	assert.Contains(t, out, sourceID)
+
+	// Materialize and confirm both issues are cited.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	validateOut, err := runTrls(t, repo, "validate")
+	require.NoError(t, err)
+	assert.NotContains(t, validateOut, "uncited node: ml-a")
+	assert.NotContains(t, validateOut, "uncited node: ml-b")
+}
+
+// TestSourceLinkCommand_SingleIssue_BackwardCompat verifies that the single-issue
+// path (positional arg or single --issue flag) is unchanged.
+func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	tmpFile := filepath.Join(t.TempDir(), "plan.md")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("# Plan\n"), 0600))
+	out, err := runTrls(t, repo, "sources", "add", "--url", tmpFile, "--type", "filesystem", "--title", "Plan")
+	require.NoError(t, err)
+	parts := strings.Fields(strings.TrimSpace(out))
+	require.GreaterOrEqual(t, len(parts), 3)
+	sourceID := parts[2]
+
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Single link task", "--id", "sl-01")
+	require.NoError(t, err)
+
+	// Single --issue flag (existing flag path).
+	out, err = runTrls(t, repo, "source-link", "--issue", "sl-01", "--source-id", sourceID)
+	require.NoError(t, err)
+	assert.Contains(t, out, "sl-01")
+	assert.Contains(t, out, sourceID)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	validateOut, err := runTrls(t, repo, "validate")
+	require.NoError(t, err)
+	assert.NotContains(t, validateOut, "uncited node: sl-01")
+}
