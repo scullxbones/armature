@@ -73,15 +73,15 @@ install: build
 
 skill: build
 	mkdir -p .claude/skills/trls/scripts
-	cat docs/trls-skill-meta.yaml docs/SKILL.md > .claude/skills/trls/SKILL.md
+	cat skills/trls-skill-meta.yaml skills/trls.md > .claude/skills/trls/SKILL.md
 	cp bin/trls .claude/skills/trls/scripts/trls
 	chmod +x .claude/skills/trls/scripts/trls
 	mkdir -p .claude/skills/trls-worker
-	{ cat docs/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `docs/trls-worker-SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat docs/trls-worker-SKILL.md; } > .claude/skills/trls-worker/SKILL.md
+	{ cat skills/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `skills/trls-worker.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat skills/trls-worker.md; } > .claude/skills/trls-worker/SKILL.md
 	mkdir -p .gemini/skills/trls/scripts
-	cat docs/trls-skill-meta.yaml docs/SKILL.md > .gemini/skills/trls/SKILL.md
+	cat skills/trls-skill-meta.yaml skills/trls.md > .gemini/skills/trls/SKILL.md
 	cp bin/trls .gemini/skills/trls/scripts/trls
 	chmod +x .gemini/skills/trls/scripts/trls
 	mkdir -p .gemini/skills/trls-worker
-	{ cat docs/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `docs/trls-worker-SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat docs/trls-worker-SKILL.md; } > .gemini/skills/trls-worker/SKILL.md
+	{ cat skills/trls-worker-skill-meta.yaml; printf '> **DO NOT EDIT** — generated from `skills/trls-worker.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat skills/trls-worker.md; } > .gemini/skills/trls-worker/SKILL.md
 	@echo "Deployed trls and trls-worker skills to .claude/skills/ and .gemini/skills/"
