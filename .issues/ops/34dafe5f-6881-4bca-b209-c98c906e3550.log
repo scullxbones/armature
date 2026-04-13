@@ -889,3 +889,4 @@
 ["dag-transition","task-source-link-multi",1776108659,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"verified","issue_id":"task-source-link-multi"}]
 ["source-link","task-source-link-multi",1776108660,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"5dafbe47-422b-454b-94ad-4d630925c8f1","source_url":"/home/brian/.claude/plans/e6-skil1-skills-infra.md"}]
 ["source-fingerprint","1241e468-5c15-4f75-9c29-1a09b42adda7",1776114127,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"b19acf157c20a20e763264867fd9a770ec3e8626849f35b5e1c59827337377c6","provider":"filesystem"}]
+["source-fingerprint","1259c48e-867f-4f70-bde6-5a5fdb5cab36",1776114127,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"da926bc9d816c24abe03b047d41d42fd3881961557d49f8dcc3d068171afbf29","provider":"filesystem"}]
