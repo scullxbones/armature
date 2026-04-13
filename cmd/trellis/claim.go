@@ -72,6 +72,13 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				}
 				if claimPkg.ScopesOverlap(issue.Scope, entry.Scope) {
 					msg := fmt.Sprintf("scope overlap with %s (%s)", id, entry.Title)
+					// Same worker claiming serially: auto-dismiss — log a note, no error or warning.
+					if entry.Assignee == workerID {
+						noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
+							WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
+						appendOp(logPath, noteOp) //nolint:errcheck
+						continue
+					}
 					if !force {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s\n", msg)
 						return fmt.Errorf("cannot claim %s: %s — use --force to override", issueID, msg)
