@@ -62,6 +62,18 @@ trls ready
 ```
 Lists unblocked, unclaimed issues. If empty, all work is done or blocked — stop.
 
+**Assignment-aware sorting (`--worker`):** Pass your worker ID to sort pre-assigned tasks first:
+```
+trls ready --worker <your-worker-id>
+```
+Order: assigned-to-me → unassigned → assigned-to-someone-else. Without `--worker` all tasks are treated as unassigned and sorted by priority.
+
+**Coordinator visibility (`--assigned-to`):** A coordinator can inspect what a specific worker has been pre-assigned without claiming those issues:
+```
+trls ready --assigned-to <worker-id> --format json
+```
+This filters the output to tasks whose `assigned_worker` matches the given ID. Useful for verifying a pre-assignment wave before dispatching workers.
+
 To inspect broader state without claiming (e.g. to check what's done or blocked), use `trls list`. In non-TTY environments the output is JSON automatically:
 ```
 trls list --status done       # completed tasks — JSON array in agent context
@@ -279,6 +291,52 @@ symbol renamed in a sibling agent's branch).
 3. Merge branches into the story feature branch.
 4. Run `make check` once on the merged result.
 5. Push only after `make check` is green.
+
+## Coordinator-Push Assignment (Advanced)
+
+By default workers pull work: they call `trls ready` and claim whatever is
+highest-priority. Sometimes a coordinator needs to **push** specific tasks to
+specific workers before those workers start — for example to pre-wire a
+parallel wave or reserve a task for a specialist worker.
+
+### Commands
+
+```
+trls assign --issue ISSUE-ID --worker WORKER-ID   # pre-assign a task to a worker
+trls unassign --issue ISSUE-ID                    # release the assignment (task returns to open)
+```
+
+`assign` sets `assigned_worker` on the issue but does **not** claim it.
+The issue remains visible in `trls ready` and any worker can still claim it —
+the assignment only affects sort order (it rises to tier 0 for that worker).
+
+`unassign` clears the assignment. If the issue was also claimed, it
+automatically transitions back to `open` so it can be claimed again.
+
+### Verifying a pre-assignment wave
+
+After assigning a batch, confirm the assignments landed before dispatching
+workers:
+```
+trls ready --assigned-to <worker-id> --format json   # shows only that worker's tasks
+```
+
+The JSON output includes an `assigned_worker` field on each entry, so a script
+can verify the full list.
+
+### When to use assign overlay vs pure pull
+
+| Situation | Recommendation |
+|---|---|
+| Tasks are independent and any worker can do them | Pure pull — let workers claim from `trls ready` |
+| A specialist worker must handle a specific task | Use `trls assign` to pre-wire it |
+| Parallel wave with tightly scoped work per agent | Assign before dispatching to avoid two agents claiming the same task |
+| Task has scope overlap with another in-flight task | Do **not** pre-assign in parallel — assign serially or add `trls link` dependency |
+
+**Important:** `trls assign` does not prevent a non-assigned worker from
+claiming the task. If you need strict exclusion (e.g. scope-overlap tasks that
+must not run in parallel), use `trls link --source A --dep B` to create a
+blocking dependency instead of relying on assignment alone.
 
 ## Batch Strategy (Advanced)
 
