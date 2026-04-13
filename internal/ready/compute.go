@@ -82,6 +82,21 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	return ready
 }
 
+// FilterByAssignedTo returns entries whose AssignedWorker matches workerID.
+// If workerID is empty, all entries are returned unchanged.
+func FilterByAssignedTo(entries []ReadyEntry, workerID string) []ReadyEntry {
+	if workerID == "" {
+		return entries
+	}
+	filtered := entries[:0:0]
+	for _, e := range entries {
+		if e.AssignedWorker == workerID {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
+}
+
 func allBlockersMerged(blockers []string, index materialize.Index) bool {
 	for _, bid := range blockers {
 		entry, ok := index[bid]

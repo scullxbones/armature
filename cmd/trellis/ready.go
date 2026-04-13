@@ -18,6 +18,7 @@ import (
 func newReadyCmd() *cobra.Command {
 	var workerID string
 	var filterParent string
+	var assignedTo string
 
 	cmd := &cobra.Command{
 		Use:   "ready",
@@ -56,6 +57,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			}
 
 			entries := ready.ComputeReady(index, issues, workerID)
+
+			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
+			entries = ready.FilterByAssignedTo(entries, assignedTo)
 
 			// Apply --parent filter: keep only descendants of the given issue.
 			if filterParent != "" {
@@ -133,6 +137,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID for assignment-aware sorting")
 	cmd.Flags().StringVar(&filterParent, "parent", "", "filter to descendants of this issue ID")
+	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "filter to tasks assigned to this worker ID")
 	return cmd
 }
 
