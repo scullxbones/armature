@@ -170,6 +170,12 @@ Each worker's context package must contain:
    Working branch: feat/STORY-ID  — run `git checkout feat/STORY-ID` before committing.
    ```
 
+6. **Commit instruction** — instruct the worker to stage files explicitly using
+   the task's `scope` field, not `git commit -am` (which silently skips new files):
+   ```
+   Commit: git add <each file listed in scope> && git commit -m "feat(ISSUE-ID): ..."
+   ```
+
 **Dispatch using your platform's agent dispatch capability** — the exact tool
 or API call depends on your runtime. The content above is what matters; the
 mechanism is platform-specific.

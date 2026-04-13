@@ -104,9 +104,13 @@ Do not leave issues uncited.
 
 ```
 trls transition ISSUE-ID --to done --outcome "what was accomplished"
-git add <code files...> .issues/   # always include .issues/ — ops must travel with code
+git add <each file from the task scope> .issues/
 git commit -m "feat(ISSUE-ID): brief description of what was implemented"
 ```
+
+Stage files **explicitly by name or path** — taken directly from the task's `scope` field.
+Do **not** use `git commit -am`: the `-a` flag only auto-stages already-tracked files and
+silently skips new files and directories created by the task.
 
 Record a concrete outcome. Commit immediately after the task — small focused commits
 are easier to review.
@@ -114,7 +118,7 @@ are easier to review.
 **Pro-tip: Bundled Workflow**
 To avoid forgetting `.issues/` or the commit, combine these into a single command:
 ```bash
-trls transition ISSUE-ID --to done --outcome "..." && git add . .issues/ && git commit -m "feat(ISSUE-ID): ..."
+trls transition ISSUE-ID --to done --outcome "..." && git add <scope files> .issues/ && git commit -m "feat(ISSUE-ID): ..."
 ```
 
 **Always stage `.issues/` alongside code files.** Every `trls` command (note,
@@ -186,6 +190,7 @@ high token usage. Instead:
 | Running `trls claim` when dispatched by Coordinator | The Coordinator pre-claims the issue; do not re-claim |
 | Skipping heartbeat on long tasks | Claim expires after TTL; other workers can steal it |
 | Skipping commit after task | Small commits make review and revert tractable |
+| Using `git commit -am` | `-a` only stages tracked files — new files and directories are silently skipped; always use explicit `git add <scope files>` |
 | Omitting `.issues/` from `git add` | Ops left behind, not delivered with code; always include `.issues/` in every commit (single-branch mode only) |
 | Including `.issues/` in `git add` in dual-branch mode | Stages stale data; ops are already on `_trellis` branch — omit `.issues/` from code commits |
 | Leave issues uncited | Run `trls source-link` or `trls accept-citation --ci` before returning |
