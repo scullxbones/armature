@@ -767,9 +767,42 @@ Exit codes: 0 success, 1 validation errors (nothing written), 2 plan file parse 
 
 **Idempotency protection:** Each `decompose-apply` invocation generates a batch ID (UUID) recorded in every created op's payload, along with a SHA of the plan file. Before writing ops, the CLI scans existing logs for ops with a matching plan file hash. If a prior batch from the same plan is detected (indicating a partial push that may have succeeded), the CLI warns and requires `--force` to proceed. This prevents duplicate node creation from network-timeout retries. The `--generate-ids` flag generates new UUIDs for nodes but preserves the batch-level deduplication check.
 
+### `trls doctor`
+
+Checks structural integrity of the local repo state. Intended as a **pre-work gate** — run once after `worker-init` and before claiming any issue to confirm the repo is in a coherent state.
+
+```
+trls doctor [flags]
+
+Flags:
+  --strict     Promote warnings to errors (non-zero exit on any finding)
+  --format json
+
+Checks:
+  D1  Git/trellis divergence — commits reference issues not in done/merged state
+  D2  Stale claims — claimed issues with expired TTL
+  D3  Orphaned ops — op log entries whose target_id is not in the issue graph
+  D4  Broken parent refs — issues whose parent points to a non-existent node
+  D5  Dependency cycles — blocked_by chains that form a cycle
+  D6  Uncited issues — issues with no source_link and no accept-citation record
+
+Exit codes: 0 clean (warnings OK), 1 errors found, non-zero with --strict on warnings.
+```
+
+**Design boundary — doctor vs validate:** These two commands have distinct responsibilities and distinct invocation points. Do not merge them.
+
+| Command | Responsibility | When to run |
+|---|---|---|
+| `trls doctor` | **Structural** — can this repo function at all? (broken refs, orphaned ops, stale claims, cycles) | Pre-work: after `worker-init`, before claiming |
+| `trls validate` | **Semantic** — is this repo honest? (citation coverage, source UUID validity, scope overlap) | Pre-push: before transitioning a story and opening a PR |
+
+`trls doctor` operates on materialized state and the raw op log; it is intentionally fast and does not re-fetch or re-fingerprint sources. `trls validate` does deeper citation integrity (E7, E8) that requires resolving source UUIDs against the manifest. **D6 in doctor checks field presence only** (does a source_link or accept-citation record exist?); it does not validate that the cited source UUID exists in the manifest — that is validate's job (E8).
+
+This separation keeps the pre-work gate cheap and the pre-push gate thorough. Running doctor before every claim session is low-friction. Running validate before every push is the right moment for the slower source-resolution check.
+
 ### `trls validate`
 
-Checks structural integrity of the current materialized DAG.
+Checks semantic integrity of the current materialized DAG. Intended as a **pre-push gate** — run after all story tasks are done and before transitioning the story and opening a PR.
 
 ```
 trls validate [flags]
@@ -1821,6 +1854,7 @@ These decisions are locked and should not be revisited without significant new e
 - Language: Go. Distribution: single static binary.
 - Token proxy: `chars/4`, advisory only
 - `decompose-revert` via cancellation ops (double-entry), not history rewriting
+- `trls doctor` = structural pre-work gate (D1–D6, field presence only); `trls validate` = semantic pre-push gate (citation UUID integrity, scope overlap, coverage). They are distinct commands with distinct invocation points — do not merge. D6 in doctor intentionally checks only field presence; source UUID validation belongs in validate (E8).
 
 ## Appendix B: Scope Boundaries
 

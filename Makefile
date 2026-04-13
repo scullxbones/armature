@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint clean mutate check help skill install
+.PHONY: test coverage coverage-check lint clean mutate check help skill dist-skills install
 
 # Default target
 .DEFAULT_GOAL := help
@@ -13,7 +13,8 @@ help:
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make clean      - Remove build artifacts and test outputs"
 	@echo "  make build      - Build CLI binary to ./bin/trls"
-	@echo "  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/"
+	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/"
+	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/trls (adds to PATH)"
 
 check: lint test coverage-check mutate skill
@@ -72,16 +73,29 @@ install: build
 	@echo "Ensure ~/.local/bin is on your PATH"
 
 skill: build
-	mkdir -p .claude/skills/trls/scripts
-	cat skills/trls/meta.yaml skills/trls/SKILL.md > .claude/skills/trls/SKILL.md
-	cp bin/trls .claude/skills/trls/scripts/trls
-	chmod +x .claude/skills/trls/scripts/trls
-	mkdir -p .claude/skills/trls-worker
-	{ cat skills/trls-worker/meta.yaml; printf '> **DO NOT EDIT** — generated from `skills/trls-worker/SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat skills/trls-worker/SKILL.md; } > .claude/skills/trls-worker/SKILL.md
-	mkdir -p .gemini/skills/trls/scripts
-	cat skills/trls/meta.yaml skills/trls/SKILL.md > .gemini/skills/trls/SKILL.md
-	cp bin/trls .gemini/skills/trls/scripts/trls
-	chmod +x .gemini/skills/trls/scripts/trls
-	mkdir -p .gemini/skills/trls-worker
-	{ cat skills/trls-worker/meta.yaml; printf '> **DO NOT EDIT** — generated from `skills/trls-worker/SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n'; cat skills/trls-worker/SKILL.md; } > .gemini/skills/trls-worker/SKILL.md
-	@echo "Deployed trls and trls-worker skills to .claude/skills/ and .gemini/skills/"
+	cp bin/trls skills/trls/scripts/trls
+	@for name in skills/*/; do \
+		name=$$(basename "$$name"); \
+		[ -f "skills/$$name/SKILL.md" ] || continue; \
+		for harness in claude gemini; do \
+			mkdir -p ".$$harness/skills/$$name"; \
+			{ cat "skills/$$name/meta.yaml"; \
+			  printf '> **DO NOT EDIT** — generated from `skills/%s/SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n' "$$name"; \
+			  cat "skills/$$name/SKILL.md"; \
+			} > ".$$harness/skills/$$name/SKILL.md"; \
+			if [ -d "skills/$$name/scripts" ]; then \
+				mkdir -p ".$$harness/skills/$$name/scripts"; \
+				cp "skills/$$name/scripts/"* ".$$harness/skills/$$name/scripts/"; \
+				chmod +x ".$$harness/skills/$$name/scripts/"*; \
+			fi; \
+		done; \
+	done
+	@echo "Deployed skills to .claude/skills/ and .gemini/skills/"
+
+dist-skills:
+	mkdir -p dist
+	@for harness in claude gemini; do \
+		zip -r "dist/skills-$$harness.zip" ".$$harness/skills/" \
+			--exclude ".$$harness/skills/*/scripts/*"; \
+		echo "Created dist/skills-$$harness.zip"; \
+	done
