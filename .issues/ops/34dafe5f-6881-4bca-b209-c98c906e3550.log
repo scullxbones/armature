@@ -969,3 +969,4 @@
 ["transition","task-source-link-multi",1776121859,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"trls source-link now accepts --issue repeated one or more times; all named issues linked to source in single invocation; positional-arg single-issue path unchanged; 2 new tests added (multi-issue + backward compat); make check green"}]
 ["link","task-1775389531",1776122391,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"task-1775389519","rel":"blocked_by"}]
 ["link","task-1775348396",1776122412,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"task-1775311802","rel":"blocked_by"}]
+["link","task-1775348396",1776122412,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"task-1775311528","rel":"blocked_by"}]
