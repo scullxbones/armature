@@ -962,3 +962,4 @@
 ["transition","E6-DOCFIX1-T5",1776119286,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"transition --to done warns on uncited issues to stderr with source-link/accept-citation instructions; --force suppresses warning; cited issues unaffected; 3 new tests pass"}]
 ["claim","E6-DOCFIX1-T3",1776119603,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["citation-accepted","task-auto-serial-claim",1776119607,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"task-auto-serial-claim is a dogfooding task created in-session to track auto-serial claim behavior; no external source document exists"}]
+["transition","E6-DOCFIX1-T3",1776119615,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added accept-citation for task-auto-serial-claim; trls doctor D6 now passes with no uncited issues"}]
