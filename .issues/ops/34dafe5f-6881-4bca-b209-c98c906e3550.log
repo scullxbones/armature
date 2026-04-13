@@ -849,3 +849,4 @@
 ["transition","task-auto-serial-claim",1776045846,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"claim auto-dismisses scope overlap for same-worker serial claims; cross-worker overlap still requires --force; existing tests updated; SKILL doc updated"}]
 ["source-fingerprint","cd32a9ac-d9af-4aaa-962e-56372acc2ea2",1776108560,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"468d28a4980b1a32955dd419861c1b7645c5ad87fcbd2229e25889797e94a5dd","provider":"filesystem"}]
 ["source-fingerprint","ce4eb7ce-96ce-439d-ae2c-9e7ba575ca0e",1776108560,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"524bd8fb1bf38ae9c122fe13c2e78289b82f864484516c4482207e226b600ee5","provider":"filesystem"}]
+["source-fingerprint","d290e7a5-e410-4359-b53d-827ead188ae4",1776108560,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"742bde2f46becf56487f1ad6ff717ac288cf406e0e3c1c1474bc16e65a12838a","provider":"filesystem"}]
