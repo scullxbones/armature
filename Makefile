@@ -95,7 +95,16 @@ skill: build
 dist-skills:
 	mkdir -p dist
 	@for harness in claude gemini; do \
-		zip -r "dist/skills-$$harness.zip" ".$$harness/skills/" \
-			--exclude ".$$harness/skills/*/scripts/*"; \
-		echo "Created dist/skills-$$harness.zip"; \
+		python3 -c "\
+import zipfile, os, sys; \
+harness = sys.argv[1]; \
+base = '.'+harness+'/skills'; \
+out = 'dist/skills-'+harness+'.zip'; \
+zf = zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED); \
+[ (zf.write(os.path.join(r,f), os.path.join(r,f)) \
+   if 'scripts' not in r.split(os.sep) else None) \
+  for r,_,fs in os.walk(base) for f in fs ]; \
+zf.close(); \
+print('Created '+out) \
+" "$$harness"; \
 	done
