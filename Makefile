@@ -73,7 +73,6 @@ install: build
 	@echo "Ensure ~/.local/bin is on your PATH"
 
 skill: build
-	cp bin/trls skills/trls/scripts/trls
 	@for name in skills/*/; do \
 		name=$$(basename "$$name"); \
 		[ -f "skills/$$name/SKILL.md" ] || continue; \
