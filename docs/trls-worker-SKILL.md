@@ -338,6 +338,17 @@ claiming the task. If you need strict exclusion (e.g. scope-overlap tasks that
 must not run in parallel), use `trls link --source A --dep B` to create a
 blocking dependency instead of relying on assignment alone.
 
+### Same-worker serial claims
+
+When the **same worker** claims two tasks with overlapping scope, the overlap
+check is automatically dismissed — no `--force` needed. A note op is recorded
+on the issue for traceability. This covers the common serial-work pattern where
+one worker works through a group of related tasks one at a time.
+
+Cross-worker overlaps still require `--force` and emit a warning, signalling
+that parallel work on the same files is occurring and the workers must
+coordinate to avoid merge conflicts.
+
 ## Batch Strategy (Advanced)
 
 When a task involves a large number of files (e.g. refactoring 10+ files), do not

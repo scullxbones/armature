@@ -2321,7 +2321,8 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	assert.NotContains(t, out, "error")
 }
 
-// TestClaimCommand_ScopeOverlapExitsWithoutForce verifies that claim exits 1 when scope overlap detected
+// TestClaimCommand_ScopeOverlapExitsWithoutForce verifies that claim exits 1 when a *different*
+// worker holds an overlapping task and --force is not passed.
 func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2332,7 +2333,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	cmd.SetArgs([]string{"init", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
-	// Initialize worker
+	// Initialize our worker (worker-A).
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
@@ -2344,12 +2345,15 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
 	require.NoError(t, err)
 
-	// Claim the first task
+	// Claim task-01 as a *different* worker by temporarily overriding the git config.
+	run(t, repo, "git", "config", "--local", "trellis.worker-id", "other-worker-abc")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
 	require.NoError(t, err)
+	// Restore worker-A by re-running worker-init (generates a new UUID for worker-A).
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
 
-	// Attempt to claim the second task without --force should fail with exit code 1
-	// Capture both stdout and stderr
+	// Attempt to claim the second task without --force should fail: different worker holds task-01.
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()
@@ -2358,7 +2362,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
 
 	err = root.Execute()
-	assert.Error(t, err, "claim should fail when scope overlaps without --force flag")
+	assert.Error(t, err, "claim should fail when a different worker's task overlaps without --force")
 	errOutput := errBuf.String()
 	assert.Contains(t, errOutput, "overlap", "error output should mention scope overlap")
 }
@@ -2394,6 +2398,42 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	out, err := runTrls(t, repo, "claim", "--issue", "task-02", "--force")
 	assert.NoError(t, err, "claim --force should succeed despite scope overlap")
 	assert.Contains(t, out, "task-02", "output should contain the claimed issue ID")
+}
+
+// TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed verifies that when the same worker
+// holds both overlapping tasks no --force is required; the claim succeeds with no error output.
+func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	// Same worker claims task-01 first.
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Same worker claims task-02 without --force: should succeed (serial same-worker work).
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(errBuf)
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
+
+	err = root.Execute()
+	assert.NoError(t, err, "same-worker overlap should not require --force")
+	assert.NotContains(t, errBuf.String(), "Error:", "no error should be emitted to stderr")
 }
 
 // TestUnassignHelp verifies unassign --help mentions auto-transition side effect
