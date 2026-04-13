@@ -62,16 +62,22 @@ digraph coordinator_loop {
 
 ## Step-by-Step
 
-### 1. Survey the Story
+### 1. Survey the Story and Create a Feature Branch
 
 ```bash
 trls list --parent STORY-ID
 trls doctor
+git checkout -b feat/STORY-ID   # create the story branch NOW, before any worker is dispatched
 ```
 
 Identify which tasks are `open` and which have `blocked_by` dependencies. Group
 tasks into waves — tasks within the same wave have no dependencies on each other
 and can run in parallel. Tasks in different waves must run sequentially.
+
+**Create the feature branch before dispatching any worker.** All workers commit
+to this branch. If workers are dispatched without a branch, they default to
+whatever branch the repo is on — typically `main` — and the story cannot be
+reviewed via PR.
 
 ### 2. Find Ready Work
 
@@ -158,8 +164,11 @@ Each worker's context package must contain:
    Working directory: /path/to/repo
    ```
 
-5. **Branch** — if using a feature branch, name it explicitly so the worker
-   checks it out before making commits.
+5. **Branch** — pass the story feature branch name so the worker checks it out
+   before making any commits:
+   ```
+   Working branch: feat/STORY-ID  — run `git checkout feat/STORY-ID` before committing.
+   ```
 
 **Dispatch using your platform's agent dispatch capability** — the exact tool
 or API call depends on your runtime. The content above is what matters; the
