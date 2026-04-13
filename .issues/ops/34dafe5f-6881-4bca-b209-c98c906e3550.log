@@ -933,3 +933,4 @@
 ["transition","E6-SKIL1",1776117888,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"All 6 tasks complete: skills/ restructured to subdir-per-skill (T1); Makefile skill target made data-driven with dist-skills (T2); trls-coordinator skill written (T3); trls-worker skill trimmed to worker-only (T4); trls-planner skill written (T5); trls-auditor skill written (T6)"}]
 ["claim","E6-DOCFIX1-T1",1776118505,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","E6-DOCFIX1",1776118505,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["claim","E6-DOCFIX1-T2",1776118506,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
