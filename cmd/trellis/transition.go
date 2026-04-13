@@ -68,6 +68,18 @@ This enforces branch + PR discipline.`,
 				// If we can't determine the branch, allow the transition (graceful degradation)
 			}
 
+			// Warn if transitioning to done and issue has no source-link or accept-citation (unless --force)
+			if to == "done" && !force {
+				if uncited := isIssueUncited(issueID); uncited {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"WARNING: issue %s has no source citation.\n"+
+							"Run 'trls source-link --issue %s --source-id <UUID>' to link to a source document,\n"+
+							"or 'trls accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
+							"Use --force to suppress this warning.\n",
+						issueID, issueID, issueID)
+				}
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -148,6 +160,19 @@ This enforces branch + PR discipline.`,
 	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
+}
+
+// isIssueUncited returns true if the issue has no source-link or accept-citation.
+// It loads the materialized issue from the state directory. If the issue cannot be
+// loaded (e.g. not yet materialized), it returns false to avoid false positives.
+func isIssueUncited(issueID string) bool {
+	issuePath := filepath.Join(appCtx.StateDir, "issues", issueID+".json")
+	issue, err := materialize.LoadIssue(issuePath)
+	if err != nil {
+		// Cannot load — graceful degradation, don't warn
+		return false
+	}
+	return len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0
 }
 
 // checkAndWarnParentStoryStatus checks if all sibling tasks will be done after this transition,

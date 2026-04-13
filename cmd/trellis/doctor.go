@@ -10,6 +10,7 @@ import (
 
 func newDoctorCmd() *cobra.Command {
 	var strict bool
+	var verbose bool
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -18,7 +19,7 @@ func newDoctorCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			repoPath := appCtx.RepoPath
 
-			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath)
+			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, verbose)
 			if err != nil {
 				return err
 			}
@@ -38,7 +39,11 @@ func newDoctorCmd() *cobra.Command {
 						icon = "✗"
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
-					for _, item := range f.Items {
+					items := f.Items
+					if verbose && len(f.VerboseItems) > 0 {
+						items = f.VerboseItems
+					}
+					for _, item := range items {
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    - %s\n", item)
 					}
 				}
@@ -56,6 +61,7 @@ func newDoctorCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&strict, "strict", false, "promote warnings to errors")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "emit file path and line context for D3 violations; name uncited issue IDs for D6")
 	return cmd
 }
 

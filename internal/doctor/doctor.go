@@ -27,10 +27,11 @@ const (
 
 // Finding is a single finding from a health check.
 type Finding struct {
-	Check    string   `json:"check"`
-	Severity Severity `json:"severity"`
-	Message  string   `json:"message"`
-	Items    []string `json:"items,omitempty"`
+	Check        string   `json:"check"`
+	Severity     Severity `json:"severity"`
+	Message      string   `json:"message"`
+	Items        []string `json:"items,omitempty"`
+	VerboseItems []string `json:"verbose_items,omitempty"`
 }
 
 // Report is the result of running all doctor checks.
@@ -80,7 +81,8 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 }
 
 // Run executes all health checks and returns a Report.
-func Run(issuesDir string, stateDir string, repoPath string) (Report, error) {
+// verbose=true adds file path and line context to D3 violations via VerboseItems.
+func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Report, error) {
 	singleBranch := true // single-branch is the default for doctor
 
 	if _, err := materialize.Materialize(issuesDir, stateDir, singleBranch); err != nil {
@@ -102,7 +104,7 @@ func Run(issuesDir string, stateDir string, repoPath string) (Report, error) {
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
 	checks = append(checks, checkD2StaleClaims(allIssues))
-	checks = append(checks, checkD3OrphanedOps(issuesDir, index))
+	checks = append(checks, checkD3OrphanedOps(issuesDir, index, verbose))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
@@ -182,8 +184,15 @@ func checkD2StaleClaims(allIssues map[string]*materialize.Issue) Finding {
 	return f
 }
 
+// opLocation records where in an op log a target ID was found.
+type opLocation struct {
+	file string
+	line int
+}
+
 // D3: orphaned ops — op files referencing issue IDs not in the graph.
-func checkD3OrphanedOps(issuesDir string, index materialize.Index) Finding {
+// When verbose=true, VerboseItems is populated with "id (file:line, ...)" context.
+func checkD3OrphanedOps(issuesDir string, index materialize.Index, verbose bool) Finding {
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, err := os.ReadDir(opsDir)
 	if err != nil {
@@ -198,6 +207,9 @@ func checkD3OrphanedOps(issuesDir string, index materialize.Index) Finding {
 	}
 
 	var targetIDs []string
+	// locations maps targetID -> list of op log file:line references (verbose mode only).
+	locations := make(map[string][]opLocation)
+
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".log") {
 			continue
@@ -207,16 +219,46 @@ func checkD3OrphanedOps(issuesDir string, index materialize.Index) Finding {
 		if err != nil {
 			continue
 		}
-		for _, op := range logOps {
+		for lineNum, op := range logOps {
 			if op.Type == ops.OpSourceFingerprint {
 				continue
 			}
 			if op.TargetID != "" {
 				targetIDs = append(targetIDs, op.TargetID)
+				if verbose {
+					locations[op.TargetID] = append(locations[op.TargetID], opLocation{
+						file: entry.Name(),
+						line: lineNum + 1,
+					})
+				}
 			}
 		}
 	}
-	return checkD3OrphanedOpsFromList(index, targetIDs)
+
+	f := checkD3OrphanedOpsFromList(index, targetIDs)
+
+	if verbose && f.Severity == SeverityError && len(f.Items) > 0 {
+		orphanedSet := make(map[string]bool, len(f.Items))
+		for _, id := range f.Items {
+			orphanedSet[id] = true
+		}
+		var verboseItems []string
+		for id, locs := range locations {
+			if !orphanedSet[id] {
+				continue
+			}
+			var locStrs []string
+			for _, loc := range locs {
+				locStrs = append(locStrs, fmt.Sprintf("%s:%d", loc.file, loc.line))
+			}
+			sort.Strings(locStrs)
+			verboseItems = append(verboseItems, fmt.Sprintf("%s (%s)", id, strings.Join(locStrs, ", ")))
+		}
+		sort.Strings(verboseItems)
+		f.VerboseItems = verboseItems
+	}
+
+	return f
 }
 
 // checkD3OrphanedOpsFromList checks for orphaned ops given a flat list of target IDs.
