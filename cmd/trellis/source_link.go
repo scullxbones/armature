@@ -10,17 +10,19 @@ import (
 )
 
 func newSourceLinkCmd() *cobra.Command {
-	var issueID, sourceID string
+	var issueIDs []string
+	var sourceID string
 
 	cmd := &cobra.Command{
 		Use:   "source-link [issue-id]",
-		Short: "Link an issue to a source entry in the manifest",
+		Short: "Link one or more issues to a source entry in the manifest",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
+			// Positional arg is a backward-compat single-issue path.
+			if len(issueIDs) == 0 && len(args) > 0 {
+				issueIDs = []string{args[0]}
 			}
-			if issueID == "" {
+			if len(issueIDs) == 0 {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
@@ -40,28 +42,30 @@ func newSourceLinkCmd() *cobra.Command {
 				return err
 			}
 
-			op := ops.Op{
-				Type:      ops.OpSourceLink,
-				TargetID:  issueID,
-				Timestamp: nowEpoch(),
-				WorkerID:  workerID,
-				Payload: ops.Payload{
-					SourceID:  sourceID,
-					SourceURL: entry.URL,
-				},
-			}
-			if err := appendLowStakesOp(logPath, op); err != nil {
-				return err
-			}
+			for _, issueID := range issueIDs {
+				op := ops.Op{
+					Type:      ops.OpSourceLink,
+					TargetID:  issueID,
+					Timestamp: nowEpoch(),
+					WorkerID:  workerID,
+					Payload: ops.Payload{
+						SourceID:  sourceID,
+						SourceURL: entry.URL,
+					},
+				}
+				if err := appendLowStakesOp(logPath, op); err != nil {
+					return err
+				}
 
-			result := map[string]string{"issue": issueID, "source_id": sourceID, "source_url": entry.URL}
-			data, _ := json.Marshal(result)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				result := map[string]string{"issue": issueID, "source_id": sourceID, "source_url": entry.URL}
+				data, _ := json.Marshal(result)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to link")
+	cmd.Flags().StringArrayVar(&issueIDs, "issue", nil, "issue ID to link (repeatable)")
 	cmd.Flags().StringVar(&sourceID, "source-id", "", "UUID of the source entry in the manifest")
 	_ = cmd.MarkFlagRequired("source-id")
 	return cmd
