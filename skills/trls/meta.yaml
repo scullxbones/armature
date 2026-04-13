@@ -1,9 +1,7 @@
----
 name: trls
 description: >
   Trellis task management interface for AI agents. Use when working in a
   trellis-managed repo: find actionable work with ready, claim issues, record
   progress with note/decision/heartbeat, complete work with transition.
   Requires trls on PATH (run make install).
-compatibility: Designed for Claude Code. Requires trls on PATH.
----
+compatibility: Designed for Claude Code and Gemini CLI. Requires trls on PATH.
