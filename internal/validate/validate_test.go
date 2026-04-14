@@ -201,6 +201,72 @@ func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
 	assert.False(t, containsError(result, "missing required field"))
 }
 
+func TestE5TypeHierarchy_EpicWithTaskIsValid(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"TASK-2"}},
+		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "EPIC-1"},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsError(result, "invalid hierarchy"), "epic with task child should be valid")
+}
+
+func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
+	// B.Blocks contains A (B was created first and blocks A) — should suppress overlap warning
+	state := makeState(
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-B"}},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-A"}},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when B blocks A")
+}
+
+func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
+	// Context field pushes estimated token count over the 4000-token budget
+	largeContext := make([]byte, 20000) // 20k bytes / 4 = 5000 est tokens
+	for i := range largeContext {
+		largeContext[i] = 'x'
+	}
+	jsonContext := append([]byte(`"`), append(largeContext, '"')...)
+	state := makeState(
+		&materialize.Issue{ID: "TSK-1", Type: "task", Context: json.RawMessage(jsonContext)},
+	)
+	result := Validate(state, Options{})
+	assert.True(t, containsWarning(result, "budget advisory"))
+}
+
+func TestW6ComplexityMismatch_SmallWith6Files(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{
+			ID: "TSK-1", Type: "task",
+			Scope:         []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go"},
+			EstComplexity: "small",
+		},
+	)
+	result := Validate(state, Options{})
+	assert.True(t, containsWarning(result, "complexity mismatch"))
+}
+
+func TestW6ComplexityMismatch_LargeWith1File(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{
+			ID: "TSK-1", Type: "task",
+			Scope:         []string{"a.go"},
+			EstComplexity: "large",
+		},
+	)
+	result := Validate(state, Options{})
+	assert.True(t, containsWarning(result, "complexity mismatch"))
+}
+
+func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
+	// Outcome is exactly one of the vague words (exact match check at validate.go:491)
+	state := makeState(
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
+	)
+	result := Validate(state, Options{})
+	assert.True(t, containsWarning(result, "vague outcome"))
+}
+
 func TestValidateUsesStateDir(t *testing.T) {
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")

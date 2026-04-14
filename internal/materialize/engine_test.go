@@ -448,6 +448,59 @@ func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
 	assert.NotEqual(t, "merged", state.Issues["story-01"].Status, "story should not be merged with open task-02")
 }
 
+func TestRunRollup_CascadesToEpic(t *testing.T) {
+	// epic-01 → story-01 → task-01; when task-01 is merged, both story and epic should cascade-merge.
+	// This exercises the parent-decrement path at engine.go:371-380.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Epic", NodeType: "epic"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story", Parent: "epic-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task", NodeType: "task", Parent: "story-01"}}))
+
+	// Mark task merged directly (simulating single-branch done → merged)
+	state.Issues["task-01"].Status = ops.StatusMerged
+
+	state.RunRollup()
+	assert.Equal(t, "merged", state.Issues["story-01"].Status, "story should cascade-merge when all tasks merged")
+	assert.Equal(t, "merged", state.Issues["epic-01"].Status, "epic should cascade-merge when all stories merged")
+}
+
+func TestApplyUnlinkOp_BlockedByRel(t *testing.T) {
+	// Create two linked tasks then unlink them — exercises applyUnlink (engine.go:184, 445)
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "A", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "B", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocked_by"}}))
+	require.Contains(t, state.Issues["task-01"].BlockedBy, "task-02")
+
+	// Unlink: task-01 is no longer blocked_by task-02
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpUnlink, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocked_by"}}))
+	assert.NotContains(t, state.Issues["task-01"].BlockedBy, "task-02")
+	assert.NotContains(t, state.Issues["task-02"].Blocks, "task-01")
+}
+
+func TestApplyUnlinkOp_NonBlockedByRel_NoOp(t *testing.T) {
+	// Unlink with a rel other than "blocked_by" should be a no-op (engine.go:184 negation path)
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "A", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "B", NodeType: "task"}}))
+	// Link with "blocked_by" first
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocked_by"}}))
+	// Unlink with a different rel — should not remove the blocked_by relationship
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpUnlink, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "relates-to"}}))
+	assert.Contains(t, state.Issues["task-01"].BlockedBy, "task-02", "blocked_by not removed for non-blocked_by unlink")
+}
+
 func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,

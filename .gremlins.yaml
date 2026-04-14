@@ -11,5 +11,5 @@ unleash:
   # Quality gates (ratchet: only raise, never lower).
   # threshold-mcover: % of mutation sites reachable by tests (analogous to code coverage).
   # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
-  threshold-mcover: 85
-  threshold-efficacy: 70
+  threshold-mcover: 90
+  threshold-efficacy: 75

@@ -2,6 +2,7 @@ package doctor_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -270,4 +271,55 @@ func TestDoctorRunUsesStateDir(t *testing.T) {
 	// Since T-001 has no parent, D4 should be OK.
 	d4 := findCheck(t, report, "D4")
 	assert.Equal(t, doctor.SeverityOK, d4.Severity)
+}
+
+func TestRunChecks_D1_GitDivergence(t *testing.T) {
+	t.Parallel()
+	// Create a temp git repo with a commit referencing an issue not in done/merged state (doctor.go:159)
+	repoDir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoDir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "command %v failed: %s", args, out)
+	}
+	run("git", "init")
+	run("git", "config", "user.email", "test@test.com")
+	run("git", "config", "user.name", "Test")
+	run("git", "config", "commit.gpgsign", "false")
+	run("git", "commit", "--allow-empty", "-m", "feat(task-open-1): implement feature")
+
+	index := materialize.Index{
+		"task-open-1": {Status: "in-progress", Type: "task"},
+	}
+	report := doctor.RunChecks(index, nil, nil, repoDir)
+	d1 := findCheck(t, report, "D1")
+	assert.Equal(t, doctor.SeverityWarning, d1.Severity, "D1 should warn when commit references non-done issue")
+	assert.Contains(t, d1.Items[0], "task-open-1")
+}
+
+func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
+	t.Parallel()
+	// Done issues referenced in commits should not trigger D1 warning (covers 159:46 — "merged" branch)
+	repoDir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = repoDir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "command %v failed: %s", args, out)
+	}
+	run("git", "init")
+	run("git", "config", "user.email", "test@test.com")
+	run("git", "config", "user.name", "Test")
+	run("git", "config", "commit.gpgsign", "false")
+	run("git", "commit", "--allow-empty", "-m", "feat(task-done-1): implement feature")
+
+	index := materialize.Index{
+		"task-done-1": {Status: "done", Type: "task"},
+	}
+	report := doctor.RunChecks(index, nil, nil, repoDir)
+	d1 := findCheck(t, report, "D1")
+	assert.Equal(t, doctor.SeverityOK, d1.Severity, "D1 should be OK when commit references done issue")
 }

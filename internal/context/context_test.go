@@ -2,6 +2,8 @@ package context
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -456,6 +458,170 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 			assert.Empty(t, l.Content)
 		}
 	}
+}
+
+func TestBuildBlockerOutcomes_LoadsFromDisk(t *testing.T) {
+	// Blocker is NOT in the in-memory state — it must be loaded from disk (assemble.go:119-123)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	blockerJSON := `{"id":"TST-BLK","type":"task","status":"done","title":"Blocker","outcome":"unblocked successfully","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-BLK.json"), []byte(blockerJSON), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-X"] = &materialize.Issue{
+		ID:           "TST-X",
+		Title:        "Needs blocker",
+		Type:         "task",
+		Status:       "open",
+		BlockedBy:    []string{"TST-BLK"},
+		Children:     []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	// TST-BLK is intentionally absent from state — must load from disk
+
+	ctx, err := Assemble("TST-X", dir, state)
+	require.NoError(t, err)
+
+	var blockerLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "blocker_outcomes" {
+			blockerLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, blockerLayer)
+	assert.Contains(t, blockerLayer.Content, "TST-BLK")
+	assert.Contains(t, blockerLayer.Content, "unblocked successfully")
+}
+
+func TestBuildParentChain_LoadsFromDisk(t *testing.T) {
+	// Parent is NOT in the in-memory state — must be loaded from disk (assemble.go:151-155)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	parentJSON := `{"id":"TST-PAR","type":"story","status":"in-progress","title":"Parent Story","children":["TST-X"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR.json"), []byte(parentJSON), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-X"] = &materialize.Issue{
+		ID:           "TST-X",
+		Title:        "Child task",
+		Type:         "task",
+		Status:       "open",
+		Parent:       "TST-PAR",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	// TST-PAR absent from state — must load from disk
+
+	ctx, err := Assemble("TST-X", dir, state)
+	require.NoError(t, err)
+
+	var parentLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "parent_chain" {
+			parentLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, parentLayer)
+	assert.Contains(t, parentLayer.Content, "TST-PAR")
+	assert.Contains(t, parentLayer.Content, "Parent Story")
+}
+
+func TestBuildSiblingOutcomes_LoadsSiblingFromDisk(t *testing.T) {
+	// Sibling is NOT in state — must load from disk (assemble.go:224-226)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	// Parent is in state but sibling is on disk
+	siblingJSON := `{"id":"TST-SIB","type":"task","status":"done","title":"Sibling","outcome":"sibling outcome from disk","parent":"TST-PAR","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-SIB.json"), []byte(siblingJSON), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-PAR"] = &materialize.Issue{
+		ID:           "TST-PAR",
+		Title:        "Parent",
+		Type:         "story",
+		Status:       "in-progress",
+		Children:     []string{"TST-X", "TST-SIB"},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	state.Issues["TST-X"] = &materialize.Issue{
+		ID:           "TST-X",
+		Title:        "Current task",
+		Type:         "task",
+		Status:       "open",
+		Parent:       "TST-PAR",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	// TST-SIB is absent from state — must load from disk
+
+	ctx, err := Assemble("TST-X", dir, state)
+	require.NoError(t, err)
+
+	var sibLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "sibling_outcomes" {
+			sibLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, sibLayer)
+	assert.Contains(t, sibLayer.Content, "TST-SIB")
+	assert.Contains(t, sibLayer.Content, "sibling outcome from disk")
+}
+
+func TestBuildSiblingOutcomes_ParentLoadedFromDisk(t *testing.T) {
+	// Parent is NOT in state — load parent from disk, then load siblings from disk (assemble.go:208-210)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	parentJSON := `{"id":"TST-PAR2","type":"story","status":"in-progress","title":"Parent2","children":["TST-X2","TST-SIB2"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR2.json"), []byte(parentJSON), 0644))
+	siblingJSON := `{"id":"TST-SIB2","type":"task","status":"done","title":"Sibling2","outcome":"disk sibling outcome","parent":"TST-PAR2","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-SIB2.json"), []byte(siblingJSON), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-X2"] = &materialize.Issue{
+		ID:           "TST-X2",
+		Title:        "Current task",
+		Type:         "task",
+		Status:       "open",
+		Parent:       "TST-PAR2",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	// Both TST-PAR2 and TST-SIB2 absent from state — loaded from disk
+
+	ctx, err := Assemble("TST-X2", dir, state)
+	require.NoError(t, err)
+
+	var sibLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "sibling_outcomes" {
+			sibLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, sibLayer)
+	assert.Contains(t, sibLayer.Content, "TST-SIB2")
+	assert.Contains(t, sibLayer.Content, "disk sibling outcome")
 }
 
 // TC-004: Tests for RenderAgent and RenderHuman

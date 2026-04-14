@@ -6,6 +6,7 @@ import (
 
 	"github.com/scullxbones/trellis/internal/materialize"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadyTask_AllRulesMet(t *testing.T) {
@@ -377,4 +378,20 @@ func TestAssignmentTier_NoWorkerContext(t *testing.T) {
 	}
 	// Empty workerID means no assignment context — treat as unassigned tier
 	assert.Equal(t, 1, assignmentTier("T-001", "", index))
+}
+
+func TestReadyTask_SortByBlocksCount(t *testing.T) {
+	// Two tasks at the same depth and priority — the one that blocks more should sort first (compute.go:167)
+	index := materialize.Index{
+		"task-a": {Status: "open", Type: "task", Blocks: []string{"task-c", "task-d"}},
+		"task-b": {Status: "open", Type: "task", Blocks: []string{}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-a": {ID: "task-a", Status: "open", Type: "task"},
+		"task-b": {ID: "task-b", Status: "open", Type: "task"},
+	}
+	ready := ComputeReady(index, issues, "")
+	require.Len(t, ready, 2)
+	// task-a blocks 2 others → it is more critical → should sort first
+	assert.Equal(t, "task-a", ready[0].Issue, "task with more Blocks should sort before task with fewer")
 }

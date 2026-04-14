@@ -44,6 +44,27 @@ func TestLoad_AllOps(t *testing.T) {
 	assert.Equal(t, int64(200), entries[2].Timestamp)
 }
 
+func TestLoad_SortsTiesByWorkerID(t *testing.T) {
+	// Two ops with identical timestamps — must be sorted by WorkerID for determinism (audit.go:50)
+	dir := t.TempDir()
+	opsDir := filepath.Join(dir, "ops")
+	writeLog(t, opsDir, "worker-b", []ops.Op{
+		{Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "worker-b",
+			Payload: ops.Payload{Msg: "from b"}},
+	})
+	writeLog(t, opsDir, "worker-a", []ops.Op{
+		{Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "from a"}},
+	})
+
+	entries, err := audit.Load(opsDir, audit.Filter{})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	// worker-a sorts before worker-b lexicographically
+	assert.Equal(t, "worker-a", entries[0].WorkerID)
+	assert.Equal(t, "worker-b", entries[1].WorkerID)
+}
+
 func TestLoad_FilterByIssue(t *testing.T) {
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
