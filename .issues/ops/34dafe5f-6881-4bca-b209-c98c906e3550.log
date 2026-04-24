@@ -988,3 +988,4 @@
 ["link","task-1775311802",1776122413,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"task-1775311528","rel":"blocked_by"}]
 ["transition","task-1775311458",1776122433,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"cancelled","outcome":"Cancelled ephemeral test task; no implementation performed"}]
 ["source-fingerprint","b6e5c559-b6de-41cb-8005-f2a158c7cb8d",1777004343,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"84223883df7b065b3081661d7e6a20ad13868294889f4466ef424971c3131a0c","provider":"filesystem"}]
+["source-fingerprint","1241e468-5c15-4f75-9c29-1a09b42adda7",1777004343,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"b19acf157c20a20e763264867fd9a770ec3e8626849f35b5e1c59827337377c6","provider":"filesystem"}]
