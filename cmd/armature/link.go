@@ -21,13 +21,13 @@ Valid relationship types include: depends-on (source depends on dependency), blo
 (source blocks dependency), and relates-to (informational connection). Links establish
 the DAG structure and help identify blocking dependencies.`,
 		Example: `  # Source depends on another issue
-  $ trls link --source E6-S4-T2 --dep E6-S4-T1 --rel depends-on
+  $ arm link --source E6-S4-T2 --dep E6-S4-T1 --rel depends-on
 
   # Source blocks another issue
-  $ trls link --source E6-S4-T1 --dep E6-S4-T3 --rel blocks
+  $ arm link --source E6-S4-T1 --dep E6-S4-T3 --rel blocks
 
   # Informational relationship
-  $ trls link --source E6-S4-T2 --dep E5-S2-T1 --rel relates-to`,
+  $ arm link --source E6-S4-T2 --dep E5-S2-T1 --rel relates-to`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {

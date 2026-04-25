@@ -75,7 +75,7 @@ func TestVersionCommand(t *testing.T) {
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "trls version")
+	assert.Contains(t, buf.String(), "arm version")
 }
 
 func initTempRepo(t *testing.T) string {
@@ -860,7 +860,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	hookPath := filepath.Join(repo, ".issues", "hooks", "post-merge.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "trls sync")
+	assert.Contains(t, string(data), "arm sync")
 }
 
 func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
@@ -874,8 +874,8 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
-	assert.Contains(t, content, "trls heartbeat")
-	assert.Contains(t, content, "trls push-ops")
+	assert.Contains(t, content, "arm heartbeat")
+	assert.Contains(t, content, "arm push-ops")
 }
 
 func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
@@ -3025,8 +3025,8 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 	require.NoError(t, err, "transition should succeed (exit 0) even for uncited issue")
 	assert.Contains(t, stderr, "WARNING", "should print WARNING on stderr for uncited issue")
 	assert.Contains(t, stderr, "source citation", "warning should mention source citation")
-	assert.Contains(t, stderr, "source-link", "warning should direct user to trls source-link")
-	assert.Contains(t, stderr, "accept-citation", "warning should direct user to trls accept-citation")
+	assert.Contains(t, stderr, "source-link", "warning should direct user to arm source-link")
+	assert.Contains(t, stderr, "accept-citation", "warning should direct user to arm accept-citation")
 }
 
 // TestTransitionToDone_UncitedIssue_ForceSupportsWarning verifies that --force suppresses

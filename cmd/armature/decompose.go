@@ -31,14 +31,14 @@ and creates them in the issue graph with proper parent-child relationships, depe
 and metadata. Use --dry-run to preview what would be created, --example to see a sample
 plan, or --schema to view the JSON schema.`,
 		Example: `  # Apply a decomposition plan from a file
-  $ trls decompose-apply --plan path/to/plan.json
+  $ arm decompose-apply --plan path/to/plan.json
 
   # Preview what would be created (dry-run)
-  $ trls decompose-apply --plan plan.json --dry-run
+  $ arm decompose-apply --plan plan.json --dry-run
 
   # Display an example plan and schema
-  $ trls decompose-apply --example
-  $ trls decompose-apply --schema`,
+  $ arm decompose-apply --example
+  $ arm decompose-apply --schema`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if exampleFlag || schemaFlag {
 				return nil
@@ -50,7 +50,7 @@ plan, or --schema to view the JSON schema.`,
 			if schemaFlag {
 				schema := map[string]interface{}{
 					"$schema":  "https://json-schema.org/draft/2020-12/schema",
-					"title":    "Trellis Decomposition Plan",
+					"title":    "Armature Decomposition Plan",
 					"type":     "object",
 					"required": []string{"version", "title", "issues"},
 					"properties": map[string]interface{}{

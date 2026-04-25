@@ -26,16 +26,16 @@ If the TTL expires without progress, the claim becomes stale and may be reassign
 This command also detects and warns about scope overlaps with concurrently claimed issues.
 When you claim a task, its parent story (if open) is automatically advanced to in-progress.`,
 		Example: `  # Claim an issue by ID
-  $ trls claim E6-S4-T2
+  $ arm claim E6-S4-T2
 
   # Claim with a custom TTL of 120 minutes
-  $ trls claim --issue E6-S4-T2 --ttl 120
+  $ arm claim --issue E6-S4-T2 --ttl 120
 
   # Claim despite scope overlap warning
-  $ trls claim E6-S4-T2 --force
+  $ arm claim E6-S4-T2 --force
 
   # Claim using flag style
-  $ trls claim --issue another-task-id`,
+  $ arm claim --issue another-task-id`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issueID == "" && len(args) > 0 {

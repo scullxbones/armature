@@ -19,8 +19,8 @@ var appCtx *config.Context
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:          "trls",
-		Short:        "Trellis — git-native work orchestration",
+		Use:          "arm",
+		Short:        "Armature — git-native work orchestration",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			format, _ := cmd.Flags().GetString("format")

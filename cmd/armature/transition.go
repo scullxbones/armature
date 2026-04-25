@@ -29,13 +29,13 @@ or PR number to document the completion context.
 When transitioning to done, you cannot be on main/master branch unless you use --force.
 This enforces branch + PR discipline.`,
 		Example: `  # Transition an issue to done with an outcome
-  $ trls transition E6-S4-T2 --to done --outcome "Implemented all required features"
+  $ arm transition E6-S4-T2 --to done --outcome "Implemented all required features"
 
   # Transition to merged and record the PR number
-  $ trls transition --issue E6-S4-T2 --to merged --pr 1234
+  $ arm transition --issue E6-S4-T2 --to merged --pr 1234
 
   # Override branch check with --force
-  $ trls transition E6-S4-T2 --to done --outcome "..." --force`,
+  $ arm transition E6-S4-T2 --to done --outcome "..." --force`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if issueID == "" && len(args) > 0 {
@@ -73,8 +73,8 @@ This enforces branch + PR discipline.`,
 				if uncited := isIssueUncited(issueID); uncited {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"WARNING: issue %s has no source citation.\n"+
-							"Run 'trls source-link --issue %s --source-id <UUID>' to link to a source document,\n"+
-							"or 'trls accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
+							"Run 'arm source-link --issue %s --source-id <UUID>' to link to a source document,\n"+
+							"or 'arm accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
 							"Use --force to suppress this warning.\n",
 						issueID, issueID, issueID)
 				}
@@ -220,7 +220,7 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 	if allSiblingsDone {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "\n"+
 			"WARNING: All tasks under %s are done but the story is still in-progress.\n"+
-			"Run: trls transition %s --to done --outcome \"...\"\n\n",
+			"Run: arm transition %s --to done --outcome \"...\"\n\n",
 			parentID, parentID)
 	}
 
