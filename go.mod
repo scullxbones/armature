@@ -1,4 +1,4 @@
-module github.com/scullxbones/trellis
+module github.com/scullxbones/armature
 
 go 1.26.1
 
