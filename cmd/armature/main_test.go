@@ -22,15 +22,15 @@ import (
 // getTestStateDir returns the absolute path to the worker-specific state directory.
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
-	issuesDir := filepath.Join(repo, ".issues")
+	issuesDir := filepath.Join(repo, ".armature")
 	// If dual-branch, issuesDir is in the worktree
-	if data, err := os.ReadFile(filepath.Join(repo, ".issues", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
-		issuesDir = filepath.Join(repo, ".trellis", ".issues")
-	} else if data, err := os.ReadFile(filepath.Join(repo, ".trellis", ".issues", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
+	if data, err := os.ReadFile(filepath.Join(repo, ".armature", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
+		issuesDir = filepath.Join(repo, ".trellis", ".armature")
+	} else if data, err := os.ReadFile(filepath.Join(repo, ".trellis", ".armature", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
 		// already in worktree case? No, config.ResolveContext handles this.
-		// For simplicity, let's just check if .trellis/.issues exists.
-		if _, err := os.Stat(filepath.Join(repo, ".trellis", ".issues")); err == nil {
-			issuesDir = filepath.Join(repo, ".trellis", ".issues")
+		// For simplicity, let's just check if .trellis/.armature exists.
+		if _, err := os.Stat(filepath.Join(repo, ".trellis", ".armature")); err == nil {
+			issuesDir = filepath.Join(repo, ".trellis", ".armature")
 		}
 	}
 
@@ -158,12 +158,12 @@ func TestInitCommand_SingleBranch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, buf.String(), "single-branch")
 
-	// Verify .issues directory structure was created
-	assert.DirExists(t, filepath.Join(repo, ".issues"))
-	assert.DirExists(t, filepath.Join(repo, ".issues", "ops"))
-	assert.DirExists(t, filepath.Join(repo, ".issues", "state"))
-	assert.FileExists(t, filepath.Join(repo, ".issues", "config.json"))
-	assert.FileExists(t, filepath.Join(repo, ".issues", "ops", "SCHEMA"))
+	// Verify .armature directory structure was created
+	assert.DirExists(t, filepath.Join(repo, ".armature"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "state"))
+	assert.FileExists(t, filepath.Join(repo, ".armature", "config.json"))
+	assert.FileExists(t, filepath.Join(repo, ".armature", "ops", "SCHEMA"))
 }
 
 func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
@@ -175,7 +175,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 	cmd.SetArgs([]string{"init", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
-	gitignorePath := filepath.Join(repo, ".issues", ".gitignore")
+	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
 	assert.FileExists(t, gitignorePath)
 	content, err := os.ReadFile(gitignorePath)
 	require.NoError(t, err)
@@ -408,7 +408,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit ops so SHA1 captures state after create (issue exists, no notes)
-	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "add create op")
 	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
@@ -418,7 +418,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit so HEAD captures the note
-	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "add note op")
 	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
@@ -510,8 +510,8 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	// Worktree should exist at .trellis/
 	assert.DirExists(t, filepath.Join(repo, ".trellis"))
 
-	// .issues/ inside worktree should have config.json with dual-branch mode
-	cfgPath := filepath.Join(repo, ".trellis", ".issues", "config.json")
+	// .armature/ inside worktree should have config.json with dual-branch mode
+	cfgPath := filepath.Join(repo, ".trellis", ".armature", "config.json")
 	data, err := os.ReadFile(cfgPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "dual-branch")
@@ -703,7 +703,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
 
 	// Count ops before dry-run
-	issuesDir := filepath.Join(repo, ".trellis", ".issues")
+	issuesDir := filepath.Join(repo, ".trellis", ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
@@ -762,7 +762,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Count ops before dry-run
-	issuesDir := filepath.Join(repo, ".issues")
+	issuesDir := filepath.Join(repo, ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
@@ -857,7 +857,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".issues", "hooks", "post-merge.sh.template")
+	hookPath := filepath.Join(repo, ".armature", "hooks", "post-merge.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "arm sync")
@@ -870,7 +870,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".issues", "hooks", "post-commit.sh.template")
+	hookPath := filepath.Join(repo, ".armature", "hooks", "post-commit.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
@@ -885,7 +885,7 @@ func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".issues", "hooks", "prepare-commit-msg.sh.template")
+	hookPath := filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
@@ -1100,7 +1100,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
-	expectedDefault := filepath.Join(repo, ".issues", "state", "default")
+	expectedDefault := filepath.Join(repo, ".armature", "state", "default")
 	assert.Equal(t, expectedDefault, appCtx.StateDir)
 
 	// Case 2: Worker ID set
@@ -1112,7 +1112,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
-	expectedWorker := filepath.Join(repo, ".issues", "state", workerID)
+	expectedWorker := filepath.Join(repo, ".armature", "state", workerID)
 	assert.Equal(t, expectedWorker, appCtx.StateDir)
 }
 
@@ -1467,7 +1467,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	// Get the worker log path so we can inject ops directly
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	logPath := filepath.Join(repo, ".issues", "ops", fmt.Sprintf("%s.log", workerID))
+	logPath := filepath.Join(repo, ".armature", "ops", fmt.Sprintf("%s.log", workerID))
 
 	t.Run("simple format when accepted_risk_nodes is zero", func(t *testing.T) {
 		// Inject a source-link op for COV-001; COV-002 remains uncited (no accepted-risk either)
@@ -1563,9 +1563,9 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 
 	// Check the ops log for an explicit transition op targeting story-01 with to=in-progress.
 	// This verifies claim.go emits a durable op (not just relies on state engine inference).
-	issuesDir := filepath.Join(repo, ".issues")
+	issuesDir := filepath.Join(repo, ".armature")
 	if _, err := os.Stat(filepath.Join(repo, ".trellis")); err == nil {
-		issuesDir = filepath.Join(repo, ".trellis", ".issues")
+		issuesDir = filepath.Join(repo, ".trellis", ".armature")
 	}
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
@@ -1617,9 +1617,9 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify a transition → open op was emitted
-	issuesDir := filepath.Join(repo, ".issues")
+	issuesDir := filepath.Join(repo, ".armature")
 	if _, err := os.Stat(filepath.Join(repo, ".trellis")); err == nil {
-		issuesDir = filepath.Join(repo, ".trellis", ".issues")
+		issuesDir = filepath.Join(repo, ".trellis", ".armature")
 	}
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
@@ -1663,7 +1663,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit ops so SHA1 captures creation
-	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: create TST-HIST")
 	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
@@ -1673,7 +1673,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit ops so SHA2 captures note
-	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: note TST-HIST")
 	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
@@ -1698,7 +1698,7 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit an empty ops dir
-	run(t, repo, "git", "add", ".issues/")
+	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: init")
 
 	_, err = runTrls(t, repo, "context-history", "--issue", "NO-SUCH")
@@ -1977,7 +1977,7 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	require.NoError(t, err)
 
 	// The slotted file must exist; the plain file must NOT contain this note
-	opsDir := filepath.Join(repo, ".issues", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 
@@ -2014,7 +2014,7 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
 
-	opsDir := filepath.Join(repo, ".issues", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 

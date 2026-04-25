@@ -46,7 +46,7 @@ fi
 arm heartbeat 2>/dev/null
 
 # In dual-branch mode, push ops logs after each commit
-if grep -q '"mode".*"dual-branch"' .issues/config.json 2>/dev/null; then
+if grep -q '"mode".*"dual-branch"' .armature/config.json 2>/dev/null; then
   arm push-ops 2>/dev/null
 fi
 `
@@ -78,7 +78,7 @@ const preCommitHookTemplate = `#!/bin/sh
 # In dual-branch mode, ops live on _trellis — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
-# This is defense-in-depth; .issues/.gitignore also blocks ops/ from being staged.
+# This is defense-in-depth; .armature/.gitignore also blocks ops/ from being staged.
 
 # Allow commits on _trellis — that's exactly where ops belong.
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
@@ -87,14 +87,14 @@ if [ "$current_branch" = "_trellis" ]; then
 fi
 
 # Only block in dual-branch mode; check if config says dual-branch
-if ! grep -q '"mode".*"dual-branch"' .issues/config.json 2>/dev/null; then
+if ! grep -q '"mode".*"dual-branch"' .armature/config.json 2>/dev/null; then
   # Single-branch mode allows ops/ commits
   exit 0
 fi
 
 # Only block additions/modifications — deletions are allowed (cleanup commits).
-if git diff --cached --name-only --diff-filter=AM | grep -q '\.issues/ops/'; then
-  echo "ERROR: Refusing to commit .issues/ops/ changes on a code branch."
+if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; then
+  echo "ERROR: Refusing to commit .armature/ops/ changes on a code branch."
   echo "In dual-branch mode, ops are written directly to the _trellis branch."
   echo "If you are migrating to dual-branch mode, run: arm init --dual-branch"
   exit 1
@@ -122,8 +122,8 @@ func newInitCmd() *cobra.Command {
 	return cmd
 }
 
-// installHooks copies hook templates from .issues/hooks/ to .git/hooks/ and makes them executable.
-// In dual-branch mode, the templates are in the worktree's .issues/hooks/.
+// installHooks copies hook templates from .armature/hooks/ to .git/hooks/ and makes them executable.
+// In dual-branch mode, the templates are in the worktree's .armature/hooks/.
 func installHooks(repoPath string, issuesDir string) error {
 	hooksDir := filepath.Join(issuesDir, "hooks")
 	gitHooksDir := filepath.Join(repoPath, ".git", "hooks")
@@ -190,9 +190,9 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 			return fmt.Errorf("set trellis.ops-worktree-path: %w", err)
 		}
 
-		issuesDir = filepath.Join(worktreePath, ".issues")
+		issuesDir = filepath.Join(worktreePath, ".armature")
 	} else {
-		issuesDir = filepath.Join(repoPath, ".issues")
+		issuesDir = filepath.Join(repoPath, ".armature")
 	}
 
 	// Create directory structure
@@ -213,7 +213,7 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	// Write .gitignore to prevent state/ from being committed
 	gitignorePath := filepath.Join(issuesDir, ".gitignore")
 	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0644); err != nil {
-		return fmt.Errorf("write .issues/.gitignore: %w", err)
+		return fmt.Errorf("write .armature/.gitignore: %w", err)
 	}
 
 	// Write SCHEMA file
@@ -222,7 +222,7 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 		return fmt.Errorf("write SCHEMA: %w", err)
 	}
 
-	// Write hook templates to .issues/hooks/
+	// Write hook templates to .armature/hooks/
 	hookTemplates := map[string]string{
 		"post-merge.sh.template":         postMergeHookTemplate,
 		"post-commit.sh.template":        postCommitHookTemplate,

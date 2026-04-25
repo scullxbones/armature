@@ -12,7 +12,7 @@ import (
 
 // MaterializeAtSHA replays all op log files at the given commit SHA and returns
 // the resulting materialized state. opsPrefix is the path within the git tree
-// where log files are stored (e.g., "ops" or ".issues/ops").
+// where log files are stored (e.g., "ops" or ".armature/ops").
 func MaterializeAtSHA(gc *git.Client, sha string, opsPrefix string) (*State, error) {
 	files, err := gc.ListFilesAtCommit(sha)
 	if err != nil {

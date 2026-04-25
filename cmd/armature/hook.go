@@ -34,7 +34,7 @@ func newHookRunCmd() *cobra.Command {
 		Long: `Run an Armature git hook using native Go logic.
 
 Supported hooks:
-  pre-commit          Block .issues/ops/ commits on code branches in dual-branch mode
+  pre-commit          Block .armature/ops/ commits on code branches in dual-branch mode
   post-commit         Send heartbeat for active claim; push ops in dual-branch mode
   post-merge          Sync merged branches and auto-transition done issues
   prepare-commit-msg  Prepend active claim ID to commit message
@@ -142,7 +142,7 @@ func hookFindActiveClaimID() string {
 }
 
 // runPreCommitHook implements the pre-commit hook logic natively.
-// In dual-branch mode, it blocks additions/modifications to .issues/ops/ on non-_trellis branches.
+// In dual-branch mode, it blocks additions/modifications to .armature/ops/ on non-_trellis branches.
 func runPreCommitHook(cmd *cobra.Command) error {
 	// Allow all commits on _trellis branch
 	branch := hookCurrentBranch()
@@ -155,7 +155,7 @@ func runPreCommitHook(cmd *cobra.Command) error {
 		return nil
 	}
 
-	// Check for staged .issues/ops/ additions/modifications
+	// Check for staged .armature/ops/ additions/modifications
 	gitCmd := exec.Command("git", "-C", appCtx.RepoPath,
 		"diff", "--cached", "--name-only", "--diff-filter=AM")
 	out, err := gitCmd.Output()
@@ -165,11 +165,11 @@ func runPreCommitHook(cmd *cobra.Command) error {
 	}
 
 	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		if strings.Contains(line, ".issues/ops/") {
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .issues/ops/ changes on a code branch.")
+		if strings.Contains(line, ".armature/ops/") {
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .armature/ops/ changes on a code branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _trellis branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: arm init --dual-branch")
-			return fmt.Errorf("refusing to commit .issues/ops/ on branch %q in dual-branch mode", branch)
+			return fmt.Errorf("refusing to commit .armature/ops/ on branch %q in dual-branch mode", branch)
 		}
 	}
 	return nil

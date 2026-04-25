@@ -99,13 +99,13 @@ func ResolveContext(repoPath string) (*Context, error) {
 	var worktreePath string
 	switch mode {
 	case "single-branch":
-		issuesDir = filepath.Join(actualRepoPath, ".issues")
+		issuesDir = filepath.Join(actualRepoPath, ".armature")
 	case "dual-branch":
 		worktreePath, err = readGitConfig(actualRepoPath, "trellis.ops-worktree-path")
 		if err != nil {
 			return nil, fmt.Errorf("dual-branch mode requires trellis.ops-worktree-path to be set: %w", err)
 		}
-		issuesDir = filepath.Join(worktreePath, ".issues")
+		issuesDir = filepath.Join(worktreePath, ".armature")
 	default:
 		return nil, fmt.Errorf("unknown trellis mode: %q", mode)
 	}

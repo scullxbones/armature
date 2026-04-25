@@ -37,7 +37,7 @@ func newContextHistoryCmd() *cobra.Command {
 				return fmt.Errorf("log branch: %w", err)
 			}
 
-			opsPrefix := filepath.Join(".issues", "ops")
+			opsPrefix := filepath.Join(".armature", "ops")
 
 			// Reverse entries to walk oldest-first
 			for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
@@ -56,7 +56,7 @@ func newContextHistoryCmd() *cobra.Command {
 			for _, entry := range entries {
 				state, err := materialize.MaterializeAtSHA(gc, entry.SHA, opsPrefix)
 				if err != nil {
-					// Skip commits where materialization fails (e.g. before .issues existed)
+					// Skip commits where materialization fails (e.g. before .armature existed)
 					continue
 				}
 

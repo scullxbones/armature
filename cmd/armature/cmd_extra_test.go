@@ -797,7 +797,7 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
 	// Capture ops dir state before dry-run
-	opsDir := filepath.Join(repo, ".issues", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entriesBefore, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 
@@ -1200,7 +1200,7 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	// Find the worker ID from the ops log filename.
-	opsDir := filepath.Join(repo, ".issues", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, readErr := os.ReadDir(opsDir)
 	require.NoError(t, readErr)
 	var workerID string

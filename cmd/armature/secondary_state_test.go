@@ -32,21 +32,21 @@ func TestSecondaryStatePaths(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	stateDir := filepath.Join(repo, ".issues", "state", workerID)
+	stateDir := filepath.Join(repo, ".armature", "state", workerID)
 	require.DirExists(t, stateDir)
 	require.FileExists(t, filepath.Join(stateDir, "index.json"))
 
 	// 3. Ensure NO state exists in the old common location or other worker dirs
 	// (trls init might have created some structure, let's be thorough)
-	entries, err := os.ReadDir(filepath.Join(repo, ".issues", "state"))
+	entries, err := os.ReadDir(filepath.Join(repo, ".armature", "state"))
 	require.NoError(t, err)
 	for _, entry := range entries {
 		if entry.Name() != workerID {
-			_ = os.RemoveAll(filepath.Join(repo, ".issues", "state", entry.Name()))
+			_ = os.RemoveAll(filepath.Join(repo, ".armature", "state", entry.Name()))
 		}
 	}
-	// Also ensure no index.json in .issues directly (though it shouldn't be there anyway)
-	_ = os.Remove(filepath.Join(repo, ".issues", "index.json"))
+	// Also ensure no index.json in .armature directly (though it shouldn't be there anyway)
+	_ = os.Remove(filepath.Join(repo, ".armature", "index.json"))
 
 	// 4. Verify secondary commands work using ONLY the worker-specific state
 
