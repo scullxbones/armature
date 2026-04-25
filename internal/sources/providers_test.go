@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/sources"
+	"github.com/scullxbones/armature/internal/sources"
 )
 
 func TestConfluenceProviderFetch(t *testing.T) {

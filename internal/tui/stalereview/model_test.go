@@ -3,8 +3,8 @@ package stalereview_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	stalereview "github.com/scullxbones/trellis/internal/tui/stalereview"
+	"github.com/scullxbones/armature/internal/materialize"
+	stalereview "github.com/scullxbones/armature/internal/tui/stalereview"
 	"github.com/stretchr/testify/assert"
 )
 

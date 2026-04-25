@@ -164,7 +164,7 @@ func runPreCommitHook(cmd *cobra.Command) error {
 		return nil
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if strings.Contains(line, ".issues/ops/") {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .issues/ops/ changes on a code branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _trellis branch.")

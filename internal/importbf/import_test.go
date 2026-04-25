@@ -3,7 +3,7 @@ package importbf_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/importbf"
+	"github.com/scullxbones/armature/internal/importbf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

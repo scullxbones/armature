@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/armature/internal/config"
 )
 
 type HookInput struct {

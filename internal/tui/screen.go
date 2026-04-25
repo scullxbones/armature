@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // Screen is implemented by every TUI sub-screen (dagtree, workers, validate, sources).

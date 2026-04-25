@@ -117,7 +117,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				result := map[string]interface{}{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
+				result := map[string]any{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
 				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {

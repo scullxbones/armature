@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/traceability"
 )
 
 type Result struct {

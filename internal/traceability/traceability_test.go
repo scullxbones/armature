@@ -3,7 +3,7 @@ package traceability_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/traceability"
 )
 
 func TestCoverageAllCited(t *testing.T) {

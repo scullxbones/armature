@@ -4,8 +4,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // StaleClaims returns a sorted list of issue IDs that are claimed but whose

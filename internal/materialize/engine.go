@@ -3,7 +3,7 @@ package materialize
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // State holds the complete materialized state built from op replay.

@@ -8,7 +8,7 @@ import (
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 )
 

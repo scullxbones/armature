@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	internalready "github.com/scullxbones/trellis/internal/ready"
-	readytui "github.com/scullxbones/trellis/internal/tui/ready"
+	internalready "github.com/scullxbones/armature/internal/ready"
+	readytui "github.com/scullxbones/armature/internal/tui/ready"
 	"github.com/stretchr/testify/assert"
 )
 

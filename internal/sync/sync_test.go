@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	trellissync "github.com/scullxbones/trellis/internal/sync"
+	"github.com/scullxbones/armature/internal/materialize"
+	trellissync "github.com/scullxbones/armature/internal/sync"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

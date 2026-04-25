@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/claim"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // Entry is a single audit log entry with an optional lost-race marker.

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/tui/dagsummary"
+	"github.com/scullxbones/armature/internal/tui/dagsummary"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

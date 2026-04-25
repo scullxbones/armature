@@ -187,7 +187,7 @@ func TestInitCommand_Idempotent(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Init twice should not error
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		cmd := newRootCmd()
 		cmd.SetOut(new(bytes.Buffer))
 		cmd.SetArgs([]string{"init", "--repo", repo})
@@ -2091,7 +2091,7 @@ func TestCreateCommand_JSONOutput(t *testing.T) {
 
 	out, err := runTrls(t, repo, "create", "--format", "json", "--type", "task", "--title", "JSON task", "--id", "json-01")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "json-01", result["id"])
 	assert.Equal(t, "created", result["status"])
@@ -2117,7 +2117,7 @@ func TestClaimCommand_JSONOutput(t *testing.T) {
 
 	out, err := runTrls(t, repo, "claim", "--format", "json", "--issue", "task-01")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "task-01", result["issue"])
 	assert.NotNil(t, result["claimed_by"])
@@ -2149,7 +2149,7 @@ func TestDecisionCommand_JSONOutput(t *testing.T) {
 	out, err := runTrls(t, repo, "decision", "--format", "json", "--issue", "task-01",
 		"--topic", "arch", "--choice", "monolith", "--rationale", "simple")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "task-01", result["issue"])
 	assert.Equal(t, "arch", result["topic"])
@@ -2190,7 +2190,7 @@ func TestLinkCommand_JSONOutput(t *testing.T) {
 
 	out, err := runTrls(t, repo, "link", "--format", "json", "--source", "linkj-a", "--dep", "linkj-b")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "linkj-a", result["source"])
 	assert.Equal(t, "linkj-b", result["dep"])
@@ -2248,7 +2248,7 @@ func TestUnlinkCommand_JSONOutput(t *testing.T) {
 	// Unlink with JSON output
 	out, err := runTrls(t, repo, "unlink", "--format", "json", "--source", "unlinkj-a", "--dep", "unlinkj-b")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "unlinkj-a", result["source"])
 	assert.Equal(t, "unlinkj-b", result["dep"])
@@ -2274,7 +2274,7 @@ func TestAmendCommand_JSONOutput(t *testing.T) {
 
 	out, err := runTrls(t, repo, "amend", "--format", "json", "--issue", "task-01", "--dod", "new dod")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "task-01", result["issue"])
 	assert.Equal(t, "amended", result["status"])
@@ -2300,7 +2300,7 @@ func TestAssignCommand_JSONOutput(t *testing.T) {
 
 	out, err := runTrls(t, repo, "assign", "--format", "json", "--issue", "task-01", "--worker", "worker-abc")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "task-01", result["issue"])
 	assert.Equal(t, "worker-abc", result["assigned_to"])
@@ -2330,7 +2330,7 @@ func TestUnassignCommand_JSONOutput(t *testing.T) {
 
 	out, err := runTrls(t, repo, "unassign", "--format", "json", "--issue", "task-01")
 	require.NoError(t, err)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "task-01", result["issue"])
 }
@@ -2361,7 +2361,7 @@ func TestWorkersCommand_FormatJSON(t *testing.T) {
 	// output is JSONL — parse first line
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	require.NotEmpty(t, lines)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &result))
 	assert.NotNil(t, result["worker_id"])
 	assert.NotNil(t, result["status"])
@@ -2379,7 +2379,7 @@ func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	require.NotEmpty(t, lines)
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &result))
 	assert.NotNil(t, result["worker_id"])
 }
@@ -2868,7 +2868,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	out, err := runTrls(t, repo, "show", "--format", "json", "show-j1", "show-j2")
 	require.NoError(t, err)
 
-	var results []map[string]interface{}
+	var results []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &results))
 	require.Len(t, results, 2)
 	ids := []string{results[0]["id"].(string), results[1]["id"].(string)}
@@ -2904,7 +2904,7 @@ func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, issue.Acceptance, "acceptance should be set from --acceptance flag on create")
 
-	var criteria []map[string]interface{}
+	var criteria []map[string]any
 	require.NoError(t, json.Unmarshal(issue.Acceptance, &criteria))
 	require.Len(t, criteria, 1)
 	assert.Equal(t, "test_passes", criteria[0]["type"])

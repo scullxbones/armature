@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // Layer represents a single named, prioritized context layer.

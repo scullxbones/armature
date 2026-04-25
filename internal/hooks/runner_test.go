@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/armature/internal/config"
 )
 
 func TestRunPreTransition_NoHooks(t *testing.T) {
