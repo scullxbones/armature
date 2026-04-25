@@ -1,7 +1,7 @@
 package claim
 
 import (
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // ResolveClaim resolves a claim race: earliest timestamp wins,

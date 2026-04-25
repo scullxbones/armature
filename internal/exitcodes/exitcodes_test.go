@@ -3,7 +3,7 @@ package exitcodes_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/exitcodes"
+	"github.com/scullxbones/armature/internal/exitcodes"
 )
 
 func TestExitCodeValues(t *testing.T) {

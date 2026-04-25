@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/git"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/traceability"
 )
 
 func TestWriteAndRead_RoundTrip(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/ready"
-	"github.com/scullxbones/trellis/internal/tui"
+	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/tui"
 )
 
 // ClaimMsg is sent when the user selects a task to claim.

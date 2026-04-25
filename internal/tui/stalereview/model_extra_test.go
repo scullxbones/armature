@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
-	stalereview "github.com/scullxbones/trellis/internal/tui/stalereview"
+	"github.com/scullxbones/armature/internal/materialize"
+	stalereview "github.com/scullxbones/armature/internal/tui/stalereview"
 	"github.com/stretchr/testify/assert"
 )
 

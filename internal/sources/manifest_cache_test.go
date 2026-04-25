@@ -3,7 +3,7 @@ package sources_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/sources"
+	"github.com/scullxbones/armature/internal/sources"
 )
 
 func TestWriteAndReadCache(t *testing.T) {

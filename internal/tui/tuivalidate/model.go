@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/tui"
-	"github.com/scullxbones/trellis/internal/validate"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/tui"
+	"github.com/scullxbones/armature/internal/validate"
 )
 
 // Model implements app.Screen for the validation results view.

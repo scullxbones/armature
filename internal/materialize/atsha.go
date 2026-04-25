@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/git"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // MaterializeAtSHA replays all op log files at the given commit SHA and returns

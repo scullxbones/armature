@@ -3,7 +3,7 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/tui"
+	"github.com/scullxbones/armature/internal/tui"
 )
 
 func TestNewSpinner_ReturnsModel(t *testing.T) {

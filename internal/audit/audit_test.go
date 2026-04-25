@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/audit"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/audit"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

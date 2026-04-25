@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/tui/tuivalidate"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/tui/tuivalidate"
 )
 
 func TestValidateInit(t *testing.T) {

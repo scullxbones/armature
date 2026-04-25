@@ -48,73 +48,73 @@ plan, or --schema to view the JSON schema.`,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if schemaFlag {
-				schema := map[string]interface{}{
+				schema := map[string]any{
 					"$schema":  "https://json-schema.org/draft/2020-12/schema",
 					"title":    "Armature Decomposition Plan",
 					"type":     "object",
 					"required": []string{"version", "title", "issues"},
-					"properties": map[string]interface{}{
-						"version": map[string]interface{}{
+					"properties": map[string]any{
+						"version": map[string]any{
 							"type":        "integer",
 							"description": "Schema version — must be the integer 1, not the string \"1\"",
 							"enum":        []int{1},
 						},
-						"title": map[string]interface{}{
+						"title": map[string]any{
 							"type":        "string",
 							"description": "Human-readable title for the decomposition plan",
 						},
-						"issues": map[string]interface{}{
+						"issues": map[string]any{
 							"type":        "array",
 							"description": "Ordered list of issues to create",
-							"items": map[string]interface{}{
+							"items": map[string]any{
 								"type":     "object",
 								"required": []string{"id", "title", "type"},
-								"properties": map[string]interface{}{
-									"id": map[string]interface{}{
+								"properties": map[string]any{
+									"id": map[string]any{
 										"type":        "string",
 										"description": "Unique identifier for this issue within the plan",
 									},
-									"title": map[string]interface{}{
+									"title": map[string]any{
 										"type":        "string",
 										"description": "Human-readable title of the issue",
 									},
-									"type": map[string]interface{}{
+									"type": map[string]any{
 										"type":        "string",
 										"enum":        []string{"epic", "story", "task"},
 										"description": "Issue type",
 									},
-									"parent": map[string]interface{}{
+									"parent": map[string]any{
 										"type":        "string",
 										"description": "ID of the parent issue (empty for top-level issues)",
 									},
-									"scope": map[string]interface{}{
+									"scope": map[string]any{
 										"type":        "string",
 										"description": "Comma-separated file paths this issue is scoped to — stored as a single string, not an array",
 									},
-									"acceptance": map[string]interface{}{
+									"acceptance": map[string]any{
 										"type":        "array",
 										"description": "Array of acceptance criteria for this issue (passed to issue state as-is)",
-										"items":       map[string]interface{}{"type": "object"},
+										"items":       map[string]any{"type": "object"},
 										"nullable":    true,
 									},
-									"priority": map[string]interface{}{
+									"priority": map[string]any{
 										"type":        "string",
 										"enum":        []string{"critical", "high", "medium", "low"},
 										"description": "Issue priority",
 									},
-									"dod": map[string]interface{}{
+									"dod": map[string]any{
 										"type":        "string",
 										"description": "Definition of done — field is named 'dod', not 'definition_of_done'",
 									},
-									"blocked_by": map[string]interface{}{
+									"blocked_by": map[string]any{
 										"type":        "array",
-										"items":       map[string]interface{}{"type": "string"},
+										"items":       map[string]any{"type": "string"},
 										"description": "List of issue IDs this issue is blocked by",
 										"nullable":    true,
 									},
-									"notes": map[string]interface{}{
+									"notes": map[string]any{
 										"type":        "array",
-										"items":       map[string]interface{}{"type": "string"},
+										"items":       map[string]any{"type": "string"},
 										"description": "Optional free-text notes",
 										"nullable":    true,
 									},
@@ -307,7 +307,7 @@ func newDecomposeContextCmd() *cobra.Command {
 
 			var sourceIDs []string
 			if sourcesFlag != "" {
-				for _, s := range strings.Split(sourcesFlag, ",") {
+				for s := range strings.SplitSeq(sourcesFlag, ",") {
 					s = strings.TrimSpace(s)
 					if s != "" {
 						sourceIDs = append(sourceIDs, s)

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/sources"
+	"github.com/scullxbones/armature/internal/sources"
 )
 
 type ContextParams struct {

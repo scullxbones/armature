@@ -4,8 +4,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // ReadyEntry represents a task in the ready queue.
