@@ -1065,3 +1065,4 @@
 ["claim","ARM-S1-T2",1777127660,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM-S1-T2",1777127786,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"go.mod updated to github.com/scullxbones/armature; all import paths updated via sed; go build ./... exits 0"}]
 ["claim","ARM-S1-T3",1777127801,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","ARM-S1-T3",1777129632,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Makefile builds bin/arm; root command Use='arm'; help strings say arm/Armature; make check green"}]
