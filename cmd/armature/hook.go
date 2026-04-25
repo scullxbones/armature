@@ -30,8 +30,8 @@ func newHookCmd() *cobra.Command {
 func newHookRunCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "run <hook-name> [args...]",
-		Short: "Run a Trellis git hook natively",
-		Long: `Run a Trellis git hook using native Go logic.
+		Short: "Run an Armature git hook natively",
+		Long: `Run an Armature git hook using native Go logic.
 
 Supported hooks:
   pre-commit          Block .issues/ops/ commits on code branches in dual-branch mode
@@ -40,10 +40,10 @@ Supported hooks:
   prepare-commit-msg  Prepend active claim ID to commit message
 
 Examples:
-  trls hook run pre-commit
-  trls hook run post-commit
-  trls hook run post-merge
-  trls hook run prepare-commit-msg .git/COMMIT_EDITMSG`,
+  arm hook run pre-commit
+  arm hook run post-commit
+  arm hook run post-merge
+  arm hook run prepare-commit-msg .git/COMMIT_EDITMSG`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			hookName := args[0]
@@ -168,7 +168,7 @@ func runPreCommitHook(cmd *cobra.Command) error {
 		if strings.Contains(line, ".issues/ops/") {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .issues/ops/ changes on a code branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _trellis branch.")
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: trls init --dual-branch")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: arm init --dual-branch")
 			return fmt.Errorf("refusing to commit .issues/ops/ on branch %q in dual-branch mode", branch)
 		}
 	}

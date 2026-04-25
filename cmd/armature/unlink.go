@@ -19,7 +19,7 @@ func newUnlinkCmd() *cobra.Command {
 Unlink a source issue from a dependency (typically a blocked_by relationship).
 This removes erroneous dependency links that were previously created with the link command.`,
 		Example: `  # Remove blocked_by dependency
-  $ trls unlink --source E6-S4-T2 --dep E6-S4-T1`,
+  $ arm unlink --source E6-S4-T2 --dep E6-S4-T1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {

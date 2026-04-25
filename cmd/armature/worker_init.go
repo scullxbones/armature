@@ -23,7 +23,7 @@ func newWorkerInitCmd() *cobra.Command {
 			if check {
 				ok, id := worker.CheckWorkerID(repoPath)
 				if !ok {
-					return fmt.Errorf("no worker ID configured — run 'trls worker-init'")
+					return fmt.Errorf("no worker ID configured — run 'arm worker-init'")
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Worker ID: %s\n", id)
 				return nil

@@ -24,13 +24,13 @@ conventions or metadata) and transitions their corresponding issues from "done" 
 This keeps the issue graph synchronized with the actual git history. Use --dry-run to
 preview changes without committing them.`,
 		Example: `  # Detect merges on the current branch and sync issue statuses
-  $ trls sync
+  $ arm sync
 
   # Check for merges into a specific target branch
-  $ trls sync --into main
+  $ arm sync --into main
 
   # Preview which issues would be transitioned without making changes
-  $ trls sync --dry-run`,
+  $ arm sync --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"

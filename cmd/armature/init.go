@@ -18,7 +18,7 @@ state/
 `
 
 const postMergeHookTemplate = `#!/bin/sh
-# Trellis post-merge hook: auto-detect merged branches and transition done issues to merged.
+# Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
 # Branch-aware: skips on _trellis since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
 
@@ -28,11 +28,11 @@ if [ "$current_branch" = "_trellis" ]; then
   exit 0
 fi
 
-trls sync
+arm sync
 `
 
 const postCommitHookTemplate = `#!/bin/sh
-# Trellis post-commit hook: emit heartbeat and push ops in dual-branch mode.
+# Armature post-commit hook: emit heartbeat and push ops in dual-branch mode.
 # Branch-aware: skips on _trellis since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
 
@@ -43,16 +43,16 @@ if [ "$current_branch" = "_trellis" ]; then
 fi
 
 # Send heartbeat for active claim (if any)
-trls heartbeat 2>/dev/null
+arm heartbeat 2>/dev/null
 
 # In dual-branch mode, push ops logs after each commit
 if grep -q '"mode".*"dual-branch"' .issues/config.json 2>/dev/null; then
-  trls push-ops 2>/dev/null
+  arm push-ops 2>/dev/null
 fi
 `
 
 const prepareCommitMsgHookTemplate = `#!/bin/sh
-# Trellis prepare-commit-msg hook: prepend active claim ID to commit message.
+# Armature prepare-commit-msg hook: prepend active claim ID to commit message.
 # Branch-aware: skips on _trellis since ops logs use automated messages.
 # To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
 
@@ -63,7 +63,7 @@ if [ "$current_branch" = "_trellis" ]; then
 fi
 
 # Get the active claim ID
-claim_id=$(trls show active-claim --field id 2>/dev/null)
+claim_id=$(arm show active-claim --field id 2>/dev/null)
 
 # If there's an active claim, prepend it to the commit message
 if [ -n "$claim_id" ]; then
@@ -74,7 +74,7 @@ fi
 `
 
 const preCommitHookTemplate = `#!/bin/sh
-# Trellis pre-commit hook: block ops log commits on code branches in dual-branch mode.
+# Armature pre-commit hook: block ops log commits on code branches in dual-branch mode.
 # In dual-branch mode, ops live on _trellis — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
@@ -96,7 +96,7 @@ fi
 if git diff --cached --name-only --diff-filter=AM | grep -q '\.issues/ops/'; then
   echo "ERROR: Refusing to commit .issues/ops/ changes on a code branch."
   echo "In dual-branch mode, ops are written directly to the _trellis branch."
-  echo "If you are migrating to dual-branch mode, run: trls init --dual-branch"
+  echo "If you are migrating to dual-branch mode, run: arm init --dual-branch"
   exit 1
 fi
 `
@@ -107,7 +107,7 @@ func newInitCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:               "init",
-		Short:             "Initialize Trellis in the current repository",
+		Short:             "Initialize Armature in the current repository",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repoPath == "" {
@@ -271,9 +271,9 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	// if the ops directory already existed before we ran MkdirAll.
 	opsDir := filepath.Join(issuesDir, "ops")
 	if entries, err := os.ReadDir(opsDir); err == nil && len(entries) > 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Trellis already initialized in %s mode at %s\n", mode, issuesDir)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in %s mode at %s\n", mode, issuesDir)
 	} else {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in %s mode at %s\n", mode, issuesDir)
 	}
 	return nil
 }

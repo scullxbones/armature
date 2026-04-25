@@ -32,13 +32,13 @@ inferred or awaiting confirmation. You can review traceability coverage, accept/
 individual items, and generate a sign-off artifact. Use --approve-all in non-interactive
 mode (agents) to auto-approve all pending draft items.`,
 		Example: `  # Open interactive TUI to review and approve draft nodes
-  $ trls dag-summary
+  $ arm dag-summary
 
   # Review only draft nodes in a subtree
-  $ trls dag-summary --issue parent-task-id
+  $ arm dag-summary --issue parent-task-id
 
   # Auto-approve all draft items in agent mode
-  $ trls dag-summary --approve-all --format json`,
+  $ arm dag-summary --approve-all --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 

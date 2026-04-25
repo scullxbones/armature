@@ -29,13 +29,13 @@ An issue is ready when it has no unmet blocking dependencies and its status is "
 This command shows a prioritized list of tasks available for work, optionally filtered
 to a specific worker or a subtree of issues. Use --format json for automation.`,
 		Example: `  # Show all ready tasks in interactive mode
-  $ trls ready
+  $ arm ready
 
   # Show ready tasks filtered for a specific worker
-  $ trls ready --worker alice-worker
+  $ arm ready --worker alice-worker
 
   # Show ready tasks in JSON format (suitable for agents)
-  $ trls ready --format json`,
+  $ arm ready --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 

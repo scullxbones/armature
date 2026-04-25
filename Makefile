@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Trellis Go build targets:"
+	@echo "Armature Go build targets:"
 	@echo "  make check      - Run full CI validation: lint, test, coverage-check, mutate"
 	@echo "  make test       - Run all tests"
 	@echo "  make coverage   - Generate coverage report (coverage.html)"
@@ -12,10 +12,10 @@ help:
 	@echo "  make lint       - Run golangci-lint"
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make clean      - Remove build artifacts and test outputs"
-	@echo "  make build      - Build CLI binary to ./bin/trls"
+	@echo "  make build      - Build CLI binary to ./bin/arm"
 	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/"
 	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
-	@echo "  make install    - Build binary and install to ~/.local/bin/trls (adds to PATH)"
+	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
 check: lint test coverage-check mutate skill
 
@@ -63,13 +63,13 @@ clean:
 
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 go build -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o bin/trls ./cmd/trellis
+	CGO_ENABLED=0 go build -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o bin/arm ./cmd/armature
 
 install: build
 	mkdir -p ~/.local/bin
-	cp bin/trls ~/.local/bin/trls
-	chmod +x ~/.local/bin/trls
-	@echo "Installed trls to ~/.local/bin/trls"
+	cp bin/arm ~/.local/bin/arm
+	chmod +x ~/.local/bin/arm
+	@echo "Installed arm to ~/.local/bin/arm"
 	@echo "Ensure ~/.local/bin is on your PATH"
 
 skill: build

@@ -36,7 +36,7 @@ func newMergedCmd() *cobra.Command {
 
 			// In dual-branch mode, require current status to be "done"
 			if !singleBranch && entry.Status != ops.StatusDone {
-				return fmt.Errorf("issue %s is in status %q; trls merged requires status=done (transition it to done first)", issueID, entry.Status)
+				return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
 			}
 
 			workerID, logPath, err := resolveWorkerAndLog()
