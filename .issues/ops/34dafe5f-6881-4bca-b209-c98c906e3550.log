@@ -1068,3 +1068,4 @@
 ["transition","ARM-S1-T3",1777129632,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Makefile builds bin/arm; root command Use='arm'; help strings say arm/Armature; make check green"}]
 ["claim","ARM-S2-T1",1777130426,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM-S2",1777130427,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["transition","ARM-S2-T1",1777143930,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"All .issues/ string literals replaced with .armature/ in Go source and tests; go test ./internal/config/... ./cmd/armature/... passes"}]
