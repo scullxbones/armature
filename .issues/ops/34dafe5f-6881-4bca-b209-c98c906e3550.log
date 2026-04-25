@@ -1061,3 +1061,4 @@
 ["source-link","task-1777124841",1777124841,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"3778fb64-506f-413e-9d18-1cc218987277","source_url":"docs/dogfooding-learnings.md"}]
 ["claim","ARM-S1-T1",1777124950,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM-S1",1777124951,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["transition","ARM-S1-T1",1777127448,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"OS directory renamed to /home/brian/development/armature/; cmd/trellis renamed to cmd/armature/ via git mv; git history intact, no file content changes"}]
