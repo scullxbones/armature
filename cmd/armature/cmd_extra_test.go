@@ -766,7 +766,7 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 
 	output := buf.String()
 	// Output must be valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed), "output must be valid JSON")
 
 	// Must contain top-level plan fields
@@ -775,7 +775,7 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 	assert.Contains(t, parsed, "issues")
 
 	// Issues must be a non-empty array
-	issues, ok := parsed["issues"].([]interface{})
+	issues, ok := parsed["issues"].([]any)
 	require.True(t, ok, "issues must be an array")
 	assert.NotEmpty(t, issues)
 }
@@ -1013,7 +1013,7 @@ func TestShowCmd(t *testing.T) {
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "show", "--issue", "task-01"})
 	require.NoError(t, cmd.Execute())
 
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &result))
 	assert.Equal(t, "task-01", result["id"])
 	assert.Equal(t, "My Task", result["title"])
@@ -1080,7 +1080,7 @@ func TestDoctorCmd_JSONFormat(t *testing.T) {
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "doctor"})
 	require.NoError(t, cmd.Execute())
 
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &result))
 	assert.Contains(t, result, "checks")
 }
@@ -1135,7 +1135,7 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 	output := strings.TrimSpace(buf.String())
 
 	// Output must be valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(output), &parsed), "output must be valid JSON")
 
 	// Must contain $schema key (JSON Schema indicator)
@@ -1154,7 +1154,7 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 	assert.Contains(t, schemaStr, `"scope"`, "schema must document scope field")
 	// scope property should use "string" type, not "array"
 	// We verify by checking the properties section contains scope with string type
-	properties, ok := parsed["properties"].(map[string]interface{})
+	properties, ok := parsed["properties"].(map[string]any)
 	require.True(t, ok, "schema must have a properties object")
 	assert.Contains(t, properties, "version", "properties must include version")
 	assert.Contains(t, properties, "issues", "properties must include issues")
@@ -1205,8 +1205,8 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	require.NoError(t, readErr)
 	var workerID string
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".log") {
-			workerID = strings.TrimSuffix(e.Name(), ".log")
+		if w, ok := strings.CutSuffix(e.Name(), ".log"); ok {
+			workerID = w
 			break
 		}
 	}
