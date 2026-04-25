@@ -1070,3 +1070,4 @@
 ["transition","ARM-S2",1777130427,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["transition","ARM-S2-T1",1777143930,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"All .issues/ string literals replaced with .armature/ in Go source and tests; go test ./internal/config/... ./cmd/armature/... passes"}]
 ["claim","ARM-S2-T2",1777151890,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","ARM-S2-T2",1777161555,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"_trellis→_armature, trellis.*→armature.* config keys, .trellis/→.arm/ worktree path; all tests pass"}]
