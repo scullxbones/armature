@@ -120,11 +120,11 @@ func findCheck(t *testing.T, report doctor.Report, checkID string) doctor.Findin
 	return doctor.Finding{}
 }
 
-// initIssuesDir sets up a minimal .issues directory for integration tests.
+// initIssuesDir sets up a minimal .armature directory for integration tests.
 func initIssuesDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	issuesDir := filepath.Join(dir, ".issues")
+	issuesDir := filepath.Join(dir, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0755))
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "state", "issues"), 0755))
 	// Write a minimal config.json

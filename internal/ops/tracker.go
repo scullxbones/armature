@@ -26,7 +26,7 @@ func (NoTracker) Reset() error            { return nil }
 func (NoTracker) Count() (int, error)     { return 0, nil }
 
 // FilePushTracker persists the pending push count to a file at
-// .issues/state/pending-push-count.
+// .armature/state/pending-push-count.
 type FilePushTracker struct {
 	Path string
 }

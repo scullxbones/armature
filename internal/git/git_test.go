@@ -117,14 +117,14 @@ func TestCommitWorktreeOp(t *testing.T) {
 	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
 
 	// Write a file in the worktree
-	opsDir := filepath.Join(worktreePath, ".issues", "ops")
+	opsDir := filepath.Join(worktreePath, ".armature", "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	logFile := filepath.Join(opsDir, "worker-abc.log")
 	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
 
 	// CommitWorktreeOp is called on a client rooted at the worktree
 	wc := git.New(worktreePath)
-	err := wc.CommitWorktreeOp(".issues/ops/worker-abc.log", "ops: append claim for E2-001")
+	err := wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
 	require.NoError(t, err)
 
 	// Verify commit exists in the worktree branch

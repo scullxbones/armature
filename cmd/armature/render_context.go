@@ -42,7 +42,7 @@ func newRenderContextCmd() *cobra.Command {
 					opsRepoPath = appCtx.WorktreePath
 				}
 				gc := git.New(opsRepoPath)
-				opsPrefix := filepath.Join(".issues", "ops")
+				opsPrefix := filepath.Join(".armature", "ops")
 				var err error
 				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix)
 				if err != nil {

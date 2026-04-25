@@ -32,8 +32,8 @@ func TestResolveContext_SingleBranch_Default(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	// Create .issues/config.json so LoadConfig works
-	issuesDir := filepath.Join(repo, ".issues")
+	// Create .armature/config.json so LoadConfig works
+	issuesDir := filepath.Join(repo, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
 	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
@@ -41,7 +41,7 @@ func TestResolveContext_SingleBranch_Default(t *testing.T) {
 	ctx, err := ResolveContext(repo)
 	require.NoError(t, err)
 	assert.Equal(t, "single-branch", ctx.Mode)
-	assert.Equal(t, filepath.Join(repo, ".issues"), ctx.IssuesDir)
+	assert.Equal(t, filepath.Join(repo, ".armature"), ctx.IssuesDir)
 	assert.Equal(t, repo, ctx.RepoPath)
 	assert.Equal(t, "go", ctx.Config.ProjectType)
 }
@@ -50,9 +50,9 @@ func TestResolveContext_DualBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	// Simulate a dual-branch setup: create the worktree dir with .issues/ inside
+	// Simulate a dual-branch setup: create the worktree dir with .armature/ inside
 	worktreePath := filepath.Join(repo, ".trellis")
-	issuesDir := filepath.Join(worktreePath, ".issues")
+	issuesDir := filepath.Join(worktreePath, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
 	cfg.Mode = "dual-branch"
@@ -94,7 +94,7 @@ func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
 	cmd := exec.Command("git", "-C", repo, "config", "trellis.mode", "single-branch")
 	require.NoError(t, cmd.Run())
 
-	issuesDir := filepath.Join(repo, ".issues")
+	issuesDir := filepath.Join(repo, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), DefaultConfig("go")))
 
@@ -108,7 +108,7 @@ func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
 	repo := initTestRepo(t)
 
 	worktreePath := filepath.Join(repo, ".trellis")
-	issuesDir := filepath.Join(worktreePath, ".issues")
+	issuesDir := filepath.Join(worktreePath, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
 	cfg.Mode = "dual-branch"
@@ -130,7 +130,7 @@ func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
 func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	issuesDir := filepath.Join(repo, ".issues")
+	issuesDir := filepath.Join(repo, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), DefaultConfig("go")))
 
@@ -152,8 +152,8 @@ func TestResolveContext_GitWorktree_SingleBranch(t *testing.T) {
 	// Create a "parent" repo that will be the actual git repo
 	parentRepo := initTestRepo(t)
 
-	// Create parent repo's .issues directory
-	parentIssuesDir := filepath.Join(parentRepo, ".issues")
+	// Create parent repo's .armature directory
+	parentIssuesDir := filepath.Join(parentRepo, ".armature")
 	require.NoError(t, os.MkdirAll(parentIssuesDir, 0755))
 	require.NoError(t, WriteConfig(filepath.Join(parentIssuesDir, "config.json"), DefaultConfig("go")))
 
