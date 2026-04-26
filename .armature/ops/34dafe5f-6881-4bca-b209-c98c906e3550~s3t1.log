@@ -1,0 +1,1 @@
+["transition","ARM-S3-T1",1777210174,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Five skill dirs renamed via git mv; meta.yaml files updated with armature names; arm binary built and placed at skills/armature/scripts/arm; trls binary removed"}]
