@@ -1086,3 +1086,4 @@
 ["claim","ARM-S4-T4",1777211281,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM-S4-T4",1777212153,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"make check green; arm --help shows 'Usage: arm'; arm version works; arm ready --format agent works; stale .issues/ removed from main branch; AGENTS.md and architecture.md swept; GitHub remote rename pending user action"}]
 ["source-fingerprint","58f09f72-5864-49ad-9871-34db725c7fec",1777212187,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"eafeb87d329672e38e512a869b8630a6bc03fbbd5b730bce70ade3d04f03af1d","provider":"filesystem"}]
+["source-fingerprint","878f82b7-fce0-4b3b-87d7-3085eb7d335e",1777212187,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"9839bf37a60ddee9b90585aa4e1cc403c6b3203c0f4135a1359efce63cdee1b0","provider":"filesystem"}]
