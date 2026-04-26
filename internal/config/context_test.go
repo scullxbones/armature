@@ -51,7 +51,7 @@ func TestResolveContext_DualBranch(t *testing.T) {
 	repo := initTestRepo(t)
 
 	// Simulate a dual-branch setup: create the worktree dir with .armature/ inside
-	worktreePath := filepath.Join(repo, ".trellis")
+	worktreePath := filepath.Join(repo, ".arm")
 	issuesDir := filepath.Join(worktreePath, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
@@ -64,8 +64,8 @@ func TestResolveContext_DualBranch(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	runGit("config", "trellis.mode", "dual-branch")
-	runGit("config", "trellis.ops-worktree-path", worktreePath)
+	runGit("config", "armature.mode", "dual-branch")
+	runGit("config", "armature.ops-worktree-path", worktreePath)
 
 	ctx, err := ResolveContext(repo)
 	require.NoError(t, err)
@@ -79,19 +79,19 @@ func TestResolveContext_DualBranch_MissingWorktreePath(t *testing.T) {
 	repo := initTestRepo(t)
 
 	// Set dual-branch mode but do NOT set ops-worktree-path
-	cmd := exec.Command("git", "-C", repo, "config", "trellis.mode", "dual-branch")
+	cmd := exec.Command("git", "-C", repo, "config", "armature.mode", "dual-branch")
 	require.NoError(t, cmd.Run())
 
 	_, err := ResolveContext(repo)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "trellis.ops-worktree-path")
+	assert.Contains(t, err.Error(), "armature.ops-worktree-path")
 }
 
 func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	cmd := exec.Command("git", "-C", repo, "config", "trellis.mode", "single-branch")
+	cmd := exec.Command("git", "-C", repo, "config", "armature.mode", "single-branch")
 	require.NoError(t, cmd.Run())
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -107,7 +107,7 @@ func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	worktreePath := filepath.Join(repo, ".trellis")
+	worktreePath := filepath.Join(repo, ".arm")
 	issuesDir := filepath.Join(worktreePath, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
@@ -119,8 +119,8 @@ func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	runGit("config", "trellis.mode", "dual-branch")
-	runGit("config", "trellis.ops-worktree-path", worktreePath)
+	runGit("config", "armature.mode", "dual-branch")
+	runGit("config", "armature.ops-worktree-path", worktreePath)
 
 	ctx, err := ResolveContext(repo)
 	require.NoError(t, err)

@@ -142,11 +142,11 @@ func hookFindActiveClaimID() string {
 }
 
 // runPreCommitHook implements the pre-commit hook logic natively.
-// In dual-branch mode, it blocks additions/modifications to .armature/ops/ on non-_trellis branches.
+// In dual-branch mode, it blocks additions/modifications to .armature/ops/ on non-_armature branches.
 func runPreCommitHook(cmd *cobra.Command) error {
-	// Allow all commits on _trellis branch
+	// Allow all commits on _armature branch
 	branch := hookCurrentBranch()
-	if branch == "_trellis" {
+	if branch == "_armature" {
 		return nil
 	}
 
@@ -167,7 +167,7 @@ func runPreCommitHook(cmd *cobra.Command) error {
 	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if strings.Contains(line, ".armature/ops/") {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .armature/ops/ changes on a code branch.")
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _trellis branch.")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _armature branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: arm init --dual-branch")
 			return fmt.Errorf("refusing to commit .armature/ops/ on branch %q in dual-branch mode", branch)
 		}
@@ -178,9 +178,9 @@ func runPreCommitHook(cmd *cobra.Command) error {
 // runPostCommitHook implements the post-commit hook logic natively.
 // Sends a heartbeat for any active claim and, in dual-branch mode, pushes ops.
 func runPostCommitHook(cmd *cobra.Command) error {
-	// Skip on _trellis branch
+	// Skip on _armature branch
 	branch := hookCurrentBranch()
-	if branch == "_trellis" {
+	if branch == "_armature" {
 		return nil
 	}
 
@@ -213,9 +213,9 @@ func runPostCommitHook(cmd *cobra.Command) error {
 // runPostMergeHook implements the post-merge hook logic natively.
 // Runs the sync command to auto-transition done issues to merged.
 func runPostMergeHook(cmd *cobra.Command) error {
-	// Skip on _trellis branch
+	// Skip on _armature branch
 	branch := hookCurrentBranch()
-	if branch == "_trellis" {
+	if branch == "_armature" {
 		return nil
 	}
 
@@ -274,9 +274,9 @@ func runPrepareCommitMsgHook(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("prepare-commit-msg requires a commit message file path argument")
 	}
 
-	// Skip on _trellis branch
+	// Skip on _armature branch
 	branch := hookCurrentBranch()
-	if branch == "_trellis" {
+	if branch == "_armature" {
 		return nil
 	}
 

@@ -59,7 +59,7 @@ func TestAppendCommitAndPush_DualBranch_PushesAndResetsTracker(t *testing.T) {
 	fc := &fakeCommitter{}
 	pusher := &ops.AppendCommitAndPush{
 		Pusher:  fp,
-		Branch:  "_trellis",
+		Branch:  "_armature",
 		Backoff: []time.Duration{}, // no backoff for test
 	}
 
@@ -84,7 +84,7 @@ func TestAppendCommitAndPush_AllAttemptsFail_ReturnsError(t *testing.T) {
 	fc := &fakeCommitter{}
 	pusher := &ops.AppendCommitAndPush{
 		Pusher:  fp,
-		Branch:  "_trellis",
+		Branch:  "_armature",
 		Backoff: []time.Duration{0, 0, 0}, // no actual sleep in tests
 	}
 

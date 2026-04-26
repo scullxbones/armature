@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -71,6 +73,15 @@ var (
 	appTracker ops.PendingPushTracker
 )
 
+// stateDirFor returns the worker-specific state directory.
+// In dual-branch mode, state lives at the worktree root (not inside .armature/).
+func stateDirFor(ctx *config.Context, workerID string) string {
+	if ctx.WorktreePath != "" {
+		return filepath.Join(ctx.WorktreePath, "state", workerID)
+	}
+	return filepath.Join(ctx.IssuesDir, "state", workerID)
+}
+
 func resolveWorkerAndLog() (string, string, error) {
 	workerID, err := worker.GetWorkerID(appCtx.RepoPath)
 	if err != nil {
@@ -101,7 +112,7 @@ func initPushDeps() {
 	gc := git.New(appCtx.WorktreePath)
 	appPusher = &ops.AppendCommitAndPush{
 		Pusher:  gc,
-		Branch:  "_trellis",
+		Branch:  "_armature",
 		Backoff: nil, // use defaults: 1s, 2s, 4s
 	}
 	appTracker = ops.NewFilePushTracker(appCtx.StateDir)
@@ -132,10 +143,10 @@ func appendHighStakesOp(logPath string, op ops.Op) error {
 	if appCtx.WorktreePath != "" {
 		// Use the underlying git client for push attempts
 		gc2 := git.New(appCtx.WorktreePath)
-		if err := gc2.Push("_trellis"); err != nil {
+		if err := gc2.Push("_armature"); err != nil {
 			// Best-effort: attempt fetch+rebase and retry once
-			if rbErr := gc2.FetchAndRebase("_trellis"); rbErr == nil {
-				gc2.Push("_trellis") //nolint:errcheck
+			if rbErr := gc2.FetchAndRebase("_armature"); rbErr == nil {
+				gc2.Push("_armature") //nolint:errcheck
 			}
 		}
 		appTracker.Reset() //nolint:errcheck

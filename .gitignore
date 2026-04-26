@@ -17,7 +17,7 @@ mutesting-report/
 
 # Git worktrees
 .worktrees/
-.trellis/
+.arm/
 
 # IDE / tools
 .vscode/*.code-workspace

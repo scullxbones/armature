@@ -19,12 +19,12 @@ state/
 
 const postMergeHookTemplate = `#!/bin/sh
 # Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
-# Branch-aware: skips on _trellis since ops are committed directly there.
+# Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
 
-# Skip on _trellis branch where ops logs are committed directly
+# Skip on _armature branch where ops logs are committed directly
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$current_branch" = "_trellis" ]; then
+if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
 
@@ -33,12 +33,12 @@ arm sync
 
 const postCommitHookTemplate = `#!/bin/sh
 # Armature post-commit hook: emit heartbeat and push ops in dual-branch mode.
-# Branch-aware: skips on _trellis since ops are committed directly there.
+# Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
 
-# Skip on _trellis branch where ops logs are committed directly
+# Skip on _armature branch where ops logs are committed directly
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$current_branch" = "_trellis" ]; then
+if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
 
@@ -53,12 +53,12 @@ fi
 
 const prepareCommitMsgHookTemplate = `#!/bin/sh
 # Armature prepare-commit-msg hook: prepend active claim ID to commit message.
-# Branch-aware: skips on _trellis since ops logs use automated messages.
+# Branch-aware: skips on _armature since ops logs use automated messages.
 # To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
 
-# Skip on _trellis branch where ops logs use automated messages
+# Skip on _armature branch where ops logs use automated messages
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$current_branch" = "_trellis" ]; then
+if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
 
@@ -75,14 +75,14 @@ fi
 
 const preCommitHookTemplate = `#!/bin/sh
 # Armature pre-commit hook: block ops log commits on code branches in dual-branch mode.
-# In dual-branch mode, ops live on _trellis — never on a code branch.
+# In dual-branch mode, ops live on _armature — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
 # This is defense-in-depth; .armature/.gitignore also blocks ops/ from being staged.
 
-# Allow commits on _trellis — that's exactly where ops belong.
+# Allow commits on _armature — that's exactly where ops belong.
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$current_branch" = "_trellis" ]; then
+if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
 
@@ -95,7 +95,7 @@ fi
 # Only block additions/modifications — deletions are allowed (cleanup commits).
 if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; then
   echo "ERROR: Refusing to commit .armature/ops/ changes on a code branch."
-  echo "In dual-branch mode, ops are written directly to the _trellis branch."
+  echo "In dual-branch mode, ops are written directly to the _armature branch."
   echo "If you are migrating to dual-branch mode, run: arm init --dual-branch"
   exit 1
 fi
@@ -118,7 +118,7 @@ func newInitCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
-	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _trellis branch)")
+	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _armature branch)")
 	return cmd
 }
 
@@ -171,23 +171,23 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 
 	var issuesDir string
 	if dualBranch {
-		// Create orphan branch _trellis (idempotent)
-		if err := gitClient.CreateOrphanBranch("_trellis"); err != nil {
-			return fmt.Errorf("create _trellis branch: %w", err)
+		// Create orphan branch _armature (idempotent)
+		if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
+			return fmt.Errorf("create _armature branch: %w", err)
 		}
 
-		// Create .trellis/ worktree (idempotent)
-		worktreePath := filepath.Join(repoPath, ".trellis")
-		if err := gitClient.AddWorktree("_trellis", worktreePath); err != nil {
-			return fmt.Errorf("add .trellis worktree: %w", err)
+		// Create .arm/ worktree (idempotent)
+		worktreePath := filepath.Join(repoPath, ".arm")
+		if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
+			return fmt.Errorf("add .arm worktree: %w", err)
 		}
 
 		// Set git config keys
-		if err := gitClient.SetGitConfig("trellis.mode", "dual-branch"); err != nil {
-			return fmt.Errorf("set trellis.mode: %w", err)
+		if err := gitClient.SetGitConfig("armature.mode", "dual-branch"); err != nil {
+			return fmt.Errorf("set armature.mode: %w", err)
 		}
-		if err := gitClient.SetGitConfig("trellis.ops-worktree-path", worktreePath); err != nil {
-			return fmt.Errorf("set trellis.ops-worktree-path: %w", err)
+		if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
+			return fmt.Errorf("set armature.ops-worktree-path: %w", err)
 		}
 
 		issuesDir = filepath.Join(worktreePath, ".armature")
