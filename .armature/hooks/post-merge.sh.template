@@ -1,4 +1,4 @@
 #!/bin/sh
-# Trellis post-merge hook: auto-detect merged branches and transition done issues to merged.
+# Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
-trls sync
+arm sync
