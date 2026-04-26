@@ -1,7 +1,0 @@
-# Materialized state — derived from ops logs, regenerated locally by each worker.
-# Never commit. See architecture.md §2 (Directory Structure).
-state/
-
-# Ops logs live on the _trellis branch (dual-branch mode).
-# Blocking commits from code branches prevents merge conflicts on .issues/ops/.
-ops/

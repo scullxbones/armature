@@ -1,6 +1,6 @@
-# Trellis Command Reference
+# Armature Command Reference
 
-`trls` is a git-native work orchestration tool. This document provides a complete reference for every `trls` subcommand.
+`arm` is a git-native work orchestration tool. This document provides a complete reference for every `arm` subcommand.
 
 ## Global Flags
 
@@ -17,7 +17,7 @@ The following flags are available for all commands:
 Accept a citation for an issue with a recorded rationale.
 
 **Synopsis:**
-`trls accept-citation [issue-id] [flags]`
+`arm accept-citation [issue-id] [flags]`
 
 **Flags:**
 - `--ci`: Bypass interactive prompt (non-interactive/CI mode).
@@ -26,7 +26,7 @@ Accept a citation for an issue with a recorded rationale.
 
 **Example:**
 ```bash
-trls accept-citation E5-S4-T3 --rationale "Documentation is complete and reviewed."
+arm accept-citation E5-S4-T3 --rationale "Documentation is complete and reviewed."
 ```
 
 ---
@@ -36,7 +36,7 @@ trls accept-citation E5-S4-T3 --rationale "Documentation is complete and reviewe
 Amend fields on an existing issue.
 
 **Synopsis:**
-`trls amend [issue-id] [flags]`
+`arm amend [issue-id] [flags]`
 
 **Flags:**
 - `--acceptance string`: Acceptance criteria as JSON array.
@@ -47,7 +47,7 @@ Amend fields on an existing issue.
 
 **Example:**
 ```bash
-trls amend TASK-001 --type story --dod "Feature is fully tested and documented."
+arm amend TASK-001 --type story --dod "Feature is fully tested and documented."
 ```
 
 ---
@@ -57,7 +57,7 @@ trls amend TASK-001 --type story --dod "Feature is fully tested and documented."
 Assign an issue to a worker.
 
 **Synopsis:**
-`trls assign [issue-id] [flags]`
+`arm assign [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID to assign.
@@ -65,7 +65,7 @@ Assign an issue to a worker.
 
 **Example:**
 ```bash
-trls assign TASK-001 --worker "brian"
+arm assign TASK-001 --worker "brian"
 ```
 
 ---
@@ -75,7 +75,7 @@ trls assign TASK-001 --worker "brian"
 Claim a ready task.
 
 **Synopsis:**
-`trls claim [issue-id] [flags]`
+`arm claim [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID to claim.
@@ -83,7 +83,7 @@ Claim a ready task.
 
 **Example:**
 ```bash
-trls claim TASK-001 --ttl 120
+arm claim TASK-001 --ttl 120
 ```
 
 ---
@@ -93,11 +93,11 @@ trls claim TASK-001 --ttl 120
 Promote an inferred node from draft to verified confidence.
 
 **Synopsis:**
-`trls confirm <node-id> [flags]`
+`arm confirm <node-id> [flags]`
 
 **Example:**
 ```bash
-trls confirm STORY-001
+arm confirm STORY-001
 ```
 
 ---
@@ -107,7 +107,7 @@ trls confirm STORY-001
 Show commits where an issue's context changed.
 
 **Synopsis:**
-`trls context-history [flags]`
+`arm context-history [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID (required).
@@ -115,7 +115,7 @@ Show commits where an issue's context changed.
 
 **Example:**
 ```bash
-trls context-history --issue TASK-001 --limit 50
+arm context-history --issue TASK-001 --limit 50
 ```
 
 ---
@@ -125,7 +125,7 @@ trls context-history --issue TASK-001 --limit 50
 Create a new work item.
 
 **Synopsis:**
-`trls create [flags]`
+`arm create [flags]`
 
 **Flags:**
 - `--confidence string`: Confidence level: `draft` or `verified` (default `verified`).
@@ -139,7 +139,7 @@ Create a new work item.
 
 **Example:**
 ```bash
-trls create --title "Implement user login" --type story --parent EPIC-001
+arm create --title "Implement user login" --type story --parent EPIC-001
 ```
 
 ---
@@ -149,7 +149,7 @@ trls create --title "Implement user login" --type story --parent EPIC-001
 Interactive TUI for reviewing and signing off DAG items.
 
 **Synopsis:**
-`trls dag-summary [flags]`
+`arm dag-summary [flags]`
 
 **Flags:**
 - `--issue string`: Root issue ID of the subtree to review (default: all draft nodes).
@@ -161,7 +161,7 @@ Interactive TUI for reviewing and signing off DAG items.
 Promote all draft nodes in a subtree to verified.
 
 **Synopsis:**
-`trls dag-transition [flags]`
+`arm dag-transition [flags]`
 
 **Flags:**
 - `--issue string`: Root issue ID of the subtree to promote.
@@ -174,7 +174,7 @@ Promote all draft nodes in a subtree to verified.
 Record an architectural decision.
 
 **Synopsis:**
-`trls decision [issue-id] [flags]`
+`arm decision [issue-id] [flags]`
 
 **Flags:**
 - `--affects strings`: Affected scope globs.
@@ -185,7 +185,7 @@ Record an architectural decision.
 
 **Example:**
 ```bash
-trls decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rationale "Industry standard and supports JSONB."
+arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rationale "Industry standard and supports JSONB."
 ```
 
 ---
@@ -195,7 +195,7 @@ trls decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rationa
 Apply a decomposition plan to the issue graph.
 
 **Synopsis:**
-`trls decompose-apply [flags]`
+`arm decompose-apply [flags]`
 
 **Flags:**
 - `--dry-run`: Validate and preview what would be created without writing ops.
@@ -208,7 +208,7 @@ Apply a decomposition plan to the issue graph.
 
 **Example:**
 ```bash
-trls decompose-apply --plan plan.json
+arm decompose-apply --plan plan.json
 ```
 
 **Example Plan JSON (`--example` output):**
@@ -263,7 +263,7 @@ trls decompose-apply --plan plan.json
 Build decomposition context with template interpolation.
 
 **Synopsis:**
-`trls decompose-context [flags]`
+`arm decompose-context [flags]`
 
 **Flags:**
 - `--existing-dag`: Include existing DAG issues in context.
@@ -280,7 +280,7 @@ Build decomposition context with template interpolation.
 Revert a decomposition plan from the issue graph.
 
 **Synopsis:**
-`trls decompose-revert [flags]`
+`arm decompose-revert [flags]`
 
 **Flags:**
 - `--plan string`: Path to plan JSON file.
@@ -292,7 +292,7 @@ Revert a decomposition plan from the issue graph.
 Run repository health checks (D1-D6).
 
 **Synopsis:**
-`trls doctor [flags]`
+`arm doctor [flags]`
 
 **Flags:**
 - `--strict`: Promote warnings to errors.
@@ -304,7 +304,7 @@ Run repository health checks (D1-D6).
 Send heartbeat for an active claim.
 
 **Synopsis:**
-`trls heartbeat [issue-id] [flags]`
+`arm heartbeat [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID.
@@ -316,7 +316,7 @@ Send heartbeat for an active claim.
 Import issues from a CSV or JSON file.
 
 **Synopsis:**
-`trls import <file> [flags]`
+`arm import <file> [flags]`
 
 **Flags:**
 - `--dry-run`: Show what would be imported without writing ops.
@@ -326,13 +326,13 @@ Import issues from a CSV or JSON file.
 
 ## init
 
-Initialize Trellis in the current repository.
+Initialize Armature in the current repository.
 
 **Synopsis:**
-`trls init [flags]`
+`arm init [flags]`
 
 **Flags:**
-- `--dual-branch`: Initialize in dual-branch mode (issues stored on separate `_trellis` branch).
+- `--dual-branch`: Initialize in dual-branch mode (issues stored on separate `_armature` branch).
 
 ---
 
@@ -341,7 +341,7 @@ Initialize Trellis in the current repository.
 Add a dependency link between issues.
 
 **Synopsis:**
-`trls link [flags]`
+`arm link [flags]`
 
 **Flags:**
 - `--dep string`: Dependency issue ID.
@@ -355,7 +355,7 @@ Add a dependency link between issues.
 List issues with optional filters. In non-TTY environments (agent context) the output is a JSON array automatically.
 
 **Synopsis:**
-`trls list [flags]`
+`arm list [flags]`
 
 **Flags:**
 - `--group`: Group issues under `=== STATUS ===` section headers sorted by workflow priority (human output only).
@@ -366,12 +366,12 @@ List issues with optional filters. In non-TTY environments (agent context) the o
 **Examples:**
 ```bash
 # Flat list — in agent context this is JSON automatically
-trls list --status done
-trls list --status open --parent STORY-001
+arm list --status done
+arm list --status open --parent STORY-001
 
 # Grouped human overview
-trls list --group
-trls list --group --parent EPIC-001
+arm list --group
+arm list --group --parent EPIC-001
 ```
 
 ---
@@ -381,7 +381,7 @@ trls list --group --parent EPIC-001
 Show the audit log of ops.
 
 **Synopsis:**
-`trls log [flags]`
+`arm log [flags]`
 
 **Flags:**
 - `--issue string`: Filter by issue ID.
@@ -396,7 +396,7 @@ Show the audit log of ops.
 Replay op logs and update materialized state files.
 
 **Synopsis:**
-`trls materialize [flags]`
+`arm materialize [flags]`
 
 **Flags:**
 - `--exclude-worker string`: Skip all ops from this worker ID.
@@ -408,7 +408,7 @@ Replay op logs and update materialized state files.
 Mark a done issue as merged.
 
 **Synopsis:**
-`trls merged [flags]`
+`arm merged [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID.
@@ -421,7 +421,7 @@ Mark a done issue as merged.
 Add a note to an issue.
 
 **Synopsis:**
-`trls note [issue-id] [flags]`
+`arm note [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID.
@@ -429,7 +429,7 @@ Add a note to an issue.
 
 **Example:**
 ```bash
-trls note TASK-001 --msg "Started implementation after architectural review."
+arm note TASK-001 --msg "Started implementation after architectural review."
 ```
 
 ---
@@ -439,7 +439,7 @@ trls note TASK-001 --msg "Started implementation after architectural review."
 Show tasks ready to be claimed.
 
 **Synopsis:**
-`trls ready [flags]`
+`arm ready [flags]`
 
 **Flags:**
 - `--parent string`: Filter to descendants of this issue ID.
@@ -452,7 +452,7 @@ Show tasks ready to be claimed.
 Render assembled context for an issue.
 
 **Synopsis:**
-`trls render-context [issue-id] [flags]`
+`arm render-context [issue-id] [flags]`
 
 **Flags:**
 - `--at string`: Replay context as of this git commit SHA.
@@ -467,7 +467,7 @@ Render assembled context for an issue.
 Reopen a done or blocked issue.
 
 **Synopsis:**
-`trls reopen [issue-id] [flags]`
+`arm reopen [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID to reopen.
@@ -479,7 +479,7 @@ Reopen a done or blocked issue.
 Show a human-readable summary of one or more issues.
 
 **Synopsis:**
-`trls show [issue-id ...] [flags]`
+`arm show [issue-id ...] [flags]`
 
 **Flags:**
 - `--field string`: Extract a single field value (e.g. `status`, `title`).
@@ -492,7 +492,7 @@ Show a human-readable summary of one or more issues.
 Link an issue to a source entry in the manifest.
 
 **Synopsis:**
-`trls source-link [issue-id] [flags]`
+`arm source-link [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID to link.
@@ -505,7 +505,7 @@ Link an issue to a source entry in the manifest.
 Manage external knowledge sources.
 
 **Synopsis:**
-`trls sources [command]`
+`arm sources [command]`
 
 **Available Subcommands:**
 - `add`: Add a new source to the manifest.
@@ -514,7 +514,7 @@ Manage external knowledge sources.
 
 **Example:**
 ```bash
-trls sources add --url "https://example.com/docs" --type filesystem
+arm sources add --url "https://example.com/docs" --type filesystem
 ```
 
 ---
@@ -524,7 +524,7 @@ trls sources add --url "https://example.com/docs" --type filesystem
 Review sources whose cached content has changed since last sync.
 
 **Synopsis:**
-`trls stale-review [flags]`
+`arm stale-review [flags]`
 
 ---
 
@@ -533,7 +533,7 @@ Review sources whose cached content has changed since last sync.
 Detect merged branches and auto-transition done issues to merged.
 
 **Synopsis:**
-`trls sync [flags]`
+`arm sync [flags]`
 
 **Flags:**
 - `--into string`: Target branch to check merges against (default: current branch).
@@ -545,7 +545,7 @@ Detect merged branches and auto-transition done issues to merged.
 Transition an issue to a new status.
 
 **Synopsis:**
-`trls transition [issue-id] [flags]`
+`arm transition [issue-id] [flags]`
 
 **Flags:**
 - `--branch string`: Feature branch name.
@@ -556,7 +556,7 @@ Transition an issue to a new status.
 
 **Example:**
 ```bash
-trls transition TASK-001 --to in-progress --branch feature/login
+arm transition TASK-001 --to in-progress --branch feature/login
 ```
 
 ---
@@ -566,7 +566,7 @@ trls transition TASK-001 --to in-progress --branch feature/login
 Interactive kanban board with auto-refresh.
 
 **Synopsis:**
-`trls tui [flags]`
+`arm tui [flags]`
 
 ---
 
@@ -575,7 +575,7 @@ Interactive kanban board with auto-refresh.
 Remove worker assignment from an issue.
 
 **Synopsis:**
-`trls unassign [issue-id] [flags]`
+`arm unassign [issue-id] [flags]`
 
 **Flags:**
 - `--issue string`: Issue ID to unassign.
@@ -587,7 +587,7 @@ Remove worker assignment from an issue.
 Validate the issue graph for consistency.
 
 **Synopsis:**
-`trls validate [flags]`
+`arm validate [flags]`
 
 **Flags:**
 - `--ci`: Exit non-zero if errors found.
@@ -598,10 +598,10 @@ Validate the issue graph for consistency.
 
 ## version
 
-Print `trls` version.
+Print `arm` version.
 
 **Synopsis:**
-`trls version [flags]`
+`arm version [flags]`
 
 ---
 
@@ -610,7 +610,7 @@ Print `trls` version.
 Generate or check worker identity.
 
 **Synopsis:**
-`trls worker-init [flags]`
+`arm worker-init [flags]`
 
 **Flags:**
 - `--check`: Verify existing worker ID without modifying state.
@@ -622,7 +622,7 @@ Generate or check worker identity.
 Show worker activity status.
 
 **Synopsis:**
-`trls workers [flags]`
+`arm workers [flags]`
 
 **Flags:**
 - `--json`: Output as JSONL.

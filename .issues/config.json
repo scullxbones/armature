@@ -1,7 +1,0 @@
-{
-  "mode": "single-branch",
-  "project_type": "go",
-  "default_ttl": 60,
-  "token_budget": 1600,
-  "hooks": []
-}

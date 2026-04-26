@@ -73,7 +73,7 @@ cd .arm/
 git sparse-checkout set .armature/ops .armature/state
 ```
 
-The worktree directory is `.arm/` in the repository root. This is the default location; it can be overridden via git config (`trellis.ops-worktree-path`). The `.arm/` directory is added to `.gitignore` on all branches.
+The worktree directory is `.arm/` in the repository root. This is the default location; it can be overridden via git config (`armature.ops-worktree-path`). The `.arm/` directory is added to `.gitignore` on all branches.
 
 Sparse checkout limits the ops worktree to essential directories (`ops/` and `state/`). `sources/cache/` remains on the ops branch but is excluded from the default sparse checkout to minimize disk usage. Workers needing source content (e.g., `arm sources sync`, `arm decompose-context`) expand the sparse checkout on demand.
 
@@ -1412,7 +1412,7 @@ Exit codes:
 `arm worker-init` (also run as part of `arm init`) generates a UUID and writes it to repo-local git config:
 
 ```
-git config --local trellis.worker-id <uuid>
+git config --local armature.worker-id <uuid>
 ```
 
 The CLI refuses to operate without a configured worker ID. First push validates uniqueness against existing log filenames in the repo — if a collision is detected (vanishingly unlikely with UUID), the worker is prompted to regenerate.
@@ -1426,7 +1426,7 @@ This is a hard requirement, not a recommendation. Each worker (human or AI) must
 Part of `worker-init`. The CLI creates the ops worktree via `git worktree add`, configures sparse checkout, and stores the ops worktree path in git config:
 
 ```
-git config --local trellis.ops-worktree-path .arm/
+git config --local armature.ops-worktree-path .arm/
 ```
 
 ### Multi-Machine Workers
@@ -1706,7 +1706,7 @@ The transition op records `branch` and `pr` fields, bridging the ops history (on
 | Layer | Location | Scope | Contents |
 |---|---|---|---|
 | Repository | `.armature/config.json` (on ops branch) | Shared by all workers | Templates, pre-transition hooks, token budget, TTL defaults, staleness thresholds |
-| Worker | Repo-local git config | Per-worktree | `trellis.worker-id`, `trellis.ops-worktree-path` |
+| Worker | Repo-local git config | Per-worktree | `armature.worker-id`, `armature.ops-worktree-path` |
 | User | `~/.config/arm/providers.toml` | Per-machine | Provider credentials (Confluence, SharePoint auth) |
 | Environment | Environment variables | Per-session | Provider tokens (e.g., `CONFLUENCE_PAT`) |
 
@@ -1740,8 +1740,8 @@ The transition op records `branch` and `pr` fields, bridging the ops history (on
 ### Worker Configuration
 
 ```
-git config --local trellis.worker-id a1b2c3d4-5678-90ab-cdef-1234567890ab
-git config --local trellis.ops-worktree-path .arm/
+git config --local armature.worker-id a1b2c3d4-5678-90ab-cdef-1234567890ab
+git config --local armature.ops-worktree-path .arm/
 ```
 
 ### User Configuration
