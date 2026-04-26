@@ -1077,3 +1077,4 @@
 ["transition","ARM-S2-T4",1777209722,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"test"}]
 ["claim","ARM-S3-T1",1777209773,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM-S3",1777209774,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["claim","ARM-S4-T1",1777209787,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
