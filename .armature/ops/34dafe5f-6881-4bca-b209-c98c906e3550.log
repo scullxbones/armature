@@ -1083,3 +1083,4 @@
 ["claim","ARM-S4-T2",1777210568,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM-S3",1777210830,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"All five skill dirs renamed to armature-*; meta.yaml files updated; arm binary deployed to skills/armature/scripts/arm; all five SKILL.md files fully revamped with armature branding; make skill green"}]
 ["claim","ARM-S4-T3",1777210835,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["claim","ARM-S4-T4",1777211281,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
