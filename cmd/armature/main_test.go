@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -20,25 +21,27 @@ import (
 )
 
 // getTestStateDir returns the absolute path to the worker-specific state directory.
+// In dual-branch mode, state lives at the worktree root (.arm/state/); in single-branch,
+// it lives inside .armature/state/.
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
-	issuesDir := filepath.Join(repo, ".armature")
-	// If dual-branch, issuesDir is in the worktree
-	if data, err := os.ReadFile(filepath.Join(repo, ".armature", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
-		issuesDir = filepath.Join(repo, ".trellis", ".armature")
-	} else if data, err := os.ReadFile(filepath.Join(repo, ".trellis", ".armature", "config.json")); err == nil && strings.Contains(string(data), "dual-branch") {
-		// already in worktree case? No, config.ResolveContext handles this.
-		// For simplicity, let's just check if .trellis/.armature exists.
-		if _, err := os.Stat(filepath.Join(repo, ".trellis", ".armature")); err == nil {
-			issuesDir = filepath.Join(repo, ".trellis", ".armature")
-		}
-	}
-
 	workerID, _ := worker.GetWorkerID(repo)
 	if workerID == "" {
 		workerID = "default"
 	}
-	return filepath.Join(issuesDir, "state", workerID)
+	if _, err := os.Stat(filepath.Join(repo, ".arm", ".armature", "config.json")); err == nil {
+		return filepath.Join(repo, ".arm", "state", workerID)
+	}
+	return filepath.Join(repo, ".armature", "state", workerID)
+}
+
+func TestStateDirFor(t *testing.T) {
+	t.Parallel()
+	ctx := &config.Context{IssuesDir: "/repo/.armature", WorktreePath: ""}
+	assert.Equal(t, "/repo/.armature/state/w1", stateDirFor(ctx, "w1"))
+
+	ctx2 := &config.Context{IssuesDir: "/repo/.arm/.armature", WorktreePath: "/repo/.arm"}
+	assert.Equal(t, "/repo/.arm/state/w1", stateDirFor(ctx2, "w1"))
 }
 
 // runTrls invokes the trellis cobra command tree with --repo injected and returns stdout + error.
@@ -507,26 +510,26 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "dual-branch")
 
-	// Worktree should exist at .trellis/
-	assert.DirExists(t, filepath.Join(repo, ".trellis"))
+	// Worktree should exist at .arm/
+	assert.DirExists(t, filepath.Join(repo, ".arm"))
 
 	// .armature/ inside worktree should have config.json with dual-branch mode
-	cfgPath := filepath.Join(repo, ".trellis", ".armature", "config.json")
+	cfgPath := filepath.Join(repo, ".arm", ".armature", "config.json")
 	data, err := os.ReadFile(cfgPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "dual-branch")
 
 	// Git config should have mode set
-	modeCmd := exec.Command("git", "-C", repo, "config", "trellis.mode")
+	modeCmd := exec.Command("git", "-C", repo, "config", "armature.mode")
 	modeOut, err := modeCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, "dual-branch\n", string(modeOut))
 
 	// Git config should have worktree path set
-	wtCmd := exec.Command("git", "-C", repo, "config", "trellis.ops-worktree-path")
+	wtCmd := exec.Command("git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
-	assert.Contains(t, string(wtOut), ".trellis")
+	assert.Contains(t, string(wtOut), ".arm")
 }
 
 func TestMaterialize_SingleBranchMode_AfterModeRefactor(t *testing.T) {
@@ -580,12 +583,12 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Write a note op — should commit to _trellis, not to main
+	// Write a note op — should commit to _armature, not to main
 	_, err = runTrls(t, repo, "note", "--issue", "T-001", "--msg", "dual branch test")
 	require.NoError(t, err)
 
-	// Verify the commit appeared on _trellis branch (inside the worktree)
-	worktreePath := filepath.Join(repo, ".trellis")
+	// Verify the commit appeared on _armature branch (inside the worktree)
+	worktreePath := filepath.Join(repo, ".arm")
 	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-3")
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -703,7 +706,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
 
 	// Count ops before dry-run
-	issuesDir := filepath.Join(repo, ".trellis", ".armature")
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
@@ -954,14 +957,14 @@ func TestInit_HooksAreBranchAware(t *testing.T) {
 	data, err := os.ReadFile(postCommitPath)
 	require.NoError(t, err)
 	content := string(data)
-	assert.Contains(t, content, "_trellis")
+	assert.Contains(t, content, "_armature")
 
 	// Check that post-merge hook contains branch awareness logic
 	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
 	data, err = os.ReadFile(postMergePath)
 	require.NoError(t, err)
 	content = string(data)
-	assert.Contains(t, content, "_trellis")
+	assert.Contains(t, content, "_armature")
 }
 
 func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
@@ -1096,7 +1099,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	require.NoError(t, err)
 
 	// Case 1: No worker ID set (manually unset it)
-	run(t, repo, "git", "config", "--local", "--unset", "trellis.worker-id")
+	run(t, repo, "git", "config", "--local", "--unset", "armature.worker-id")
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
@@ -1564,8 +1567,8 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	// Check the ops log for an explicit transition op targeting story-01 with to=in-progress.
 	// This verifies claim.go emits a durable op (not just relies on state engine inference).
 	issuesDir := filepath.Join(repo, ".armature")
-	if _, err := os.Stat(filepath.Join(repo, ".trellis")); err == nil {
-		issuesDir = filepath.Join(repo, ".trellis", ".armature")
+	if _, err := os.Stat(filepath.Join(repo, ".arm")); err == nil {
+		issuesDir = filepath.Join(repo, ".arm", ".armature")
 	}
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
@@ -1618,8 +1621,8 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 
 	// Verify a transition → open op was emitted
 	issuesDir := filepath.Join(repo, ".armature")
-	if _, err := os.Stat(filepath.Join(repo, ".trellis")); err == nil {
-		issuesDir = filepath.Join(repo, ".trellis", ".armature")
+	if _, err := os.Stat(filepath.Join(repo, ".arm")); err == nil {
+		issuesDir = filepath.Join(repo, ".arm", ".armature")
 	}
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
@@ -1735,7 +1738,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	err = dotCmd.Execute()
 	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")
 
-	wtCmd := exec.Command("git", "-C", repo, "config", "trellis.ops-worktree-path")
+	wtCmd := exec.Command("git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
 	storedPath := strings.TrimSpace(string(wtOut))
@@ -2443,7 +2446,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim task-01 as a *different* worker by temporarily overriding the git config.
-	run(t, repo, "git", "config", "--local", "trellis.worker-id", "other-worker-abc")
+	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
 	require.NoError(t, err)
 	// Restore worker-A by re-running worker-init (generates a new UUID for worker-A).

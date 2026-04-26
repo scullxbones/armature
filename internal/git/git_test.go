@@ -34,20 +34,20 @@ func TestCreateOrphanBranch(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	err := c.CreateOrphanBranch("_trellis")
+	err := c.CreateOrphanBranch("_armature")
 	require.NoError(t, err)
 
 	// Verify branch exists
-	cmd := exec.Command("git", "-C", repo, "branch", "--list", "_trellis")
+	cmd := exec.Command("git", "-C", repo, "branch", "--list", "_armature")
 	out, err := cmd.Output()
 	require.NoError(t, err)
-	assert.Contains(t, string(out), "_trellis")
+	assert.Contains(t, string(out), "_armature")
 
-	// Verify we are still on the original branch (not _trellis)
+	// Verify we are still on the original branch (not _armature)
 	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
-	assert.NotEqual(t, "_trellis\n", string(branchOut))
+	assert.NotEqual(t, "_armature\n", string(branchOut))
 }
 
 func TestCreateOrphanBranch_Idempotent(t *testing.T) {
@@ -55,16 +55,16 @@ func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	// Second call should not error; branch already exists so it returns nil immediately
-	err := c.CreateOrphanBranch("_trellis")
+	err := c.CreateOrphanBranch("_armature")
 	assert.NoError(t, err)
 
 	// Still on original branch
 	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
-	assert.NotEqual(t, "_trellis\n", string(branchOut))
+	assert.NotEqual(t, "_armature\n", string(branchOut))
 }
 
 func TestAddWorktree(t *testing.T) {
@@ -72,10 +72,10 @@ func TestAddWorktree(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
 
-	worktreePath := filepath.Join(repo, ".trellis")
-	err := c.AddWorktree("_trellis", worktreePath)
+	worktreePath := filepath.Join(repo, ".arm")
+	err := c.AddWorktree("_armature", worktreePath)
 	require.NoError(t, err)
 
 	// Verify worktree directory exists
@@ -89,10 +89,10 @@ func TestSetAndReadGitConfig(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	err := c.SetGitConfig("trellis.ops-worktree-path", "/some/path")
+	err := c.SetGitConfig("armature.ops-worktree-path", "/some/path")
 	require.NoError(t, err)
 
-	val, err := c.ReadGitConfig("trellis.ops-worktree-path")
+	val, err := c.ReadGitConfig("armature.ops-worktree-path")
 	require.NoError(t, err)
 	assert.Equal(t, "/some/path", val)
 }
@@ -102,7 +102,7 @@ func TestReadGitConfig_Unset(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	_, err := c.ReadGitConfig("trellis.nonexistent")
+	_, err := c.ReadGitConfig("armature.nonexistent")
 	assert.Error(t, err)
 }
 
@@ -112,9 +112,9 @@ func TestCommitWorktreeOp(t *testing.T) {
 	c := git.New(repo)
 
 	// Create orphan branch and worktree (using E2-001 methods)
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
-	worktreePath := filepath.Join(repo, ".trellis")
-	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
+	worktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
 	// Write a file in the worktree
 	opsDir := filepath.Join(worktreePath, ".armature", "ops")
@@ -139,9 +139,9 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
-	worktreePath := filepath.Join(repo, ".trellis")
-	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
+	worktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
 	// Write and commit file first
 	opsDir := filepath.Join(worktreePath, "ops")
@@ -208,7 +208,7 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 }
 
 // TestConcurrentWorkerPush demonstrates what happens when two workers commit
-// to their own log files on _trellis and both try to push to a shared remote.
+// to their own log files on _armature and both try to push to a shared remote. Uses _armature branch.
 // Worker A pushes first (fast-forward, succeeds). Worker B's push is rejected
 // because the remote tip has moved — it must fetch+rebase before pushing.
 func TestConcurrentWorkerPush_SecondPushRejected(t *testing.T) {
@@ -236,14 +236,14 @@ func TestConcurrentWorkerPush_SecondPushRejected(t *testing.T) {
 	gitRun(workerB, "config", "user.name", "Worker B")
 	gitRun(workerB, "config", "commit.gpgsign", "false")
 
-	// Both workers create the _trellis orphan branch locally (simulating trls init)
+	// Both workers create the _armature orphan branch locally (simulating trls init)
 	// and push it to the remote so both start from the same tip
-	gitRun(workerA, "checkout", "--orphan", "_trellis")
-	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _trellis")
-	gitRun(workerA, "push", "-u", "origin", "_trellis")
+	gitRun(workerA, "checkout", "--orphan", "_armature")
+	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _armature")
+	gitRun(workerA, "push", "-u", "origin", "_armature")
 	gitRun(workerB, "fetch", "origin")
-	gitRun(workerB, "checkout", "-b", "_trellis", "origin/_trellis")
-	gitRun(workerB, "branch", "--set-upstream-to=origin/_trellis", "_trellis")
+	gitRun(workerB, "checkout", "-b", "_armature", "origin/_armature")
+	gitRun(workerB, "branch", "--set-upstream-to=origin/_armature", "_armature")
 
 	// Worker A writes an op to its own log file and commits
 	opsA := filepath.Join(workerA, "ops")
@@ -260,32 +260,32 @@ func TestConcurrentWorkerPush_SecondPushRejected(t *testing.T) {
 	gitRun(workerB, "commit", "-m", "ops: claim E3-001 by worker-b")
 
 	// Worker A pushes successfully (fast-forward)
-	gitRun(workerA, "push", "origin", "_trellis")
+	gitRun(workerA, "push", "origin", "_armature")
 
 	// Worker B's push is rejected — remote tip has moved
-	pushB := exec.Command("git", "-C", workerB, "push", "origin", "_trellis")
+	pushB := exec.Command("git", "-C", workerB, "push", "origin", "_armature")
 	out, err := pushB.CombinedOutput()
 	require.Error(t, err, "expected worker B's push to be rejected, but it succeeded: %s", out)
 	assert.Contains(t, string(out), "rejected", "expected rejection message: %s", out)
 
 	// Worker B must fetch + rebase to make its push fast-forward
 	gitRun(workerB, "fetch", "origin")
-	gitRun(workerB, "rebase", "origin/_trellis")
+	gitRun(workerB, "rebase", "origin/_armature")
 
 	// Now worker B's push succeeds
-	gitRun(workerB, "push", "origin", "_trellis")
+	gitRun(workerB, "push", "origin", "_armature")
 
 	// Verify the remote has both workers' log files
 	verify := t.TempDir()
 	gitRun(verify, "clone", remote, ".")
-	gitRun(verify, "checkout", "_trellis")
+	gitRun(verify, "checkout", "_armature")
 	_, errA := os.Stat(filepath.Join(verify, "ops", "worker-a.log"))
 	_, errB := os.Stat(filepath.Join(verify, "ops", "worker-b.log"))
 	assert.NoError(t, errA, "worker-a.log should be present on remote")
 	assert.NoError(t, errB, "worker-b.log should be present on remote")
 }
 
-// setupTwoWorkerRepos creates a bare remote and two worker clones, both on _trellis branch.
+// setupTwoWorkerRepos creates a bare remote and two worker clones, both on _armature branch.
 // Returns (remote, workerA, workerB paths).
 func setupTwoWorkerRepos(t *testing.T) (string, string, string) {
 	t.Helper()
@@ -309,12 +309,12 @@ func setupTwoWorkerRepos(t *testing.T) (string, string, string) {
 	gitRun(workerB, "config", "user.name", "Worker B")
 	gitRun(workerB, "config", "commit.gpgsign", "false")
 
-	gitRun(workerA, "checkout", "--orphan", "_trellis")
-	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _trellis")
-	gitRun(workerA, "push", "-u", "origin", "_trellis")
+	gitRun(workerA, "checkout", "--orphan", "_armature")
+	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _armature")
+	gitRun(workerA, "push", "-u", "origin", "_armature")
 	gitRun(workerB, "fetch", "origin")
-	gitRun(workerB, "checkout", "-b", "_trellis", "origin/_trellis")
-	gitRun(workerB, "branch", "--set-upstream-to=origin/_trellis", "_trellis")
+	gitRun(workerB, "checkout", "-b", "_armature", "origin/_armature")
+	gitRun(workerB, "branch", "--set-upstream-to=origin/_armature", "_armature")
 
 	return remote, workerA, workerB
 }
@@ -333,7 +333,7 @@ func TestPush_FastForward_Succeeds(t *testing.T) {
 	cmd = exec.Command("git", "-C", workerA, "commit", "-m", "ops: add log")
 	require.NoError(t, cmd.Run())
 
-	err := cA.Push("_trellis")
+	err := cA.Push("_armature")
 	assert.NoError(t, err)
 }
 
@@ -349,7 +349,7 @@ func TestPush_Rejected_ReturnsError(t *testing.T) {
 	require.NoError(t, cmdA.Run())
 	cmdA = exec.Command("git", "-C", workerA, "commit", "-m", "ops: worker-a")
 	require.NoError(t, cmdA.Run())
-	cmdA = exec.Command("git", "-C", workerA, "push", "origin", "_trellis")
+	cmdA = exec.Command("git", "-C", workerA, "push", "origin", "_armature")
 	require.NoError(t, cmdA.Run())
 
 	// Worker B makes a commit from the old tip — push should be rejected
@@ -362,7 +362,7 @@ func TestPush_Rejected_ReturnsError(t *testing.T) {
 	cmdB = exec.Command("git", "-C", workerB, "commit", "-m", "ops: worker-b")
 	require.NoError(t, cmdB.Run())
 
-	err := cB.Push("_trellis")
+	err := cB.Push("_armature")
 	assert.Error(t, err, "expected push to be rejected")
 }
 
@@ -378,7 +378,7 @@ func TestFetchAndRebase_Then_Push_Succeeds(t *testing.T) {
 	require.NoError(t, cmdA.Run())
 	cmdA = exec.Command("git", "-C", workerA, "commit", "-m", "ops: worker-a")
 	require.NoError(t, cmdA.Run())
-	cmdA = exec.Command("git", "-C", workerA, "push", "origin", "_trellis")
+	cmdA = exec.Command("git", "-C", workerA, "push", "origin", "_armature")
 	require.NoError(t, cmdA.Run())
 
 	// Worker B commits from old tip
@@ -392,8 +392,8 @@ func TestFetchAndRebase_Then_Push_Succeeds(t *testing.T) {
 	require.NoError(t, cmdB.Run())
 
 	// FetchAndRebase resolves the conflict, then push succeeds
-	require.NoError(t, cB.FetchAndRebase("_trellis"))
-	err := cB.Push("_trellis")
+	require.NoError(t, cB.FetchAndRebase("_armature"))
+	err := cB.Push("_armature")
 	assert.NoError(t, err)
 }
 

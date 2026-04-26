@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const gitConfigKey = "trellis.worker-id"
+const gitConfigKey = "armature.worker-id"
 
 // InitWorker generates a new worker UUID and stores it in local git config.
 func InitWorker(repoPath string) (string, error) {

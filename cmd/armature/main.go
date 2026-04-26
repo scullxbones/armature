@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
@@ -50,7 +49,7 @@ func newRootCmd() *cobra.Command {
 			if workerID == "" {
 				workerID = "default"
 			}
-			ctx.StateDir = filepath.Join(ctx.IssuesDir, "state", workerID)
+			ctx.StateDir = stateDirFor(ctx, workerID)
 			appCtx = ctx
 			initPushDeps()
 			return nil

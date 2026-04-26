@@ -13,7 +13,7 @@ import (
 type Context struct {
 	RepoPath     string // resolved repo root
 	IssuesDir    string // path to issues directory
-	WorktreePath string // path to .trellis/ worktree; empty in single-branch mode
+	WorktreePath string // path to .arm/ worktree; empty in single-branch mode
 	StateDir     string // path to runtime state directory
 	Mode         string // "single-branch" or "dual-branch"
 	Config       Config // loaded from IssuesDir/config.json
@@ -101,9 +101,9 @@ func ResolveContext(repoPath string) (*Context, error) {
 	case "single-branch":
 		issuesDir = filepath.Join(actualRepoPath, ".armature")
 	case "dual-branch":
-		worktreePath, err = readGitConfig(actualRepoPath, "trellis.ops-worktree-path")
+		worktreePath, err = readGitConfig(actualRepoPath, "armature.ops-worktree-path")
 		if err != nil {
-			return nil, fmt.Errorf("dual-branch mode requires trellis.ops-worktree-path to be set: %w", err)
+			return nil, fmt.Errorf("dual-branch mode requires armature.ops-worktree-path to be set: %w", err)
 		}
 		issuesDir = filepath.Join(worktreePath, ".armature")
 	default:
@@ -144,9 +144,9 @@ func readGitConfig(repoPath, key string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// readGitConfigMode reads trellis.mode from git config. Returns "single-branch" if unset.
+// readGitConfigMode reads armature.mode from git config. Returns "single-branch" if unset.
 func readGitConfigMode(repoPath string) (string, error) {
-	cmd := nonInteractiveGitCmd(repoPath, "config", "trellis.mode")
+	cmd := nonInteractiveGitCmd(repoPath, "config", "armature.mode")
 	out, err := cmd.Output()
 	if err != nil {
 		// Exit code 1 means key not set — default to single-branch
