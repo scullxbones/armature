@@ -1,25 +1,25 @@
-# Trellis Dogfooding Learnings
+# Armature Dogfooding Learnings
 
 Captured while using trellis to track its own E2 development.
 
-## L1: `trls ready` only shows task/feature types
+## L1: `arm ready` only shows task/feature types
 
-**Observed**: Created stories (E2-001 through E2-004) but `trls ready` returned empty because `ComputeReady` filters to `type == "task" || type == "feature"` only.
+**Observed**: Created stories (E2-001 through E2-004) but `arm ready` returned empty because `ComputeReady` filters to `type == "task" || type == "feature"` only.
 
 **Impact**: Solo devs or small teams using stories as their primary work unit get no ready queue output.
 
 **Recommendation**: Either:
 - Add `story` to the ready filter
 - Document that stories must be decomposed into tasks to appear in ready queue
-- Add a `--type` filter flag to `trls ready` so users can opt in
+- Add a `--type` filter flag to `arm ready` so users can opt in
 
 **File**: `internal/ready/compute.go:34`
 
 ---
 
-## L2: `trls transition` accepts invalid status values silently
+## L2: `arm transition` accepts invalid status values silently
 
-**Observed**: `trls transition --issue E2-001 --to in_progress` succeeded, but the canonical status is `in-progress` (hyphen). This caused the ready gate to fail because `ops.StatusInProgress == "in-progress"` didn't match the stored `"in_progress"`.
+**Observed**: `arm transition --issue E2-001 --to in_progress` succeeded, but the canonical status is `in-progress` (hyphen). This caused the ready gate to fail because `ops.StatusInProgress == "in-progress"` didn't match the stored `"in_progress"`.
 
 **Impact**: Silently corrupted state that was hard to debug. Ready queue appeared empty with no explanation.
 
@@ -29,15 +29,15 @@ Captured while using trellis to track its own E2 development.
 
 ---
 
-## L3: AgentSkill trls binary path is wrong
+## L3: AgentSkill arm binary path is wrong
 
-**Observed**: The trls AgentSkill references `scripts/trls` as the binary path, but the actual binary is at `bin/trls`. Running `scripts/trls ready` produces "no such file or directory".
+**Observed**: The arm AgentSkill references `scripts/arm` as the binary path, but the actual binary is at `bin/arm`. Running `scripts/arm ready` produces "no such file or directory".
 
 **Impact**: Agents following the skill literally fail immediately. Requires manual discovery of the correct path.
 
-**Recommendation**: Update the AgentSkill to reference `bin/trls`, or add a `scripts/trls` symlink/wrapper, or make `make install` install to a predictable location on PATH.
+**Recommendation**: Update the AgentSkill to reference `bin/arm`, or add a `scripts/arm` symlink/wrapper, or make `make install` install to a predictable location on PATH.
 
-**File**: `.claude/skills/trls` (binary path reference)
+**File**: `.claude/skills/arm` (binary path reference)
 
 ---
 
@@ -53,43 +53,43 @@ Captured while using trellis to track its own E2 development.
 
 ## L5: Skills cannot deliver cross-platform binaries; `SKILL_ROOT` is not exposed to agents
 
-**Observed**: The `trls` AgentSkill bundles the compiled binary at `scripts/trls` (relative to skill root). Agents cannot resolve this path because: (1) Claude Code does not expose `SKILL_ROOT` to agent context at runtime, and (2) the bundled binary is platform-specific — a skill targeting linux/amd64 breaks on darwin/arm64 and vice versa. Fixing path to `bin/trls` (repo-relative) only works inside the trellis repo itself.
+**Observed**: The `arm` AgentSkill bundles the compiled binary at `scripts/arm` (relative to skill root). Agents cannot resolve this path because: (1) Claude Code does not expose `SKILL_ROOT` to agent context at runtime, and (2) the bundled binary is platform-specific — a skill targeting linux/amd64 breaks on darwin/arm64 and vice versa. Fixing path to `bin/arm` (repo-relative) only works inside the trellis repo itself.
 
 **Impact**: Bundled binary delivery via skills is not viable for compiled Go binaries without per-platform skill variants. Agents guess the binary path relative to CWD and fail.
 
-**Recommendation**: Install `trls` to PATH via `make install` (deploys to `~/.local/bin/trls`). Skills should reference bare `trls` and fail clearly if not found. The bundled `scripts/trls` in the skill directory is a dead end for Go binaries. If the Claude Code skills runtime were to inject `SKILL_ROOT` into agent context, bundled scripts would become viable — this is a platform feature request.
+**Recommendation**: Install `arm` to PATH via `make install` (deploys to `~/.local/bin/arm`). Skills should reference bare `arm` and fail clearly if not found. The bundled `scripts/arm` in the skill directory is a dead end for Go binaries. If the Claude Code skills runtime were to inject `SKILL_ROOT` into agent context, bundled scripts would become viable — this is a platform feature request.
 
-**File**: `.claude/skills/trls/SKILL.md`, `Makefile` that diffs the plan's expected starting state against reality before executing any steps. Alternatively, cross-plan notes (like the one in E2-002) should be more prominent, listing which steps are expected to already be complete.
+**File**: `.claude/skills/arm/SKILL.md`, `Makefile` that diffs the plan's expected starting state against reality before executing any steps. Alternatively, cross-plan notes (like the one in E2-002) should be more prominent, listing which steps are expected to already be complete.
 
 ---
 
-## L6: Stale claim blocks `trls ready` with no diagnostic
+## L6: Stale claim blocks `arm ready` with no diagnostic
 
-**Observed**: `trls ready` returned "No tasks ready" even though open tasks existed (E4-S1-T2 through T5). The actual cause was E4-S1-T1 held an expired claim from a previous worker session (`0fb9a1c9-...`, stale since 2026-03-19T03:14:12Z). The dependent tasks couldn't surface because their blocker appeared to still be in-progress.
+**Observed**: `arm ready` returned "No tasks ready" even though open tasks existed (E4-S1-T2 through T5). The actual cause was E4-S1-T1 held an expired claim from a previous worker session (`0fb9a1c9-...`, stale since 2026-03-19T03:14:12Z). The dependent tasks couldn't surface because their blocker appeared to still be in-progress.
 
-**Impact**: Agent got a false "nothing to do" signal and would have stopped. Required user intervention to diagnose. The `trls workers` output showed the holding worker as `stale`, but there was no connection drawn between the stale worker and the empty ready queue.
+**Impact**: Agent got a false "nothing to do" signal and would have stopped. Required user intervention to diagnose. The `arm workers` output showed the holding worker as `stale`, but there was no connection drawn between the stale worker and the empty ready queue.
 
-**Recommendation**: When `trls ready` returns empty and in-progress issues exist with stale claims, print a diagnostic: e.g. "1 task in-progress with stale claim (E4-S1-T1, claimed by 0fb9a1c9, expired 2h ago) — use `trls claim --issue E4-S1-T1` to steal." Alternatively, auto-expire stale claims when computing the ready queue.
+**Recommendation**: When `arm ready` returns empty and in-progress issues exist with stale claims, print a diagnostic: e.g. "1 task in-progress with stale claim (E4-S1-T1, claimed by 0fb9a1c9, expired 2h ago) — use `arm claim --issue E4-S1-T1` to steal." Alternatively, auto-expire stale claims when computing the ready queue.
 
 **File**: `internal/ready/compute.go`, `cmd/trellis/ready.go`
 
 ---
 
-## L7: `trls-worker` skill not discoverable from project root
+## L7: `arm-worker` skill not discoverable from project root
 
-**Observed**: The skill is deployed at `trellis/.claude/skills/trls-worker/` but the agent's working directory is `/home/brian/development` (the parent). The Skill tool only surfaces skills from the active project directory, so `trls-worker` was initially not found. The agent fell back to reading the skill file directly from disk before the user pointed out the correct deployment path.
+**Observed**: The skill is deployed at `trellis/.claude/skills/arm-worker/` but the agent's working directory is `/home/brian/development` (the parent). The Skill tool only surfaces skills from the active project directory, so `arm-worker` was initially not found. The agent fell back to reading the skill file directly from disk before the user pointed out the correct deployment path.
 
-**Impact**: Wasted turn discovering the skill location. Agent attempted to use the wrong skill file (`docs/trls-worker-SKILL.md`) before the correct one was loaded.
+**Impact**: Wasted turn discovering the skill location. Agent attempted to use the wrong skill file (`docs/arm-worker-SKILL.md`) before the correct one was loaded.
 
 **Recommendation**: Skills should be deployed at the repo root (`.claude/skills/`) rather than a subdirectory if the agent's working directory may be the parent. Alternatively, document in the skill meta that the user must `cd` into the trellis repo or open it as the active workspace before invoking.
 
-**File**: `trellis/.claude/skills/trls-worker/`
+**File**: `trellis/.claude/skills/arm-worker/`
 
 ---
 
 ## L8: `worker-init` emits noisy `_encode`/`_decode` warnings
 
-**Observed**: Running `trls worker-init` produced 12 lines of `setValueForKeyFakeAssocArray:27: command not found: _encode` / `valueForKeyFakeAssocArray:28: command not found: _decode` before the actual output. These are non-fatal shell warnings from the zsh completion or git config helper internals.
+**Observed**: Running `arm worker-init` produced 12 lines of `setValueForKeyFakeAssocArray:27: command not found: _encode` / `valueForKeyFakeAssocArray:28: command not found: _decode` before the actual output. These are non-fatal shell warnings from the zsh completion or git config helper internals.
 
 **Impact**: Output noise erodes agent confidence that the command succeeded. Agents may flag warnings as errors and stop.
 
@@ -99,33 +99,33 @@ Captured while using trellis to track its own E2 development.
 
 ---
 
-## L9: Claiming a story blocks its child tasks from `trls ready`
+## L9: Claiming a story blocks its child tasks from `arm ready`
 
-**Observed**: `trls ready` surfaced E4-S4 (a story, not a task) as ready. Running `trls claim --issue E4-S4` set the story to `claimed` status, which blocked E4-S4-T1 through T6 from appearing in `trls ready` — the parent was now claimed by me and the children showed their parent as `[claimed]`.
+**Observed**: `arm ready` surfaced E4-S4 (a story, not a task) as ready. Running `arm claim --issue E4-S4` set the story to `claimed` status, which blocked E4-S4-T1 through T6 from appearing in `arm ready` — the parent was now claimed by me and the children showed their parent as `[claimed]`.
 
-**Impact**: Claiming the wrong granularity stalls all downstream work. The worker loop skill says to claim tasks, but `trls ready` mixed stories into the queue without signaling they behave differently.
+**Impact**: Claiming the wrong granularity stalls all downstream work. The worker loop skill says to claim tasks, but `arm ready` mixed stories into the queue without signaling they behave differently.
 
-**Recommendation**: Either (a) exclude stories from `trls ready` output (tasks/features only), or (b) print a warning when claiming a story: "Claiming a story will block its child tasks — claim individual tasks instead." Or (c) make claiming a story auto-claim all its ready children instead.
+**Recommendation**: Either (a) exclude stories from `arm ready` output (tasks/features only), or (b) print a warning when claiming a story: "Claiming a story will block its child tasks — claim individual tasks instead." Or (c) make claiming a story auto-claim all its ready children instead.
 
 **File**: `internal/ready/compute.go`, `cmd/trellis/claim.go`
 
 ---
 
-## L10: `trls unassign` does not fully release a claim — explicit transition required
+## L10: `arm unassign` does not fully release a claim — explicit transition required
 
-**Observed**: After claiming E4-S4 by mistake, `trls unassign --issue E4-S4` cleared the `assigned_to` field but left the issue in `claimed` status. Child tasks still showed parent as `[claimed]` and `trls ready` remained empty. A follow-up `trls transition --issue E4-S4 --to in-progress` was required to unblock the queue.
+**Observed**: After claiming E4-S4 by mistake, `arm unassign --issue E4-S4` cleared the `assigned_to` field but left the issue in `claimed` status. Child tasks still showed parent as `[claimed]` and `arm ready` remained empty. A follow-up `arm transition --issue E4-S4 --to in-progress` was required to unblock the queue.
 
 **Impact**: Two-step recovery is non-obvious. `unassign` appears to undo a claim but silently leaves a residual state.
 
-**Recommendation**: `trls unassign` should transition the issue back to `in-progress` (or its prior status) automatically, or at least print: "Issue remains in 'claimed' state — run `trls transition --issue ID --to in-progress` to restore."
+**Recommendation**: `arm unassign` should transition the issue back to `in-progress` (or its prior status) automatically, or at least print: "Issue remains in 'claimed' state — run `arm transition --issue ID --to in-progress` to restore."
 
 **File**: `cmd/trellis/unassign.go`
 
 ---
 
-## L11: `trls transition --to open` is rejected — `open` is not a valid transition target
+## L11: `arm transition --to open` is rejected — `open` is not a valid transition target
 
-**Observed**: Attempted `trls transition --issue E4-S4 --to open` to undo an accidental claim. Got error: `invalid status "open": valid values are [blocked cancelled done in-progress merged]`. There is no way to return an issue to `open` once it has been moved to `in-progress` or `claimed`.
+**Observed**: Attempted `arm transition --issue E4-S4 --to open` to undo an accidental claim. Got error: `invalid status "open": valid values are [blocked cancelled done in-progress merged]`. There is no way to return an issue to `open` once it has been moved to `in-progress` or `claimed`.
 
 **Impact**: Agents have no recovery path for accidentally starting an issue. The only options are `in-progress`, `done`, `blocked`, `cancelled`, or `merged` — none of which mean "I didn't mean to touch this."
 
@@ -137,47 +137,47 @@ Captured while using trellis to track its own E2 development.
 
 ## L12: `decompose-apply` plan JSON schema is undiscoverable — agents fall back to reading Go source
 
-**Observed**: When loading a plan into trellis via `trls decompose-apply --plan <file>`, the agent had no way to discover the required JSON schema without reading the Go source (`internal/decompose/plan.go`). `trls decompose-apply --help` describes only the `--plan` flag, not the file format. There is no example file, schema reference, or `--schema` flag.
+**Observed**: When loading a plan into trellis via `arm decompose-apply --plan <file>`, the agent had no way to discover the required JSON schema without reading the Go source (`internal/decompose/plan.go`). `arm decompose-apply --help` describes only the `--plan` flag, not the file format. There is no example file, schema reference, or `--schema` flag.
 
-**Impact**: Agents must either guess the format (and fail silently or with a cryptic parse error) or read the implementation source. Both paths are friction. This was observed directly when a session fell back to `find`/`cat` on the Go source instead of using `trls` queries.
+**Impact**: Agents must either guess the format (and fail silently or with a cryptic parse error) or read the implementation source. Both paths are friction. This was observed directly when a session fell back to `find`/`cat` on the Go source instead of using `arm` queries.
 
-**Recommendation**: One or more of: (a) add `trls decompose-apply --example` that prints a minimal valid JSON plan; (b) add a `--schema` flag that prints the JSON schema; (c) document the format in `docs/commands.md` under `trls decompose-apply`; (d) improve the `--help` text to include the schema inline.
+**Recommendation**: One or more of: (a) add `arm decompose-apply --example` that prints a minimal valid JSON plan; (b) add a `--schema` flag that prints the JSON schema; (c) document the format in `docs/commands.md` under `arm decompose-apply`; (d) improve the `--help` text to include the schema inline.
 
 **File**: `cmd/trellis/decompose.go`, `internal/decompose/plan.go`, `docs/commands.md`
 
 ---
 
-## L13: No `trls list` command — agents fall back to filesystem reads to discover existing issue IDs
+## L13: No `arm list` command — agents fall back to filesystem reads to discover existing issue IDs
 
-**Observed**: Before creating a plan JSON, the agent needed to know which issue IDs already exist (to avoid conflicts) and to understand the naming convention (E4 → E5, E5-S1-T1, etc.). `trls status` lists all issues grouped by status but is not filterable by type, parent, or scope. There is no `trls list` command that supports `--type`, `--parent`, or `--format json` with structured output for programmatic use. The agent fell back to `ls .issues/state/issues/` to read issue IDs from the filesystem.
+**Observed**: Before creating a plan JSON, the agent needed to know which issue IDs already exist (to avoid conflicts) and to understand the naming convention (E4 → E5, E5-S1-T1, etc.). `arm status` lists all issues grouped by status but is not filterable by type, parent, or scope. There is no `arm list` command that supports `--type`, `--parent`, or `--format json` with structured output for programmatic use. The agent fell back to `ls .armature/state/issues/` to read issue IDs from the filesystem.
 
-**Impact**: Agents cannot reliably query the issue graph using `trls` tooling alone. Filesystem reads bypass the op-log abstraction, are fragile, and are exactly the kind of behavior the CLI is meant to prevent.
+**Impact**: Agents cannot reliably query the issue graph using `arm` tooling alone. Filesystem reads bypass the op-log abstraction, are fragile, and are exactly the kind of behavior the CLI is meant to prevent.
 
-**Recommendation**: Add a `trls list` command (or extend `trls status`) with: `--type [epic|story|task|feature|bug]` filter, `--parent ID` filter, `--format json` output with full issue fields (id, title, type, status, parent, blocked_by), and optionally `--ids-only` for quick ID enumeration. Agents should be able to answer "what IDs exist under E5?" without touching the filesystem.
+**Recommendation**: Add a `arm list` command (or extend `arm status`) with: `--type [epic|story|task|feature|bug]` filter, `--parent ID` filter, `--format json` output with full issue fields (id, title, type, status, parent, blocked_by), and optionally `--ids-only` for quick ID enumeration. Agents should be able to answer "what IDs exist under E5?" without touching the filesystem.
 
 **File**: `cmd/trellis/status.go` (or new `cmd/trellis/list.go`), `internal/materialize/`
 
 ---
 
-## L14: `trls sources` traceability bypassed — decompose pipeline undiscoverable as a workflow
+## L14: `arm sources` traceability bypassed — decompose pipeline undiscoverable as a workflow
 
-**Observed**: When loading the E5 plan from `docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md`, the agent skipped `trls sources` entirely and hand-crafted the plan JSON directly from a manual reading of the markdown file. The intended pipeline — `sources add` → `sources sync` → `decompose-context --sources <id> --existing-dag` → AI generates JSON → `decompose-apply` — was never followed. The 21 E5 issues are now loaded with no traceability link back to the source document. The `trls sources` feature provides this link, but it was completely invisible.
+**Observed**: When loading the E5 plan from `docs/superpowers/plans/2026-03-19-e5-ux-tui-forensics-docs.md`, the agent skipped `arm sources` entirely and hand-crafted the plan JSON directly from a manual reading of the markdown file. The intended pipeline — `sources add` → `sources sync` → `decompose-context --sources <id> --existing-dag` → AI generates JSON → `decompose-apply` — was never followed. The 21 E5 issues are now loaded with no traceability link back to the source document. The `arm sources` feature provides this link, but it was completely invisible.
 
-**Impact**: Source traceability — the primary value of `trls sources` — was entirely bypassed. The plan document and the loaded issues have no recorded connection. If the plan is updated, `stale-review` cannot surface the drift. Additionally, the manual JSON authoring is slower and more error-prone than the AI-assisted decompose-context path.
+**Impact**: Source traceability — the primary value of `arm sources` — was entirely bypassed. The plan document and the loaded issues have no recorded connection. If the plan is updated, `stale-review` cannot surface the drift. Additionally, the manual JSON authoring is slower and more error-prone than the AI-assisted decompose-context path.
 
-**Recommendation**: Make the decompose pipeline a first-class documented workflow. The trls skill (SKILL.md) should include a "Loading a plan" section that walks through: (1) `sources add`, (2) `sources sync`, (3) `decompose-context`, (4) human/AI reviews and edits the JSON, (5) `decompose-apply`. Without this narrative, agents treat the commands as unrelated and skip the connective tissue. Consider also whether `decompose-apply` should require or at least warn when no source is linked to the resulting issues.
+**Recommendation**: Make the decompose pipeline a first-class documented workflow. The arm skill (SKILL.md) should include a "Loading a plan" section that walks through: (1) `sources add`, (2) `sources sync`, (3) `decompose-context`, (4) human/AI reviews and edits the JSON, (5) `decompose-apply`. Without this narrative, agents treat the commands as unrelated and skip the connective tissue. Consider also whether `decompose-apply` should require or at least warn when no source is linked to the resulting issues.
 
-**File**: `.claude/skills/trls/SKILL.md`, `cmd/trellis/decompose.go`
+**File**: `.claude/skills/arm/SKILL.md`, `cmd/trellis/decompose.go`
 
 ---
 
 ## L15: `decompose-apply` has no `--dry-run` — agents apply blindly
 
-**Observed**: When running `trls decompose-apply --plan e5-plan.json`, there was no way to preview which issues would be created, what IDs they would get, or whether any conflicts existed before committing. The command applied 21 issues in a single shot with no confirmation step. If the JSON had contained a bad parent ID, duplicate ID, or wrong type, the error would only surface after ops were written.
+**Observed**: When running `arm decompose-apply --plan e5-plan.json`, there was no way to preview which issues would be created, what IDs they would get, or whether any conflicts existed before committing. The command applied 21 issues in a single shot with no confirmation step. If the JSON had contained a bad parent ID, duplicate ID, or wrong type, the error would only surface after ops were written.
 
 **Impact**: A malformed plan is hard to recover from — `decompose-revert` exists but requires the same plan file to be intact. An agent cannot audit the plan's effect before applying it, increasing the risk of polluting the op log with bad data.
 
-**Recommendation**: Add `trls decompose-apply --dry-run` that validates the plan against the current graph state and prints what would be created (IDs, types, parents, blocked_by edges) without writing any ops. Also consider `--validate-only` as an alias. This gives agents and humans a chance to catch mistakes before they're committed to the op log.
+**Recommendation**: Add `arm decompose-apply --dry-run` that validates the plan against the current graph state and prints what would be created (IDs, types, parents, blocked_by edges) without writing any ops. Also consider `--validate-only` as an alias. This gives agents and humans a chance to catch mistakes before they're committed to the op log.
 
 **File**: `cmd/trellis/decompose.go`, `internal/decompose/apply.go`
 
@@ -185,7 +185,7 @@ Captured while using trellis to track its own E2 development.
 
 ## L16: Fresh worker session sees empty ready queue — parent epic/story must be manually transitioned to `in-progress`
 
-**Observed**: Starting a new worker session on a repo where the epic and story are both `open`, `trls ready` returned "No tasks ready" even though the story had ready subtasks with no blockers. Root cause: `ComputeReady` gates tasks on `parent.Status == in-progress`. The parent epic (E5) and story (E5-S0) had never been transitioned, so no tasks surfaced. Required two manual `trls transition --to in-progress` calls (one for the epic, one for the story) before any tasks appeared.
+**Observed**: Starting a new worker session on a repo where the epic and story are both `open`, `arm ready` returned "No tasks ready" even though the story had ready subtasks with no blockers. Root cause: `ComputeReady` gates tasks on `parent.Status == in-progress`. The parent epic (E5) and story (E5-S0) had never been transitioned, so no tasks surfaced. Required two manual `arm transition --to in-progress` calls (one for the epic, one for the story) before any tasks appeared.
 
 **Impact**: A fresh agent session hits an empty queue with no explanation and would stop, even though work is ready. The agent must know to walk up the parent chain and manually start each ancestor — this is non-obvious and not documented in the worker skill.
 
@@ -197,7 +197,7 @@ Captured while using trellis to track its own E2 development.
 
 ## L17: Flag-heavy ID arguments increase command noise
 
-**Observed**: Commands like `trls show`, `trls claim`, and `trls transition` require the `--issue` flag for the primary target ID.
+**Observed**: Commands like `arm show`, `arm claim`, and `arm transition` require the `--issue` flag for the primary target ID.
 
 **Impact**: Higher token usage and more typing/boilerplate for every operation. Standard CLI patterns often allow positional IDs for primary targets.
 
@@ -207,9 +207,9 @@ Captured while using trellis to track its own E2 development.
 
 ---
 
-## L18: `trls ready` hangs in non-TTY/agent environments
+## L18: `arm ready` hangs in non-TTY/agent environments
 
-**Observed**: `trls ready` defaults to an interactive TUI. In an agent environment (like Gemini CLI), this causes the command to hang or timeout because there is no human to provide input for the TUI.
+**Observed**: `arm ready` defaults to an interactive TUI. In an agent environment (like Gemini CLI), this causes the command to hang or timeout because there is no human to provide input for the TUI.
 
 **Impact**: Agents fail to get work without explicit `--format agent` or `--format json` flags, which are easy to forget or discover.
 
@@ -221,9 +221,9 @@ Captured while using trellis to track its own E2 development.
 
 ## L19: Lack of aggregated "Story Board" view makes tracking progress hard
 
-**Observed**: `trls list --parent ID` shows children, but doesn't provide a high-level view of progress (outcomes, claims, blockers) for the whole story at once in a single output.
+**Observed**: `arm list --parent ID` shows children, but doesn't provide a high-level view of progress (outcomes, claims, blockers) for the whole story at once in a single output.
 
-**Impact**: Users/agents must run `trls show` on every child to understand the current state of a story, leading to high turn counts and context usage.
+**Impact**: Users/agents must run `arm show` on every child to understand the current state of a story, leading to high turn counts and context usage.
 
 **Recommendation**: Add a "board" or "summary" view that aggregates child statuses, outcomes, and current claims for a given parent in a table format.
 
@@ -231,15 +231,15 @@ Captured while using trellis to track its own E2 development.
 
 ---
 
-## L20: `trls-worker` loop is repetitive: transition then commit
+## L20: `arm-worker` loop is repetitive: transition then commit
 
-**Observed**: The standard workflow involves `trls transition` followed immediately by `git add <files> .issues/` and `git commit`.
+**Observed**: The standard workflow involves `arm transition` followed immediately by `git add <files> .armature/` and `git commit`.
 
-**Impact**: High repetition and risk of forgetting to include `.issues/` in the commit, leaving trellis state behind. This happened multiple times during E5-S3 execution.
+**Impact**: High repetition and risk of forgetting to include `.armature/` in the commit, leaving trellis state behind. This happened multiple times during E5-S3 execution.
 
-**Recommendation**: The `trls-worker` skill should suggest a helper or the CLI should provide a bundled command that handles both transition and commit in one go, automatically including the op files.
+**Recommendation**: The `arm-worker` skill should suggest a helper or the CLI should provide a bundled command that handles both transition and commit in one go, automatically including the op files.
 
-**File**: `.claude/skills/trls-worker/SKILL.md`
+**File**: `.claude/skills/arm-worker/SKILL.md`
 
 ---
 
@@ -251,15 +251,15 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add a "Batch Strategy" section to the worker skill instructing agents to build a manifest (e.g. `grep --names-only`) and process in small, verified chunks rather than attempting all at once.
 
-**File**: `.claude/skills/trls-worker/SKILL.md`
+**File**: `.claude/skills/arm-worker/SKILL.md`
 
 ---
 
-## L22: `trls doctor` flags `source-fingerprint` ops as orphaned
+## L22: `arm doctor` flags `source-fingerprint` ops as orphaned
 
-**Observed**: `trls doctor` D3 check flagged `source-fingerprint` ops because they use source UUIDs as `TargetID`, which are not present in the issue index.
+**Observed**: `arm doctor` D3 check flagged `source-fingerprint` ops because they use source UUIDs as `TargetID`, which are not present in the issue index.
 
-**Impact**: Mandatory "fix doctor errors" requirement in `trls-worker` loop blocked work on actual features until the CLI itself was patched.
+**Impact**: Mandatory "fix doctor errors" requirement in `arm-worker` loop blocked work on actual features until the CLI itself was patched.
 
 **Recommendation**: Exclude `source-fingerprint` ops from the D3 orphaned ops check, or verify them against the source manifest instead of the issue index.
 
@@ -281,7 +281,7 @@ Captured while using trellis to track its own E2 development.
 
 ## L24: CLI auto-format detection breaks existing integration tests
 
-**Observed**: When `GEMINI_CLI` is set, `trls` defaults to machine-readable formats. Existing integration tests in `main_test.go` that assert on human-readable output (e.g., checking if a string does *not* contain "status") fail in agent environments.
+**Observed**: When `GEMINI_CLI` is set, `arm` defaults to machine-readable formats. Existing integration tests in `main_test.go` that assert on human-readable output (e.g., checking if a string does *not* contain "status") fail in agent environments.
 
 **Impact**: Agents see existing tests failing unrelated to their changes, causing doubt about codebase stability.
 
@@ -305,23 +305,23 @@ Captured while using trellis to track its own E2 development.
 
 ## L26: Story-level transitions silently skipped when tasks complete
 
-**Observed**: During E3, E6-S2, and E6-S3 execution, agents transitioned all tasks to done but never transitioned the parent story. Stories remained `in-progress` indefinitely with all children done — a state `trls status` surfaced but which nothing prevented.
+**Observed**: During E3, E6-S2, and E6-S3 execution, agents transitioned all tasks to done but never transitioned the parent story. Stories remained `in-progress` indefinitely with all children done — a state `arm status` surfaced but which nothing prevented.
 
-**Impact**: `trls status` showed phantom in-progress work. Coordinator had to manually close out E3-001/002/003/004, E6-S2, and E6-S3 in a later session. State drift makes the board untrustworthy.
+**Impact**: `arm status` showed phantom in-progress work. Coordinator had to manually close out E3-001/002/003/004, E6-S2, and E6-S3 in a later session. State drift makes the board untrustworthy.
 
-**Recommendation**: When `trls transition <TASK> --to done` makes all siblings done but the parent story is still `in-progress`, emit a prominent warning to stderr with the exact remediation command: `trls transition STORY-ID --to done --outcome "..."`. This should be impossible to miss.
+**Recommendation**: When `arm transition <TASK> --to done` makes all siblings done but the parent story is still `in-progress`, emit a prominent warning to stderr with the exact remediation command: `arm transition STORY-ID --to done --outcome "..."`. This should be impossible to miss.
 
 **File**: `cmd/trellis/transition.go`
 
 ---
 
-## L27: `trls create` requires a follow-up `trls amend` — not a 1-liner
+## L27: `arm create` requires a follow-up `arm amend` — not a 1-liner
 
-**Observed**: `trls create` accepts `--dod`, `--scope`, and `--title` but not `--acceptance`. Creating a fully-specified task always required a second `trls amend --acceptance '[...]'` call. Separately, extracting the new issue ID from the JSON output required a `python3 -c "import json..."` pipe.
+**Observed**: `arm create` accepts `--dod`, `--scope`, and `--title` but not `--acceptance`. Creating a fully-specified task always required a second `arm amend --acceptance '[...]'` call. Separately, extracting the new issue ID from the JSON output required a `python3 -c "import json..."` pipe.
 
 **Impact**: Every task creation costs two commands plus a scripting step. In a batch of 4+ tasks this produced incorrect ID extraction (all four IDs collapsed to one), resulting in acceptance criteria from task 4 overwriting task 1. Wasted tokens and produced bad data.
 
-**Recommendation**: (1) Add `--acceptance` to `trls create` for parity with `trls amend`. (2) Add `--field id` output selector to return only the new ID. (3) Add `--source <id-or-path>` to apply a source-link at creation time, eliminating the follow-up `trls source-link` call. A fully-specified, cited task should be expressible in one command.
+**Recommendation**: (1) Add `--acceptance` to `arm create` for parity with `arm amend`. (2) Add `--field id` output selector to return only the new ID. (3) Add `--source <id-or-path>` to apply a source-link at creation time, eliminating the follow-up `arm source-link` call. A fully-specified, cited task should be expressible in one command.
 
 **File**: `cmd/trellis/create.go`
 
@@ -329,23 +329,23 @@ Captured while using trellis to track its own E2 development.
 
 ## L28: Scripting required for basic field extraction and output filtering
 
-**Observed**: Throughout E6 execution, agents resorted to `python3`, `grep`, and `awk` for: extracting single fields from `trls show` JSON output; filtering `trls status` to a single status group; filtering `trls validate` to only ERROR lines; extracting IDs from `trls create` output.
+**Observed**: Throughout E6 execution, agents resorted to `python3`, `grep`, and `awk` for: extracting single fields from `arm show` JSON output; filtering `arm status` to a single status group; filtering `arm validate` to only ERROR lines; extracting IDs from `arm create` output.
 
-**Impact**: Extra tool calls, token usage, and fragile pipelines. Shell loops for multi-ID operations (e.g. `for id in ...; do trls accept-citation $id; done`) are a consistent source of bugs.
+**Impact**: Extra tool calls, token usage, and fragile pipelines. Shell loops for multi-ID operations (e.g. `for id in ...; do arm accept-citation $id; done`) are a consistent source of bugs.
 
-**Recommendation**: Add `--field <name>` to all read commands (`show`, `create`, `transition`, `ready`). Add `--status` and `--parent` filter flags to `trls status`. These cover the vast majority of scripting observed. The goal: no python or awk needed for any routine trellis operation.
+**Recommendation**: Add `--field <name>` to all read commands (`show`, `create`, `transition`, `ready`). Add `--status` and `--parent` filter flags to `arm status`. These cover the vast majority of scripting observed. The goal: no python or awk needed for any routine trellis operation.
 
 **File**: `cmd/trellis/show.go`, `cmd/trellis/create.go`, `cmd/trellis/status.go`, `cmd/trellis/helpers.go`
 
 ---
 
-## L29: `trls create --source` missing — citation always requires a second command
+## L29: `arm create --source` missing — citation always requires a second command
 
-**Observed**: The correct citation workflow (create issue → `trls source-link`) required two commands per issue. In practice, agents skipped `source-link` and used `accept-citation --ci` instead, producing accepted-risk citations with boilerplate rationales rather than real source links.
+**Observed**: The correct citation workflow (create issue → `arm source-link`) required two commands per issue. In practice, agents skipped `source-link` and used `accept-citation --ci` instead, producing accepted-risk citations with boilerplate rationales rather than real source links.
 
 **Impact**: Traceability bypassed by default because the right path is harder than the wrong path. Bulk `accept-citation` loops produced noise data, not meaningful audit records.
 
-**Recommendation**: Add `--source <source-id-or-path>` to `trls create`. Resolves against the manifest by URL/path if a string is given. Issue is born fully cited via `source-link`, not accepted-risk. Makes the correct traceability path the zero-friction path.
+**Recommendation**: Add `--source <source-id-or-path>` to `arm create`. Resolves against the manifest by URL/path if a string is given. Issue is born fully cited via `source-link`, not accepted-risk. Makes the correct traceability path the zero-friction path.
 
 **File**: `cmd/trellis/create.go`, `cmd/trellis/source_link.go`
 
@@ -357,7 +357,7 @@ Captured while using trellis to track its own E2 development.
 
 **Impact**: Coordinator spent extra turns verifying that compile errors were phantom. Eroded trust in IDE diagnostics.
 
-**Recommendation**: (1) Add `.claude/worktrees/` and `.trellis/` to `.gitignore`. (2) Configure gopls `build.directoryFilters` to exclude these paths (`.vscode/settings.json`). (3) Claude Code should prune completed worktrees automatically. Implemented in this session — see `chore(ops)` commit.
+**Recommendation**: (1) Add `.claude/worktrees/` and `.arm/` to `.gitignore`. (2) Configure gopls `build.directoryFilters` to exclude these paths (`.vscode/settings.json`). (3) Claude Code should prune completed worktrees automatically. Implemented in this session — see `chore(ops)` commit.
 
 **File**: `.gitignore`, `.vscode/settings.json`
 
@@ -365,11 +365,11 @@ Captured while using trellis to track its own E2 development.
 
 ## L31: Source retirement leaves orphaned citations with no repair path
 
-**Observed**: Source `dee6f489-a75b-46be-9f36-a1a99ec113ad` was removed from the manifest at some point during E6. All 25+ issues that had been `source-link`ed to it began showing `ERROR: unknown source: dee6f489...` in `trls validate`. Running `trls accept-citation --ci` on each added a new accepted-risk citation alongside the old broken one — validate continued to report the error because the orphaned citation op is immutable in the append-only log.
+**Observed**: Source `dee6f489-a75b-46be-9f36-a1a99ec113ad` was removed from the manifest at some point during E6. All 25+ issues that had been `source-link`ed to it began showing `ERROR: unknown source: dee6f489...` in `arm validate`. Running `arm accept-citation --ci` on each added a new accepted-risk citation alongside the old broken one — validate continued to report the error because the orphaned citation op is immutable in the append-only log.
 
-**Impact**: `trls validate` had 25 permanent non-fixable ERROR lines. Coverage was 202/202 but errors could not be cleared with existing tooling.
+**Impact**: `arm validate` had 25 permanent non-fixable ERROR lines. Coverage was 202/202 but errors could not be cleared with existing tooling.
 
-**Recommendation**: (1) `trls validate` should treat an accepted-risk citation as superseding any earlier orphaned source citation for the same issue. (2) Add a `trls sources retire --replace-citations-with <new-source-id>` command for graceful source migration. Workaround: restore the source entry directly in `manifest.json` with the original UUID.
+**Recommendation**: (1) `arm validate` should treat an accepted-risk citation as superseding any earlier orphaned source citation for the same issue. (2) Add a `arm sources retire --replace-citations-with <new-source-id>` command for graceful source migration. Workaround: restore the source entry directly in `manifest.json` with the original UUID.
 
 **File**: `cmd/trellis/validate.go`, `internal/validate/validate.go`, `cmd/trellis/sources.go`
 
@@ -393,43 +393,43 @@ Captured while using trellis to track its own E2 development.
 
 **Impact**: Story-level PR workflow (one PR per story, reviewed before merge) is broken when using worktree isolation. The coordinator cannot open a PR because there is no branch to target.
 
-**Recommendation**: The coordinator should create a feature branch before dispatching agents (`git checkout -b story/E6-S4`), and agents should commit to that branch. Alternatively, the task prompt template should include `git checkout -b feat/ISSUE-ID` as the first git operation. Add this as an explicit step in the trls-worker skill for the parallel dispatch pattern.
+**Recommendation**: The coordinator should create a feature branch before dispatching agents (`git checkout -b story/E6-S4`), and agents should commit to that branch. Alternatively, the task prompt template should include `git checkout -b feat/ISSUE-ID` as the first git operation. Add this as an explicit step in the arm-worker skill for the parallel dispatch pattern.
 
-**File**: `docs/trls-worker-SKILL.md`
-
----
-
-## L34: Shell hook templates expose missing native `trls hook run` command
-
-**Observed**: The four hook templates added in E6-S6 (post-commit, post-merge, prepare-commit-msg, pre-commit) contain non-trivial shell logic: branch detection (`git symbolic-ref`), dual-branch mode detection (reading `.issues/config.json`), active claim ID lookup, and staged-file inspection. This logic is duplicated in shell rather than owned by trls. The templates call `trls` for the actual ops but must wrap it in shell scaffolding that is hard to test and fragile when `trls` is not on PATH.
-
-**Impact**: Hook templates are verbose, brittle, and untestable in Go. Adding a new hook requires authoring shell logic that mirrors logic already inside `trls`. The w2h agent spent the most tokens of any Wave 2 agent (84,803 / 83 tool uses) largely due to this scaffolding overhead.
-
-**Recommendation**: Add a `trls hook run <hookname>` native subcommand. Each hookname (`post-commit`, `post-merge`, `prepare-commit-msg`, `pre-commit`) maps to native Go logic that owns branch detection, mode detection, and claim lookup. Shell templates become trivial one-liners (`trls hook run post-commit`), are testable in Go, and degrade gracefully when `trls` is missing (single exit-code check rather than scattered shell guards).
-
-**File**: `cmd/trellis/hook.go` (new), `.issues/hooks/*.sh.template`
+**File**: `docs/arm-worker-SKILL.md`
 
 ---
 
-## L36: No `trls rollup` command — parent status drift requires manual triage
+## L34: Shell hook templates expose missing native `arm hook run` command
 
-**Observed**: After a status-audit pass, 9 issues required manual transitions: 4 tasks whose implementation commits were on `main` but status was still `claimed`; 3 stories/epics whose children were all `done` but the parent was still `open` or `in-progress`; 2 stories with stale `claimed` status whose child tasks had all completed. `trls doctor` caught the stale-claim cases (D2) and git-divergence cases (D1), but missed the pure rollup failures (e.g., `E5-S4`, `DF`, `story-1773804400`) where all children were terminal but no stale claim or git reference triggered a check.
+**Observed**: The four hook templates added in E6-S6 (post-commit, post-merge, prepare-commit-msg, pre-commit) contain non-trivial shell logic: branch detection (`git symbolic-ref`), dual-branch mode detection (reading `.armature/config.json`), active claim ID lookup, and staged-file inspection. This logic is duplicated in shell rather than owned by arm. The templates call `arm` for the actual ops but must wrap it in shell scaffolding that is hard to test and fragile when `arm` is not on PATH.
+
+**Impact**: Hook templates are verbose, brittle, and untestable in Go. Adding a new hook requires authoring shell logic that mirrors logic already inside `arm`. The w2h agent spent the most tokens of any Wave 2 agent (84,803 / 83 tool uses) largely due to this scaffolding overhead.
+
+**Recommendation**: Add a `arm hook run <hookname>` native subcommand. Each hookname (`post-commit`, `post-merge`, `prepare-commit-msg`, `pre-commit`) maps to native Go logic that owns branch detection, mode detection, and claim lookup. Shell templates become trivial one-liners (`arm hook run post-commit`), are testable in Go, and degrade gracefully when `arm` is missing (single exit-code check rather than scattered shell guards).
+
+**File**: `cmd/trellis/hook.go` (new), `.armature/hooks/*.sh.template`
+
+---
+
+## L36: No `arm rollup` command — parent status drift requires manual triage
+
+**Observed**: After a status-audit pass, 9 issues required manual transitions: 4 tasks whose implementation commits were on `main` but status was still `claimed`; 3 stories/epics whose children were all `done` but the parent was still `open` or `in-progress`; 2 stories with stale `claimed` status whose child tasks had all completed. `arm doctor` caught the stale-claim cases (D2) and git-divergence cases (D1), but missed the pure rollup failures (e.g., `E5-S4`, `DF`, `story-1773804400`) where all children were terminal but no stale claim or git reference triggered a check.
 
 **Impact**: Status drift accumulates silently between audit passes. Coordinators must manually walk the hierarchy to find parents that should have advanced. The existing auto-advance-on-claim (E5-S1-T3) advances parents to `in-progress` when a child is claimed, but there is no corresponding auto-advance-to-done when all children complete. This gap means story and epic statuses routinely lag behind reality.
 
-**Recommendation**: Add a `trls rollup [--apply]` command that walks the DAG bottom-up, identifies any story or epic whose children are all in terminal states (`done`, `merged`, `cancelled`) but the parent is not, and reports (or with `--apply`, transitions) them. Optionally integrate this check into the post-transition path: after any task transitions to `done`, check if all siblings are terminal and emit a warning or auto-advance the parent.
+**Recommendation**: Add a `arm rollup [--apply]` command that walks the DAG bottom-up, identifies any story or epic whose children are all in terminal states (`done`, `merged`, `cancelled`) but the parent is not, and reports (or with `--apply`, transitions) them. Optionally integrate this check into the post-transition path: after any task transitions to `done`, check if all siblings are terminal and emit a warning or auto-advance the parent.
 
 **File**: `cmd/trellis/rollup.go` (new), `internal/materialize/`, `cmd/trellis/transition.go`
 
 ---
 
-## L37: `trls sync` misses squash/rebase-merged PRs — false "not merged" detection
+## L37: `arm sync` misses squash/rebase-merged PRs — false "not merged" detection
 
-**Observed**: After merging four PRs via GitHub's squash-merge strategy, `trls sync` reported "No merged branches detected" and `git merge-base --is-ancestor origin/<branch> origin/main` returned false for all four branches. The implementation commits were present on `main` (visible in `git log`), but the branch tips were not direct ancestors after squash rebase, breaking the ancestry check.
+**Observed**: After merging four PRs via GitHub's squash-merge strategy, `arm sync` reported "No merged branches detected" and `git merge-base --is-ancestor origin/<branch> origin/main` returned false for all four branches. The implementation commits were present on `main` (visible in `git log`), but the branch tips were not direct ancestors after squash rebase, breaking the ancestry check.
 
-**Impact**: `trls sync` is effectively a no-op on repos that use squash or rebase merge strategies. The `done → merged` transition must be performed manually with `trls merged` for every affected issue, which defeats the purpose of auto-detection.
+**Impact**: `arm sync` is effectively a no-op on repos that use squash or rebase merge strategies. The `done → merged` transition must be performed manually with `arm merged` for every affected issue, which defeats the purpose of auto-detection.
 
-**Recommendation**: `trls sync` should fall back to commit-message matching when ancestry check fails: scan `git log main` for commit messages containing the issue ID and treat a match as evidence of merge. Alternatively, check the GitHub API for PR merge state (`gh pr list --state merged`) rather than relying solely on git ancestry. The current ancestry check should remain as the fast path; message-scan or API check as the slow fallback.
+**Recommendation**: `arm sync` should fall back to commit-message matching when ancestry check fails: scan `git log main` for commit messages containing the issue ID and treat a match as evidence of merge. Alternatively, check the GitHub API for PR merge state (`gh pr list --state merged`) rather than relying solely on git ancestry. The current ancestry check should remain as the fast path; message-scan or API check as the slow fallback.
 
 **File**: `internal/sync/sync.go`, `cmd/trellis/sync.go`
 
@@ -443,4 +443,4 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Two complementary mitigations: (1) At dispatch time, write a minimal `go.work` file (`use .`) into each worktree (gitignored) — this allows agents to run `gopls check ./...` for fast per-file feedback before the full make check suite. (2) The coordinator should run `gopls diagnostics` (via LSP tool) on all changed files after agents return and before merging, catching import/format issues at merge time rather than after.
 
-**File**: `docs/trls-worker-SKILL.md`, dispatcher workflow
+**File**: `docs/arm-worker-SKILL.md`, dispatcher workflow

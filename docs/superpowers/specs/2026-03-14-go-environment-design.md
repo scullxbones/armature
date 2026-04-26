@@ -1,4 +1,4 @@
-# Trellis Go Environment Design
+# Armature Go Environment Design
 
 **Date:** 2026-03-14
 **Scope:** GVM setup, library stack, testing infrastructure, agent guidance
@@ -7,7 +7,7 @@
 
 ## Overview
 
-Set up a Go development environment for Trellis using GVM with a carefully selected library stack optimized for a **functional core / hexagonal architecture**. Emphasis on high-rigor mutation testing, property-based invariant testing, and minimal mocking through architectural discipline.
+Set up a Go development environment for Armature using GVM with a carefully selected library stack optimized for a **functional core / hexagonal architecture**. Emphasis on high-rigor mutation testing, property-based invariant testing, and minimal mocking through architectural discipline.
 
 ---
 
@@ -80,14 +80,14 @@ Set up a Go development environment for Trellis using GVM with a carefully selec
 
 ## AGENTS.md Guidance
 
-Minimal, focused constraints for agents working on Trellis:
+Minimal, focused constraints for agents working on Armature:
 
 ```markdown
-# AGENTS.md — Trellis Go Development
+# AGENTS.md — Armature Go Development
 
 ## Architecture
 
-Trellis uses **functional core / hexagonal architecture**:
+Armature uses **functional core / hexagonal architecture**:
 - **Core:** Pure functions (DAG ops, materialization algorithm, validation)
   - No mocks needed; inputs → outputs
   - Fully testable with property tests

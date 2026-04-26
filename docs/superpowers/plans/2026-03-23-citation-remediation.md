@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `trls source-link` and `trls accept-citation` commands, a `citation-accepted` op type, and remediate all 106 existing uncited issue nodes so `trls validate` reports 0 uncited nodes.
+**Goal:** Add `arm source-link` and `arm accept-citation` commands, a `citation-accepted` op type, and remediate all 106 existing uncited issue nodes so `arm validate` reports 0 uncited nodes.
 
-**Architecture:** Event-sourced: all state changes are new ops appended to `.issues/ops/*.log` files, replayed by the materialize engine into `materialize.Issue` structs. Validation reads the materialized state and checks citation coverage. The two new commands emit ops; the engine, traceability, and validation packages are updated to understand them.
+**Architecture:** Event-sourced: all state changes are new ops appended to `.armature/ops/*.log` files, replayed by the materialize engine into `materialize.Issue` structs. Validation reads the materialized state and checks citation coverage. The two new commands emit ops; the engine, traceability, and validation packages are updated to understand them.
 
 **Tech Stack:** Go, Cobra (CLI), `golang.org/x/term` (TTY detection, already in dep graph), testify (assertions), `make check` (lint + test + coverage ≥ 80% + mutation)
 
@@ -698,7 +698,7 @@ Expected: no compile errors. Fix any before proceeding to Chunk 2 — the comman
 
 ## Chunk 2: Commands — source-link and accept-citation
 
-### Task 7: Implement `trls source-link` command
+### Task 7: Implement `arm source-link` command
 
 **Files:**
 - Create: `cmd/trellis/source_link.go`
@@ -790,8 +790,8 @@ package main
 import (
     "fmt"
 
-    "github.com/scullxbones/trellis/internal/ops"
-    "github.com/scullxbones/trellis/internal/sources"
+    "github.com/scullxbones/armature/internal/ops"
+    "github.com/scullxbones/armature/internal/sources"
     "github.com/spf13/cobra"
 )
 
@@ -809,7 +809,7 @@ func newSourceLinkCmd() *cobra.Command {
             }
             entry, ok := manifest.Get(sourceID)
             if !ok {
-                return fmt.Errorf("unknown source ID %s — run 'trls sources add' to register sources", sourceID)
+                return fmt.Errorf("unknown source ID %s — run 'arm sources add' to register sources", sourceID)
             }
 
             workerID, logPath, err := resolveWorkerAndLog()
@@ -868,12 +868,12 @@ Expected: PASS.
 
 ```bash
 git add cmd/trellis/source_link.go cmd/trellis/main.go cmd/trellis/cmd_extra_test.go
-git commit -m "feat(E5-S0-ext): add trls source-link command"
+git commit -m "feat(E5-S0-ext): add arm source-link command"
 ```
 
 ---
 
-### Task 8: Implement `trls accept-citation` command
+### Task 8: Implement `arm accept-citation` command
 
 **Files:**
 - Create: `cmd/trellis/accept_citation.go`
@@ -970,7 +970,7 @@ func TestAcceptCitationCmd_CI_SetsConfirmedNoninteractively(t *testing.T) {
 }
 ```
 
-The last test uses `materialize.MaterializeAndReturn` — ensure `"github.com/scullxbones/trellis/internal/materialize"`, `"path/filepath"`, and `"strings"` are imported in `cmd_extra_test.go`. (`"strings"` is also needed by `setupRepoWithTaskAndSource` which calls `strings.Fields`.)
+The last test uses `materialize.MaterializeAndReturn` — ensure `"github.com/scullxbones/armature/internal/materialize"`, `"path/filepath"`, and `"strings"` are imported in `cmd_extra_test.go`. (`"strings"` is also needed by `setupRepoWithTaskAndSource` which calls `strings.Fields`.)
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -993,7 +993,7 @@ import (
     "os"
     "strings"
 
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/spf13/cobra"
     "golang.org/x/term"
 )
@@ -1123,7 +1123,7 @@ Expected: all four stages (lint, test, coverage ≥ 80%, mutation) GREEN. Fix an
 
 ```bash
 git add cmd/trellis/accept_citation.go cmd/trellis/main.go cmd/trellis/cmd_extra_test.go
-git commit -m "feat(E5-S0-ext): add trls accept-citation command with interactive confirmation"
+git commit -m "feat(E5-S0-ext): add arm accept-citation command with interactive confirmation"
 ```
 
 ---
@@ -1137,34 +1137,34 @@ This chunk is data-only. All implementation code must be committed and `make che
 - [ ] **Step 1: Run worker-init**
 
 ```
-./bin/trls worker-init
+./bin/arm worker-init
 ```
 
 Expected: `Worker ID: <uuid>` (or "already initialized").
 
 - [ ] **Step 2: Register all source docs**
 
-Run `trls sources add` for each doc. Use the exact paths relative to the trellis repo root:
+Run `arm sources add` for each doc. Use the exact paths relative to the trellis repo root:
 
 ```bash
-./bin/trls sources add --url "docs/trellis-prd.md" --type filesystem --title "Trellis PRD"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-15-e2-001-multi-branch-mode.md" --type filesystem --title "E2-001 Multi-Branch Mode"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-15-e2-002-branch-isolation.md" --type filesystem --title "E2-002 Branch Isolation"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-15-e2-003-merge-detection.md" --type filesystem --title "E2-003 Merge Detection"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-15-e2-004-pr-done-to-merged.md" --type filesystem --title "E2-004 PR Done to Merged"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-16-e3-collaboration.md" --type filesystem --title "E3 Collaboration"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-17-ci-validation-pipeline.md" --type filesystem --title "CI Validation Pipeline"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-17-test-coverage-hardening.md" --type filesystem --title "Test Coverage Hardening"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-index.md" --type filesystem --title "E4 Index"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s1-tui-foundation.md" --type filesystem --title "E4-S1 TUI Foundation"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s2-glamour-render.md" --type filesystem --title "E4-S2 Glamour Render"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s3-full-validate.md" --type filesystem --title "E4-S3 Full Validate"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s4-sources.md" --type filesystem --title "E4-S4 Sources"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s5-decompose-context.md" --type filesystem --title "E4-S5 Decompose Context"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s6-dag-summary.md" --type filesystem --title "E4-S6 DAG Summary"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s7-traceability.md" --type filesystem --title "E4-S7 Traceability"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s8-brownfield-import.md" --type filesystem --title "E4-S8 Brownfield Import"
-./bin/trls sources add --url "docs/superpowers/plans/2026-03-18-e4-s9-stale-review.md" --type filesystem --title "E4-S9 Stale Review"
+./bin/arm sources add --url "docs/trellis-prd.md" --type filesystem --title "Armature PRD"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-15-e2-001-multi-branch-mode.md" --type filesystem --title "E2-001 Multi-Branch Mode"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-15-e2-002-branch-isolation.md" --type filesystem --title "E2-002 Branch Isolation"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-15-e2-003-merge-detection.md" --type filesystem --title "E2-003 Merge Detection"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-15-e2-004-pr-done-to-merged.md" --type filesystem --title "E2-004 PR Done to Merged"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-16-e3-collaboration.md" --type filesystem --title "E3 Collaboration"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-17-ci-validation-pipeline.md" --type filesystem --title "CI Validation Pipeline"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-17-test-coverage-hardening.md" --type filesystem --title "Test Coverage Hardening"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-index.md" --type filesystem --title "E4 Index"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s1-tui-foundation.md" --type filesystem --title "E4-S1 TUI Foundation"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s2-glamour-render.md" --type filesystem --title "E4-S2 Glamour Render"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s3-full-validate.md" --type filesystem --title "E4-S3 Full Validate"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s4-sources.md" --type filesystem --title "E4-S4 Sources"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s5-decompose-context.md" --type filesystem --title "E4-S5 Decompose Context"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s6-dag-summary.md" --type filesystem --title "E4-S6 DAG Summary"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s7-traceability.md" --type filesystem --title "E4-S7 Traceability"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s8-brownfield-import.md" --type filesystem --title "E4-S8 Brownfield Import"
+./bin/arm sources add --url "docs/superpowers/plans/2026-03-18-e4-s9-stale-review.md" --type filesystem --title "E4-S9 Stale Review"
 ```
 
 Each prints `added source <UUID> (<path>)`. Capture the UUIDs — you need them in Task 10.
@@ -1172,13 +1172,13 @@ Each prints `added source <UUID> (<path>)`. Capture the UUIDs — you need them 
 The E5 plan is already registered. Get its UUID:
 
 ```bash
-cat .issues/sources/manifest.json | python3 -c "import sys,json; m=json.load(sys.stdin); [print(k,v['title']) for k,v in m['entries'].items()]"
+cat .armature/sources/manifest.json | python3 -c "import sys,json; m=json.load(sys.stdin); [print(k,v['title']) for k,v in m['entries'].items()]"
 ```
 
 - [ ] **Step 3: Verify all sources registered**
 
 ```bash
-cat .issues/sources/manifest.json | python3 -c "import sys,json; m=json.load(sys.stdin); print(len(m['entries']), 'sources registered')"
+cat .armature/sources/manifest.json | python3 -c "import sys,json; m=json.load(sys.stdin); print(len(m['entries']), 'sources registered')"
 ```
 
 Expected: 20 sources (19 new + 1 already registered E5 plan).
@@ -1186,7 +1186,7 @@ Expected: 20 sources (19 new + 1 already registered E5 plan).
 - [ ] **Step 4: Commit sources manifest**
 
 ```bash
-git add .issues/sources/
+git add .armature/sources/
 git commit -m "chore(E5-S0-ext): register planning docs as citation sources"
 ```
 
@@ -1231,7 +1231,7 @@ The following table maps issue IDs to source doc titles. Use the UUIDs captured 
 For each issue in the mapping, run:
 
 ```bash
-./bin/trls source-link --issue ISSUE-ID --source-id SOURCE-UUID
+./bin/arm source-link --issue ISSUE-ID --source-id SOURCE-UUID
 ```
 
 Work in order: E2 → E3 → CI/TC → E4 → E5. This will produce a large number of individual op emissions. They can be batched in a shell loop if preferred, but do not script the UUIDs — retrieve them from the manifest.
@@ -1241,7 +1241,7 @@ Work in order: E2 → E3 → CI/TC → E4 → E5. This will produce a large numb
 After each epic group, run:
 
 ```bash
-./bin/trls validate 2>&1 | grep -c "uncited node"
+./bin/arm validate 2>&1 | grep -c "uncited node"
 ```
 
 Expected count decreases as each group is linked.
@@ -1249,7 +1249,7 @@ Expected count decreases as each group is linked.
 - [ ] **Step 3: Commit ops after all source-link ops are emitted**
 
 ```bash
-git add .issues/
+git add .armature/
 git commit -m "chore(E5-S0-ext): emit source-link ops for E2/E3/CI/TC/E4/E5 issues"
 ```
 
@@ -1262,7 +1262,7 @@ The bare-timestamp IDs have no recoverable source material.
 - [ ] **Step 1: Identify remaining uncited nodes**
 
 ```bash
-./bin/trls validate 2>&1 | grep "uncited node"
+./bin/arm validate 2>&1 | grep "uncited node"
 ```
 
 Expected: only `task-1773804403`, `task-1773804476`, `story-1773804400` (and possibly `TC-001` if it predates coverage).
@@ -1270,19 +1270,19 @@ Expected: only `task-1773804403`, `task-1773804476`, `story-1773804400` (and pos
 - [ ] **Step 2: Accept citation risk for each straggler**
 
 ```bash
-./bin/trls accept-citation \
+./bin/arm accept-citation \
     --issue task-1773804403 \
     --rationale "Created before planning doc convention existed; no recoverable source material."
 ```
 
 ```bash
-./bin/trls accept-citation \
+./bin/arm accept-citation \
     --issue task-1773804476 \
     --rationale "Created before planning doc convention existed; no recoverable source material."
 ```
 
 ```bash
-./bin/trls accept-citation \
+./bin/arm accept-citation \
     --issue story-1773804400 \
     --rationale "Created before planning doc convention existed; no recoverable source material."
 ```
@@ -1294,7 +1294,7 @@ The interactive prompt requires typing the issue ID exactly for each. Use `--ci`
 - [ ] **Step 3: Verify zero uncited nodes**
 
 ```bash
-./bin/trls validate 2>&1
+./bin/arm validate 2>&1
 ```
 
 Expected: no lines beginning with `ERROR:`. Coverage line should show `106/106 cited (N source-linked, M accepted-risk)`. If any `ERROR: uncited node:` lines remain, resolve them before committing — either source-link the issue if a doc applies, or accept-citation with appropriate rationale.
@@ -1302,7 +1302,7 @@ Expected: no lines beginning with `ERROR:`. Coverage line should show `106/106 c
 - [ ] **Step 4: Final commit**
 
 ```bash
-git add .issues/
+git add .armature/
 git commit -m "chore(E5-S0-ext): accept-citation for pre-convention issues; 106/106 cited"
 ```
 
@@ -1321,7 +1321,7 @@ Expected: lint → test → coverage ≥ 80% → mutation — all GREEN.
 - [ ] **Run validate**
 
 ```
-./bin/trls validate
+./bin/arm validate
 ```
 
 Expected: `COVERAGE: 106/106 cited (N source-linked, M accepted-risk)` with no ERROR lines.

@@ -16,11 +16,11 @@
     },
     {
       "id": "DF-S1-T1",
-      "title": "Update trls show, claim, and transition to support positional ID",
+      "title": "Update arm show, claim, and transition to support positional ID",
       "type": "task",
       "parent": "DF-S1",
       "scope": "cmd/trellis/show.go, cmd/trellis/claim.go, cmd/trellis/transition.go",
-      "dod": "trls show <id>, trls claim <id>, and trls transition <id> --to <status> all work without --issue flag."
+      "dod": "arm show <id>, arm claim <id>, and arm transition <id> --to <status> all work without --issue flag."
     },
     {
       "id": "DF-S1-T2",
@@ -39,11 +39,11 @@
     },
     {
       "id": "DF-S2-T1",
-      "title": "Implement TTY detection and update trls ready",
+      "title": "Implement TTY detection and update arm ready",
       "type": "task",
       "parent": "DF-S2",
       "scope": "internal/tui/tui.go, cmd/trellis/ready.go",
-      "dod": "trls ready defaults to --format agent when piped or run in non-TTY."
+      "dod": "arm ready defaults to --format agent when piped or run in non-TTY."
     },
     {
       "id": "DF-S2-T2",
@@ -62,25 +62,25 @@
     },
     {
       "id": "DF-S3-T1",
-      "title": "Add Story Board view to trls list",
+      "title": "Add Story Board view to arm list",
       "type": "task",
       "parent": "DF-S3",
       "scope": "cmd/trellis/list.go",
-      "dod": "trls list --parent <id> includes Status, Outcome, and ClaimedBy columns in a table format."
+      "dod": "arm list --parent <id> includes Status, Outcome, and ClaimedBy columns in a table format."
     },
     {
       "id": "DF-S4",
       "title": "Improve Worker Skill for efficiency and reliability (L20, L21)",
       "type": "story",
       "parent": "DF",
-      "dod": "trls-worker skill updated with best practices for loop efficiency and large batch processing."
+      "dod": "arm-worker skill updated with best practices for loop efficiency and large batch processing."
     },
     {
       "id": "DF-S4-T1",
       "title": "Document bundled 'transition + commit' workflow in skill",
       "type": "task",
       "parent": "DF-S4",
-      "scope": "docs/trls-worker-SKILL.md",
+      "scope": "docs/arm-worker-SKILL.md",
       "dod": "Skill includes explicit recommendation for bundling trellis transition with git commit to avoid state lag."
     },
     {
@@ -88,7 +88,7 @@
       "title": "Add 'Batch Strategy' section to worker skill",
       "type": "task",
       "parent": "DF-S4",
-      "scope": "docs/trls-worker-SKILL.md",
+      "scope": "docs/arm-worker-SKILL.md",
       "dod": "Skill instructs agents on how to handle large tasks by building manifests and processing in chunks."
     }
   ]

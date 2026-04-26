@@ -44,8 +44,8 @@ package dagsum_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/tui/dagsum"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/tui/dagsum"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -155,7 +155,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // ConfirmMsg signals the user confirmed the current item.
@@ -386,11 +386,11 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/tui"
-	"github.com/scullxbones/trellis/internal/tui/dagsum"
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/tui"
+	"github.com/scullxbones/armature/internal/tui/dagsum"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/spf13/cobra"
 )
 
@@ -537,7 +537,7 @@ rootCmd.AddCommand(newDAGSummaryCmd())
 - [ ] **Step 4: Build and verify**
 
 ```bash
-go build ./cmd/trellis/... && ./bin/trls dag-summary --help
+go build ./cmd/trellis/... && ./bin/arm dag-summary --help
 ```
 
 Expected: no errors, help displayed.

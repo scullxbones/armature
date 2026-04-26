@@ -1,8 +1,8 @@
-# Go Environment Setup for Trellis Implementation Plan
+# Go Environment Setup for Armature Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Initialize Trellis as a Go module with hexagonal architecture, add curated testing libraries (gopter, mutesting, cobra), create agent guidance, and verify with a sample property test.
+**Goal:** Initialize Armature as a Go module with hexagonal architecture, add curated testing libraries (gopter, mutesting, cobra), create agent guidance, and verify with a sample property test.
 
 **Architecture:** Functional core (pure functions for DAG/materialization logic) + imperative crust (git, file I/O adapters). Testing via property tests for invariants, mutation testing for rigor, real I/O in integration tests (no mocks). Minimal external dependencies; prefer Go built-ins.
 
@@ -44,12 +44,12 @@
 From `/home/brian/development/trellis`, run:
 
 ```bash
-go mod init github.com/scullxbones/trellis
+go mod init github.com/scullxbones/armature
 ```
 
 Expected output:
 ```
-go: creating new go.mod: module github.com/scullxbones/trellis
+go: creating new go.mod: module github.com/scullxbones/armature
 ```
 
 - [ ] **Step 2: Verify go.mod was created**
@@ -60,7 +60,7 @@ cat go.mod
 
 Expected:
 ```
-module github.com/scullxbones/trellis
+module github.com/scullxbones/armature
 
 go 1.22
 ```
@@ -69,7 +69,7 @@ go 1.22
 
 ```bash
 git add go.mod
-git commit -m "init: initialize Go module github.com/scullxbones/trellis"
+git commit -m "init: initialize Go module github.com/scullxbones/armature"
 ```
 
 ---
@@ -159,11 +159,11 @@ git commit -m "deps: add testing, CLI, and TUI libraries"
 
 ```bash
 cat > /home/brian/development/trellis/AGENTS.md << 'EOF'
-# AGENTS.md — Trellis Go Development
+# AGENTS.md — Armature Go Development
 
 ## Architecture
 
-Trellis uses **functional core / hexagonal architecture**:
+Armature uses **functional core / hexagonal architecture**:
 
 - **Core:** Pure functions (DAG ops, materialization algorithm, validation)
   - No mocks needed; inputs → outputs
@@ -229,7 +229,7 @@ mutesting ./internal/dag
 golangci-lint run ./...
 
 # Build CLI
-go build -o bin/trls ./cmd/trellis
+go build -o bin/arm ./cmd/trellis
 ```
 
 ## File Organization
@@ -271,7 +271,7 @@ EOF
 head -20 /home/brian/development/trellis/AGENTS.md
 ```
 
-Expected: File starts with `# AGENTS.md — Trellis Go Development`
+Expected: File starts with `# AGENTS.md — Armature Go Development`
 
 - [ ] **Step 3: Commit**
 
@@ -388,13 +388,13 @@ cat > /home/brian/development/trellis/Makefile << 'EOF'
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Trellis Go build targets:"
+	@echo "Armature Go build targets:"
 	@echo "  make test       - Run all tests"
 	@echo "  make coverage   - Generate coverage report (coverage.html)"
 	@echo "  make lint       - Run golangci-lint"
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make clean      - Remove build artifacts and test outputs"
-	@echo "  make build      - Build CLI binary to ./bin/trls"
+	@echo "  make build      - Build CLI binary to ./bin/arm"
 
 test:
 	go test -v ./...
@@ -419,7 +419,7 @@ clean:
 
 build:
 	mkdir -p bin
-	go build -o bin/trls ./cmd/trellis
+	go build -o bin/arm ./cmd/trellis
 EOF
 ```
 
@@ -905,7 +905,7 @@ git commit -m "build: add linter config, verify all tests pass"
 
 ## Success Criteria
 
-- [x] `go.mod` initialized with module `github.com/scullxbones/trellis`
+- [x] `go.mod` initialized with module `github.com/scullxbones/armature`
 - [x] All dependencies added: gopter, mutesting, cobra, charm ecosystem, uuid, testify
 - [x] `AGENTS.md` created with architecture and testing guidance
 - [x] `.gitignore` updated with Go build artifacts

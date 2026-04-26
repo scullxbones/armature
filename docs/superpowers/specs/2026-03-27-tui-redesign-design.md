@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-27
 **Status:** Approved for implementation planning
-**Scope:** Replaces `trls tui` kanban board with a DAG tree viewer; adds Workers, Validate, and Sources screens; fixes semantic color palette; fully remediates multi-agent worktree conflicts on a single developer machine.
+**Scope:** Replaces `arm tui` kanban board with a DAG tree viewer; adds Workers, Validate, and Sources screens; fixes semantic color palette; fully remediates multi-agent worktree conflicts on a single developer machine.
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 1.1 TUI UX
 
-The existing `trls tui` command renders a three-column kanban board (`internal/tui/board/`). User-reported problems:
+The existing `arm tui` command renders a three-column kanban board (`internal/tui/board/`). User-reported problems:
 
 - Screen space underutilised — column widths are `terminal_width / 3`, leaving titles heavily truncated
 - Detail panel shows only five fields (ID, Title, Status, Priority, Type); most `Issue` data is inaccessible
@@ -30,13 +30,13 @@ The existing `trls tui` command renders a three-column kanban board (`internal/t
 | Info | `#00CCFF` (cyan) | blue(39) |
 | ActionRequired | `#CC44FF` (magenta) | bold white on red |
 
-Warning and Advisory are swapped, causing "needs attention" items to render yellow and "informational" items orange — the reverse of intent. This affects every existing TUI command (`trls ready`, `trls stale-review`, `trls dag-summary`, `trls dagsummary`).
+Warning and Advisory are swapped, causing "needs attention" items to render yellow and "informational" items orange — the reverse of intent. This affects every existing TUI command (`arm ready`, `arm stale-review`, `arm dag-summary`, `arm dagsummary`).
 
 ### 1.3 Multi-Agent Worktree Conflicts
 
 When multiple agents (or a human + agents) run in separate git worktrees on the same machine, three problems occur:
 
-**Problem A — `_trellis` branch checkout conflict.** Git disallows the same branch checked out in more than one worktree simultaneously. `trls init` creates the ops worktree using a path relative to the current directory (`filepath.Join(repoPath, ".trellis")`). If run from a second git worktree (e.g. `../repo-feat-a/`), it calls `git worktree add .trellis/ origin/_trellis` again, which git rejects because `_trellis` is already checked out elsewhere. Additionally, the relative path stored in `trellis.ops-worktree-path` config resolves incorrectly when read from a different worktree's working directory.
+**Problem A — `_armature` branch checkout conflict.** Git disallows the same branch checked out in more than one worktree simultaneously. `arm init` creates the ops worktree using a path relative to the current directory (`filepath.Join(repoPath, ".trellis")`). If run from a second git worktree (e.g. `../repo-feat-a/`), it calls `git worktree add .trellis/ origin/_armature` again, which git rejects because `_armature` is already checked out elsewhere. Additionally, the relative path stored in `trellis.ops-worktree-path` config resolves incorrectly when read from a different worktree's working directory.
 
 **Problem B — `state/checkpoint.json` collision.** All agents materialise into the same flat `state/` directory (`filepath.Join(issuesDir, "state")` in `pipeline.go:36`), sharing `checkpoint.json`, `index.json`, and `state/issues/*.json`. Concurrent materializations corrupt the checkpoint, causing missed or double-applied ops on subsequent runs.
 
@@ -44,7 +44,7 @@ When multiple agents (or a human + agents) run in separate git worktrees on the 
 
 ### 1.4 Materialized State Committed to Git
 
-Materialized state files were being committed in single-branch mode due to a missing `.gitignore` guard. **Already fixed** in commit `7699161`: `.issues/.gitignore` excludes `state/` and `trls init` writes this file on setup.
+Materialized state files were being committed in single-branch mode due to a missing `.gitignore` guard. **Already fixed** in commit `7699161`: `.armature/.gitignore` excludes `state/` and `arm init` writes this file on setup.
 
 ---
 
@@ -101,7 +101,7 @@ The detail overlay is a separate `detail.Model` struct that any screen instantia
 One line at the top, always visible:
 
 ```
- [1] Tree  [2] Workers  [3] Validate ⚠2  [4] Sources ⚠1    trls tui · E4,E5 · ↺ live
+ [1] Tree  [2] Workers  [3] Validate ⚠2  [4] Sources ⚠1    arm tui · E4,E5 · ↺ live
 ```
 
 - Active screen tab: Info blue background
@@ -161,7 +161,7 @@ j/k move  h/l expand/collapse  enter detail  / filter  v validate subtree  p par
 
 ### 2.5 Live Updates + State Isolation
 
-**Filesystem watch:** Root model starts an `fsnotify.Watcher` on `.issues/ops/` at init. Any `*.log` file change triggers a 200ms debounced re-materialisation.
+**Filesystem watch:** Root model starts an `fsnotify.Watcher` on `.armature/ops/` at init. Any `*.log` file change triggers a 200ms debounced re-materialisation.
 
 > **Dependency note:** `fsnotify` (`github.com/fsnotify/fsnotify`) is not currently in `go.mod` and must be added as a direct dependency. The architecture's "zero external deps" constraint (§1 Key Constraints) applies to core CLI operations only — claim, transition, render-context, materialize — which must never make network calls beyond git. The TUI is a human-interactive monitoring tool, not a core operation, and is explicitly exempt. `fsnotify` is a pure Go library with no runtime network calls; it uses OS-native inotify/kqueue/FSEvents.
 
@@ -169,7 +169,7 @@ j/k move  h/l expand/collapse  enter detail  / filter  v validate subtree  p par
 
 **TUI state path:** TUI always materialises into `state/.tui/` via a dedicated `stateDir` — never into an agent's state directory (see §3.2 for the `stateDir` parameter design).
 
-**Remote agent updates:** A background `git fetch` runs every 30 seconds when a remote is configured. The fetch runs with a 10-second timeout; if it times out or errors, the failure is logged to the nav bar status briefly and the next cycle continues. If the `_trellis` ref changed post-fetch, re-materialise. Gives ~30s latency for remote agents vs near-instant for local ones.
+**Remote agent updates:** A background `git fetch` runs every 30 seconds when a remote is configured. The fetch runs with a 10-second timeout; if it times out or errors, the failure is logged to the nav bar status briefly and the next cycle continues. If the `_armature` ref changed post-fetch, re-materialise. Gives ~30s latency for remote agents vs near-instant for local ones.
 
 ### 2.6 Screen 2 — Workers
 
@@ -193,7 +193,7 @@ j/k move  h/l expand/collapse  enter detail  / filter  v validate subtree  p par
 E4  Missing required field: acceptance                              [enter →]
     node: E4-S5-T2  "Log ops for per-item acknowledgment"
     ⓘ Without acceptance criteria there's no machine-checkable definition of done.
-    fix: trls amend E4-S5-T2 --acceptance "..."
+    fix: arm amend E4-S5-T2 --acceptance "..."
 ```
 
 Implication sentence is plain-language impact — what goes wrong if this is ignored, not just what the rule says.
@@ -214,7 +214,7 @@ Implication sentence is plain-language impact — what goes wrong if this is ign
 **Actions:**
 - `s`: sync selected source
 - `S`: sync all sources
-- `r`: launch `trls stale-review` for selected stale source
+- `r`: launch `arm stale-review` for selected stale source
 - `Enter` on an affected node: switch to Tree with that node selected
 - `Tab`: move focus between source list and node list
 
@@ -259,13 +259,13 @@ TheirClaim = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 
 ## 3. Multi-Agent Worktree Remediation
 
-### 3.1 Problem A — `_trellis` Branch Checkout Conflict
+### 3.1 Problem A — `_armature` Branch Checkout Conflict
 
 **Root cause:** `cmd/trellis/init.go` creates the ops worktree with a relative path:
 ```go
 worktreePath := filepath.Join(repoPath, ".trellis")  // ".trellis" when repoPath is "."
 ```
-This relative path is stored in `trellis.ops-worktree-path` git config. When read from a second git worktree whose working directory is different (e.g., `../repo-feat-a/`), the relative path resolves to the wrong location. Additionally, running `trls init` from a second worktree attempts `git worktree add .trellis/ origin/_trellis` again, which git rejects because `_trellis` is already checked out.
+This relative path is stored in `trellis.ops-worktree-path` git config. When read from a second git worktree whose working directory is different (e.g., `../repo-feat-a/`), the relative path resolves to the wrong location. Additionally, running `arm init` from a second worktree attempts `git worktree add .trellis/ origin/_armature` again, which git rejects because `_armature` is already checked out.
 
 **Fix — `cmd/trellis/init.go`:**
 1. Resolve `worktreePath` to an absolute path before use — with proper error handling:
@@ -369,7 +369,7 @@ appCtx.StateDir = filepath.Join(appCtx.IssuesDir, "state", workerID)
 
 New state directory layout:
 ```
-.issues/state/
+.armature/state/
   <worker-id-1>/      # agent 1's isolated materialization
     checkpoint.json
     index.json
@@ -384,7 +384,7 @@ New state directory layout:
     ...
 ```
 
-The existing `.issues/.gitignore` (`state/`) already excludes all subdirectories correctly.
+The existing `.armature/.gitignore` (`state/`) already excludes all subdirectories correctly.
 
 ### 3.3 Problem C — TUI/Agent State Contention
 
@@ -394,11 +394,11 @@ Resolved by §3.2 (per-agent state dirs) and §2.5 (TUI uses `state/.tui/`).
 
 ## 4. What Is Preserved Unchanged
 
-- `internal/tui/ready/` — `trls ready` interactive TUI is already satisfactory
+- `internal/tui/ready/` — `arm ready` interactive TUI is already satisfactory
 - `internal/tui/dagsum/`, `internal/tui/dagsummary/`, `internal/tui/stalereview/` — functional logic unchanged; their rendered output will change slightly due to the palette correction (§2.10)
 - All non-TUI commands — unaffected by palette fix except rendered color values, which improve automatically
-- `trls ready --format=json` agent path — untouched
-- `.issues/.gitignore` fix from commit `7699161` — already in place
+- `arm ready --format=json` agent path — untouched
+- `.armature/.gitignore` fix from commit `7699161` — already in place
 
 ---
 
@@ -409,7 +409,7 @@ Resolved by §3.2 (per-agent state dirs) and §2.5 (TUI uses `state/.tui/`).
 - **Root app model:** tests for screen switching, nav bar badge counts (error/stale counts), `SetState()` propagation to all screens, `Init()` batching
 - **colors.go:** `colors_test.go` updated to assert corrected xterm color numbers. All existing TUI test packages (`ready/`, `dagsum/`, `dagsummary/`, `stalereview/`) audited for ANSI escape sequence assertions and updated to match the new palette values
 - **Multi-agent worktree:** integration tests using `initTempRepo` + two simulated workers with separate `stateDir` values writing concurrently; assert no checkpoint corruption and correct independent state
-- **`trls init` idempotency with absolute path:** test that running `trls init` a second time from a different working directory does not attempt a second `git worktree add` and stores the same absolute path
+- **`arm init` idempotency with absolute path:** test that running `arm init` a second time from a different working directory does not attempt a second `git worktree add` and stores the same absolute path
 - **`stateDir` propagation:** test that `AppContext.StateDir` uses worker ID and falls back to `"default"` when no worker is configured
 - Coverage target: ≥ 80% per package, consistent with repo standard (`make check`)
 
@@ -419,6 +419,6 @@ Resolved by §3.2 (per-agent state dirs) and §2.5 (TUI uses `state/.tui/`).
 
 - Browser-based D3 force-directed graph visualization (future effort)
 - Claim action from the TUI (human manager persona does not need it)
-- `trls ready` changes (already satisfactory)
+- `arm ready` changes (already satisfactory)
 - Compaction of op logs (deferred per architecture)
 - Multi-repo trellis instances (v1 limitation, unrelated)

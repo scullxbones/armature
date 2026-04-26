@@ -1,26 +1,26 @@
 # E5-S1 Dogfooding UX Fixes — T9–T13
 
-Friction points surfaced during E5-S1 implementation. Five targeted fixes to `trls` CLI, `Makefile`, and skill documentation.
+Friction points surfaced during E5-S1 implementation. Five targeted fixes to `arm` CLI, `Makefile`, and skill documentation.
 
 ---
 
-## T9 — Fix `trls show` to return human-readable output
+## T9 — Fix `arm show` to return human-readable output
 
-**Issue:** `trls show --issue ISSUE-ID` returned empty output during E5-S1 implementation. Workers had to `grep` op files directly to inspect issue state.
+**Issue:** `arm show --issue ISSUE-ID` returned empty output during E5-S1 implementation. Workers had to `grep` op files directly to inspect issue state.
 
 **Scope:** `cmd/trellis/status.go` (or new `show.go`), `cmd/trellis/main_test.go`
 
-**Definition of Done:** `trls show --issue ISSUE-ID` prints a human-readable summary of the materialized issue state (ID, title, type, status, parent, claimed_by, DoD, notes); `--format json` outputs structured data; `TestShowCmd` passes; make check green.
+**Definition of Done:** `arm show --issue ISSUE-ID` prints a human-readable summary of the materialized issue state (ID, title, type, status, parent, claimed_by, DoD, notes); `--format json` outputs structured data; `TestShowCmd` passes; make check green.
 
 ---
 
-## T10 — `trls doctor` command
+## T10 — `arm doctor` command
 
 **Issue:** No command exists to surface structural repo health problems — git/trellis divergence (commits referencing issues that aren't `done`), stale claims, orphaned ops, broken parent refs, dependency cycles, and uncited issues.
 
-**Scope:** `cmd/trellis/doctor.go`, `internal/doctor/` package, `cmd/trellis/main_test.go`, `docs/SKILL.md`, `docs/trls-worker-SKILL.md`
+**Scope:** `cmd/trellis/doctor.go`, `internal/doctor/` package, `cmd/trellis/main_test.go`, `docs/SKILL.md`, `docs/arm-worker-SKILL.md`
 
-**Definition of Done:** `trls doctor` runs six checks (D1–D6 below) and exits non-zero on any error-severity failure; `--strict` promotes warnings to errors; `--format json` outputs structured results; integrated into `docs/SKILL.md` (Repo Health section) and `docs/trls-worker-SKILL.md` (worker-init step); tests pass; make check green.
+**Definition of Done:** `arm doctor` runs six checks (D1–D6 below) and exits non-zero on any error-severity failure; `--strict` promotes warnings to errors; `--format json` outputs structured results; integrated into `docs/SKILL.md` (Repo Health section) and `docs/arm-worker-SKILL.md` (worker-init step); tests pass; make check green.
 
 ### Checks
 
@@ -36,7 +36,7 @@ Friction points surfaced during E5-S1 implementation. Five targeted fixes to `tr
 ### Output format (human)
 
 ```
-trls doctor
+arm doctor
   ✓ git/trellis sync
   ✗ stale claims (2):
       E5-S2-T1  claimed 47m ago, TTL=60m (worker: abc123)
@@ -48,24 +48,24 @@ trls doctor
 
 ### Skill integration
 
-- **`docs/SKILL.md`** — add "Repo Health" section documenting `trls doctor`
-- **`docs/trls-worker-SKILL.md`** — add `trls doctor` call to worker-init step; workers should stop and surface errors before claiming work
+- **`docs/SKILL.md`** — add "Repo Health" section documenting `arm doctor`
+- **`docs/arm-worker-SKILL.md`** — add `arm doctor` call to worker-init step; workers should stop and surface errors before claiming work
 
 ---
 
-## T11 — `--parent` filter on `trls ready`
+## T11 — `--parent` filter on `arm ready`
 
-**Issue:** `trls ready --story E5-S1` silently returned the full queue. Workers focused on a specific story have no way to scope the ready queue.
+**Issue:** `arm ready --story E5-S1` silently returned the full queue. Workers focused on a specific story have no way to scope the ready queue.
 
 **Scope:** `cmd/trellis/ready.go`, `cmd/trellis/cmd_extra_test.go`
 
-**Definition of Done:** `trls ready --parent ISSUE-ID` returns only tasks that are descendants of the given issue; `TestReadyParentFilter` passes; make check green.
+**Definition of Done:** `arm ready --parent ISSUE-ID` returns only tasks that are descendants of the given issue; `TestReadyParentFilter` passes; make check green.
 
 ---
 
 ## T12 — Add `make skill` to `make check`
 
-**Issue:** After updating `docs/SKILL.md` in T7, `make skill` had to be run manually to regenerate `.claude/skills/trls/SKILL.md`. The deployed skill can silently drift from the source docs. The `.claude/skills/` build output is intentionally gitignored (dogfooding only), so the fix is to ensure `make check` always regenerates skills so any drift is caught during local development.
+**Issue:** After updating `docs/SKILL.md` in T7, `make skill` had to be run manually to regenerate `.claude/skills/arm/SKILL.md`. The deployed skill can silently drift from the source docs. The `.claude/skills/` build output is intentionally gitignored (dogfooding only), so the fix is to ensure `make check` always regenerates skills so any drift is caught during local development.
 
 **Scope:** `Makefile`
 
@@ -73,10 +73,10 @@ trls doctor
 
 ---
 
-## T13 — Heartbeat instructions in trls-worker subagent prompts
+## T13 — Heartbeat instructions in arm-worker subagent prompts
 
-**Issue:** The trls-worker SKILL.md dispatches subagents but doesn't instruct them to call `trls heartbeat`. Long-running subagents (T3 took 28m, T8 took 13m) risk TTL expiry and claim theft by other workers.
+**Issue:** The arm-worker SKILL.md dispatches subagents but doesn't instruct them to call `arm heartbeat`. Long-running subagents (T3 took 28m, T8 took 13m) risk TTL expiry and claim theft by other workers.
 
-**Scope:** `docs/trls-worker-SKILL.md`
+**Scope:** `docs/arm-worker-SKILL.md`
 
-**Definition of Done:** The "Dispatch Subagent" section of `docs/trls-worker-SKILL.md` explicitly instructs subagents to call `trls heartbeat --issue ID` for long-running work (with a note on the max-once-per-minute constraint); `make skill` regenerates the deployed skill; make check green.
+**Definition of Done:** The "Dispatch Subagent" section of `docs/arm-worker-SKILL.md` explicitly instructs subagents to call `arm heartbeat --issue ID` for long-running work (with a note on the max-once-per-minute constraint); `make skill` regenerates the deployed skill; make check green.

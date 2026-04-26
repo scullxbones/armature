@@ -103,15 +103,15 @@ func TestPush_FastForward(t *testing.T) {
     gitRun(worker, "config", "user.email", "test@test.com")
     gitRun(worker, "config", "user.name", "Test")
     gitRun(worker, "config", "commit.gpgsign", "false")
-    gitRun(worker, "checkout", "--orphan", "_trellis")
-    gitRun(worker, "commit", "--allow-empty", "-m", "init: _trellis")
+    gitRun(worker, "checkout", "--orphan", "_armature")
+    gitRun(worker, "commit", "--allow-empty", "-m", "init: _armature")
 
     c := git.New(worker)
-    err := c.Push("_trellis")
+    err := c.Push("_armature")
     require.NoError(t, err)
 
     // Verify remote has the branch
-    verifyCmd := exec.Command("git", "-C", remote, "rev-parse", "--verify", "_trellis")
+    verifyCmd := exec.Command("git", "-C", remote, "rev-parse", "--verify", "_armature")
     assert.NoError(t, verifyCmd.Run())
 }
 
@@ -136,24 +136,24 @@ func TestPush_Rejected(t *testing.T) {
     }
 
     // Both workers start from the same base: A creates branch and pushes
-    gitRun(workerA, "checkout", "--orphan", "_trellis")
+    gitRun(workerA, "checkout", "--orphan", "_armature")
     gitRun(workerA, "commit", "--allow-empty", "-m", "init")
-    gitRun(workerA, "push", "-u", "origin", "_trellis")
+    gitRun(workerA, "push", "-u", "origin", "_armature")
 
     // B fetches and starts from the same tip as A
     gitRun(workerB, "fetch", "origin")
-    gitRun(workerB, "checkout", "-b", "_trellis", "origin/_trellis")
-    gitRun(workerB, "branch", "--set-upstream-to=origin/_trellis", "_trellis")
+    gitRun(workerB, "checkout", "-b", "_armature", "origin/_armature")
+    gitRun(workerB, "branch", "--set-upstream-to=origin/_armature", "_armature")
     // B makes a local commit (but doesn't push yet)
     gitRun(workerB, "commit", "--allow-empty", "-m", "worker-b op")
 
     // A makes another commit and pushes first — advancing the remote tip
     gitRun(workerA, "commit", "--allow-empty", "-m", "worker-a second")
-    gitRun(workerA, "push", "origin", "_trellis")
+    gitRun(workerA, "push", "origin", "_armature")
 
     // Now B's push is rejected — remote tip has moved past B's base
     cB := git.New(workerB)
-    err := cB.Push("_trellis")
+    err := cB.Push("_armature")
     assert.Error(t, err, "expected push rejection")
 }
 
@@ -176,24 +176,24 @@ func TestFetchAndRebase_MakesPushPossible(t *testing.T) {
     }
 
     // A creates shared base and pushes
-    gitRun(workerA, "checkout", "--orphan", "_trellis")
+    gitRun(workerA, "checkout", "--orphan", "_armature")
     gitRun(workerA, "commit", "--allow-empty", "-m", "init")
-    gitRun(workerA, "push", "-u", "origin", "_trellis")
+    gitRun(workerA, "push", "-u", "origin", "_armature")
 
     // B fetches and tracks the branch, then makes a local commit
     gitRun(workerB, "fetch", "origin")
-    gitRun(workerB, "checkout", "-b", "_trellis", "origin/_trellis")
-    gitRun(workerB, "branch", "--set-upstream-to=origin/_trellis", "_trellis")
+    gitRun(workerB, "checkout", "-b", "_armature", "origin/_armature")
+    gitRun(workerB, "branch", "--set-upstream-to=origin/_armature", "_armature")
     gitRun(workerB, "commit", "--allow-empty", "-m", "worker-b op")
 
     // A advances remote
     gitRun(workerA, "commit", "--allow-empty", "-m", "worker-a op")
-    gitRun(workerA, "push", "origin", "_trellis")
+    gitRun(workerA, "push", "origin", "_armature")
 
     // B's push would fail; FetchAndRebase then Push should succeed
     cB := git.New(workerB)
-    require.NoError(t, cB.FetchAndRebase("_trellis"))
-    require.NoError(t, cB.Push("_trellis"))
+    require.NoError(t, cB.FetchAndRebase("_armature"))
+    require.NoError(t, cB.Push("_armature"))
 }
 ```
 
@@ -263,7 +263,7 @@ package ops_test
 import (
     "testing"
 
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
     "os"
@@ -316,7 +316,7 @@ func TestAppendCommitAndPush_SingleBranch_NoPush(t *testing.T) {
     op := ops.Op{Type: ops.OpClaim, TargetID: "T1", Timestamp: 1000, WorkerID: "abc",
         Payload: ops.Payload{TTL: 60}}
 
-    err := ops.AppendCommitAndPush(logPath, "", "_trellis", op, fc, fp, ft)
+    err := ops.AppendCommitAndPush(logPath, "", "_armature", op, fc, fp, ft)
     require.NoError(t, err)
 
     // In single-branch mode: no commit, no push, no fetch
@@ -337,7 +337,7 @@ func TestAppendCommitAndPush_DualBranch_PushSucceeds(t *testing.T) {
     op := ops.Op{Type: ops.OpClaim, TargetID: "T1", Timestamp: 1000, WorkerID: "abc-def-ghi",
         Payload: ops.Payload{TTL: 60}}
 
-    err := ops.AppendCommitAndPush(logPath, worktreePath, "_trellis", op, fc, fp, ft)
+    err := ops.AppendCommitAndPush(logPath, worktreePath, "_armature", op, fc, fp, ft)
     require.NoError(t, err)
 
     assert.Equal(t, 1, fc.calls)     // committed once
@@ -364,7 +364,7 @@ func TestAppendCommitAndPush_RetryOnRejection(t *testing.T) {
 
     _ = attempt // for coverage
     // When all retries fail, error is returned
-    err := ops.AppendCommitAndPush(logPath, worktreePath, "_trellis", op, fc, fp, ft)
+    err := ops.AppendCommitAndPush(logPath, worktreePath, "_armature", op, fc, fp, ft)
     assert.Error(t, err)
 
     // Should have attempted push 4 times total (1 + 3 retries)
@@ -377,8 +377,8 @@ func TestAppendCommitAndPush_RetryOnRejection(t *testing.T) {
 
 func TestNoPusher_IsNoop(t *testing.T) {
     p := ops.NoPusher{}
-    assert.NoError(t, p.Push("_trellis"))
-    assert.NoError(t, p.FetchAndRebase("_trellis"))
+    assert.NoError(t, p.Push("_armature"))
+    assert.NoError(t, p.FetchAndRebase("_armature"))
 }
 ```
 
@@ -403,7 +403,7 @@ import (
     "time"
 )
 
-// Pusher handles remote sync for the _trellis branch.
+// Pusher handles remote sync for the _armature branch.
 // In single-branch mode, both methods are no-ops returning nil.
 type Pusher interface {
     FetchAndRebase(branch string) error
@@ -509,7 +509,7 @@ import (
     "path/filepath"
     "testing"
 
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
@@ -593,7 +593,7 @@ type PendingPushTracker interface {
     Reset()
 }
 
-// FilePushTracker persists the pending count to .issues/state/pending-push-count.
+// FilePushTracker persists the pending count to .armature/state/pending-push-count.
 // The file is never committed to git — it is local process state only.
 type FilePushTracker struct {
     path      string
@@ -687,9 +687,9 @@ import (
     "fmt"
     "time"
 
-    "github.com/scullxbones/trellis/internal/git"
-    "github.com/scullxbones/trellis/internal/ops"
-    "github.com/scullxbones/trellis/internal/worker"
+    "github.com/scullxbones/armature/internal/git"
+    "github.com/scullxbones/armature/internal/ops"
+    "github.com/scullxbones/armature/internal/worker"
 )
 
 var appPusher  ops.Pusher
@@ -727,7 +727,7 @@ func appendHighStakesOp(logPath string, op ops.Op) error {
     if appCtx.WorktreePath != "" {
         gc = git.New(appCtx.WorktreePath)
     }
-    return ops.AppendCommitAndPush(logPath, appCtx.WorktreePath, "_trellis", op, gc, appPusher, appTracker)
+    return ops.AppendCommitAndPush(logPath, appCtx.WorktreePath, "_armature", op, gc, appPusher, appTracker)
 }
 
 // appendLowStakesOp appends a low-stakes op, commits it locally, and flushes
@@ -741,10 +741,10 @@ func appendLowStakesOp(logPath string, op ops.Op) error {
         return err
     }
     if shouldFlush := appTracker.Increment(); shouldFlush {
-        if err := appPusher.FetchAndRebase("_trellis"); err != nil {
+        if err := appPusher.FetchAndRebase("_armature"); err != nil {
             return fmt.Errorf("low-stakes flush rebase: %w", err)
         }
-        if err := appPusher.Push("_trellis"); err != nil {
+        if err := appPusher.Push("_armature"); err != nil {
             return fmt.Errorf("low-stakes flush push: %w", err)
         }
         appTracker.Reset()
@@ -876,8 +876,8 @@ import (
     "path/filepath"
     "testing"
 
-    "github.com/scullxbones/trellis/internal/audit"
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/audit"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
@@ -1008,8 +1008,8 @@ import (
     "sort"
     "strings"
 
-    "github.com/scullxbones/trellis/internal/claim"
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/claim"
+    "github.com/scullxbones/armature/internal/ops"
 )
 
 // Filter controls which ops are returned by Load.
@@ -1116,7 +1116,7 @@ git commit -m "feat(audit): add audit.Load — reads, merges, filters, annotates
 
 ---
 
-### Task 7: `cmd/trellis/log.go` — `trls log` command
+### Task 7: `cmd/trellis/log.go` — `arm log` command
 
 **Files:**
 - Create: `cmd/trellis/log.go`
@@ -1139,7 +1139,7 @@ import (
     "strings"
     "time"
 
-    "github.com/scullxbones/trellis/internal/audit"
+    "github.com/scullxbones/armature/internal/audit"
     "github.com/spf13/cobra"
 )
 
@@ -1240,8 +1240,8 @@ import (
     "strconv"
     "time"
 
-    "github.com/scullxbones/trellis/internal/audit"
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/audit"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/spf13/cobra"
 )
 
@@ -1353,7 +1353,7 @@ Expected: no errors
 
 ```bash
 git add cmd/trellis/log.go cmd/trellis/main.go
-git commit -m "feat(cmd): add trls log command for audit log viewing"
+git commit -m "feat(cmd): add arm log command for audit log viewing"
 ```
 
 ---
@@ -1611,7 +1611,7 @@ git commit -m "feat(materialize): add AssignedWorker field and applyAssign handl
 
 ---
 
-### Task 10: `cmd/trellis/assign.go` — `trls assign` / `trls unassign`
+### Task 10: `cmd/trellis/assign.go` — `arm assign` / `arm unassign`
 
 **Files:**
 - Create: `cmd/trellis/assign.go`
@@ -1626,7 +1626,7 @@ import (
     "encoding/json"
     "fmt"
 
-    "github.com/scullxbones/trellis/internal/ops"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/spf13/cobra"
 )
 
@@ -1721,7 +1721,7 @@ Expected: no errors
 
 ```bash
 git add cmd/trellis/assign.go cmd/trellis/main.go
-git commit -m "feat(cmd): add trls assign and trls unassign commands"
+git commit -m "feat(cmd): add arm assign and arm unassign commands"
 ```
 
 ---
@@ -1748,9 +1748,9 @@ package ready_test
 import (
     "testing"
 
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/ops"
-    "github.com/scullxbones/trellis/internal/ready"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/ops"
+    "github.com/scullxbones/armature/internal/ready"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
@@ -1943,7 +1943,7 @@ git commit -m "feat(ready): assignment-aware sort — assigned issues first, oth
 
 ---
 
-### Task 12: `cmd/trellis/workers.go` — `trls workers` command
+### Task 12: `cmd/trellis/workers.go` — `arm workers` command
 
 **Files:**
 - Create: `cmd/trellis/workers.go`
@@ -1967,9 +1967,9 @@ import (
     "strings"
     "time"
 
-    claimPkg "github.com/scullxbones/trellis/internal/claim"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/ops"
+    claimPkg "github.com/scullxbones/armature/internal/claim"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/ops"
     "github.com/spf13/cobra"
 )
 
@@ -2215,7 +2215,7 @@ Expected: no errors
 
 ```bash
 git add cmd/trellis/workers.go cmd/trellis/main.go
-git commit -m "feat(cmd): add trls workers command for worker presence visibility"
+git commit -m "feat(cmd): add arm workers command for worker presence visibility"
 ```
 
 ---
@@ -2245,18 +2245,18 @@ Expected: all PASS
 - [ ] **Step 3: Build the binary**
 
 ```bash
-go build -o bin/trls ./cmd/trellis/
+go build -o bin/arm ./cmd/trellis/
 ```
 Expected: binary produced with no errors.
 
 - [ ] **Step 4: Smoke test — help output shows all new commands**
 
 ```bash
-./bin/trls --help
-./bin/trls log --help
-./bin/trls assign --help
-./bin/trls unassign --help
-./bin/trls workers --help
+./bin/arm --help
+./bin/arm log --help
+./bin/arm assign --help
+./bin/arm unassign --help
+./bin/arm workers --help
 ```
 Expected: all commands visible with correct flags.
 
@@ -2276,7 +2276,7 @@ The four E3 issues must ship atomically. Recommended parallel execution:
 | Stream A (E3-001) | Stream B (E3-003) |
 |---|---|
 | Task 1: Config | Task 6: audit.go (no dependency on Task 1–5) |
-| Task 2: git Push/FetchAndRebase | Task 7: trls log (without OpAssign case — added in Task 8) |
+| Task 2: git Push/FetchAndRebase | Task 7: arm log (without OpAssign case — added in Task 8) |
 | Task 3: Pusher + AppendCommitAndPush | |
 | Task 4: FilePushTracker | |
 | Task 5: Wire helpers + commands | |
@@ -2287,7 +2287,7 @@ After both streams complete:
 |---|
 | Task 8: OpAssign type registration |
 | Task 9: Materialization AssignedWorker |
-| Task 10: trls assign/unassign |
+| Task 10: arm assign/unassign |
 | Task 11: Assignment-aware ready sort |
-| Task 12: trls workers |
+| Task 12: arm workers |
 | Task 13: Final integration |

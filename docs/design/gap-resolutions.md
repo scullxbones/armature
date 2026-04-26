@@ -4,7 +4,7 @@ Resolves the 5 gaps identified during TOC development. These decisions feed into
 
 ---
 
-## Gap 1: trls sync — Recommendation
+## Gap 1: arm sync — Recommendation
 
 ### Background: Where Does Sync Currently Live?
 
@@ -22,21 +22,21 @@ The problem: there is no single command that does "make my local ops state curre
 
 ### Recommendation: Implicit Sync With Explicit Override
 
-**Every read or write command implicitly syncs the ops worktree before executing.** This means `trls ready`, `trls claim`, `trls render-context`, `trls transition` — all of them pull the ops branch as their first internal step. The developer and the AI agent never need to think about syncing ops.
+**Every read or write command implicitly syncs the ops worktree before executing.** This means `arm ready`, `arm claim`, `arm render-context`, `arm transition` — all of them pull the ops branch as their first internal step. The developer and the AI agent never need to think about syncing ops.
 
-**`trls sync` exists as an explicit command** for two use cases:
+**`arm sync` exists as an explicit command** for two use cases:
 
-1. **Diagnostic/verification:** "Is my ops state current?" A developer troubleshooting a stale claim or unexpected ready-task list can run `trls sync` and see what changed.
+1. **Diagnostic/verification:** "Is my ops state current?" A developer troubleshooting a stale claim or unexpected ready-task list can run `arm sync` and see what changed.
 
-2. **Batch operations:** If a script or CI job needs to ensure fresh state before a sequence of read-only operations (e.g., generating a report), a single `trls sync` at the top is cheaper than implicit sync on each command.
+2. **Batch operations:** If a script or CI job needs to ensure fresh state before a sequence of read-only operations (e.g., generating a report), a single `arm sync` at the top is cheaper than implicit sync on each command.
 
 The command specification:
 
 ```
-trls sync [flags]
+arm sync [flags]
 
 Behavior:
-  1. Pull ops worktree (_trellis branch)
+  1. Pull ops worktree (_armature branch)
   2. Incremental materialize (process new ops since checkpoint)
   3. Report summary of changes
 
@@ -51,11 +51,11 @@ Output:
 
 Exit codes:
   0  success (or already current)
-  1  ops branch not found (run trls init)
+  1  ops branch not found (run arm init)
   2  network error (offline — local state is stale)
 ```
 
-**SKILL.md contract change:** Replace `git pull` in step 1 with nothing — the agent just runs `trls ready` and sync happens automatically. If we want to be explicit in the SKILL.md for clarity, the step becomes `trls sync` followed by `trls ready`, but the sync is redundant since `ready` syncs internally. Recommend keeping it explicit in the SKILL.md for readability even though it is technically unnecessary.
+**SKILL.md contract change:** Replace `git pull` in step 1 with nothing — the agent just runs `arm ready` and sync happens automatically. If we want to be explicit in the SKILL.md for clarity, the step becomes `arm sync` followed by `arm ready`, but the sync is redundant since `ready` syncs internally. Recommend keeping it explicit in the SKILL.md for readability even though it is technically unnecessary.
 
 **Impact on the process flow:** The 6-step flow from DESIGN-BRANCHING.md is now internal to every CLI write command. Read-only commands (ready, render-context, validate) do steps 1-2 only (pull + materialize, no write/push). This is the consolidated specification that the architecture doc should describe once.
 
@@ -93,13 +93,13 @@ For stories and epics, `done` and `merged` are set simultaneously because there 
 
 ### The Problem
 
-`trls transition <id> done --verify` runs acceptance hooks (test runners, linters, type checkers) that operate on code files. These files are in the developer's code worktree, not the ops worktree. The CLI needs to know where the code worktree is so it can run hooks in the right directory.
+`arm transition <id> done --verify` runs acceptance hooks (test runners, linters, type checkers) that operate on code files. These files are in the developer's code worktree, not the ops worktree. The CLI needs to know where the code worktree is so it can run hooks in the right directory.
 
 Additionally, the hook commands themselves are project-specific. A Node.js project runs `npm test`. A Go project runs `go test ./...`. A Python project runs `pytest`. The CLI cannot assume any particular toolchain.
 
 ### Recommendation: Configure at Init, Store in Repo Config
 
-**During `trls init`, the CLI detects and prompts for verification configuration.** This is stored in `.issues/config.json` on the ops branch, so all workers share the same hook definitions.
+**During `arm init`, the CLI detects and prompts for verification configuration.** This is stored in `.armature/config.json` on the ops branch, so all workers share the same hook definitions.
 
 **Auto-detection at init time:**
 
@@ -115,7 +115,7 @@ The CLI checks for well-known files in the repository root and proposes defaults
 
 The developer confirms or overrides. If nothing is detected, the CLI prompts for manual entry.
 
-**Config format in `.issues/config.json`:**
+**Config format in `.armature/config.json`:**
 
 ```json
 {
@@ -150,23 +150,23 @@ The developer confirms or overrides. If nothing is detected, the CLI prompts for
 
 **Exit code semantics:** `0` = pass, `1` = test/lint failure (actionable), anything else = environment error (not actionable by the worker — dependency missing, build broken by another change, etc.). This distinction matters for AI agents: a test failure means "fix your code," an environment error means "report the issue and move on."
 
-**Code worktree path:** The CLI does not need explicit configuration for the code worktree path. It discovers it by walking up from `cwd` to find the `.git` directory, which is the standard git behavior. The developer runs `trls transition` from within their code worktree (where they have been working). The CLI runs hooks in `cwd`, then switches to the ops worktree internally to record the transition. This matches the verify-then-record phase separation from the adversarial review.
+**Code worktree path:** The CLI does not need explicit configuration for the code worktree path. It discovers it by walking up from `cwd` to find the `.git` directory, which is the standard git behavior. The developer runs `arm transition` from within their code worktree (where they have been working). The CLI runs hooks in `cwd`, then switches to the ops worktree internally to record the transition. This matches the verify-then-record phase separation from the adversarial review.
 
 **Single-branch mode:** In single-branch mode, there is no worktree distinction — hooks run in the same directory as ops. The config format is identical.
 
 **Init flow:**
 
 ```
-$ trls init
+$ arm init
   Detected: package.json (Node.js)
   Proposed test command: npm test
   Proposed lint command: npx eslint {scope}
   Accept? [Y/n/edit]
   
-  ✓ Config written to .issues/config.json
+  ✓ Config written to .armature/config.json
   ✓ Hooks installed to .git/hooks/
   ✓ Worker ID: a1b2c3d4
-  ✓ Ops worktree created at .trellis/
+  ✓ Ops worktree created at .arm/
 ```
 
 ---
@@ -179,7 +179,7 @@ Workers without network access can continue appending ops to their local ops wor
 
 ### What Happens on Reconnection
 
-**Stale claims:** A worker claims a task while offline. Meanwhile, another (online) worker claims the same task. When the offline worker pushes, both claims land in the log. Normal timestamp-based resolution applies — first claim by timestamp wins. If the offline worker's clock was accurate, they win only if they claimed first. If they lose, they discover it on their next `trls sync` and their work may be wasted. This is the same behavior as the online race condition, just with a longer window.
+**Stale claims:** A worker claims a task while offline. Meanwhile, another (online) worker claims the same task. When the offline worker pushes, both claims land in the log. Normal timestamp-based resolution applies — first claim by timestamp wins. If the offline worker's clock was accurate, they win only if they claimed first. If they lose, they discover it on their next `arm sync` and their work may be wasted. This is the same behavior as the online race condition, just with a longer window.
 
 **Stale done transitions:** A worker transitions a task to `done` while offline. The transition op sits in their local log. When they push, the `done` status propagates to all workers. The two-phase model handles this correctly — `done` does not unblock downstream work, only `merged` does. The code PR still needs to be submitted and merged. No correctness issue.
 
@@ -205,7 +205,7 @@ Offline mode requires no special handling. The existing timestamp-based conflict
 
 ### The Real Question
 
-Multi-repo is not about "can trellis run in multiple repos?" — it already can. Each repo gets its own `trls init`, its own ops branch, its own DAG. The question is: **can a task in repo A declare a dependency on a task in repo B, such that the ready-task computation in repo A knows when the blocker in repo B is `merged`?**
+Multi-repo is not about "can trellis run in multiple repos?" — it already can. Each repo gets its own `arm init`, its own ops branch, its own DAG. The question is: **can a task in repo A declare a dependency on a task in repo B, such that the ready-task computation in repo A knows when the blocker in repo B is `merged`?**
 
 ### Options
 
@@ -215,7 +215,7 @@ Each repo has its own independent trellis instance. Cross-repo dependencies are 
 
 Pros: No new architecture. Zero complexity. Works today.
 
-Cons: Cross-repo blockers are not enforced. A developer might start work on repo-A task-01 without realizing repo-B task-02 (its blocker) is still in progress. For AI workers following the SKILL.md strictly, this is fine — they only see what `trls ready` shows, and cross-repo blockers would need to be modeled differently. But for humans, it is a process gap.
+Cons: Cross-repo blockers are not enforced. A developer might start work on repo-A task-01 without realizing repo-B task-02 (its blocker) is still in progress. For AI workers following the SKILL.md strictly, this is fine — they only see what `arm ready` shows, and cross-repo blockers would need to be modeled differently. But for humans, it is a process gap.
 
 Best for: Teams where cross-repo dependencies are rare (fewer than 10% of tasks). Most monorepo-first organizations. Persona 1 and 2 exclusively. Persona 3 when using a monorepo.
 
@@ -223,7 +223,7 @@ Best for: Teams where cross-repo dependencies are rare (fewer than 10% of tasks)
 
 A dedicated repository (e.g., `acme/trellis-ops`) contains all trellis ops for the entire organization or project. No code lives here — it is purely a coordination repo. Individual code repos reference this hub for task context. Workers in any code repo push ops to the hub.
 
-Implementation: `trls init --ops-repo=acme/trellis-ops` configures the ops worktree to point at the external hub repo instead of creating a local ops branch. All CLI commands operate against the hub. The code worktree is the current repo.
+Implementation: `arm init --ops-repo=acme/trellis-ops` configures the ops worktree to point at the external hub repo instead of creating a local ops branch. All CLI commands operate against the hub. The code worktree is the current repo.
 
 Pros: Single DAG across all repos. Cross-repo dependencies work natively. Ready-task computation, claim races, and merged detection all operate normally because ops are centralized.
 
@@ -262,7 +262,7 @@ Best for: Loosely coupled teams that want optional cross-repo visibility without
 | Feature | Solo Freelance | Solo Enterprise | Team (Monorepo) | Team (Multi-Repo) |
 |---|---|---|---|---|
 | Branch mode | Single-branch | Dual-branch | Dual-branch | Dual-branch |
-| Ops location | .issues/ on main | _trellis branch | _trellis branch | Hub repo (future) |
+| Ops location | .armature/ on main | _armature branch | _armature branch | Hub repo (future) |
 | Claim races | N/A (one worker) | N/A (one worker) | Full MRDT | Full MRDT |
 | Two-phase completion | Optional (no PR gate) | Yes | Yes | Yes |
 | Merge detection | Immediate (direct push) | Commit-message scan | Commit-message scan | Cross-repo scan (future) |

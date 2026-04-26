@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** In dual-branch mode, `done` and `merged` are distinct states — issues stay `done` after work completes and move to `merged` only after the PR/branch merges. `trls status` shows a clear separation of done-awaiting-merge vs fully merged issues, and `trls merged` validates current state before accepting an explicit merge op.
+**Goal:** In dual-branch mode, `done` and `merged` are distinct states — issues stay `done` after work completes and move to `merged` only after the PR/branch merges. `arm status` shows a clear separation of done-awaiting-merge vs fully merged issues, and `arm merged` validates current state before accepting an explicit merge op.
 
-**Architecture:** The `SingleBranchMode=false` flag (set by E2-001) already prevents auto-merge in `applyTransition`. This plan adds: (1) `Branch` and `PR` fields to `IndexEntry` so the status command can show them without loading per-issue files; (2) `trls status` command rendering issues grouped by status with `done` issues in dual-branch mode calling out awaiting-merge; (3) `trls merged` rewritten to validate state before accepting the op and to accept an optional `--pr` flag.
+**Architecture:** The `SingleBranchMode=false` flag (set by E2-001) already prevents auto-merge in `applyTransition`. This plan adds: (1) `Branch` and `PR` fields to `IndexEntry` so the status command can show them without loading per-issue files; (2) `arm status` command rendering issues grouped by status with `done` issues in dual-branch mode calling out awaiting-merge; (3) `arm merged` rewritten to validate state before accepting the op and to accept an optional `--pr` flag.
 
 **Tech Stack:** Go, testify
 
 **Prerequisites:**
 - E2-001 complete — `appCtx.Mode` correctly set
 - E2-002 complete — `appendOp` helper defined in `helpers.go`, `runTrls` test helper in `main_test.go`
-- E2-003 complete — `trls sync` for auto-detection (used in integration test)
+- E2-003 complete — `arm sync` for auto-detection (used in integration test)
 
 **Cross-plan note:** E2-002 made a narrow change to `merged.go` (replacing `ops.AppendOp` with `appendOp`). This plan completely rewrites `merged.go`. Ensure the rewrite includes `appendOp` (it does — see Task 3 Step 3).
 
@@ -23,10 +23,10 @@
 |--------|------|---------------|
 | Modify | `internal/materialize/state.go` | Add `Branch`, `PR` to `IndexEntry`; populate in `BuildIndex` |
 | Modify | `internal/materialize/engine_test.go` | Test that `BuildIndex` populates Branch and PR |
-| Create | `cmd/trellis/status.go` | `trls status` — grouped status view, highlights done-awaiting-merge |
+| Create | `cmd/trellis/status.go` | `arm status` — grouped status view, highlights done-awaiting-merge |
 | Modify | `cmd/trellis/main.go` | Register `newStatusCmd()` |
 | Modify | `cmd/trellis/merged.go` | Full rewrite: validate done state, add `--pr` flag, use `appendOp` |
-| Modify | `cmd/trellis/main_test.go` | Integration tests for `trls status` and `trls merged` |
+| Modify | `cmd/trellis/main_test.go` | Integration tests for `arm status` and `arm merged` |
 
 ---
 
@@ -96,9 +96,9 @@ git commit -m "feat(materialize): include Branch and PR in IndexEntry for status
 
 ---
 
-## Chunk 2: `trls status` Command
+## Chunk 2: `arm status` Command
 
-### Task 2: Implement `trls status`
+### Task 2: Implement `arm status`
 
 **Files:**
 - Create: `cmd/trellis/status.go`
@@ -188,8 +188,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -293,12 +293,12 @@ Expected: PASS
 
 ```bash
 cd /home/brian/development/trellis && git add cmd/trellis/status.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat: add trls status command with grouped view and awaiting-merge callout"
+git commit -m "feat: add arm status command with grouped view and awaiting-merge callout"
 ```
 
 ---
 
-## Chunk 3: Rewrite `trls merged` with State Validation
+## Chunk 3: Rewrite `arm merged` with State Validation
 
 ### Task 3: Validate done state and add `--pr` flag
 
@@ -399,8 +399,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -431,7 +431,7 @@ func newMergedCmd() *cobra.Command {
 
 			// In dual-branch mode, require current status to be "done"
 			if !singleBranch && entry.Status != ops.StatusDone {
-				return fmt.Errorf("issue %s is in status %q; trls merged requires status=done (transition it to done first)", issueID, entry.Status)
+				return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
 			}
 
 			workerID, logPath, err := resolveWorkerAndLog()
@@ -577,10 +577,10 @@ git commit -m "test: add full dual-branch done-to-merged workflow integration te
 
 ## Definition of Done Checklist
 
-- [ ] `trls status` renders issues grouped by status
+- [ ] `arm status` renders issues grouped by status
 - [ ] In dual-branch mode, `done` issues display as "done (awaiting merge)" with their branch/PR info
-- [ ] `trls merged --issue X --pr 42` records the merge op with PR reference
-- [ ] In dual-branch mode, `trls merged` validates current status is `done` before accepting
-- [ ] In single-branch mode, `trls merged` works without validation (with explanatory note)
+- [ ] `arm merged --issue X --pr 42` records the merge op with PR reference
+- [ ] In dual-branch mode, `arm merged` validates current status is `done` before accepting
+- [ ] In single-branch mode, `arm merged` works without validation (with explanatory note)
 - [ ] `IndexEntry` includes `Branch` and `PR` fields populated by `BuildIndex`
 - [ ] `go test ./...` passes clean

@@ -12,7 +12,7 @@
     },
     {
       "id": "E3-001",
-      "title": "Push/Sync Layer — remote sync for _trellis branch",
+      "title": "Push/Sync Layer — remote sync for _armature branch",
       "type": "story",
       "parent": "E3",
       "priority": "high",
@@ -55,7 +55,7 @@
       "parent": "E3-001",
       "priority": "high",
       "scope": "internal/ops/**",
-      "dod": "PendingPushTracker interface, FilePushTracker persisting to .issues/state/pending-push-count, NoTracker no-op. Tests: increment/reset, persistence across instances, default threshold.",
+      "dod": "PendingPushTracker interface, FilePushTracker persisting to .armature/state/pending-push-count, NoTracker no-op. Tests: increment/reset, persistence across instances, default threshold.",
       "blocked_by": ["E3-001-T3"]
     },
     {
@@ -70,12 +70,12 @@
     },
     {
       "id": "E3-003",
-      "title": "Audit Log Viewer — trls log command",
+      "title": "Audit Log Viewer — arm log command",
       "type": "story",
       "parent": "E3",
       "priority": "high",
       "scope": "internal/audit/**",
-      "dod": "audit.Load reads/merges/filters op logs, marks losing claims. trls log with --issue/--worker/--since and --json output."
+      "dod": "audit.Load reads/merges/filters op logs, marks losing claims. arm log with --issue/--worker/--since and --json output."
     },
     {
       "id": "E3-003-T6",
@@ -88,7 +88,7 @@
     },
     {
       "id": "E3-003-T7",
-      "title": "trls log command",
+      "title": "arm log command",
       "type": "task",
       "parent": "E3-003",
       "priority": "high",
@@ -98,12 +98,12 @@
     },
     {
       "id": "E3-004",
-      "title": "Issue Assignment — trls assign/unassign + ready sort",
+      "title": "Issue Assignment — arm assign/unassign + ready sort",
       "type": "story",
       "parent": "E3",
       "priority": "high",
       "scope": "internal/ops/**",
-      "dod": "OpAssign registered. AssignedWorker in Issue/IndexEntry. applyAssign in engine. trls assign/unassign. Assignment-aware ComputeReady sort.",
+      "dod": "OpAssign registered. AssignedWorker in Issue/IndexEntry. applyAssign in engine. arm assign/unassign. Assignment-aware ComputeReady sort.",
       "blocked_by": ["E3-001"]
     },
     {
@@ -127,7 +127,7 @@
     },
     {
       "id": "E3-004-T10",
-      "title": "trls assign and trls unassign commands",
+      "title": "arm assign and arm unassign commands",
       "type": "task",
       "parent": "E3-004",
       "priority": "high",
@@ -142,22 +142,22 @@
       "parent": "E3-004",
       "priority": "high",
       "scope": "internal/ready/**",
-      "dod": "ComputeReady(index, issues, workerID string, now ...int64). sortReady: assigned-to-me first, unassigned next, other-assigned last. --worker flag on trls ready. Caller in ready.go updated. Tests pass.",
+      "dod": "ComputeReady(index, issues, workerID string, now ...int64). sortReady: assigned-to-me first, unassigned next, other-assigned last. --worker flag on arm ready. Caller in ready.go updated. Tests pass.",
       "blocked_by": ["E3-004-T9"]
     },
     {
       "id": "E3-002",
-      "title": "Worker Presence — trls workers command",
+      "title": "Worker Presence — arm workers command",
       "type": "story",
       "parent": "E3",
       "priority": "high",
       "scope": "cmd/trellis/**",
-      "dod": "trls workers: enumerates workers from ops/*.log, classifies active/idle/stale via claim.IsClaimStale. Human-readable and --json output.",
+      "dod": "arm workers: enumerates workers from ops/*.log, classifies active/idle/stale via claim.IsClaimStale. Human-readable and --json output.",
       "blocked_by": ["E3-004-T9"]
     },
     {
       "id": "E3-002-T12",
-      "title": "trls workers command",
+      "title": "arm workers command",
       "type": "task",
       "parent": "E3-002",
       "priority": "high",

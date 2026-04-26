@@ -55,7 +55,7 @@ func initTestRepo(t *testing.T) string {
 func TestResolveContext_SingleBranch_Default(t *testing.T) {
 	repo := initTestRepo(t)
 
-	// Create .issues/config.json so LoadConfig works
+	// Create .armature/config.json so LoadConfig works
 	issuesDir := filepath.Join(repo, ".issues")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
@@ -243,7 +243,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -253,8 +253,8 @@ var appCtx *config.Context
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "trls",
-		Short: "Trellis — git-native work orchestration",
+		Use:   "arm",
+		Short: "Armature — git-native work orchestration",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			repoPath, _ := cmd.Flags().GetString("repo")
@@ -376,11 +376,11 @@ Expected: Binary builds successfully
 ```bash
 cd $(mktemp -d)
 git init && git commit --allow-empty -m init
-/path/to/trls init
-/path/to/trls create --title "Smoke test" --type task --id SMOKE-1
-/path/to/trls ready
-/path/to/trls materialize
-/path/to/trls version
+/path/to/arm init
+/path/to/arm create --title "Smoke test" --type task --id SMOKE-1
+/path/to/arm ready
+/path/to/arm materialize
+/path/to/arm version
 ```
 
 Expected: All commands work. `version` works even outside a trellis repo.
@@ -389,7 +389,7 @@ Expected: All commands work. `version` works even outside a trellis repo.
 
 ```bash
 git config trellis.mode dual-branch
-/path/to/trls ready
+/path/to/arm ready
 ```
 
 Expected: Error message containing "not yet implemented"

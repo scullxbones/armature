@@ -1067,7 +1067,7 @@ func TestLogPayloadSummary(t *testing.T) {
 - [ ] **Step 2: Run tests**
 
 Run: `go test ./cmd/trellis/... -v -run "TestLog|TestAssign|TestUnassign|TestHeartbeat|TestDecision|TestLink|TestReopen|TestLogPayload"`
-Expected: All PASS. Some commands may need `trls worker-init` in the test setup — adjust if tests fail with "worker not found" errors.
+Expected: All PASS. Some commands may need `arm worker-init` in the test setup — adjust if tests fail with "worker not found" errors.
 
 - [ ] **Step 3: Commit**
 

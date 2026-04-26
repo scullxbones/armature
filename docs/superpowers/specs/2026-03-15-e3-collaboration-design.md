@@ -9,7 +9,7 @@
 
 ## Context
 
-E2 (dual-branch mode) is complete. All E2 issues are merged. The `_trellis` orphan branch holds per-worker op logs; the `AppendAndCommit` function commits ops locally to the worktree. There is currently no push, fetch, or remote sync — ops never leave the local machine. E3 adds the remote sync layer, worker visibility, audit tooling, and advisory assignment.
+E2 (dual-branch mode) is complete. All E2 issues are merged. The `_armature` orphan branch holds per-worker op logs; the `AppendAndCommit` function commits ops locally to the worktree. There is currently no push, fetch, or remote sync — ops never leave the local machine. E3 adds the remote sync layer, worker visibility, audit tooling, and advisory assignment.
 
 ### Key Finding: Remote Sync Gap
 
@@ -37,7 +37,7 @@ Ops are binned into high-stakes and low-stakes to achieve eager push on state-cr
 ### Push Strategy: Hybrid A+C
 
 - **Piggybacked (A):** When a high-stakes op fires, any pending low-stakes commits (already written and locally committed, not yet pushed) are included in the same push cycle.
-- **Count-based (C):** Low-stakes ops are pushed automatically after accumulating N locally-committed-but-unpushed ops (default N=5, configurable as `lowStakesPushThreshold` in `.issues/config.json`).
+- **Count-based (C):** Low-stakes ops are pushed automatically after accumulating N locally-committed-but-unpushed ops (default N=5, configurable as `lowStakesPushThreshold` in `.armature/config.json`).
 
 ### Single-Branch Mode
 
@@ -48,7 +48,7 @@ In single-branch mode, `AppendCommitAndPush` degrades to `AppendAndCommit` — t
 ```go
 // internal/ops/push.go
 
-// Pusher handles remote sync for the _trellis branch.
+// Pusher handles remote sync for the _armature branch.
 // In single-branch mode, both methods are no-ops returning nil.
 type Pusher interface {
     FetchAndRebase(branch string) error
@@ -80,7 +80,7 @@ type PendingPushTracker interface {
 
 ### Tracker Persistence
 
-Counter stored in `.issues/state/pending-push-count` (a plain integer file, never committed to git). Survives process restarts. Resets to 0 on any successful push.
+Counter stored in `.armature/state/pending-push-count` (a plain integer file, never committed to git). Survives process restarts. Resets to 0 on any successful push.
 
 ### Git Client Additions
 
@@ -107,7 +107,7 @@ func (c *Client) FetchAndRebase(branch string) error
 
 ## E3-002: Worker Presence & Claim Visibility
 
-### New Command: `trls workers [--json]`
+### New Command: `arm workers [--json]`
 
 Derived entirely from materialized state. No new op types.
 
@@ -127,7 +127,7 @@ Derived entirely from materialized state. No new op types.
 
 ### Staleness Rules
 
-Staleness is computed **per-claim**, not per-worker, using the existing `claim.IsClaimStale` function as the single source of truth. This ensures `trls workers` and materialization agree on what is stale.
+Staleness is computed **per-claim**, not per-worker, using the existing `claim.IsClaimStale` function as the single source of truth. This ensures `arm workers` and materialization agree on what is stale.
 
 - A worker is **`active`** if it has at least one claim where `claim.IsClaimStale(...)` returns `false`.
 - A worker is **`stale`** if all of its claims satisfy `claim.IsClaimStale(...) == true`.
@@ -160,7 +160,7 @@ Staleness is computed **per-claim**, not per-worker, using the existing `claim.I
 
 ## E3-003: Audit Log Viewer
 
-### New Command: `trls log [--issue ID] [--worker ID] [--since TIME] [--json]`
+### New Command: `arm log [--issue ID] [--worker ID] [--since TIME] [--json]`
 
 Reads raw op log files directly (not materialized state) to provide a complete audit trail including superseded ops (e.g., losing claim race entries).
 
@@ -190,8 +190,8 @@ Reads raw op log files directly (not materialized state) to provide a complete a
 ### New Commands
 
 ```
-trls assign --issue ID --worker WORKER-ID
-trls unassign --issue ID
+arm assign --issue ID --worker WORKER-ID
+arm unassign --issue ID
 ```
 
 ### New Op Type: `assign`
@@ -207,13 +207,13 @@ AssignedTo string `json:"assigned_to,omitempty"`
 
 `OpAssign` must also be added to the `ValidOpTypes` map in `types.go` (used for op validation) and to `schema.go` (the forward-compatibility op type registry). Without these additions, `assign` ops will be rejected during validation and invisible to schema readers.
 
-### Effect on `trls ready`
+### Effect on `arm ready`
 
-- `trls ready --worker ID` — assigned issues for that worker sort first (before the existing priority tiebreakers: explicit > depth > unblock count > age)
-- `trls ready` (no worker) — uses existing sort order unchanged; another worker's assigned issues sort to the bottom
+- `arm ready --worker ID` — assigned issues for that worker sort first (before the existing priority tiebreakers: explicit > depth > unblock count > age)
+- `arm ready` (no worker) — uses existing sort order unchanged; another worker's assigned issues sort to the bottom
 - Assignment is advisory — any worker can still claim any unblocked issue
 
-### Effect on `trls workers`
+### Effect on `arm workers`
 
 Idle workers show their assigned-but-unclaimed issues:
 ```
@@ -225,9 +225,9 @@ Idle workers show their assigned-but-unclaimed issues:
 
 `IndexEntry` and `Issue` structs in `internal/materialize/state.go` gain `AssignedWorker string` (empty = unassigned). This is **additive** alongside the existing `IndexEntry.Assignee` field (which maps `ClaimedBy` and is unrelated). `engine.go` adds an `applyAssign` case to the `ApplyOp` switch and maps `AssignedWorker` in `BuildIndex`. The ready queue sort in `internal/ready/compute.go` reads from `AssignedWorker` (not `Assignee`) for assignment-aware ordering and accepts an optional `workerID string` parameter.
 
-**Deployment ordering risk:** `engine.go`'s `ApplyOp` switch has `default: return fmt.Errorf("unknown op type: %s", op.Type)`. Any `assign` op written by an E3-deployed worker will cause `trls materialize` to hard-fail for any worker running a pre-E3 binary. All four E3 issues must ship atomically in a single release — no partial deployment. As a forward-compatibility measure, `OpAssign` should be added to `engine.go`'s default passthrough (alongside other non-state ops like `OpSourceLink`) so that pre-E3 binaries can tolerate the op if encountered.
+**Deployment ordering risk:** `engine.go`'s `ApplyOp` switch has `default: return fmt.Errorf("unknown op type: %s", op.Type)`. Any `assign` op written by an E3-deployed worker will cause `arm materialize` to hard-fail for any worker running a pre-E3 binary. All four E3 issues must ship atomically in a single release — no partial deployment. As a forward-compatibility measure, `OpAssign` should be added to `engine.go`'s default passthrough (alongside other non-state ops like `OpSourceLink`) so that pre-E3 binaries can tolerate the op if encountered.
 
-**`reopen` and `AssignedWorker`:** A `reopen` transition (which clears `ClaimedBy`/`ClaimedAt`) does **not** clear `AssignedWorker` — the assignment persists across reopens. Assignment is an advisory relationship separate from the claim; clearing it on reopen would require an explicit `trls unassign`.
+**`reopen` and `AssignedWorker`:** A `reopen` transition (which clears `ClaimedBy`/`ClaimedAt`) does **not** clear `AssignedWorker` — the assignment persists across reopens. Assignment is an advisory relationship separate from the claim; clearing it on reopen would require an explicit `arm unassign`.
 
 ### Constraints
 
@@ -260,7 +260,7 @@ All four should ship together for coherence.
 | `internal/git/git.go` | Add `Push`, `FetchAndRebase` methods |
 | `internal/git/git_test.go` | Tests for push/fetch/rebase (concurrent push test already added) |
 | `internal/ops/push.go` | New file: `Pusher` interface, `PendingPushTracker` interface, `AppendCommitAndPush` |
-| `internal/ops/tracker.go` | New file: `FilePushTracker` implementation (persists count to `.issues/state/pending-push-count`) |
+| `internal/ops/tracker.go` | New file: `FilePushTracker` implementation (persists count to `.armature/state/pending-push-count`) |
 | `internal/ops/commit.go` | Unchanged |
 | `internal/ops/types.go` | Add `OpAssign = "assign"` constant to `ValidOpTypes` map; add `AssignedTo string` to `Payload` struct |
 | `internal/ops/schema.go` | Add `assign` to op type list; document `assigned_to` payload field |
@@ -269,9 +269,9 @@ All four should ship together for coherence.
 | `internal/materialize/engine.go` | Add `applyAssign` case to `ApplyOp` switch; map `AssignedWorker` in `BuildIndex`; add `OpAssign` to the `OpSourceLink`/`OpSourceFingerprint`/`OpDAGTransition` no-op passthrough case for pre-E3 forward compatibility |
 | `internal/audit/audit.go` | New file: log reader, filter, formatter; imports `internal/claim` for `ResolveClaim` |
 | `internal/claim/claim.go` | Unchanged (reused by audit package) |
-| `cmd/trellis/workers.go` | New file: `trls workers` command |
-| `cmd/trellis/log.go` | New file: `trls log` command |
-| `cmd/trellis/assign.go` | New file: `trls assign` / `trls unassign` commands |
+| `cmd/trellis/workers.go` | New file: `arm workers` command |
+| `cmd/trellis/log.go` | New file: `arm log` command |
+| `cmd/trellis/assign.go` | New file: `arm assign` / `arm unassign` commands |
 | `cmd/trellis/helpers.go` | Thread `Pusher` and `PendingPushTracker` through `appCtx` |
 | `cmd/trellis/main.go` | Register new commands |
 

@@ -23,7 +23,7 @@
       "type": "task",
       "scope": "internal/ops/types.go, internal/materialize/materialize.go, internal/ready/compute.go, cmd/trellis/main_test.go",
       "priority": "high",
-      "dod": "draft nodes excluded from trls ready; verified nodes appear normally; existing nodes without confidence field default to verified; tests pass; make check green",
+      "dod": "draft nodes excluded from arm ready; verified nodes appear normally; existing nodes without confidence field default to verified; tests pass; make check green",
       "parent": "E5-S0",
       "blocked_by": [],
       "notes": [
@@ -38,7 +38,7 @@
       "type": "task",
       "scope": "internal/ops/types.go, internal/materialize/materialize.go, cmd/trellis/dag_summary.go, cmd/trellis/main_test.go",
       "priority": "high",
-      "dod": "dag-transition op walks subtree and promotes all draft nodes to verified; trls dag-transition CLI command emits the op; tests pass; make check green",
+      "dod": "dag-transition op walks subtree and promotes all draft nodes to verified; arm dag-transition CLI command emits the op; tests pass; make check green",
       "parent": "E5-S0",
       "blocked_by": ["E5-S0-T1"],
       "notes": [
@@ -69,7 +69,7 @@
       "type": "task",
       "scope": "internal/decompose/apply.go, cmd/trellis/cmd_extra_test.go",
       "priority": "high",
-      "dod": "All nodes created by decompose-apply have confidence=draft; they do not appear in trls ready until dag-summary sign-off; dogfood test passes; make check green",
+      "dod": "All nodes created by decompose-apply have confidence=draft; they do not appear in arm ready until dag-summary sign-off; dogfood test passes; make check green",
       "parent": "E5-S0",
       "blocked_by": ["E5-S0-T3"],
       "notes": [
@@ -94,22 +94,22 @@
     },
     {
       "id": "E5-S2-T3",
-      "title": "`trls ready` interactive TUI in human mode — task selection and direct claim",
+      "title": "`arm ready` interactive TUI in human mode — task selection and direct claim",
       "type": "task",
       "scope": "cmd/trellis/ready.go, internal/tui/ready/model.go, internal/tui/ready/model_test.go",
       "priority": "medium",
-      "dod": "trls ready on TTY launches BubbleTea selection list; enter claims selected task; --format=json bypasses TUI entirely; make check green",
+      "dod": "arm ready on TTY launches BubbleTea selection list; enter claims selected task; --format=json bypasses TUI entirely; make check green",
       "parent": "E5-S2",
       "blocked_by": ["E5-S2-T2"],
       "notes": [
         "Architecture section 15: ready should be interactive TUI for humans, JSON for agents",
-        "Distinct from trls tui kanban board — this is the task-selection + claim flow",
+        "Distinct from arm tui kanban board — this is the task-selection + claim flow",
         "Commit: feat(tui): add ready interactive TUI for human task selection and claim (architecture section 15)"
       ]
     },
     {
       "id": "E5-S3-T5",
-      "title": "`trls materialize --exclude-worker <worker-id>` for selective forensic replay",
+      "title": "`arm materialize --exclude-worker <worker-id>` for selective forensic replay",
       "type": "task",
       "scope": "cmd/trellis/materialize.go, internal/materialize/materialize.go, cmd/trellis/cmd_extra_test.go",
       "priority": "medium",

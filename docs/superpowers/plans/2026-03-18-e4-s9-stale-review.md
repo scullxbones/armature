@@ -44,8 +44,8 @@ package stalereview_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	tuistalereview "github.com/scullxbones/trellis/internal/tui/stalereview"
+	"github.com/scullxbones/armature/internal/materialize"
+	tuistalereview "github.com/scullxbones/armature/internal/tui/stalereview"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -92,7 +92,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // ReviewItem represents a source change with its affected cited issues.
@@ -236,12 +236,12 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/sources"
-	"github.com/scullxbones/trellis/internal/tui"
-	tuistalereview "github.com/scullxbones/trellis/internal/tui/stalereview"
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/sources"
+	"github.com/scullxbones/armature/internal/tui"
+	tuistalereview "github.com/scullxbones/armature/internal/tui/stalereview"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/spf13/cobra"
 )
 
@@ -414,7 +414,7 @@ git commit -m "feat(stalereview): stale-review TUI for source change notificatio
 make build
 ```
 
-Expected: `./bin/trls` produced with no errors.
+Expected: `./bin/arm` produced with no errors.
 
 - [ ] **Step 2: Full test + coverage**
 
@@ -428,7 +428,7 @@ Expected: all tests pass, coverage ≥ 80%.
 - [ ] **Step 3: Verify all new commands registered**
 
 ```bash
-./bin/trls --help
+./bin/arm --help
 ```
 
 Expected: output includes `sources`, `dag-summary`, `import`, `confirm`, `stale-review`.
@@ -436,9 +436,9 @@ Expected: output includes `sources`, `dag-summary`, `import`, `confirm`, `stale-
 - [ ] **Step 4: Smoke test sources workflow**
 
 ```bash
-./bin/trls worker-init --check 2>/dev/null || ./bin/trls worker-init
-./bin/trls sources add prd --provider filesystem --path docs/trellis-prd.md
-./bin/trls sources verify
+./bin/arm worker-init --check 2>/dev/null || ./bin/arm worker-init
+./bin/arm sources add prd --provider filesystem --path docs/trellis-prd.md
+./bin/arm sources verify
 ```
 
 Expected: source added, verify passes.
@@ -446,7 +446,7 @@ Expected: source added, verify passes.
 - [ ] **Step 5: Smoke test validate**
 
 ```bash
-./bin/trls validate --ci --format json
+./bin/arm validate --ci --format json
 ```
 
 Expected: JSON output with `errors` and `warnings` arrays.
@@ -454,7 +454,7 @@ Expected: JSON output with `errors` and `warnings` arrays.
 - [ ] **Step 6: Smoke test decompose-context**
 
 ```bash
-./bin/trls decompose-context --plan docs/plan-post-bootstrap.json --sources prd
+./bin/arm decompose-context --plan docs/plan-post-bootstrap.json --sources prd
 ```
 
 Expected: JSON output with `prompt_template`, `sources`, `plan_schema` fields.

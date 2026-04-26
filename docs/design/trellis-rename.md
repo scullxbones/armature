@@ -1,8 +1,8 @@
-# Trellis Rename — Decision Archive
+# Armature Rename — Decision Archive
  
 **Date:** April 19, 2026
-**Status:** Leading candidate identified (Armature); final availability checks pending
-**Context:** The existing project name "Trellis" collides with [mindfold-ai/Trellis](https://github.com/mindfold-ai/Trellis) (4.3k stars, agent harness, uses `.trellis/` directory, similar positioning language). Rename required before OSS launch.
+**Status:** Complete
+**Context:** The existing project name "Armature" collides with [mindfold-ai/Armature](https://github.com/mindfold-ai/Armature) (4.3k stars, agent harness, uses `.arm/` directory, similar positioning language). Rename required before OSS launch.
  
 ---
  
@@ -13,7 +13,7 @@ The product is three things sharing one thread:
 1. **A substrate for agent memory** — externalizes episodic, semantic, and procedural memory into git so nothing rots between sessions.
 2. **A coordination layer** — multiple workers (human and AI) push independently, never collide, converge via replay (MRDT model).
 3. **A decomposition engine** — source docs become a typed DAG where each task renders as ~1,600 tokens of precisely-assembled working memory.
-The unifying metaphor: **structure that holds things in place while growth happens**. This is why "Trellis" worked originally. The distinctive technical asset is the DAG itself — parent/child/blocker/sibling adjacency is what enables precision context assembly.
+The unifying metaphor: **structure that holds things in place while growth happens**. This is why "Armature" worked originally. The distinctive technical asset is the DAG itself — parent/child/blocker/sibling adjacency is what enables precision context assembly.
  
 ## Naming Criteria
  
@@ -116,14 +116,14 @@ Considered using `coder/hnsw` for semantic retrieval over DAG nodes. Rejected be
 - Blurs value prop against RAG-style competitors (CASS, Mem0, OpenViking) whose differentiator is "structure beats vibes."
 - Loosely-related prior work is a documented hallucination source; adding it to `render-context` could *raise* the anti-metric being tracked.
 - Not in a gap users have reported; decomposition-time explicit linking (Conductor sign-off) already covers the need.
-Acceptable niche: `trls-search` as a separate binary for Conductor-facing, human-evaluated decomposition-time lookups. Not in the core `trls` binary.
+Acceptable niche: `arm-search` as a separate binary for Conductor-facing, human-evaluated decomposition-time lookups. Not in the core `arm` binary.
  
 ### Retrieval Algorithms Worth Considering
  
 Zero-dep, deterministic, non-embedding alternatives surfaced:
  
 - **Graph-walk retrieval (Personalized PageRank / Random Walk with Restart)** — uses structure already present; deterministic; fills the cousin-node gap HNSW was tempting for. Recommended first if any retrieval enhancement is built.
-- **BM25 over text fields** — classic lexical retrieval; deterministic; ~300–500 LOC hand-roll; supports `trls search` for Conductor persona.
+- **BM25 over text fields** — classic lexical retrieval; deterministic; ~300–500 LOC hand-roll; supports `arm search` for Conductor persona.
 - **MinHash for near-duplicate detection** — targeted at import and decomposition-time duplicate flagging. Narrow but high-value at its job. Defer until adoption surfaces the need.
 Rejected: LSH (needs vectors), AST-based code search (breaks zero-dep), symbol extraction (needs language server), Levenshtein (not the problem).
  
@@ -135,7 +135,7 @@ Rejected: LSH (needs vectors), AST-based code search (breaks zero-dep), symbol e
 2. Verify GitHub org handle `armature` claimability.
 3. If org handle is taken, evaluate `armature-dev` / `armature-cli` or pivot to Vinculum.
 4. Trademark search in software categories (USPTO, EUIPO) for Armature in Class 9 / 42.
-5. On commit: update repo name, CLI name (`trls` → `arm` or `armature`), documentation, landing page, `.issues/` → `.armature/` directory convention.
+5. On commit: update repo name, CLI name (`arm` → `arm` or `armature`), documentation, landing page, `.armature/` → `.armature/` directory convention.
 6. Defer branding work (logo, visual identity) until name is locked.
 ## Branding Direction (Reference Only)
  

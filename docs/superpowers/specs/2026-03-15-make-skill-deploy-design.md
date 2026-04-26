@@ -1,4 +1,4 @@
-# Design: `make skill` — Build and Deploy `trls` as a Local AgentSkill
+# Design: `make skill` — Build and Deploy `arm` as a Local AgentSkill
 
 **Date:** 2026-03-15
 **Status:** Approved
@@ -7,7 +7,7 @@
 
 ## Goal
 
-Add a `make skill` target that builds the `trls` binary and deploys a fully-formed AgentSkills-compliant skill into `.claude/skills/trls/`, making it available to Claude Code for the current project session. The skill refreshes the binary and documentation as the project evolves, enabling continuous dogfooding.
+Add a `make skill` target that builds the `arm` binary and deploys a fully-formed AgentSkills-compliant skill into `.claude/skills/arm/`, making it available to Claude Code for the current project session. The skill refreshes the binary and documentation as the project evolves, enabling continuous dogfooding.
 
 ---
 
@@ -24,10 +24,10 @@ The project already has `docs/SKILL.md` — a well-structured AI worker interfac
 ### Output structure (build artifact, not committed)
 
 ```
-.claude/skills/trls/
+.claude/skills/arm/
 ├── SKILL.md          # Generated: frontmatter + docs/SKILL.md body
 └── scripts/
-    └── trls          # Copied from bin/trls
+    └── arm          # Copied from bin/arm
 ```
 
 ### Source files (committed)
@@ -35,36 +35,36 @@ The project already has `docs/SKILL.md` — a well-structured AI worker interfac
 ```
 docs/
 ├── SKILL.md                  # Body content — AI worker interface reference
-└── trls-skill-meta.yaml      # AgentSkills frontmatter source
+└── arm-skill-meta.yaml      # AgentSkills frontmatter source
 ```
 
 ### Extensibility seam
 
-The Makefile assembles `.claude/skills/trls/SKILL.md` from two sources:
+The Makefile assembles `.claude/skills/arm/SKILL.md` from two sources:
 
 ```
-docs/trls-skill-meta.yaml  +  docs/SKILL.md  →  .claude/skills/trls/SKILL.md
+docs/arm-skill-meta.yaml  +  docs/SKILL.md  →  .claude/skills/arm/SKILL.md
 ```
 
-When `SKILL.md` generation becomes dynamic (e.g. a `trls skill-meta` subcommand), only the source changes — the Makefile recipe stays the same.
+When `SKILL.md` generation becomes dynamic (e.g. a `arm skill-meta` subcommand), only the source changes — the Makefile recipe stays the same.
 
 ---
 
 ## Components
 
-### 1. `docs/trls-skill-meta.yaml`
+### 1. `docs/arm-skill-meta.yaml`
 
 A small YAML file containing the AgentSkills frontmatter block. Committed. Not inlined in the Makefile so it can be replaced by a generation step without changing the Makefile recipe.
 
 ```yaml
 ---
-name: trls
+name: arm
 description: >
-  Trellis task management interface for AI agents. Use when working in a
+  Armature task management interface for AI agents. Use when working in a
   trellis-managed repo: find actionable work with ready, claim issues, record
   progress with note/decision/heartbeat, complete work with transition.
-  The trls binary is available at scripts/trls.
-compatibility: Designed for Claude Code. Requires the trls binary in scripts/.
+  The arm binary is available at scripts/arm.
+compatibility: Designed for Claude Code. Requires the arm binary in scripts/.
 ---
 ```
 
@@ -72,12 +72,12 @@ compatibility: Designed for Claude Code. Requires the trls binary in scripts/.
 
 Added to `.PHONY`. Depends on `build`. Recipe:
 
-1. `mkdir -p .claude/skills/trls/scripts`
-2. Concatenate `docs/trls-skill-meta.yaml` + `docs/SKILL.md` → `.claude/skills/trls/SKILL.md`
-3. `cp bin/trls .claude/skills/trls/scripts/trls`
-4. `chmod +x .claude/skills/trls/scripts/trls` (ensures executable across all filesystems/umask configs)
+1. `mkdir -p .claude/skills/arm/scripts`
+2. Concatenate `docs/arm-skill-meta.yaml` + `docs/SKILL.md` → `.claude/skills/arm/SKILL.md`
+3. `cp bin/arm .claude/skills/arm/scripts/arm`
+4. `chmod +x .claude/skills/arm/scripts/arm` (ensures executable across all filesystems/umask configs)
 
-**Constraint:** `docs/SKILL.md` must not begin with `---` (a leading YAML delimiter would corrupt the frontmatter block). Currently satisfied — the file begins with `# Trellis AI Worker Interface`.
+**Constraint:** `docs/SKILL.md` must not begin with `---` (a leading YAML delimiter would corrupt the frontmatter block). Currently satisfied — the file begins with `# Armature AI Worker Interface`.
 
 ### 3. `.gitignore` addition
 
@@ -88,13 +88,13 @@ Added to `.PHONY`. Depends on `build`. Recipe:
 
 ### 4. `make clean` extension
 
-Extends the existing `clean` target to remove `.claude/skills/` (entire directory, not just `trls/`, to stay consistent as additional skills may be added).
+Extends the existing `clean` target to remove `.claude/skills/` (entire directory, not just `arm/`, to stay consistent as additional skills may be added).
 
 ### 5. `make help` update
 
 Adds the following line to the help output:
 ```
-  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/
+  make skill      - Build binary and deploy arm AgentSkill to .claude/skills/arm/
 ```
 
 ---
@@ -104,9 +104,9 @@ Adds the following line to the help output:
 ```
 make skill
   └─ depends on: make build
-       └─ bin/trls  ──────────────────────────────────► .claude/skills/trls/scripts/trls
-  └─ docs/trls-skill-meta.yaml ─┐
-                                 ├─ cat ──────────────► .claude/skills/trls/SKILL.md
+       └─ bin/arm  ──────────────────────────────────► .claude/skills/arm/scripts/arm
+  └─ docs/arm-skill-meta.yaml ─┐
+                                 ├─ cat ──────────────► .claude/skills/arm/SKILL.md
   └─ docs/SKILL.md ─────────────┘
 ```
 
@@ -116,14 +116,14 @@ make skill
 
 `.claude/skills/` is entirely a build artifact — platform-specific binary + generated markdown. It is excluded from version control. Developers run `make skill` after cloning (or after `make build`) to activate the local skill.
 
-`docs/trls-skill-meta.yaml` and `docs/SKILL.md` are the committed sources of truth.
+`docs/arm-skill-meta.yaml` and `docs/SKILL.md` are the committed sources of truth.
 
 ---
 
 ## Error handling
 
 - `make skill` fails fast if `make build` fails (binary prerequisite)
-- `cp` will fail with a clear message if `bin/trls` is missing
+- `cp` will fail with a clear message if `bin/arm` is missing
 - No silent failures — standard Makefile error propagation
 
 ---
@@ -133,22 +133,22 @@ make skill
 After `make skill`, verify with:
 
 ```bash
-ls .claude/skills/trls/SKILL.md          # exists
-ls .claude/skills/trls/scripts/trls      # exists and executable
-head -6 .claude/skills/trls/SKILL.md     # shows frontmatter with name: trls
+ls .claude/skills/arm/SKILL.md          # exists
+ls .claude/skills/arm/scripts/arm      # exists and executable
+head -6 .claude/skills/arm/SKILL.md     # shows frontmatter with name: arm
 ```
 
-In a Claude Code session, `/trls` should be available as a slash command.
+In a Claude Code session, `/arm` should be available as a slash command.
 
 ---
 
 ## Future evolution
 
-When the `trls` binary grows a `skill-meta` subcommand (or similar), the Makefile recipe becomes:
+When the `arm` binary grows a `skill-meta` subcommand (or similar), the Makefile recipe becomes:
 
 ```makefile
-./bin/trls skill-meta > .claude/skills/trls/SKILL.md
-cat docs/SKILL.md >> .claude/skills/trls/SKILL.md
+./bin/arm skill-meta > .claude/skills/arm/SKILL.md
+cat docs/SKILL.md >> .claude/skills/arm/SKILL.md
 ```
 
 No other changes required.
@@ -159,6 +159,6 @@ No other changes required.
 
 | Action | File | Notes |
 |--------|------|-------|
-| Create | `docs/trls-skill-meta.yaml` | AgentSkills frontmatter source |
+| Create | `docs/arm-skill-meta.yaml` | AgentSkills frontmatter source |
 | Modify | `Makefile` | Add `skill` target, extend `clean`, update `help` |
 | Modify | `.gitignore` | Add `.claude/skills/` |
