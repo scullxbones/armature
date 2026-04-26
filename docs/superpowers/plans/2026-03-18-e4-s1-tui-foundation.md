@@ -77,7 +77,7 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/tui"
+	"github.com/scullxbones/armature/internal/tui"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -178,7 +178,7 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/tui"
+	"github.com/scullxbones/armature/internal/tui"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -296,7 +296,7 @@ In `cmd/trellis/main.go`, inside `PersistentPreRunE`, after resolving appCtx, ad
     format, _ := cmd.Root().PersistentFlags().GetString("format")
     tui.SetFormat(format)
 
-Add import: "github.com/scullxbones/trellis/internal/tui"
+Add import: "github.com/scullxbones/armature/internal/tui"
 
 - [ ] **Step 5: Run tests to verify they pass**
 

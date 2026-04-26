@@ -9,14 +9,14 @@
 
 ## Context
 
-E5-S0 introduced citation validation: every issue node must carry at least one `source-link` op pointing to a registered source entry in `.issues/sources/manifest.json`. This is a backward-incompatible change — all 106 pre-existing nodes have zero citations, producing `COVERAGE: 0.0% (0/106 nodes cited)` from `trls validate`.
+E5-S0 introduced citation validation: every issue node must carry at least one `source-link` op pointing to a registered source entry in `.armature/sources/manifest.json`. This is a backward-incompatible change — all 106 pre-existing nodes have zero citations, producing `COVERAGE: 0.0% (0/106 nodes cited)` from `arm validate`.
 
 Two things are required to resolve this:
 
-1. **New tooling** — a `trls source-link` command (the everyday citation path) and a `trls accept-citation` command (the auditable fallback for nodes where no recoverable source exists).
+1. **New tooling** — a `arm source-link` command (the everyday citation path) and a `arm accept-citation` command (the auditable fallback for nodes where no recoverable source exists).
 2. **Retroactive remediation** — register existing planning docs as sources and emit the appropriate ops for all 106 nodes.
 
-An audit report command (`trls audit`) is scoped to E6 and not part of this story.
+An audit report command (`arm audit`) is scoped to E6 and not part of this story.
 
 ---
 
@@ -39,7 +39,7 @@ Register in `internal/ops/types.go`:
 
 No seal, no git identity fields in the payload. Git provides the rest:
 
-- **Named approver**: git commit author (`user.name` + `user.email`) on the commit that delivers the `.issues/ops/` change
+- **Named approver**: git commit author (`user.name` + `user.email`) on the commit that delivers the `.armature/ops/` change
 - **Content integrity**: git commit SHA covers the ops log file
 - **Cryptographic attestation**: `commit.gpgsign=true` enforceable by regulated customers via pre-receive hook — trellis does not replicate this
 
@@ -66,19 +66,19 @@ Add `case ops.OpCitationAccepted` to `engine.go`'s apply switch, appending to `C
 
 ---
 
-## New Command: `trls source-link`
+## New Command: `arm source-link`
 
-A new top-level command registered in `cmd/trellis/main.go`. The `source-link` op type already exists in `internal/ops/types.go` and is handled in `engine.go`; no materialization changes are needed. This command provides a standalone CLI path to emit that op — previously only `trls import` emitted `source-link` ops internally.
+A new top-level command registered in `cmd/trellis/main.go`. The `source-link` op type already exists in `internal/ops/types.go` and is handled in `engine.go`; no materialization changes are needed. This command provides a standalone CLI path to emit that op — previously only `arm import` emitted `source-link` ops internally.
 
-The workflow is: register a source doc first (`trls sources add`), then link issues to it with `trls source-link`.
+The workflow is: register a source doc first (`arm sources add`), then link issues to it with `arm source-link`.
 
 ```
-trls source-link --issue ISSUE-ID --source-id SOURCE-UUID [--section "Heading"]
+arm source-link --issue ISSUE-ID --source-id SOURCE-UUID [--section "Heading"]
 ```
 
 **Behaviour:**
 - `--issue` and `--source-id` are both required
-- `--source-id` must match an entry in `.issues/sources/manifest.json`; rejected with `"unknown source ID %s — run 'trls sources add' to register sources"` if not found
+- `--source-id` must match an entry in `.armature/sources/manifest.json`; rejected with `"unknown source ID %s — run 'arm sources add' to register sources"` if not found
 - `--section` is optional; maps to the existing `Payload.Section` field, pinning the citation to a heading within the source doc
 - Non-interactive; suitable for scripting and remediation loops
 
@@ -96,12 +96,12 @@ trls source-link --issue ISSUE-ID --source-id SOURCE-UUID [--section "Heading"]
 
 ---
 
-## New Command: `trls accept-citation`
+## New Command: `arm accept-citation`
 
 Auditable fallback for nodes where no source material is recoverable.
 
 ```
-trls accept-citation --issue ISSUE-ID --rationale "..."
+arm accept-citation --issue ISSUE-ID --rationale "..."
 ```
 
 **Behaviour:**
@@ -213,18 +213,18 @@ Register all existing planning docs as `filesystem` sources. These are the actua
 
 ### Step 2 — Emit `source-link` ops
 
-For each issue, emit `trls source-link --issue X --source-id Y`. Parent nodes (stories, epics) cite the umbrella doc for their epic. Work in epic order: E2 → E3 → CI/TC → E4 → E5.
+For each issue, emit `arm source-link --issue X --source-id Y`. Parent nodes (stories, epics) cite the umbrella doc for their epic. Work in epic order: E2 → E3 → CI/TC → E4 → E5.
 
 E5 nodes have no existing `source_links` (confirmed via state inspection) — they are cited using the already-registered source (`2026-03-19-e5-ux-tui-forensics-docs.md`) without registering a duplicate. Use its existing UUID from the manifest.
 
 ### Step 3 — `accept-citation` the stragglers
 
-A small number of bare-timestamp IDs (`task-1773804403`, `task-1773804476`, `story-1773804400`) predate the planning doc convention and have no recoverable source. These receive `trls accept-citation` with rationale: *"Created before planning doc convention existed; no recoverable source material."*
+A small number of bare-timestamp IDs (`task-1773804403`, `task-1773804476`, `story-1773804400`) predate the planning doc convention and have no recoverable source. These receive `arm accept-citation` with rationale: *"Created before planning doc convention existed; no recoverable source material."*
 
 ### Step 4 — Verify
 
 ```
-trls validate
+arm validate
 ```
 
 Expected: `COVERAGE: 106/106 cited (N source-linked, M accepted-risk)`, no `uncited node` errors.
@@ -234,7 +234,7 @@ Expected: `COVERAGE: 106/106 cited (N source-linked, M accepted-risk)`, no `unci
 The new commands must be implemented and `make check` must be green **before** this step. Remediation is a data-only commit (ops logs + manifest); it does not require a separate `make check` run for the data itself.
 
 ```
-git add .issues/ docs/superpowers/
+git add .armature/ docs/superpowers/
 git commit -m "chore(E5-S0-ext): retroactive citation remediation"
 ```
 
@@ -242,7 +242,7 @@ git commit -m "chore(E5-S0-ext): retroactive citation remediation"
 
 ## E6 Scope Item: Audit Report
 
-`trls audit` (or `trls validate --audit-report`) will surface:
+`arm audit` (or `arm validate --audit-report`) will surface:
 
 - All `citation-accepted` ops: issue ID, rationale, worker_id, timestamp, git commit author (resolved via `git log` on the op file)
 - Coverage summary: total nodes, source-linked count, accepted-risk count
@@ -253,10 +253,10 @@ Designed for paste-able compliance reporting. Not part of this story.
 
 ## Definition of Done
 
-- `trls source-link` command implemented and tested (happy path, unknown source-id, missing flags)
-- `trls accept-citation` command implemented and tested (happy path interactive, rationale < 3 words rejected, confirmation mismatch aborts, `--ci` sets `confirmed_noninteractively`, non-TTY treated as `--ci`)
+- `arm source-link` command implemented and tested (happy path, unknown source-id, missing flags)
+- `arm accept-citation` command implemented and tested (happy path interactive, rationale < 3 words rejected, confirmation mismatch aborts, `--ci` sets `confirmed_noninteractively`, non-TTY treated as `--ci`)
 - `citation-accepted` op type registered in `OpCitationAccepted` constant and `ValidOpTypes`; `Payload` struct gains `Rationale` and `ConfirmedNoninteractively` fields; `materialize.Issue` gains `CitationAcceptances []CitationAcceptance`; engine applies the op
 - `traceability.IssueRef` gains `CitationAcceptanceCount`; `traceability.Coverage` gains `AcceptedRiskNodes` and `AcceptedRiskPct`; `Compute` updated; `pipeline.go` populates new field
 - Validator treats `citation-accepted` as satisfying citation requirement; manifest-membership check unchanged (source-link ops only); coverage output updated in both human and JSON formats
-- All 106 existing nodes cited (`trls validate` shows 0 `uncited node` errors; coverage line shows accepted-risk count)
-- `make check` green before remediation commit; remediation commit is data-only (`.issues/`, `docs/superpowers/`)
+- All 106 existing nodes cited (`arm validate` shows 0 `uncited node` errors; coverage line shows accepted-risk count)
+- `make check` green before remediation commit; remediation commit is data-only (`.armature/`, `docs/superpowers/`)

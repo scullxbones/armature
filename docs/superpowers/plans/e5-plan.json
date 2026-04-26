@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "title": "Trellis E5 — Polish, UX Hardening & User-Facing Docs",
+  "title": "Armature E5 — Polish, UX Hardening & User-Facing Docs",
   "issues": [
     {
       "id": "E5",
@@ -8,7 +8,7 @@
       "type": "epic",
       "scope": "",
       "priority": "high",
-      "dod": "All four stories complete; make check green; trls tui renders; forensics commands work; docs site complete",
+      "dod": "All four stories complete; make check green; arm tui renders; forensics commands work; docs site complete",
       "parent": "",
       "blocked_by": [],
       "notes": [
@@ -28,7 +28,7 @@
       "blocked_by": [],
       "notes": [
         "Fixes: open transition target (L11), stale-claim diagnostic (L6), story-claim auto-advance (L9), unassign claim release (L10)",
-        "Adds: decompose-apply --example flag (L12), trls list command with --type/--parent filters (L13)"
+        "Adds: decompose-apply --example flag (L12), arm list command with --type/--parent filters (L13)"
       ]
     },
     {
@@ -47,7 +47,7 @@
     },
     {
       "id": "E5-S1-T2",
-      "title": "Stale-claim diagnostic in `trls ready` (L6)",
+      "title": "Stale-claim diagnostic in `arm ready` (L6)",
       "type": "task",
       "scope": "internal/ready/stale.go, internal/ready/stale_test.go, cmd/trellis/ready.go",
       "priority": "high",
@@ -76,7 +76,7 @@
     },
     {
       "id": "E5-S1-T4",
-      "title": "Fix `trls unassign` to release `claimed` status back to `open` (L10)",
+      "title": "Fix `arm unassign` to release `claimed` status back to `open` (L10)",
       "type": "task",
       "scope": "cmd/trellis/assign.go, cmd/trellis/main_test.go",
       "priority": "high",
@@ -94,7 +94,7 @@
       "type": "task",
       "scope": "cmd/trellis/decompose.go, cmd/trellis/cmd_extra_test.go",
       "priority": "medium",
-      "dod": "trls decompose-apply --example prints valid minimal plan JSON; TestDecomposeApplyExampleFlag passes; make check green",
+      "dod": "arm decompose-apply --example prints valid minimal plan JSON; TestDecomposeApplyExampleFlag passes; make check green",
       "parent": "E5-S1",
       "blocked_by": [],
       "notes": [
@@ -104,26 +104,26 @@
     },
     {
       "id": "E5-S1-T6",
-      "title": "`trls list` command with `--type` and `--parent` filters (L13)",
+      "title": "`arm list` command with `--type` and `--parent` filters (L13)",
       "type": "task",
       "scope": "cmd/trellis/list.go, cmd/trellis/main.go, cmd/trellis/cmd_extra_test.go",
       "priority": "medium",
-      "dod": "trls list shows all issues; --type and --parent filter correctly; --format json outputs structured data; tests pass; make check green",
+      "dod": "arm list shows all issues; --type and --parent filter correctly; --format json outputs structured data; tests pass; make check green",
       "parent": "E5-S1",
       "blocked_by": ["E5-S1-T5"],
       "notes": [
         "Human format: ID\\tTYPE\\tSTATUS\\tTITLE tab-separated",
         "JSON/agent format: array of {id, title, type, status, parent, blocked_by}",
-        "Commit: feat(ux): add trls list command with --type and --parent filters (L13)"
+        "Commit: feat(ux): add arm list command with --type and --parent filters (L13)"
       ]
     },
     {
       "id": "E5-S2",
-      "title": "`trls tui` Interactive Board — BubbleTea kanban with three status columns",
+      "title": "`arm tui` Interactive Board — BubbleTea kanban with three status columns",
       "type": "story",
       "scope": "internal/tui/board/model.go, internal/tui/board/keys.go, internal/tui/board/model_test.go, cmd/trellis/tui.go, cmd/trellis/main.go",
       "priority": "high",
-      "dod": "trls tui renders open/active/done columns; keyboard nav works; auto-refresh; q quits; make check green",
+      "dod": "arm tui renders open/active/done columns; keyboard nav works; auto-refresh; q quits; make check green",
       "parent": "E5",
       "blocked_by": [],
       "notes": [
@@ -148,16 +148,16 @@
     },
     {
       "id": "E5-S2-T2",
-      "title": "`trls tui` CLI command with auto-refresh",
+      "title": "`arm tui` CLI command with auto-refresh",
       "type": "task",
       "scope": "cmd/trellis/tui.go, cmd/trellis/main.go",
       "priority": "high",
-      "dod": "trls tui launches board; auto-refreshes every 5s; q quits cleanly; make check green",
+      "dod": "arm tui launches board; auto-refreshes every 5s; q quits cleanly; make check green",
       "parent": "E5-S2",
       "blocked_by": ["E5-S2-T1"],
       "notes": [
         "Wire board model into Cobra command; tick message drives refresh",
-        "Commit: feat(tui): add trls tui interactive board command (E5-S2)"
+        "Commit: feat(tui): add arm tui interactive board command (E5-S2)"
       ]
     },
     {
@@ -218,7 +218,7 @@
     },
     {
       "id": "E5-S3-T4",
-      "title": "`trls context-history` — list issue context at each commit",
+      "title": "`arm context-history` — list issue context at each commit",
       "type": "task",
       "scope": "cmd/trellis/context_history.go, cmd/trellis/main.go",
       "priority": "medium",
@@ -241,7 +241,7 @@
       "blocked_by": [],
       "notes": [
         "Pure documentation — no code changes",
-        "commands.md must include new E5 commands: trls tui, context-history, list, and decompose-apply --example"
+        "commands.md must include new E5 commands: arm tui, context-history, list, and decompose-apply --example"
       ]
     },
     {
@@ -254,7 +254,7 @@
       "parent": "E5-S4",
       "blocked_by": [],
       "notes": [
-        "Sections: Why Trellis, Install, 5-Minute Quickstart, Documentation index, Key Concepts, License",
+        "Sections: Why Armature, Install, 5-Minute Quickstart, Documentation index, Key Concepts, License",
         "Commit: docs: add README with overview, install, and quickstart (E5-S4-T1)"
       ]
     },
@@ -274,11 +274,11 @@
     },
     {
       "id": "E5-S4-T3",
-      "title": "`docs/commands.md` — complete command reference for every `trls` subcommand",
+      "title": "`docs/commands.md` — complete command reference for every `arm` subcommand",
       "type": "task",
       "scope": "docs/commands.md",
       "priority": "medium",
-      "dod": "Every trls subcommand documented with synopsis, flags, examples, and notes; includes all E5 additions (tui, context-history, list, decompose-apply --example)",
+      "dod": "Every arm subcommand documented with synopsis, flags, examples, and notes; includes all E5 additions (tui, context-history, list, decompose-apply --example)",
       "parent": "E5-S4",
       "blocked_by": [],
       "notes": [

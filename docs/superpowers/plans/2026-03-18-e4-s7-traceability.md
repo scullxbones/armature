@@ -195,8 +195,8 @@ package traceability_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -259,7 +259,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // Coverage holds traceability coverage metrics for the DAG.
@@ -291,7 +291,7 @@ func Compute(state *materialize.State) Coverage {
 	return cov
 }
 
-// Write serializes coverage to .issues/state/traceability.json.
+// Write serializes coverage to .armature/state/traceability.json.
 func Write(issuesDir string, cov Coverage) error {
 	dir := filepath.Join(issuesDir, "state")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -336,7 +336,7 @@ In `internal/materialize/pipeline.go`, after the existing state file writes, add
 First read `internal/materialize/pipeline.go` to find the correct insertion point before editing.
 
 ```go
-import "github.com/scullxbones/trellis/internal/traceability"
+import "github.com/scullxbones/armature/internal/traceability"
 
 // After writing state files:
 cov := traceability.Compute(state)

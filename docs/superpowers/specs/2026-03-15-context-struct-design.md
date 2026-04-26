@@ -6,7 +6,7 @@ All trellis commands hardcode `issuesDir := repoPath + "/.issues"`. For dual-bra
 
 ## Decision: Git Config for Mode Detection
 
-Mode is stored in `git config trellis.mode` rather than in a file inside `.issues/`. This avoids a chicken-and-egg problem: you can't read `.issues/config.json` to find out where `.issues/` is.
+Mode is stored in `git config trellis.mode` rather than in a file inside `.armature/`. This avoids a chicken-and-egg problem: you can't read `.armature/config.json` to find out where `.armature/` is.
 
 - Unset or `"single-branch"` → default behavior
 - `"dual-branch"` → worktree-based path resolution
@@ -37,9 +37,9 @@ func ResolveContext(repoPath string) (*Context, error)
 
 A `PersistentPreRunE` on the root command calls `ResolveContext` and stores the result in a package-level `var appCtx *config.Context`.
 
-**Excluded commands** (don't need context, or run before `.issues/` exists): `init`, `version`, `worker-init`, `decompose-context`. These set their own `PersistentPreRunE` that returns nil to skip the root hook (Cobra runs the most-specific `PersistentPreRunE`).
+**Excluded commands** (don't need context, or run before `.armature/` exists): `init`, `version`, `worker-init`, `decompose-context`. These set their own `PersistentPreRunE` that returns nil to skip the root hook (Cobra runs the most-specific `PersistentPreRunE`).
 
-- `init` and `worker-init` are excluded because they run before `.issues/` exists — `ResolveContext` step 4 (load config) would fail.
+- `init` and `worker-init` are excluded because they run before `.armature/` exists — `ResolveContext` step 4 (load config) would fail.
 - `decompose-context` only parses a plan file and has no repo interaction.
 - `version` needs no project state.
 
@@ -79,7 +79,7 @@ Signature changes from `resolveWorkerAndLog(repoPath string)` to `resolveWorkerA
 // Before:
 func resolveWorkerAndLog(repoPath string) (string, string, error) {
     workerID, err := worker.GetWorkerID(repoPath)
-    logPath := fmt.Sprintf("%s/.issues/ops/%s.log", repoPath, workerID)
+    logPath := fmt.Sprintf("%s/.armature/ops/%s.log", repoPath, workerID)
 }
 
 // After:
@@ -100,12 +100,12 @@ The `--repo` flag moves from individual commands to a persistent flag on the roo
 
 - No worktree creation or management (E2-001-T2)
 - No dual-branch path resolution implementation (stubbed with error)
-- Config file stays at `.issues/config.json` — only mode detection uses git config
+- Config file stays at `.armature/config.json` — only mode detection uses git config
 - No changes to `Materialize()` signature (E2-001-T4)
 
 ## Testing Strategy
 
 - **Unit test** `ResolveContext` with a temp git repo: verify single-branch returns correct path, dual-branch returns error stub
 - **Integration tests**: existing command tests continue to pass (single-branch is default)
-- **Excluded commands**: verify `init`, `version`, `worker-init`, `decompose-context` work without a valid `.issues/` directory
+- **Excluded commands**: verify `init`, `version`, `worker-init`, `decompose-context` work without a valid `.armature/` directory
 - **Regression**: `make test` must pass (behavior-preserving refactor; test file changes allowed only if tests invoke commands that now trigger `PersistentPreRunE`)

@@ -1,4 +1,4 @@
-# Trellis E5 — Polish, UX Hardening & User-Facing Docs
+# Armature E5 — Polish, UX Hardening & User-Facing Docs
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -56,27 +56,27 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestDraftNodeNotReady(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-    runCmd(t, repo, "trls", "transition", "--issue", "E-1", "--to", "in-progress")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+    runCmd(t, repo, "arm", "transition", "--issue", "E-1", "--to", "in-progress")
     // Create a task with draft confidence
-    runCmd(t, repo, "trls", "create", "--id", "E-1-T1", "--title", "Draft Task",
+    runCmd(t, repo, "arm", "create", "--id", "E-1-T1", "--title", "Draft Task",
         "--type", "task", "--parent", "E-1", "--confidence", "draft")
-    out := runCmdOutput(t, repo, "trls", "ready")
+    out := runCmdOutput(t, repo, "arm", "ready")
     // draft node must not appear
     require.NotContains(t, out, "E-1-T1")
 }
 
 func TestVerifiedNodeIsReady(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-    runCmd(t, repo, "trls", "transition", "--issue", "E-1", "--to", "in-progress")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-T1", "--title", "Draft Task",
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+    runCmd(t, repo, "arm", "transition", "--issue", "E-1", "--to", "in-progress")
+    runCmd(t, repo, "arm", "create", "--id", "E-1-T1", "--title", "Draft Task",
         "--type", "task", "--parent", "E-1", "--confidence", "draft")
     // Promote via dag-transition
-    runCmd(t, repo, "trls", "dag-transition", "--root", "E-1", "--to", "approved")
-    out := runCmdOutput(t, repo, "trls", "ready")
+    runCmd(t, repo, "arm", "dag-transition", "--root", "E-1", "--to", "approved")
+    out := runCmdOutput(t, repo, "arm", "ready")
     require.Contains(t, out, "E-1-T1")
 }
 ```
@@ -149,16 +149,16 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestDagTransitionPromotesDraft(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic",
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic",
         "--confidence", "draft")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-S1", "--title", "Story", "--type", "story",
+    runCmd(t, repo, "arm", "create", "--id", "E-1-S1", "--title", "Story", "--type", "story",
         "--parent", "E-1", "--confidence", "draft")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-S1-T1", "--title", "Task", "--type", "task",
+    runCmd(t, repo, "arm", "create", "--id", "E-1-S1-T1", "--title", "Task", "--type", "task",
         "--parent", "E-1-S1", "--confidence", "draft")
-    runCmd(t, repo, "trls", "dag-transition", "--root", "E-1", "--to", "approved")
+    runCmd(t, repo, "arm", "dag-transition", "--root", "E-1", "--to", "approved")
     // All three nodes should now be verified
-    out := runCmdExpectOK(t, repo, "trls", "status")
+    out := runCmdExpectOK(t, repo, "arm", "status")
     require.Contains(t, out, "E-1-S1-T1") // visible, no longer hidden
 }
 ```
@@ -170,12 +170,12 @@ During replay, when a `dag-transition` op is encountered:
 2. For each node with `confidence == "draft"`, set `confidence = "verified"`
 3. Record signing worker ID and timestamp
 
-- [ ] **Step 3: Add `trls dag-transition` command**
+- [ ] **Step 3: Add `arm dag-transition` command**
 
 New thin Cobra command (for tests and manual use):
 
 ```
-trls dag-transition --root <id> --to approved [--uncovered-acknowledged <id,...>]
+arm dag-transition --root <id> --to approved [--uncovered-acknowledged <id,...>]
 ```
 
 Emits `["dag-transition", root_id, ts, worker_id, {"to": "approved", "uncovered_acknowledged": [...]}]`.
@@ -222,7 +222,7 @@ Coverage summary at bottom: `cited: N/M nodes (X%)`. Any uncited nodes named ind
 
 `cmd/trellis/dag_summary.go` runs the BubbleTea model, collects per-item decisions, then on confirmation emits:
 ```
-trls dag-transition --root <root-id> --to approved \
+arm dag-transition --root <root-id> --to approved \
     --uncovered-acknowledged <comma-separated uncited node IDs>
 ```
 
@@ -262,11 +262,11 @@ After E5-S0-T1 through T3 are complete, update `decompose-apply` so every node i
 ```go
 func TestDecomposeApplyCreatesDraftNodes(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
+    runCmd(t, repo, "arm", "worker-init")
     plan := writeTempPlan(t, minimalPlanJSON)
-    runCmd(t, repo, "trls", "decompose-apply", "--plan", plan)
+    runCmd(t, repo, "arm", "decompose-apply", "--plan", plan)
     // Nodes should be draft — not yet in ready queue
-    out := runCmdOutput(t, repo, "trls", "ready")
+    out := runCmdOutput(t, repo, "arm", "ready")
     require.Contains(t, out, "No tasks ready")
 }
 ```
@@ -284,7 +284,7 @@ make check
 
 - [ ] **Step 4: Dogfood**
 
-Run `trls decompose-apply` on a test plan, then run `trls dag-summary`, sign off interactively, and confirm tasks appear in `trls ready` afterwards.
+Run `arm decompose-apply` on a test plan, then run `arm dag-summary`, sign off interactively, and confirm tasks appear in `arm ready` afterwards.
 
 - [ ] **Step 5: Commit**
 
@@ -326,20 +326,20 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestTransitionToOpen(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Task One", "--type", "task")
-    runCmd(t, repo, "trls", "transition", "--issue", "T-1", "--to", "in-progress")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Task One", "--type", "task")
+    runCmd(t, repo, "arm", "transition", "--issue", "T-1", "--to", "in-progress")
     // Now transition back to open — this should succeed
-    out := runCmdExpectOK(t, repo, "trls", "transition", "--issue", "T-1", "--to", "open")
+    out := runCmdExpectOK(t, repo, "arm", "transition", "--issue", "T-1", "--to", "open")
     require.Contains(t, out, `"open"`)
 }
 
 func TestTransitionToOpenRejectsInvalidAlias(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Task One", "--type", "task")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Task One", "--type", "task")
     // Underscore variant must still be rejected
-    runCmdExpectError(t, repo, "trls", "transition", "--issue", "T-1", "--to", "in_progress")
+    runCmdExpectError(t, repo, "arm", "transition", "--issue", "T-1", "--to", "in_progress")
 }
 ```
 
@@ -370,7 +370,7 @@ to:
 
 ```go
 // ValidTransitionTargets is the set of statuses accepted by the transition command.
-// StatusOpen is included so workers can revert accidental claims without using `trls reopen`.
+// StatusOpen is included so workers can revert accidental claims without using `arm reopen`.
 var ValidTransitionTargets = map[string]bool{
 	StatusOpen:       true,
 	StatusInProgress: true,
@@ -398,9 +398,9 @@ git commit -m "fix(ux): add open as valid transition target (L11)"
 
 ---
 
-### Task 2: Stale-claim diagnostic in `trls ready`
+### Task 2: Stale-claim diagnostic in `arm ready`
 
-When `trls ready` returns empty because in-progress tasks hold stale claims, print an actionable message.
+When `arm ready` returns empty because in-progress tasks hold stale claims, print an actionable message.
 
 **Files:**
 - Create: `internal/ready/stale.go`
@@ -417,8 +417,8 @@ package ready
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -489,9 +489,9 @@ package ready
 import (
 	"sort"
 
-	"github.com/scullxbones/trellis/internal/claim"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // StaleClaimInfo describes an in-progress issue whose claim has expired.
@@ -542,18 +542,18 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestReadyEmptyWithStaleDiagnostic(t *testing.T) {
 	repo := setupTestRepo(t)
-	runCmd(t, repo, "trls", "worker-init")
+	runCmd(t, repo, "arm", "worker-init")
 	// Create blocker task and block another on it
-	runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-	runCmd(t, repo, "trls", "transition", "--issue", "E-1", "--to", "in-progress")
-	runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Blocker", "--type", "task",
+	runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+	runCmd(t, repo, "arm", "transition", "--issue", "E-1", "--to", "in-progress")
+	runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Blocker", "--type", "task",
 		"--parent", "E-1")
-	runCmd(t, repo, "trls", "create", "--id", "T-2", "--title", "Blocked", "--type", "task",
+	runCmd(t, repo, "arm", "create", "--id", "T-2", "--title", "Blocked", "--type", "task",
 		"--parent", "E-1", "--blocked-by", "T-1")
 	// Claim T-1 with a 1-minute TTL then fast-forward time by injecting a stale state
 	// We test the diagnostic by directly checking StaleClaims in unit tests;
 	// here just verify the ready command runs cleanly when queue is empty.
-	out := runCmdOutput(t, repo, "trls", "ready")
+	out := runCmdOutput(t, repo, "arm", "ready")
 	// Could be empty or have T-1 — just verify no crash
 	_ = out
 }
@@ -582,7 +582,7 @@ if len(entries) == 0 {
         _, _ = fmt.Fprintln(cmd.ErrOrStderr(), "Warning: stale claim(s) may be blocking the queue:")
         for _, s := range stale {
             _, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-                "  %s  claimed by %s (claim expired) — run `trls claim --issue %s` to steal\n",
+                "  %s  claimed by %s (claim expired) — run `arm claim --issue %s` to steal\n",
                 s.IssueID, s.WorkerID, s.IssueID)
         }
     }
@@ -624,24 +624,24 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestClaimStoryAutoAdvancesToInProgress(t *testing.T) {
 	repo := setupTestRepo(t)
-	runCmd(t, repo, "trls", "worker-init")
-	runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-	runCmd(t, repo, "trls", "transition", "--issue", "E-1", "--to", "in-progress")
-	runCmd(t, repo, "trls", "create", "--id", "S-1", "--title", "Story", "--type", "story",
+	runCmd(t, repo, "arm", "worker-init")
+	runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+	runCmd(t, repo, "arm", "transition", "--issue", "E-1", "--to", "in-progress")
+	runCmd(t, repo, "arm", "create", "--id", "S-1", "--title", "Story", "--type", "story",
 		"--parent", "E-1")
-	runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Child task", "--type", "task",
+	runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Child task", "--type", "task",
 		"--parent", "S-1")
 
 	// Claim the story — children should become ready immediately
-	runCmd(t, repo, "trls", "claim", "--issue", "S-1")
-	runCmd(t, repo, "trls", "materialize")
+	runCmd(t, repo, "arm", "claim", "--issue", "S-1")
+	runCmd(t, repo, "arm", "materialize")
 
 	// S-1 should be in-progress (not just claimed)
 	index := loadIndex(t, repo)
 	require.Equal(t, "in-progress", index["S-1"].Status)
 
 	// T-1 should appear in the ready queue
-	out := runCmdOutput(t, repo, "trls", "ready")
+	out := runCmdOutput(t, repo, "arm", "ready")
 	require.Contains(t, out, "T-1")
 }
 ```
@@ -694,9 +694,9 @@ git commit -m "fix(ux): auto-advance story/epic to in-progress on claim (L9)"
 
 ---
 
-### Task 4: Fix `trls unassign` to release `claimed` status
+### Task 4: Fix `arm unassign` to release `claimed` status
 
-`trls unassign` currently only clears the assignment but leaves the issue in `claimed` status, requiring a manual transition to unblock. Fix: when the issue is `claimed`, also emit `transition → open`.
+`arm unassign` currently only clears the assignment but leaves the issue in `claimed` status, requiring a manual transition to unblock. Fix: when the issue is `claimed`, also emit `transition → open`.
 
 **Files:**
 - Modify: `cmd/trellis/assign.go`
@@ -709,33 +709,33 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestUnassignReleasesClaimedStatus(t *testing.T) {
 	repo := setupTestRepo(t)
-	runCmd(t, repo, "trls", "worker-init")
-	runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Task", "--type", "task")
-	runCmd(t, repo, "trls", "claim", "--issue", "T-1")
-	runCmd(t, repo, "trls", "materialize")
+	runCmd(t, repo, "arm", "worker-init")
+	runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Task", "--type", "task")
+	runCmd(t, repo, "arm", "claim", "--issue", "T-1")
+	runCmd(t, repo, "arm", "materialize")
 
 	// Unassign should return T-1 to open
-	runCmd(t, repo, "trls", "unassign", "--issue", "T-1")
-	runCmd(t, repo, "trls", "materialize")
+	runCmd(t, repo, "arm", "unassign", "--issue", "T-1")
+	runCmd(t, repo, "arm", "materialize")
 
 	index := loadIndex(t, repo)
 	require.Equal(t, "open", index["T-1"].Status,
 		"unassign on a claimed issue should restore open status")
 
 	// T-1 should reappear in ready queue
-	out := runCmdOutput(t, repo, "trls", "ready")
+	out := runCmdOutput(t, repo, "arm", "ready")
 	require.Contains(t, out, "T-1")
 }
 
 func TestUnassignDoesNotAffectInProgressStatus(t *testing.T) {
 	repo := setupTestRepo(t)
-	runCmd(t, repo, "trls", "worker-init")
-	runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Task", "--type", "task")
-	runCmd(t, repo, "trls", "transition", "--issue", "T-1", "--to", "in-progress")
+	runCmd(t, repo, "arm", "worker-init")
+	runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Task", "--type", "task")
+	runCmd(t, repo, "arm", "transition", "--issue", "T-1", "--to", "in-progress")
 
 	// Unassign on in-progress should NOT change status (worker is actively working)
-	runCmd(t, repo, "trls", "unassign", "--issue", "T-1")
-	runCmd(t, repo, "trls", "materialize")
+	runCmd(t, repo, "arm", "unassign", "--issue", "T-1")
+	runCmd(t, repo, "arm", "materialize")
 
 	index := loadIndex(t, repo)
 	require.Equal(t, "in-progress", index["T-1"].Status,
@@ -796,7 +796,7 @@ func newUnassignCmd() *cobra.Command {
 				if appendErr := appendOp(logPath, releaseOp); appendErr != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"Warning: unassigned but could not release claim: %v\n"+
-							"Run `trls transition --issue %s --to open` manually.\n",
+							"Run `arm transition --issue %s --to open` manually.\n",
 						appendErr, issueID)
 				}
 			}
@@ -814,9 +814,9 @@ func newUnassignCmd() *cobra.Command {
 }
 ```
 
-Add `"github.com/scullxbones/trellis/internal/materialize"` to imports in `assign.go`.
+Add `"github.com/scullxbones/armature/internal/materialize"` to imports in `assign.go`.
 
-> **Note on stale state:** `materialize.LoadIssue` reads from the last materialized checkpoint on disk. The test calls `trls materialize` explicitly before `unassign` to ensure the checkpoint reflects the claim. In production use, `trls sync` or any command that materializes will keep the checkpoint fresh. If the checkpoint is missing, `loadErr != nil` and the release transition is simply skipped (safe degradation).
+> **Note on stale state:** `materialize.LoadIssue` reads from the last materialized checkpoint on disk. The test calls `arm materialize` explicitly before `unassign` to ensure the checkpoint reflects the claim. In production use, `arm sync` or any command that materializes will keep the checkpoint fresh. If the checkpoint is missing, `loadErr != nil` and the release transition is simply skipped (safe degradation).
 
 - [ ] **Step 4: Run tests**
 
@@ -858,7 +858,7 @@ Add to `cmd/trellis/cmd_extra_test.go`:
 ```go
 func TestDecomposeApplyExampleFlag(t *testing.T) {
     repo := setupTestRepo(t)
-    out := runCmdExpectOK(t, repo, "trls", "decompose-apply", "--example")
+    out := runCmdExpectOK(t, repo, "arm", "decompose-apply", "--example")
     require.Contains(t, out, `"version"`)
     require.Contains(t, out, `"issues"`)
 }
@@ -937,9 +937,9 @@ git commit -m "feat(ux): add decompose-apply --example flag for schema discovera
 
 ---
 
-### Task 6: `trls list` command for queryable issue enumeration (L13)
+### Task 6: `arm list` command for queryable issue enumeration (L13)
 
-Agents cannot discover existing issue IDs or hierarchy using `trls` alone, falling back to filesystem reads. Add a `trls list` command with type and parent filters.
+Agents cannot discover existing issue IDs or hierarchy using `arm` alone, falling back to filesystem reads. Add a `arm list` command with type and parent filters.
 
 **Files:**
 - Create: `cmd/trellis/list.go`
@@ -953,11 +953,11 @@ Add to `cmd/trellis/cmd_extra_test.go`:
 ```go
 func TestListAllIssues(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-S1", "--title", "Story", "--type", "story", "--parent", "E-1")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-S1-T1", "--title", "Task", "--type", "task", "--parent", "E-1-S1")
-    out := runCmdExpectOK(t, repo, "trls", "list")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+    runCmd(t, repo, "arm", "create", "--id", "E-1-S1", "--title", "Story", "--type", "story", "--parent", "E-1")
+    runCmd(t, repo, "arm", "create", "--id", "E-1-S1-T1", "--title", "Task", "--type", "task", "--parent", "E-1-S1")
+    out := runCmdExpectOK(t, repo, "arm", "list")
     require.Contains(t, out, "E-1")
     require.Contains(t, out, "E-1-S1")
     require.Contains(t, out, "E-1-S1-T1")
@@ -965,31 +965,31 @@ func TestListAllIssues(t *testing.T) {
 
 func TestListFilterByType(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-S1-T1", "--title", "Task", "--type", "task", "--parent", "E-1")
-    out := runCmdExpectOK(t, repo, "trls", "list", "--type", "task")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+    runCmd(t, repo, "arm", "create", "--id", "E-1-S1-T1", "--title", "Task", "--type", "task", "--parent", "E-1")
+    out := runCmdExpectOK(t, repo, "arm", "list", "--type", "task")
     require.Contains(t, out, "E-1-S1-T1")
     require.NotContains(t, out, "E-1\t")
 }
 
 func TestListFilterByParent(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-    runCmd(t, repo, "trls", "create", "--id", "E-2", "--title", "Other Epic", "--type", "epic")
-    runCmd(t, repo, "trls", "create", "--id", "E-1-T1", "--title", "Child", "--type", "task", "--parent", "E-1")
-    runCmd(t, repo, "trls", "create", "--id", "E-2-T1", "--title", "Other child", "--type", "task", "--parent", "E-2")
-    out := runCmdExpectOK(t, repo, "trls", "list", "--parent", "E-1")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+    runCmd(t, repo, "arm", "create", "--id", "E-2", "--title", "Other Epic", "--type", "epic")
+    runCmd(t, repo, "arm", "create", "--id", "E-1-T1", "--title", "Child", "--type", "task", "--parent", "E-1")
+    runCmd(t, repo, "arm", "create", "--id", "E-2-T1", "--title", "Other child", "--type", "task", "--parent", "E-2")
+    out := runCmdExpectOK(t, repo, "arm", "list", "--parent", "E-1")
     require.Contains(t, out, "E-1-T1")
     require.NotContains(t, out, "E-2-T1")
 }
 
 func TestListFormatJSON(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
-    runCmd(t, repo, "trls", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
-    out := runCmdExpectOK(t, repo, "trls", "list", "--format", "json")
+    runCmd(t, repo, "arm", "worker-init")
+    runCmd(t, repo, "arm", "create", "--id", "E-1", "--title", "Epic", "--type", "epic")
+    out := runCmdExpectOK(t, repo, "arm", "list", "--format", "json")
     require.Contains(t, out, `"id"`)
     require.Contains(t, out, `"E-1"`)
 }
@@ -1034,7 +1034,7 @@ Expected: all pass, coverage ≥80%.
 
 ```bash
 git add cmd/trellis/list.go cmd/trellis/main.go cmd/trellis/cmd_extra_test.go
-git commit -m "feat(ux): add trls list command with --type and --parent filters (L13)"
+git commit -m "feat(ux): add arm list command with --type and --parent filters (L13)"
 ```
 
 ---
@@ -1044,7 +1044,7 @@ git commit -m "feat(ux): add trls list command with --type and --parent filters 
 The `sources → decompose-context → decompose-apply` pipeline is invisible to agents. Additionally, `decompose-apply` has no way to preview effects before committing ops.
 
 **Files:**
-- Modify: `.claude/skills/trls/SKILL.md`
+- Modify: `.claude/skills/arm/SKILL.md`
 - Modify: `cmd/trellis/decompose.go`
 - Modify: `internal/decompose/apply.go`
 - Test: `cmd/trellis/cmd_extra_test.go`
@@ -1056,7 +1056,7 @@ Add to `cmd/trellis/cmd_extra_test.go`:
 ```go
 func TestDecomposeApplyDryRun(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
+    runCmd(t, repo, "arm", "worker-init")
 
     plan := writeTempPlan(t, `{
         "version": 1,
@@ -1068,12 +1068,12 @@ func TestDecomposeApplyDryRun(t *testing.T) {
         ]
     }`)
 
-    out := runCmdExpectOK(t, repo, "trls", "decompose-apply", "--plan", plan, "--dry-run")
+    out := runCmdExpectOK(t, repo, "arm", "decompose-apply", "--plan", plan, "--dry-run")
     require.Contains(t, out, "E-99")
     require.Contains(t, out, "dry run")
 
     // Verify nothing was actually created
-    statusOut := runCmdOutput(t, repo, "trls", "status")
+    statusOut := runCmdOutput(t, repo, "arm", "status")
     require.NotContains(t, statusOut, "E-99")
 }
 ```
@@ -1100,7 +1100,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Add "Loading a plan" workflow to SKILL.md**
 
-In `.claude/skills/trls/SKILL.md`, add a section describing the full pipeline:
+In `.claude/skills/arm/SKILL.md`, add a section describing the full pipeline:
 
 ```markdown
 ## Loading a Plan (Source → Decompose → Apply)
@@ -1108,20 +1108,20 @@ In `.claude/skills/trls/SKILL.md`, add a section describing the full pipeline:
 When ingesting a specification or design document into the issue graph:
 
 1. Register the source document:
-   trls sources add --type filesystem --url <path/to/doc.md> --title "Plan title"
-   trls sources sync
+   arm sources add --type filesystem --url <path/to/doc.md> --title "Plan title"
+   arm sources sync
 
 2. Build the decomposition prompt (include existing graph for ID awareness):
-   trls decompose-context --sources <source-id> --existing-dag
+   arm decompose-context --sources <source-id> --existing-dag
 
 3. Use the prompt output to generate a plan JSON matching the schema
-   (run `trls decompose-apply --example` to see the required format).
+   (run `arm decompose-apply --example` to see the required format).
 
 4. Validate before committing:
-   trls decompose-apply --plan plan.json --dry-run
+   arm decompose-apply --plan plan.json --dry-run
 
 5. Apply:
-   trls decompose-apply --plan plan.json
+   arm decompose-apply --plan plan.json
 ```
 
 - [ ] **Step 6: Run full check**
@@ -1136,7 +1136,7 @@ Expected: all pass, coverage ≥80%.
 
 ```bash
 git add cmd/trellis/decompose.go internal/decompose/apply.go \
-        cmd/trellis/cmd_extra_test.go .claude/skills/trls/SKILL.md
+        cmd/trellis/cmd_extra_test.go .claude/skills/arm/SKILL.md
 git commit -m "feat(ux): add decompose-apply --dry-run and document decompose pipeline in skill (L14, L15)"
 ```
 
@@ -1157,16 +1157,16 @@ The architecture (section 7) specifies three flags that are not yet implemented.
 func TestDecomposeApplyStrictRejectsWarnings(t *testing.T) {
     // Plan with scope overlap (W1) — should fail with --strict
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
+    runCmd(t, repo, "arm", "worker-init")
     plan := writePlanWithScopeOverlap(t)
-    runCmdExpectError(t, repo, "trls", "decompose-apply", "--plan", plan, "--strict")
+    runCmdExpectError(t, repo, "arm", "decompose-apply", "--plan", plan, "--strict")
 }
 
 func TestDecomposeApplyGenerateIDs(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
+    runCmd(t, repo, "arm", "worker-init")
     plan := writeTempPlan(t, minimalPlanJSON) // has explicit IDs
-    out := runCmdExpectOK(t, repo, "trls", "decompose-apply", "--plan", plan, "--generate-ids")
+    out := runCmdExpectOK(t, repo, "arm", "decompose-apply", "--plan", plan, "--generate-ids")
     // Output should show created count; original IDs should NOT appear
     require.NotContains(t, out, "E-99") // plan's explicit ID replaced
 }
@@ -1200,7 +1200,7 @@ git commit -m "feat(ux): add decompose-apply --root, --generate-ids, --strict (a
 
 ---
 
-## Chunk 2: E5-S2 — `trls tui` Interactive Board
+## Chunk 2: E5-S2 — `arm tui` Interactive Board
 
 A full BubbleTea kanban board: three status columns (open / active / done), a workers panel, auto-refresh, and an issue detail viewport. Read-only in this iteration.
 
@@ -1211,7 +1211,7 @@ A full BubbleTea kanban board: three status columns (open / active / done), a wo
 | `internal/tui/board/model.go` | **New** — BubbleTea model (columns, nav, detail view) |
 | `internal/tui/board/keys.go` | **New** — key bindings |
 | `internal/tui/board/model_test.go` | **New** — unit tests |
-| `cmd/trellis/tui.go` | **New** — `trls tui` CLI command |
+| `cmd/trellis/tui.go` | **New** — `arm tui` CLI command |
 | `cmd/trellis/main.go` | Register `newTUICmd()` |
 
 ---
@@ -1236,8 +1236,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1355,9 +1355,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/tui"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/tui"
 )
 
 // column indices
@@ -1568,7 +1568,7 @@ func (m Model) boardView() string {
 }
 
 func (m Model) detailView() string {
-	return fmt.Sprintf("Issue: %s\n\n(run `trls render-context --issue %s` for full context)\n\nPress esc to return.",
+	return fmt.Sprintf("Issue: %s\n\n(run `arm render-context --issue %s` for full context)\n\nPress esc to return.",
 		m.detailID, m.detailID)
 }
 
@@ -1601,7 +1601,7 @@ git commit -m "feat(tui): add board model with column layout and keyboard nav (E
 
 ---
 
-### Task 2: `trls tui` CLI command with auto-refresh
+### Task 2: `arm tui` CLI command with auto-refresh
 
 **Files:**
 - Create: `cmd/trellis/tui.go`
@@ -1620,8 +1620,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/tui/board"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/tui/board"
 	"github.com/spf13/cobra"
 )
 
@@ -1746,14 +1746,14 @@ Expected: all pass.
 
 ```bash
 git add cmd/trellis/tui.go cmd/trellis/main.go
-git commit -m "feat(tui): add trls tui interactive board command (E5-S2)"
+git commit -m "feat(tui): add arm tui interactive board command (E5-S2)"
 ```
 
 ---
 
-### Task 3: `trls ready` interactive TUI in human mode
+### Task 3: `arm ready` interactive TUI in human mode
 
-The architecture (section 15) specifies that `trls ready` in human-interactive mode shows a task selection list from which the operator can claim directly. Currently `trls ready` is plain text only. This makes it a first-class interactive claim flow for humans, distinct from (but complementary to) the `trls tui` kanban board.
+The architecture (section 15) specifies that `arm ready` in human-interactive mode shows a task selection list from which the operator can claim directly. Currently `arm ready` is plain text only. This makes it a first-class interactive claim flow for humans, distinct from (but complementary to) the `arm tui` kanban board.
 
 **Files:**
 - Modify: `cmd/trellis/ready.go`
@@ -1765,7 +1765,7 @@ The architecture (section 15) specifies that `trls ready` in human-interactive m
 `internal/tui/ready/model.go` — displays the ready task queue with:
 - Priority-sorted list (priority, estimated_complexity, scope summary)
 - `j`/`k` navigation
-- `enter` to claim the selected task (runs `trls claim` internally)
+- `enter` to claim the selected task (runs `arm claim` internally)
 - `q` to quit without claiming
 - `--format=json` bypasses the TUI entirely (agent-safe)
 
@@ -1794,7 +1794,7 @@ git commit -m "feat(tui): add ready interactive TUI for human task selection and
 
 ## Chunk 3: E5-S3 — Time Travel & Forensics
 
-`render-context --at <sha>` reconstructs the exact context an agent received at a past ops-branch commit. `trls context-history --issue ID` lists commits where the issue changed, with timestamps and op types.
+`render-context --at <sha>` reconstructs the exact context an agent received at a past ops-branch commit. `arm context-history --issue ID` lists commits where the issue changed, with timestamps and op types.
 
 ### File Map
 
@@ -1805,7 +1805,7 @@ git commit -m "feat(tui): add ready interactive TUI for human task selection and
 | `internal/materialize/atsha.go` | **New** — `MaterializeAtSHA()` |
 | `internal/materialize/atsha_test.go` | **New** — unit tests |
 | `cmd/trellis/render_context.go` | Add `--at <sha>` flag |
-| `cmd/trellis/context_history.go` | **New** — `trls context-history` command |
+| `cmd/trellis/context_history.go` | **New** — `arm context-history` command |
 | `cmd/trellis/main.go` | Register `newContextHistoryCmd()` |
 
 ---
@@ -2015,7 +2015,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2046,7 +2046,7 @@ func TestMaterializeAtSHA_ReadsOpsFromGitObject(t *testing.T) {
 		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusDone}}
 	require.NoError(t, ops.AppendOp(logPath, op2))
 
-	state, err := MaterializeAtSHA(repo, sha, ".issues/ops", true)
+	state, err := MaterializeAtSHA(repo, sha, ".armature/ops", true)
 	require.NoError(t, err)
 	require.Contains(t, state.Issues, "T-1")
 	require.Equal(t, ops.StatusOpen, state.Issues["T-1"].Status,
@@ -2089,8 +2089,8 @@ package materialize
 import (
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/git"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // MaterializeAtSHA reconstructs the materialized state as of a specific git commit.
@@ -2098,8 +2098,8 @@ import (
 // repoPath is the git repository root.
 // sha is the commit from which to read ops (typically a commit on the ops branch).
 // opsPathPrefix is the directory path within the commit tree that contains *.log files
-//   - dual-branch mode: "ops"  (the _trellis branch root IS .issues/)
-//   - single-branch mode: ".issues/ops"
+//   - dual-branch mode: "ops"  (the _armature branch root IS .armature/)
+//   - single-branch mode: ".armature/ops"
 //
 // singleBranch is passed through to State.SingleBranchMode.
 func MaterializeAtSHA(repoPath, sha, opsPathPrefix string, singleBranch bool) (*State, error) {
@@ -2173,8 +2173,8 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestRenderContextAtSHA(t *testing.T) {
 	repo := setupTestRepo(t)
-	runCmd(t, repo, "trls", "worker-init")
-	runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Snapshot Task", "--type", "task")
+	runCmd(t, repo, "arm", "worker-init")
+	runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Snapshot Task", "--type", "task")
 
 	// Commit the current ops state
 	mustGitInRepo(t, repo, "add", ".")
@@ -2182,10 +2182,10 @@ func TestRenderContextAtSHA(t *testing.T) {
 	sha := gitHEADInRepo(t, repo)
 
 	// Add a subsequent transition that should NOT appear in --at output
-	runCmd(t, repo, "trls", "transition", "--issue", "T-1", "--to", "in-progress")
+	runCmd(t, repo, "arm", "transition", "--issue", "T-1", "--to", "in-progress")
 
 	// render-context --at <sha> should show T-1 as open (pre-transition)
-	out := runCmdOutput(t, repo, "trls", "render-context", "--issue", "T-1", "--at", sha)
+	out := runCmdOutput(t, repo, "arm", "render-context", "--issue", "T-1", "--at", sha)
 	require.Contains(t, out, "Snapshot Task")
 }
 ```
@@ -2220,9 +2220,9 @@ var state *materialize.State
 
 if rcAt != "" {
     // Forensic mode: read ops from git object store at the given SHA
-    opsPrefix := ".issues/ops"
+    opsPrefix := ".armature/ops"
     if appCtx.Mode != "single-branch" {
-        // In dual-branch mode the SHA is on _trellis which has ops/ at its root
+        // In dual-branch mode the SHA is on _armature which has ops/ at its root
         opsPrefix = "ops"
     }
     var err error
@@ -2273,7 +2273,7 @@ git commit -m "feat(forensics): add render-context --at <sha> for time-travel co
 
 ---
 
-### Task 4: `trls context-history`
+### Task 4: `arm context-history`
 
 Lists ops-branch commits that touched a given issue, newest first, with timestamps and op types.
 
@@ -2288,16 +2288,16 @@ Add to `cmd/trellis/main_test.go`:
 ```go
 func TestContextHistoryListsCommits(t *testing.T) {
 	repo := setupTestRepo(t)
-	runCmd(t, repo, "trls", "worker-init")
-	runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "History Task", "--type", "task")
+	runCmd(t, repo, "arm", "worker-init")
+	runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "History Task", "--type", "task")
 	mustGitInRepo(t, repo, "add", ".")
 	mustGitInRepo(t, repo, "commit", "-m", "add T-1")
 
-	runCmd(t, repo, "trls", "transition", "--issue", "T-1", "--to", "in-progress")
+	runCmd(t, repo, "arm", "transition", "--issue", "T-1", "--to", "in-progress")
 	mustGitInRepo(t, repo, "add", ".")
 	mustGitInRepo(t, repo, "commit", "-m", "transition T-1")
 
-	out := runCmdOutput(t, repo, "trls", "context-history", "--issue", "T-1")
+	out := runCmdOutput(t, repo, "arm", "context-history", "--issue", "T-1")
 	require.Contains(t, out, "T-1")
 }
 ```
@@ -2321,8 +2321,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/git"
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
 
@@ -2335,7 +2335,7 @@ func newContextHistoryCmd() *cobra.Command {
 		Short: "Show ops-branch commits where an issue changed",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoPath := appCtx.RepoPath
-			branch := "_trellis" // _trellis is visible from main repo even when checked out as worktree
+			branch := "_armature" // _armature is visible from main repo even when checked out as worktree
 			if appCtx.Mode == "single-branch" {
 				branch = "HEAD"
 			}
@@ -2348,7 +2348,7 @@ func newContextHistoryCmd() *cobra.Command {
 
 			opsPrefix := "ops"
 			if appCtx.Mode == "single-branch" {
-				opsPrefix = ".issues/ops"
+				opsPrefix = ".armature/ops"
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
@@ -2377,7 +2377,7 @@ func newContextHistoryCmd() *cobra.Command {
 			// Suggest render-context --at for full forensics
 			if len(commits) > 0 {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"\nUse `trls render-context --issue %s --at <sha>` to reconstruct full context at any commit.\n",
+					"\nUse `arm render-context --issue %s --at <sha>` to reconstruct full context at any commit.\n",
 					issueID)
 			}
 			return nil
@@ -2416,7 +2416,7 @@ git commit -m "feat(forensics): add context-history command (E5-S3-T4)"
 
 ---
 
-### Task 5: `trls materialize --exclude-worker <worker-id>`
+### Task 5: `arm materialize --exclude-worker <worker-id>`
 
 The architecture (section 19) specifies selective replay as a forensics primitive: rebuild state excluding one worker's ops. Useful for diagnosing whether a specific worker introduced corruption or inconsistency.
 
@@ -2430,12 +2430,12 @@ The architecture (section 19) specifies selective replay as a forensics primitiv
 ```go
 func TestMaterializeExcludeWorker(t *testing.T) {
     repo := setupTestRepo(t)
-    runCmd(t, repo, "trls", "worker-init")
+    runCmd(t, repo, "arm", "worker-init")
     workerID := getWorkerID(t, repo)
-    runCmd(t, repo, "trls", "create", "--id", "T-1", "--title", "Task", "--type", "task")
+    runCmd(t, repo, "arm", "create", "--id", "T-1", "--title", "Task", "--type", "task")
     // Exclude this worker's ops — T-1 should not appear in state
-    runCmd(t, repo, "trls", "materialize", "--exclude-worker", workerID)
-    out := runCmdOutput(t, repo, "trls", "status")
+    runCmd(t, repo, "arm", "materialize", "--exclude-worker", workerID)
+    out := runCmdOutput(t, repo, "arm", "status")
     require.NotContains(t, out, "T-1")
 }
 ```
@@ -2473,7 +2473,7 @@ No existing `README.md`. This story creates the full user documentation surface:
 |------|--------|
 | `README.md` | **New** — project overview, install, 5-minute quickstart |
 | `docs/getting-started.md` | **New** — step-by-step guide from install to first agent task |
-| `docs/commands.md` | **New** — complete command reference (every `trls` subcommand) |
+| `docs/commands.md` | **New** — complete command reference (every `arm` subcommand) |
 | `docs/use-cases.md` | **New** — per-persona workflow walkthroughs |
 
 ---
@@ -2490,19 +2490,19 @@ The README is the first thing users see. It must answer four questions in under 
 Create `README.md`:
 
 ```markdown
-# Trellis
+# Armature
 
 **Git-native work orchestration for multi-agent AI coordination.**
 
-Trellis gives AI coding agents persistent memory and lets human+AI teams coordinate without merge conflicts, external dependencies, or context rot. All state lives in git. No database, no server, no daemon — just a single Go binary and git.
+Armature gives AI coding agents persistent memory and lets human+AI teams coordinate without merge conflicts, external dependencies, or context rot. All state lives in git. No database, no server, no daemon — just a single Go binary and git.
 
-> *"Context rot is a memory problem. Trellis gives your agents memory."*
+> *"Context rot is a memory problem. Armature gives your agents memory."*
 
-## Why Trellis?
+## Why Armature?
 
 AI coding agents forget everything between sessions. When multiple agents work in the same repo, they step on each other with no coordination primitive. Existing tools (Jira, Linear, GitHub Issues) were built for humans, require network access, and consume 12,000–21,000+ tokens when presented to AI agents.
 
-Trellis solves this by treating the work queue as a git-native data structure:
+Armature solves this by treating the work queue as a git-native data structure:
 
 - **Zero infrastructure.** Git is the only dependency.
 - **Merge-conflict-free by construction.** Each worker writes to its own log file (MRDT).
@@ -2513,17 +2513,17 @@ Trellis solves this by treating the work queue as a git-native data structure:
 
 **Homebrew (macOS/Linux):**
 ```bash
-brew install scullxbones/tap/trls
+brew install scullxbones/tap/arm
 ```
 
 **Direct download (all platforms):**
 
-Download the latest binary for your platform from [GitHub Releases](https://github.com/scullxbones/trellis/releases).
+Download the latest binary for your platform from [GitHub Releases](https://github.com/scullxbones/armature/releases).
 
 **From source:**
 ```bash
-git clone https://github.com/scullxbones/trellis
-cd trellis && make install   # installs to ~/.local/bin/trls
+git clone https://github.com/scullxbones/armature
+cd trellis && make install   # installs to ~/.local/bin/arm
 ```
 
 Requires Go 1.26+ and git 2.25+.
@@ -2531,27 +2531,27 @@ Requires Go 1.26+ and git 2.25+.
 ## 5-Minute Quickstart
 
 ```bash
-# 1. Initialize Trellis in your repo
+# 1. Initialize Armature in your repo
 cd my-project
-trls init
+arm init
 
 # 2. Initialize yourself as a worker
-trls worker-init
+arm worker-init
 
 # 3. Create your first task
-trls create --id T-1 --title "Add login page" --type task
+arm create --id T-1 --title "Add login page" --type task
 
 # 4. Find what's ready to work on
-trls ready
+arm ready
 
 # 5. Claim the task
-trls claim --issue T-1
+arm claim --issue T-1
 
 # 6. Get structured context (what your AI agent will see)
-trls render-context --issue T-1
+arm render-context --issue T-1
 
 # 7. When done, mark it complete
-trls transition --issue T-1 --to done --outcome "Login page implemented with OAuth2"
+arm transition --issue T-1 --to done --outcome "Login page implemented with OAuth2"
 ```
 
 For AI agents: see [`docs/SKILL.md`](docs/SKILL.md) for the complete work loop contract.
@@ -2559,7 +2559,7 @@ For AI agents: see [`docs/SKILL.md`](docs/SKILL.md) for the complete work loop c
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — step-by-step guide for your first project
-- [Command Reference](docs/commands.md) — every `trls` subcommand explained
+- [Command Reference](docs/commands.md) — every `arm` subcommand explained
 - [Use Cases](docs/use-cases.md) — workflows for solo devs, teams, and AI fleets
 - [Architecture](docs/architecture.md) — how it works under the hood
 - [SKILL.md](docs/SKILL.md) — AI worker contract (feed this to your agent)
@@ -2571,7 +2571,7 @@ For AI agents: see [`docs/SKILL.md`](docs/SKILL.md) for the complete work loop c
 | **Op log** | Append-only JSONL file per worker. The source of truth. |
 | **Materialization** | Replaying all ops to produce the current state. |
 | **Ready queue** | Tasks whose blockers are merged and parent is in-progress. |
-| **Dual-branch mode** | Ops live on a separate `_trellis` orphan branch, keeping them out of code history. |
+| **Dual-branch mode** | Ops live on a separate `_armature` orphan branch, keeping them out of code history. |
 | **MRDT** | Mergeable Replicated Data Type — merge conflicts are impossible by construction. |
 
 ## License
@@ -2587,13 +2587,13 @@ Run each command from the quickstart in a fresh temp directory:
 TMPDIR=$(mktemp -d) && cd $TMPDIR
 git init && git config user.email "test@test.com" && git config user.name "Test"
 git commit --allow-empty -m "init"
-trls init
-trls worker-init
-trls create --id T-1 --title "Add login page" --type task
-trls ready
-trls claim --issue T-1
-trls render-context --issue T-1
-trls transition --issue T-1 --to done --outcome "done"
+arm init
+arm worker-init
+arm create --id T-1 --title "Add login page" --type task
+arm ready
+arm claim --issue T-1
+arm render-context --issue T-1
+arm transition --issue T-1 --to done --outcome "done"
 ```
 
 All commands must exit 0.
@@ -2619,36 +2619,36 @@ Covers: installation, single-branch setup (Lone Wolf), decomposing a PRD, the ag
 Create `docs/getting-started.md` with the following sections:
 
 ```markdown
-# Getting Started with Trellis
+# Getting Started with Armature
 
 This guide takes you from a fresh install to a working project in about 15 minutes.
 
 ## Prerequisites
 
 - git 2.25 or newer
-- `trls` binary installed (see [README](../README.md#install))
+- `arm` binary installed (see [README](../README.md#install))
 
 ## 1. Initialize Your Repository
 
 ```bash
 cd my-project
-trls init
+arm init
 ```
 
-`trls init` auto-detects your repository configuration:
-- If your main branch is unprotected (solo/local): **single-branch mode** — ops live alongside your code in `.issues/`.
-- If your main branch is protected (team/enterprise): **dual-branch mode** — ops live on a separate `_trellis` orphan branch.
+`arm init` auto-detects your repository configuration:
+- If your main branch is unprotected (solo/local): **single-branch mode** — ops live alongside your code in `.armature/`.
+- If your main branch is protected (team/enterprise): **dual-branch mode** — ops live on a separate `_armature` orphan branch.
 
 You can force a mode:
 ```bash
-trls init --mode single-branch
-trls init --mode dual-branch
+arm init --mode single-branch
+arm init --mode dual-branch
 ```
 
 ## 2. Register as a Worker
 
 ```bash
-trls worker-init
+arm worker-init
 ```
 
 This assigns you a unique UUID and records it in your local git config. Every operation you perform is attributed to this ID. AI agents run `worker-init` once per session.
@@ -2659,80 +2659,80 @@ Work items form a DAG: **epic → story → task**. Only tasks appear in the rea
 
 ```bash
 # Create an epic
-trls create --id E-1 --title "User Authentication" --type epic
+arm create --id E-1 --title "User Authentication" --type epic
 
 # Create a story under it
-trls create --id S-1 --title "Login page" --type story --parent E-1
+arm create --id S-1 --title "Login page" --type story --parent E-1
 
 # Create tasks under the story
-trls create --id T-1 --title "Build login form" --type task --parent S-1
-trls create --id T-2 --title "Add OAuth2 provider" --type task --parent S-1 --blocked-by T-1
+arm create --id T-1 --title "Build login form" --type task --parent S-1
+arm create --id T-2 --title "Add OAuth2 provider" --type task --parent S-1 --blocked-by T-1
 ```
 
 ## 4. Start the Work Loop
 
 ```bash
 # Activate the epic/story chain
-trls transition --issue E-1 --to in-progress
-trls transition --issue S-1 --to in-progress
+arm transition --issue E-1 --to in-progress
+arm transition --issue S-1 --to in-progress
 
 # See what's ready
-trls ready
+arm ready
 
 # Get full context for a task (what your AI agent will see)
-trls render-context --issue T-1
+arm render-context --issue T-1
 
 # Claim it
-trls claim --issue T-1
+arm claim --issue T-1
 
 # ... do the work ...
 
 # Mark complete
-trls transition --issue T-1 --to done --outcome "Login form built with email/password"
+arm transition --issue T-1 --to done --outcome "Login form built with email/password"
 ```
 
 ## 5. Decomposing from a PRD (Conductor workflow)
 
-If you have source documents (PRD, architecture doc), Trellis can help decompose them:
+If you have source documents (PRD, architecture doc), Armature can help decompose them:
 
 ```bash
 # Register your PRD
-trls sources add --id prd --url file://./docs/prd.md
+arm sources add --id prd --url file://./docs/prd.md
 
 # Generate decomposition context (feed this to your AI)
-trls decompose-context --output decompose-context.md
+arm decompose-context --output decompose-context.md
 
 # After your AI produces a plan.json:
-trls decompose-apply --plan plan.json --dry-run   # validate
-trls decompose-apply --plan plan.json             # apply
+arm decompose-apply --plan plan.json --dry-run   # validate
+arm decompose-apply --plan plan.json             # apply
 
 # Review the resulting DAG
-trls dag-summary   # interactive TUI
+arm dag-summary   # interactive TUI
 ```
 
 ## 6. Monitoring Progress
 
 ```bash
-trls status          # all issues grouped by status
-trls workers         # active workers and their claims
-trls log             # full audit trail
-trls validate        # check DAG structural integrity
+arm status          # all issues grouped by status
+arm workers         # active workers and their claims
+arm log             # full audit trail
+arm validate        # check DAG structural integrity
 ```
 
 ## 7. Team Setup (Dual-Branch Mode)
 
-In dual-branch mode, AI agents push their ops to `_trellis` independently. No code conflicts possible.
+In dual-branch mode, AI agents push their ops to `_armature` independently. No code conflicts possible.
 
 ```bash
 # Each agent on first run:
-trls init       # detects dual-branch, sets up _trellis + worktree
-trls worker-init
+arm init       # detects dual-branch, sets up _armature + worktree
+arm worker-init
 
 # Pull latest ops before starting work:
-trls sync
+arm sync
 
 # Push after completing tasks:
-# (trls transition --to done triggers push automatically if configured)
+# (arm transition --to done triggers push automatically if configured)
 ```
 
 See [use-cases.md](use-cases.md) for full team workflow examples.
@@ -2753,7 +2753,7 @@ git commit -m "docs: add getting-started guide (E5-S4-T2)"
 
 ### Task 3: `docs/commands.md` — Complete command reference
 
-Every `trls` subcommand with flags, examples, and output description.
+Every `arm` subcommand with flags, examples, and output description.
 
 **Files:**
 - Create: `docs/commands.md`
@@ -2762,7 +2762,7 @@ Every `trls` subcommand with flags, examples, and output description.
 
 Run:
 ```bash
-trls --help
+arm --help
 ```
 
 Use the output as the authoritative list of commands. The reference must cover every command registered in `cmd/trellis/main.go`.
@@ -2772,7 +2772,7 @@ Use the output as the authoritative list of commands. The reference must cover e
 Structure:
 
 ```markdown
-# Trellis Command Reference
+# Armature Command Reference
 
 All commands accept `--repo <path>` to specify the repository (default: current directory) and `--format human|json|agent` to control output format.
 
@@ -2780,14 +2780,14 @@ All commands accept `--repo <path>` to specify the repository (default: current 
 
 ## Setup
 
-### `trls init`
-Initialize Trellis in a git repository.
+### `arm init`
+Initialize Armature in a git repository.
 
 ```
-trls init [--mode single-branch|dual-branch] [--repair]
+arm init [--mode single-branch|dual-branch] [--repair]
 ```
 
-Auto-detects branch mode. Creates `.issues/` directory (single-branch) or `_trellis` orphan branch with ops worktree (dual-branch). Proposes git hooks based on detected project type.
+Auto-detects branch mode. Creates `.armature/` directory (single-branch) or `_armature` orphan branch with ops worktree (dual-branch). Proposes git hooks based on detected project type.
 
 **Flags:**
 - `--mode` — force single-branch or dual-branch (default: auto-detect)
@@ -2795,11 +2795,11 @@ Auto-detects branch mode. Creates `.issues/` directory (single-branch) or `_trel
 
 ---
 
-### `trls worker-init`
-Register the current user/agent as a Trellis worker.
+### `arm worker-init`
+Register the current user/agent as a Armature worker.
 
 ```
-trls worker-init
+arm worker-init
 ```
 
 Generates a UUID if none exists and records it in the local git config. Run once per machine (humans) or once per session (AI agents).
@@ -2808,11 +2808,11 @@ Generates a UUID if none exists and records it in the local git config. Run once
 
 ## Work Loop
 
-### `trls ready`
+### `arm ready`
 List tasks that are ready to be claimed, in priority order.
 
 ```
-trls ready [--worker <worker-id>] [--format json]
+arm ready [--worker <worker-id>] [--format json]
 ```
 
 A task is ready when: status is `open`, all blockers are `merged`, parent is `in-progress`, and no active (non-stale) claim exists.
@@ -2823,11 +2823,11 @@ A task is ready when: status is `open`, all blockers are `merged`, parent is `in
 
 ---
 
-### `trls render-context`
+### `arm render-context`
 Assemble the full context slice for a task.
 
 ```
-trls render-context --issue <id> [--at <sha>] [--budget <chars>] [--raw]
+arm render-context --issue <id> [--at <sha>] [--budget <chars>] [--raw]
 ```
 
 Produces 650–1,600 tokens of structured context across 7 layers: task spec, scope, decisions, notes, sibling outcomes, open questions, and token budget status.
@@ -2839,11 +2839,11 @@ Produces 650–1,600 tokens of structured context across 7 layers: task spec, sc
 
 ---
 
-### `trls claim`
+### `arm claim`
 Claim a ready task.
 
 ```
-trls claim --issue <id> [--ttl <minutes>]
+arm claim --issue <id> [--ttl <minutes>]
 ```
 
 Timestamp-based race resolution: first claim by time wins, lexicographic worker ID as tiebreaker. Stories and epics are auto-advanced to `in-progress` after claiming.
@@ -2853,22 +2853,22 @@ Timestamp-based race resolution: first claim by time wins, lexicographic worker 
 
 ---
 
-### `trls heartbeat`
+### `arm heartbeat`
 Signal that work is ongoing to prevent claim expiry.
 
 ```
-trls heartbeat --issue <id>
+arm heartbeat --issue <id>
 ```
 
 Resets the claim TTL timer. Rate-limited to once per minute per issue.
 
 ---
 
-### `trls transition`
+### `arm transition`
 Move an issue to a new status.
 
 ```
-trls transition --issue <id> --to <status> [--outcome <text>] [--branch <name>] [--pr <number>]
+arm transition --issue <id> --to <status> [--outcome <text>] [--branch <name>] [--pr <number>]
 ```
 
 Valid statuses: `open`, `in-progress`, `done`, `merged`, `blocked`, `cancelled`.
@@ -2882,55 +2882,55 @@ Pre-transition hooks run before the op is recorded. Required hooks must pass; op
 
 ---
 
-### `trls reopen`
+### `arm reopen`
 Reopen a done or blocked issue.
 
 ```
-trls reopen --issue <id>
+arm reopen --issue <id>
 ```
 
-Equivalent to `trls transition --issue <id> --to open`.
+Equivalent to `arm transition --issue <id> --to open`.
 
 ---
 
 ## Coordination
 
-### `trls assign`
+### `arm assign`
 Assign an issue to a specific worker.
 
 ```
-trls assign --issue <id> --worker <worker-id>
+arm assign --issue <id> --worker <worker-id>
 ```
 
-Assignment is advisory — any worker can claim an assigned issue. Assigned tasks appear first in `trls ready --worker <me>`.
+Assignment is advisory — any worker can claim an assigned issue. Assigned tasks appear first in `arm ready --worker <me>`.
 
 ---
 
-### `trls unassign`
+### `arm unassign`
 Remove worker assignment. If the issue is currently `claimed`, also transitions it back to `open`.
 
 ```
-trls unassign --issue <id>
+arm unassign --issue <id>
 ```
 
 ---
 
-### `trls workers`
+### `arm workers`
 Show all workers and their current activity.
 
 ```
-trls workers [--json]
+arm workers [--json]
 ```
 
 Reports `active` (live claim), `stale` (expired claim), or `idle` for each worker.
 
 ---
 
-### `trls sync`
+### `arm sync`
 Fetch and materialize the ops branch.
 
 ```
-trls sync [--check] [--code]
+arm sync [--check] [--code]
 ```
 
 **Flags:**
@@ -2939,215 +2939,215 @@ trls sync [--check] [--code]
 
 ---
 
-### `trls status`
+### `arm status`
 Show all issues grouped by status.
 
 ```
-trls status
+arm status
 ```
 
 ---
 
 ## Governance
 
-### `trls validate`
+### `arm validate`
 Run structural integrity checks on the DAG.
 
 ```
-trls validate [--scope <prefix>] [--strict] [--ci] [--format json]
+arm validate [--scope <prefix>] [--strict] [--ci] [--format json]
 ```
 
 Checks W1–W11 (warnings) and E2–E12 (errors). Use `--ci` in CI pipelines for non-zero exit on any finding.
 
 ---
 
-### `trls dag-summary`
+### `arm dag-summary`
 Interactive TUI for reviewing and signing off on DAG nodes.
 
 ```
-trls dag-summary [--json]
+arm dag-summary [--json]
 ```
 
 Per-node sign-off records a `dag-transition` op with worker attribution. Use `--json` for non-interactive output.
 
 ---
 
-### `trls log`
+### `arm log`
 Display the audit trail.
 
 ```
-trls log [--issue <id>] [--worker <id>] [--since <time>] [--json]
+arm log [--issue <id>] [--worker <id>] [--since <time>] [--json]
 ```
 
 ---
 
 ## Sources & Decomposition
 
-### `trls sources`
+### `arm sources`
 Manage source documents.
 
 ```
-trls sources add --id <id> --url <url> [--provider filesystem|confluence|sharepoint]
-trls sources sync [--id <id>]
-trls sources verify
+arm sources add --id <id> --url <url> [--provider filesystem|confluence|sharepoint]
+arm sources sync [--id <id>]
+arm sources verify
 ```
 
 ---
 
-### `trls decompose-context`
+### `arm decompose-context`
 Generate a decomposition context package for an AI agent.
 
 ```
-trls decompose-context [--sources] [--template <path>] [--output <path>]
+arm decompose-context [--sources] [--template <path>] [--output <path>]
 ```
 
 ---
 
-### `trls decompose-apply`
+### `arm decompose-apply`
 Apply an AI-generated decomposition plan.
 
 ```
-trls decompose-apply --plan <plan.json> [--dry-run]
+arm decompose-apply --plan <plan.json> [--dry-run]
 ```
 
 ---
 
-### `trls decompose-revert`
+### `arm decompose-revert`
 Revert a decomposition (double-entry cancellation).
 
 ```
-trls decompose-revert --plan <plan.json>
+arm decompose-revert --plan <plan.json>
 ```
 
 ---
 
 ## Forensics
 
-### `trls context-history`
+### `arm context-history`
 List ops-branch commits where an issue changed.
 
 ```
-trls context-history --issue <id> [--limit <n>]
+arm context-history --issue <id> [--limit <n>]
 ```
 
-Use with `trls render-context --at <sha>` to reconstruct the exact context at any point in history.
+Use with `arm render-context --at <sha>` to reconstruct the exact context at any point in history.
 
 ---
 
 ## Brownfield
 
-### `trls import`
+### `arm import`
 Import tasks from CSV or JSON.
 
 ```
-trls import --file <path>
+arm import --file <path>
 ```
 
 Imported nodes get `provenance.confidence=inferred` and cannot be claimed until confirmed.
 
 ---
 
-### `trls confirm`
+### `arm confirm`
 Confirm an imported node for claiming.
 
 ```
-trls confirm --issue <id>
+arm confirm --issue <id>
 ```
 
 ---
 
 ## Interactive TUI
 
-### `trls tui`
+### `arm tui`
 Launch the interactive board. *(Added in E5-S2 — verify the command is registered before committing this documentation.)*
 
 ```
-trls tui
+arm tui
 ```
 
 Three-column kanban (Open / Active / Done) with workers panel. Keyboard: `j/k` to navigate, `tab/h/l` to switch columns, `enter` for issue detail, `q` to quit. Auto-refreshes every 30 seconds.
 
 ---
 
-### `trls stale-review`
+### `arm stale-review`
 Interactive TUI for reviewing source document changes.
 
 ```
-trls stale-review
+arm stale-review
 ```
 
 ---
 
 ## Utilities
 
-### `trls create`
+### `arm create`
 Create a new work item.
 
 ```
-trls create --id <id> --title <text> --type epic|story|task|feature
+arm create --id <id> --title <text> --type epic|story|task|feature
             [--parent <id>] [--blocked-by <id>,...] [--priority critical|high|medium|low]
             [--scope <path>,...] [--complexity small|medium|large]
 ```
 
 ---
 
-### `trls note`
+### `arm note`
 Add a note to an issue.
 
 ```
-trls note --issue <id> --msg <text>
+arm note --issue <id> --msg <text>
 ```
 
 ---
 
-### `trls decision`
+### `arm decision`
 Record a structured decision.
 
 ```
-trls decision --topic <text> --choice <text> --rationale <text> [--affects <id>,...]
+arm decision --topic <text> --choice <text> --rationale <text> [--affects <id>,...]
 ```
 
 ---
 
-### `trls link`
+### `arm link`
 Add a dependency between issues.
 
 ```
-trls link --from <id> --to <id> [--rel blocks|related]
+arm link --from <id> --to <id> [--rel blocks|related]
 ```
 
 ---
 
-### `trls materialize`
+### `arm materialize`
 Force explicit materialization from ops.
 
 ```
-trls materialize
+arm materialize
 ```
 
 ---
 
-### `trls merged`
+### `arm merged`
 Mark an issue as merged (typically called by post-merge git hook).
 
 ```
-trls merged --issue <id> [--pr <number>]
+arm merged --issue <id> [--pr <number>]
 ```
 
 ---
 
-### `trls version`
+### `arm version`
 Print the binary version.
 
 ```
-trls version
+arm version
 ```
 ```
 
 - [ ] **Step 3: Verify the command list is complete**
 
 ```bash
-trls --help | grep -E "^\s{2}\w"
+arm --help | grep -E "^\s{2}\w"
 ```
 
 Compare output against the commands documented above. Add any missing commands.
@@ -3171,34 +3171,34 @@ Covers the five personas from the PRD: Lone Wolf, Gatekeeper, Conductor, Wrangle
 - [ ] **Step 1: Create `docs/use-cases.md`**
 
 ```markdown
-# Trellis Use Cases
+# Armature Use Cases
 
-Real-world workflows for each type of Trellis user.
+Real-world workflows for each type of Armature user.
 
 ---
 
 ## P1: Lone Wolf — Solo Developer
 
-**Setup:** Single-branch mode. All `.issues/` data on main. One worker.
+**Setup:** Single-branch mode. All `.armature/` data on main. One worker.
 
 ```bash
 cd my-project
-trls init                          # auto-detects single-branch
-trls worker-init
+arm init                          # auto-detects single-branch
+arm worker-init
 
 # Create your project breakdown
-trls create --id E-1 --title "v2.0 Refactor" --type epic
-trls transition --issue E-1 --to in-progress
+arm create --id E-1 --title "v2.0 Refactor" --type epic
+arm transition --issue E-1 --to in-progress
 
-trls create --id T-1 --title "Extract auth module" --type task --parent E-1
-trls create --id T-2 --title "Write auth tests" --type task --parent E-1 --blocked-by T-1
+arm create --id T-1 --title "Extract auth module" --type task --parent E-1
+arm create --id T-2 --title "Write auth tests" --type task --parent E-1 --blocked-by T-1
 
 # Start your AI agent — feed it SKILL.md and let it loop:
-trls ready
-trls render-context --issue T-1
-trls claim --issue T-1
+arm ready
+arm render-context --issue T-1
+arm claim --issue T-1
 # ... agent works ...
-trls transition --issue T-1 --to done --outcome "Auth module extracted to internal/auth"
+arm transition --issue T-1 --to done --outcome "Auth module extracted to internal/auth"
 ```
 
 **Key benefit:** Your AI agent picks up exactly where it left off in the next session. No re-derivation of context.
@@ -3207,20 +3207,20 @@ trls transition --issue T-1 --to done --outcome "Auth module extracted to intern
 
 ## P2: Gatekeeper — Enterprise Developer with Protected Main
 
-**Setup:** Dual-branch mode. `_trellis` orphan branch for ops. Feature branches to main via PR.
+**Setup:** Dual-branch mode. `_armature` orphan branch for ops. Feature branches to main via PR.
 
 ```bash
-trls init                          # detects protected main, creates _trellis branch
-trls worker-init
+arm init                          # detects protected main, creates _armature branch
+arm worker-init
 
 # Work loop is the same as Lone Wolf, but completion is two-phase:
-trls transition --issue T-1 --to done --branch feature/auth --pr 142 --outcome "..."
+arm transition --issue T-1 --to done --branch feature/auth --pr 142 --outcome "..."
 
-# After your PR is merged, Trellis auto-detects the merge:
-trls sync                          # promotes T-1 from done → merged
+# After your PR is merged, Armature auto-detects the merge:
+arm sync                          # promotes T-1 from done → merged
 
 # Only after merged will T-2 become unblocked and appear in ready queue
-trls ready
+arm ready
 ```
 
 **Key benefit:** Downstream tasks don't start until code has passed review. The audit trail connects ops history to PR history bidirectionally.
@@ -3235,60 +3235,60 @@ trls ready
 
 ```bash
 # Register your source documents
-trls sources add --id prd --url https://your-confluence/prd
-trls sources add --id arch --url file://./docs/architecture.md
-trls sources sync
+arm sources add --id prd --url https://your-confluence/prd
+arm sources add --id arch --url file://./docs/architecture.md
+arm sources sync
 
 # Generate decomposition context and feed to AI
-trls decompose-context --sources --output decompose-context.md
+arm decompose-context --sources --output decompose-context.md
 # ... AI produces plan.json ...
 
 # Validate and apply
-trls decompose-apply --plan plan.json --dry-run
-trls decompose-apply --plan plan.json
+arm decompose-apply --plan plan.json --dry-run
+arm decompose-apply --plan plan.json
 
 # Review the DAG interactively
-trls dag-summary
+arm dag-summary
 ```
 
 ### Monitoring in Real Time
 
 ```bash
-trls status          # all issues by status
-trls workers         # who's working on what
-trls log --since 1h  # what happened in the last hour
-trls validate --ci   # CI-ready structural check
+arm status          # all issues by status
+arm workers         # who's working on what
+arm log --since 1h  # what happened in the last hour
+arm validate --ci   # CI-ready structural check
 ```
 
 ### Spot-checking Agent Context
 
 ```bash
 # See exactly what Agent X will see before it starts
-trls render-context --issue T-42
+arm render-context --issue T-42
 
 # Check historical context after an incident
-trls context-history --issue T-42
-trls render-context --issue T-42 --at abc1234
+arm context-history --issue T-42
+arm render-context --issue T-42 --at abc1234
 ```
 
 ---
 
 ## P4: Wrangler — Platform Engineer
 
-**Setup:** Manages Trellis infra for the Conductor's team.
+**Setup:** Manages Armature infra for the Conductor's team.
 
 ### Provisioning Agents
 
 ```bash
 # Each CI agent on spin-up:
-trls init --mode dual-branch
-trls worker-init
+arm init --mode dual-branch
+arm worker-init
 # Worker ID is now in local git config, persists for the agent's lifetime
 ```
 
 ### Tuning TTLs
 
-Edit `.issues/config.json`:
+Edit `.armature/config.json`:
 ```json
 {
   "default_ttl": 120,
@@ -3303,20 +3303,20 @@ Edit `.issues/config.json`:
 
 ```bash
 # Find the stale worker
-trls workers
+arm workers
 
 # Steal its claim (or let TTL expire and claim normally)
-trls claim --issue T-99   # timestamp-based winner takes precedence
+arm claim --issue T-99   # timestamp-based winner takes precedence
 
 # Or transition it manually
-trls transition --issue T-99 --to open
+arm transition --issue T-99 --to open
 ```
 
 ---
 
 ## P5: AI Worker (The Swarm)
 
-AI agents interact exclusively through the SKILL.md contract and `trls` CLI.
+AI agents interact exclusively through the SKILL.md contract and `arm` CLI.
 
 **Full work loop:** See [`docs/SKILL.md`](SKILL.md).
 
@@ -3324,29 +3324,29 @@ AI agents interact exclusively through the SKILL.md contract and `trls` CLI.
 
 ```bash
 # Start of session
-trls worker-init
-trls sync
+arm worker-init
+arm sync
 
 # Find work
-trls ready --format json
+arm ready --format json
 
 # Get context for the top task
-trls render-context --issue <id> --format json
+arm render-context --issue <id> --format json
 
 # Claim
-trls claim --issue <id>
+arm claim --issue <id>
 
 # Signal progress (every 10 minutes during long operations)
-trls heartbeat --issue <id>
+arm heartbeat --issue <id>
 
 # Complete
-trls transition --issue <id> --to done --outcome "<one line summary>"
+arm transition --issue <id> --to done --outcome "<one line summary>"
 
 # Return to top of loop
 ```
 
 **Error recovery:**
-- `No tasks ready` with stale claim warning → run `trls claim --issue <id>` to steal
+- `No tasks ready` with stale claim warning → run `arm claim --issue <id>` to steal
 - `confidence=inferred` claim error → task needs human confirmation first
 - Scope overlap warning → acknowledge and proceed, or raise with Conductor
 
@@ -3357,10 +3357,10 @@ trls transition --issue <id> --to done --outcome "<one line summary>"
 Two agents both see `T-55` as ready and both claim it simultaneously:
 
 1. Both agents write claim ops to their own log files (no conflict at write time).
-2. Both push to `_trellis` — pushes succeed independently.
-3. On the next `trls sync`, both agents materialize the same state.
+2. Both push to `_armature` — pushes succeed independently.
+3. On the next `arm sync`, both agents materialize the same state.
 4. Timestamp resolution: the earlier claim wins. The other agent's claim is treated as stale.
-5. The losing agent runs `trls ready` and gets a different task.
+5. The losing agent runs `arm ready` and gets a different task.
 
 **Zero wasted work** beyond the sync cycle window. No locks, no coordinators.
 ```
@@ -3379,15 +3379,15 @@ git commit -m "docs: add per-persona use case guides (E5-S4-T4)"
 After all five stories are complete:
 
 - [ ] Run `make check` — must pass (lint + test ≥80% coverage + mutate)
-- [ ] Run `trls decompose-apply` on a test plan — verify all nodes are created as `draft` and do NOT appear in `trls ready`
-- [ ] Run `trls dag-summary` — sign off interactively, verify tasks become claimable in `trls ready`
-- [ ] Run `trls tui` in a repo with issues — verify board renders, columns populate, `q` quits
-- [ ] Run `trls ready` (no flags, TTY) — verify interactive selection TUI launches; select a task and confirm claim succeeds
-- [ ] Run `trls render-context --issue <id> --at <sha>` on a past commit — verify output differs from HEAD
-- [ ] Run `trls materialize --exclude-worker <id>` — verify excluded worker's issues disappear from state
-- [ ] Run `trls ready` with a stale in-progress issue — verify diagnostic prints to stderr
-- [ ] Verify `trls transition --to open` succeeds
-- [ ] Verify `trls unassign` on a claimed issue transitions back to open
+- [ ] Run `arm decompose-apply` on a test plan — verify all nodes are created as `draft` and do NOT appear in `arm ready`
+- [ ] Run `arm dag-summary` — sign off interactively, verify tasks become claimable in `arm ready`
+- [ ] Run `arm tui` in a repo with issues — verify board renders, columns populate, `q` quits
+- [ ] Run `arm ready` (no flags, TTY) — verify interactive selection TUI launches; select a task and confirm claim succeeds
+- [ ] Run `arm render-context --issue <id> --at <sha>` on a past commit — verify output differs from HEAD
+- [ ] Run `arm materialize --exclude-worker <id>` — verify excluded worker's issues disappear from state
+- [ ] Run `arm ready` with a stale in-progress issue — verify diagnostic prints to stderr
+- [ ] Verify `arm transition --to open` succeeds
+- [ ] Verify `arm unassign` on a claimed issue transitions back to open
 - [ ] Read README.md cold — answer: install path clear? quickstart runnable without docs?
 
 ---
@@ -3396,8 +3396,8 @@ After all five stories are complete:
 
 - GitHub Issues bidirectional sync (plan-post-bootstrap E4-002)
 - Webhook support (plan-post-bootstrap E4-003)
-- Issue templates / `trls init --template` (plan-post-bootstrap E4-004)
+- Issue templates / `arm init --template` (plan-post-bootstrap E4-004)
 - Sprint bookmarks
-- `trls metrics` command
-- Log compaction (`trls compact`)
+- `arm metrics` command
+- Log compaction (`arm compact`)
 - **Plan file format migration: `issues` → `nodes` with separate `links` array** — The architecture spec (section 7) defines the plan format using a `nodes` array and a top-level `links` array for dependency edges. The current implementation uses `issues` with `blocked_by` inline per node. The `nodes`/`links` format supports arbitrary link types and is the correct long-term schema. Defer migration to E6 to avoid churn while E5 work is in flight; document the divergence in the `decompose-apply --help` text and in `docs/commands.md` so users are not surprised.

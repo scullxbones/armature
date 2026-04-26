@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `trellis.mode=dual-branch` functional end-to-end: init creates an orphan `_trellis` branch + `.trellis/` worktree, context resolution reads the worktree path, and all materialize calls derive `singleBranch` from the mode rather than hardcoding `true`.
+**Goal:** Make `trellis.mode=dual-branch` functional end-to-end: init creates an orphan `_armature` branch + `.trellis/` worktree, context resolution reads the worktree path, and all materialize calls derive `singleBranch` from the mode rather than hardcoding `true`.
 
-**Architecture:** Git config `trellis.mode` already drives mode selection; the Context struct (`internal/config/context.go`) already resolves `IssuesDir` for single-branch. This plan implements the dual-branch case: create an orphan `_trellis` branch at init, mount it as a linked worktree at `.trellis/`, and store the worktree path in `trellis.ops-worktree-path` git config so `ResolveContext` can find it. All hardcoded `singleBranch=true` calls become `appCtx.Mode == "single-branch"`.
+**Architecture:** Git config `trellis.mode` already drives mode selection; the Context struct (`internal/config/context.go`) already resolves `IssuesDir` for single-branch. This plan implements the dual-branch case: create an orphan `_armature` branch at init, mount it as a linked worktree at `.trellis/`, and store the worktree path in `trellis.ops-worktree-path` git config so `ResolveContext` can find it. All hardcoded `singleBranch=true` calls become `appCtx.Mode == "single-branch"`.
 
 **Tech Stack:** Go, `os/exec` for git commands, testify
 
@@ -56,7 +56,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/git"
+	"github.com/scullxbones/armature/internal/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,46 +82,46 @@ func TestCreateOrphanBranch(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	err := c.CreateOrphanBranch("_trellis")
+	err := c.CreateOrphanBranch("_armature")
 	require.NoError(t, err)
 
 	// Verify branch exists
-	cmd := exec.Command("git", "-C", repo, "branch", "--list", "_trellis")
+	cmd := exec.Command("git", "-C", repo, "branch", "--list", "_armature")
 	out, err := cmd.Output()
 	require.NoError(t, err)
-	assert.Contains(t, string(out), "_trellis")
+	assert.Contains(t, string(out), "_armature")
 
-	// Verify we are still on the original branch (not _trellis)
+	// Verify we are still on the original branch (not _armature)
 	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
-	assert.NotEqual(t, "_trellis\n", string(branchOut))
+	assert.NotEqual(t, "_armature\n", string(branchOut))
 }
 
 func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	// Second call should not error; branch already exists so it returns nil immediately
-	err := c.CreateOrphanBranch("_trellis")
+	err := c.CreateOrphanBranch("_armature")
 	assert.NoError(t, err)
 
 	// Still on original branch
 	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
-	assert.NotEqual(t, "_trellis\n", string(branchOut))
+	assert.NotEqual(t, "_armature\n", string(branchOut))
 }
 
 func TestAddWorktree(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
 
 	worktreePath := filepath.Join(repo, ".trellis")
-	err := c.AddWorktree("_trellis", worktreePath)
+	err := c.AddWorktree("_armature", worktreePath)
 	require.NoError(t, err)
 
 	// Verify worktree directory exists
@@ -362,7 +362,7 @@ In `internal/config/context_test.go`, replace `TestResolveContext_DualBranch_Ret
 func TestResolveContext_DualBranch(t *testing.T) {
 	repo := initTestRepo(t)
 
-	// Simulate a dual-branch setup: create the worktree dir with .issues/ inside
+	// Simulate a dual-branch setup: create the worktree dir with .armature/ inside
 	worktreePath := filepath.Join(repo, ".trellis")
 	issuesDir := filepath.Join(worktreePath, ".issues")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
@@ -456,7 +456,7 @@ git commit -m "feat(config): implement dual-branch context resolution via trelli
 
 ---
 
-### Task 4: Add `--dual-branch` flag to `trls init`
+### Task 4: Add `--dual-branch` flag to `arm init`
 
 **Files:**
 - Modify: `cmd/trellis/init.go`
@@ -484,7 +484,7 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	// Worktree should exist at .trellis/
 	assert.DirExists(t, filepath.Join(repo, ".trellis"))
 
-	// .issues/ inside worktree should have config.json with dual-branch mode
+	// .armature/ inside worktree should have config.json with dual-branch mode
 	cfgPath := filepath.Join(repo, ".trellis", ".issues", "config.json")
 	data, err := os.ReadFile(cfgPath)
 	require.NoError(t, err)
@@ -523,10 +523,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/scullxbones/trellis/internal/config"
-	"github.com/scullxbones/trellis/internal/git"
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/worker"
+	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -536,7 +536,7 @@ func newInitCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:               "init",
-		Short:             "Initialize Trellis in the current repository",
+		Short:             "Initialize Armature in the current repository",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repoPath == "" {
@@ -547,7 +547,7 @@ func newInitCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
-	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _trellis branch)")
+	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _armature branch)")
 	return cmd
 }
 
@@ -556,14 +556,14 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 
 	var issuesDir string
 	if dualBranch {
-		// Create orphan branch _trellis (idempotent)
-		if err := gitClient.CreateOrphanBranch("_trellis"); err != nil {
-			return fmt.Errorf("create _trellis branch: %w", err)
+		// Create orphan branch _armature (idempotent)
+		if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
+			return fmt.Errorf("create _armature branch: %w", err)
 		}
 
 		// Create .trellis/ worktree (idempotent)
 		worktreePath := filepath.Join(repoPath, ".trellis")
-		if err := gitClient.AddWorktree("_trellis", worktreePath); err != nil {
+		if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
 			return fmt.Errorf("add .trellis worktree: %w", err)
 		}
 
@@ -625,7 +625,7 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	if dualBranch {
 		mode = "dual-branch"
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in %s mode at %s\n", mode, issuesDir)
+	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in %s mode at %s\n", mode, issuesDir)
 	return nil
 }
 ```
@@ -641,7 +641,7 @@ Expected: PASS — new dual-branch init test passes, all existing tests continue
 
 ```bash
 cd /home/brian/development/trellis && git add cmd/trellis/init.go cmd/trellis/main_test.go
-git commit -m "feat(init): add --dual-branch flag to create _trellis orphan branch and .trellis worktree"
+git commit -m "feat(init): add --dual-branch flag to create _armature orphan branch and .trellis worktree"
 ```
 
 ---
@@ -655,7 +655,7 @@ git commit -m "feat(init): add --dual-branch flag to create _trellis orphan bran
 - [ ] **Step 1: Build the binary**
 
 ```bash
-cd /home/brian/development/trellis && go build -o /tmp/trls ./cmd/trellis
+cd /home/brian/development/trellis && go build -o /tmp/arm ./cmd/trellis
 ```
 Expected: Clean build, no errors
 
@@ -669,10 +669,10 @@ git config user.email "test@test.com"
 git config user.name "Test"
 git config commit.gpgsign false
 git commit --allow-empty -m "init"
-/tmp/trls init --dual-branch
-# Should print: "Initialized Trellis in dual-branch mode at .../\.trellis/.issues"
-ls .trellis/.issues/  # Should show ops/ state/ config.json etc
-git branch            # Should show _trellis branch
+/tmp/arm init --dual-branch
+# Should print: "Initialized Armature in dual-branch mode at .../\.trellis/.issues"
+ls .trellis/.armature/  # Should show ops/ state/ config.json etc
+git branch            # Should show _armature branch
 git config trellis.mode  # Should print "dual-branch"
 git config trellis.ops-worktree-path  # Should print path to .trellis/
 ```
@@ -683,8 +683,8 @@ Expected: All steps succeed
 Continuing in the same temp dir:
 
 ```bash
-/tmp/trls worker-init
-/tmp/trls materialize
+/tmp/arm worker-init
+/tmp/arm materialize
 # Should print: "Materialized 0 issues from 0 ops"
 ```
 Expected: Success (ops dir is empty but path resolves correctly)
@@ -708,9 +708,9 @@ git commit -m "fix(dual-branch): fix issues found during smoke test"
 
 ## Definition of Done Checklist
 
-- [ ] `trls init --dual-branch` creates `_trellis` orphan branch and `.trellis/` worktree
+- [ ] `arm init --dual-branch` creates `_armature` orphan branch and `.trellis/` worktree
 - [ ] `trellis.mode=dual-branch` and `trellis.ops-worktree-path` are set in git config
-- [ ] `ResolveContext` resolves `IssuesDir` to `.trellis/.issues/` in dual-branch mode
+- [ ] `ResolveContext` resolves `IssuesDir` to `.trellis/.armature/` in dual-branch mode
 - [ ] `ResolveContext` returns a clear error when `trellis.ops-worktree-path` is absent
 - [ ] `CreateOrphanBranch` always returns to the original branch (captures it by name, not `checkout -`)
 - [ ] All `Materialize()` calls use `appCtx.Mode == "single-branch"` (not hardcoded `true`)

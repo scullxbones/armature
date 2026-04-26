@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** In dual-branch mode, every worker op (claim, note, heartbeat, transition) appends to a log in the `.trellis/` worktree and immediately commits that file change to the `_trellis` branch, keeping issues history completely isolated from the working branch.
+**Goal:** In dual-branch mode, every worker op (claim, note, heartbeat, transition) appends to a log in the `.trellis/` worktree and immediately commits that file change to the `_armature` branch, keeping issues history completely isolated from the working branch.
 
-**Architecture:** When `appCtx.Mode == "dual-branch"`, the `IssuesDir` already points to `.trellis/.issues/`. The existing `ops.AppendOp` writes to the correct file. What's missing: after writing, git-add and git-commit the changed log file within the worktree (using `git -C .trellis add ops/... && git -C .trellis commit`). This is wrapped in a new `git.Client.CommitWorktreeOp` method and called by a new `ops.AppendAndCommit` function used by all worker commands in dual-branch mode.
+**Architecture:** When `appCtx.Mode == "dual-branch"`, the `IssuesDir` already points to `.trellis/.armature/`. The existing `ops.AppendOp` writes to the correct file. What's missing: after writing, git-add and git-commit the changed log file within the worktree (using `git -C .trellis add ops/... && git -C .trellis commit`). This is wrapped in a new `git.Client.CommitWorktreeOp` method and called by a new `ops.AppendAndCommit` function used by all worker commands in dual-branch mode.
 
 **Tech Stack:** Go, os/exec for git, testify
 
@@ -61,9 +61,9 @@ func TestCommitWorktreeOp(t *testing.T) {
 	c := git.New(repo)
 
 	// Create orphan branch and worktree (using E2-001 methods)
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	worktreePath := filepath.Join(repo, ".trellis")
-	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
 	// Write a file in the worktree
 	opsDir := filepath.Join(worktreePath, ".issues", "ops")
@@ -73,7 +73,7 @@ func TestCommitWorktreeOp(t *testing.T) {
 
 	// CommitWorktreeOp is called on a client rooted at the worktree
 	wc := git.New(worktreePath)
-	err := wc.CommitWorktreeOp(".issues/ops/worker-abc.log", "ops: append claim for E2-001")
+	err := wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
 	require.NoError(t, err)
 
 	// Verify commit exists in the worktree branch
@@ -87,9 +87,9 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	repo := initTestRepo(t)
 	c := git.New(repo)
 
-	require.NoError(t, c.CreateOrphanBranch("_trellis"))
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	worktreePath := filepath.Join(repo, ".trellis")
-	require.NoError(t, c.AddWorktree("_trellis", worktreePath))
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
 	// Write and commit file first
 	opsDir := filepath.Join(worktreePath, "ops")
@@ -275,7 +275,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -489,8 +489,8 @@ func appendOp(logPath string, op ops.Op) error {
 ```
 
 Add imports to `helpers.go`:
-- `"github.com/scullxbones/trellis/internal/git"`
-- `"github.com/scullxbones/trellis/internal/ops"`
+- `"github.com/scullxbones/armature/internal/git"`
+- `"github.com/scullxbones/armature/internal/ops"`
 
 - [ ] **Step 5: Replace `ops.AppendOp(logPath, op)` in all nine worker command files**
 
@@ -526,7 +526,7 @@ git commit -m "feat(ops): route all worker op writes through AppendAndCommit for
 
 ## Chunk 4: Integration Test for Dual-Branch Isolation
 
-### Task 5: Verify ops are committed to `_trellis` branch only
+### Task 5: Verify ops are committed to `_armature` branch only
 
 **Files:**
 - Modify: `cmd/trellis/main_test.go`
@@ -534,7 +534,7 @@ git commit -m "feat(ops): route all worker op writes through AppendAndCommit for
 - [ ] **Step 1: Write integration test**
 
 ```go
-func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
+func TestDualBranch_OpsCommittedToArmatureBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -551,11 +551,11 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Write a note op — should commit to _trellis, not to main
+	// Write a note op — should commit to _armature, not to main
 	_, err = runTrls(t, repo, "note", "--issue", "T-001", "--msg", "dual branch test")
 	require.NoError(t, err)
 
-	// Verify the commit appeared on _trellis branch (inside the worktree)
+	// Verify the commit appeared on _armature branch (inside the worktree)
 	worktreePath := filepath.Join(repo, ".trellis")
 	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-3")
 	out, err := cmd.Output()
@@ -573,7 +573,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 - [ ] **Step 2: Run test**
 
 ```bash
-cd /home/brian/development/trellis && go test ./cmd/trellis/... -run TestDualBranch_OpsCommittedToTrellisBranch -v -timeout 60s
+cd /home/brian/development/trellis && go test ./cmd/trellis/... -run TestDualBranch_OpsCommittedToArmatureBranch -v -timeout 60s
 ```
 Expected: PASS
 
@@ -596,7 +596,7 @@ git commit -m "test: add integration test for dual-branch op isolation"
 ## Definition of Done Checklist
 
 - [ ] In dual-branch mode, every `AppendOp` call is followed by a git commit in the `.trellis/` worktree
-- [ ] The commit appears on the `_trellis` branch, not on the working branch
+- [ ] The commit appears on the `_armature` branch, not on the working branch
 - [ ] Single-branch mode behavior is completely unchanged (no extra git calls; nil gc is never invoked)
 - [ ] `op.WorkerID` is safely truncated to ≤8 chars in commit messages
 - [ ] `runTrls` test helper is defined in `main_test.go` for use by E2-002, E2-003, E2-004

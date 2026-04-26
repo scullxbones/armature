@@ -46,7 +46,7 @@ package importbf_test
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/importbf"
+	"github.com/scullxbones/armature/internal/importbf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,8 +223,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/importbf"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/importbf"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -336,8 +336,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -391,7 +391,7 @@ rootCmd.AddCommand(newConfirmCmd())
 - [ ] **Step 8: Build and verify**
 
 ```bash
-go build ./cmd/trellis/... && ./bin/trls import --help && ./bin/trls confirm --help
+go build ./cmd/trellis/... && ./bin/arm import --help && ./bin/arm confirm --help
 ```
 
 Expected: both show help without errors.

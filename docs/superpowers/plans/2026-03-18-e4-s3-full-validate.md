@@ -126,8 +126,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/traceability"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/traceability"
 )
 
 // Options controls which checks are run and how results are reported.
@@ -650,8 +650,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/validate"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -722,7 +722,7 @@ func newValidateCmd() *cobra.Command {
 - [ ] **Step 2: Build and test**
 
 ```bash
-go build ./cmd/trellis/... && ./bin/trls validate --help
+go build ./cmd/trellis/... && ./bin/arm validate --help
 ```
 
 Expected: shows `--ci`, `--strict`, `--scope` flags.

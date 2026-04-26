@@ -95,7 +95,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/sources"
+	"github.com/scullxbones/armature/internal/sources"
 )
 
 // ContextParams holds inputs for building decompose-context output.

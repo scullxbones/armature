@@ -4,17 +4,17 @@
 
 Version 1.0 | March 2026 | DRAFT
 
-> *"Context rot is a memory problem. Trellis gives your agents memory."*
+> *"Context rot is a memory problem. Armature gives your agents memory."*
 
 ---
 
 ## 1. Executive Summary
 
-Trellis is a file-based, git-native work orchestration system that gives AI coding agents persistent memory. It enables humans and AI workers to coordinate on software projects without merge conflicts, external dependencies, or context rot.
+Armature is a file-based, git-native work orchestration system that gives AI coding agents persistent memory. It enables humans and AI workers to coordinate on software projects without merge conflicts, external dependencies, or context rot.
 
 AI coding agents today suffer from a fundamental architectural flaw: they forget everything between sessions. Every new conversation starts from scratch. When multiple agents work in the same codebase, they step on each other with no coordination primitive to prevent conflicts. The existing tools designed to manage software work (Jira, Linear, GitHub Issues) were built for humans, require network access, and consume thousands of tokens when presented to AI agents.
 
-Trellis solves this by treating context rot as a memory problem. Using the CoALA (Cognitive Architectures for Language Agents) taxonomy, Trellis provides working memory (deterministic context assembly at ~650–1,600 tokens per task), episodic memory (append-only event-sourced logs capturing every decision, claim, and outcome), semantic memory (source document caching with traceability), and procedural memory (the SKILL.md work loop contract). All state lives in git. No database, no server, no daemon. A single Go binary (`trls`) and git are the only requirements.
+Armature solves this by treating context rot as a memory problem. Using the CoALA (Cognitive Architectures for Language Agents) taxonomy, Armature provides working memory (deterministic context assembly at ~650–1,600 tokens per task), episodic memory (append-only event-sourced logs capturing every decision, claim, and outcome), semantic memory (source document caching with traceability), and procedural memory (the SKILL.md work loop contract). All state lives in git. No database, no server, no daemon. A single Go binary (`arm`) and git are the only requirements.
 
 The system uses Mergeable Replicated Data Types (MRDT) to ensure that multiple workers—human and AI—can coordinate without merge conflicts by construction. Each worker writes exclusively to its own log file. Current state is derived by replaying all logs in timestamp order. This design is compatible with every major AI coding agent (Claude Code, Cursor, Windsurf, Gemini CLI, Kiro) and requires no platform-specific integration.
 
@@ -48,7 +48,7 @@ The AI coding tools market reached $4.9 billion in 2024 and is projected to reac
 
 ### 3.2 The Vibe Coding Backlash
 
-The industry is undergoing a correction from undisciplined AI-assisted development. 89% of CTOs surveyed have experienced production disasters from AI-generated code. GitClear's analysis of 211 million lines shows code refactoring dropped from 25% to under 10% while duplication increased 4x. Andrej Karpathy declared "vibe coding" passé in February 2026, proposing "agentic engineering" as the replacement—emphasizing AI agent orchestration with human oversight. This narrative shift from "AI writes code" to "AI agents need coordination infrastructure" creates the precise market opening Trellis addresses.
+The industry is undergoing a correction from undisciplined AI-assisted development. 89% of CTOs surveyed have experienced production disasters from AI-generated code. GitClear's analysis of 211 million lines shows code refactoring dropped from 25% to under 10% while duplication increased 4x. Andrej Karpathy declared "vibe coding" passé in February 2026, proposing "agentic engineering" as the replacement—emphasizing AI agent orchestration with human oversight. This narrative shift from "AI writes code" to "AI agents need coordination infrastructure" creates the precise market opening Armature addresses.
 
 ### 3.3 Competitive Landscape
 
@@ -72,11 +72,11 @@ CrewAI (40K+ stars, $18M funding), LangGraph, and AutoGen are optimized for busi
 
 Letta Context Repositories store agent context as git-versioned files. Git-Context-Controller achieved 48% resolution on SWE-Bench-Lite by treating agent context as a versioned filesystem. Clash detects merge conflicts between worktrees before they happen. Each solves a fragment. None delivers a complete coordination system.
 
-### 3.4 Trellis Differentiation
+### 3.4 Armature Differentiation
 
-Trellis occupies a unique position in this landscape by combining five properties no competitor offers together:
+Armature occupies a unique position in this landscape by combining five properties no competitor offers together:
 
-| Property | Trellis | Beads | CASS | OpenViking | CrewAI |
+| Property | Armature | Beads | CASS | OpenViking | CrewAI |
 |---|---|---|---|---|---|
 | Zero infrastructure | Yes (git only) | No (Dolt server) | No (Rust + Bun + LLM) | No (embeddings + DB) | No (Python + cloud) |
 | Merge-conflict-free | By construction (MRDT) | Hash IDs (Dolt merges) | N/A (not coordination) | N/A | N/A |
@@ -90,7 +90,7 @@ Trellis occupies a unique position in this landscape by combining five propertie
 
 ## 4. Target Personas
 
-Trellis serves five distinct personas. Each persona maps to a deployment topology and feature surface. The persona names are used throughout this document and in the feature matrix (Section 7) to trace requirements to their owners.
+Armature serves five distinct personas. Each persona maps to a deployment topology and feature surface. The persona names are used throughout this document and in the feature matrix (Section 7) to trace requirements to their owners.
 
 ### 4.1 P1: Lone Wolf — Solo Freelance Developer
 
@@ -100,7 +100,7 @@ Trellis serves five distinct personas. Each persona maps to a deployment topolog
 
 **Pain today:** Manually writing TODO.md files and CLAUDE.md instructions. Losing agent context between sessions. Repeating the same architectural context in every prompt. Agent forgets decisions made in prior sessions and suggests approaches already rejected.
 
-**Deployment:** Single-branch mode. All `.issues/` data on main alongside code. No dual-branch complexity. Hooks optional. One worker.
+**Deployment:** Single-branch mode. All `.armature/` data on main alongside code. No dual-branch complexity. Hooks optional. One worker.
 
 ### 4.2 P2: Gatekeeper — Enterprise Solo Developer
 
@@ -110,7 +110,7 @@ Trellis serves five distinct personas. Each persona maps to a deployment topolog
 
 **Pain today:** Same as Lone Wolf, plus: merge detection is manual (they don't know when their PR was merged and downstream tasks can start), and there is no audit trail connecting agent decisions to source requirements.
 
-**Deployment:** Dual-branch mode (`_trellis` orphan branch for ops, feature branches to protected main via PR). Hooks recommended. One worker.
+**Deployment:** Dual-branch mode (`_armature` orphan branch for ops, feature branches to protected main via PR). Hooks recommended. One worker.
 
 ### 4.3 P3: Conductor — Team Lead / Architect
 
@@ -126,21 +126,21 @@ Trellis serves five distinct personas. Each persona maps to a deployment topolog
 
 **Profile:** DevOps engineer or platform engineer responsible for provisioning AI agent environments, monitoring agent health, tuning TTLs, configuring verification hooks, and recovering from agent failures. May manage agents across multiple repositories.
 
-**Core need:** Worker provisioning (`trls init`, `worker-init`), heartbeat monitoring to detect stuck agents, TTL tuning for different agent profiles (ephemeral CI agents vs. long-running supervised agents), hook configuration for project-specific test/lint commands, and worktree repair when things go wrong.
+**Core need:** Worker provisioning (`arm init`, `worker-init`), heartbeat monitoring to detect stuck agents, TTL tuning for different agent profiles (ephemeral CI agents vs. long-running supervised agents), hook configuration for project-specific test/lint commands, and worktree repair when things go wrong.
 
 **Pain today:** No standard way to provision agent identities. No heartbeat protocol to detect stuck agents. No configurable verification gates. Agent failures are discovered only when someone notices bad output. Worktree management is manual and error-prone.
 
-**Deployment:** Manages the infrastructure for Conductor and AI Worker deployments. Primary user of `trls init`, `trls init --repair`, hook configuration, and TTL tuning.
+**Deployment:** Manages the infrastructure for Conductor and AI Worker deployments. Primary user of `arm init`, `arm init --repair`, hook configuration, and TTL tuning.
 
 ### 4.5 P5: The Swarm — AI Workers
 
-**Profile:** The AI coding agents themselves (Claude Code, Gemini CLI, Cursor, Windsurf, Kiro). Ephemeral by nature—they forget everything between sessions. They interact with Trellis exclusively through the SKILL.md contract and the `trls` CLI, consuming JSON output and emitting structured commands.
+**Profile:** The AI coding agents themselves (Claude Code, Gemini CLI, Cursor, Windsurf, Kiro). Ephemeral by nature—they forget everything between sessions. They interact with Armature exclusively through the SKILL.md contract and the `arm` CLI, consuming JSON output and emitting structured commands.
 
 **Core need:** Deterministic, minimal-token context for each task. A clear work loop: find ready task, get context, claim, execute, verify, complete. Machine-parseable output for all commands. Structured error messages with actionable hints. Never need to understand dual branches, worktrees, or materialization—the CLI abstracts everything.
 
 **Pain today:** The "50 First Dates" problem: every session starts from zero. Agents re-derive context, re-plan completed work, and declare premature victory. No structured acceptance criteria to verify against. No mechanism to discover what other agents have done or are doing. Context windows fill with stale information, causing context rot.
 
-**Deployment:** Consumes SKILL.md. Executes work loop. Interacts only via `trls` CLI commands with JSON output. Platform-agnostic by design.
+**Deployment:** Consumes SKILL.md. Executes work loop. Interacts only via `arm` CLI commands with JSON output. Platform-agnostic by design.
 
 ---
 
@@ -152,7 +152,7 @@ Trellis serves five distinct personas. Each persona maps to a deployment topolog
 
 **Trigger:** A new project or feature needs to be broken down from source documents (PRD, architecture doc) into executable work.
 
-The Conductor registers source documents via `trls sources add` and runs `trls sources sync` to cache them locally. They then run `trls decompose-context` to generate a structured context package that an AI agent reads to produce a decomposition plan (`plan.json`). The plan undergoes structural validation via `trls decompose-apply --dry-run`. Once clean, `trls decompose-apply` atomically creates all nodes in the DAG. The Conductor reviews the DAG via the `trls dag-summary` interactive TUI, performing per-item sign-off that promotes draft nodes to verified status. Agents can then begin claiming and executing tasks.
+The Conductor registers source documents via `arm sources add` and runs `arm sources sync` to cache them locally. They then run `arm decompose-context` to generate a structured context package that an AI agent reads to produce a decomposition plan (`plan.json`). The plan undergoes structural validation via `arm decompose-apply --dry-run`. Once clean, `arm decompose-apply` atomically creates all nodes in the DAG. The Conductor reviews the DAG via the `arm dag-summary` interactive TUI, performing per-item sign-off that promotes draft nodes to verified status. Agents can then begin claiming and executing tasks.
 
 **Success criteria:** Source documents are transformed into a typed DAG (epic → story → task) with source citations on every node, machine-checkable acceptance criteria on every task, and scope isolation preventing file-level conflicts between sibling tasks. Time from source registration to first agent task claim is under 30 minutes for a typical PRD.
 
@@ -162,7 +162,7 @@ The Conductor registers source documents via `trls sources add` and runs `trls s
 
 **Trigger:** An AI agent starts a work session and needs to find, claim, execute, and complete a task.
 
-The agent runs `trls ready --format=json` to get the prioritized list of available tasks (the ready queue filters for: status open, all blockers merged, parent in-progress, no active claim). It selects the highest-priority task and runs `trls render-context` to receive a deterministic context slice containing the task spec, scope, acceptance criteria, blocker outcomes, parent chain, open decisions, and advisory token budget. The agent claims the task via `trls claim` (which handles post-claim verification internally), executes the work within the defined scope, emits heartbeats during long operations, verifies acceptance criteria, and transitions to done with a one-line outcome summary. Code is committed to the feature branch and pushed for PR review. The agent returns to the top of the loop.
+The agent runs `arm ready --format=json` to get the prioritized list of available tasks (the ready queue filters for: status open, all blockers merged, parent in-progress, no active claim). It selects the highest-priority task and runs `arm render-context` to receive a deterministic context slice containing the task spec, scope, acceptance criteria, blocker outcomes, parent chain, open decisions, and advisory token budget. The agent claims the task via `arm claim` (which handles post-claim verification internally), executes the work within the defined scope, emits heartbeats during long operations, verifies acceptance criteria, and transitions to done with a one-line outcome summary. Code is committed to the feature branch and pushed for PR review. The agent returns to the top of the loop.
 
 **Success criteria:** Each task context is 650–1,600 tokens (vs. 12,000–21,000+ for markdown approaches). The agent never needs to understand dual branches, worktrees, or materialization. Claim races are resolved deterministically with zero wasted work beyond the race window.
 
@@ -172,7 +172,7 @@ The agent runs `trls ready --format=json` to get the prioritized list of availab
 
 **Trigger:** Multiple AI agents attempt to claim the same task between sync cycles.
 
-Two agents both see a task as ready and emit claim ops to their respective log files. Both pushes succeed because they write to different files (the MRDT guarantee). On the next pull-and-materialize cycle, timestamp-based resolution determines the winner: first claim by timestamp wins, with lexicographic worker ID as the deterministic tiebreaker for identical timestamps. The losing agent discovers it lost on its next sync and returns to the ready queue to find another task. The winning agent proceeds with execution. The Conductor can observe this coordination in real-time via `trls status`.
+Two agents both see a task as ready and emit claim ops to their respective log files. Both pushes succeed because they write to different files (the MRDT guarantee). On the next pull-and-materialize cycle, timestamp-based resolution determines the winner: first claim by timestamp wins, with lexicographic worker ID as the deterministic tiebreaker for identical timestamps. The losing agent discovers it lost on its next sync and returns to the ready queue to find another task. The winning agent proceeds with execution. The Conductor can observe this coordination in real-time via `arm status`.
 
 **Success criteria:** No merge conflicts. No locking. No central coordinator. Deterministic winner selection. Losing agent wastes at most one sync cycle of effort.
 
@@ -182,17 +182,17 @@ Two agents both see a task as ready and emit claim ops to their respective log f
 
 **Trigger:** A solo developer wants structured task tracking for their AI agent without team coordination overhead.
 
-The developer runs `trls init`, which detects no branch protection and uses single-branch mode. All `.issues/` data lives on main alongside code. They create tasks manually (`trls create`) or via decomposition. Their single AI agent executes the work loop: find ready task, get context, claim, execute, complete. There are no claim races (one worker), two-phase completion is optional (direct push to main), and hooks are optional. The developer benefits from persistent context across agent sessions, structured acceptance criteria, and a ready-task queue that automatically tracks dependencies and completion.
+The developer runs `arm init`, which detects no branch protection and uses single-branch mode. All `.armature/` data lives on main alongside code. They create tasks manually (`arm create`) or via decomposition. Their single AI agent executes the work loop: find ready task, get context, claim, execute, complete. There are no claim races (one worker), two-phase completion is optional (direct push to main), and hooks are optional. The developer benefits from persistent context across agent sessions, structured acceptance criteria, and a ready-task queue that automatically tracks dependencies and completion.
 
-**Success criteria:** `trls init` to first task execution in under 5 minutes. Zero configuration beyond init. Agent context persists across sessions without manual intervention.
+**Success criteria:** `arm init` to first task execution in under 5 minutes. Zero configuration beyond init. Agent context persists across sessions without manual intervention.
 
 ### 5.5 UC-5: Enterprise Onboarding
 
 **Personas:** Gatekeeper, Wrangler
 
-**Trigger:** A developer at an enterprise with protected main branch sets up Trellis for the first time.
+**Trigger:** A developer at an enterprise with protected main branch sets up Armature for the first time.
 
-`trls init` detects branch protection and automatically creates the `_trellis` orphan branch, sets up the ops worktree with sparse checkout, proposes verification hooks based on detected project type (`package.json` → `npm test`, `go.mod` → `go test ./...`), and installs git hooks for automatic heartbeat, commit-message stamping, and merge promotion. The two-phase completion model ensures downstream tasks only begin after code passes PR review (status must be `merged`, not just `done`). The Wrangler configures TTL defaults, verification commands, and optional staleness thresholds in the shared `.issues/config.json`.
+`arm init` detects branch protection and automatically creates the `_armature` orphan branch, sets up the ops worktree with sparse checkout, proposes verification hooks based on detected project type (`package.json` → `npm test`, `go.mod` → `go test ./...`), and installs git hooks for automatic heartbeat, commit-message stamping, and merge promotion. The two-phase completion model ensures downstream tasks only begin after code passes PR review (status must be `merged`, not just `done`). The Wrangler configures TTL defaults, verification commands, and optional staleness thresholds in the shared `.armature/config.json`.
 
 **Success criteria:** Branch mode auto-detection is correct. Hooks install without conflicting with existing hook managers. Verification hooks match the project's actual toolchain.
 
@@ -200,9 +200,9 @@ The developer runs `trls init`, which detects no branch protection and uses sing
 
 **Personas:** Conductor
 
-**Trigger:** A team with existing work items in Jira, Linear, or CSV wants to adopt Trellis without starting over.
+**Trigger:** A team with existing work items in Jira, Linear, or CSV wants to adopt Armature without starting over.
 
-The Conductor runs `trls import` with the existing task file. Imported nodes are created with `provenance.confidence` set to `inferred`, meaning they appear in the ready queue with a `requires_confirmation` flag and cannot be claimed until a human confirms each one via `trls confirm`. This rate-limiting is intentional: it forces human review of imported work items rather than allowing bulk rubber-stamping. After confirmation, a second decomposition pass can extend the DAG with new tasks that reference or depend on the imported ones.
+The Conductor runs `arm import` with the existing task file. Imported nodes are created with `provenance.confidence` set to `inferred`, meaning they appear in the ready queue with a `requires_confirmation` flag and cannot be claimed until a human confirms each one via `arm confirm`. This rate-limiting is intentional: it forces human review of imported work items rather than allowing bulk rubber-stamping. After confirmation, a second decomposition pass can extend the DAG with new tasks that reference or depend on the imported ones.
 
 **Success criteria:** CSV and JSON import work out of the box. Imported nodes are clearly distinguished from decomposed nodes. Bulk confirmation is not possible. The DAG remains structurally valid after import.
 
@@ -212,7 +212,7 @@ The Conductor runs `trls import` with the existing task file. Imported nodes are
 
 **Trigger:** Source documents (e.g., PRD in Confluence) are updated mid-sprint.
 
-`trls sources sync` detects that a source document's fingerprint has changed. The Conductor runs the `trls stale-review` interactive TUI, which walks through each affected node showing the source change summary, the node's citation, and the full rendered context. Per node, the Conductor can confirm the citation is still valid, flag the node for re-decomposition, or skip. Each decision is recorded as a log op with worker attribution.
+`arm sources sync` detects that a source document's fingerprint has changed. The Conductor runs the `arm stale-review` interactive TUI, which walks through each affected node showing the source change summary, the node's citation, and the full rendered context. Per node, the Conductor can confirm the citation is still valid, flag the node for re-decomposition, or skip. Each decision is recorded as a log op with worker attribution.
 
 **Success criteria:** Source changes are detected within one sync cycle. Every affected node is surfaced. The review is per-node (not bulk). Audit trail records who reviewed what.
 
@@ -222,7 +222,7 @@ The Conductor runs `trls import` with the existing task file. Imported nodes are
 
 **Trigger:** The Conductor wants to verify what an agent will see before it starts working.
 
-The Conductor runs `trls render-context` on any task to see exactly the same context slice the agent receives: the task spec, scope restrictions, acceptance criteria, blocker outcomes, open decisions, and the advisory token budget with truncation status. This is the primary tool for catching bad decompositions before agents waste cycles. It takes under 30 seconds per node.
+The Conductor runs `arm render-context` on any task to see exactly the same context slice the agent receives: the task spec, scope restrictions, acceptance criteria, blocker outcomes, open decisions, and the advisory token budget with truncation status. This is the primary tool for catching bad decompositions before agents waste cycles. It takes under 30 seconds per node.
 
 **Success criteria:** `render-context` output is deterministic (same state → same output). Token budget and truncation status are visible. All seven context layers are present and correctly prioritized.
 
@@ -232,7 +232,7 @@ The Conductor runs `trls render-context` on any task to see exactly the same con
 
 **Trigger:** A bug is traced to an AI-generated change and the team needs to understand why the agent made a specific decision.
 
-The team uses `trls render-context --at <sha>` to reconstruct the exact context the agent received at the time of the decision. The transition op records the branch name and PR number, bridging ops history (on `_trellis`) with code history (on `main`). `trls context-history` shows how the task's context changed over time: which ops modified it, when, and by which worker. If necessary, `trls materialize --exclude-worker` removes a specific worker's ops to diagnose whether they introduced corruption.
+The team uses `arm render-context --at <sha>` to reconstruct the exact context the agent received at the time of the decision. The transition op records the branch name and PR number, bridging ops history (on `_armature`) with code history (on `main`). `arm context-history` shows how the task's context changed over time: which ops modified it, when, and by which worker. If necessary, `arm materialize --exclude-worker` removes a specific worker's ops to diagnose whether they introduced corruption.
 
 **Success criteria:** Any historical context state is reconstructable from the append-only log. Code-ops correlation is bidirectional (ops commit → code PR and code commit → ops task).
 
@@ -242,7 +242,7 @@ The team uses `trls render-context --at <sha>` to reconstruct the exact context 
 
 **Trigger:** An agent attempts to transition a task to done.
 
-Pre-transition hooks configured in `.issues/config.json` run automatically against the task's scoped files. Required hooks (e.g., tests, typecheck) must pass before the transition is recorded. Optional hooks (e.g., lint) report results but do not block. Exit code semantics distinguish actionable failures (code 1: fix your code) from environment errors (other codes: report the issue and move on). Hooks run in the code worktree; the transition op is recorded in the ops worktree. These are strictly two-phase: verify in code, then record in ops.
+Pre-transition hooks configured in `.armature/config.json` run automatically against the task's scoped files. Required hooks (e.g., tests, typecheck) must pass before the transition is recorded. Optional hooks (e.g., lint) report results but do not block. Exit code semantics distinguish actionable failures (code 1: fix your code) from environment errors (other codes: report the issue and move on). Hooks run in the code worktree; the transition op is recorded in the ops worktree. These are strictly two-phase: verify in code, then record in ops.
 
 **Success criteria:** No task can reach done status without passing required verification hooks. AI agents can distinguish test failures from environment errors. Hook configuration is shared across all workers via the ops branch.
 
@@ -256,17 +256,17 @@ Features are prioritized into four tiers. P0 features are required for initial r
 
 | Feature | Description | Primary Personas |
 |---|---|---|
-| `trls init` | Auto-detect branch mode, set up ops worktree, propose verification hooks, install git hooks, run worker-init | Lone Wolf, Gatekeeper, Wrangler |
+| `arm init` | Auto-detect branch mode, set up ops worktree, propose verification hooks, install git hooks, run worker-init | Lone Wolf, Gatekeeper, Wrangler |
 | Worker identity | UUID generation, repo-local git config, one-worktree-per-worker enforcement, uniqueness validation on first push | All |
 | Op log engine | Append-only JSONL with positional arrays, per-worker log files, MRDT merge-conflict-free guarantee, filename-worker-ID validation during materialization, CLI-side rate limiting (heartbeats 1/min/issue, creates 500/commit) | All |
 | Materialization engine | Incremental processing from local-only checkpoint (state files never committed), merged-status auto-detection, bottom-up rollup, ready-queue recomputation, cold-start full replay on fresh clone | All |
 | Ready task computation | 4-rule gate (open + blockers merged + parent in-progress + claim available), priority sort (explicit > depth > unblock count > age) | The Swarm, Conductor |
 | Claim system | Timestamp-based race resolution, heartbeat protocol, configurable TTL, post-claim verification, deterministic tiebreaker | The Swarm |
 | Context assembly | 7-layer algorithm with fixed and truncatable sections, advisory token budget (chars/4), deterministic output | The Swarm, Conductor |
-| Status transitions | open → claimed → in-progress → done → merged, plus blocked, cancelled, and reverse transitions (done→open via `trls reopen`, blocked→open, claimed→open) | All |
+| Status transitions | open → claimed → in-progress → done → merged, plus blocked, cancelled, and reverse transitions (done→open via `arm reopen`, blocked→open, claimed→open) | All |
 | Decomposition workflow | `decompose-context`, `decompose-apply` (with dry-run), `decompose-revert` (double-entry cancellation) | Conductor, The Swarm |
 | SKILL.md contract | Complete AI worker interface: work loop, setup, error recovery, rules and constraints | The Swarm |
-| Dual-branch architecture | `_trellis` orphan branch for ops, ops worktree with sparse checkout, single-branch fallback | Gatekeeper, Conductor, Wrangler |
+| Dual-branch architecture | `_armature` orphan branch for ops, ops worktree with sparse checkout, single-branch fallback | Gatekeeper, Conductor, Wrangler |
 | Two-phase completion | done (self-reported) then merged (auto-detected), 4-layer merge detection fallback, downstream unblocking requires merged | Gatekeeper, Conductor |
 | Pre-transition hooks | Configurable verification commands, required vs optional gates, exit code semantics, scope interpolation | The Swarm, Wrangler |
 | Structured error diagnostics | Every error includes state, hint, and `--debug` flag for full internal state dump | All |
@@ -278,11 +278,11 @@ Features are prioritized into four tiers. P0 features are required for initial r
 | Git hook automation | post-commit heartbeat, prepare-commit-msg stamping, post-merge materialization. Convenience only, system correct without them. | Gatekeeper, Conductor |
 | DAG governance | `dag-summary` interactive TUI with per-item sign-off, attribution logging, coverage metrics | Conductor |
 | Source document management | `sources add/sync/verify`, Confluence and SharePoint providers, aggressive caching on ops branch, fingerprinting | Conductor |
-| Brownfield import | Import from CSV/JSON with inferred confidence, per-node confirmation via `trls confirm` | Conductor |
+| Brownfield import | Import from CSV/JSON with inferred confidence, per-node confirmation via `arm confirm` | Conductor |
 | TUI (Charm ecosystem) | Bubble Tea + Lip Gloss + Glamour for human-interactive commands, semantic color palette | Conductor, Wrangler |
-| `trls validate` | Structural integrity checks (cycles, orphans, missing fields, scope overlap), CI-friendly output | Conductor, Wrangler |
+| `arm validate` | Structural integrity checks (cycles, orphans, missing fields, scope overlap), CI-friendly output | Conductor, Wrangler |
 | Traceability | Source citations per node, `traceability.json` materialization, coverage metrics in `dag-summary` | Conductor |
-| `trls sync` | Explicit ops sync with change summary, `--check` for status without pulling, `--code` for code branch | All |
+| `arm sync` | Explicit ops sync with change summary, `--check` for status without pulling, `--code` for code branch | All |
 
 ### 6.3 P2 — Nice to Have (v1)
 
@@ -290,8 +290,8 @@ Features are prioritized into four tiers. P0 features are required for initial r
 |---|---|---|
 | Time travel / forensics | `render-context --at <sha>`, `context-history`, selective replay (`--exclude-worker`) | Conductor, Wrangler |
 | Sprint bookmarks | Git tags on ops branch marking sprint boundaries for state reconstruction | Conductor |
-| `trls metrics` | DAG completion statistics, velocity tracking, context budget utilization | Conductor |
-| `trls status` | Dashboard view of all workers, active claims, staleness warnings | Conductor, Wrangler |
+| `arm metrics` | DAG completion statistics, velocity tracking, context budget utilization | Conductor |
+| `arm status` | Dashboard view of all workers, active claims, staleness warnings | Conductor, Wrangler |
 | Stale review TUI | Interactive per-node review of source document changes with confirm/flag/skip flow | Conductor |
 | Cross-document consistency | Warning when source doc timestamps diverge beyond configurable threshold | Conductor |
 
@@ -299,7 +299,7 @@ Features are prioritized into four tiers. P0 features are required for initial r
 
 | Feature | Rationale for Deferral | Design-For Signal in v1 |
 |---|---|---|
-| Log compaction | Optimize when materialization performance is measured to be a problem | Compaction algorithm designed, `trls compact` command specified |
+| Log compaction | Optimize when materialization performance is measured to be a problem | Compaction algorithm designed, `arm compact` command specified |
 | Multi-repo hub topology | Implement when a paying customer or significant user cohort requests cross-repo coordination | Task scope includes optional `repo` field, ops worktree path configurable, task IDs globally unique (UUIDs) |
 | Adversarial decomposition | Human gate serves same purpose at lower cost for v1 | Plan file format supports multiple decomposition passes |
 | Section-level fingerprinting | File-level is sufficient; section parser complexity not justified | Fingerprint model is extensible to section granularity |
@@ -314,7 +314,7 @@ This matrix maps deployment topology and feature availability to each persona's 
 | Feature | Lone Wolf | Gatekeeper | Conductor (Monorepo) | Conductor (Multi-Repo) |
 |---|---|---|---|---|
 | Branch mode | Single-branch | Dual-branch | Dual-branch | Dual-branch |
-| Ops location | `.issues/` on main | `_trellis` branch | `_trellis` branch | Hub repo (future) |
+| Ops location | `.armature/` on main | `_armature` branch | `_armature` branch | Hub repo (future) |
 | Claim races | N/A (one worker) | N/A (one worker) | Full MRDT | Full MRDT |
 | Two-phase completion | Optional (no PR gate) | Yes | Yes | Yes |
 | Merge detection | Immediate (direct push) | Commit-message scan | Commit-message scan | Cross-repo scan (future) |
@@ -331,15 +331,15 @@ This matrix maps deployment topology and feature availability to each persona's 
 
 ### 8.1 Performance
 
-The `trls` binary must start in under 5ms. Incremental materialization must process new ops in O(new ops), not O(all ops). Context assembly (`render-context`) must complete in under 100ms for typical DAGs (up to 500 nodes). The ready-task queue must be precomputed during materialization, not computed on demand.
+The `arm` binary must start in under 5ms. Incremental materialization must process new ops in O(new ops), not O(all ops). Context assembly (`render-context`) must complete in under 100ms for typical DAGs (up to 500 nodes). The ready-task queue must be precomputed during materialization, not computed on demand.
 
 ### 8.2 Distribution
 
-Single static Go binary compiled with `CGO_ENABLED=0`. Zero runtime dependencies beyond git (v2.25+ for sparse checkout support, released January 2020). Platform matrix: linux/macOS/Windows across amd64/arm64. Binary size target: 8–12MB uncompressed (4–6MB compressed). Distribution via GitHub releases with per-platform binaries, and as an Agent Skills-compliant skill folder with the binary at `scripts/trls`.
+Single static Go binary compiled with `CGO_ENABLED=0`. Zero runtime dependencies beyond git (v2.25+ for sparse checkout support, released January 2020). Platform matrix: linux/macOS/Windows across amd64/arm64. Binary size target: 8–12MB uncompressed (4–6MB compressed). Distribution via GitHub releases with per-platform binaries, and as an Agent Skills-compliant skill folder with the binary at `scripts/arm`.
 
 ### 8.3 Context Efficiency
 
-Target range: 650–1,600 tokens per task context, measured by the `chars/4` proxy. This represents a 10–20x reduction compared to markdown-based approaches (12,000–21,000+ tokens). The advisory budget is configurable per-repository in `.issues/config.json`. Truncation follows a strict priority order: fixed sections (core spec, snippets) are never removed; truncatable sections are removed lowest-priority-first.
+Target range: 650–1,600 tokens per task context, measured by the `chars/4` proxy. This represents a 10–20x reduction compared to markdown-based approaches (12,000–21,000+ tokens). The advisory budget is configurable per-repository in `.armature/config.json`. Truncation follows a strict priority order: fixed sections (core spec, snippets) are never removed; truncatable sections are removed lowest-priority-first.
 
 ### 8.4 Offline Capability
 
@@ -347,7 +347,7 @@ All core operations must work offline. Workers can append ops to their local log
 
 ### 8.5 Compatibility
 
-Trellis must be compatible with every AI coding agent that can invoke a subprocess and parse JSON. The compatibility surface is the CLI contract (commands, arguments, exit codes, JSON output). The initial target list includes Claude Code, Gemini CLI, Cursor, Windsurf, and Kiro. No platform-specific integration is required; the SKILL.md skill file is the universal interface.
+Armature must be compatible with every AI coding agent that can invoke a subprocess and parse JSON. The compatibility surface is the CLI contract (commands, arguments, exit codes, JSON output). The initial target list includes Claude Code, Gemini CLI, Cursor, Windsurf, and Kiro. No platform-specific integration is required; the SKILL.md skill file is the universal interface.
 
 ### 8.6 Auditability
 
@@ -357,7 +357,7 @@ All mutations to coordination state are recorded as append-only ops in JSONL log
 
 ## 9. Scope Boundaries
 
-The following concerns are explicitly out of scope for Trellis. These boundaries are intentional design decisions that trade completeness for adoption simplicity and focus.
+The following concerns are explicitly out of scope for Armature. These boundaries are intentional design decisions that trade completeness for adoption simplicity and focus.
 
 | Concern | Decision | Rationale |
 |---|---|---|
@@ -372,17 +372,17 @@ The following concerns are explicitly out of scope for Trellis. These boundaries
 
 ## 10. Success Metrics
 
-Trellis's primary mission is to eliminate context rot without reducing task fidelity. Success is measured across four dimensions: context efficiency, adoption, operational velocity, and output quality. Increased hallucinations or decreased task completion rates are explicit failure signals.
+Armature's primary mission is to eliminate context rot without reducing task fidelity. Success is measured across four dimensions: context efficiency, adoption, operational velocity, and output quality. Increased hallucinations or decreased task completion rates are explicit failure signals.
 
 ### 10.1 Primary KPIs
 
 | KPI | Target | Measurement Method | Why It Matters |
 |---|---|---|---|
-| Context tokens per task | 650–1,600 tokens (10–20x reduction vs. markdown) | `trls render-context --format=agent` output, measured via chars/4 proxy across representative DAGs | Context minimization is job #1. Lower token count means less context rot, more headroom for agent reasoning, and lower API cost. |
-| Agent platform adoption | Compatible with 5+ major agent platforms within 6 months of launch | Track confirmed compatibility (Claude Code, Gemini CLI, Cursor, Windsurf, Kiro) via integration tests and community reports | Market adoption is the ultimate validation. Trellis must work everywhere developers already use AI agents. |
-| Sources-to-DAG creation time | Under 15 minutes for a typical PRD (10–20 pages, 50–100 tasks) | Wall-clock time from `trls sources add` to `trls decompose-apply` completion (excludes human review) | Measures whether Trellis accelerates converting requirements into structured work. Separating creation from review prevents the per-item sign-off gate from inflating this metric. |
-| DAG sign-off time | Under 30 minutes for 50–100 tasks | Wall-clock time for `trls dag-summary` interactive sign-off completion | Measures human review overhead. Story/epic-level batch review (with task-level spot-checks) keeps this feasible for large DAGs. |
-| Task completion fidelity | 95%+ of tasks completed by agents meet all acceptance criteria on first attempt | Acceptance criteria pass rate tracked via pre-transition hook results across deployments | Context reduction must not come at the cost of task quality. If agents fail more often with Trellis, context assembly is too aggressive. |
+| Context tokens per task | 650–1,600 tokens (10–20x reduction vs. markdown) | `arm render-context --format=agent` output, measured via chars/4 proxy across representative DAGs | Context minimization is job #1. Lower token count means less context rot, more headroom for agent reasoning, and lower API cost. |
+| Agent platform adoption | Compatible with 5+ major agent platforms within 6 months of launch | Track confirmed compatibility (Claude Code, Gemini CLI, Cursor, Windsurf, Kiro) via integration tests and community reports | Market adoption is the ultimate validation. Armature must work everywhere developers already use AI agents. |
+| Sources-to-DAG creation time | Under 15 minutes for a typical PRD (10–20 pages, 50–100 tasks) | Wall-clock time from `arm sources add` to `arm decompose-apply` completion (excludes human review) | Measures whether Armature accelerates converting requirements into structured work. Separating creation from review prevents the per-item sign-off gate from inflating this metric. |
+| DAG sign-off time | Under 30 minutes for 50–100 tasks | Wall-clock time for `arm dag-summary` interactive sign-off completion | Measures human review overhead. Story/epic-level batch review (with task-level spot-checks) keeps this feasible for large DAGs. |
+| Task completion fidelity | 95%+ of tasks completed by agents meet all acceptance criteria on first attempt | Acceptance criteria pass rate tracked via pre-transition hook results across deployments | Context reduction must not come at the cost of task quality. If agents fail more often with Armature, context assembly is too aggressive. |
 
 ### 10.2 Secondary KPIs
 
@@ -391,19 +391,19 @@ Trellis's primary mission is to eliminate context rot without reducing task fide
 | Claim race waste rate | Under 5% of claims result in wasted work | Validates that the MRDT coordination model works in practice with real agent timing |
 | Hallucination rate on scoped tasks | Measurably lower than unscoped agent sessions (controlled comparison) | Directly validates the anti-context-rot thesis. If scoped agents hallucinate as much as unscoped ones, the architecture is not working. |
 | Context drift per session | Zero drift within a single agent session (deterministic assembly) | Ensures `render-context` produces identical output for identical state, preventing the progressive degradation that defines context rot |
-| Time to first task claim (new user) | Under 5 minutes from `trls init` for Lone Wolf persona | Measures adoption friction. The single biggest risk is complexity deterring the first use. |
-| Merged detection accuracy | 95%+ of done-to-merged promotions are automatic (no manual `trls merged` needed) | Validates the 4-layer merge detection algorithm. Manual fallback should be rare. |
+| Time to first task claim (new user) | Under 5 minutes from `arm init` for Lone Wolf persona | Measures adoption friction. The single biggest risk is complexity deterring the first use. |
+| Merged detection accuracy | 95%+ of done-to-merged promotions are automatic (no manual `arm merged` needed) | Validates the 4-layer merge detection algorithm. Manual fallback should be rare. |
 | DAG coverage ratio | 90%+ of nodes have at least one source citation after decomposition | Measures traceability quality. Uncited nodes represent untraceable requirements. |
 
 ### 10.3 Anti-Metrics (Failure Signals)
 
-The following metrics, if they worsen after Trellis adoption, indicate a fundamental problem with the product thesis:
+The following metrics, if they worsen after Armature adoption, indicate a fundamental problem with the product thesis:
 
-**Increased hallucination rate:** If agents hallucinate more with Trellis-assembled context than with full-context approaches, the truncation algorithm is removing critical information.
+**Increased hallucination rate:** If agents hallucinate more with Armature-assembled context than with full-context approaches, the truncation algorithm is removing critical information.
 
-**Lower task completion rate:** If agents complete fewer tasks per session with Trellis than without, the overhead of the work loop (claim, heartbeat, verify, transition) exceeds the benefit of structured context.
+**Lower task completion rate:** If agents complete fewer tasks per session with Armature than without, the overhead of the work loop (claim, heartbeat, verify, transition) exceeds the benefit of structured context.
 
-**Increased merge conflicts:** If teams using Trellis experience more merge conflicts than teams without, the scope isolation at decomposition time is insufficient.
+**Increased merge conflicts:** If teams using Armature experience more merge conflicts than teams without, the scope isolation at decomposition time is insufficient.
 
 ---
 
@@ -413,12 +413,12 @@ The following metrics, if they worsen after Trellis adoption, indicate a fundame
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Adoption friction: dual-branch model confuses solo developers | Medium | High | Auto-detection at init time. Single-branch fallback for unprotected repos. The CLI abstracts all worktree management—developers never interact with `_trellis` directly. |
+| Adoption friction: dual-branch model confuses solo developers | Medium | High | Auto-detection at init time. Single-branch fallback for unprotected repos. The CLI abstracts all worktree management—developers never interact with `_armature` directly. |
 | Governance gate rubber-stamping | High | High | Interactive checklist with per-item acknowledgment, mechanically impossible to bulk-approve. Named attribution in audit log. Cannot be fully closed technically—reviewer incentives are outside tool control. |
 | Coverage gap: implicit requirements never tagged | Medium | High | Citation required per node. `dag-summary` names uncited nodes by ID. Reviewer signs off acknowledging gaps. Residual: implicit "everyone knows" requirements remain invisible. |
 | Context budget overrun causes silent truncation of critical info | Medium | Medium | Truncation follows strict priority: core spec and snippets are never removed. Decisions outrank notes and siblings. `--raw` flag bypasses truncation. Advisory warning in output. |
 | Decomposition prompt template quality is load-bearing | Medium | Medium | Template ships with tested defaults and is overridable per-repo. Bad templates produce bad DAGs, but `dag-summary` catches structural issues and the reviewer catches semantic issues. |
-| Agent tools evolve faster than Trellis adapts | Medium | Medium | CLI contract (commands + JSON output) is the compatibility surface, not platform-specific integrations. Any tool that can invoke a subprocess and parse JSON works. AGENTS.md convergence reduces fragmentation. |
+| Agent tools evolve faster than Armature adapts | Medium | Medium | CLI contract (commands + JSON output) is the compatibility surface, not platform-specific integrations. Any tool that can invoke a subprocess and parse JSON works. AGENTS.md convergence reduces fragmentation. |
 
 ### 11.2 Technical Risks
 
@@ -453,7 +453,7 @@ After adversarial review, these low-severity findings remain accepted:
 
 The following items require product-level decisions that are outside the scope of the architecture document. They should be resolved before or during implementation.
 
-**Pricing and licensing model:** Trellis is open source. Is there a commercial layer (hosted hub-repo, enterprise support, SaaS dashboard)? If so, what features gate the commercial tier versus the open-source core?
+**Pricing and licensing model:** Armature is open source. Is there a commercial layer (hosted hub-repo, enterprise support, SaaS dashboard)? If so, what features gate the commercial tier versus the open-source core?
 
 **Community governance:** Contribution model, release cadence, RFC process for breaking changes to the SKILL.md contract or plan file format.
 
@@ -461,9 +461,9 @@ The following items require product-level decisions that are outside the scope o
 
 **Telemetry and feedback:** Should the CLI include opt-in anonymous telemetry to measure adoption KPIs? If so, what is collected and how is consent managed?
 
-**AGENTS.md convergence:** The Linux Foundation-backed AGENTS.md standard is emerging as the cross-tool configuration format. Should Trellis generate an AGENTS.md file as part of `trls init`, or wait for the standard to stabilize?
+**AGENTS.md convergence:** The Linux Foundation-backed AGENTS.md standard is emerging as the cross-tool configuration format. Should Armature generate an AGENTS.md file as part of `arm init`, or wait for the standard to stabilize?
 
-**Agent Skills distribution standard:** The agentskills.io open standard defines skill folder structure. Confirm the final packaging of `trls` as `scripts/trls` with SKILL.md frontmatter and `references/` subdirectory.
+**Agent Skills distribution standard:** The agentskills.io open standard defines skill folder structure. Confirm the final packaging of `arm` as `scripts/arm` with SKILL.md frontmatter and `references/` subdirectory.
 
 **Compaction trigger threshold:** When compaction is eventually implemented, what heuristic triggers it? After N ops? After N days? By which worker? This is deferred but the decision framework should be outlined.
 

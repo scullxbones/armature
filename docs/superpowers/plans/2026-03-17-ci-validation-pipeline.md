@@ -23,7 +23,7 @@ The `check` target must run steps in this order (fail-fast is the default for ma
 3. `coverage-check` — enforces the 80% threshold (re-runs tests internally; acceptable duplication for clarity)
 4. `mutate` — slowest; runs last to avoid wasting time when earlier checks fail
 
-> **Why `check` and not `validate`?** The CLI binary already has a `trls validate` subcommand. Naming the Makefile target `validate` would cause confusion. `check` is idiomatic in Go toolchains (e.g., `go vet`, `staticcheck`).
+> **Why `check` and not `validate`?** The CLI binary already has a `arm validate` subcommand. Naming the Makefile target `validate` would cause confusion. `check` is idiomatic in Go toolchains (e.g., `go vet`, `staticcheck`).
 
 - [ ] **Step 1: Open the Makefile and locate the `.PHONY` line and `help` target**
 

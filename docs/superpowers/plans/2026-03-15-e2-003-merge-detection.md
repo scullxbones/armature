@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** When a worker's feature branch is merged into main, `trls sync` detects this and auto-transitions all `done` issues whose `Branch` field matches the merged branch to `merged` status by appending transition ops.
+**Goal:** When a worker's feature branch is merged into main, `arm sync` detects this and auto-transitions all `done` issues whose `Branch` field matches the merged branch to `merged` status by appending transition ops.
 
-**Architecture:** A new `trls sync` command reads the materialized `state/issues/` directory, finds issues with `status=done` and `branch` set, checks if that branch is reachable from the current branch via `git merge-base --is-ancestor`, and appends `OpTransition{To: "merged"}` for each detected merge. An optional git `post-merge` hook template calls `trls sync` automatically. Sync works in both single- and dual-branch modes.
+**Architecture:** A new `arm sync` command reads the materialized `state/issues/` directory, finds issues with `status=done` and `branch` set, checks if that branch is reachable from the current branch via `git merge-base --is-ancestor`, and appends `OpTransition{To: "merged"}` for each detected merge. An optional git `post-merge` hook template calls `arm sync` automatically. Sync works in both single- and dual-branch modes.
 
 **Tech Stack:** Go, os/exec (git), testify
 
@@ -12,7 +12,7 @@
 - E2-001 complete — `appCtx`, `ResolveContext`, dual-branch context all working
 - E2-002 complete — `appendOp` helper and `runTrls` test helper both defined in `cmd/trellis/`
 
-**Cross-plan note:** `trls sync` uses `appendOp` (defined in E2-002's `helpers.go`). Implement E2-002 before E2-003.
+**Cross-plan note:** `arm sync` uses `appendOp` (defined in E2-002's `helpers.go`). Implement E2-002 before E2-003.
 
 ---
 
@@ -24,9 +24,9 @@
 | Modify | `internal/git/git_test.go` | Tests for `BranchMergedInto` |
 | Create | `internal/sync/sync.go` | `DetectMerges(issuesDir, targetBranch string, mc MergeChecker) ([]string, error)` |
 | Create | `internal/sync/sync_test.go` | Unit tests with fake MergeChecker |
-| Create | `cmd/trellis/sync.go` | `trls sync` command |
+| Create | `cmd/trellis/sync.go` | `arm sync` command |
 | Modify | `cmd/trellis/main.go` | Register `newSyncCmd()` |
-| Modify | `cmd/trellis/main_test.go` | Integration test for `trls sync` |
+| Modify | `cmd/trellis/main_test.go` | Integration test for `arm sync` |
 | Modify | `cmd/trellis/init.go` | Write `post-merge.sh.template` during init |
 
 ---
@@ -175,8 +175,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	trellissync "github.com/scullxbones/trellis/internal/sync"
+	"github.com/scullxbones/armature/internal/materialize"
+	trellissync "github.com/scullxbones/armature/internal/sync"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -268,8 +268,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // MergeChecker checks if a branch is merged into a target branch.
@@ -332,18 +332,18 @@ git commit -m "feat(sync): add DetectMerges to find done issues with merged bran
 
 ---
 
-## Chunk 3: `trls sync` Command
+## Chunk 3: `arm sync` Command
 
-### Task 3: Implement `trls sync` command
+### Task 3: Implement `arm sync` command
 
 **Files:**
 - Create: `cmd/trellis/sync.go`
 - Modify: `cmd/trellis/main.go`
 - Modify: `cmd/trellis/main_test.go`
 
-Note: `trls sync` uses `appendOp` (defined in E2-002's `helpers.go`) and `runTrls` (defined in E2-002's `main_test.go`). Both must exist before compiling/testing this chunk.
+Note: `arm sync` uses `appendOp` (defined in E2-002's `helpers.go`) and `runTrls` (defined in E2-002's `main_test.go`). Both must exist before compiling/testing this chunk.
 
-Note on worker identity: `sync` uses `resolveWorkerAndLog()` because ops are appended to a worker log (same as all other commands). Users must run `trls worker-init` before `trls sync`, same as any other worker command.
+Note on worker identity: `sync` uses `resolveWorkerAndLog()` because ops are appended to a worker log (same as all other commands). Users must run `arm worker-init` before `arm sync`, same as any other worker command.
 
 - [ ] **Step 1: Write failing integration test**
 
@@ -418,10 +418,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/scullxbones/trellis/internal/git"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
-	trellissync "github.com/scullxbones/trellis/internal/sync"
+	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
+	trellissync "github.com/scullxbones/armature/internal/sync"
 	"github.com/spf13/cobra"
 )
 
@@ -515,14 +515,14 @@ Expected: PASS
 
 ```bash
 cd /home/brian/development/trellis && git add cmd/trellis/sync.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat: add trls sync command for cross-branch merge detection and auto-transition"
+git commit -m "feat: add arm sync command for cross-branch merge detection and auto-transition"
 ```
 
 ---
 
 ## Chunk 4: Post-Merge Hook Template
 
-### Task 4: Write `post-merge.sh.template` during `trls init`
+### Task 4: Write `post-merge.sh.template` during `arm init`
 
 **Files:**
 - Modify: `cmd/trellis/init.go`
@@ -545,7 +545,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	hookPath := filepath.Join(repo, ".issues", "hooks", "post-merge.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "trls sync")
+	assert.Contains(t, string(data), "arm sync")
 }
 ```
 
@@ -562,9 +562,9 @@ Add a constant at the top of the file (after the package declaration):
 
 ```go
 const postMergeHookTemplate = `#!/bin/sh
-# Trellis post-merge hook: auto-detect merged branches and transition done issues to merged.
+# Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
-trls sync
+arm sync
 `
 ```
 
@@ -588,16 +588,16 @@ Expected: PASS
 
 ```bash
 cd /home/brian/development/trellis && git add cmd/trellis/init.go cmd/trellis/main_test.go
-git commit -m "feat(init): write post-merge.sh.template hook for trls sync"
+git commit -m "feat(init): write post-merge.sh.template hook for arm sync"
 ```
 
 ---
 
 ## Definition of Done Checklist
 
-- [ ] `trls sync` detects done issues whose branch is merged into the current/specified branch
+- [ ] `arm sync` detects done issues whose branch is merged into the current/specified branch
 - [ ] Detected issues are transitioned to `merged` via appended `OpTransition` ops
-- [ ] `trls sync` materializes before detection and after to keep state current
+- [ ] `arm sync` materializes before detection and after to keep state current
 - [ ] Non-existent or non-merged branches are silently skipped (return false, nil)
-- [ ] A `post-merge.sh.template` is written to `.issues/hooks/` during `trls init`
+- [ ] A `post-merge.sh.template` is written to `.armature/hooks/` during `arm init`
 - [ ] `go test ./...` passes clean

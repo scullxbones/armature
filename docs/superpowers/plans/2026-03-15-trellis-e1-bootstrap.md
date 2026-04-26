@@ -1,10 +1,10 @@
-# Trellis E1: Bootstrap Solo Workflow — Implementation Plan
+# Armature E1: Bootstrap Solo Workflow — Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the complete solo-workflow CLI (`trls`) for single-branch mode — from op log engine through materialization, ready-task computation, claiming, context assembly, decomposition, hooks, and error diagnostics — so that the dogfood ceremony can load E2/E3/E4 into Trellis itself.
+**Goal:** Build the complete solo-workflow CLI (`arm`) for single-branch mode — from op log engine through materialization, ready-task computation, claiming, context assembly, decomposition, hooks, and error diagnostics — so that the dogfood ceremony can load E2/E3/E4 into Armature itself.
 
-**Architecture:** Functional core / hexagonal architecture. Pure functions for all DAG, materialization, ready-computation, and context-assembly logic (no I/O). Thin boundary adapters for git and filesystem. All coordination state is append-only JSONL op logs; materialized state files are local-only caches derived from logs. Single-branch mode stores `.issues/` on the code branch directly.
+**Architecture:** Functional core / hexagonal architecture. Pure functions for all DAG, materialization, ready-computation, and context-assembly logic (no I/O). Thin boundary adapters for git and filesystem. All coordination state is append-only JSONL op logs; materialized state files are local-only caches derived from logs. Single-branch mode stores `.armature/` on the code branch directly.
 
 **Tech Stack:** Go 1.22+, `github.com/spf13/cobra` (CLI), `github.com/leanovate/gopter` (property tests), `github.com/stretchr/testify` (assertions), `github.com/google/uuid` (worker IDs). No external deps for core logic.
 
@@ -39,25 +39,25 @@ S11: SKILL.md + plan.json                     [depends on S3-S9]
 | Package | File | Responsibility |
 |---------|------|---------------|
 | `cmd/trellis` | `main.go` | Cobra root command, global flags (`--debug`, `--format`) |
-| `cmd/trellis` | `version.go` | `trls version` — prints module version |
-| `cmd/trellis` | `init.go` | `trls init` — single-branch setup, config.json generation |
-| `cmd/trellis` | `worker_init.go` | `trls worker-init` / `trls worker-init --check` |
-| `cmd/trellis` | `materialize.go` | `trls materialize` — standalone CLI for materialization |
-| `cmd/trellis` | `ready.go` | `trls ready` — show ready tasks |
-| `cmd/trellis` | `claim.go` | `trls claim` — claim a task |
-| `cmd/trellis` | `heartbeat.go` | `trls heartbeat` — heartbeat for active claim |
-| `cmd/trellis` | `transition.go` | `trls transition` — status transitions |
-| `cmd/trellis` | `create.go` | `trls create` — create new node |
-| `cmd/trellis` | `note.go` | `trls note` — add note to issue |
-| `cmd/trellis` | `link.go` | `trls link` — add blocked_by link |
-| `cmd/trellis` | `decision.go` | `trls decision` — record decision |
-| `cmd/trellis` | `reopen.go` | `trls reopen` — reverse transition to open |
-| `cmd/trellis` | `merged.go` | `trls merged` — stub for single-branch mode |
-| `cmd/trellis` | `render_context.go` | `trls render-context` — context assembly output |
-| `cmd/trellis` | `decompose_apply.go` | `trls decompose-apply` — load plan.json |
-| `cmd/trellis` | `decompose_revert.go` | `trls decompose-revert` — revert decomposition |
-| `cmd/trellis` | `decompose_context.go` | `trls decompose-context` — stub with local filesystem |
-| `cmd/trellis` | `validate.go` | `trls validate --ci` — structural validation |
+| `cmd/trellis` | `version.go` | `arm version` — prints module version |
+| `cmd/trellis` | `init.go` | `arm init` — single-branch setup, config.json generation |
+| `cmd/trellis` | `worker_init.go` | `arm worker-init` / `arm worker-init --check` |
+| `cmd/trellis` | `materialize.go` | `arm materialize` — standalone CLI for materialization |
+| `cmd/trellis` | `ready.go` | `arm ready` — show ready tasks |
+| `cmd/trellis` | `claim.go` | `arm claim` — claim a task |
+| `cmd/trellis` | `heartbeat.go` | `arm heartbeat` — heartbeat for active claim |
+| `cmd/trellis` | `transition.go` | `arm transition` — status transitions |
+| `cmd/trellis` | `create.go` | `arm create` — create new node |
+| `cmd/trellis` | `note.go` | `arm note` — add note to issue |
+| `cmd/trellis` | `link.go` | `arm link` — add blocked_by link |
+| `cmd/trellis` | `decision.go` | `arm decision` — record decision |
+| `cmd/trellis` | `reopen.go` | `arm reopen` — reverse transition to open |
+| `cmd/trellis` | `merged.go` | `arm merged` — stub for single-branch mode |
+| `cmd/trellis` | `render_context.go` | `arm render-context` — context assembly output |
+| `cmd/trellis` | `decompose_apply.go` | `arm decompose-apply` — load plan.json |
+| `cmd/trellis` | `decompose_revert.go` | `arm decompose-revert` — revert decomposition |
+| `cmd/trellis` | `decompose_context.go` | `arm decompose-context` — stub with local filesystem |
+| `cmd/trellis` | `validate.go` | `arm validate --ci` — structural validation |
 | `internal/ops` | `types.go` | Op type constants, status constants, positional array codec |
 | `internal/ops` | `log.go` | Per-worker log file append/read, byte offset tracking |
 | `internal/ops` | `parse.go` | JSONL line parsing into typed Op structs |
@@ -110,7 +110,7 @@ S11: SKILL.md + plan.json                     [depends on S3-S9]
 
 This chunk establishes the CLI entry point, op type system, and worker identity — the foundation everything else builds on.
 
-### Task 1: Create Cobra CLI entry point with `trls version`
+### Task 1: Create Cobra CLI entry point with `arm version`
 
 **Files:**
 - Create: `cmd/trellis/main.go`
@@ -139,7 +139,7 @@ func TestVersionCommand(t *testing.T) {
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "trls version")
+	assert.Contains(t, buf.String(), "arm version")
 }
 ```
 
@@ -165,8 +165,8 @@ var Version = "dev"
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "trls",
-		Short: "Trellis — git-native work orchestration",
+		Use:   "arm",
+		Short: "Armature — git-native work orchestration",
 		SilenceUsage: true,
 	}
 
@@ -199,9 +199,9 @@ import (
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print trls version",
+		Short: "Print arm version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintf(cmd.OutOrStdout(), "trls version %s\n", Version)
+			fmt.Fprintf(cmd.OutOrStdout(), "arm version %s\n", Version)
 			return nil
 		},
 	}
@@ -223,19 +223,19 @@ Add/update the build target:
 ```makefile
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 go build -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o bin/trls ./cmd/trellis
+	CGO_ENABLED=0 go build -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o bin/arm ./cmd/trellis
 ```
 
 - [ ] **Step 8: Verify build**
 
-Run: `cd /home/brian/development/trellis && make build && ./bin/trls version`
-Expected: `trls version dev` (or a git SHA)
+Run: `cd /home/brian/development/trellis && make build && ./bin/arm version`
+Expected: `arm version dev` (or a git SHA)
 
 - [ ] **Step 9: Commit**
 
 ```bash
 git add cmd/trellis/main.go cmd/trellis/version.go cmd/trellis/main_test.go Makefile go.mod go.sum
-git commit -m "feat(cli): add cobra root command and trls version"
+git commit -m "feat(cli): add cobra root command and arm version"
 ```
 
 ---
@@ -679,7 +679,7 @@ func GetWorkerID(repoPath string) (string, error) {
 	cmd := exec.Command("git", "-C", repoPath, "config", "--local", gitConfigKey)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("worker ID not configured — run 'trls worker-init': %w", err)
+		return "", fmt.Errorf("worker ID not configured — run 'arm worker-init': %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -712,7 +712,7 @@ git commit -m "feat(worker): add worker identity generation and git config stora
 
 ---
 
-### Task 5: `trls worker-init` and `trls worker-init --check` CLI commands
+### Task 5: `arm worker-init` and `arm worker-init --check` CLI commands
 
 **Files:**
 - Create: `cmd/trellis/worker_init.go`
@@ -803,7 +803,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/worker"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -822,7 +822,7 @@ func newWorkerInitCmd() *cobra.Command {
 			if check {
 				ok, id := worker.CheckWorkerID(repoPath)
 				if !ok {
-					return fmt.Errorf("no worker ID configured — run 'trls worker-init'")
+					return fmt.Errorf("no worker ID configured — run 'arm worker-init'")
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Worker ID: %s\n", id)
 				return nil
@@ -857,7 +857,7 @@ Expected: PASS
 
 ```bash
 git add cmd/trellis/worker_init.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat(cli): add trls worker-init and worker-init --check commands"
+git commit -m "feat(cli): add arm worker-init and worker-init --check commands"
 ```
 
 ---
@@ -1113,7 +1113,7 @@ package ops
 
 // GenerateSchema returns the SCHEMA file content defining positional array format.
 func GenerateSchema() string {
-	return `# Trellis Op Log Schema v1
+	return `# Armature Op Log Schema v1
 #
 # Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
 #
@@ -1376,7 +1376,7 @@ git commit -m "feat(config): add config.json struct, read/write, and project typ
 
 ---
 
-### Task 9: `trls init` for single-branch mode
+### Task 9: `arm init` for single-branch mode
 
 **Files:**
 - Create: `cmd/trellis/init.go`
@@ -1439,9 +1439,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/scullxbones/trellis/internal/config"
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/worker"
+	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -1450,7 +1450,7 @@ func newInitCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Initialize Trellis in the current repository",
+		Short: "Initialize Armature in the current repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repoPath == "" {
 				repoPath = "."
@@ -1504,7 +1504,7 @@ func runInit(cmd *cobra.Command, repoPath string) error {
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Trellis in single-branch mode at %s\n", issuesDir)
+	fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in single-branch mode at %s\n", issuesDir)
 	return nil
 }
 ```
@@ -1527,7 +1527,7 @@ Expected: All PASS
 
 ```bash
 git add cmd/trellis/init.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat(cli): add trls init for single-branch mode"
+git commit -m "feat(cli): add arm init for single-branch mode"
 ```
 
 ---
@@ -1860,7 +1860,7 @@ package materialize
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1979,7 +1979,7 @@ package materialize
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // State holds the complete materialized state built from op replay.
@@ -2332,7 +2332,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 type Result struct {
@@ -2434,7 +2434,7 @@ func Materialize(issuesDir string, singleBranch bool) (Result, error) {
 		}
 	}
 
-	// Write ready.json placeholder (recomputed on-demand by `trls ready`)
+	// Write ready.json placeholder (recomputed on-demand by `arm ready`)
 	readyPath := filepath.Join(stateDir, "ready.json")
 	os.WriteFile(readyPath, []byte("[]"), 0644)
 
@@ -2483,7 +2483,7 @@ git commit -m "feat(materialize): add full materialization pipeline with log rea
 
 ---
 
-### Task 14: `trls materialize` CLI command
+### Task 14: `arm materialize` CLI command
 
 **Files:**
 - Create: `cmd/trellis/materialize.go`
@@ -2523,7 +2523,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
 
@@ -2569,7 +2569,7 @@ Expected: PASS
 
 ```bash
 git add cmd/trellis/materialize.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat(cli): add trls materialize command"
+git commit -m "feat(cli): add arm materialize command"
 ```
 
 ---
@@ -2677,7 +2677,7 @@ package ready
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -2793,9 +2793,9 @@ import (
 	"sort"
 	"time"
 
-	claimPkg "github.com/scullxbones/trellis/internal/claim"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // ReadyEntry represents a task in the ready queue.
@@ -2945,7 +2945,7 @@ git commit -m "feat(ready): implement 4-rule ready gate and priority sort"
 
 ---
 
-### Task 17: `trls ready` CLI command
+### Task 17: `arm ready` CLI command
 
 **Files:**
 - Create: `cmd/trellis/ready.go`
@@ -2984,8 +2984,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ready"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ready"
 	"github.com/spf13/cobra"
 )
 
@@ -3060,7 +3060,7 @@ Expected: PASS
 
 ```bash
 git add cmd/trellis/ready.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat(cli): add trls ready command"
+git commit -m "feat(cli): add arm ready command"
 ```
 
 ---
@@ -3110,8 +3110,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/ops"
-	"github.com/scullxbones/trellis/internal/worker"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worker"
 )
 
 // resolveWorkerAndLog returns the worker ID and log path for appending ops.
@@ -3120,7 +3120,7 @@ func resolveWorkerAndLog(repoPath string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
-	logPath := fmt.Sprintf("%s/.issues/ops/%s.log", repoPath, workerID)
+	logPath := fmt.Sprintf("%s/.armature/ops/%s.log", repoPath, workerID)
 	return workerID, logPath, nil
 }
 
@@ -3138,7 +3138,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3211,7 +3211,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3259,7 +3259,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3308,7 +3308,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3362,7 +3362,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3434,7 +3434,7 @@ git commit -m "feat(cli): add create, note, link, decision, and heartbeat comman
 - [ ] **Step 1: Write test for transition command**
 
 ```go
-// setupRepoWithTask creates a temp repo, runs trls init, and creates a test task.
+// setupRepoWithTask creates a temp repo, runs arm init, and creates a test task.
 func setupRepoWithTask(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -3475,7 +3475,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3533,13 +3533,13 @@ func newTransitionCmd() *cobra.Command {
 
 - [ ] **Step 3: Create reopen.go**
 
-`trls reopen` is a convenience wrapper that emits `transition --to open`:
+`arm reopen` is a convenience wrapper that emits `transition --to open`:
 
 ```go
 package main
 
 import (
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3575,7 +3575,7 @@ func newReopenCmd() *cobra.Command {
 
 - [ ] **Step 4: Create merged.go (stub)**
 
-Per spec: `trls merged` is a stub in E1 single-branch mode — auto-handled by materializer.
+Per spec: `arm merged` is a stub in E1 single-branch mode — auto-handled by materializer.
 
 ```go
 package main
@@ -3583,7 +3583,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3661,7 +3661,7 @@ package claim
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -3707,7 +3707,7 @@ Expected: FAIL
 package claim
 
 import (
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // ResolveClaim resolves a claim race: earliest timestamp wins,
@@ -3837,7 +3837,7 @@ git commit -m "feat(claim): add scope overlap detection for claim advisory"
 
 ---
 
-### Task 22: `trls claim` CLI command
+### Task 22: `arm claim` CLI command
 
 **Files:**
 - Create: `cmd/trellis/claim.go`
@@ -3877,9 +3877,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/claim"
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -3968,7 +3968,7 @@ Expected: All PASS
 
 ```bash
 git add cmd/trellis/claim.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat(cli): add trls claim with scope overlap advisory and inferred node blocking"
+git commit -m "feat(cli): add arm claim with scope overlap advisory and inferred node blocking"
 ```
 
 ---
@@ -3992,7 +3992,7 @@ package context
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -4076,7 +4076,7 @@ Expected: FAIL
 package context
 
 import (
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // RenderedContext is the output of the context assembly algorithm.
@@ -4309,7 +4309,7 @@ git commit -m "feat(context): implement 7-layer context assembly with priority-b
 
 ---
 
-### Task 24: `trls render-context` CLI command
+### Task 24: `arm render-context` CLI command
 
 **Files:**
 - Create: `cmd/trellis/render_context.go`
@@ -4411,8 +4411,8 @@ package main
 import (
 	"fmt"
 
-	ctx "github.com/scullxbones/trellis/internal/context"
-	"github.com/scullxbones/trellis/internal/materialize"
+	ctx "github.com/scullxbones/armature/internal/context"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
 
@@ -4485,7 +4485,7 @@ Expected: All PASS
 
 ```bash
 git add cmd/trellis/render_context.go internal/context/render.go cmd/trellis/main.go cmd/trellis/main_test.go
-git commit -m "feat(cli): add trls render-context with agent JSON and human text output"
+git commit -m "feat(cli): add arm render-context with agent JSON and human text output"
 ```
 
 ---
@@ -4592,7 +4592,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/scullxbones/trellis/internal/dag"
+	"github.com/scullxbones/armature/internal/dag"
 )
 
 type Plan struct {
@@ -4832,7 +4832,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 type ApplyResult struct {
@@ -4995,7 +4995,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/scullxbones/trellis/internal/ops"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // RevertPlan emits cancellation transition ops for all nodes in the plan.
@@ -5122,7 +5122,7 @@ git commit -m "feat(decompose): add decompose-revert and decompose-context stub"
 
 ---
 
-### Task 28: `trls validate --ci` (minimal structural checks)
+### Task 28: `arm validate --ci` (minimal structural checks)
 
 **Files:**
 - Create: `internal/validate/validate.go`
@@ -5139,7 +5139,7 @@ package validate
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -5182,8 +5182,8 @@ package validate
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/dag"
-	"github.com/scullxbones/trellis/internal/materialize"
+	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 type Result struct {
@@ -5250,8 +5250,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/scullxbones/trellis/internal/materialize"
-	"github.com/scullxbones/trellis/internal/validate"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -5308,7 +5308,7 @@ Expected: All PASS
 
 ```bash
 git add internal/validate/ cmd/trellis/validate.go cmd/trellis/main.go
-git commit -m "feat(validate): add trls validate --ci with structural checks"
+git commit -m "feat(validate): add arm validate --ci with structural checks"
 ```
 
 ---
@@ -5330,7 +5330,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/decompose"
+	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/spf13/cobra"
 )
 
@@ -5371,7 +5371,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 				return err
 			}
 
-			opsDir := repoPath + "/.issues/ops"
+			opsDir := repoPath + "/.armature/ops"
 			result, err := decompose.ApplyPlan(plan, opsDir, workerID, dryRun)
 			if err != nil {
 				return err
@@ -5399,7 +5399,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/trellis/internal/decompose"
+	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/spf13/cobra"
 )
 
@@ -5422,7 +5422,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			opsDir := repoPath + "/.issues/ops"
+			opsDir := repoPath + "/.armature/ops"
 			if err := decompose.RevertPlan(plan, opsDir, workerID); err != nil {
 				return err
 			}
@@ -5446,7 +5446,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/scullxbones/trellis/internal/decompose"
+	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/spf13/cobra"
 )
 
@@ -5536,7 +5536,7 @@ package hooks
 import (
 	"testing"
 
-	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -5610,7 +5610,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/scullxbones/trellis/internal/config"
+	"github.com/scullxbones/armature/internal/config"
 )
 
 type HookResult struct {
@@ -5724,7 +5724,7 @@ In `newTransitionCmd`'s `RunE`, after resolving the worker and before appending 
 
 ```go
 // Load config and run pre-transition hooks
-cfg, cfgErr := config.LoadConfig(repoPath + "/.issues/config.json")
+cfg, cfgErr := config.LoadConfig(repoPath + "/.armature/config.json")
 if cfgErr == nil && len(cfg.Hooks) > 0 {
 	// Load issue for scope
 	issuesDir := repoPath + "/.issues"
@@ -5773,15 +5773,15 @@ import (
 )
 
 func TestStructuredError(t *testing.T) {
-	err := New("claim failed", "issue task-01 is already claimed by worker-b2", "run 'trls ready' to find available tasks")
+	err := New("claim failed", "issue task-01 is already claimed by worker-b2", "run 'arm ready' to find available tasks")
 	assert.Contains(t, err.Error(), "claim failed")
-	assert.Contains(t, err.Hint, "trls ready")
+	assert.Contains(t, err.Hint, "arm ready")
 }
 
 func TestOpsWorktreeNotFoundError(t *testing.T) {
 	err := OpsWorktreeNotFound()
 	assert.Contains(t, err.Error(), "dual-branch mode not active")
-	assert.Contains(t, err.Hint, "trls init")
+	assert.Contains(t, err.Hint, "arm init")
 }
 ```
 
@@ -5792,45 +5792,45 @@ package errors
 
 import "fmt"
 
-// TrellisError is a structured error with context and hints.
-type TrellisError struct {
+// ArmatureError is a structured error with context and hints.
+type ArmatureError struct {
 	Message string `json:"message"`
 	State   string `json:"relevant_state,omitempty"`
 	Hint    string `json:"hint,omitempty"`
 }
 
-func (e *TrellisError) Error() string {
+func (e *ArmatureError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Message, e.State)
 }
 
-func New(message, state, hint string) *TrellisError {
-	return &TrellisError{Message: message, State: state, Hint: hint}
+func New(message, state, hint string) *ArmatureError {
+	return &ArmatureError{Message: message, State: state, Hint: hint}
 }
 
 // OpsWorktreeNotFound returns an informative stub error for E1 single-branch mode.
-func OpsWorktreeNotFound() *TrellisError {
-	return &TrellisError{
+func OpsWorktreeNotFound() *ArmatureError {
+	return &ArmatureError{
 		Message: "ops branch not found",
 		State:   "dual-branch mode not active",
-		Hint:    "run 'trls init' in a repo with branch protection, or after E2 is complete",
+		Hint:    "run 'arm init' in a repo with branch protection, or after E2 is complete",
 	}
 }
 
 // OpsWorktreeDesync returns a stub error for E1.
-func OpsWorktreeDesync() *TrellisError {
-	return &TrellisError{
+func OpsWorktreeDesync() *ArmatureError {
+	return &ArmatureError{
 		Message: "ops worktree desync",
 		State:   "dual-branch mode not active",
-		Hint:    "run 'trls init' in a repo with branch protection, or after E2 is complete",
+		Hint:    "run 'arm init' in a repo with branch protection, or after E2 is complete",
 	}
 }
 
 // MaterializationFailed returns an error for corrupt log lines.
-func MaterializationFailed(logFile string, lineNum int, detail string) *TrellisError {
-	return &TrellisError{
+func MaterializationFailed(logFile string, lineNum int, detail string) *ArmatureError {
+	return &ArmatureError{
 		Message: "materialization failed",
 		State:   fmt.Sprintf("corrupt line %d in %s: %s", lineNum, logFile, detail),
-		Hint:    "the corrupt line will be skipped; run 'trls materialize' to rebuild state",
+		Hint:    "the corrupt line will be skipped; run 'arm materialize' to rebuild state",
 	}
 }
 ```
@@ -5912,71 +5912,71 @@ git commit -m "feat(errors): add structured error format, --debug dump, and ops 
 - [ ] **Step 1: Write SKILL.md**
 
 This is the complete AI worker interface document per E1-S11. It must include:
-- Setup (2 commands: `trls version`, `trls worker-init --check`)
+- Setup (2 commands: `arm version`, `arm worker-init --check`)
 - Work loop (7 steps)
 - Error recovery (blocked, wrong task, PR rejected)
 - Rules and constraints
-- NO reference to `trls confirm` (doesn't exist until E3-S8)
+- NO reference to `arm confirm` (doesn't exist until E3-S8)
 - Inferred nodes cannot be claimed (error message only)
 
 ```markdown
-# Trellis Worker Skill
+# Armature Worker Skill
 
 ## Setup
 
 Before starting work, verify your environment:
 
-1. `trls version` — confirm CLI is installed and accessible
-2. `trls worker-init --check` — confirm worker identity is configured
+1. `arm version` — confirm CLI is installed and accessible
+2. `arm worker-init --check` — confirm worker identity is configured
 
-If worker-init fails, run `trls worker-init` to generate a new identity.
+If worker-init fails, run `arm worker-init` to generate a new identity.
 
 ## Work Loop
 
 Repeat these steps for each work item:
 
-1. **Sync and materialize:** `trls materialize`
-2. **Find ready work:** `trls ready --format=json`
+1. **Sync and materialize:** `arm materialize`
+2. **Find ready work:** `arm ready --format=json`
    - Pick the highest-priority task from the list
    - If no tasks are ready, wait for blockers to complete
-3. **Get context:** `trls render-context --issue <id> --format=agent`
+3. **Get context:** `arm render-context --issue <id> --format=agent`
    - Read the full context before starting work
-4. **Claim the task:** `trls claim --issue <id> --ttl 60`
+4. **Claim the task:** `arm claim --issue <id> --ttl 60`
    - If claim fails with "inferred" error: this node has not been confirmed by a human. Skip it and pick another task.
 5. **Do the work:**
    - Follow the scope, definition of done, and acceptance criteria from the context
-   - Send heartbeats periodically: `trls heartbeat --issue <id>`
-   - Add notes for discoveries: `trls note --issue <id> --msg "..."`
-6. **Complete the task:** `trls transition --issue <id> --to done --outcome "description of what was done"`
+   - Send heartbeats periodically: `arm heartbeat --issue <id>`
+   - Add notes for discoveries: `arm note --issue <id> --msg "..."`
+6. **Complete the task:** `arm transition --issue <id> --to done --outcome "description of what was done"`
 7. **Repeat from step 1**
 
 ## Error Recovery
 
 ### Blocked — cannot complete work
 ```
-trls transition --issue <id> --to blocked
-trls note --issue <id> --msg "Blocked because: <reason>"
+arm transition --issue <id> --to blocked
+arm note --issue <id> --msg "Blocked because: <reason>"
 ```
 Return to step 1 — pick a different task.
 
 ### Wrong task — claimed by mistake
 ```
-trls reopen --issue <id>
+arm reopen --issue <id>
 ```
 Return to step 1.
 
 ### PR rejected — work needs revision
 ```
-trls reopen --issue <id>
-trls note --issue <id> --msg "PR rejected: <reason>"
-trls claim --issue <id> --ttl 60
+arm reopen --issue <id>
+arm note --issue <id> --msg "PR rejected: <reason>"
+arm claim --issue <id> --ttl 60
 ```
 Rework and re-transition to done.
 
 ### Merge not detected automatically
 If your task is stuck at `done` and the code is on main:
 ```
-trls merged --issue <id>
+arm merged --issue <id>
 ```
 Note: In single-branch mode this is automatic. This command exists for dual-branch mode (E2).
 
@@ -5985,7 +5985,7 @@ Note: In single-branch mode this is automatic. This command exists for dual-bran
 - **One task at a time.** Complete or release your current claim before taking another.
 - **Heartbeat every significant operation.** Prevents your claim from expiring.
 - **Stay within scope.** Only modify files listed in the task's scope globs.
-- **Record decisions.** Use `trls decision --issue <id> --topic <topic> --choice <choice> --rationale <why>` for architectural choices that affect other tasks.
+- **Record decisions.** Use `arm decision --issue <id> --topic <topic> --choice <choice> --rationale <why>` for architectural choices that affect other tasks.
 - **Never skip tests.** Run the project's test suite before transitioning to done.
 - **Inferred nodes cannot be claimed.** If you see "requires confirmation" on a ready task, skip it — a human must confirm it first.
 ```
@@ -6006,7 +6006,7 @@ git commit -m "docs: add SKILL.md AI worker interface"
 
 - [ ] **Step 1: Generate plan-post-bootstrap.json**
 
-This is a first-class deliverable of E1-S11. It must contain E2, E3, and E4 as epics with all stories, acceptance criteria, source citations, and scope globs. The plan must be valid according to `trls decompose-apply --dry-run`.
+This is a first-class deliverable of E1-S11. It must contain E2, E3, and E4 as epics with all stories, acceptance criteria, source citations, and scope globs. The plan must be valid according to `arm decompose-apply --dry-run`.
 
 The implementing agent must:
 1. Read `docs/superpowers/specs/2026-03-14-trellis-epic-decomposition-design.md` for all E2/E3/E4 story details
@@ -6027,7 +6027,7 @@ This task is comparable in effort to writing SKILL.md itself — it requires car
 
 - [ ] **Step 2: Validate the plan**
 
-Run: `cd /home/brian/development/trellis && trls decompose-apply docs/plan-post-bootstrap.json --dry-run`
+Run: `cd /home/brian/development/trellis && arm decompose-apply docs/plan-post-bootstrap.json --dry-run`
 Expected: Validation passes, shows nodes that would be created
 
 - [ ] **Step 3: Commit**
@@ -6043,68 +6043,68 @@ git commit -m "feat: add plan-post-bootstrap.json for dogfood ceremony (E2/E3/E4
 
 This task executes the dogfood ceremony described in the spec to verify E1 is complete.
 
-- [ ] **Step 1: Initialize Trellis in the trellis repo**
+- [ ] **Step 1: Initialize Armature in the trellis repo**
 
 ```bash
 cd /home/brian/development/trellis
-trls init
+arm init
 ```
 
 - [ ] **Step 2: Register source documents as local filesystem sources**
 
 ```bash
-trls decompose-context --sources docs/trellis-prd.md,docs/architecture.md --format json --output /tmp/context.json
+arm decompose-context --sources docs/trellis-prd.md,docs/architecture.md --format json --output /tmp/context.json
 ```
 
 - [ ] **Step 3: Dry-run the plan**
 
 ```bash
-trls decompose-apply docs/plan-post-bootstrap.json --dry-run
+arm decompose-apply docs/plan-post-bootstrap.json --dry-run
 ```
 Expected: Validation passes
 
 - [ ] **Step 4: Apply the plan**
 
 ```bash
-trls decompose-apply docs/plan-post-bootstrap.json
+arm decompose-apply docs/plan-post-bootstrap.json
 ```
 Expected: All nodes created
 
 - [ ] **Step 5: Validate DAG integrity**
 
 ```bash
-trls validate --ci
+arm validate --ci
 ```
 Expected: Exit 0, no errors
 
 - [ ] **Step 6: Confirm tasks are available**
 
 ```bash
-trls ready --format=json
+arm ready --format=json
 ```
 Expected: JSON array with ready tasks
 
 - [ ] **Step 7: Claim and complete one task**
 
 ```bash
-trls claim --issue <first-ready-task-id> --ttl 60
-trls heartbeat --issue <first-ready-task-id>
-trls transition --issue <first-ready-task-id> --to done --outcome "Dogfood ceremony verification"
+arm claim --issue <first-ready-task-id> --ttl 60
+arm heartbeat --issue <first-ready-task-id>
+arm transition --issue <first-ready-task-id> --to done --outcome "Dogfood ceremony verification"
 ```
 
 - [ ] **Step 8: Verify final state**
 
 ```bash
-trls materialize
-trls ready --format=json
+arm materialize
+arm ready --format=json
 ```
 Expected: The completed task no longer appears in ready queue
 
 - [ ] **Step 9: Commit ceremony results**
 
 ```bash
-git add .issues/
-git commit -m "ceremony: complete E1 dogfood transition — Trellis managing itself"
+git add .armature/
+git commit -m "ceremony: complete E1 dogfood transition — Armature managing itself"
 ```
 
 ---
@@ -6114,7 +6114,7 @@ git commit -m "ceremony: complete E1 dogfood transition — Trellis managing its
 - [ ] All 10 op types defined and parseable (E1-S1)
 - [ ] Per-worker log files with append/read/validation (E1-S1)
 - [ ] Rate limiters for heartbeats and creates (E1-S1)
-- [ ] `trls materialize` standalone CLI command (E1-S2)
+- [ ] `arm materialize` standalone CLI command (E1-S2)
 - [ ] Incremental materialization via byte offsets (E1-S2)
 - [ ] Single-branch auto-merge (done→merged) (E1-S2)
 - [ ] Bottom-up rollup (story/epic auto-promote) (E1-S2)
@@ -6123,14 +6123,14 @@ git commit -m "ceremony: complete E1 dogfood transition — Trellis managing its
 - [ ] Claim race resolution (timestamp + lexicographic) (E1-S4)
 - [ ] Scope overlap advisory with auto-notes (E1-S4)
 - [ ] 7-layer context assembly with truncation (E1-S5)
-- [ ] `trls render-context` with --format=agent and --format=human (E1-S5)
+- [ ] `arm render-context` with --format=agent and --format=human (E1-S5)
 - [ ] All status transitions including reverse (E1-S6)
-- [ ] `trls merged` stub command (E1-S6)
-- [ ] `trls init` single-branch mode (E1-S7)
-- [ ] `trls version` and `trls worker-init` (E1-S7)
-- [ ] `trls decompose-apply` with validation, dry-run, idempotency (E1-S8)
-- [ ] `trls decompose-context` stub with local filesystem (E1-S8)
-- [ ] `trls validate --ci` structural checks (E1-S8)
+- [ ] `arm merged` stub command (E1-S6)
+- [ ] `arm init` single-branch mode (E1-S7)
+- [ ] `arm version` and `arm worker-init` (E1-S7)
+- [ ] `arm decompose-apply` with validation, dry-run, idempotency (E1-S8)
+- [ ] `arm decompose-context` stub with local filesystem (E1-S8)
+- [ ] `arm validate --ci` structural checks (E1-S8)
 - [ ] Pre-transition hooks with scope interpolation (E1-S9)
 - [ ] Structured error format with ops-worktree stubs (E1-S10)
 - [ ] SKILL.md complete AI worker interface (E1-S11)

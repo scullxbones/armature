@@ -1,6 +1,6 @@
 # **The Paradigm Shift from Prompt to Context Engineering: A Market Analysis of Agentic Work Management and Task Decomposition Systems**
 
-**Competitive Intelligence Freshness Notice:** All competitive assessments in this document reflect the state of each tool as of March 7, 2026. The agentic AI tooling landscape evolves rapidly — tools like Beads (18,100 stars, active development) may have changed architecture, features, or positioning since this analysis was conducted. Competitive positioning should be refreshed quarterly. Trellis's differentiation is strongest when grounded in structural architectural advantages (zero infrastructure, MRDT, deterministic context assembly) rather than point-in-time competitor weaknesses.
+**Competitive Intelligence Freshness Notice:** All competitive assessments in this document reflect the state of each tool as of March 7, 2026. The agentic AI tooling landscape evolves rapidly — tools like Beads (18,100 stars, active development) may have changed architecture, features, or positioning since this analysis was conducted. Competitive positioning should be refreshed quarterly. Armature's differentiation is strongest when grounded in structural architectural advantages (zero infrastructure, MRDT, deterministic context assembly) rather than point-in-time competitor weaknesses.
 
 ## **The Evolution of Agentic Engineering and the Strategic Imperative**
 

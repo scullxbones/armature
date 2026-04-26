@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename the project from Trellis to Armature across every layer — OS path, Go module, CLI binary, data directory, branch names, git config keys, environment variables, skills, and all user documentation.
+**Goal:** Rename the project from Armature to Armature across every layer — OS path, Go module, CLI binary, data directory, branch names, git config keys, environment variables, skills, and all user documentation.
 
 **Architecture:** This is a pure rename with no logic changes. It is structured in four chunks so each chunk leaves the codebase in a buildable, testable state: (1) structural renames that affect compilation, (2) runtime string constants governed by TDD, (3) skill revamp, (4) documentation sweep. Each chunk ends with `make check` green before moving on.
 
@@ -15,25 +15,25 @@
 | Before | After |
 |--------|-------|
 | OS dir `/home/brian/development/trellis/` | `/home/brian/development/armature/` |
-| Go module `github.com/scullxbones/trellis` | `github.com/scullxbones/armature` |
+| Go module `github.com/scullxbones/armature` | `github.com/scullxbones/armature` |
 | Go cmd package `cmd/trellis/` | `cmd/armature/` |
-| Binary `trls` / `bin/trls` / `~/.local/bin/trls` | `arm` / `bin/arm` / `~/.local/bin/arm` |
-| Root command `Use: "trls"` | `Use: "arm"` |
-| Data dir `.issues/` | `.armature/` |
+| Binary `arm` / `bin/arm` / `~/.local/bin/arm` | `arm` / `bin/arm` / `~/.local/bin/arm` |
+| Root command `Use: "arm"` | `Use: "arm"` |
+| Data dir `.armature/` | `.armature/` |
 | Git config key `trellis.mode` | `armature.mode` |
 | Git config key `trellis.ops-worktree-path` | `armature.ops-worktree-path` |
 | Git config key `trellis.worker-id` | `armature.worker-id` |
-| Ops branch `_trellis` | `_armature` |
+| Ops branch `_armature` | `_armature` |
 | Ops worktree default path `.trellis/` | `.arm/` |
-| Env var `TRLS_LOG_SLOT` | `ARM_LOG_SLOT` |
-| Skill `trls` | `armature` |
-| Skill `trls-worker` | `armature-worker` |
-| Skill `trls-coordinator` | `armature-coordinator` |
-| Skill `trls-planner` | `armature-planner` |
-| Skill `trls-auditor` | `armature-auditor` |
-| Product name "Trellis" | "Armature" |
+| Env var `ARM_LOG_SLOT` | `ARM_LOG_SLOT` |
+| Skill `arm` | `armature` |
+| Skill `arm-worker` | `armature-worker` |
+| Skill `arm-coordinator` | `armature-coordinator` |
+| Skill `arm-planner` | `armature-planner` |
+| Skill `arm-auditor` | `armature-auditor` |
+| Product name "Armature" | "Armature" |
 
-> **Note on worktree path:** In dual-branch mode, the ops worktree was created at `.trellis/` by `trls init`. After rename, `arm init --dual-branch` will create it at `.arm/`. Data inside the worktree: `.arm/.armature/`. The current repo uses single-branch mode; `.trellis/` is a stale worktree that will be removed in Task 7.
+> **Note on worktree path:** In dual-branch mode, the ops worktree was created at `.trellis/` by `arm init`. After rename, `arm init --dual-branch` will create it at `.arm/`. Data inside the worktree: `.arm/.armature/`. The current repo uses single-branch mode; `.trellis/` is a stale worktree that will be removed in Task 7.
 
 ---
 
@@ -90,7 +90,7 @@ Expected: all `.go` files present, no errors.
 
 **Files:**
 - Modify: `go.mod` (line 1)
-- Modify: every `*.go` file that imports `github.com/scullxbones/trellis/...`
+- Modify: every `*.go` file that imports `github.com/scullxbones/armature/...`
 
 - [ ] **Step 1: Update go.mod**
 
@@ -103,7 +103,7 @@ module github.com/scullxbones/armature
 
 ```bash
 find . -name "*.go" -not -path "./.git/*" -not -path "./.claude/worktrees/*" \
-  -exec sed -i 's|github.com/scullxbones/trellis|github.com/scullxbones/armature|g' {} +
+  -exec sed -i 's|github.com/scullxbones/armature|github.com/scullxbones/armature|g' {} +
 ```
 
 - [ ] **Step 3: Verify the build**
@@ -114,7 +114,7 @@ go build ./...
 
 Expected: exits 0. If any import errors remain, grep for the old path:
 ```bash
-grep -r "scullxbones/trellis" --include="*.go" .
+grep -r "scullxbones/armature" --include="*.go" .
 ```
 
 - [ ] **Step 4: Run tests (sanity only — full make check after chunk)**
@@ -143,13 +143,13 @@ git commit -m "refactor: rename Go module and cmd package to armature"
 - [ ] **Step 1: Update Makefile**
 
 In `Makefile`, make these replacements:
-- `"Trellis Go build targets:"` → `"Armature Go build targets:"`
-- `make build      - Build CLI binary to ./bin/trls` → `make build      - Build CLI binary to ./bin/arm`
-- `make install    - Build binary and install to ~/.local/bin/trls` → `make install    - Build binary and install to ~/.local/bin/arm`
-- `-o bin/trls` → `-o bin/arm`
-- `cp bin/trls ~/.local/bin/trls` → `cp bin/arm ~/.local/bin/arm`
-- `chmod +x ~/.local/bin/trls` → `chmod +x ~/.local/bin/arm`
-- `"Installed trls to ~/.local/bin/trls"` → `"Installed arm to ~/.local/bin/arm"`
+- `"Armature Go build targets:"` → `"Armature Go build targets:"`
+- `make build      - Build CLI binary to ./bin/arm` → `make build      - Build CLI binary to ./bin/arm`
+- `make install    - Build binary and install to ~/.local/bin/arm` → `make install    - Build binary and install to ~/.local/bin/arm`
+- `-o bin/arm` → `-o bin/arm`
+- `cp bin/arm ~/.local/bin/arm` → `cp bin/arm ~/.local/bin/arm`
+- `chmod +x ~/.local/bin/arm` → `chmod +x ~/.local/bin/arm`
+- `"Installed arm to ~/.local/bin/arm"` → `"Installed arm to ~/.local/bin/arm"`
 - `"Ensure ~/.local/bin is on your PATH"` stays
 - `./cmd/trellis` → `./cmd/armature` (in the build target)
 
@@ -165,11 +165,11 @@ root := &cobra.Command{
 
 - [ ] **Step 3: Sweep product-name string literals across all cmd/armature/*.go (TDD)**
 
-Many command files contain `Long:` help strings, error messages, and `Short:` descriptions with `trls` or `Trellis` that are user-visible. Do this TDD-style.
+Many command files contain `Long:` help strings, error messages, and `Short:` descriptions with `arm` or `Armature` that are user-visible. Do this TDD-style.
 
 First, find every affected test assertion:
 ```bash
-grep -rn '"trls \|"Trellis\|trls version\|trls hook\|trls init\|trls decompose\|trls worker-init' \
+grep -rn '"arm \|"Armature\|arm version\|arm hook\|arm init\|arm decompose\|arm worker-init' \
   cmd/armature/*_test.go | head -20
 ```
 
@@ -183,7 +183,7 @@ Then bulk-replace in source files:
 ```bash
 sed -i \
   -e 's/\btrls\b/arm/g' \
-  -e 's/Trellis/Armature/g' \
+  -e 's/Armature/Armature/g' \
   cmd/armature/*.go
 ```
 
@@ -207,7 +207,7 @@ Expected: `Usage: arm [command]` with Armature in the description, and all subco
 
 ```bash
 git add Makefile cmd/armature/
-git commit -m "refactor: rename CLI binary from trls to arm and update all user-visible strings"
+git commit -m "refactor: rename CLI binary from arm to arm and update all user-visible strings"
 ```
 
 ---
@@ -216,15 +216,15 @@ git commit -m "refactor: rename CLI binary from trls to arm and update all user-
 
 These are behavioral changes: the tool reads/writes differently named directories, branches, git config keys, and environment variables. Apply TDD — update the test first, confirm it fails, then update the source, confirm it passes.
 
-### Task 5: `.issues/` → `.armature/` data directory
+### Task 5: `.armature/` → `.armature/` data directory
 
 **Files:**
 - Modify: `internal/config/context.go` (lines 102, 108)
 - Modify: `internal/config/context_test.go`
-- Modify: `cmd/armature/init.go` (multiple `.issues/` string literals in hook scripts and comments)
+- Modify: `cmd/armature/init.go` (multiple `.armature/` string literals in hook scripts and comments)
 - Modify: `cmd/armature/secondary_state_test.go`
 - Modify: `internal/ops/tracker.go` (comment on line 29)
-- Modify: `cmd/armature/helpers.go` (any `.issues/` in comments/strings)
+- Modify: `cmd/armature/helpers.go` (any `.armature/` in comments/strings)
 - Modify: `internal/materialize/atsha.go` (comment on line 15)
 
 - [ ] **Step 1: Update tests first**
@@ -260,7 +260,7 @@ Update every occurrence. Key locations in `cmd/armature/main_test.go` to check i
 go test ./internal/config/... ./cmd/armature/... 2>&1 | grep -E "FAIL|PASS"
 ```
 
-Expected: FAIL (tests expect `.armature/` but code still creates `.issues/`).
+Expected: FAIL (tests expect `.armature/` but code still creates `.armature/`).
 
 - [ ] **Step 3: Update source — config/context.go**
 
@@ -275,10 +275,10 @@ Also update the comment: `// Context holds resolved paths and config for the cur
 
 - [ ] **Step 4: Update source — cmd/armature/init.go**
 
-The hook script templates embedded in init.go contain `.issues/` references. Replace all occurrences:
-- `.issues/config.json` → `.armature/config.json`
-- `.issues/ops/` → `.armature/ops/`
-- `.issues/hooks/` → `.armature/hooks/`
+The hook script templates embedded in init.go contain `.armature/` references. Replace all occurrences:
+- `.armature/config.json` → `.armature/config.json`
+- `.armature/ops/` → `.armature/ops/`
+- `.armature/hooks/` → `.armature/hooks/`
 
 Also update the `Short:` description string:
 ```go
@@ -293,7 +293,7 @@ And the `--dual-branch` flag help text:
 - [ ] **Step 5: Bulk-sweep remaining `.issues` references in non-test Go source**
 
 ```bash
-grep -rn '"\.issues\|`\.issues\|\.issues/' --include="*.go" . | grep -v "_test.go" | grep -v ".git"
+grep -rn '"\.issues\|`\.issues\|\.armature/' --include="*.go" . | grep -v "_test.go" | grep -v ".git"
 ```
 
 Fix any remaining occurrences in source files.
@@ -315,28 +315,28 @@ git commit -m "refactor: rename data directory from .issues to .armature"
 
 ---
 
-### Task 6: `_trellis` → `_armature` branch, all `trellis.*` git config keys, and worktree path
+### Task 6: `_armature` → `_armature` branch, all `trellis.*` git config keys, and worktree path
 
 **Files:**
-- Modify: `cmd/armature/helpers.go` (lines 104, 135, 137, 138 — `_trellis` branch literals)
-- Modify: `cmd/armature/init.go` (many `_trellis` occurrences in hook scripts and branch setup code)
-- Modify: `cmd/armature/worker_init.go` (error string `"run 'trls worker-init'"`)
+- Modify: `cmd/armature/helpers.go` (lines 104, 135, 137, 138 — `_armature` branch literals)
+- Modify: `cmd/armature/init.go` (many `_armature` occurrences in hook scripts and branch setup code)
+- Modify: `cmd/armature/worker_init.go` (error string `"run 'arm worker-init'"`)
 - Modify: `internal/config/context.go` (git config key strings on lines 104, 106, 149; error strings on lines 95, 110)
 - Modify: `internal/config/context_test.go` (git config key strings on lines 67, 68, 82, 87, 94, 122, 123)
-- Modify: `internal/worker/identity.go` (line 11: `gitConfigKey = "trellis.worker-id"`; line 28: error message with `trls worker-init`)
+- Modify: `internal/worker/identity.go` (line 11: `gitConfigKey = "trellis.worker-id"`; line 28: error message with `arm worker-init`)
 - Modify: `internal/worker/identity_test.go`
-- Modify: `internal/git/git_test.go` (all `_trellis` branch name literals, `trellis.ops-worktree-path`)
-- Modify: `internal/ops/pusher_test.go` (lines 62, 87 — `Branch: "_trellis"`)
+- Modify: `internal/git/git_test.go` (all `_armature` branch name literals, `trellis.ops-worktree-path`)
+- Modify: `internal/ops/pusher_test.go` (lines 62, 87 — `Branch: "_armature"`)
 - Modify: `cmd/armature/main_test.go` (hook content assertions on lines ~863, ~877, ~878, ~957, ~964; dual-branch dir-exists assertions on lines ~510–529)
 
 - [ ] **Step 1: Update tests first**
 
-In `internal/git/git_test.go`, replace all `"_trellis"` with `"_armature"`.
+In `internal/git/git_test.go`, replace all `"_armature"` with `"_armature"`.
 
 In `internal/ops/pusher_test.go`:
 ```go
 // Before:
-Branch: "_trellis",
+Branch: "_armature",
 // After:
 Branch: "_armature",
 ```
@@ -410,10 +410,10 @@ WorktreePath string // path to .arm/ worktree; empty in single-branch mode
 
 ```go
 // Before:
-Branch: "_trellis",
+Branch: "_armature",
 // ...
-gc2.Push("_trellis")
-gc2.FetchAndRebase("_trellis")
+gc2.Push("_armature")
+gc2.FetchAndRebase("_armature")
 // After:
 Branch: "_armature",
 // ...
@@ -423,10 +423,10 @@ gc2.FetchAndRebase("_armature")
 
 - [ ] **Step 5: Update source — cmd/armature/init.go**
 
-In the embedded hook scripts, replace all `_trellis` with `_armature`:
+In the embedded hook scripts, replace all `_armature` with `_armature`:
 ```bash
 # Before:
-if [ "$current_branch" = "_trellis" ]; then
+if [ "$current_branch" = "_armature" ]; then
 # After:
 if [ "$current_branch" = "_armature" ]; then
 ```
@@ -434,11 +434,11 @@ if [ "$current_branch" = "_armature" ]; then
 In the Go code:
 ```go
 // Before:
-if err := gitClient.CreateOrphanBranch("_trellis"); err != nil {
-    return fmt.Errorf("create _trellis branch: %w", err)
+if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
+    return fmt.Errorf("create _armature branch: %w", err)
 }
 worktreePath := filepath.Join(repoPath, ".trellis")
-if err := gitClient.AddWorktree("_trellis", worktreePath); err != nil {
+if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
     return fmt.Errorf("add .trellis worktree: %w", err)
 }
 if err := gitClient.SetGitConfig("trellis.mode", "dual-branch"); err != nil {
@@ -489,12 +489,12 @@ Expected: PASS.
 
 ```bash
 git add -u
-git commit -m "refactor: rename _trellis branch, all trellis.* git config keys, and .trellis worktree"
+git commit -m "refactor: rename _armature branch, all trellis.* git config keys, and .trellis worktree"
 ```
 
 ---
 
-### Task 7: `TRLS_LOG_SLOT` → `ARM_LOG_SLOT`
+### Task 7: `ARM_LOG_SLOT` → `ARM_LOG_SLOT`
 
 **Files:**
 - Modify: `cmd/armature/hook.go` (line 91)
@@ -503,7 +503,7 @@ git commit -m "refactor: rename _trellis branch, all trellis.* git config keys, 
 
 - [ ] **Step 1: Update tests first**
 
-In `cmd/armature/main_test.go`, replace all `TRLS_LOG_SLOT` with `ARM_LOG_SLOT` and update any log-slot test descriptions that mention the old name.
+In `cmd/armature/main_test.go`, replace all `ARM_LOG_SLOT` with `ARM_LOG_SLOT` and update any log-slot test descriptions that mention the old name.
 
 - [ ] **Step 2: Run tests to confirm failure**
 
@@ -511,13 +511,13 @@ In `cmd/armature/main_test.go`, replace all `TRLS_LOG_SLOT` with `ARM_LOG_SLOT` 
 go test ./cmd/armature/... -run TestLogSlot
 ```
 
-Expected: FAIL (code reads `TRLS_LOG_SLOT`, test sets `ARM_LOG_SLOT`).
+Expected: FAIL (code reads `ARM_LOG_SLOT`, test sets `ARM_LOG_SLOT`).
 
 - [ ] **Step 3: Update source — hook.go and helpers.go**
 
 ```go
 // Before:
-if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
+if slot := os.Getenv("ARM_LOG_SLOT"); slot != "" {
 // After:
 if slot := os.Getenv("ARM_LOG_SLOT"); slot != "" {
 ```
@@ -542,17 +542,17 @@ Expected: all PASS. Fix any stragglers before continuing.
 
 ```bash
 git add -u
-git commit -m "refactor: rename TRLS_LOG_SLOT env var to ARM_LOG_SLOT"
+git commit -m "refactor: rename ARM_LOG_SLOT env var to ARM_LOG_SLOT"
 ```
 
 ---
 
 ### Task 8: Rename data directory in the repo itself + clean up stale worktree
 
-The repo uses single-branch mode; its data lives in `.issues/`. Rename it to `.armature/` so the self-dogfooding instance matches the updated binary.
+The repo uses single-branch mode; its data lives in `.armature/`. Rename it to `.armature/` so the self-dogfooding instance matches the updated binary.
 
 **Files:**
-- Rename (git): `.issues/` → `.armature/`
+- Rename (git): `.armature/` → `.armature/`
 - Remove: stale `.trellis/` worktree (from earlier dual-branch experiments)
 - Modify: `.vscode/settings.json` (directory filter)
 
@@ -630,21 +630,21 @@ git add -u && git commit -m "fix: resolve any lint/test issues after rename"
 ### Task 10: Rename skill directories and update meta.yaml
 
 **Files:**
-- Rename: `skills/trls/` → `skills/armature/`
-- Rename: `skills/trls-worker/` → `skills/armature-worker/`
-- Rename: `skills/trls-coordinator/` → `skills/armature-coordinator/`
-- Rename: `skills/trls-planner/` → `skills/armature-planner/`
-- Rename: `skills/trls-auditor/` → `skills/armature-auditor/`
+- Rename: `skills/arm/` → `skills/armature/`
+- Rename: `skills/arm-worker/` → `skills/armature-worker/`
+- Rename: `skills/arm-coordinator/` → `skills/armature-coordinator/`
+- Rename: `skills/arm-planner/` → `skills/armature-planner/`
+- Rename: `skills/arm-auditor/` → `skills/armature-auditor/`
 - Modify: each `meta.yaml`
 
 - [ ] **Step 1: Rename skill directories**
 
 ```bash
-git mv skills/trls skills/armature
-git mv skills/trls-worker skills/armature-worker
-git mv skills/trls-coordinator skills/armature-coordinator
-git mv skills/trls-planner skills/armature-planner
-git mv skills/trls-auditor skills/armature-auditor
+git mv skills/arm skills/armature
+git mv skills/arm-worker skills/armature-worker
+git mv skills/arm-coordinator skills/armature-coordinator
+git mv skills/arm-planner skills/armature-planner
+git mv skills/arm-auditor skills/armature-auditor
 ```
 
 - [ ] **Step 2: Update skills/armature/meta.yaml**
@@ -686,12 +686,12 @@ Apply the same pattern: `name:` → `armature-planner` / `armature-auditor`, upd
 
 - [ ] **Step 6: Rebuild and rename the skills binary**
 
-The `skills/armature/scripts/` directory contains a compiled ELF binary named `trls` (built from the old source). After the directory rename, it is now at `skills/armature/scripts/trls`. It must be rebuilt under the new binary name:
+The `skills/armature/scripts/` directory contains a compiled ELF binary named `arm` (built from the old source). After the directory rename, it is now at `skills/armature/scripts/arm`. It must be rebuilt under the new binary name:
 
 ```bash
 make build
 cp bin/arm skills/armature/scripts/arm
-git rm skills/armature/scripts/trls
+git rm skills/armature/scripts/arm
 git add skills/armature/scripts/arm
 ```
 
@@ -701,7 +701,7 @@ The `make skill` target copies everything under `skills/*/scripts/` into the dep
 
 ```bash
 git add skills/
-git commit -m "refactor: rename skill directories from trls-* to armature-* and rebuild skills binary"
+git commit -m "refactor: rename skill directories from arm-* to armature-* and rebuild skills binary"
 ```
 
 ---
@@ -710,11 +710,11 @@ git commit -m "refactor: rename skill directories from trls-* to armature-* and 
 
 **File:** `skills/armature/SKILL.md`
 
-This skill is a quick command reference. Update all `trls` → `arm`, `.issues/` → `.armature/`, and product name references.
+This skill is a quick command reference. Update all `arm` → `arm`, `.armature/` → `.armature/`, and product name references.
 
 - [ ] **Step 1: Update all command examples**
 
-Replace every occurrence of `trls ` with `arm ` in code blocks and inline references throughout the file.
+Replace every occurrence of `arm ` with `arm ` in code blocks and inline references throughout the file.
 
 Key sections to update:
 - "During Work" code block: `arm note`, `arm decision`, `arm heartbeat`, `arm transition`
@@ -724,12 +724,12 @@ Key sections to update:
 
 - [ ] **Step 2: Update data directory references**
 
-- `.issues/` → `.armature/` everywhere in the file
-- `_trellis` → `_armature`
+- `.armature/` → `.armature/` everywhere in the file
+- `_armature` → `_armature`
 
 - [ ] **Step 3: Update product name**
 
-- "Trellis" → "Armature" in the title and any descriptive text
+- "Armature" → "Armature" in the title and any descriptive text
 
 - [ ] **Step 4: Build and verify skill deploys**
 
@@ -747,29 +747,29 @@ Expected: `.claude/skills/armature/SKILL.md` created.
 
 The worker skill is the most content-rich. Do a thorough pass.
 
-- [ ] **Step 1: Update all trls → arm command references**
+- [ ] **Step 1: Update all arm → arm command references**
 
 ```bash
 # Quick audit of what needs changing:
-grep -n "trls\|Trellis\|\.issues\|_trellis\|TRLS_" skills/armature-worker/SKILL.md
+grep -n "arm\|Armature\|\.issues\|_armature\|TRLS_" skills/armature-worker/SKILL.md
 ```
 
 Key updates:
 - Title: `# Armature Worker`
-- Prerequisites section: `arm` instead of `trls`, `~/.local/bin/arm`, `arm worker-init`
+- Prerequisites section: `arm` instead of `arm`, `~/.local/bin/arm`, `arm worker-init`
 - All command examples: `arm note`, `arm decision`, `arm heartbeat`, `arm transition`
-- Skill cross-references: `armature-coordinator` instead of `trls-coordinator`
-- `.issues/` → `.armature/` in all staging instructions
-- `_trellis` → `_armature` in dual-branch section
-- `TRLS_LOG_SLOT` → `ARM_LOG_SLOT`
-- Error table: update all `.issues/` paths and `_trellis` branch references
+- Skill cross-references: `armature-coordinator` instead of `arm-coordinator`
+- `.armature/` → `.armature/` in all staging instructions
+- `_armature` → `_armature` in dual-branch section
+- `ARM_LOG_SLOT` → `ARM_LOG_SLOT`
+- Error table: update all `.armature/` paths and `_armature` branch references
 
 - [ ] **Step 2: Commit block — staging instructions**
 
 The single-branch staging instructions are user-critical. Update:
 ```bash
 # Before:
-git add <each file from the task scope> .issues/
+git add <each file from the task scope> .armature/
 # After:
 git add <each file from the task scope> .armature/
 ```
@@ -777,7 +777,7 @@ git add <each file from the task scope> .armature/
 And the bundled command:
 ```bash
 # Before:
-arm transition ISSUE-ID --to done --outcome "..." && git add <scope files> .issues/ && git commit -m "..."
+arm transition ISSUE-ID --to done --outcome "..." && git add <scope files> .armature/ && git commit -m "..."
 # After:
 arm transition ISSUE-ID --to done --outcome "..." && git add <scope files> .armature/ && git commit -m "..."
 ```
@@ -786,7 +786,7 @@ arm transition ISSUE-ID --to done --outcome "..." && git add <scope files> .arma
 
 ```bash
 make skill
-grep -c "trls\|Trellis\|\.issues\b\|_trellis\|TRLS_" .claude/skills/armature-worker/SKILL.md
+grep -c "arm\|Armature\|\.issues\b\|_armature\|TRLS_" .claude/skills/armature-worker/SKILL.md
 ```
 
 Expected: 0 matches (all old names eliminated from deployed copy).
@@ -800,30 +800,30 @@ Expected: 0 matches (all old names eliminated from deployed copy).
 - `skills/armature-planner/SKILL.md`
 - `skills/armature-auditor/SKILL.md`
 
-Apply the same sweep as Task 12 to each file. The coordinator skill also references `.issues/` staging in mop-up commit instructions and `_trellis` in dual-branch sections.
+Apply the same sweep as Task 12 to each file. The coordinator skill also references `.armature/` staging in mop-up commit instructions and `_armature` in dual-branch sections.
 
 - [ ] **Step 1: Audit each file**
 
 ```bash
 for f in skills/armature-coordinator/SKILL.md skills/armature-planner/SKILL.md skills/armature-auditor/SKILL.md; do
   echo "=== $f ==="
-  grep -c "trls\|Trellis\|\.issues\b\|_trellis\|TRLS_" "$f"
+  grep -c "arm\|Armature\|\.issues\b\|_armature\|TRLS_" "$f"
 done
 ```
 
 - [ ] **Step 2: Update each file**
 
 For coordinator specifically, update:
-- `git add .issues/ && git commit -m "chore(STORY-ID): sync trellis state"` →
+- `git add .armature/ && git commit -m "chore(STORY-ID): sync trellis state"` →
   `git add .armature/ && git commit -m "chore(STORY-ID): sync armature state"`
-- Error table row: `Trellis ops from story/epic transitions` → `Armature ops from story/epic transitions`
-- `TRLS_LOG_SLOT` → `ARM_LOG_SLOT` throughout (including the "Before running any arm command" instruction)
+- Error table row: `Armature ops from story/epic transitions` → `Armature ops from story/epic transitions`
+- `ARM_LOG_SLOT` → `ARM_LOG_SLOT` throughout (including the "Before running any arm command" instruction)
 
 - [ ] **Step 3: Deploy all skills and final audit**
 
 ```bash
 make skill
-grep -rn "trls\|Trellis\b\|\.issues\b\|_trellis\|TRLS_" .claude/skills/
+grep -rn "arm\|Armature\b\|\.issues\b\|_armature\|TRLS_" .claude/skills/
 ```
 
 Expected: 0 matches.
@@ -859,14 +859,14 @@ The README needs a thorough rewrite of user-facing sections. Key changes:
 ```
 
 Replace throughout:
-- Title and tagline: Trellis → Armature
-- All `trls` command examples → `arm`
-- `_trellis` orphan branch → `_armature`
-- `.issues/` → `.armature/`
-- `TRLS_LOG_SLOT` → `ARM_LOG_SLOT`
+- Title and tagline: Armature → Armature
+- All `arm` command examples → `arm`
+- `_armature` orphan branch → `_armature`
+- `.armature/` → `.armature/`
+- `ARM_LOG_SLOT` → `ARM_LOG_SLOT`
 - Clone URL: update to future armature repo URL (use placeholder `https://github.com/scullxbones/armature.git` until GitHub rename is done)
 - Binary install instructions: `~/.local/bin/arm`, `arm init`, `arm ready`, etc.
-- All prose references to "Trellis" → "Armature"
+- All prose references to "Armature" → "Armature"
 
 - [ ] **Step 2: Update CLAUDE.md**
 
@@ -882,10 +882,10 @@ CLAUDE.md is mostly process rules; the only content change is the title and any 
 # AGENTS.md — Armature Go Development
 ```
 
-Update the title line. Check for any `trls`/`trellis`-specific references in the body.
+Update the title line. Check for any `arm`/`trellis`-specific references in the body.
 
 ```bash
-grep -n "trls\|Trellis\|trellis" AGENTS.md
+grep -n "arm\|Armature\|trellis" AGENTS.md
 ```
 
 - [ ] **Step 4: Commit**
@@ -910,27 +910,27 @@ These are the primary user-facing docs. Do a thorough rewrite pass, not just a t
 
 ```bash
 for f in docs/commands.md docs/getting-started.md docs/use-cases.md; do
-  echo "=== $f ==="; grep -c "trls\|Trellis\|trellis\|\.issues\|_trellis" "$f"
+  echo "=== $f ==="; grep -c "arm\|Armature\|trellis\|\.issues\|_armature" "$f"
 done
 ```
 
 - [ ] **Step 2: Update docs/getting-started.md**
 
 Key changes:
-- `arm init` instead of `trls init`
+- `arm init` instead of `arm init`
 - `_armature` orphan branch, `.arm/` worktree
 - `.armature/` data directory
-- "Armature will detect..." instead of "Trellis will detect..."
+- "Armature will detect..." instead of "Armature will detect..."
 - All command examples updated
-- `ARM_LOG_SLOT` instead of `TRLS_LOG_SLOT`
+- `ARM_LOG_SLOT` instead of `ARM_LOG_SLOT`
 
 - [ ] **Step 3: Update docs/commands.md**
 
 This is a comprehensive command reference. Replace:
-- Every `trls <command>` → `arm <command>`
+- Every `arm <command>` → `arm <command>`
 - `--dual-branch` description: `_armature` branch
-- `.issues/` path references → `.armature/`
-- `TRLS_LOG_SLOT` → `ARM_LOG_SLOT`
+- `.armature/` path references → `.armature/`
+- `ARM_LOG_SLOT` → `ARM_LOG_SLOT`
 
 - [ ] **Step 4: Update docs/use-cases.md**
 
@@ -955,7 +955,7 @@ git commit -m "docs: update user documentation for armature rename"
 - Modify: `docs/design/trellis-prd.md`
 - Modify: `docs/design/gap-resolutions.md`
 - Modify: `docs/design/trellis-rename.md` (update status to "Complete")
-- Modify: `.armature/hooks/*.template` (previously `.issues/hooks/*.template`, now in renamed dir)
+- Modify: `.armature/hooks/*.template` (previously `.armature/hooks/*.template`, now in renamed dir)
 - Modify: `.claude/settings.local.json`
 
 Design docs are reference material; a token-replacement pass is sufficient without deep prose rewrite.
@@ -964,12 +964,12 @@ Design docs are reference material; a token-replacement pass is sufficient witho
 
 ```bash
 sed -i \
-  -e 's/Trellis/Armature/g' \
+  -e 's/Armature/Armature/g' \
   -e 's/trellis/armature/g' \
-  -e 's/_trellis/_armature/g' \
-  -e 's/trls\b/arm/g' \
+  -e 's/_armature/_armature/g' \
+  -e 's/arm\b/arm/g' \
   -e 's/\.issues\//\.armature\//g' \
-  -e 's/TRLS_LOG_SLOT/ARM_LOG_SLOT/g' \
+  -e 's/ARM_LOG_SLOT/ARM_LOG_SLOT/g' \
   docs/design/architecture.md \
   docs/design/trellis-prd.md \
   docs/design/gap-resolutions.md \
@@ -988,11 +988,11 @@ Add a note at the top of `docs/design/trellis-rename.md`:
 
 - [ ] **Step 3: Update hook templates in .armature/hooks/**
 
-The hook template files now live in `.armature/hooks/` (after the data dir rename in Task 8). Their content still references `_trellis`, `.issues/`, and `trls`. Update:
+The hook template files now live in `.armature/hooks/` (after the data dir rename in Task 8). Their content still references `_armature`, `.armature/`, and `arm`. Update:
 
 ```bash
 sed -i \
-  -e 's/_trellis/_armature/g' \
+  -e 's/_armature/_armature/g' \
   -e 's/\.issues\//.armature\//g' \
   -e 's/\btrls\b/arm/g' \
   -e 's/trellis/armature/g' \
@@ -1001,17 +1001,17 @@ sed -i \
 
 - [ ] **Step 4: Clean up .claude/settings.local.json**
 
-The file has many historical permissions with `trls` and `.trellis` path references that are no longer valid. Replace the relevant allow entries:
+The file has many historical permissions with `arm` and `.trellis` path references that are no longer valid. Replace the relevant allow entries:
 
 Key entries to update:
-- `"Bash(trls *)"` → `"Bash(arm *)"`
+- `"Bash(arm *)"` → `"Bash(arm *)"`
 - `"Bash(git -C /home/brian/development/trellis/.trellis log ...)"` → remove (stale path)
-- `"Bash(/dev/null trls:*)"` → `"Bash(/dev/null arm:*)"`
-- `"Bash(trls init:*)"` → `"Bash(arm init:*)"`
-- `"Bash(trls unlink:*)"` → `"Bash(arm unlink:*)"`
-- `"Bash(~/.local/bin/trls *)"` → `"Bash(~/.local/bin/arm *)"`
-- `"Bash(export TRLS_LOG_SLOT=*)"` → `"Bash(export ARM_LOG_SLOT=*)"`
-- `"Bash(unset TRLS_LOG_SLOT)"` → `"Bash(unset ARM_LOG_SLOT)"`
+- `"Bash(/dev/null arm:*)"` → `"Bash(/dev/null arm:*)"`
+- `"Bash(arm init:*)"` → `"Bash(arm init:*)"`
+- `"Bash(arm unlink:*)"` → `"Bash(arm unlink:*)"`
+- `"Bash(~/.local/bin/arm *)"` → `"Bash(~/.local/bin/arm *)"`
+- `"Bash(export ARM_LOG_SLOT=*)"` → `"Bash(export ARM_LOG_SLOT=*)"`
+- `"Bash(unset ARM_LOG_SLOT)"` → `"Bash(unset ARM_LOG_SLOT)"`
 
 Remove any permissions that reference `/home/brian/development/trellis/` — those paths no longer exist.
 
@@ -1036,14 +1036,14 @@ These are historical artifacts; no prose rewrite needed. A single sed pass.
 find docs/superpowers/ -name "*.md" -o -name "*.json" | xargs sed -i \
   -e 's/scullxbones\/trellis/scullxbones\/armature/g' \
   -e 's/\.issues\//\.armature\//g' \
-  -e 's/_trellis/_armature/g' \
+  -e 's/_armature/_armature/g' \
   -e 's/\btrls\b/arm/g'
 ```
 
 - [ ] **Step 2: Spot-check**
 
 ```bash
-grep -rn "scullxbones/trellis\|\.issues/\|_trellis\b\|\btrls\b" docs/superpowers/ | head -10
+grep -rn "scullxbones/armature\|\.armature/\|_armature\b\|\btrls\b" docs/superpowers/ | head -10
 ```
 
 Expected: 0 results. If any remain, fix manually.
@@ -1081,7 +1081,7 @@ Expected: binary name shows `arm`, description shows "Armature", commands work a
 - [ ] **Step 3: Audit for any remaining old names in source**
 
 ```bash
-grep -rn "\btrls\b\|scullxbones/trellis\|\.issues/\|_trellis\b\|TRLS_LOG_SLOT\|trellis\.mode\|trellis\.ops" \
+grep -rn "\btrls\b\|scullxbones/armature\|\.armature/\|_armature\b\|ARM_LOG_SLOT\|trellis\.mode\|trellis\.ops" \
   --include="*.go" --include="*.md" --include="*.yaml" --include="*.json" --include="Makefile" \
   --exclude-dir=".git" --exclude-dir="worktrees" \
   . | grep -v "docs/design/trellis-rename.md"
@@ -1092,12 +1092,12 @@ Expected: 0 results outside of the rename archive doc.
 - [ ] **Step 4: Final commit if any stragglers were fixed**
 
 ```bash
-git add -u && git commit -m "fix: final cleanup of remaining trellis/trls references"
+git add -u && git commit -m "fix: final cleanup of remaining trellis/arm references"
 ```
 
 - [ ] **Step 5: Remind user to rename GitHub repository**
 
-After the local rename is complete: rename the GitHub repo from `scullxbones/trellis` to `scullxbones/armature` via GitHub Settings → Repository name. Then update the remote URL:
+After the local rename is complete: rename the GitHub repo from `scullxbones/armature` to `scullxbones/armature` via GitHub Settings → Repository name. Then update the remote URL:
 
 ```bash
 git remote set-url origin https://github.com/scullxbones/armature.git

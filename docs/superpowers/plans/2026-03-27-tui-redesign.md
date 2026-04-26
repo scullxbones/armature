@@ -128,7 +128,7 @@ magenta instead of bold-white-on-red. Adds MyClaim and TheirClaim styles."
 
 ---
 
-### Task 2: Fix `trls init` Absolute Path + Idempotency (Problem A)
+### Task 2: Fix `arm init` Absolute Path + Idempotency (Problem A)
 
 **Files:**
 - Modify: `cmd/trellis/init.go`
@@ -193,7 +193,7 @@ if existing != "" {
     }
 }
 
-if err := gitClient.AddWorktree("_trellis", worktreePath); err != nil {
+if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
     return fmt.Errorf("add .trellis worktree: %w", err)
 }
 if err := gitClient.SetGitConfig("trellis.mode", "dual-branch"); err != nil {
@@ -227,9 +227,9 @@ Expected: all PASS
 
 ```bash
 git add cmd/trellis/init.go cmd/trellis/main_test.go
-git commit -m "fix: trls init stores absolute worktree path and is idempotent
+git commit -m "fix: arm init stores absolute worktree path and is idempotent
 
-Second-worktree init no longer re-adds the _trellis checkout or stores
+Second-worktree init no longer re-adds the _armature checkout or stores
 a relative path that breaks resolution from other working directories."
 ```
 
@@ -332,7 +332,7 @@ if workerID == "" {
 appCtx.StateDir = filepath.Join(appCtx.IssuesDir, "state", workerID)
 ```
 
-Add `"path/filepath"` and `"github.com/scullxbones/trellis/internal/worker"` to imports if not already present (worker is already imported via helpers.go in the same package, but main.go needs to import it directly since it's used here).
+Add `"path/filepath"` and `"github.com/scullxbones/armature/internal/worker"` to imports if not already present (worker is already imported via helpers.go in the same package, but main.go needs to import it directly since it's used here).
 
 - [ ] **Step 4: Run test — expect pass** (after Task 5 updates Materialize callsite; this test will pass once pipeline.go also uses the stateDir param)
 
@@ -649,7 +649,7 @@ git commit -m "fix: sync.DetectMerges accepts stateDir instead of issuesDir"
 - Modify: `cmd/trellis/validate.go`
 
 **Important:** `validate.go` has TWO uses of `opts.IssuesDir`:
-- Line ~44: `checkE7E8E12Citations(targets, opts.IssuesDir)` — reads actual issue source files from `.issues/`. **Do NOT change this to StateDir.**
+- Line ~44: `checkE7E8E12Citations(targets, opts.IssuesDir)` — reads actual issue source files from `.armature/`. **Do NOT change this to StateDir.**
 - Line ~66: `filepath.Join(opts.IssuesDir, "state", "traceability.json")` — reads materialized state. **This is the only line that changes.**
 
 - [ ] **Step 1: Write failing tests** — add to `internal/validate/validate_test.go` (or create if absent):
@@ -1016,7 +1016,7 @@ package tui
 
 import (
     tea "github.com/charmbracelet/bubbletea"
-    "github.com/scullxbones/trellis/internal/materialize"
+    "github.com/scullxbones/armature/internal/materialize"
 )
 
 // Screen is implemented by every TUI sub-screen (dagtree, workers, validate, sources).
@@ -1064,8 +1064,8 @@ import (
     "strings"
     "testing"
 
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui/detail"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui/detail"
 )
 
 func TestDetailClosedByDefault(t *testing.T) {
@@ -1135,8 +1135,8 @@ import (
     "github.com/charmbracelet/bubbles/viewport"
     tea "github.com/charmbracelet/bubbletea"
     "github.com/charmbracelet/lipgloss"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui"
 )
 
 // Model is the shared detail overlay used by dagtree and workers screens.
@@ -1301,8 +1301,8 @@ import (
     "testing"
 
     tea "github.com/charmbracelet/bubbletea"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui/app"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui/app"
 )
 
 func TestInitialScreenIsDAGTree(t *testing.T) {
@@ -1384,9 +1384,9 @@ import (
     "github.com/fsnotify/fsnotify"
     tea "github.com/charmbracelet/bubbletea"
     "github.com/charmbracelet/lipgloss"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui"
-    "github.com/scullxbones/trellis/internal/tui/detail"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui"
+    "github.com/scullxbones/armature/internal/tui/detail"
 )
 
 // ScreenID identifies one of the four main screens.
@@ -1521,7 +1521,7 @@ func (m Model) NavBar() string {
         indicator = tui.Advisory.Render("↺ poll")
     }
     left := strings.Join(parts, "  ")
-    right := "trls tui · " + m.workerID + " · " + indicator
+    right := "arm tui · " + m.workerID + " · " + indicator
     gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
     if gap < 1 {
         gap = 1
@@ -1681,8 +1681,8 @@ import (
     "strings"
     "testing"
 
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui/dagtree"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui/dagtree"
 )
 
 func makeState(issues ...*materialize.Issue) *materialize.State {
@@ -1786,9 +1786,9 @@ import (
 
     tea "github.com/charmbracelet/bubbletea"
     "github.com/charmbracelet/lipgloss"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui"
-    "github.com/scullxbones/trellis/internal/tui/detail"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui"
+    "github.com/scullxbones/armature/internal/tui/detail"
 )
 
 // visibleNode is a rendered tree row.
@@ -2075,8 +2075,8 @@ import (
     "testing"
     "time"
 
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui/workers"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui/workers"
 )
 
 // Worker data comes from Issue.ClaimedBy — there is no separate Claims map on State.
@@ -2153,8 +2153,8 @@ import (
     "time"
 
     tea "github.com/charmbracelet/bubbletea"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui"
 )
 
 type Model struct {
@@ -2332,8 +2332,8 @@ import (
     "strings"
     "testing"
 
-    "github.com/scullxbones/trellis/internal/tui/tuivalidate"
-    "github.com/scullxbones/trellis/internal/validate"
+    "github.com/scullxbones/armature/internal/tui/tuivalidate"
+    "github.com/scullxbones/armature/internal/validate"
 )
 
 func TestErrorsSectionShownFirst(t *testing.T) {
@@ -2384,9 +2384,9 @@ import (
     "strings"
 
     tea "github.com/charmbracelet/bubbletea"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui"
-    "github.com/scullxbones/trellis/internal/validate"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui"
+    "github.com/scullxbones/armature/internal/validate"
 )
 
 type Model struct {
@@ -2497,8 +2497,8 @@ import (
     "strings"
     "testing"
 
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui/sources"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui/sources"
 )
 
 // Sources are derived from Issue.SourceLinks. materialize.SourceLink has fields:
@@ -2550,8 +2550,8 @@ import (
     "sort"
 
     tea "github.com/charmbracelet/bubbletea"
-    "github.com/scullxbones/trellis/internal/materialize"
-    "github.com/scullxbones/trellis/internal/tui"
+    "github.com/scullxbones/armature/internal/materialize"
+    "github.com/scullxbones/armature/internal/tui"
 )
 
 type Model struct {
@@ -2729,13 +2729,13 @@ import (
     "path/filepath"
 
     tea "github.com/charmbracelet/bubbletea"
-    "github.com/scullxbones/trellis/internal/tui"
-    "github.com/scullxbones/trellis/internal/tui/app"
-    "github.com/scullxbones/trellis/internal/tui/dagtree"
-    "github.com/scullxbones/trellis/internal/tui/sources"
-    "github.com/scullxbones/trellis/internal/tui/tuivalidate"
-    "github.com/scullxbones/trellis/internal/tui/workers"
-    "github.com/scullxbones/trellis/internal/worker"
+    "github.com/scullxbones/armature/internal/tui"
+    "github.com/scullxbones/armature/internal/tui/app"
+    "github.com/scullxbones/armature/internal/tui/dagtree"
+    "github.com/scullxbones/armature/internal/tui/sources"
+    "github.com/scullxbones/armature/internal/tui/tuivalidate"
+    "github.com/scullxbones/armature/internal/tui/workers"
+    "github.com/scullxbones/armature/internal/worker"
     "github.com/spf13/cobra"
 )
 
@@ -2807,7 +2807,7 @@ git add cmd/trellis/tui.go cmd/trellis/tui_test.go
 git rm -r internal/tui/board/
 git commit -m "feat: replace kanban board with DAG tree TUI
 
-New trls tui launches app/ root model with dagtree/workers/tuivalidate/sources
+New arm tui launches app/ root model with dagtree/workers/tuivalidate/sources
 screens. TUI materializes into state/.tui/ for isolation from agent state dirs.
 Removes internal/tui/board/ package."
 ```
@@ -2823,4 +2823,4 @@ make check
 ```
 Expected: lint + test + coverage ≥ 80% + mutation testing all green
 
-- [ ] **Smoke test from a fresh clone / `trls init` + `trls worker-init` + `trls tui`** to verify the live TUI launches, shows the DAG tree, and navigation keys work.
+- [ ] **Smoke test from a fresh clone / `arm init` + `arm worker-init` + `arm tui`** to verify the live TUI launches, shows the DAG tree, and navigation keys work.

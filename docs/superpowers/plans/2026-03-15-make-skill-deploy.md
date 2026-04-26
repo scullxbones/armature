@@ -1,12 +1,12 @@
-# make skill — Deploy trls AgentSkill Implementation Plan
+# make skill — Deploy arm AgentSkill Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a `make skill` Makefile target that builds the `trls` binary and deploys a fully-formed AgentSkills-compliant skill into `.claude/skills/trls/`, enabling Claude Code slash-command access to `trls` from within the project.
+**Goal:** Add a `make skill` Makefile target that builds the `arm` binary and deploys a fully-formed AgentSkills-compliant skill into `.claude/skills/arm/`, enabling Claude Code slash-command access to `arm` from within the project.
 
-**Architecture:** Two committed source files (`docs/trls-skill-meta.yaml` for AgentSkills frontmatter, `docs/SKILL.md` for skill body content) are concatenated to produce `.claude/skills/trls/SKILL.md`. The built binary is copied to `.claude/skills/trls/scripts/trls`. The entire `.claude/skills/` directory is a build artifact excluded from git.
+**Architecture:** Two committed source files (`docs/arm-skill-meta.yaml` for AgentSkills frontmatter, `docs/SKILL.md` for skill body content) are concatenated to produce `.claude/skills/arm/SKILL.md`. The built binary is copied to `.claude/skills/arm/scripts/arm`. The entire `.claude/skills/` directory is a build artifact excluded from git.
 
-**Tech Stack:** GNU Make, bash (cat, cp, chmod, mkdir), existing `make build` target that produces `bin/trls`
+**Tech Stack:** GNU Make, bash (cat, cp, chmod, mkdir), existing `make build` target that produces `bin/arm`
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Action | File | Responsibility |
 |--------|------|----------------|
-| Create | `docs/trls-skill-meta.yaml` | AgentSkills YAML frontmatter block |
+| Create | `docs/arm-skill-meta.yaml` | AgentSkills YAML frontmatter block |
 | Modify | `Makefile` | Add `skill` to `.PHONY`, add `skill` target, extend `clean`, update `help` |
 | Modify | `.gitignore` | Exclude `.claude/skills/` build artifacts |
 
@@ -22,10 +22,10 @@
 
 ## Chunk 1: Source files and gitignore
 
-### Task 1: Create `docs/trls-skill-meta.yaml`
+### Task 1: Create `docs/arm-skill-meta.yaml`
 
 **Files:**
-- Create: `docs/trls-skill-meta.yaml`
+- Create: `docs/arm-skill-meta.yaml`
 
 This file holds the AgentSkills frontmatter. It is the only committed piece that cannot be derived from `docs/SKILL.md`.
 
@@ -33,22 +33,22 @@ This file holds the AgentSkills frontmatter. It is the only committed piece that
 
 ```yaml
 ---
-name: trls
+name: arm
 description: >
-  Trellis task management interface for AI agents. Use when working in a
+  Armature task management interface for AI agents. Use when working in a
   trellis-managed repo: find actionable work with ready, claim issues, record
   progress with note/decision/heartbeat, complete work with transition.
-  The trls binary is available at scripts/trls.
-compatibility: Designed for Claude Code. Requires the trls binary in scripts/.
+  The arm binary is available at scripts/arm.
+compatibility: Designed for Claude Code. Requires the arm binary in scripts/.
 ---
 ```
 
-Write this to `docs/trls-skill-meta.yaml` exactly as shown (including the leading `---` and trailing `---`).
+Write this to `docs/arm-skill-meta.yaml` exactly as shown (including the leading `---` and trailing `---`).
 
 - [ ] **Step 2: Verify the file**
 
 ```bash
-cat docs/trls-skill-meta.yaml
+cat docs/arm-skill-meta.yaml
 ```
 
 Expected: content matches exactly, starts with `---`, ends with `---`.
@@ -59,7 +59,7 @@ Expected: content matches exactly, starts with `---`, ends with `---`.
 head -1 docs/SKILL.md
 ```
 
-Expected: first line is `# Trellis AI Worker Interface` (or similar `#` heading). If it starts with `---`, stop and raise this with the user — concatenation would corrupt the frontmatter block.
+Expected: first line is `# Armature AI Worker Interface` (or similar `#` heading). If it starts with `---`, stop and raise this with the user — concatenation would corrupt the frontmatter block.
 
 ---
 
@@ -88,8 +88,8 @@ Expected: line with `.claude/skills/`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/trls-skill-meta.yaml .gitignore
-git commit -m "feat: add trls AgentSkill meta source and gitignore artifact dir"
+git add docs/arm-skill-meta.yaml .gitignore
+git commit -m "feat: add arm AgentSkill meta source and gitignore artifact dir"
 ```
 
 ---
@@ -134,12 +134,12 @@ New:
 
 Old:
 ```
-	@echo "  make build      - Build CLI binary to ./bin/trls"
+	@echo "  make build      - Build CLI binary to ./bin/arm"
 ```
 New:
 ```
-	@echo "  make build      - Build CLI binary to ./bin/trls"
-	@echo "  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/"
+	@echo "  make build      - Build CLI binary to ./bin/arm"
+	@echo "  make skill      - Build binary and deploy arm AgentSkill to .claude/skills/arm/"
 ```
 
 **Change 3 — `clean` target:** extend to also remove `.claude/skills/`.
@@ -161,10 +161,10 @@ clean:
 
 ```makefile
 skill: build
-	mkdir -p .claude/skills/trls/scripts
-	cat docs/trls-skill-meta.yaml docs/SKILL.md > .claude/skills/trls/SKILL.md
-	cp bin/trls .claude/skills/trls/scripts/trls
-	chmod +x .claude/skills/trls/scripts/trls
+	mkdir -p .claude/skills/arm/scripts
+	cat docs/arm-skill-meta.yaml docs/SKILL.md > .claude/skills/arm/SKILL.md
+	cp bin/arm .claude/skills/arm/scripts/arm
+	chmod +x .claude/skills/arm/scripts/arm
 ```
 
 - [ ] **Step 1: Apply Change 1 — `.PHONY` line**
@@ -195,7 +195,7 @@ Expected: prints the commands (`mkdir -p`, `cat`, `cp`, `chmod`) without executi
 
 ```bash
 git add Makefile
-git commit -m "feat: add make skill target to deploy trls AgentSkill"
+git commit -m "feat: add make skill target to deploy arm AgentSkill"
 ```
 
 ---
@@ -217,31 +217,31 @@ Expected: no errors. You will see the go build output followed by the `mkdir`, `
 - [ ] **Step 2: Verify output files exist**
 
 ```bash
-ls -la .claude/skills/trls/SKILL.md
-ls -la .claude/skills/trls/scripts/trls
+ls -la .claude/skills/arm/SKILL.md
+ls -la .claude/skills/arm/scripts/arm
 ```
 
-Expected: both files exist. `trls` is executable (`-rwxr-xr-x` or similar).
+Expected: both files exist. `arm` is executable (`-rwxr-xr-x` or similar).
 
 - [ ] **Step 3: Verify SKILL.md frontmatter**
 
 ```bash
-head -6 .claude/skills/trls/SKILL.md
+head -6 .claude/skills/arm/SKILL.md
 ```
 
 Expected output (exact content):
 ```
 ---
-name: trls
+name: arm
 description: >
-  Trellis task management interface for AI agents. Use when working in a
+  Armature task management interface for AI agents. Use when working in a
   trellis-managed repo: find actionable work with ready, claim issues, record
 ```
 
 - [ ] **Step 4: Verify skill body content follows frontmatter**
 
 ```bash
-grep -n "# Trellis AI Worker Interface" .claude/skills/trls/SKILL.md
+grep -n "# Armature AI Worker Interface" .claude/skills/arm/SKILL.md
 ```
 
 Expected: prints a line number showing the heading appears after the frontmatter block (line 10 or later).
@@ -259,7 +259,7 @@ Expected: `ls: cannot access '.claude/skills/': No such file or directory`
 
 ```bash
 make skill
-ls .claude/skills/trls/SKILL.md .claude/skills/trls/scripts/trls
+ls .claude/skills/arm/SKILL.md .claude/skills/arm/scripts/arm
 ```
 
 Expected: both files present again.
@@ -280,5 +280,5 @@ make help
 
 Expected: includes the line:
 ```
-  make skill      - Build binary and deploy trls AgentSkill to .claude/skills/trls/
+  make skill      - Build binary and deploy arm AgentSkill to .claude/skills/arm/
 ```
