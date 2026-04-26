@@ -1,18 +1,18 @@
-# Trellis
+# Armature
 
 **Git-Native Work Orchestration for Multi-Agent AI Coordination**
 
-> "Context rot is a memory problem. Trellis gives your agents memory."
+> "Context rot is a memory problem. Armature gives your agents memory."
 
 ---
 
 ## Overview
 
-Trellis is a file-based, git-native work orchestration system that gives AI coding agents persistent memory. It enables humans and AI workers to coordinate on software projects without merge conflicts, external dependencies, or context rot.
+Armature is a file-based, git-native work orchestration system that gives AI coding agents persistent memory. It enables humans and AI workers to coordinate on software projects without merge conflicts, external dependencies, or context rot.
 
-AI coding agents today suffer from a fundamental architectural flaw: they forget everything between sessions. When multiple agents work in the same codebase, they step on each other with no coordination primitive to prevent conflicts. Trellis solves this by treating context rot as a memory problem, providing deterministic context assembly and append-only event-sourced logs for every decision, claim, and outcome.
+AI coding agents today suffer from a fundamental architectural flaw: they forget everything between sessions. When multiple agents work in the same codebase, they step on each other with no coordination primitive to prevent conflicts. Armature solves this by treating context rot as a memory problem, providing deterministic context assembly and append-only event-sourced logs for every decision, claim, and outcome.
 
-All state lives in git. No database, no server, no daemon. A single Go binary (`trls`) and git are the only requirements.
+All state lives in git. No database, no server, no daemon. A single Go binary (`arm`) and git are the only requirements.
 
 ## Key Features
 
@@ -37,7 +37,7 @@ cd trellis
 make install
 ```
 
-This will build the `trls` binary and install it to `~/.local/bin/trls`. Ensure `~/.local/bin` is in your `PATH`.
+This will build the `arm` binary and install it to `~/.local/bin/arm`. Ensure `~/.local/bin` is in your `PATH`.
 
 ---
 
@@ -48,18 +48,18 @@ This will build the `trls` binary and install it to `~/.local/bin/trls`. Ensure 
 From your project root, run:
 
 ```bash
-trls init
+arm init
 ```
 
-Trellis will detect if your repository has branch protection and set up either a dual-branch (`_trellis` orphan branch) or single-branch mode accordingly.
+Armature will detect if your repository has branch protection and set up either a dual-branch (`_armature` orphan branch) or single-branch mode accordingly.
 
 ### 2. Add Requirements
 
 Register source documents (PRDs, architecture docs) that define your project's work:
 
 ```bash
-trls sources add docs/trellis-prd.md
-trls sources sync
+arm sources add docs/trellis-prd.md
+arm sources sync
 ```
 
 ### 3. Decompose into Tasks (via AI)
@@ -67,9 +67,9 @@ trls sources sync
 Generate a decomposition context for your AI agent to break down requirements into a task DAG:
 
 ```bash
-trls decompose-context --sources src-001 > context.json
+arm decompose-context --sources src-001 > context.json
 # Feed context.json to your AI agent to produce plan.json
-trls decompose-apply plan.json
+arm decompose-apply plan.json
 ```
 
 ### 4. Claim and Execute Work
@@ -78,13 +78,13 @@ Find the next ready task, claim it, and start working:
 
 ```bash
 # See ready tasks
-trls ready
+arm ready
 
 # Claim the highest priority task
-trls claim <issue-id>
+arm claim <issue-id>
 
 # Get the task context
-trls render-context <issue-id>
+arm render-context <issue-id>
 ```
 
 ### 5. Complete and Verify
@@ -92,13 +92,13 @@ trls render-context <issue-id>
 Once you've finished the code changes, transition the task to `done`:
 
 ```bash
-trls transition <issue-id> done --outcome "Brief summary of work"
+arm transition <issue-id> done --outcome "Brief summary of work"
 ```
 
-Trellis will automatically detect when your code is merged into the main branch to promote the task to `merged`.
+Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
 
 ---
 
 ## License
 
-Trellis is open-source software licensed under the Apache 2.0 License.
+Armature is open-source software licensed under the Apache 2.0 License.
