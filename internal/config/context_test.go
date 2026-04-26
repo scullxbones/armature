@@ -142,9 +142,9 @@ func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
 func TestContextStateDir(t *testing.T) {
 	t.Parallel()
 	ctx := &Context{
-		StateDir: "/tmp/trellis-state",
+		StateDir: "/tmp/armature-state",
 	}
-	assert.Equal(t, "/tmp/trellis-state", ctx.StateDir)
+	assert.Equal(t, "/tmp/armature-state", ctx.StateDir)
 }
 
 func TestResolveContext_GitWorktree_SingleBranch(t *testing.T) {

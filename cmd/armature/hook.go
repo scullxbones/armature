@@ -11,7 +11,7 @@ import (
 	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	trellissync "github.com/scullxbones/armature/internal/sync"
+	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -227,7 +227,7 @@ func runPostMergeHook(cmd *cobra.Command) error {
 	}
 
 	gc := git.New(appCtx.RepoPath)
-	mergedIDs, err := trellissync.DetectMerges(issuesDir, appCtx.StateDir, branch, gc)
+	mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, branch, gc)
 	if err != nil {
 		return fmt.Errorf("detect merges: %w", err)
 	}

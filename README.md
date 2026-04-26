@@ -32,8 +32,8 @@ All state lives in git. No database, no server, no daemon. A single Go binary (`
 ### Building from Source
 
 ```bash
-git clone https://github.com/google/trellis.git
-cd trellis
+git clone https://github.com/scullxbones/armature.git
+cd armature
 make install
 ```
 
@@ -58,7 +58,7 @@ Armature will detect if your repository has branch protection and set up either 
 Register source documents (PRDs, architecture docs) that define your project's work:
 
 ```bash
-arm sources add docs/trellis-prd.md
+arm sources add docs/armature-prd.md
 arm sources sync
 ```
 

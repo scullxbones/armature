@@ -1,6 +1,6 @@
-<!-- CANONICAL SOURCE: edit this file, not .claude/skills/trls-planner/SKILL.md — run `make skill` to regenerate the deployed copy -->
+<!-- CANONICAL SOURCE: edit this file, not .claude/skills/armature-planner/SKILL.md — run `make skill` to regenerate the deployed copy -->
 
-# Trellis Planner Loop
+# Armature Planner Loop
 
 The Planner translates objectives and specifications into a well-structured DAG
 of actionable work. The output is a validated, cited, dependency-resolved set of
@@ -8,16 +8,16 @@ issues ready for workers to claim.
 
 ## Prerequisites
 
-- `trls` must be on your PATH. Run `make install` from the trellis repo root if
+- `arm` must be on your PATH. Run `make install` from the armature repo root if
   it isn't:
   ```
-  make install   # installs to ~/.local/bin/trls
+  make install   # installs to ~/.local/bin/arm
   ```
-- **Do NOT run `trls worker-init`** — the Planner does not require a worker
+- **Do NOT run `arm worker-init`** — the Planner does not require a worker
   identity. Skip that step entirely.
 - Have a source document, spec, or design doc before you start. Every issue you
   create must be citable. If no source exists yet, write one first or be
-  prepared to use `trls accept-citation` with a clear rationale.
+  prepared to use `arm accept-citation` with a clear rationale.
 
 ## The Planner Loop
 
@@ -25,7 +25,7 @@ issues ready for workers to claim.
 digraph planner_loop {
     "Start: objective/spec" [shape=box];
     "Single task?" [shape=diamond];
-    "trls create" [shape=box];
+    "arm create" [shape=box];
     "Write plan.json" [shape=box];
     "decompose-apply --dry-run" [shape=box];
     "OK?" [shape=diamond];
@@ -33,15 +33,15 @@ digraph planner_loop {
     "dag-transition" [shape=box];
     "sources add/sync/verify" [shape=box];
     "source-link / accept-citation" [shape=box];
-    "trls link (deps)" [shape=box];
-    "trls validate" [shape=box];
-    "trls doctor" [shape=box];
+    "arm link (deps)" [shape=box];
+    "arm validate" [shape=box];
+    "arm doctor" [shape=box];
     "Release to Coordinator" [shape=doublecircle];
 
     "Start: objective/spec" -> "Single task?";
-    "Single task?" -> "trls create" [label="yes"];
+    "Single task?" -> "arm create" [label="yes"];
     "Single task?" -> "Write plan.json" [label="no"];
-    "trls create" -> "sources add/sync/verify";
+    "arm create" -> "sources add/sync/verify";
     "Write plan.json" -> "decompose-apply --dry-run";
     "decompose-apply --dry-run" -> "OK?" ;
     "OK?" -> "Write plan.json" [label="fix errors"];
@@ -49,10 +49,10 @@ digraph planner_loop {
     "decompose-apply --apply" -> "dag-transition";
     "dag-transition" -> "sources add/sync/verify";
     "sources add/sync/verify" -> "source-link / accept-citation";
-    "source-link / accept-citation" -> "trls link (deps)";
-    "trls link (deps)" -> "trls validate";
-    "trls validate" -> "trls doctor";
-    "trls doctor" -> "Release to Coordinator";
+    "source-link / accept-citation" -> "arm link (deps)";
+    "arm link (deps)" -> "arm validate";
+    "arm validate" -> "arm doctor";
+    "arm doctor" -> "Release to Coordinator";
 }
 ```
 
@@ -64,19 +64,19 @@ Register source documents **before** creating issues. This lets you link issues
 at creation time rather than doing a remediation pass later.
 
 ```bash
-trls sources add --url path/to/spec.md --title "Feature Spec" --type filesystem
-trls sources sync       # fetch and fingerprint all registered sources
-trls sources verify     # confirm all show OK (not MISSING)
+arm sources add --url path/to/spec.md --title "Feature Spec" --type filesystem
+arm sources sync       # fetch and fingerprint all registered sources
+arm sources verify     # confirm all show OK (not MISSING)
 ```
 
-If `trls sources verify` shows MISSING entries, re-run `trls sources sync` until
+If `arm sources verify` shows MISSING entries, re-run `arm sources sync` until
 they resolve. Do not proceed with issue creation while sources are MISSING.
 
 ### 2. Create or Decompose
 
 **For a single task:**
 ```bash
-trls create --title "Task title" --type task --parent STORY-ID
+arm create --title "Task title" --type task --parent STORY-ID
 ```
 
 Valid types: `task`, `feature`, `bug`, `story`
@@ -92,21 +92,21 @@ After `decompose-apply`, all created issues are in `draft` state. Promote them
 so workers can see them:
 
 ```bash
-trls dag-transition --issue ROOT-ID   # promotes ROOT-ID and all children draft → verified
+arm dag-transition --issue ROOT-ID   # promotes ROOT-ID and all children draft → verified
 ```
 
 Workers cannot claim draft issues. Do not skip this step.
 
 ### 4. Link Issues to Sources
 
-Every issue must be cited before `trls validate` will pass.
+Every issue must be cited before `arm validate` will pass.
 
 ```bash
 # Link each issue to a registered source
-trls source-link --issue ISSUE-ID --source-id UUID
+arm source-link --issue ISSUE-ID --source-id UUID
 
 # If no source document exists for this issue
-trls accept-citation --issue ISSUE-ID --rationale "No external spec; requirements captured in issue body" --ci
+arm accept-citation --issue ISSUE-ID --rationale "No external spec; requirements captured in issue body" --ci
 ```
 
 Do this at creation time — not as a post-hoc remediation pass. Citation debt
@@ -117,16 +117,16 @@ accumulates silently and blocks validation.
 Identify scope overlaps and set blocking dependencies before releasing work.
 
 ```bash
-trls link --source A --dep B    # A is blocked_by B; A runs after B completes
-trls validate                   # scope overlap WARNINGs appear here; resolve each one
+arm link --source A --dep B    # A is blocked_by B; A runs after B completes
+arm validate                   # scope overlap WARNINGs appear here; resolve each one
 ```
 
 ### 6. Validate and Release
 
 ```bash
-trls validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved
-trls doctor          # repo health check (D1-D6); fix any errors
-trls list --group    # final sanity check — all issues visible and in expected states
+arm validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved
+arm doctor          # repo health check (D1-D6); fix any errors
+arm list --group    # final sanity check — all issues visible and in expected states
 ```
 
 Only release to the Coordinator after both commands are clean.
@@ -136,7 +136,7 @@ Only release to the Coordinator after both commands are clean.
 ## Writing Good Plan JSON
 
 This section is critical. **Every task in the plan MUST have `dod`, `scope`, and
-`acceptance` fields or `trls validate` will ERROR.**
+`acceptance` fields or `arm validate` will ERROR.**
 
 ### The Three Mandatory Fields
 
@@ -163,7 +163,7 @@ that do not yet exist. Use precise paths, not vague descriptions.
 JSON array of specific criteria the worker can verify mechanically. Each entry
 should name a test, a command output, or an observable behavior.
 
-- Good: `["TestParseTokenTypes passes", "make check green", "trls validate exits 0"]`
+- Good: `["TestParseTokenTypes passes", "make check green", "arm validate exits 0"]`
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
 
@@ -196,9 +196,9 @@ should name a test, a command output, or an observable behavior.
 | `"scope": "various files"` | Worker cannot self-scope | List every file path explicitly |
 | `"acceptance": []` | No pass/fail signal | Name at least one test or command |
 | `"scope": "internal/"` | Too broad, causes overlaps | Name the specific files |
-| Missing `acceptance` field entirely | `trls validate` ERRORs | Add the field, even if `--example` omits it |
+| Missing `acceptance` field entirely | `arm validate` ERRORs | Add the field, even if `--example` omits it |
 
-> **Note:** `trls decompose-apply --example` omits `acceptance` in its output.
+> **Note:** `arm decompose-apply --example` omits `acceptance` in its output.
 > Always add it manually to every task in your plan JSON.
 
 ---
@@ -210,7 +210,7 @@ Use this for any work involving more than one or two tasks.
 ### 1. Inspect the Schema
 
 ```bash
-trls decompose-apply --example
+arm decompose-apply --example
 ```
 
 This prints a minimal plan JSON. Use it as a starting template but remember to
@@ -258,7 +258,7 @@ Create a file (e.g. `plan.json`) following this structure:
 ### 3. Dry-Run First
 
 ```bash
-trls decompose-apply --plan plan.json --dry-run
+arm decompose-apply --plan plan.json --dry-run
 ```
 
 This validates the plan and prints what would be created without writing
@@ -273,7 +273,7 @@ Common dry-run errors:
 ### 4. Apply the Plan
 
 ```bash
-trls decompose-apply --plan plan.json
+arm decompose-apply --plan plan.json
 ```
 
 All issues are created in `draft` state.
@@ -281,40 +281,40 @@ All issues are created in `draft` state.
 ### 5. Promote from Draft
 
 ```bash
-trls dag-transition --issue STORY-ID   # promotes the story and all its tasks
+arm dag-transition --issue STORY-ID   # promotes the story and all its tasks
 ```
 
 Verify promotion:
 ```bash
-trls list --parent STORY-ID   # all tasks should show status: open or in-progress
+arm list --parent STORY-ID   # all tasks should show status: open or in-progress
 ```
 
 ---
 
 ## Source Registration
 
-Every issue must have a citation before `trls validate` passes. The two paths:
+Every issue must have a citation before `arm validate` passes. The two paths:
 
 ### Path A: Source document exists
 
 ```bash
 # 1. Register the source (do this before creating issues)
-trls sources add --url docs/design/feature-spec.md --title "Feature Spec" --type filesystem
+arm sources add --url docs/design/feature-spec.md --title "Feature Spec" --type filesystem
 
 # 2. Sync to fingerprint it
-trls sources sync
+arm sources sync
 
 # 3. Verify it shows OK
-trls sources verify
+arm sources verify
 
 # 4. Link each issue (get UUID from sources verify output)
-trls source-link --issue ISSUE-ID --source-id UUID
+arm source-link --issue ISSUE-ID --source-id UUID
 ```
 
 ### Path B: No source document exists
 
 ```bash
-trls accept-citation --issue ISSUE-ID --rationale "Requirements captured in issue body; no external spec exists" --ci
+arm accept-citation --issue ISSUE-ID --rationale "Requirements captured in issue body; no external spec exists" --ci
 ```
 
 Use a specific rationale — vague rationales like "no docs" are harder to audit
@@ -323,28 +323,28 @@ later.
 ### Rules
 
 - Register sources **before** creating issues, not after.
-- Do not leave any issue uncited. Check coverage with `trls validate`.
-- If `trls validate` reports `uncited node: ID`, either `source-link` or
+- Do not leave any issue uncited. Check coverage with `arm validate`.
+- If `arm validate` reports `uncited node: ID`, either `source-link` or
   `accept-citation` that issue before releasing to workers.
-- If `trls validate` reports `unknown source: UUID`, the source UUID is not in
-  the manifest — re-run `trls sources sync` then `trls sources verify`.
+- If `arm validate` reports `unknown source: UUID`, the source UUID is not in
+  the manifest — re-run `arm sources sync` then `arm sources verify`.
 
 ---
 
 ## Dependency Management
 
-Use `trls link` to express ordering constraints between tasks.
+Use `arm link` to express ordering constraints between tasks.
 
 ```bash
-trls link --source A --dep B    # A is blocked_by B (A runs after B completes)
-trls unlink --source A --dep B  # remove a dependency
+arm link --source A --dep B    # A is blocked_by B (A runs after B completes)
+arm unlink --source A --dep B  # remove a dependency
 ```
 
-### When to Use `trls link`
+### When to Use `arm link`
 
 - **Scope overlaps:** If two tasks touch the same file, one must run after the
-  other. Run `trls validate` to surface scope overlap WARNINGs, then resolve
-  each one with `trls link`.
+  other. Run `arm validate` to surface scope overlap WARNINGs, then resolve
+  each one with `arm link`.
 - **Logical ordering:** Task A consumes the output of Task B (e.g. integration
   tests depend on the feature being implemented).
 - **Avoiding collisions:** Tasks assigned to parallel workers must not have
@@ -353,13 +353,13 @@ trls unlink --source A --dep B  # remove a dependency
 ### Checking for Overlaps
 
 ```bash
-trls validate    # scope overlap WARNINGs appear here
+arm validate    # scope overlap WARNINGs appear here
 ```
 
 For each WARNING, decide which task runs first and add the link:
 ```bash
-trls link --source LATER-TASK --dep EARLIER-TASK
-trls validate    # re-run until all WARNINGs are resolved
+arm link --source LATER-TASK --dep EARLIER-TASK
+arm validate    # re-run until all WARNINGs are resolved
 ```
 
 ---
@@ -368,26 +368,26 @@ trls validate    # re-run until all WARNINGs are resolved
 
 Run this checklist before handing work off to the Coordinator.
 
-1. **`trls validate`** — no ERRORs, citation coverage complete
+1. **`arm validate`** — no ERRORs, citation coverage complete
    ```bash
-   trls validate --ci   # exits non-zero on any error
+   arm validate --ci   # exits non-zero on any error
    ```
 
-2. **`trls doctor`** — repo health checks D1-D6 pass
+2. **`arm doctor`** — repo health checks D1-D6 pass
    ```bash
-   trls doctor          # or trls doctor --strict (warnings as errors)
+   arm doctor          # or arm doctor --strict (warnings as errors)
    ```
 
 3. **All issues promoted from draft**
    ```bash
-   trls list --group    # no issues should appear in draft state
+   arm list --group    # no issues should appear in draft state
    ```
 
-4. **All issues cited** — `trls validate` output shows `COVERAGE: N/N cited`
+4. **All issues cited** — `arm validate` output shows `COVERAGE: N/N cited`
 
-5. **Dependencies correct** — no scope overlap WARNINGs in `trls validate`
+5. **Dependencies correct** — no scope overlap WARNINGs in `arm validate`
 
-6. **Priorities set** — review `trls list --group` to confirm priorities reflect
+6. **Priorities set** — review `arm list --group` to confirm priorities reflect
    intended execution order
 
 Do not release until all six checks pass.
@@ -398,10 +398,10 @@ Do not release until all six checks pass.
 
 | Failure | Symptom | Prevention |
 |---|---|---|
-| Tasks missing `dod`, `scope`, or `acceptance` | Workers cannot self-verify completion; `trls validate` ERRORs | Write all three fields for every task; use the complete example in this skill as a template |
-| Issues created without source links | `trls validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `source-link` every issue at creation time |
-| Scope overlaps not resolved with `trls link` | Workers collide on the same files; merge conflicts during story close | Run `trls validate` after decompose-apply; resolve every scope overlap WARNING before releasing |
-| Draft issues not promoted | Workers see an empty ready queue; work never starts | Always run `trls dag-transition --issue ROOT-ID` after `decompose-apply` |
+| Tasks missing `dod`, `scope`, or `acceptance` | Workers cannot self-verify completion; `arm validate` ERRORs | Write all three fields for every task; use the complete example in this skill as a template |
+| Issues created without source links | `arm validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `source-link` every issue at creation time |
+| Scope overlaps not resolved with `arm link` | Workers collide on the same files; merge conflicts during story close | Run `arm validate` after decompose-apply; resolve every scope overlap WARNING before releasing |
+| Draft issues not promoted | Workers see an empty ready queue; work never starts | Always run `arm dag-transition --issue ROOT-ID` after `decompose-apply` |
 
 ---
 
@@ -409,32 +409,32 @@ Do not release until all six checks pass.
 
 ```bash
 # Single issue creation
-trls create --title "X" --type task --parent STORY-ID
+arm create --title "X" --type task --parent STORY-ID
 
 # Decomposition
-trls decompose-apply --example                         # inspect schema
-trls decompose-apply --plan plan.json --dry-run        # preview without writing
-trls decompose-apply --plan plan.json                  # apply the plan
+arm decompose-apply --example                         # inspect schema
+arm decompose-apply --plan plan.json --dry-run        # preview without writing
+arm decompose-apply --plan plan.json                  # apply the plan
 
 # Draft promotion
-trls dag-transition --issue ROOT-ID                    # promote root + all children
+arm dag-transition --issue ROOT-ID                    # promote root + all children
 
 # Source management
-trls sources add --url PATH --title "TEXT" --type filesystem
-trls sources sync                                      # fetch and fingerprint
-trls sources verify                                    # confirm all show OK
-trls source-link --issue ID --source-id UUID           # link issue to source
-trls accept-citation --issue ID --rationale "..." --ci # accept risk (no source)
+arm sources add --url PATH --title "TEXT" --type filesystem
+arm sources sync                                      # fetch and fingerprint
+arm sources verify                                    # confirm all show OK
+arm source-link --issue ID --source-id UUID           # link issue to source
+arm accept-citation --issue ID --rationale "..." --ci # accept risk (no source)
 
 # Dependency management
-trls link --source A --dep B                           # A runs after B
-trls unlink --source A --dep B                         # remove dependency
+arm link --source A --dep B                           # A runs after B
+arm unlink --source A --dep B                         # remove dependency
 
 # Validation
-trls validate                                          # graph + citation check
-trls validate --ci                                     # exit non-zero on errors
-trls doctor                                            # repo health check
-trls doctor --strict                                   # warnings as errors
-trls list --group                                      # grouped by status
-trls list --parent STORY-ID                            # tasks under a story
+arm validate                                          # graph + citation check
+arm validate --ci                                     # exit non-zero on errors
+arm doctor                                            # repo health check
+arm doctor --strict                                   # warnings as errors
+arm list --group                                      # grouped by status
+arm list --parent STORY-ID                            # tasks under a story
 ```

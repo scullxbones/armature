@@ -86,10 +86,10 @@ cd my-project
 arm init
 # Armature detects: main is protected → dual-branch mode
 # Creates orphan branch _armature for coordination data
-# Creates worktree at .trellis/ for simultaneous access
+# Creates worktree at .arm/ for simultaneous access
 ```
 
-The orphan `_armature` branch stores all `.armature/` data. Your `main` branch stays clean. A secondary worktree at `.trellis/` lets you read and write coordination state while your code changes live on a feature branch.
+The orphan `_armature` branch stores all `.armature/` data. Your `main` branch stays clean. A secondary worktree at `.arm/` lets you read and write coordination state while your code changes live on a feature branch.
 
 ### Two-Phase Completion
 
@@ -135,7 +135,7 @@ When the PR is merged to `main`, Armature detects the merge automatically and pr
 ### Notes for Gatekeeper
 
 - Never use `--to merged` manually. Armature watches for the merge commit and handles promotion automatically.
-- The `_armature` orphan branch and `.trellis/` worktree are managed by Armature — do not edit them directly.
+- The `_armature` orphan branch and `.arm/` worktree are managed by Armature — do not edit them directly.
 - `arm list --group` shows which tasks are `done` (PR open) vs `merged` (code landed).
 
 ---

@@ -2,7 +2,7 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Semantic color palette for trellis TUI output.
+// Semantic color palette for armature TUI output.
 // Colors are chosen to convey meaning at a glance across standard terminals.
 var (
 	// Critical indicates a fatal error or blocking condition (bright red).

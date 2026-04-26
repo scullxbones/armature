@@ -12,8 +12,8 @@ Armature is a git-native work orchestration system for multi-agent AI coordinati
 Clone the repository and install the `arm` binary:
 
 ```bash
-git clone https://github.com/google/trellis.git
-cd trellis
+git clone https://github.com/scullxbones/armature.git
+cd armature
 make install
 ```
 
@@ -29,7 +29,7 @@ arm init
 
 ### Solo vs Dual-Branch Modes
 - **Solo Mode (Single-Branch):** If your repository doesn't have branch protection on `main`, Armature stores all data in a `.armature/` folder on your `main` branch.
-- **Dual-Branch Mode:** If `main` is protected (e.g., GitHub/GitLab PR workflow), Armature creates an orphan `_armature` branch for coordination data. It also creates a secondary worktree at `.trellis/` so you can work on code and coordination state simultaneously without conflicts.
+- **Dual-Branch Mode:** If `main` is protected (e.g., GitHub/GitLab PR workflow), Armature creates an orphan `_armature` branch for coordination data. It also creates a secondary worktree at `.arm/` so you can work on code and coordination state simultaneously without conflicts.
 
 ## 3. Register Knowledge Sources
 
@@ -37,7 +37,7 @@ Armature uses source documents (PRDs, Architecture docs) to define work.
 
 ```bash
 # Add a source document from the local filesystem
-arm sources add --url docs/trellis-prd.md --type filesystem
+arm sources add --url docs/armature-prd.md --type filesystem
 
 # Sync to cache the content locally
 arm sources sync

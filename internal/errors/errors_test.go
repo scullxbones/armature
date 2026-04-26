@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func TestTrellisError_Error(t *testing.T) {
+func TestArmatureError_Error(t *testing.T) {
 	tests := []struct {
 		name        string
-		err         *TrellisError
+		err         *ArmatureError
 		wantCode    string
 		wantMessage string
 	}{
@@ -52,7 +52,7 @@ func TestTrellisError_Error(t *testing.T) {
 	}
 }
 
-func TestTrellisError_Unwrap(t *testing.T) {
+func TestArmatureError_Unwrap(t *testing.T) {
 	cause := stderrors.New("underlying io error")
 	err := IOError("write", cause)
 
@@ -60,11 +60,11 @@ func TestTrellisError_Unwrap(t *testing.T) {
 		t.Error("errors.Is should find cause through Unwrap")
 	}
 
-	var trellisErr *TrellisError
-	if !stderrors.As(err, &trellisErr) {
-		t.Error("errors.As should find TrellisError")
+	var armatureErr *ArmatureError
+	if !stderrors.As(err, &armatureErr) {
+		t.Error("errors.As should find ArmatureError")
 	}
-	if trellisErr.Code != "IO_ERROR" {
-		t.Errorf("expected code IO_ERROR, got %s", trellisErr.Code)
+	if armatureErr.Code != "IO_ERROR" {
+		t.Errorf("expected code IO_ERROR, got %s", armatureErr.Code)
 	}
 }

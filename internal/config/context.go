@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Context holds resolved paths and config for the current trellis session.
+// Context holds resolved paths and config for the current armature session.
 type Context struct {
 	RepoPath     string // resolved repo root
 	IssuesDir    string // path to issues directory
@@ -92,7 +92,7 @@ func ResolveContext(repoPath string) (*Context, error) {
 
 	mode, err := readGitConfigMode(actualRepoPath)
 	if err != nil {
-		return nil, fmt.Errorf("read trellis mode: %w", err)
+		return nil, fmt.Errorf("read armature mode: %w", err)
 	}
 
 	var issuesDir string
@@ -107,7 +107,7 @@ func ResolveContext(repoPath string) (*Context, error) {
 		}
 		issuesDir = filepath.Join(worktreePath, ".armature")
 	default:
-		return nil, fmt.Errorf("unknown trellis mode: %q", mode)
+		return nil, fmt.Errorf("unknown armature mode: %q", mode)
 	}
 
 	cfg, err := LoadConfig(filepath.Join(issuesDir, "config.json"))

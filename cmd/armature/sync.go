@@ -6,7 +6,7 @@ import (
 	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	trellissync "github.com/scullxbones/armature/internal/sync"
+	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +50,7 @@ preview changes without committing them.`,
 			}
 
 			gc := git.New(appCtx.RepoPath)
-			mergedIDs, err := trellissync.DetectMerges(issuesDir, appCtx.StateDir, targetBranch, gc)
+			mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, targetBranch, gc)
 			if err != nil {
 				return fmt.Errorf("detect merges: %w", err)
 			}

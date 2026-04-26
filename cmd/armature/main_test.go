@@ -44,7 +44,7 @@ func TestStateDirFor(t *testing.T) {
 	assert.Equal(t, "/repo/.arm/state/w1", stateDirFor(ctx2, "w1"))
 }
 
-// runTrls invokes the trellis cobra command tree with --repo injected and returns stdout + error.
+// runTrls invokes the armature cobra command tree with --repo injected and returns stdout + error.
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
 	buf := new(bytes.Buffer)
@@ -57,7 +57,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	return buf.String(), err
 }
 
-// runTrlsWithStderr invokes the trellis cobra command tree and returns stdout, stderr, and error.
+// runTrlsWithStderr invokes the armature cobra command tree and returns stdout, stderr, and error.
 func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) {
 	t.Helper()
 	buf := new(bytes.Buffer)
@@ -1094,7 +1094,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Init trellis (which also inits worker ID)
+	// Init armature (which also inits worker ID)
 	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 
@@ -2427,7 +2427,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Initialize trellis
+	// Initialize armature
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"init", "--repo", repo})
@@ -2472,7 +2472,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Initialize trellis
+	// Initialize armature
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"init", "--repo", repo})

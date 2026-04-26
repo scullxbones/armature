@@ -42,7 +42,7 @@ func TestAppendAndCommit_SingleBranch_NoCommit(t *testing.T) {
 
 func TestAppendAndCommit_DualBranch_Commits(t *testing.T) {
 	dir := t.TempDir()
-	worktreePath := filepath.Join(dir, ".trellis")
+	worktreePath := filepath.Join(dir, ".arm")
 	logPath := filepath.Join(worktreePath, ".issues", "ops", "abc.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
 
@@ -61,7 +61,7 @@ func TestAppendAndCommit_DualBranch_Commits(t *testing.T) {
 
 func TestAppendAndCommit_ShortWorkerID(t *testing.T) {
 	dir := t.TempDir()
-	worktreePath := filepath.Join(dir, ".trellis")
+	worktreePath := filepath.Join(dir, ".arm")
 	logPath := filepath.Join(worktreePath, ".issues", "ops", "x.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
 

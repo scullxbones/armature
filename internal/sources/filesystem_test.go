@@ -19,7 +19,7 @@ func TestFilesystemProviderType(t *testing.T) {
 // TestFilesystemFetchContent writes a temp file and asserts that Fetch returns
 // the expected content.
 func TestFilesystemFetchContent(t *testing.T) {
-	content := []byte("hello trellis filesystem provider")
+	content := []byte("hello armature filesystem provider")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "testfile.txt")
@@ -48,7 +48,7 @@ func TestFilesystemFetchContent(t *testing.T) {
 // fetched content matches the expected digest. The Provider interface returns
 // []byte; callers compute the fingerprint via Fingerprint(content).
 func TestFilesystemFetchFingerprint(t *testing.T) {
-	content := []byte("hello trellis filesystem provider")
+	content := []byte("hello armature filesystem provider")
 	expected := Fingerprint(content)
 
 	dir := t.TempDir()

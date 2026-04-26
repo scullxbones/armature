@@ -46,7 +46,7 @@ Four deployment personas drive feature scope. See section 21 for the full person
 - **Solo freelance:** Single-branch mode, no claim races, hooks optional.
 - **Solo enterprise:** Dual-branch mode, no claim races, hooks recommended.
 - **Team monorepo:** Dual-branch mode, full MRDT coordination, hooks recommended.
-- **Team multi-repo:** Separate trellis instances per repo (v1), manual cross-repo deps.
+- **Team multi-repo:** Separate armature instances per repo (v1), manual cross-repo deps.
 
 ---
 
@@ -779,7 +779,7 @@ Flags:
   --format json
 
 Checks:
-  D1  Git/trellis divergence — commits reference issues not in done/merged state
+  D1  Git/armature divergence — commits reference issues not in done/merged state
   D2  Stale claims — claimed issues with expired TTL
   D3  Orphaned ops — op log entries whose target_id is not in the issue graph
   D4  Broken parent refs — issues whose parent points to a non-existent node
@@ -1201,7 +1201,7 @@ The `post-commit` hook is the highest-leverage automation: every code commit bec
 
 ### Coexistence with Hook Managers
 
-Teams using husky, pre-commit, or other hook managers need a coexistence strategy. Recommended approach: Armature hooks are installed as scripts that can be sourced from existing hook files rather than replacing them. If a hook manager owns `.git/hooks/`, the trellis hooks can be invoked from within the managed hook chain. Documentation should cover the integration pattern for the most common managers.
+Teams using husky, pre-commit, or other hook managers need a coexistence strategy. Recommended approach: Armature hooks are installed as scripts that can be sourced from existing hook files rather than replacing them. If a hook manager owns `.git/hooks/`, the armature hooks can be invoked from within the managed hook chain. Documentation should cover the integration pattern for the most common managers.
 
 ---
 
@@ -1780,9 +1780,9 @@ auth_method = "device_flow"
 
 **v1: Separate instances per repo (Option A).** Each repo has its own `arm init`, its own ops branch, its own DAG. Cross-repo dependencies are tracked manually (notes on tasks). The CLI has no awareness of other repos.
 
-**Future: Hub-repo topology (Option B, designed-for but not implemented).** A dedicated coordination repository (e.g., `acme/trellis-ops`) contains all trellis ops for the project. Individual code repos reference this hub. Workers in any code repo push ops to the hub.
+**Future: Hub-repo topology (Option B, designed-for but not implemented).** A dedicated coordination repository (e.g., `acme/armature-ops`) contains all armature ops for the project. Individual code repos reference this hub. Workers in any code repo push ops to the hub.
 
-Implementation path: `arm init --ops-repo=acme/trellis-ops` configures the ops worktree to point at the external hub repo. All CLI commands operate against the hub. The code worktree is the current repo.
+Implementation path: `arm init --ops-repo=acme/armature-ops` configures the ops worktree to point at the external hub repo. All CLI commands operate against the hub. The code worktree is the current repo.
 
 **Design-for signals in v1:**
 

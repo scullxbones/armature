@@ -129,10 +129,10 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 	return result, nil
 }
 
-// D1: git/trellis divergence — scan git log for issue IDs referenced in commits
+// D1: git/armature divergence — scan git log for issue IDs referenced in commits
 // that are not in done/merged state.
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
-	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/trellis divergence detected"}
+	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
 
 	cmd := exec.Command("git", "-C", repoPath, "log", "--oneline", "--no-merges", "--pretty=%s")
 	out, err := cmd.Output()

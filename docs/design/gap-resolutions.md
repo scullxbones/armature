@@ -197,21 +197,21 @@ Offline mode requires no special handling. The existing timestamp-based conflict
 
 ### Personas and Their Repository Topology
 
-**Persona 1 — Freelance solo developer.** Single repo, no branch protection, likely no team. Uses single-branch mode. Multi-repo is irrelevant — if they have multiple repos, they run separate trellis instances per repo. No coordination needed across repos because there is only one worker.
+**Persona 1 — Freelance solo developer.** Single repo, no branch protection, likely no team. Uses single-branch mode. Multi-repo is irrelevant — if they have multiple repos, they run separate armature instances per repo. No coordination needed across repos because there is only one worker.
 
-**Persona 2 — Enterprise solo developer.** Single repo, protected main branch, uses dual-branch mode. Same as persona 1 for multi-repo: separate trellis instances per repo. Branch protection drives the dual-branch model, but multi-repo coordination is not a concern because one developer does not face claim races with themselves.
+**Persona 2 — Enterprise solo developer.** Single repo, protected main branch, uses dual-branch mode. Same as persona 1 for multi-repo: separate armature instances per repo. Branch protection drives the dual-branch model, but multi-repo coordination is not a concern because one developer does not face claim races with themselves.
 
 **Persona 3 — Enterprise/freelance developer team.** This is the persona where multi-repo becomes a real question. Multiple workers (human and AI) collaborate on a project. If the project spans multiple repositories, work items in one repo may depend on work items in another.
 
 ### The Real Question
 
-Multi-repo is not about "can trellis run in multiple repos?" — it already can. Each repo gets its own `arm init`, its own ops branch, its own DAG. The question is: **can a task in repo A declare a dependency on a task in repo B, such that the ready-task computation in repo A knows when the blocker in repo B is `merged`?**
+Multi-repo is not about "can armature run in multiple repos?" — it already can. Each repo gets its own `arm init`, its own ops branch, its own DAG. The question is: **can a task in repo A declare a dependency on a task in repo B, such that the ready-task computation in repo A knows when the blocker in repo B is `merged`?**
 
 ### Options
 
 **Option A: Separate instances, manual coordination.**
 
-Each repo has its own independent trellis instance. Cross-repo dependencies are tracked by humans or by convention (e.g., a note on the task: "blocked by repo-B task-xyz — verify manually"). The CLI has no awareness of other repos.
+Each repo has its own independent armature instance. Cross-repo dependencies are tracked by humans or by convention (e.g., a note on the task: "blocked by repo-B task-xyz — verify manually"). The CLI has no awareness of other repos.
 
 Pros: No new architecture. Zero complexity. Works today.
 
@@ -221,9 +221,9 @@ Best for: Teams where cross-repo dependencies are rare (fewer than 10% of tasks)
 
 **Option B: Ops hub repo.**
 
-A dedicated repository (e.g., `acme/trellis-ops`) contains all trellis ops for the entire organization or project. No code lives here — it is purely a coordination repo. Individual code repos reference this hub for task context. Workers in any code repo push ops to the hub.
+A dedicated repository (e.g., `acme/armature-ops`) contains all armature ops for the entire organization or project. No code lives here — it is purely a coordination repo. Individual code repos reference this hub for task context. Workers in any code repo push ops to the hub.
 
-Implementation: `arm init --ops-repo=acme/trellis-ops` configures the ops worktree to point at the external hub repo instead of creating a local ops branch. All CLI commands operate against the hub. The code worktree is the current repo.
+Implementation: `arm init --ops-repo=acme/armature-ops` configures the ops worktree to point at the external hub repo instead of creating a local ops branch. All CLI commands operate against the hub. The code worktree is the current repo.
 
 Pros: Single DAG across all repos. Cross-repo dependencies work natively. Ready-task computation, claim races, and merged detection all operate normally because ops are centralized.
 
@@ -251,7 +251,7 @@ Best for: Loosely coupled teams that want optional cross-repo visibility without
 
 2. The ops worktree path should be configurable (already recommended for other reasons), so that a future `--ops-repo` flag can point it at an external repo.
 
-3. Task IDs should be globally unique (UUIDs — already the case). If two repos' trellis instances are later merged into a hub, there are no ID collisions.
+3. Task IDs should be globally unique (UUIDs — already the case). If two repos' armature instances are later merged into a hub, there are no ID collisions.
 
 4. The merged detection algorithm should not assume the code branch is in the same repo as the ops branch. Today it does (it runs `git log main` in the local repo). Making the code-repo a configurable per-task property is a small abstraction that pays off later.
 
@@ -272,7 +272,7 @@ Best for: Loosely coupled teams that want optional cross-repo visibility without
 
 ### Risks of the Recommendation
 
-**Risk:** A team adopts trellis for a monorepo, then splits into multiple repos (common microservices evolution). Their DAG is now split across repos with broken cross-repo links.
+**Risk:** A team adopts armature for a monorepo, then splits into multiple repos (common microservices evolution). Their DAG is now split across repos with broken cross-repo links.
 
 **Mitigation:** Migration path from single-repo to hub-repo is straightforward: create the hub, copy the ops branch from the original repo, update worker configs. The data model does not change. Document this migration path even before implementing Option B.
 

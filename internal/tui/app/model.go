@@ -57,7 +57,7 @@ type Model struct {
 }
 
 // New constructs the root model. Screens are constructed lazily with placeholder
-// implementations; real screens are injected by cmd/trellis/tui.go via WithScreens.
+// implementations; real screens are injected by cmd/armature/tui.go via WithScreens.
 func New(issuesDir, stateDir, workerID string) Model {
 	return Model{
 		issuesDir: issuesDir,

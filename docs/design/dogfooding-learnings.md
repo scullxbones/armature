@@ -1,6 +1,6 @@
 # Armature Dogfooding Learnings
 
-Captured while using trellis to track its own E2 development.
+Captured while using armature to track its own E2 development.
 
 ## L1: `arm ready` only shows task/feature types
 
@@ -25,7 +25,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Validate `--to` against the known status set (`open`, `in-progress`, `done`, `merged`, `blocked`) and reject unknown values with an error message listing valid options.
 
-**File**: `cmd/trellis/transition.go`, `internal/ops/types.go:29-33`
+**File**: `cmd/armature/transition.go`, `internal/ops/types.go:29-33`
 
 ---
 
@@ -53,7 +53,7 @@ Captured while using trellis to track its own E2 development.
 
 ## L5: Skills cannot deliver cross-platform binaries; `SKILL_ROOT` is not exposed to agents
 
-**Observed**: The `arm` AgentSkill bundles the compiled binary at `scripts/arm` (relative to skill root). Agents cannot resolve this path because: (1) Claude Code does not expose `SKILL_ROOT` to agent context at runtime, and (2) the bundled binary is platform-specific — a skill targeting linux/amd64 breaks on darwin/arm64 and vice versa. Fixing path to `bin/arm` (repo-relative) only works inside the trellis repo itself.
+**Observed**: The `arm` AgentSkill bundles the compiled binary at `scripts/arm` (relative to skill root). Agents cannot resolve this path because: (1) Claude Code does not expose `SKILL_ROOT` to agent context at runtime, and (2) the bundled binary is platform-specific — a skill targeting linux/amd64 breaks on darwin/arm64 and vice versa. Fixing path to `bin/arm` (repo-relative) only works inside the armature repo itself.
 
 **Impact**: Bundled binary delivery via skills is not viable for compiled Go binaries without per-platform skill variants. Agents guess the binary path relative to CWD and fail.
 
@@ -71,19 +71,19 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: When `arm ready` returns empty and in-progress issues exist with stale claims, print a diagnostic: e.g. "1 task in-progress with stale claim (E4-S1-T1, claimed by 0fb9a1c9, expired 2h ago) — use `arm claim --issue E4-S1-T1` to steal." Alternatively, auto-expire stale claims when computing the ready queue.
 
-**File**: `internal/ready/compute.go`, `cmd/trellis/ready.go`
+**File**: `internal/ready/compute.go`, `cmd/armature/ready.go`
 
 ---
 
 ## L7: `arm-worker` skill not discoverable from project root
 
-**Observed**: The skill is deployed at `trellis/.claude/skills/arm-worker/` but the agent's working directory is `/home/brian/development` (the parent). The Skill tool only surfaces skills from the active project directory, so `arm-worker` was initially not found. The agent fell back to reading the skill file directly from disk before the user pointed out the correct deployment path.
+**Observed**: The skill is deployed at `armature/.claude/skills/arm-worker/` but the agent's working directory is `/home/brian/development` (the parent). The Skill tool only surfaces skills from the active project directory, so `arm-worker` was initially not found. The agent fell back to reading the skill file directly from disk before the user pointed out the correct deployment path.
 
 **Impact**: Wasted turn discovering the skill location. Agent attempted to use the wrong skill file (`docs/arm-worker-SKILL.md`) before the correct one was loaded.
 
-**Recommendation**: Skills should be deployed at the repo root (`.claude/skills/`) rather than a subdirectory if the agent's working directory may be the parent. Alternatively, document in the skill meta that the user must `cd` into the trellis repo or open it as the active workspace before invoking.
+**Recommendation**: Skills should be deployed at the repo root (`.claude/skills/`) rather than a subdirectory if the agent's working directory may be the parent. Alternatively, document in the skill meta that the user must `cd` into the armature repo or open it as the active workspace before invoking.
 
-**File**: `trellis/.claude/skills/arm-worker/`
+**File**: `armature/.claude/skills/arm-worker/`
 
 ---
 
@@ -95,7 +95,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Suppress or fix the underlying shell compat issue. At minimum, document in the skill that these warnings are harmless so agents don't halt on them.
 
-**File**: `cmd/trellis/worker_init.go` or underlying git config shell helper
+**File**: `cmd/armature/worker_init.go` or underlying git config shell helper
 
 ---
 
@@ -107,7 +107,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Either (a) exclude stories from `arm ready` output (tasks/features only), or (b) print a warning when claiming a story: "Claiming a story will block its child tasks — claim individual tasks instead." Or (c) make claiming a story auto-claim all its ready children instead.
 
-**File**: `internal/ready/compute.go`, `cmd/trellis/claim.go`
+**File**: `internal/ready/compute.go`, `cmd/armature/claim.go`
 
 ---
 
@@ -119,7 +119,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: `arm unassign` should transition the issue back to `in-progress` (or its prior status) automatically, or at least print: "Issue remains in 'claimed' state — run `arm transition --issue ID --to in-progress` to restore."
 
-**File**: `cmd/trellis/unassign.go`
+**File**: `cmd/armature/unassign.go`
 
 ---
 
@@ -131,19 +131,19 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add `open` as a valid transition target (or alias `reopen` to cover this case for non-done issues too), so agents can undo accidental claims cleanly.
 
-**File**: `cmd/trellis/transition.go`, `internal/ops/types.go`
+**File**: `cmd/armature/transition.go`, `internal/ops/types.go`
 
 ---
 
 ## L12: `decompose-apply` plan JSON schema is undiscoverable — agents fall back to reading Go source
 
-**Observed**: When loading a plan into trellis via `arm decompose-apply --plan <file>`, the agent had no way to discover the required JSON schema without reading the Go source (`internal/decompose/plan.go`). `arm decompose-apply --help` describes only the `--plan` flag, not the file format. There is no example file, schema reference, or `--schema` flag.
+**Observed**: When loading a plan into armature via `arm decompose-apply --plan <file>`, the agent had no way to discover the required JSON schema without reading the Go source (`internal/decompose/plan.go`). `arm decompose-apply --help` describes only the `--plan` flag, not the file format. There is no example file, schema reference, or `--schema` flag.
 
 **Impact**: Agents must either guess the format (and fail silently or with a cryptic parse error) or read the implementation source. Both paths are friction. This was observed directly when a session fell back to `find`/`cat` on the Go source instead of using `arm` queries.
 
 **Recommendation**: One or more of: (a) add `arm decompose-apply --example` that prints a minimal valid JSON plan; (b) add a `--schema` flag that prints the JSON schema; (c) document the format in `docs/commands.md` under `arm decompose-apply`; (d) improve the `--help` text to include the schema inline.
 
-**File**: `cmd/trellis/decompose.go`, `internal/decompose/plan.go`, `docs/commands.md`
+**File**: `cmd/armature/decompose.go`, `internal/decompose/plan.go`, `docs/commands.md`
 
 ---
 
@@ -155,7 +155,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add a `arm list` command (or extend `arm status`) with: `--type [epic|story|task|feature|bug]` filter, `--parent ID` filter, `--format json` output with full issue fields (id, title, type, status, parent, blocked_by), and optionally `--ids-only` for quick ID enumeration. Agents should be able to answer "what IDs exist under E5?" without touching the filesystem.
 
-**File**: `cmd/trellis/status.go` (or new `cmd/trellis/list.go`), `internal/materialize/`
+**File**: `cmd/armature/status.go` (or new `cmd/armature/list.go`), `internal/materialize/`
 
 ---
 
@@ -167,7 +167,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Make the decompose pipeline a first-class documented workflow. The arm skill (SKILL.md) should include a "Loading a plan" section that walks through: (1) `sources add`, (2) `sources sync`, (3) `decompose-context`, (4) human/AI reviews and edits the JSON, (5) `decompose-apply`. Without this narrative, agents treat the commands as unrelated and skip the connective tissue. Consider also whether `decompose-apply` should require or at least warn when no source is linked to the resulting issues.
 
-**File**: `.claude/skills/arm/SKILL.md`, `cmd/trellis/decompose.go`
+**File**: `.claude/skills/arm/SKILL.md`, `cmd/armature/decompose.go`
 
 ---
 
@@ -179,7 +179,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add `arm decompose-apply --dry-run` that validates the plan against the current graph state and prints what would be created (IDs, types, parents, blocked_by edges) without writing any ops. Also consider `--validate-only` as an alias. This gives agents and humans a chance to catch mistakes before they're committed to the op log.
 
-**File**: `cmd/trellis/decompose.go`, `internal/decompose/apply.go`
+**File**: `cmd/armature/decompose.go`, `internal/decompose/apply.go`
 
 ---
 
@@ -191,7 +191,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Fix has two parts: (1) change `ComputeReady` to surface tasks whose parent is `open` (not just `in-progress`) — this removes the bootstrap deadlock; (2) when a task is claimed, auto-transition any `open` ancestor story/epic to `in-progress`. Together these eliminate the manual pre-flight. E5-S1-T3 addresses part (2) but not part (1).
 
-**File**: `internal/ready/compute.go` (parent status gate), `cmd/trellis/claim.go` (auto-advance on claim)
+**File**: `internal/ready/compute.go` (parent status gate), `cmd/armature/claim.go` (auto-advance on claim)
 
 ---
 
@@ -203,7 +203,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Support positional arguments for issue IDs while keeping the flag for backward compatibility or explicit disambiguation.
 
-**File**: `cmd/trellis/`
+**File**: `cmd/armature/`
 
 ---
 
@@ -215,7 +215,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Auto-detect TTY status. If `stdout` is not a TTY, default to a machine-readable format like `agent`.
 
-**File**: `cmd/trellis/ready.go`
+**File**: `cmd/armature/ready.go`
 
 ---
 
@@ -227,7 +227,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add a "board" or "summary" view that aggregates child statuses, outcomes, and current claims for a given parent in a table format.
 
-**File**: `cmd/trellis/`
+**File**: `cmd/armature/`
 
 ---
 
@@ -235,7 +235,7 @@ Captured while using trellis to track its own E2 development.
 
 **Observed**: The standard workflow involves `arm transition` followed immediately by `git add <files> .armature/` and `git commit`.
 
-**Impact**: High repetition and risk of forgetting to include `.armature/` in the commit, leaving trellis state behind. This happened multiple times during E5-S3 execution.
+**Impact**: High repetition and risk of forgetting to include `.armature/` in the commit, leaving armature state behind. This happened multiple times during E5-S3 execution.
 
 **Recommendation**: The `arm-worker` skill should suggest a helper or the CLI should provide a bundled command that handles both transition and commit in one go, automatically including the op files.
 
@@ -287,7 +287,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Tests should explicitly set the expected format (e.g., `cmd.Root().PersistentFlags().Set("format", "human")`) rather than relying on the default, especially in CI/Agent environments.
 
-**File**: `cmd/trellis/main_test.go`, `cmd/trellis/main.go`
+**File**: `cmd/armature/main_test.go`, `cmd/armature/main.go`
 
 ---
 
@@ -311,7 +311,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: When `arm transition <TASK> --to done` makes all siblings done but the parent story is still `in-progress`, emit a prominent warning to stderr with the exact remediation command: `arm transition STORY-ID --to done --outcome "..."`. This should be impossible to miss.
 
-**File**: `cmd/trellis/transition.go`
+**File**: `cmd/armature/transition.go`
 
 ---
 
@@ -323,7 +323,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: (1) Add `--acceptance` to `arm create` for parity with `arm amend`. (2) Add `--field id` output selector to return only the new ID. (3) Add `--source <id-or-path>` to apply a source-link at creation time, eliminating the follow-up `arm source-link` call. A fully-specified, cited task should be expressible in one command.
 
-**File**: `cmd/trellis/create.go`
+**File**: `cmd/armature/create.go`
 
 ---
 
@@ -333,9 +333,9 @@ Captured while using trellis to track its own E2 development.
 
 **Impact**: Extra tool calls, token usage, and fragile pipelines. Shell loops for multi-ID operations (e.g. `for id in ...; do arm accept-citation $id; done`) are a consistent source of bugs.
 
-**Recommendation**: Add `--field <name>` to all read commands (`show`, `create`, `transition`, `ready`). Add `--status` and `--parent` filter flags to `arm status`. These cover the vast majority of scripting observed. The goal: no python or awk needed for any routine trellis operation.
+**Recommendation**: Add `--field <name>` to all read commands (`show`, `create`, `transition`, `ready`). Add `--status` and `--parent` filter flags to `arm status`. These cover the vast majority of scripting observed. The goal: no python or awk needed for any routine armature operation.
 
-**File**: `cmd/trellis/show.go`, `cmd/trellis/create.go`, `cmd/trellis/status.go`, `cmd/trellis/helpers.go`
+**File**: `cmd/armature/show.go`, `cmd/armature/create.go`, `cmd/armature/status.go`, `cmd/armature/helpers.go`
 
 ---
 
@@ -347,7 +347,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add `--source <source-id-or-path>` to `arm create`. Resolves against the manifest by URL/path if a string is given. Issue is born fully cited via `source-link`, not accepted-risk. Makes the correct traceability path the zero-friction path.
 
-**File**: `cmd/trellis/create.go`, `cmd/trellis/source_link.go`
+**File**: `cmd/armature/create.go`, `cmd/armature/source_link.go`
 
 ---
 
@@ -371,7 +371,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: (1) `arm validate` should treat an accepted-risk citation as superseding any earlier orphaned source citation for the same issue. (2) Add a `arm sources retire --replace-citations-with <new-source-id>` command for graceful source migration. Workaround: restore the source entry directly in `manifest.json` with the original UUID.
 
-**File**: `cmd/trellis/validate.go`, `internal/validate/validate.go`, `cmd/trellis/sources.go`
+**File**: `cmd/armature/validate.go`, `internal/validate/validate.go`, `cmd/armature/sources.go`
 
 ---
 
@@ -407,7 +407,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add a `arm hook run <hookname>` native subcommand. Each hookname (`post-commit`, `post-merge`, `prepare-commit-msg`, `pre-commit`) maps to native Go logic that owns branch detection, mode detection, and claim lookup. Shell templates become trivial one-liners (`arm hook run post-commit`), are testable in Go, and degrade gracefully when `arm` is missing (single exit-code check rather than scattered shell guards).
 
-**File**: `cmd/trellis/hook.go` (new), `.armature/hooks/*.sh.template`
+**File**: `cmd/armature/hook.go` (new), `.armature/hooks/*.sh.template`
 
 ---
 
@@ -419,7 +419,7 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: Add a `arm rollup [--apply]` command that walks the DAG bottom-up, identifies any story or epic whose children are all in terminal states (`done`, `merged`, `cancelled`) but the parent is not, and reports (or with `--apply`, transitions) them. Optionally integrate this check into the post-transition path: after any task transitions to `done`, check if all siblings are terminal and emit a warning or auto-advance the parent.
 
-**File**: `cmd/trellis/rollup.go` (new), `internal/materialize/`, `cmd/trellis/transition.go`
+**File**: `cmd/armature/rollup.go` (new), `internal/materialize/`, `cmd/armature/transition.go`
 
 ---
 
@@ -431,13 +431,13 @@ Captured while using trellis to track its own E2 development.
 
 **Recommendation**: `arm sync` should fall back to commit-message matching when ancestry check fails: scan `git log main` for commit messages containing the issue ID and treat a match as evidence of merge. Alternatively, check the GitHub API for PR merge state (`gh pr list --state merged`) rather than relying solely on git ancestry. The current ancestry check should remain as the fast path; message-scan or API check as the slow fallback.
 
-**File**: `internal/sync/sync.go`, `cmd/trellis/sync.go`
+**File**: `internal/sync/sync.go`, `cmd/armature/sync.go`
 
 ---
 
 ## L35: Parallel subagents work without LSP — expensive write→check→fix loops
 
-**Observed**: Subagents dispatched to `/tmp/trellis-w2*` worktrees have no gopls connection. The coordinator's LSP session can reach worktree files (verified via hover on `/tmp/trellis-w3/`), but subagents launched via the Agent tool run as headless processes with no IDE. Every compilation or lint error requires a full `make check` cycle (~20–30s) rather than instant inline feedback. w2h introduced a goimports violation in `init.go` that passed `make check` inside its worktree (where goimports had already run) but failed after merge into main.
+**Observed**: Subagents dispatched to `/tmp/armature-w2*` worktrees have no gopls connection. The coordinator's LSP session can reach worktree files (verified via hover on `/tmp/armature-w3/`), but subagents launched via the Agent tool run as headless processes with no IDE. Every compilation or lint error requires a full `make check` cycle (~20–30s) rather than instant inline feedback. w2h introduced a goimports violation in `init.go` that passed `make check` inside its worktree (where goimports had already run) but failed after merge into main.
 
 **Impact**: Each fix-loop consumes ~500–800 tokens of output reading plus the tool calls to edit and re-run. Across 8 parallel agents averaging 2–3 check cycles each, this accounts for a significant fraction of the wave's token spend. Post-merge lint failures require an extra coordinator fix pass.
 

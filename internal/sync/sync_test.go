@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
-	trellissync "github.com/scullxbones/armature/internal/sync"
+	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +47,7 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 		"feature/merged-work": true,
 	}}
 
-	ids, err := trellissync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
+	ids, err := armsync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"T-001"}, ids)
 }
@@ -65,7 +65,7 @@ func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 
 	mc := &fakeMergeChecker{merged: map[string]bool{}}
 
-	ids, err := trellissync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
+	ids, err := armsync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
 	require.NoError(t, err)
 	assert.Empty(t, ids)
 }
@@ -75,7 +75,7 @@ func TestDetectMerges_EmptyDir(t *testing.T) {
 	// No state/issues dir — should return nil, nil
 
 	mc := &fakeMergeChecker{merged: map[string]bool{}}
-	ids, err := trellissync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
+	ids, err := armsync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
 	assert.NoError(t, err)
 	assert.Empty(t, ids)
 }
@@ -95,7 +95,7 @@ func TestSyncDetectMergesUsesStateDir(t *testing.T) {
 	mc := &fakeMergeChecker{merged: map[string]bool{"feature/merged": true}}
 
 	// If it was hardcoded to something else, this would fail.
-	ids, err := trellissync.DetectMerges("unused", stateDir, "main", mc)
+	ids, err := armsync.DetectMerges("unused", stateDir, "main", mc)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"T-001"}, ids)
 }

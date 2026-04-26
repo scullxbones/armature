@@ -140,7 +140,7 @@
       "type": "feature",
       "scope": "integrations",
       "priority": "low",
-      "dod": "Trellis can POST op log events to a configured webhook URL when ops are appended. Payload follows a documented JSON schema. Supports per-event-type filtering. Webhook URL is stored in git config or `.trellis/config`.",
+      "dod": "Armature can POST op log events to a configured webhook URL when ops are appended. Payload follows a documented JSON schema. Supports per-event-type filtering. Webhook URL is stored in git config or `.arm/config`.",
       "parent": "",
       "blocked_by": ["E3-001"],
       "notes": [
@@ -153,7 +153,7 @@
       "type": "feature",
       "scope": "ux",
       "priority": "low",
-      "dod": "`trls init --template NAME` scaffolds a new project with a starter set of issues loaded from a named template. Templates are YAML or JSON files stored in `.trellis/templates/`. A built-in `software-project` template is included.",
+      "dod": "`arm init --template NAME` scaffolds a new project with a starter set of issues loaded from a named template. Templates are YAML or JSON files stored in `.arm/templates/`. A built-in `software-project` template is included.",
       "parent": "",
       "blocked_by": [],
       "notes": [

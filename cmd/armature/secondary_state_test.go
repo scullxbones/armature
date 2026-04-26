@@ -13,7 +13,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	// Create an initial commit so git is fully initialized
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// 1. Initialize trellis and worker
+	// 1. Initialize armature and worker
 	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")

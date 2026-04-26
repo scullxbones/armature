@@ -1,6 +1,6 @@
-<!-- CANONICAL SOURCE: edit this file, not .claude/skills/trls-auditor/SKILL.md — run `make skill` to regenerate the deployed copy -->
+<!-- CANONICAL SOURCE: edit this file, not .claude/skills/armature-auditor/SKILL.md — run `make skill` to regenerate the deployed copy -->
 
-# Trellis Auditor
+# Armature Auditor
 
 The Auditor verifies that completed work is honest and traceable before story sign-off. Every issue must have a valid cited source, every decision must be recorded, and outcomes must satisfy acceptance criteria.
 
@@ -21,7 +21,7 @@ Work through these steps in order. Each step must pass before proceeding to the 
 ### Step 1 — Citation Integrity
 
 ```bash
-trls validate
+arm validate
 ```
 
 Expected output: `COVERAGE: N/N cited` with **zero ERROR lines**.
@@ -31,19 +31,19 @@ If you see `ERROR: uncited node` or `ERROR: unknown source`, see the [Citation I
 For CI use (exits non-zero on any error):
 
 ```bash
-trls validate --ci
+arm validate --ci
 ```
 
 To validate only a subtree:
 
 ```bash
-trls validate --scope STORY-ID
+arm validate --scope STORY-ID
 ```
 
 ### Step 2 — Source Freshness
 
 ```bash
-trls sources verify
+arm sources verify
 ```
 
 All sources must show `OK`. Any `MISSING` entry means a source fingerprint is stale or the source was removed after initial registration.
@@ -51,20 +51,20 @@ All sources must show `OK`. Any `MISSING` entry means a source fingerprint is st
 If sources show `MISSING`:
 
 ```bash
-trls sources sync        # fetch and re-fingerprint all sources
-trls sources verify      # re-run until all show OK
+arm sources sync        # fetch and re-fingerprint all sources
+arm sources verify      # re-run until all show OK
 ```
 
 If a source is gone entirely, re-register it:
 
 ```bash
-trls sources add <url-or-path>
+arm sources add <url-or-path>
 ```
 
 If source content changed and you need to review the delta before accepting it:
 
 ```bash
-trls stale-review        # interactive review of sources whose content changed
+arm stale-review        # interactive review of sources whose content changed
 ```
 
 ### Step 3 — Outcome Quality Review
@@ -72,13 +72,13 @@ trls stale-review        # interactive review of sources whose content changed
 List all completed tasks under the story:
 
 ```bash
-trls list --status done --parent STORY-ID
+arm list --status done --parent STORY-ID
 ```
 
 For each completed task, inspect its outcome against its acceptance criteria:
 
 ```bash
-trls render-context --issue ISSUE-ID
+arm render-context --issue ISSUE-ID
 ```
 
 `render-context` shows both the `acceptance` criteria array and the recorded `outcome` field side by side. Verify that:
@@ -90,33 +90,33 @@ trls render-context --issue ISSUE-ID
 You can also inspect an issue directly:
 
 ```bash
-trls show ISSUE-ID      # shows outcome and acceptance criteria side by side
+arm show ISSUE-ID      # shows outcome and acceptance criteria side by side
 ```
 
 **Good outcome example:**
-> "Added `--verbose` flag to `trls doctor`; each violation now prints the op file path and affected issue ID; 3 new tests added; make check green at 82% coverage"
+> "Added `--verbose` flag to `arm doctor`; each violation now prints the op file path and affected issue ID; 3 new tests added; make check green at 82% coverage"
 
 **Vague outcome examples (flag these):**
 > "Done" / "Fixed" / "Implemented as requested" / "Completed"
 
 ### Step 4 — Scope Overlap Resolution
 
-`trls validate` may report `WARNING: scope overlap` lines. These are not errors by default, but **must be resolved before sign-off**.
+`arm validate` may report `WARNING: scope overlap` lines. These are not errors by default, but **must be resolved before sign-off**.
 
 ```bash
 # Make overlapping tasks serial
-trls link --source ISSUE-A --dep ISSUE-B
+arm link --source ISSUE-A --dep ISSUE-B
 
 # Or treat overlaps as errors to confirm none remain
-trls validate --strict
+arm validate --strict
 ```
 
-If two tasks genuinely do not overlap despite the warning, document the rationale with `trls decision` on one of the issues before proceeding.
+If two tasks genuinely do not overlap despite the warning, document the rationale with `arm decision` on one of the issues before proceeding.
 
 ### Step 5 — Repo Health
 
 ```bash
-trls doctor --strict
+arm doctor --strict
 ```
 
 `--strict` promotes all warnings to errors. The command must **exit zero**. Any warning or error must be resolved before approving the story.
@@ -124,7 +124,7 @@ trls doctor --strict
 For machine-readable output:
 
 ```bash
-trls doctor --format json
+arm doctor --format json
 ```
 
 Doctor checks reference:
@@ -152,10 +152,10 @@ An issue has neither a `source-link` nor an `accept-citation`. It is completely 
 
 ```bash
 # Link to a source document
-trls source-link ISSUE-ID
+arm source-link ISSUE-ID
 
 # Or accept the citation risk explicitly (for issues with no recoverable source)
-trls accept-citation --ci ISSUE-ID
+arm accept-citation --ci ISSUE-ID
 ```
 
 ### E8 — Unknown Source
@@ -169,46 +169,46 @@ An issue's `source-link` points to a UUID that no longer exists in the sources m
 **Fix:**
 
 ```bash
-trls sources sync          # refresh manifest; re-fingerprint all sources
-trls sources verify        # confirm all show OK
-trls validate              # re-run — E8 should be gone if the source was re-found
+arm sources sync          # refresh manifest; re-fingerprint all sources
+arm sources verify        # confirm all show OK
+arm validate              # re-run — E8 should be gone if the source was re-found
 ```
 
 If the source is gone permanently, register a replacement and re-link:
 
 ```bash
-trls sources add <replacement-url-or-path>
-trls source-link ISSUE-ID  # link to the new source UUID
-trls validate              # confirm E8 is resolved
+arm sources add <replacement-url-or-path>
+arm source-link ISSUE-ID  # link to the new source UUID
+arm validate              # confirm E8 is resolved
 ```
 
 ### CRITICAL: D6 Does Not Catch E8
 
-> **WARNING: `trls doctor` D6 checks field presence only.** It verifies that `source_link` or `citation_acceptance` fields exist on an issue — but it does **not** verify that the source UUID actually exists in the manifest.
+> **WARNING: `arm doctor` D6 checks field presence only.** It verifies that `source_link` or `citation_acceptance` fields exist on an issue — but it does **not** verify that the source UUID actually exists in the manifest.
 >
-> **An issue can pass D6 while still failing E8 in `trls validate`.**
+> **An issue can pass D6 while still failing E8 in `arm validate`.**
 >
 > Always run both:
-> - `trls doctor` — structural health (field presence, parent refs, dependency cycles)
-> - `trls validate` — semantic citation validity (UUID integrity, coverage)
+> - `arm doctor` — structural health (field presence, parent refs, dependency cycles)
+> - `arm validate` — semantic citation validity (UUID integrity, coverage)
 >
 > Never rely on D6 alone as proof of citation integrity.
 
 ## Source Freshness
 
-Source fingerprints go stale when the underlying document changes after initial registration. `trls sources verify` detects this; `trls sources sync` re-fetches and re-fingerprints all sources.
+Source fingerprints go stale when the underlying document changes after initial registration. `arm sources verify` detects this; `arm sources sync` re-fetches and re-fingerprints all sources.
 
 Workflow when sources are stale:
 
 ```bash
-trls sources verify        # identify MISSING or changed sources
-trls sources sync          # re-fingerprint
-trls sources verify        # confirm all OK
-trls stale-review          # if content changed, review delta before accepting
-trls validate              # confirm no new E8 errors from stale UUIDs
+arm sources verify        # identify MISSING or changed sources
+arm sources sync          # re-fingerprint
+arm sources verify        # confirm all OK
+arm stale-review          # if content changed, review delta before accepting
+arm validate              # confirm no new E8 errors from stale UUIDs
 ```
 
-Sources can also go stale silently between the time a worker registers them and the time the auditor runs. Always run `trls sources verify` as step 2 of the audit — do not assume sources registered during implementation are still current.
+Sources can also go stale silently between the time a worker registers them and the time the auditor runs. Always run `arm sources verify` as step 2 of the audit — do not assume sources registered during implementation are still current.
 
 ## Pre-Merge Gate
 
@@ -216,11 +216,11 @@ Before approving the story transition, all five checks must be green:
 
 | Check | Command | Pass Condition |
 |-------|---------|----------------|
-| Citation integrity | `trls validate` | Zero ERRORs, `COVERAGE: N/N cited` |
-| Source freshness | `trls sources verify` | Zero MISSING |
-| Outcome quality | `trls render-context --issue ID` for each done task | All outcomes concrete, all acceptance criteria addressed |
-| Scope overlap | `trls validate --strict` | Zero scope overlap warnings |
-| Repo health | `trls doctor --strict` | Exit zero (zero ERRORs, zero WARNINGs) |
+| Citation integrity | `arm validate` | Zero ERRORs, `COVERAGE: N/N cited` |
+| Source freshness | `arm sources verify` | Zero MISSING |
+| Outcome quality | `arm render-context --issue ID` for each done task | All outcomes concrete, all acceptance criteria addressed |
+| Scope overlap | `arm validate --strict` | Zero scope overlap warnings |
+| Repo health | `arm doctor --strict` | Exit zero (zero ERRORs, zero WARNINGs) |
 
 Only after all five pass should you approve the story for transition and PR.
 
@@ -228,6 +228,6 @@ Only after all five pass should you approve the story for transition and PR.
 
 | Failure Mode | Why It Happens | Fix |
 |---|---|---|
-| Trusting D6 alone for citation integrity | `trls doctor` D6 checks field presence only — it will pass even if the source UUID is invalid (E8) | Always run `trls validate` after `trls doctor`; D6 and E8 check different things |
-| Accepting vague outcomes ("done", "fixed") | Worker transitions without writing a concrete outcome | Use `trls render-context --issue ID` to cross-check outcome against `acceptance` criteria; require workers to amend before sign-off |
-| Skipping `trls sources verify` | Source fingerprints go stale silently when documents are updated after initial registration | Always run `trls sources verify` as step 2; run `trls sources sync` to refresh, then re-verify |
+| Trusting D6 alone for citation integrity | `arm doctor` D6 checks field presence only — it will pass even if the source UUID is invalid (E8) | Always run `arm validate` after `arm doctor`; D6 and E8 check different things |
+| Accepting vague outcomes ("done", "fixed") | Worker transitions without writing a concrete outcome | Use `arm render-context --issue ID` to cross-check outcome against `acceptance` criteria; require workers to amend before sign-off |
+| Skipping `arm sources verify` | Source fingerprints go stale silently when documents are updated after initial registration | Always run `arm sources verify` as step 2; run `arm sources sync` to refresh, then re-verify |

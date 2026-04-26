@@ -86,7 +86,7 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	// Clear the index; ignore exit code 1 (nothing to remove on an empty repo)
 	rmCmd := c.cmd("rm", "-rf", "--quiet", ".")
 	rmCmd.Run() //nolint:errcheck
-	commitCmd := c.cmd("commit", "--allow-empty", "-m", "chore: init trellis issues branch")
+	commitCmd := c.cmd("commit", "--allow-empty", "-m", "chore: init armature issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit on orphan branch: %w\n%s", err, out)
 	}
