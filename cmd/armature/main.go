@@ -219,6 +219,10 @@ func newRootCmd() *cobra.Command {
 	doctorCmd.GroupID = "admin"
 	root.AddCommand(doctorCmd)
 
+	completionCmd := newCompletionCmd()
+	completionCmd.GroupID = "admin"
+	root.AddCommand(completionCmd)
+
 	hookCmd := newHookCmd()
 	hookCmd.GroupID = "admin"
 	root.AddCommand(hookCmd)
