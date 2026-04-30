@@ -1256,3 +1256,4 @@
 ["claim","RP-T2",1777517943,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","RP-T4",1777517945,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","RP-T2",1777517986,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created .github/workflows/release.yml triggering goreleaser on v*.*.* tags"}]
+["transition","RP-T4",1777517990,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"dist/ already present in .gitignore (as /dist/ at line 3); goreleaser snapshot build deferred to CI — goreleaser not installed locally"}]
