@@ -1252,3 +1252,4 @@
 ["transition","RP",1777517320,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["claim","RP-T3",1777517320,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","RP-T1",1777517406,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":".goreleaser.yaml v2 config created: arm binary for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64; tar.gz archives (zip for windows); SHA256 checksums; conventional commit changelog grouped feat/fix/docs/other; targets github.com/scullxbones/armature"}]
+["transition","RP-T3",1777517685,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"arm completion subcommand added for bash/zsh/fish/powershell via cobra; TDD with 6 tests; make check green"}]
