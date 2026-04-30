@@ -1250,3 +1250,4 @@
 ["assign","RP-T3",1777517311,"34dafe5f-6881-4bca-b209-c98c906e3550",{"assigned_to":"rp-t3"}]
 ["claim","RP-T1",1777517319,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","RP",1777517320,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["claim","RP-T3",1777517320,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
