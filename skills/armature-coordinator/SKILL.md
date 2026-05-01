@@ -89,9 +89,14 @@ arm ready --assigned-to WORKER-ID      # verify a pre-assignment wave
 If `arm ready` returns nothing and not all tasks are `done`, check for
 dependency cycles or stalled in-progress tasks:
 ```bash
+arm ready --explain                    # why each open task is NOT ready (blocked/claimed/missing dep)
 arm list --status in-progress          # claims that may have expired
 arm list --status blocked              # diagnose blockers
 ```
+
+`arm ready --explain` prints a per-task diagnosis for every open task that
+did not make it into the ready queue. Use it as the first step whenever the
+queue looks unexpectedly empty.
 
 ### 3. Sequential Dispatch (one task at a time)
 
@@ -143,12 +148,21 @@ each prompt (see [Dispatch Protocol](#dispatch-protocol) and
 
 Each worker's context package must contain:
 
-1. **Log slot (FIRST instruction):**
+0. **Skill invocation (VERY FIRST instruction):**
+   ```
+   You are an armature worker. Invoke the `armature-worker` skill via the Skill tool before proceeding.
+   ```
+   This must appear before everything else — the skill loads the worker's
+   operating procedure and pre-flight checks. Workers that skip this step
+   may miss critical setup steps or validations.
+
+1. **Log slot (second instruction, before any `arm` command):**
    ```
    Before running any arm command, run: export ARM_LOG_SLOT=<assigned-slot>
    ```
-   This must be the first line of the worker's prompt — before any other
-   instructions. See [Log Slots](#log-slots-for-parallel-dispatch) for why.
+   This must be the second line of the worker's prompt — immediately after
+   the skill invocation and before any other instructions. See
+   [Log Slots](#log-slots-for-parallel-dispatch) for why.
 
 2. **Full `render-context` output** — this is the worker's complete task spec.
    Do not summarize it; pass it verbatim.
@@ -326,6 +340,51 @@ git push -u origin HEAD
 
 **One PR per story** — not per task (too many small PRs), not per epic (too
 large to review). Story-level PRs give reviewers clear scope.
+
+**CI and tag-push note:** If your CI pipeline triggers on tag pushes as well
+as branch pushes, story feature branches (e.g. `feat/STORY-ID`) will not
+accidentally fire tag-based workflows as long as your CI config uses a
+`branches:` filter. Example for GitHub Actions:
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+```
+
+Without a `branches:` filter a `git push --tags` can trigger branch-push
+workflows unexpectedly. If you see spurious CI runs after tagging, add or
+tighten the `branches:` filter in your workflow file.
+
+---
+
+## Querying JSON Output
+
+Most `arm` commands emit newline-delimited JSON. Use `grep` for quick
+field extraction without requiring `jq`:
+
+```bash
+# Extract a single field from each object
+arm list --parent STORY-ID | grep -o '"status":"[^"]*"'
+
+# Filter objects where a field matches a value
+arm list --parent STORY-ID | grep '"status":"done"'
+
+# Count matches
+arm list --parent STORY-ID | grep -c '"status":"done"'
+
+# Extract IDs of all blocked tasks
+arm list --status blocked | grep -o '"id":"[^"]*"'
+
+# Show title alongside status for a quick overview
+arm list --parent STORY-ID | grep -o '"id":"[^"]*"\|"title":"[^"]*"\|"status":"[^"]*"'
+```
+
+These patterns work in any shell without additional tooling. If `jq` is
+available you can use it for more complex queries, but `grep` is sufficient
+for the common coordinator workflow.
 
 ---
 
