@@ -1314,3 +1314,4 @@
 ["claim","CFR-T1",1777608647,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","story-1777608345",1777608649,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["claim","CFR-T2",1777608650,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["claim","CFR-T3",1777608651,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
