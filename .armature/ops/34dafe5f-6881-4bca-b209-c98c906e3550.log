@@ -1324,3 +1324,4 @@
 ["transition","CFR-T1",1777609604,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added --quiet flag to arm validate; suppresses INFO lines while still printing COVERAGE and OK lines. TestValidateQuiet passes. make check green."}]
 ["transition","CFR-T4",1777609613,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Updated armature-auditor SKILL.md Step 3 from arm list --status done to arm list --terminal --parent STORY-ID; prose updated to note --terminal captures done, merged, and cancelled. make check green."}]
 ["heartbeat","CFR-T2",1777609975,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["citation-accepted","CFR-T2",1777609980,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"no external source document exists for this implementation task"}]
