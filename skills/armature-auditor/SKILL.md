@@ -69,10 +69,10 @@ arm stale-review        # interactive review of sources whose content changed
 
 ### Step 3 — Outcome Quality Review
 
-List all completed tasks under the story:
+List all terminal tasks under the story (done, merged, and cancelled):
 
 ```bash
-arm list --status done --parent STORY-ID
+arm list --terminal --parent STORY-ID
 ```
 
 For each completed task, inspect its outcome against its acceptance criteria:
