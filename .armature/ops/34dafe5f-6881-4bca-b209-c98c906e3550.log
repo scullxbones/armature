@@ -1313,3 +1313,4 @@
 ["amend","CFR-T5",1777608473,"34dafe5f-6881-4bca-b209-c98c906e3550",{"definition_of_done":"Coordinator SKILL.md updated with four additions: (1) Dispatch Protocol item 0 invokes armature-worker skill first; (2) arm ready --explain diagnostic note in Find Ready Work section; (3) Querying JSON Output section with grep idioms; (4) CI tag-push note with branches: filter example. make skill run; all four visible in .claude/skills/. make check green."}]
 ["claim","CFR-T1",1777608647,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","story-1777608345",1777608649,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
+["claim","CFR-T2",1777608650,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
