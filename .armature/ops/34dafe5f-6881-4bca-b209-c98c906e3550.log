@@ -1329,3 +1329,4 @@
 ["heartbeat","CFR-T3",1777610061,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","CFR-T3",1777610310,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["citation-accepted","CFR-T3",1777610555,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"no source document exists for this implementation task"}]
+["transition","CFR-T3",1777610561,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added ExplainNotReady to internal/ready/compute.go returning map of issue ID to exclusion reason. Wired --explain flag to arm ready; prints ID: reason pairs in deterministic sorted order. TestExplainNotReady_BlockerNotMerged, TestExplainNotReady_ParentNotActive, and TestReadyExplain pass. make check green."}]
