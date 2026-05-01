@@ -1242,6 +1242,45 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	assert.Contains(t, outExclude, "0 issues")
 }
 
+// TestListTerminal verifies that --terminal returns all issues with terminal
+// statuses (done, merged, cancelled) and excludes open/in-progress issues.
+func TestListTerminal(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	// Initialize worker so we can do transitions.
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create additional issues: one to cancel, one to leave open, one to merge.
+	_, err = runTrls(t, repo, "create", "--title", "Task to cancel", "--type", "task", "--id", "task-cancel")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task to done", "--type", "task", "--id", "task-done")
+	require.NoError(t, err)
+
+	// Transition task-cancel to cancelled.
+	_, err = runTrls(t, repo, "claim", "task-cancel")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "task-cancel", "--to", "cancelled", "--outcome", "not needed", "--force")
+	require.NoError(t, err)
+
+	// Transition task-done to done; on a repo with git history this becomes merged.
+	_, err = runTrls(t, repo, "claim", "task-done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "task-done", "--to", "done", "--outcome", "completed", "--force")
+	require.NoError(t, err)
+
+	// --terminal must include cancelled and done/merged issues.
+	out, err := runTrls(t, repo, "list", "--terminal")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-cancel", "--terminal should include cancelled issues")
+	assert.Contains(t, out, "task-done", "--terminal should include done/merged issues")
+
+	// --terminal must exclude open issues.
+	assert.NotContains(t, out, "task-01", "--terminal should exclude open issues")
+	assert.NotContains(t, out, "task-02", "--terminal should exclude open issues")
+	assert.NotContains(t, out, "story-01", "--terminal should exclude open story")
+}
+
 // TestCommandLongAndExampleFields verifies that high-priority commands have
 // non-empty Long and Example fields for comprehensive help documentation.
 func TestCommandLongAndExampleFields(t *testing.T) {

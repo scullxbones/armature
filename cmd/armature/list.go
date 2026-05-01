@@ -32,11 +32,19 @@ type listEntry struct {
 	ClaimedBy string `json:"claimed_by,omitempty"`
 }
 
+// terminalStatuses is the set of statuses that represent terminal (completed) states.
+var terminalStatuses = map[string]bool{
+	ops.StatusDone:      true,
+	ops.StatusMerged:    true,
+	ops.StatusCancelled: true,
+}
+
 func newListCmd() *cobra.Command {
 	var filterParent string
 	var filterType string
 	var filterStatus string
 	var group bool
+	var terminal bool
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -62,6 +70,9 @@ func newListCmd() *cobra.Command {
 					continue
 				}
 				if filterStatus != "" && entry.Status != filterStatus {
+					continue
+				}
+				if terminal && !terminalStatuses[entry.Status] {
 					continue
 				}
 				ids = append(ids, id)
@@ -170,6 +181,7 @@ func newListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&filterType, "type", "", "filter by issue type (task, story, feature, bug)")
 	cmd.Flags().StringVar(&filterStatus, "status", "", "filter by status (open, in-progress, done, merged, cancelled, blocked)")
 	cmd.Flags().BoolVar(&group, "group", false, "group issues by status with section headers (human format only)")
+	cmd.Flags().BoolVar(&terminal, "terminal", false, "filter to all terminal statuses (done, merged, cancelled)")
 
 	return cmd
 }
