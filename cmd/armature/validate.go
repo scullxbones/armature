@@ -14,6 +14,7 @@ func newValidateCmd() *cobra.Command {
 		ci     bool
 		strict bool
 		scope  string
+		quiet  bool
 	)
 
 	cmd := &cobra.Command{
@@ -24,7 +25,8 @@ func newValidateCmd() *cobra.Command {
 This command validates parent-child relationships, dependency links, field requirements,
 and coverage metrics (% of issues cited in documentation). Errors prevent merges in CI mode.
 Warnings highlight potential issues. Use --ci to exit non-zero on errors, or --strict to
-treat warnings as errors. Use --scope to validate only a subtree.`,
+treat warnings as errors. Use --scope to validate only a subtree. Use --quiet to suppress
+INFO lines while still printing COVERAGE and OK lines.`,
 		Example: `  # Validate the full issue graph
   $ arm validate
 
@@ -35,7 +37,10 @@ treat warnings as errors. Use --scope to validate only a subtree.`,
   $ arm validate --ci
 
   # Validate only a specific subtree
-  $ arm validate --scope parent-issue-id`,
+  $ arm validate --scope parent-issue-id
+
+  # Suppress INFO lines (e.g. phantom-scope notices)
+  $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, appCtx.StateDir, true)
 			if err != nil {
@@ -53,7 +58,7 @@ treat warnings as errors. Use --scope to validate only a subtree.`,
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
-				payload := map[string]interface{}{
+				payload := map[string]any{
 					"errors":   result.Errors,
 					"warnings": result.Warnings,
 					"infos":    result.Infos,
@@ -73,8 +78,10 @@ treat warnings as errors. Use --scope to validate only a subtree.`,
 				for _, w := range result.Warnings {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "WARNING: %s\n", w)
 				}
-				for _, i := range result.Infos {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO: %s\n", i)
+				if !quiet {
+					for _, i := range result.Infos {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO: %s\n", i)
+					}
 				}
 				if result.Coverage != nil {
 					cov := result.Coverage
@@ -102,5 +109,6 @@ treat warnings as errors. Use --scope to validate only a subtree.`,
 	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Treat warnings as errors")
 	cmd.Flags().StringVar(&scope, "scope", "", "Validate only the subtree rooted at this node ID")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines; still prints COVERAGE and OK lines")
 	return cmd
 }

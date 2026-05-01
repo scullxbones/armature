@@ -454,6 +454,24 @@ func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
 	assert.Contains(t, out, `"infos"`, "JSON output should include infos field")
 }
 
+func TestValidateQuiet(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Provide all required task fields so validate reports OK (no errors)
+	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--scope", "nonexistent/file.go",
+		"--acceptance", acceptance,
+		"--dod", "Tests pass and feature works")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "validate", "--quiet")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "INFO:", "--quiet should suppress INFO lines")
+	assert.Contains(t, out, "COVERAGE:", "--quiet should still print COVERAGE lines")
+	assert.Contains(t, out, "OK:", "--quiet should still print OK lines")
+}
+
 func TestImportCommand_DryRun_JSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
