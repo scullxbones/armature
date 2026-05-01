@@ -395,3 +395,32 @@ func TestReadyTask_SortByBlocksCount(t *testing.T) {
 	// task-a blocks 2 others → it is more critical → should sort first
 	assert.Equal(t, "task-a", ready[0].Issue, "task with more Blocks should sort before task with fewer")
 }
+
+func TestExplainNotReady_BlockerNotMerged(t *testing.T) {
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
+		"task-02":  {Status: "done", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "task-02", "reason should mention the unmerged blocker")
+}
+
+func TestExplainNotReady_ParentNotActive(t *testing.T) {
+	index := materialize.Index{
+		"story-01": {Status: "done", Type: "story"},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "story-01", "reason should mention the inactive parent")
+}

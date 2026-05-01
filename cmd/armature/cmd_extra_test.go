@@ -1281,6 +1281,36 @@ func TestListTerminal(t *testing.T) {
 	assert.NotContains(t, out, "story-01", "--terminal should exclude open story")
 }
 
+// TestReadyExplain verifies that arm ready --explain prints ID: reason pairs for
+// open tasks that are blocked or have an inactive parent, in deterministic order.
+func TestReadyExplain(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a blocker task (open, not merged) and a task that depends on it.
+	// The blocker stays open — so task-blocked is excluded because blocker is not merged.
+	_, err = runTrls(t, repo, "create", "--title", "Blocker task", "--type", "task", "--id", "task-blocker")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Blocked task", "--type", "task", "--id", "task-blocked")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "link", "--source", "task-blocked", "--dep", "task-blocker")
+	require.NoError(t, err)
+	// Claim task-blocker so it is in-progress (not merged) — task-blocked remains not ready.
+	_, err = runTrls(t, repo, "claim", "task-blocker")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "ready", "--explain")
+	require.NoError(t, err)
+	// task-blocked should appear with a reason mentioning its unmerged blocker
+	assert.Contains(t, out, "task-blocked", "--explain should list task-blocked")
+	assert.Contains(t, out, "task-blocker", "--explain reason should mention the unmerged blocker")
+	// task-01 and task-02 are ready (not blocked), so they must NOT appear in explain output
+	assert.NotContains(t, out, "task-01", "--explain must not include ready tasks")
+	assert.NotContains(t, out, "task-02", "--explain must not include ready tasks")
+}
+
 // TestCommandLongAndExampleFields verifies that high-priority commands have
 // non-empty Long and Example fields for comprehensive help documentation.
 func TestCommandLongAndExampleFields(t *testing.T) {

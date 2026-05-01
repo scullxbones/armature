@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +20,7 @@ func newReadyCmd() *cobra.Command {
 	var workerID string
 	var filterParent string
 	var assignedTo string
+	var explain bool
 
 	cmd := &cobra.Command{
 		Use:   "ready",
@@ -35,7 +37,10 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
   $ arm ready --worker alice-worker
 
   # Show ready tasks in JSON format (suitable for agents)
-  $ arm ready --format json`,
+  $ arm ready --format json
+
+  # Diagnose why open tasks are not in the ready queue
+  $ arm ready --explain`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
@@ -54,6 +59,26 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				if err == nil {
 					issues[id] = &issue
 				}
+			}
+
+			// --explain: print why each open unclaimed task is not ready, then return.
+			if explain {
+				notReady := ready.ExplainNotReady(index, issues)
+				format, _ := cmd.Flags().GetString("format")
+				if format == "json" || format == "agent" || tui.IsNonInteractive() {
+					data, _ := json.MarshalIndent(notReady, "", "  ")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				} else {
+					ids := make([]string, 0, len(notReady))
+					for id := range notReady {
+						ids = append(ids, id)
+					}
+					sort.Strings(ids)
+					for _, id := range ids {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", id, notReady[id])
+					}
+				}
+				return nil
 			}
 
 			entries := ready.ComputeReady(index, issues, workerID)
@@ -138,6 +163,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID for assignment-aware sorting")
 	cmd.Flags().StringVar(&filterParent, "parent", "", "filter to descendants of this issue ID")
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "filter to tasks assigned to this worker ID")
+	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
 	return cmd
 }
 
