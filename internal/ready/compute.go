@@ -1,7 +1,9 @@
 package ready
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -80,6 +82,60 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 
 	sortReady(ready, index, workerID)
 	return ready
+}
+
+// ExplainNotReady returns a map of issue ID to exclusion reason for every open
+// unclaimed task that is NOT in the ready queue. Keys are sorted deterministically.
+// The reason string identifies which gate excluded the issue.
+func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue) map[string]string {
+	result := make(map[string]string)
+	for id, entry := range index {
+		if entry.Type != "task" && entry.Type != "feature" && entry.Type != "story" {
+			continue
+		}
+		if entry.Status != ops.StatusOpen {
+			continue
+		}
+		issue := issues[id]
+		// Skip draft issues (they have their own gate but are not "not ready" — they
+		// require confirmation first and are intentionally excluded).
+		if issue != nil && issue.Provenance.Confidence == "draft" {
+			continue
+		}
+		// Skip issues that are actively claimed (not stale).
+		if issue != nil && issue.ClaimedBy != "" {
+			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, time.Now().Unix()) {
+				continue
+			}
+		}
+
+		// Check each gate in order and record the first failing one.
+		if !allBlockersMerged(entry.BlockedBy, index) {
+			var unmerged []string
+			for _, bid := range entry.BlockedBy {
+				e, ok := index[bid]
+				if !ok || e.Status != ops.StatusMerged {
+					unmerged = append(unmerged, bid)
+				}
+			}
+			result[id] = fmt.Sprintf("blocker(s) not merged: %s", strings.Join(unmerged, ", "))
+			continue
+		}
+		if entry.Parent != "" {
+			parentEntry, ok := index[entry.Parent]
+			if !ok || (parentEntry.Status != ops.StatusInProgress && parentEntry.Status != ops.StatusClaimed && parentEntry.Status != ops.StatusOpen) {
+				result[id] = fmt.Sprintf("parent %s is not active (status: %s)", entry.Parent, func() string {
+					if !ok {
+						return "missing"
+					}
+					return parentEntry.Status
+				}())
+				continue
+			}
+		}
+		// Issue passed all gates — it IS ready, do not include it.
+	}
+	return result
 }
 
 // FilterByAssignedTo returns entries whose AssignedWorker matches workerID.
