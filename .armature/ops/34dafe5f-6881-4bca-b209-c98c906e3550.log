@@ -1318,3 +1318,4 @@
 ["claim","CFR-T4",1777608654,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","CFR-T5",1777608657,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","CFR-T5",1777608774,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: 4 additions to coordinator SKILL.md"}]
+["citation-accepted","CFR-T5",1777609103,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"SKILL.md is the sole source of truth for coordinator workflow; no separate source doc exists"}]
