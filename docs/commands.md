@@ -519,6 +519,54 @@ arm sources add --url "https://example.com/docs" --type filesystem
 
 ---
 
+## scope-delete
+
+Remove an exact file path from all issue scopes.
+
+**Synopsis:**
+`arm scope-delete <path>`
+
+**Behaviour:**
+- Rejects an empty `path` argument with an error.
+- If no issue has an exact scope entry matching `path`, prints a warning and exits 0 without writing any ops.
+- If any non-terminal issue (status not in `merged`, `done`, `cancelled`) would be left with an empty scope after deletion, prints a warning listing those issue IDs; the command proceeds regardless.
+- Only exact-string entries are removed; glob entries that happen to cover the deleted file are left intact (use `arm amend --scope` to update them manually).
+- Emits one `scope-delete` op per affected issue, all at the same timestamp, then rematerializes.
+
+**Example:**
+```bash
+arm scope-delete cmd/trellis/main.go
+```
+
+---
+
+## scope-rename
+
+Rename a scope path across all issues using substring matching.
+
+**Synopsis:**
+`arm scope-rename <old-path> <new-path>`
+
+**Behaviour:**
+- Rejects an empty `old-path` or `new-path` argument with an error.
+- Rejects identical `old-path` and `new-path` with an error.
+- If no issue has a scope entry containing `old-path` as a substring, prints a warning and exits 0 without writing any ops.
+- Prints a summary of affected issues (count and IDs) before writing ops.
+- `old-path` is a substring match, so a directory prefix correctly updates both exact paths and glob patterns in a single op (e.g. `old-path=cmd/trellis` rewrites `cmd/trellis/main.go` and `cmd/trellis/*.go`).
+- Emits one `scope-rename` op per affected issue, all at the same timestamp, then rematerializes.
+- Idempotent: a second application finds nothing matching `old-path` and is a no-op.
+
+**Examples:**
+```bash
+# Rename a single file
+arm scope-rename cmd/trellis/main.go cmd/armature/main.go
+
+# Rename a directory prefix (updates exact paths and globs)
+arm scope-rename cmd/trellis cmd/armature
+```
+
+---
+
 ## stale-review
 
 Review sources whose cached content has changed since last sync.
