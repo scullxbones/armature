@@ -1485,3 +1485,4 @@
 ["scope-rename","E3-002-T12",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
 ["scope-rename","E3-003-T7",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
 ["scope-rename","E3-004-T10",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
+["scope-rename","E3-T13",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
