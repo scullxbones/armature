@@ -1401,3 +1401,4 @@
 ["link","SFT-S1-T10",1777721569,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T8","rel":"blocked_by"}]
 ["link","SFT-S1-T11",1777721569,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T9","rel":"blocked_by"}]
 ["link","SFT-S1-T11",1777721569,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T10","rel":"blocked_by"}]
+["source-link","SFT-S1",1777724292,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"92025c1d-1e1c-4964-a212-f37ed58fbcf7","source_url":"docs/superpowers/specs/2026-05-02-scope-file-tracking-design.md"}]
