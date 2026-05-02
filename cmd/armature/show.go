@@ -53,6 +53,8 @@ func newShowCmd() *cobra.Command {
 					Notes      []string        `json:"notes,omitempty"`
 					Outcome    string          `json:"outcome,omitempty"`
 					AssignedTo string          `json:"assigned_worker,omitempty"`
+					BlockedBy  []string        `json:"blocked_by,omitempty"`
+					Blocks     []string        `json:"blocks,omitempty"`
 				}
 				results := make([]showJSON, 0, len(ids))
 				for _, id := range ids {
@@ -78,6 +80,8 @@ func newShowCmd() *cobra.Command {
 						Notes:      noteTexts,
 						Outcome:    issue.Outcome,
 						AssignedTo: issue.AssignedWorker,
+						BlockedBy:  issue.BlockedBy,
+						Blocks:     issue.Blocks,
 					})
 				}
 				data, _ := json.MarshalIndent(results, "", "  ")
@@ -120,6 +124,8 @@ func newShowCmd() *cobra.Command {
 						Notes      []string        `json:"notes,omitempty"`
 						Outcome    string          `json:"outcome,omitempty"`
 						AssignedTo string          `json:"assigned_worker,omitempty"`
+						BlockedBy  []string        `json:"blocked_by,omitempty"`
+						Blocks     []string        `json:"blocks,omitempty"`
 					}
 					noteTexts := make([]string, 0, len(issue.Notes))
 					for _, n := range issue.Notes {
@@ -138,6 +144,8 @@ func newShowCmd() *cobra.Command {
 						Notes:      noteTexts,
 						Outcome:    issue.Outcome,
 						AssignedTo: issue.AssignedWorker,
+						BlockedBy:  issue.BlockedBy,
+						Blocks:     issue.Blocks,
 					}
 					data, _ := json.MarshalIndent(out, "", "  ")
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
@@ -173,6 +181,12 @@ func newShowCmd() *cobra.Command {
 				}
 				if issue.Outcome != "" {
 					_, _ = fmt.Fprintf(w, "Outcome:   %s\n", issue.Outcome)
+				}
+				if len(issue.BlockedBy) > 0 {
+					_, _ = fmt.Fprintf(w, "BlockedBy: %s\n", strings.Join(issue.BlockedBy, ", "))
+				}
+				if len(issue.Blocks) > 0 {
+					_, _ = fmt.Fprintf(w, "Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
 				}
 				if len(issue.Notes) > 0 {
 					_, _ = fmt.Fprintf(w, "Notes:\n")
