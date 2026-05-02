@@ -668,6 +668,78 @@ func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 	_ = refsByID
 }
 
+func TestApplyScopeRenameOp_ExactPath(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/handler.go", "internal/auth/middleware.go"}},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpScopeRename, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{OldPath: "internal/auth/handler.go", NewPath: "internal/auth/router.go"},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Contains(t, issue.Scope, "internal/auth/router.go")
+	assert.NotContains(t, issue.Scope, "internal/auth/handler.go")
+	assert.Contains(t, issue.Scope, "internal/auth/middleware.go")
+}
+
+func TestApplyScopeRenameOp_GlobPattern(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/**", "internal/util/**"}},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpScopeRename, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{OldPath: "internal/auth/**", NewPath: "internal/authn/**"},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Contains(t, issue.Scope, "internal/authn/**")
+	assert.NotContains(t, issue.Scope, "internal/auth/**")
+	assert.Contains(t, issue.Scope, "internal/util/**")
+}
+
+func TestApplyScopeRenameOp_NoMatch_NoOp(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/**"}},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpScopeRename, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{OldPath: "internal/nonexistent/**", NewPath: "internal/other/**"},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, []string{"internal/auth/**"}, issue.Scope, "scope should be unchanged when OldPath not found")
+	assert.Equal(t, int64(200), issue.Updated, "Updated timestamp should be set even on no-match")
+}
+
+func TestApplyScopeRenameOp_Idempotent(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/**"}},
+	}))
+	renameOp := ops.Op{
+		Type: ops.OpScopeRename, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{OldPath: "internal/auth/**", NewPath: "internal/authn/**"},
+	}
+	require.NoError(t, state.ApplyOp(renameOp))
+	require.NoError(t, state.ApplyOp(renameOp))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, []string{"internal/authn/**"}, issue.Scope, "applying rename twice should not duplicate entries")
+}
+
+func TestApplyScopeRenameOp_UnknownIssue_Tolerated(t *testing.T) {
+	state := NewState()
+	err := state.ApplyOp(ops.Op{
+		Type: ops.OpScopeRename, TargetID: "nonexistent-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{OldPath: "internal/auth/**", NewPath: "internal/authn/**"},
+	})
+	assert.NoError(t, err, "scope-rename on unknown issue should be tolerated")
+}
+
 // BenchmarkRunRollup_10kIssues benchmarks the rollup operation on a large hierarchy.
 // This test demonstrates that RunRollup should complete in O(n) time.
 // With the previous O(n²) implementation, 10k issues would take too long.
