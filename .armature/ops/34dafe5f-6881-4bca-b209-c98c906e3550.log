@@ -1416,3 +1416,4 @@
 ["amend","SFT-S1-T5",1777724345,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/validate/validate.go","internal/validate/validate_test.go"]}]
 ["amend","SFT-S1-T8",1777724346,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/armature/hook.go","cmd/armature/hook_test.go"]}]
 ["amend","SFT-S1-T10",1777724346,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["skills/armature/SKILL.md","skills/armature-coordinator/SKILL.md","skills/armature-planner/SKILL.md"]}]
+["amend","SFT-S1-T6",1777724361,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/armature/scope_rename.go","cmd/armature/scope_rename_test.go","cmd/armature/main.go"]}]
