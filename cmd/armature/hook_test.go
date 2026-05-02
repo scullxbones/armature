@@ -130,3 +130,100 @@ func TestHookSubcommandHelp(t *testing.T) {
 	_ = cmd.Execute()
 	assert.Contains(t, buf.String(), "hook")
 }
+
+// TestHookPostCommit_InitialCommit verifies that post-commit does not error when HEAD~1 is absent.
+func TestHookPostCommit_InitialCommit(t *testing.T) {
+	// Build a repo with NO parent commit so HEAD~1 is absent.
+	repo := initTempRepo(t)
+
+	// arm init requires at least one commit; make a bare commit then immediately run arm init.
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	// Create a task with scope so detection has something to work with.
+	_, err := runTrls(t, repo, "create", "--title", "Scoped task", "--type", "task", "--id", "task-scope-01", "--scope", "src/foo.go")
+	require.NoError(t, err)
+
+	// Claim it.
+	_, err = runTrls(t, repo, "claim", "task-scope-01")
+	require.NoError(t, err)
+
+	// Now run post-commit on the very first real commit (HEAD~1 absent for the init commit).
+	// hookDetectScopeChanges should skip silently and not error.
+	_, err = runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+}
+
+// TestHookPostCommit_ScopeRename verifies that post-commit emits scope-rename ops
+// for issues whose scope contains the renamed path.
+func TestHookPostCommit_ScopeRename(t *testing.T) {
+	repo := setupRepoWithScopedTask(t, "task-rename-01", "src/old.go")
+
+	// Perform a rename and commit so HEAD~1 exists.
+	writeFile(t, repo, "src/old.go", "package old")
+	run(t, repo, "git", "add", "src/old.go")
+	run(t, repo, "git", "commit", "-m", "add src/old.go")
+
+	run(t, repo, "git", "mv", "src/old.go", "src/new.go")
+	run(t, repo, "git", "commit", "-m", "rename src/old.go -> src/new.go")
+
+	// Claim the task so there's an active claim and a log path.
+	_, err := runTrls(t, repo, "claim", "task-rename-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope-rename")
+	assert.Contains(t, out, "task-rename-01")
+}
+
+// TestHookPostCommit_ScopeDelete verifies that post-commit emits scope-delete ops
+// for issues whose scope exactly matches the deleted path.
+func TestHookPostCommit_ScopeDelete(t *testing.T) {
+	repo := setupRepoWithScopedTask(t, "task-delete-01", "src/gone.go")
+
+	// Add a file then delete it.
+	writeFile(t, repo, "src/gone.go", "package gone")
+	run(t, repo, "git", "add", "src/gone.go")
+	run(t, repo, "git", "commit", "-m", "add src/gone.go")
+
+	run(t, repo, "git", "rm", "src/gone.go")
+	run(t, repo, "git", "commit", "-m", "delete src/gone.go")
+
+	// Claim the task so there's an active claim and a log path.
+	_, err := runTrls(t, repo, "claim", "task-delete-01")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope-delete")
+	assert.Contains(t, out, "task-delete-01")
+}
+
+// setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.
+func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "create", "--title", "Scoped task", "--type", "task", "--id", taskID, "--scope", scopePath)
+	require.NoError(t, err)
+	return repo
+}
+
+// writeFile creates (or overwrites) a file in the repo dir.
+func writeFile(t *testing.T, repo, relPath, content string) {
+	t.Helper()
+	full := filepath.Join(repo, relPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(full), 0755))
+	require.NoError(t, os.WriteFile(full, []byte(content), 0644))
+}
