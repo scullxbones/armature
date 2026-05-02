@@ -437,8 +437,4 @@ arm doctor                                            # repo health check
 arm doctor --strict                                   # warnings as errors
 arm list --group                                      # grouped by status
 arm list --parent STORY-ID                            # tasks under a story
-
-# Scope maintenance (after refactoring renames or deletions)
-arm scope-rename <old-path> <new-path>                # rename path/prefix across all scopes
-arm scope-delete <path>                               # remove exact path from all scopes
 ```
