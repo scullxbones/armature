@@ -1456,3 +1456,4 @@
 ["claim","SFT-S1-T3",1777735826,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","SFT-S1-T3",1777735893,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"Four failing test functions added to engine_test.go: TestApplyScopeDeleteOp_ExactMatch, _GlobNotRemoved, _NoMatch_NoOp, _UnknownIssue_Tolerated; all fail with 'unknown op type: scope-delete' as required"}]
 ["claim","SFT-S1-T4",1777735894,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","SFT-S1-T4",1777736204,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"applyScopeRename and applyScopeDelete implemented in engine.go; OpScopeRename/OpScopeDelete cases added to ApplyOp switch; all 9 new scope tests pass; make check green"}]
