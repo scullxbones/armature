@@ -1569,3 +1569,4 @@
 ["scope-rename","task-1775389519",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
 ["scope-rename","task-1775389531",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
 ["scope-rename","task-auto-serial-claim",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
+["scope-rename","task-source-link-multi",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
