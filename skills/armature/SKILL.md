@@ -128,6 +128,20 @@ arm accept-citation --issue ID --rationale TEXT --ci    # accept risk (no source
 - `--rationale` must be ≥ 3 words; use `--ci` to skip interactive confirmation.
 - Use `arm validate` to check coverage: `COVERAGE: N/N cited` with no ERROR lines is the goal.
 
+## Scope Management
+
+Use these commands after renaming or deleting files to keep issue scopes in sync. The post-commit hook auto-detects renames and deletions and emits the appropriate ops; run these manually when working outside a commit (e.g. directory prefix changes or glob-bearing scopes).
+
+```
+arm scope-rename <old-path> <new-path>  # rename/move a path or prefix across all issue scopes
+arm scope-delete <path>                 # remove an exact file path from all issue scopes
+```
+
+- `scope-rename` does substring replacement — passing a directory prefix updates both exact paths and glob patterns (e.g. `cmd/trellis` → `cmd/armature` rewrites `cmd/trellis/*.go` to `cmd/armature/*.go`).
+- `scope-delete` only removes exact-match entries; glob entries are left for manual cleanup via `arm amend`.
+- Both commands are no-ops if the path does not appear in any issue scope.
+- `scope-delete` warns if an active (non-terminal) issue would be left with an empty scope.
+
 ## Repo Health
 
 Run `arm doctor` to check for common repo health issues before pushing or opening a PR.

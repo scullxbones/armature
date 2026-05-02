@@ -169,6 +169,15 @@ This emits one `scope-rename` op per affected issue. No special migration comman
 
 `applyAmend` replaces the issue's scope list wholesale when `len(op.Payload.Scope) > 0`. If a user runs `arm amend` with a scope argument after `scope-rename` or `scope-delete` ops have been applied, the amended scope list overwrites the previously renamed/deleted entries. This is existing behaviour and is not changed by this spec. Users should treat `arm amend --scope` as an authoritative override, and use `arm scope-rename` / `arm scope-delete` for refactoring-driven corrections.
 
+## Documentation Updates
+
+The following files are updated as part of this spec:
+
+- `docs/commands.md` — add `scope-rename` and `scope-delete` entries in alphabetical order
+- `skills/armature/SKILL.md` — add a "Scope Management" section
+- `skills/armature-coordinator/SKILL.md` — add `scope-rename` and `scope-delete` to the Command Reference
+- `skills/armature-planner/SKILL.md` — add `scope-rename` and `scope-delete` to the Quick Reference
+
 ## Out of Scope
 
 - Fuzzy or pattern-based glob removal on file deletion (deferred; breaks replay determinism).

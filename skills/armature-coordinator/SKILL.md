@@ -413,6 +413,10 @@ arm transition ID --to done --outcome "..."   # close task or story
 arm doctor                      # repo health check
 arm doctor --strict             # warnings as errors
 
+# Scope maintenance (after file renames or deletions)
+arm scope-rename <old> <new>    # rewrite path/prefix across all issue scopes
+arm scope-delete <path>         # remove exact file path from all issue scopes
+
 # Monitoring
 arm workers                     # worker activity status
 ```
