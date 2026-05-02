@@ -597,6 +597,34 @@ func TestApplyAmendOp_PatchesScope(t *testing.T) {
 	assert.Equal(t, []string{"internal/**"}, state.Issues["T1"].Scope)
 }
 
+func TestApplyCreateOp_NormalizesCommaSeparatedScope(t *testing.T) {
+	// Legacy ops stored scope as a single comma-joined string; materializer must split them.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{
+			Title:    "T",
+			NodeType: "task",
+			Scope:    []string{"cmd/a.go, cmd/b.go, cmd/c.go"},
+		},
+	}))
+	assert.Equal(t, []string{"cmd/a.go", "cmd/b.go", "cmd/c.go"}, state.Issues["T1"].Scope)
+}
+
+func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
+	// Same normalization must apply when scope is set via amend.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{Scope: []string{"cmd/x.go, cmd/y.go"}},
+	}))
+	assert.Equal(t, []string{"cmd/x.go", "cmd/y.go"}, state.Issues["T1"].Scope)
+}
+
 func TestApplyAmendOp_UnknownIssue_NoError(t *testing.T) {
 	state := NewState()
 	err := state.ApplyOp(ops.Op{

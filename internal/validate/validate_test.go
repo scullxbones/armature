@@ -320,6 +320,54 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 	}
 }
 
+func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
+	// Scope entries ending with " (new)" mark files not yet created; they should not
+	// trigger phantom scope warnings because the file is intentionally planned, not missing.
+	dir := t.TempDir()
+	state := makeState(
+		&materialize.Issue{
+			ID:     "ISSUE-1",
+			Type:   "task",
+			Status: "open",
+			Scope:  []string{"internal/adapters/files.go (new)", "internal/adapters/git.go (new)"},
+		},
+	)
+	result := Validate(state, Options{RepoPath: dir})
+	assert.False(t, containsInfo(result, "phantom scope"),
+		"scope entries with (new) suffix should not trigger phantom scope warnings")
+}
+
+func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
+	// When a scope has both (new) and regular entries, only the regular nonexistent one triggers.
+	dir := t.TempDir()
+	// Create one real file
+	realFile := filepath.Join(dir, "real.go")
+	require.NoError(t, os.WriteFile(realFile, []byte("package x\n"), 0644))
+
+	state := makeState(
+		&materialize.Issue{
+			ID:     "ISSUE-1",
+			Type:   "task",
+			Status: "open",
+			Scope:  []string{"real.go", "planned.go (new)", "ghost.go"},
+		},
+	)
+	result := Validate(state, Options{RepoPath: dir})
+	// ghost.go is phantom (no (new) suffix, doesn't exist)
+	assert.True(t, containsInfo(result, "phantom scope"),
+		"nonexistent file without (new) suffix should still trigger phantom scope warning")
+	// Confirm only ghost.go is mentioned, not planned.go (new)
+	var phantomInfos []string
+	for _, info := range result.Infos {
+		if strings.Contains(info, "phantom scope") {
+			phantomInfos = append(phantomInfos, info)
+		}
+	}
+	assert.Len(t, phantomInfos, 1)
+	assert.Contains(t, phantomInfos[0], "ghost.go")
+	assert.NotContains(t, phantomInfos[0], "planned.go")
+}
+
 func TestValidateUsesStateDir(t *testing.T) {
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")

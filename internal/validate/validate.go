@@ -467,6 +467,10 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, repoPath string)
 			continue
 		}
 		for _, glob := range issue.Scope {
+			// "(new)" entries are planned files not yet created; skip them.
+			if strings.HasSuffix(glob, " (new)") {
+				continue
+			}
 			matches, err := filepath.Glob(filepath.Join(repoPath, glob))
 			if err != nil || len(matches) == 0 {
 				warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", glob, id))

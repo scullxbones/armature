@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "title": "Scope File Tracking — scope-rename, scope-delete, and hook auto-detection",
+  "issues": [
+    {
+      "id": "SFT-S1-T1",
+      "title": "Add OpScopeRename and OpScopeDelete op types and payload fields",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "OpScopeRename and OpScopeDelete constants added to internal/ops/types.go; both added to ValidOpTypes; OldPath/NewPath fields added under '// scope-rename' comment group; DeletedPath field added under '// scope-delete' comment group; go test ./internal/ops/... passes.",
+      "scope": "internal/ops/types.go",
+      "acceptance": [
+        "go test ./internal/ops/... passes",
+        "OpScopeRename and OpScopeDelete present in ValidOpTypes map"
+      ]
+    },
+    {
+      "id": "SFT-S1-T2",
+      "title": "Write failing unit tests for applyScopeRename",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": ["SFT-S1-T1"],
+      "dod": "Five test functions added to internal/materialize/engine_test.go: TestApplyScopeRenameOp_ExactPath, _GlobPattern, _NoMatch_NoOp (Updated unchanged when no match), _Idempotent, _UnknownIssue_Tolerated. Running these tests fails with 'unknown op type: scope-rename'.",
+      "scope": "internal/materialize/engine_test.go",
+      "acceptance": [
+        "go test ./internal/materialize/... -run TestApplyScopeRename fails with 'unknown op type: scope-rename'"
+      ]
+    },
+    {
+      "id": "SFT-S1-T3",
+      "title": "Write failing unit tests for applyScopeDelete",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": ["SFT-S1-T1", "SFT-S1-T2"],
+      "dod": "Four test functions added to internal/materialize/engine_test.go: TestApplyScopeDeleteOp_ExactMatch, _GlobNotRemoved (glob entries survive exact-match delete), _NoMatch_NoOp (Updated unchanged), _UnknownIssue_Tolerated. Running these tests fails with 'unknown op type: scope-delete'.",
+      "scope": "internal/materialize/engine_test.go",
+      "acceptance": [
+        "go test ./internal/materialize/... -run TestApplyScopeDelete fails with 'unknown op type: scope-delete'"
+      ]
+    },
+    {
+      "id": "SFT-S1-T4",
+      "title": "Implement applyScopeRename and applyScopeDelete in materializer (committed together)",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": ["SFT-S1-T2", "SFT-S1-T3"],
+      "dod": "applyScopeRename (strings.ReplaceAll per entry, Updated only if changed) and applyScopeDelete (exact match removal, Updated only if changed) implemented in engine.go; both OpScopeRename and OpScopeDelete cases added to ApplyOp switch in the same commit; go test ./internal/materialize/... passes including all new scope tests.",
+      "scope": "internal/materialize/engine.go",
+      "acceptance": [
+        "go test ./internal/materialize/... passes",
+        "all TestApplyScopeRename* and TestApplyScopeDelete* tests pass"
+      ]
+    },
+    {
+      "id": "SFT-S1-T5",
+      "title": "Narrow W10 phantom scope check to skip terminal-status issues",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "checkW10PhantomScope in internal/validate/validate.go updated to skip issues with status merged, done, or cancelled; blocked status still checked; three new test functions added covering: terminal statuses skipped, blocked still checked, epics and stories with terminal status also skipped; go test ./internal/validate/... passes.",
+      "scope": "internal/validate/validate.go, internal/validate/validate_test.go",
+      "acceptance": [
+        "go test ./internal/validate/... -run TestCheckW10Phantom passes",
+        "terminal-status issues (merged/done/cancelled) produce no phantom scope warnings"
+      ]
+    },
+    {
+      "id": "SFT-S1-T6",
+      "title": "Implement arm scope-rename command",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": ["SFT-S1-T4"],
+      "dod": "arm scope-rename command implemented in cmd/armature/scope_rename.go: empty/equal-arg rejection, no-match warning + exit 0, substring match across all issues, one op per affected issue at same timestamp, rematerializes after writing; registered in main.go; all TestScopeRenameCmd_* tests pass; go test ./cmd/armature/... passes.",
+      "scope": "cmd/armature/scope_rename.go (new), cmd/armature/scope_rename_test.go (new), cmd/armature/main.go",
+      "acceptance": [
+        "go test ./cmd/armature/... -run TestScopeRenameCmd passes",
+        "arm scope-rename --help shows correct synopsis"
+      ]
+    },
+    {
+      "id": "SFT-S1-T7",
+      "title": "Implement arm scope-delete command",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": ["SFT-S1-T4", "SFT-S1-T6"],
+      "dod": "arm scope-delete command implemented in cmd/armature/scope_delete.go: empty-arg rejection, no-match warning + exit 0, exact-match removal only, empty-scope warning to stderr for non-terminal issues (including blocked), N ops per affected issue at same timestamp, rematerializes after writing; registered in main.go; all TestScopeDeleteCmd_* tests pass.",
+      "scope": "cmd/armature/scope_delete.go (new), cmd/armature/scope_delete_test.go (new), cmd/armature/main.go",
+      "acceptance": [
+        "go test ./cmd/armature/... -run TestScopeDeleteCmd passes",
+        "arm scope-delete --help shows correct synopsis"
+      ]
+    },
+    {
+      "id": "SFT-S1-T8",
+      "title": "Extend post-commit hook to detect scope renames and deletions",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "high",
+      "blocked_by": ["SFT-S1-T4"],
+      "dod": "runPostCommitHook in cmd/armature/hook.go calls hookDetectScopeChanges; hookDetectScopeChanges parses git diff --diff-filter=R and =D from HEAD~1 HEAD, uses strings.HasPrefix(field, 'R') for rename detection, exact match for deletion, emits scope-rename/delete ops per affected issue, skips entirely when HEAD~1 absent, swallows all errors (best-effort); all TestHookPostCommit_* tests pass including new rename/delete/initial-commit tests; go test ./... passes.",
+      "scope": "cmd/armature/hook.go, cmd/armature/hook_test.go",
+      "acceptance": [
+        "go test ./cmd/armature/... -run TestHookPostCommit passes",
+        "go test ./... passes"
+      ]
+    },
+    {
+      "id": "SFT-S1-T9",
+      "title": "Update docs/commands.md with scope-delete and scope-rename entries",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "normal",
+      "blocked_by": ["SFT-S1-T8"],
+      "dod": "scope-delete and scope-rename entries added to docs/commands.md between the sources and stale-review sections; each entry has synopsis, behaviour bullets, and examples per the spec; arm validate --ci exits 0.",
+      "scope": "docs/commands.md",
+      "acceptance": [
+        "scope-delete and scope-rename sections present in docs/commands.md",
+        "sections appear between sources and stale-review in alphabetical order"
+      ]
+    },
+    {
+      "id": "SFT-S1-T10",
+      "title": "Update skill files with Scope Management documentation",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "normal",
+      "blocked_by": ["SFT-S1-T8"],
+      "dod": "Scope Management section added before Repo Health in skills/armature/SKILL.md; scope maintenance block added to Command Reference in skills/armature-coordinator/SKILL.md; scope maintenance block added to Quick Reference in skills/armature-planner/SKILL.md; all per spec §Documentation Updates.",
+      "scope": "skills/armature/SKILL.md, skills/armature-coordinator/SKILL.md, skills/armature-planner/SKILL.md",
+      "acceptance": [
+        "Scope Management section present in skills/armature/SKILL.md before Repo Health",
+        "arm scope-rename and arm scope-delete commands appear in coordinator and planner Quick Reference"
+      ]
+    },
+    {
+      "id": "SFT-S1-T11",
+      "title": "Final verification — make check green and validate clean",
+      "type": "task",
+      "parent": "SFT-S1",
+      "priority": "normal",
+      "blocked_by": ["SFT-S1-T9", "SFT-S1-T10"],
+      "dod": "make check passes all four stages (lint, test, coverage >=80%, mutate); arm scope-rename --help and arm scope-delete --help show correct output; arm validate confirms no phantom scope lines for merged/done/cancelled issues.",
+      "scope": "Makefile",
+      "acceptance": [
+        "make check exits 0",
+        "arm validate produces no phantom scope WARNINGs for terminal-status issues"
+      ]
+    }
+  ]
+}
