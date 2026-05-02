@@ -128,6 +128,22 @@ arm accept-citation --issue ID --rationale TEXT --ci    # accept risk (no source
 - `--rationale` must be ≥ 3 words; use `--ci` to skip interactive confirmation.
 - Use `arm validate` to check coverage: `COVERAGE: N/N cited` with no ERROR lines is the goal.
 
+## Scope Management
+
+Use these commands when files are renamed or deleted outside of the normal hook flow (e.g. manual renames, bulk refactors, or when the post-commit hook was not active):
+
+- **`arm scope-rename <old-path> <new-path>`** — substring replacement across all issue scopes; handles exact file paths and glob patterns. Use when a file or directory prefix is renamed.
+- **`arm scope-delete <path>`** — removes an exact file path from all issue scopes. Use when a file is deleted and no replacement exists. Glob entries require `arm amend` instead.
+- Both commands are no-ops if the path does not appear in any issue's scope.
+- `arm scope-delete` warns if an active (non-terminal) issue would be left with an empty scope after removal.
+
+**When to use manually vs. relying on the hook:**
+
+The post-commit hook (`hook.go`) automatically emits scope-rename and scope-delete ops when it detects renames and deletions in `git diff --diff-filter=RD HEAD~1 HEAD`. Use the manual commands when:
+- You are about to rename files and want to update scopes before committing.
+- The hook was not active during a previous rename/delete commit.
+- You need to make a targeted correction the hook would not have caught.
+
 ## Repo Health
 
 Run `arm doctor` to check for common repo health issues before pushing or opening a PR.
