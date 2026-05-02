@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -207,7 +208,89 @@ func runPostCommitHook(cmd *cobra.Command) error {
 	}
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Heartbeat recorded for %s\n", claimID)
+
+	hookDetectScopeChanges(cmd, workerID, logPath)
 	return nil
+}
+
+// hookDetectScopeChanges parses HEAD~1..HEAD for file renames and deletions,
+// then emits scope-rename / scope-delete ops for any issue whose scope is affected.
+// It skips silently when HEAD~1 is absent (initial commit) and swallows all errors.
+func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
+	// --name-status with diff-filter covers renames (R*) and deletions (D).
+	gitCmd := exec.Command("git", "-C", appCtx.RepoPath,
+		"diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
+	out, err := gitCmd.Output()
+	if err != nil {
+		// HEAD~1 absent on initial commit, or any other git error — skip silently.
+		return
+	}
+
+	// Load current materialized index to discover which issues are affected.
+	indexPath := filepath.Join(appCtx.StateDir, "index.json")
+	index, err := materialize.LoadIndex(indexPath)
+	if err != nil {
+		return
+	}
+
+	ts := nowEpoch()
+
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 2 {
+			continue
+		}
+		status := fields[0]
+
+		if strings.HasPrefix(status, "R") && len(fields) >= 3 {
+			// Rename: fields = [RXXX, old_path, new_path]
+			oldPath := fields[1]
+			newPath := fields[2]
+			for issueID, entry := range index {
+				for _, s := range entry.Scope {
+					if strings.Contains(s, oldPath) {
+						op := ops.Op{
+							Type:      ops.OpScopeRename,
+							TargetID:  issueID,
+							Timestamp: ts,
+							WorkerID:  workerID,
+							Payload: ops.Payload{
+								OldPath: oldPath,
+								NewPath: newPath,
+							},
+						}
+						_ = appendLowStakesOp(logPath, op)
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-rename: %s %s -> %s\n", issueID, oldPath, newPath)
+						break
+					}
+				}
+			}
+		} else if status == "D" {
+			// Deletion: fields = [D, deleted_path]
+			deletedPath := fields[1]
+			for issueID, entry := range index {
+				for _, s := range entry.Scope {
+					if s == deletedPath {
+						op := ops.Op{
+							Type:      ops.OpScopeDelete,
+							TargetID:  issueID,
+							Timestamp: ts,
+							WorkerID:  workerID,
+							Payload: ops.Payload{
+								DeletedPath: deletedPath,
+							},
+						}
+						_ = appendLowStakesOp(logPath, op)
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-delete: %s %s\n", issueID, deletedPath)
+						break
+					}
+				}
+			}
+		}
+	}
 }
 
 // runPostMergeHook implements the post-merge hook logic natively.
