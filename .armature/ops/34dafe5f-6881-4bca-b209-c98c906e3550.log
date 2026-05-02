@@ -1459,3 +1459,4 @@
 ["transition","SFT-S1-T4",1777736204,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"applyScopeRename and applyScopeDelete implemented in engine.go; OpScopeRename/OpScopeDelete cases added to ApplyOp switch; all 9 new scope tests pass; make check green"}]
 ["claim","SFT-S1-T6",1777736205,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","SFT-S1-T8",1777736206,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with SFT-S1-T6 (same worker, dismissed)"}]
+["claim","SFT-S1-T8",1777736206,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
