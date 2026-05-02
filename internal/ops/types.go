@@ -18,6 +18,8 @@ const (
 	OpAssign            = "assign"
 	OpAmend             = "amend"
 	OpCitationAccepted  = "citation-accepted"
+	OpScopeRename       = "scope-rename"
+	OpScopeDelete       = "scope-delete"
 )
 
 // ValidOpTypes for validation.
@@ -29,6 +31,8 @@ var ValidOpTypes = map[string]bool{
 	OpAssign:           true,
 	OpAmend:            true,
 	OpCitationAccepted: true,
+	OpScopeRename:      true,
+	OpScopeDelete:      true,
 }
 
 // Issue statuses.
@@ -121,4 +125,11 @@ type Payload struct {
 
 	// create — confidence level: "draft" or "verified" (default "verified" when absent)
 	Confidence string `json:"confidence,omitempty"`
+
+	// scope-rename
+	OldPath string `json:"old_path,omitempty"`
+	NewPath string `json:"new_path,omitempty"`
+
+	// scope-delete
+	DeletedPath string `json:"deleted_path,omitempty"`
 }
