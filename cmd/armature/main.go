@@ -215,6 +215,10 @@ func newRootCmd() *cobra.Command {
 	listCmd.GroupID = "admin"
 	root.AddCommand(listCmd)
 
+	scopeRenameCmd := newScopeRenameCmd()
+	scopeRenameCmd.GroupID = "admin"
+	root.AddCommand(scopeRenameCmd)
+
 	doctorCmd := newDoctorCmd()
 	doctorCmd.GroupID = "admin"
 	root.AddCommand(doctorCmd)
