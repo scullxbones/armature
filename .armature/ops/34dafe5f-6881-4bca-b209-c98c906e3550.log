@@ -1432,3 +1432,4 @@
 ["citation-accepted","SFT-S1-T15",1777731564,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Friction issue discovered during planner session; no external spec — requirement captured in issue body"}]
 ["link","SFT-S1-T10",1777731582,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T14","rel":"blocked_by"}]
 ["claim","SFT-S1-T1",1777733243,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","SFT-S1",1777733245,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
