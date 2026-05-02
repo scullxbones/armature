@@ -462,6 +462,10 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []string 
 func checkW10PhantomScope(issues map[string]*materialize.Issue, repoPath string) []string {
 	var warns []string
 	for id, issue := range issues {
+		// Terminal-status issues have already been delivered; their scope no longer needs to exist.
+		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+			continue
+		}
 		for _, glob := range issue.Scope {
 			matches, err := filepath.Glob(filepath.Join(repoPath, glob))
 			if err != nil || len(matches) == 0 {
