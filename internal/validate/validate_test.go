@@ -267,6 +267,59 @@ func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 	assert.True(t, containsWarning(result, "vague outcome"))
 }
 
+func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
+	// Issues with merged, done, or cancelled status should not trigger phantom scope warnings
+	// even if their scope globs match no files.
+	dir := t.TempDir() // empty dir — no files match any glob
+	for _, status := range []string{"merged", "done", "cancelled"} {
+		state := makeState(
+			&materialize.Issue{
+				ID:     "TSK-1",
+				Type:   "task",
+				Status: status,
+				Scope:  []string{"nonexistent/path/*.go"},
+			},
+		)
+		result := Validate(state, Options{RepoPath: dir})
+		assert.False(t, containsInfo(result, "phantom scope"),
+			"status=%s: phantom scope should be skipped for terminal status", status)
+	}
+}
+
+func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
+	// Blocked issues are not terminal — their scope should still be validated.
+	dir := t.TempDir() // empty dir — no files match any glob
+	state := makeState(
+		&materialize.Issue{
+			ID:     "TSK-1",
+			Type:   "task",
+			Status: "blocked",
+			Scope:  []string{"nonexistent/path/*.go"},
+		},
+	)
+	result := Validate(state, Options{RepoPath: dir})
+	assert.True(t, containsInfo(result, "phantom scope"),
+		"blocked status should still trigger phantom scope warning")
+}
+
+func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) {
+	// Terminal status applies across all issue types, not just tasks.
+	dir := t.TempDir() // empty dir — no files match any glob
+	for _, issueType := range []string{"epic", "story"} {
+		state := makeState(
+			&materialize.Issue{
+				ID:     "ISSUE-1",
+				Type:   issueType,
+				Status: "done",
+				Scope:  []string{"nonexistent/path/*.go"},
+			},
+		)
+		result := Validate(state, Options{RepoPath: dir})
+		assert.False(t, containsInfo(result, "phantom scope"),
+			"type=%s status=done: phantom scope should be skipped for terminal status", issueType)
+	}
+}
+
 func TestValidateUsesStateDir(t *testing.T) {
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")
