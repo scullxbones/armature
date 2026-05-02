@@ -1413,3 +1413,4 @@
 ["source-link","SFT-S1-T9",1777724293,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"92025c1d-1e1c-4964-a212-f37ed58fbcf7","source_url":"docs/superpowers/specs/2026-05-02-scope-file-tracking-design.md"}]
 ["source-link","SFT-S1-T10",1777724293,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"92025c1d-1e1c-4964-a212-f37ed58fbcf7","source_url":"docs/superpowers/specs/2026-05-02-scope-file-tracking-design.md"}]
 ["source-link","SFT-S1-T11",1777724293,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"92025c1d-1e1c-4964-a212-f37ed58fbcf7","source_url":"docs/superpowers/specs/2026-05-02-scope-file-tracking-design.md"}]
+["amend","SFT-S1-T5",1777724345,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/validate/validate.go","internal/validate/validate_test.go"]}]
