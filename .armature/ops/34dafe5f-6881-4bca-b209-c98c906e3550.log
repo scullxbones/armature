@@ -1460,3 +1460,4 @@
 ["claim","SFT-S1-T6",1777736205,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","SFT-S1-T8",1777736206,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with SFT-S1-T6 (same worker, dismissed)"}]
 ["claim","SFT-S1-T8",1777736206,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","SFT-S1-T6",1777736979,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"arm scope-rename command implemented in scope_rename.go with empty/equal rejection, no-match warning, substring match, one op per affected issue, rematerializes; registered in main.go; all TestScopeRenameCmd_* pass"}]
