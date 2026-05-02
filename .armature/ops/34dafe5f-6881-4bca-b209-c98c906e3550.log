@@ -1452,3 +1452,4 @@
 ["transition","SFT-S1-T14",1777735748,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"version field corrected to integer in armature-planner SKILL.md; make skill regenerated deployed copy; arm decompose-apply accepts corrected example"}]
 ["transition","SFT-S1-T15",1777735749,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"arm show includes blocked_by and blocks fields when non-empty; TestShow_BlockedBy and TestShow_BlockedBy_MultiJSON pass"}]
 ["claim","SFT-S1-T2",1777735753,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","SFT-S1-T2",1777735825,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"Five failing test functions added to engine_test.go: TestApplyScopeRenameOp_ExactPath, _GlobPattern, _NoMatch_NoOp, _Idempotent, _UnknownIssue_Tolerated; all fail with 'unknown op type: scope-rename' as required"}]
