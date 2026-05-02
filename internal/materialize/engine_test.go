@@ -740,6 +740,61 @@ func TestApplyScopeRenameOp_UnknownIssue_Tolerated(t *testing.T) {
 	assert.NoError(t, err, "scope-rename on unknown issue should be tolerated")
 }
 
+func TestApplyScopeDeleteOp_ExactMatch(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/handler.go", "internal/auth/middleware.go"}},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpScopeDelete, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{DeletedPath: "internal/auth/handler.go"},
+	}))
+	issue := state.Issues["task-01"]
+	assert.NotContains(t, issue.Scope, "internal/auth/handler.go", "deleted path should be removed from scope")
+	assert.Contains(t, issue.Scope, "internal/auth/middleware.go", "non-deleted path should remain in scope")
+}
+
+func TestApplyScopeDeleteOp_GlobNotRemoved(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/**", "internal/auth/handler.go"}},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpScopeDelete, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{DeletedPath: "internal/auth/handler.go"},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Contains(t, issue.Scope, "internal/auth/**", "glob entry should survive exact-match delete")
+	assert.NotContains(t, issue.Scope, "internal/auth/handler.go", "exact entry should be removed")
+}
+
+func TestApplyScopeDeleteOp_NoMatch_NoOp(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"internal/auth/**"}},
+	}))
+	originalUpdated := state.Issues["task-01"].Updated
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpScopeDelete, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{DeletedPath: "internal/nonexistent.go"},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, []string{"internal/auth/**"}, issue.Scope, "scope should be unchanged when DeletedPath not found")
+	assert.Equal(t, originalUpdated, issue.Updated, "Updated should be unchanged when no entry matched")
+}
+
+func TestApplyScopeDeleteOp_UnknownIssue_Tolerated(t *testing.T) {
+	state := NewState()
+	err := state.ApplyOp(ops.Op{
+		Type: ops.OpScopeDelete, TargetID: "nonexistent-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{DeletedPath: "internal/auth/handler.go"},
+	})
+	assert.NoError(t, err, "scope-delete on unknown issue should be tolerated")
+}
+
 // BenchmarkRunRollup_10kIssues benchmarks the rollup operation on a large hierarchy.
 // This test demonstrates that RunRollup should complete in O(n) time.
 // With the previous O(n²) implementation, 10k issues would take too long.
