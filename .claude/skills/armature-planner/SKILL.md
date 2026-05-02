@@ -1,3 +1,12 @@
+name: armature-planner
+description: >
+  Use when creating a new story or epic — translates objectives into a
+  well-structured DAG of actionable work. Covers decompose-apply (with dry-run),
+  dag-transition, source registration, dependency linking, and validation before
+  releasing work to workers.
+compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH (run make install).
+> **DO NOT EDIT** — generated from `skills/armature-planner/SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.
+
 <!-- CANONICAL SOURCE: edit this file, not .claude/skills/armature-planner/SKILL.md — run `make skill` to regenerate the deployed copy -->
 
 # Armature Planner Loop
