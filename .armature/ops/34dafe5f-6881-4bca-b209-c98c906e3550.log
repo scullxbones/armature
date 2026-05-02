@@ -1435,3 +1435,4 @@
 ["transition","SFT-S1",1777733245,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["claim","SFT-S1-T5",1777733245,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","SFT-S1-T12",1777733246,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["claim","SFT-S1-T13",1777733248,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
