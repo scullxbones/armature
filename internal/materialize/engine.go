@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -49,6 +50,10 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyCitationAccepted(op)
 	case ops.OpDAGTransition:
 		return s.applyDAGTransition(op)
+	case ops.OpScopeRename:
+		return s.applyScopeRename(op)
+	case ops.OpScopeDelete:
+		return s.applyScopeDelete(op)
 	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
@@ -285,6 +290,41 @@ func (s *State) applyDAGTransition(op ops.Op) error {
 	// Legacy behavior: set DAGConfirmed flag on the single target issue.
 	issue.Provenance.DAGConfirmed = op.Payload.Confirmed
 	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyScopeRename(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	updated := make([]string, len(issue.Scope))
+	for i, entry := range issue.Scope {
+		updated[i] = strings.ReplaceAll(entry, op.Payload.OldPath, op.Payload.NewPath)
+	}
+	issue.Scope = updated
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyScopeDelete(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(issue.Scope))
+	matched := false
+	for _, entry := range issue.Scope {
+		if entry == op.Payload.DeletedPath {
+			matched = true
+		} else {
+			result = append(result, entry)
+		}
+	}
+	if matched {
+		issue.Scope = result
+		issue.Updated = op.Timestamp
+	}
 	return nil
 }
 
