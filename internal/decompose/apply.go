@@ -3,6 +3,7 @@ package decompose
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -150,7 +151,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 
 		scope := []string{}
 		if issue.Scope != "" {
-			scope = []string{issue.Scope}
+			scope = strings.Split(issue.Scope, ", ")
 		}
 
 		op := ops.Op{
