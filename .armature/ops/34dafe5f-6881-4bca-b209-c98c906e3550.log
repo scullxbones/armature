@@ -1389,3 +1389,4 @@
 ["link","SFT-S1-T11",1777721535,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T10","rel":"blocked_by"}]
 ["dag-transition","SFT-S1",1777721541,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"verified","issue_id":"SFT-S1"}]
 ["link","SFT-S1-T2",1777721568,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T1","rel":"blocked_by"}]
+["link","SFT-S1-T3",1777721568,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SFT-S1-T1","rel":"blocked_by"}]
