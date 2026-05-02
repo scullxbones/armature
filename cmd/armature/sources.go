@@ -98,21 +98,20 @@ func newSourcesSyncCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			var fetchErrors []string
+			var syncErrors []string
+			syncedCount := 0
 			for id, entry := range manifest.Entries {
 				provider, err := providerForType(entry.ProviderType)
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "skip %s: %v\n", id, err)
+					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
 					continue
 				}
 
 				data, err := provider.Fetch(ctx, entry)
 				if err != nil {
-					// For filesystem sources, collect errors to return instead of silently skipping.
-					if entry.ProviderType == "filesystem" {
-						fetchErrors = append(fetchErrors, fmt.Sprintf("%s: %v", id, err))
-					}
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "fetch %s: %v\n", id, err)
+					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
 					continue
 				}
 
@@ -121,7 +120,9 @@ func newSourcesSyncCmd() *cobra.Command {
 				manifest.Upsert(entry)
 
 				if err := sources.WriteCache(dir, id, data); err != nil {
-					return fmt.Errorf("write cache %s: %w", id, err)
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "write cache %s: %v\n", id, err)
+					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
+					continue
 				}
 
 				o := ops.Op{
@@ -139,15 +140,16 @@ func newSourcesSyncCmd() *cobra.Command {
 				}
 
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", id, entry.Fingerprint[:8])
+				syncedCount++
 			}
 
 			if err := sources.WriteManifest(dir, manifest); err != nil {
 				return fmt.Errorf("write manifest: %w", err)
 			}
 
-			// Return error if any filesystem sources failed to fetch.
-			if len(fetchErrors) > 0 {
-				return fmt.Errorf("filesystem sources unreachable: %s", strings.Join(fetchErrors, "; "))
+			// Return error only when no sources could be synced successfully.
+			if syncedCount == 0 && len(syncErrors) > 0 {
+				return fmt.Errorf("all sources failed to sync: %s", strings.Join(syncErrors, "; "))
 			}
 
 			return nil

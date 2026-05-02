@@ -91,3 +91,43 @@ func TestSourcesSyncCommand_SuccessWithReachablePath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, syncBuf.String(), "synced")
 }
+
+// TestSourcesSyncCommand_PartialFailure verifies that sync exits 0 when at
+// least one source synced successfully, even if another source failed.
+// Errors for the failed source must still be printed to stderr.
+func TestSourcesSyncCommand_PartialFailure(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a reachable temporary file.
+	tmpfile := filepath.Join(t.TempDir(), "good_source.txt")
+	require.NoError(t, os.WriteFile(tmpfile, []byte("good content"), 0600))
+
+	// Add the reachable source.
+	addGood := newRootCmd()
+	addGood.SetOut(new(bytes.Buffer))
+	addGood.SetErr(new(bytes.Buffer))
+	addGood.SetArgs([]string{"sources", "add", "--repo", repo,
+		"--url", tmpfile, "--type", "filesystem"})
+	require.NoError(t, addGood.Execute())
+
+	// Add an unreachable source.
+	addBad := newRootCmd()
+	addBad.SetOut(new(bytes.Buffer))
+	addBad.SetErr(new(bytes.Buffer))
+	addBad.SetArgs([]string{"sources", "add", "--repo", repo,
+		"--url", "/nonexistent/path/missing.md", "--type", "filesystem"})
+	require.NoError(t, addBad.Execute())
+
+	// Sync: should exit 0 because at least one source succeeded.
+	syncOut := new(bytes.Buffer)
+	syncErr := new(bytes.Buffer)
+	syncCmd := newRootCmd()
+	syncCmd.SetOut(syncOut)
+	syncCmd.SetErr(syncErr)
+	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
+
+	err := syncCmd.Execute()
+	assert.NoError(t, err, "sync should exit 0 when at least one source succeeded")
+	assert.Contains(t, syncOut.String(), "synced", "should report the successful sync")
+	assert.NotEmpty(t, syncErr.String(), "should still print error for failed source")
+}
