@@ -1467,3 +1467,4 @@
 ["claim","SFT-S1-T10",1777736987,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","SFT-S1-T7",1777737391,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"arm scope-delete command implemented with all 8 tests passing; make check green"}]
 ["transition","SFT-S1-T7",1777737695,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"arm scope-delete command implemented with empty-arg rejection, exact-match removal, no-match warning, empty-scope warning for non-terminal issues, N ops at same timestamp, rematerializes; registered in main.go; all 8 TestScopeDeleteCmd_* pass; make check green"}]
+["transition","SFT-S1-T9",1777737696,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged","outcome":"scope-delete and scope-rename entries added to docs/commands.md between sources and stale-review sections; each has synopsis, behaviour bullets, examples; arm validate --ci exits 0"}]
