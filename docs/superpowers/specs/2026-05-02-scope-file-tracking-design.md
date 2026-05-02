@@ -169,6 +169,43 @@ This emits one `scope-rename` op per affected issue. No special migration comman
 
 `applyAmend` replaces the issue's scope list wholesale when `len(op.Payload.Scope) > 0`. If a user runs `arm amend` with a scope argument after `scope-rename` or `scope-delete` ops have been applied, the amended scope list overwrites the previously renamed/deleted entries. This is existing behaviour and is not changed by this spec. Users should treat `arm amend --scope` as an authoritative override, and use `arm scope-rename` / `arm scope-delete` for refactoring-driven corrections.
 
+## Documentation Updates
+
+The following files must be updated as part of implementation, delivered in the same PR as the feature.
+
+### `docs/commands.md`
+
+Add two entries in alphabetical order between `sources` and `stale-review`:
+
+**`scope-delete`** — synopsis `arm scope-delete <path>`, no flags. Behaviour: empty-arg rejection; no-match warning + exit 0; empty-scope warning (proceeds regardless); glob entries not removed. Example: `arm scope-delete cmd/trellis/main.go`.
+
+**`scope-rename`** — synopsis `arm scope-rename <old-path> <new-path>`, no flags. Behaviour: empty/equal-arg rejection; no-match warning + exit 0; affected-issues summary printed before writing; idempotent; `OldPath` is a substring match so a directory prefix updates both exact paths and glob entries. Examples for single file and directory prefix rename.
+
+### `skills/armature/SKILL.md`
+
+Add a **"Scope Management"** section before "Repo Health":
+- When to use the commands vs. relying on the post-commit hook
+- `arm scope-rename <old-path> <new-path>` — substring replacement, handles exact paths and glob patterns
+- `arm scope-delete <path>` — exact-match removal only; glob entries require `arm amend`
+- Both are no-ops if the path does not appear in any issue scope
+- `arm scope-delete` warns if an active (non-terminal) issue would be left with empty scope
+
+### `skills/armature-coordinator/SKILL.md`
+
+Add a `# Scope maintenance (after file renames or deletions)` block to the Command Reference section:
+```bash
+arm scope-rename <old> <new>    # rewrite path/prefix across all issue scopes
+arm scope-delete <path>         # remove exact file path from all issue scopes
+```
+
+### `skills/armature-planner/SKILL.md`
+
+Add a `# Scope maintenance (after refactoring renames or deletions)` block to the Quick Reference section:
+```bash
+arm scope-rename <old-path> <new-path>   # rename path/prefix across all scopes
+arm scope-delete <path>                  # remove exact path from all scopes
+```
+
 ## Out of Scope
 
 - Fuzzy or pattern-based glob removal on file deletion (deferred; breaks replay determinism).
