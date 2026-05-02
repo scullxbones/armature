@@ -1465,3 +1465,4 @@
 ["claim","SFT-S1-T7",1777736984,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","SFT-S1-T9",1777736986,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","SFT-S1-T10",1777736987,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","SFT-S1-T7",1777737391,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"arm scope-delete command implemented with all 8 tests passing; make check green"}]
