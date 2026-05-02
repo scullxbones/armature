@@ -1556,3 +1556,4 @@
 ["scope-rename","task-1775168164",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
 ["scope-rename","task-1775168168",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
 ["scope-rename","task-1775168172",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
+["scope-rename","task-1775311449",1777751628,"34dafe5f-6881-4bca-b209-c98c906e3550",{"old_path":"cmd/trellis","new_path":"cmd/armature"}]
