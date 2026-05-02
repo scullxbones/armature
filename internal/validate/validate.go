@@ -378,6 +378,9 @@ func checkW3BudgetExceeded(issues map[string]*materialize.Issue) []string {
 func checkW4BroadScope(issues map[string]*materialize.Issue) []string {
 	var warns []string
 	for id, issue := range issues {
+		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+			continue
+		}
 		for _, glob := range issue.Scope {
 			if glob == "**/*" || glob == "**" || glob == "." {
 				warns = append(warns, fmt.Sprintf("broad scope: %s scope covers entire tree", id))
@@ -391,6 +394,9 @@ func checkW4BroadScope(issues map[string]*materialize.Issue) []string {
 func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 	var warns []string
 	for id, issue := range issues {
+		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+			continue
+		}
 		if len(issue.ContextFiles) > 0 {
 			continue
 		}
@@ -399,7 +405,7 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 			dirs[filepath.Dir(glob)] = struct{}{}
 		}
 		if len(dirs) >= 3 {
-			warns = append(warns, fmt.Sprintf("missing context_files on %s with broad scope", id))
+			warns = append(warns, fmt.Sprintf("missing context_files on %s with broad scope — add via: arm amend %s --context-files <file>", id, id))
 		}
 	}
 	return warns

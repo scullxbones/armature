@@ -267,6 +267,41 @@ func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 	assert.True(t, containsWarning(result, "vague outcome"))
 }
 
+func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
+	// Merged/done/cancelled issues should not trigger the missing context_files warning —
+	// the work is complete and the guidance is no longer actionable.
+	for _, status := range []string{"merged", "done", "cancelled"} {
+		t.Run(status, func(t *testing.T) {
+			state := makeState(&materialize.Issue{
+				ID:     "ISSUE-1",
+				Type:   "task",
+				Status: status,
+				Scope: []string{
+					"pkg/a/foo.go",
+					"pkg/b/bar.go",
+					"pkg/c/baz.go",
+				},
+				// no ContextFiles — spans 3 dirs, would trigger W5 for active issues
+			})
+			result := Validate(state, Options{})
+			assert.False(t, containsWarning(result, "missing context_files"),
+				"status=%q: terminal issues should not warn about missing context_files", status)
+		})
+	}
+}
+
+func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
+	state := makeState(&materialize.Issue{
+		ID:     "ISSUE-1",
+		Type:   "task",
+		Status: "open",
+		Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
+	})
+	result := Validate(state, Options{})
+	assert.True(t, containsWarning(result, "missing context_files"),
+		"active issues spanning 3+ dirs without context_files should still warn")
+}
+
 func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 	// Issues with merged, done, or cancelled status should not trigger phantom scope warnings
 	// even if their scope globs match no files.
