@@ -519,51 +519,6 @@ arm sources add --url "https://example.com/docs" --type filesystem
 
 ---
 
-## scope-delete
-
-Remove a file path from all issue scopes where it appears as an exact entry. Emits one `scope-delete` op per affected issue. Use when a file has been intentionally deleted from the repository.
-
-**Synopsis:**
-`arm scope-delete <path>`
-
-**Behaviour:**
-- Rejects empty `path` with an error.
-- If no issue scope contains `path` as an exact entry, prints a warning and exits 0 without writing any ops.
-- Warns if any non-terminal issue (status not `merged`, `done`, or `cancelled`, including `blocked`) would have an empty scope after deletion.
-- Proceeds regardless of the empty-scope warning — it is advisory, not a hard stop.
-- Glob entries that happen to match the deleted file are not removed; run `arm validate` to surface them.
-
-**Example:**
-```bash
-arm scope-delete cmd/trellis/main.go
-```
-
----
-
-## scope-rename
-
-Rename or move a file path (or path prefix) across all issue scopes. Applies `strings.ReplaceAll(entry, old-path, new-path)` to every scope entry on each affected issue, handling both exact file paths and glob patterns in one pass. Emits one `scope-rename` op per affected issue.
-
-**Synopsis:**
-`arm scope-rename <old-path> <new-path>`
-
-**Behaviour:**
-- Rejects empty args or `old-path == new-path` with an error.
-- If no issue scope contains `old-path` as a substring, prints a warning and exits 0 without writing any ops.
-- Prints a summary of affected issue IDs before writing.
-- Idempotent: replaying the same op is a no-op once `old-path` no longer appears.
-
-**Example:**
-```bash
-# Rename a single file
-arm scope-rename cmd/trellis/main.go cmd/armature/main.go
-
-# Rename a directory prefix (also rewrites glob entries such as cmd/trellis/*.go)
-arm scope-rename cmd/trellis cmd/armature
-```
-
----
-
 ## stale-review
 
 Review sources whose cached content has changed since last sync.
