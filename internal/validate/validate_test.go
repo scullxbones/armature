@@ -368,6 +368,36 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 	assert.NotContains(t, phantomInfos[0], "planned.go")
 }
 
+func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
+	// Legacy ops store scope as a single comma-joined string. The W10 check must split
+	// and evaluate each path individually, skipping "(new)" entries within the list.
+	dir := t.TempDir()
+	realFile := filepath.Join(dir, "real.go")
+	require.NoError(t, os.WriteFile(realFile, []byte("package x\n"), 0644))
+
+	state := makeState(
+		&materialize.Issue{
+			ID:     "ISSUE-1",
+			Type:   "task",
+			Status: "open",
+			// Legacy single-string entry with mixed (new), existing, and phantom paths.
+			Scope: []string{"planned.go (new), real.go, ghost.go"},
+		},
+	)
+	result := Validate(state, Options{RepoPath: dir})
+	var phantomInfos []string
+	for _, info := range result.Infos {
+		if strings.Contains(info, "phantom scope") {
+			phantomInfos = append(phantomInfos, info)
+		}
+	}
+	// Only ghost.go should be phantom; planned.go (new) is skipped, real.go exists.
+	assert.Len(t, phantomInfos, 1)
+	assert.Contains(t, phantomInfos[0], "ghost.go")
+	assert.NotContains(t, phantomInfos[0], "planned.go")
+	assert.NotContains(t, phantomInfos[0], "real.go")
+}
+
 func TestValidateUsesStateDir(t *testing.T) {
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")

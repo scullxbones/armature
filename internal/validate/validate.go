@@ -466,14 +466,17 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, repoPath string)
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}
-		for _, glob := range issue.Scope {
-			// "(new)" entries are planned files not yet created; skip them.
-			if strings.HasSuffix(glob, " (new)") {
-				continue
-			}
-			matches, err := filepath.Glob(filepath.Join(repoPath, glob))
-			if err != nil || len(matches) == 0 {
-				warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", glob, id))
+		for _, entry := range issue.Scope {
+			// Legacy ops may store multiple comma-separated paths as one entry; check each individually.
+			for path := range strings.SplitSeq(entry, ", ") {
+				// "(new)" entries are planned files not yet created; skip them.
+				if strings.HasSuffix(path, " (new)") {
+					continue
+				}
+				matches, err := filepath.Glob(filepath.Join(repoPath, path))
+				if err != nil || len(matches) == 0 {
+					warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id))
+				}
 			}
 		}
 	}
