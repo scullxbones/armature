@@ -1428,3 +1428,4 @@
 ["dag-transition","SFT-S1-T15",1777729546,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"verified","issue_id":"SFT-S1-T15"}]
 ["citation-accepted","SFT-S1-T12",1777731563,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Friction issue discovered during planner session; no external spec — requirement captured in issue body"}]
 ["citation-accepted","SFT-S1-T13",1777731563,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Friction issue discovered during planner session; no external spec — requirement captured in issue body"}]
+["citation-accepted","SFT-S1-T14",1777731564,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Friction issue discovered during planner session; no external spec — requirement captured in issue body"}]
