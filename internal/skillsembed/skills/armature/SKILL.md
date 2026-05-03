@@ -1,3 +1,13 @@
+---
+name: armature
+description: >
+  Armature task management interface for AI agents. Use when working in a
+  armature-managed repo: find actionable work with ready, claim issues, record
+  progress with note/decision/heartbeat, complete work with transition.
+  Requires arm on PATH (run make install).
+compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
+---
+
 # Armature Command Reference
 
 `arm` must be on PATH (`make install` to install).

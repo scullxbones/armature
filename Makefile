@@ -72,24 +72,23 @@ install: build
 	@echo "Installed arm to ~/.local/bin/arm"
 	@echo "Ensure ~/.local/bin is on your PATH"
 
-skill: build
-	@for name in skills/*/; do \
+deploy-skills:
+	@for name in internal/skillsembed/skills/*/; do \
 		name=$$(basename "$$name"); \
-		[ -f "skills/$$name/SKILL.md" ] || continue; \
+		[ -f "internal/skillsembed/skills/$$name/SKILL.md" ] || continue; \
 		for harness in claude gemini; do \
 			mkdir -p ".$$harness/skills/$$name"; \
-			{ cat "skills/$$name/meta.yaml"; \
-			  printf '> **DO NOT EDIT** — generated from `skills/%s/SKILL.md` via `make skill`. Edit the source file and re-run `make skill`.\n\n' "$$name"; \
-			  cat "skills/$$name/SKILL.md"; \
-			} > ".$$harness/skills/$$name/SKILL.md"; \
-			if [ -d "skills/$$name/scripts" ]; then \
+			cp "internal/skillsembed/skills/$$name/SKILL.md" ".$$harness/skills/$$name/SKILL.md"; \
+			if [ -d "internal/skillsembed/skills/$$name/scripts" ]; then \
 				mkdir -p ".$$harness/skills/$$name/scripts"; \
-				cp "skills/$$name/scripts/"* ".$$harness/skills/$$name/scripts/"; \
+				cp "internal/skillsembed/skills/$$name/scripts/"* ".$$harness/skills/$$name/scripts/"; \
 				chmod +x ".$$harness/skills/$$name/scripts/"*; \
 			fi; \
 		done; \
 	done
 	@echo "Deployed skills to .claude/skills/ and .gemini/skills/"
+
+skill: build deploy-skills
 
 dist-skills:
 	mkdir -p dist
