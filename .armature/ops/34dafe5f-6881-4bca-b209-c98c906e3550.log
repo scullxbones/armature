@@ -1642,3 +1642,4 @@
 ["link","SKOPT-4A",1777767404,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SKOPT-1A","rel":"blocked_by"}]
 ["link","SKOPT-4B",1777767404,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SKOPT-1A","rel":"blocked_by"}]
 ["link","task-1777767332",1777767405,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SKOPT-4A","rel":"blocked_by"}]
+["claim","SKOPT-1A",1777767744,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
