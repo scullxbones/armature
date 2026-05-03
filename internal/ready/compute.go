@@ -115,7 +115,11 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 			for _, bid := range entry.BlockedBy {
 				e, ok := index[bid]
 				if !ok || e.Status != ops.StatusMerged {
-					unmerged = append(unmerged, bid)
+					hint := ""
+					if ok && e.Status == ops.StatusDone {
+						hint = fmt.Sprintf(" — run: arm merged --issue %s", bid)
+					}
+					unmerged = append(unmerged, bid+hint)
 				}
 			}
 			result[id] = fmt.Sprintf("blocker(s) not merged: %s", strings.Join(unmerged, ", "))
@@ -167,10 +171,7 @@ func isClaimStale(claimedAt, lastHeartbeat int64, ttlMinutes int, now int64) boo
 	if ttlMinutes <= 0 {
 		return false
 	}
-	lastActivity := claimedAt
-	if lastHeartbeat > lastActivity {
-		lastActivity = lastHeartbeat
-	}
+	lastActivity := max(claimedAt, lastHeartbeat)
 	ttlSeconds := int64(ttlMinutes) * 60
 	return now > lastActivity+ttlSeconds
 }
