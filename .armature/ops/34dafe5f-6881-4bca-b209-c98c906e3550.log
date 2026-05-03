@@ -1675,3 +1675,4 @@
 ["transition","SKOPT-4B",1777769415,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","task-1777767332",1777769420,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","task-1777767332",1777769884,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"accept-citation --issue flag upgraded from StringVar to StringArrayVar; multiple --issue flags emit one citation op per ID and one JSON output line per ID; existing single-issue usage and positional arg fallback unchanged; armature-planner SKILL.md updated to show multi-issue form in Source Registration section with note that source-link already supports it; all tests pass; make check green"}]
+["transition","task-1777767332",1777769889,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
