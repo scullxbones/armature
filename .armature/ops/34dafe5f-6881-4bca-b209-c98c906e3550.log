@@ -1657,3 +1657,4 @@
 ["claim","SKOPT-2A",1777768907,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","SKOPT-2B",1777768908,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","SKOPT-2C",1777768909,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with SKOPT-2A (same worker, dismissed)"}]
+["claim","SKOPT-2C",1777768909,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
