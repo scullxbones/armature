@@ -1747,3 +1747,4 @@
 ["transition","task-1777819580",1777823012,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Fixed W5 warning in checkW5MissingContextFiles to remove reference to non-existent --context-files flag; new message directs user to split the task or use arm amend --scope; updated test assertion to assert the flag is absent and the correct action is present; make check passes green"}]
 ["heartbeat","CRDX-T4",1777823241,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","CRDX-T2",1777823304,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["claim","CRDX-T3",1777840775,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
