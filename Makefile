@@ -17,7 +17,7 @@ help:
 	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint test coverage-check mutate skill
+check: lint test coverage-check mutate validate-skills skill
 
 test:
 	go test -v ./...
@@ -56,6 +56,13 @@ mutate:
 	gremlins unleash ./internal
 	@echo "Running mutation tests on cmd..."
 	gremlins unleash ./cmd
+
+validate-skills:
+	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md 2>/dev/null; then \
+		echo "FAIL: 'make install' found in skill bodies — remove it or replace with: 'If arm is not found, stop and resolve this before proceeding'"; \
+		exit 1; \
+	fi
+	@echo "Skills validated: no 'make install' references"
 
 clean:
 	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/
