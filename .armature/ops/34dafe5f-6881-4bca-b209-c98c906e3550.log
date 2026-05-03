@@ -1748,3 +1748,4 @@
 ["heartbeat","CRDX-T4",1777823241,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","CRDX-T2",1777823304,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","CRDX-T3",1777840775,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","CRDX-T3",1777841130,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added validate-skills Makefile target that greps for 'make install' in all SKILL.md source files and exits non-zero with an actionable message if found; wired into check target before skill; make check passes on clean state"}]
