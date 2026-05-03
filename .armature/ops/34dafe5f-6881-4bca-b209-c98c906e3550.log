@@ -1669,3 +1669,4 @@
 ["transition","SKOPT-3",1777769220,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","SKOPT-4A",1777769230,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","SKOPT-4B",1777769231,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","SKOPT-4A",1777769405,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"armature-planner/references/decompose-apply.md created with full Decompose-Apply Workflow; references/dependency-management.md created with Dependency Management deep-dive; SKILL.md core replaces those sections with inline trigger pointers; core body 323 lines (under 500); make deploy-skills deploys both reference files"}]
