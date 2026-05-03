@@ -1666,3 +1666,4 @@
 ["transition","SKOPT-2C",1777769080,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","SKOPT-3",1777769087,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","SKOPT-3",1777769215,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"references/dual-branch.md created consolidating all dual-branch callouts; references/batch-strategy.md created with Batch Strategy (Advanced) section; SKILL.md core replaces those sections with inline trigger pointers; make install prereq block replaced with stop-and-resolve message; dot graph removed; core body 145 lines; make deploy-skills deploys both reference files to both harness dirs"}]
+["transition","SKOPT-3",1777769220,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
