@@ -137,7 +137,7 @@ For tasks spanning 10+ files, see `references/batch-strategy.md`.
 
 | Mistake | Fix |
 |---|---|
-| `arm: command not found` | Run `make install`, ensure `~/.local/bin` is on PATH |
+| `arm: command not found` | Stop and resolve: install arm and ensure `~/.local/bin` is on PATH |
 | Reading plan files for task instructions | Use `render-context` output only |
 | Using `in_progress` (underscore) | Use `in-progress` (hyphen) |
 | Skipping `worker-init` on a fresh clone | Required once per clone — ops without worker ID will fail |
