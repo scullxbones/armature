@@ -227,6 +227,10 @@ func newRootCmd() *cobra.Command {
 	doctorCmd.GroupID = "admin"
 	root.AddCommand(doctorCmd)
 
+	installSkillsCmd := newInstallSkillsCmd()
+	installSkillsCmd.GroupID = "admin"
+	root.AddCommand(installSkillsCmd)
+
 	completionCmd := newCompletionCmd()
 	completionCmd.GroupID = "admin"
 	root.AddCommand(completionCmd)
