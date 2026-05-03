@@ -1732,3 +1732,4 @@
 ["claim","CRDX-T2",1777821915,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","CRDX-T4",1777821917,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","task-1777819580",1777821918,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","CRDX-T1",1777821983,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting TDD implementation: ExplainNotReady should append ' — run: arm merged --issue \u003cBLOCKER-ID\u003e' when blocker status is 'done'. Writing failing test first."}]
