@@ -17,10 +17,7 @@ output, and close the story.
 
 ## Prerequisites
 
-1. `arm` must be on your PATH. Run `make install` from the armature repo root if it isn't:
-   ```
-   make install   # installs to ~/.local/bin/arm
-   ```
+1. If `arm` is not found, stop and resolve this before proceeding.
 
 2. **No worker identity required.** The coordinator skips `arm worker-init`.
    Orchestrator ops (claims, story transitions) go to the plain `<worker-id>.log`;

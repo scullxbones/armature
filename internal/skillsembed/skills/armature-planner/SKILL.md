@@ -16,11 +16,7 @@ issues ready for workers to claim.
 
 ## Prerequisites
 
-- `arm` must be on your PATH. Run `make install` from the armature repo root if
-  it isn't:
-  ```
-  make install   # installs to ~/.local/bin/arm
-  ```
+- If `arm` is not found, stop and resolve this before proceeding.
 - **Do NOT run `arm worker-init`** — the Planner does not require a worker
   identity. Skip that step entirely.
 - Have a source document, spec, or design doc before you start. Every issue you
