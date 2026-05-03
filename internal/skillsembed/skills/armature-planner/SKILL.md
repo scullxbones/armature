@@ -236,6 +236,14 @@ arm source-link --issue ISSUE-ID --source-id UUID
 arm accept-citation --issue ISSUE-ID --rationale "Requirements captured in issue body; no external spec exists" --ci
 ```
 
+To bulk-cite multiple issues at once, pass `--issue` multiple times:
+```bash
+arm accept-citation --issue A --issue B --issue C --rationale "same rationale applies to all" --ci
+```
+
+`source-link` also accepts multiple issues in one invocation. Use bulk forms to
+reduce citation debt in large plan loads.
+
 Use a specific rationale — vague rationales like "no docs" are harder to audit
 later.
 

@@ -11,7 +11,8 @@ import (
 )
 
 func newAcceptCitationCmd() *cobra.Command {
-	var issueID, rationale string
+	var issueIDs []string
+	var rationale string
 	var ci, force, nonInteractive bool
 
 	cmd := &cobra.Command{
@@ -19,10 +20,10 @@ func newAcceptCitationCmd() *cobra.Command {
 		Short: "Accept a citation for an issue with a recorded rationale",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
+			if len(issueIDs) == 0 && len(args) > 0 {
+				issueIDs = []string{args[0]}
 			}
-			if issueID == "" {
+			if len(issueIDs) == 0 {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
@@ -31,12 +32,11 @@ func newAcceptCitationCmd() *cobra.Command {
 				return fmt.Errorf("rationale must be at least 3 words (got %d)", len(words))
 			}
 
-			// Determine if we should skip the interactive prompt
 			skipPrompt := ci || force || nonInteractive
 
 			if !skipPrompt {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"Accept citation for issue %q with rationale: %q\nConfirm? [y/N]: ", issueID, rationale)
+					"Accept citation for %d issue(s) with rationale: %q\nConfirm? [y/N]: ", len(issueIDs), rationale)
 				scanner := bufio.NewScanner(cmd.InOrStdin())
 				scanner.Scan()
 				answer := strings.TrimSpace(scanner.Text())
@@ -50,32 +50,35 @@ func newAcceptCitationCmd() *cobra.Command {
 				return err
 			}
 
-			op := ops.Op{
-				Type:      ops.OpCitationAccepted,
-				TargetID:  issueID,
-				Timestamp: nowEpoch(),
-				WorkerID:  workerID,
-				Payload: ops.Payload{
-					Rationale:                 rationale,
-					ConfirmedNoninteractively: skipPrompt,
-				},
-			}
-			if err := appendLowStakesOp(logPath, op); err != nil {
-				return err
-			}
+			ts := nowEpoch()
+			for _, id := range issueIDs {
+				op := ops.Op{
+					Type:      ops.OpCitationAccepted,
+					TargetID:  id,
+					Timestamp: ts,
+					WorkerID:  workerID,
+					Payload: ops.Payload{
+						Rationale:                 rationale,
+						ConfirmedNoninteractively: skipPrompt,
+					},
+				}
+				if err := appendLowStakesOp(logPath, op); err != nil {
+					return err
+				}
 
-			result := map[string]interface{}{
-				"issue":                      issueID,
-				"rationale":                  rationale,
-				"confirmed_noninteractively": skipPrompt,
+				result := map[string]any{
+					"issue":                      id,
+					"rationale":                  rationale,
+					"confirmed_noninteractively": skipPrompt,
+				}
+				data, _ := json.Marshal(result)
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			}
-			data, _ := json.Marshal(result)
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to accept citation for")
+	cmd.Flags().StringArrayVar(&issueIDs, "issue", nil, "issue ID to accept citation for (repeatable)")
 	cmd.Flags().StringVar(&rationale, "rationale", "", "rationale for accepting the citation (>=3 words)")
 	cmd.Flags().BoolVar(&ci, "ci", false, "bypass interactive prompt (non-interactive/CI mode)")
 	cmd.Flags().BoolVar(&force, "force", false, "skip confirmation prompt and proceed (alias for --ci)")
