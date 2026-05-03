@@ -1652,3 +1652,4 @@
 ["heartbeat","SKOPT-1B",1777768250,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["citation-accepted","SKOPT-1B",1777768255,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"No external source document; implementation derived from task specification and codebase patterns"}]
 ["transition","SKOPT-1B",1777768262,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added arm install-skills subcommand with embedded skills FS: internal/skillsembed/embed.go exposes SkillsFS via go:embed; install_skills.go implements newInstallSkillsCmd() and deploySkills(fs.FS, string); install_skills_test.go has all five TestInstallSkills* tests passing; command wired into main.go under admin group; --global flag targets os.UserHomeDir(); make check green"}]
+["transition","SKOPT-1A",1777768889,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
