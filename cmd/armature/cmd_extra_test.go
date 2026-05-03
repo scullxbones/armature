@@ -696,6 +696,63 @@ func TestAcceptCitationCmd_NonInteractive_SkipsPrompt(t *testing.T) {
 	assert.Contains(t, out, "cited because it matches")
 }
 
+func setupRepoWithTwoTasks(t *testing.T) string {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Task one", "--type", "task", "--id", "task-01"})
+	require.NoError(t, cmd2.Execute())
+
+	cmd3 := newRootCmd()
+	cmd3.SetOut(new(bytes.Buffer))
+	cmd3.SetArgs([]string{"create", "--repo", repo, "--title", "Task two", "--type", "task", "--id", "task-02"})
+	require.NoError(t, cmd3.Execute())
+
+	return repo
+}
+
+func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTwoTasks(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--issue", "task-02",
+		"--rationale", "bulk citation no source",
+		"--ci")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "task-02")
+}
+
+func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTwoTasks(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"--issue", "task-01",
+		"--issue", "task-02",
+		"--issue", "task-03",
+		"--rationale", "bulk citation three ids",
+		"--ci")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "task-02")
+	assert.Contains(t, out, "task-03")
+}
+
 func setupRepoWithStoryAndTask(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
