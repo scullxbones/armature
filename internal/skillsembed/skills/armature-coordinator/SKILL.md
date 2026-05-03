@@ -174,6 +174,16 @@ Each worker's context package must contain:
 or API call depends on your runtime. The content above is what matters; the
 mechanism is platform-specific.
 
+> **Background agent Bash limitation:** Background agents (e.g. sub-agents
+> dispatched via the API without an active terminal session) cannot inherit the
+> parent session's Bash permissions. Shell commands will block silently, causing
+> the worker to hang indefinitely. To avoid this, prefer one of:
+> - **Direct implementation** — have the coordinator implement small, well-scoped
+>   tasks itself rather than dispatching a background agent.
+> - **Foreground worktrees** — create a git worktree manually and run the worker
+>   in a foreground terminal session so it inherits Bash permissions from the
+>   active shell.
+
 ---
 
 ## After Workers Return
@@ -214,7 +224,21 @@ arm accept-citation --issue ID --ci               # if no source, mark as self-c
 
 Repeat until `arm validate` shows no errors.
 
-### e. Continue to next wave
+### e. Clean up worktrees
+
+If workers used git worktrees, remove them after their branches are merged into
+the story feature branch:
+
+```bash
+git worktree list                          # confirm which worktrees exist
+git worktree remove <path> --force         # remove each worker worktree
+git branch -d <worker-branch>             # delete the local branch if no longer needed
+```
+
+Leaving stale worktrees causes `git worktree list` clutter and can block future
+worktree operations on the same path.
+
+### f. Continue to next wave
 ```bash
 arm ready    # next wave should now be unblocked
 ```

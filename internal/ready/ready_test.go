@@ -296,7 +296,7 @@ func TestFilterByAssignedTo_NoMatches_ReturnsEmpty(t *testing.T) {
 func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 	index := make(materialize.Index)
 	// Build a chain deeper than 20
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		id := fmt.Sprintf("issue-%02d", i)
 		parent := ""
 		if i > 0 {
@@ -423,4 +423,93 @@ func TestExplainNotReady_ParentNotActive(t *testing.T) {
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "story-01", "reason should mention the inactive parent")
+}
+
+func TestExplainNotReady_BlockerDone_AppendsHint(t *testing.T) {
+	// When a blocker is in status 'done' (not merged, not missing, not cancelled),
+	// the reason string should append ' — run: arm merged --issue <BLOCKER-ID>'.
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
+		"task-02":  {Status: "done", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "task-02", "reason should mention the blocker")
+	assert.Contains(t, reason, "run: arm merged --issue task-02", "reason should append the merged hint for done blockers")
+}
+
+func TestExplainNotReady_BlockerMissing_NoHint(t *testing.T) {
+	// When a blocker is missing from the index, no merged hint should be appended.
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-missing"}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-missing"}},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "task-missing", "reason should mention the blocker")
+	assert.NotContains(t, reason, "arm merged", "no merged hint for missing blockers")
+}
+
+func TestExplainNotReady_BlockerCancelled_NoHint(t *testing.T) {
+	// When a blocker is in 'cancelled' status, no merged hint should be appended.
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
+		"task-02":  {Status: "cancelled", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "task-02", "reason should mention the blocker")
+	assert.NotContains(t, reason, "arm merged", "no merged hint for cancelled blockers")
+}
+
+func TestExplainNotReady_MultipleDoneBlockers_HintForEach(t *testing.T) {
+	// When multiple blockers are in 'done' status, the hint appears for each one.
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02", "task-03"}},
+		"task-02":  {Status: "done", Type: "task"},
+		"task-03":  {Status: "done", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02", "task-03"}},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "run: arm merged --issue task-02", "hint for task-02")
+	assert.Contains(t, reason, "run: arm merged --issue task-03", "hint for task-03")
+}
+
+func TestExplainNotReady_MixedBlockers_HintOnlyForDone(t *testing.T) {
+	// Mixed blockers: one done (hint), one missing (no hint), one cancelled (no hint).
+	index := materialize.Index{
+		"story-01":       {Status: "in-progress", Type: "story"},
+		"task-01":        {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-done", "task-missing", "task-cancelled"}},
+		"task-done":      {Status: "done", Type: "task"},
+		"task-cancelled": {Status: "cancelled", Type: "task"},
+		// task-missing intentionally absent from index
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-done", "task-missing", "task-cancelled"}},
+	}
+	result := ExplainNotReady(index, issues)
+	reason, ok := result["task-01"]
+	require.True(t, ok, "task-01 should be present in explain map")
+	assert.Contains(t, reason, "run: arm merged --issue task-done", "hint only for done blockers")
+	assert.NotContains(t, reason, "run: arm merged --issue task-missing", "no hint for missing blocker")
+	assert.NotContains(t, reason, "run: arm merged --issue task-cancelled", "no hint for cancelled blocker")
 }
