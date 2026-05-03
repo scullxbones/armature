@@ -1,10 +1,10 @@
 ---
 name: armature-worker
 description: >
-  Use when starting work in a armature-managed repository — picks up ready
+  Use when starting work in an armature-managed repository — picks up ready
   issues, claims them, assembles context, and drives implementation. Enforces
   per-task commits and story-level push/PR strategy.
-compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH (run make install).
+compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
 # Armature Worker
@@ -13,12 +13,6 @@ A worker receives a pre-claimed task from the Coordinator, implements it, record
 progress, and transitions the task to `done`.
 
 ## Prerequisites
-
-`arm` must be on your PATH. Run `make install` from the armature repo root if it isn't:
-
-```
-make install   # installs to ~/.local/bin/arm
-```
 
 If `arm` is not found, stop and resolve this before proceeding.
 
@@ -35,27 +29,6 @@ arm worker-init --check || arm worker-init
 > Workers receive task context from the Coordinator at dispatch time.
 > For finding work, claiming issues, dispatching workers, and story-level PR:
 > see the **armature-coordinator** skill.
-
-## The Worker Flow
-
-```dot
-digraph worker_flow {
-    "Receive context" [shape=box];
-    "Implement" [shape=box];
-    "note / heartbeat" [shape=box];
-    "cite (source-link / accept-citation)" [shape=box];
-    "transition --to done" [shape=box];
-    "git commit" [shape=box];
-    "Done" [shape=doublecircle];
-
-    "Receive context" -> "Implement";
-    "Implement" -> "note / heartbeat";
-    "note / heartbeat" -> "cite (source-link / accept-citation)";
-    "cite (source-link / accept-citation)" -> "transition --to done";
-    "transition --to done" -> "git commit";
-    "git commit" -> "Done";
-}
-```
 
 ## Step-by-Step
 
@@ -122,22 +95,11 @@ silently skips new files and directories created by the task.
 Record a concrete outcome. Commit immediately after the task — small focused commits
 are easier to review.
 
-**Pro-tip: Bundled Workflow**
-To avoid forgetting `.armature/` or the commit, combine these into a single command:
-```bash
-arm transition ISSUE-ID --to done --outcome "..." && git add <scope files> .armature/ && git commit -m "feat(ISSUE-ID): ..."
-```
-
 **Always stage `.armature/` alongside code files.** Every `arm` command (note,
 decision, heartbeat, transition) writes ops to `.armature/`. If you omit `.armature/`
 from the commit, those ops are left behind and will not be delivered with the code.
 
-**Dual-branch mode exception:** If `git config --local armature.mode` returns
-`dual-branch`, ops are automatically committed to the `_armature` branch by
-each `arm` command — they do **not** appear as pending changes in the code
-worktree. **Omit `.armature/` from `git add`.** Including it stages stale data
-from the code branch's (unused) `.armature/` copy and will fail the pre-commit
-guard.
+If using dual-branch mode, see `references/dual-branch.md` before committing.
 
 **Commit message format:** `<type>(<ISSUE-ID>): <description>`
 Types: `feat`, `fix`, `refactor`, `test`, `docs`
@@ -169,21 +131,7 @@ This ensures your ops go to a slot-specific log file and do not race with other
 parallel workers. The Coordinator assigns slots — workers set the slot they are
 given but do not assign slots to others.
 
-## Batch Strategy (Advanced)
-
-When a task involves a large number of files (e.g. refactoring 10+ files), do not
-attempt to process them all in a single turn. This leads to incomplete work and
-high token usage. Instead:
-
-1.  **Build a Manifest:** Use `grep --names-only` or `glob` to find all files that
-    need changes. Save this list to a temporary file or a note.
-2.  **Process in Chunks:** Process the files in small batches (e.g. 3-5 files at a
-    time).
-3.  **Verify each Chunk:** Run tests/linting after each chunk to ensure no
-    regressions were introduced.
-4.  **Heartbeat:** Call `arm heartbeat ID` after each chunk.
-5.  **Final Review:** Once all files are processed, run a final global check
-    before transitioning the task to `done`.
+For tasks spanning 10+ files, see `references/batch-strategy.md`.
 
 ## Common Mistakes
 
@@ -198,8 +146,7 @@ high token usage. Instead:
 | Skipping heartbeat on long tasks | Claim expires after TTL; other workers can steal it |
 | Skipping commit after task | Small commits make review and revert tractable |
 | Using `git commit -am` | `-a` only stages tracked files — new files and directories are silently skipped; always use explicit `git add <scope files>` |
-| Omitting `.armature/` from `git add` | Ops left behind, not delivered with code; always include `.armature/` in every commit (single-branch mode only) |
-| Including `.armature/` in `git add` in dual-branch mode | Stages stale data; ops are already on `_armature` branch — omit `.armature/` from code commits |
+| Omitting `.armature/` from `git add` | Ops left behind, not delivered with code; always include `.armature/` in every commit (see `references/dual-branch.md` for dual-branch mode exception) |
 | Leave issues uncited | Run `arm source-link` or `arm accept-citation --ci` before returning |
 | Repeating `transition` then `commit` manually | Use a bundled command: `arm transition ID ... && git add . .armature/ && git commit -m ...` |
 | Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |
