@@ -1728,3 +1728,4 @@
 ["dag-transition","task-1777819580",1777819583,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"verified","issue_id":"task-1777819580"}]
 ["citation-accepted","task-1777819580",1777819586,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Bug discovered during story-1777815839 planning: W5 warning message references arm amend --context-files which does not exist; requirements captured in issue body"}]
 ["claim","CRDX-T1",1777821913,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","story-1777815839",1777821915,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
