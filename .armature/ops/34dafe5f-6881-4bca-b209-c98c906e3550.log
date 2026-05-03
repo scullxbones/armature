@@ -1640,3 +1640,4 @@
 ["amend","SKOPT-3",1777767399,"34dafe5f-6881-4bca-b209-c98c906e3550",{"definition_of_done":"armature-worker/references/dual-branch.md consolidates all dual-branch callouts; references/batch-strategy.md has Batch Strategy (Advanced) section; SKILL.md core replaces those sections with inline trigger pointers; make install block replaced with 'If arm is not found, stop and resolve this before proceeding.'; core body ~140 lines; make deploy-skills deploys both reference files"}]
 ["link","SKOPT-3",1777767404,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SKOPT-1A","rel":"blocked_by"}]
 ["link","SKOPT-4A",1777767404,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SKOPT-1A","rel":"blocked_by"}]
+["link","SKOPT-4B",1777767404,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"SKOPT-1A","rel":"blocked_by"}]
