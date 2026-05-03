@@ -1663,3 +1663,4 @@
 ["transition","SKOPT-2C",1777769075,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"armature-auditor/references/citation-errors.md created with Citation Integrity (E7+E8) remediation guide and Source Freshness workflow extracted verbatim; SKILL.md core replaces those sections with trigger pointer 'If arm validate reports ERROR lines, read references/citation-errors.md'; core body reduced from 241 to 168 lines; Makefile deploy-skills updated to deploy references/ subdirs; make deploy-skills deploys citation-errors.md to both harness references/ dirs"}]
 ["transition","SKOPT-2A",1777769079,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","SKOPT-2B",1777769080,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","SKOPT-2C",1777769080,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
