@@ -1,11 +1,11 @@
 ---
 name: armature-coordinator
 description: >
-  Use when orchestrating work in a armature-managed repository — finds unblocked
+  Use when orchestrating work in an armature-managed repository — finds unblocked
   tasks, assembles context, dispatches worker agents (sequentially or in parallel
   waves), integrates completed work, validates citation coverage, and closes
   stories with a pull request. Does not require a worker identity (skip
-  worker-init). Requires arm on PATH (run make install).
+  worker-init). Requires arm on PATH.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -123,33 +123,7 @@ before claiming the next task.
 
 ### 4. Parallel Dispatch (independent tasks in one wave)
 
-Use parallel dispatch for tasks with no dependencies between them.
-
-**a. Assign log slots and pre-assign workers (optional but recommended):**
-```bash
-arm assign --issue T1-ID --worker WORKER-A
-arm assign --issue T2-ID --worker WORKER-B
-```
-
-**b. Claim all tasks in the wave:**
-```bash
-arm claim --issue T1-ID
-arm claim --issue T2-ID
-```
-
-**c. Render context for each:**
-```bash
-arm render-context --issue T1-ID --budget 4000
-arm render-context --issue T2-ID --budget 4000
-```
-
-**d. Dispatch all workers concurrently** — include the slot and full context in
-each prompt (see [Dispatch Protocol](#dispatch-protocol) and
-[Log Slots](#log-slots-for-parallel-dispatch) below).
-
-**e. Wait for all workers to return before proceeding.**
-
-**f. Verify and integrate** (see [After Workers Return](#after-workers-return)).
+For parallel dispatch details and log slot setup, see `references/parallel-dispatch.md`.
 
 ---
 
@@ -202,46 +176,6 @@ Each worker's context package must contain:
 **Dispatch using your platform's agent dispatch capability** — the exact tool
 or API call depends on your runtime. The content above is what matters; the
 mechanism is platform-specific.
-
----
-
-## Log Slots for Parallel Dispatch
-
-When multiple agents run concurrently, they each write ops to `.armature/`.
-Without log slots, all agents write to the same log file, causing races and
-losing per-agent attribution.
-
-**How slots work:**
-
-- Each agent sets `ARM_LOG_SLOT` before its first `arm` command.
-- Ops go to `<worker-id>~<slot>.log` instead of `<worker-id>.log`.
-- The coordinator's own shell must have `ARM_LOG_SLOT` **unset** so its ops
-  (claims, story transitions) land in the plain `<worker-id>.log`.
-
-**Assigning slots:**
-
-Use the short task ID or a single letter as the slot:
-
-| Agent | Task | Slot |
-|---|---|---|
-| Worker A | T1-ID | `t1` |
-| Worker B | T2-ID | `t2` |
-| Worker C | T3-ID | `t3` |
-
-**Critical:** When dispatching via an AI platform's native agent tool (not a
-shell subprocess), each agent runs in its own isolated shell. The coordinator's
-`export ARM_LOG_SLOT=...` is never inherited. The slot **must** be embedded
-verbatim as the first instruction in each agent's prompt:
-
-```
-Before running any arm command, run: export ARM_LOG_SLOT=t1
-```
-
-**Rules:**
-- Coordinator always runs with `ARM_LOG_SLOT` unset.
-- Each parallel agent sets a distinct slot before any `arm` call.
-- Slot names must be unique within a batch — reusing a slot defeats the purpose.
-- Slot log files are committed alongside code, just like the plain log.
 
 ---
 
@@ -367,70 +301,7 @@ Without a `branches:` filter a `git push --tags` can trigger branch-push
 workflows unexpectedly. If you see spurious CI runs after tagging, add or
 tighten the `branches:` filter in your workflow file.
 
----
-
-## Querying JSON Output
-
-Most `arm` commands emit newline-delimited JSON. Use `grep` for quick
-field extraction without requiring `jq`:
-
-```bash
-# Extract a single field from each object
-arm list --parent STORY-ID | grep -o '"status":"[^"]*"'
-
-# Filter objects where a field matches a value
-arm list --parent STORY-ID | grep '"status":"done"'
-
-# Count matches
-arm list --parent STORY-ID | grep -c '"status":"done"'
-
-# Extract IDs of all blocked tasks
-arm list --status blocked | grep -o '"id":"[^"]*"'
-
-# Show title alongside status for a quick overview
-arm list --parent STORY-ID | grep -o '"id":"[^"]*"\|"title":"[^"]*"\|"status":"[^"]*"'
-```
-
-These patterns work in any shell without additional tooling. If `jq` is
-available you can use it for more complex queries, but `grep` is sufficient
-for the common coordinator workflow.
-
----
-
-## Command Reference
-
-```bash
-# Surveying work
-arm ready                              # unblocked, unclaimed tasks
-arm ready --assigned-to WORKER-ID      # tasks pre-assigned to a specific worker
-arm list --status blocked              # diagnose blockers
-arm list --status in-progress          # in-flight claims
-arm list --parent STORY-ID             # all tasks in a story
-
-# Assignment (pre-wire before dispatching)
-arm assign --issue ID --worker WORKER-ID   # pre-assign (does not claim)
-arm unassign --issue ID                     # release assignment
-
-# Claiming and context
-arm claim --issue ID [--ttl 120]            # claim (marks in-progress, sets TTL)
-arm render-context --issue ID [--budget 4000]  # assemble full task context
-
-# Validation and story close
-arm validate                    # citation coverage + source UUID integrity
-arm validate --ci               # exit non-zero on errors (for CI use)
-arm transition ID --to done --outcome "..."   # close task or story
-arm doctor                      # repo health check
-arm doctor --strict             # warnings as errors
-
-# Monitoring
-arm workers                     # worker activity status
-
-# Scope maintenance (after file renames or deletions)
-arm scope-rename <old> <new>    # rewrite path/prefix across all issue scopes
-arm scope-delete <path>         # remove exact file path from all issue scopes
-```
-
-**Valid transition targets:** `in-progress`, `done`, `cancelled`, `blocked`
+For JSON query patterns and the full command reference, see `references/commands.md`.
 
 ---
 
