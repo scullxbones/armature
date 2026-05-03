@@ -84,6 +84,10 @@ deploy-skills:
 				cp "internal/skillsembed/skills/$$name/scripts/"* ".$$harness/skills/$$name/scripts/"; \
 				chmod +x ".$$harness/skills/$$name/scripts/"*; \
 			fi; \
+			if [ -d "internal/skillsembed/skills/$$name/references" ]; then \
+				mkdir -p ".$$harness/skills/$$name/references"; \
+				cp "internal/skillsembed/skills/$$name/references/"* ".$$harness/skills/$$name/references/"; \
+			fi; \
 		done; \
 	done
 	@echo "Deployed skills to .claude/skills/ and .gemini/skills/"
