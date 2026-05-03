@@ -1,8 +1,0 @@
-name: armature-coordinator
-description: >
-  Use when orchestrating work in a armature-managed repository — finds unblocked
-  tasks, assembles context, dispatches worker agents (sequentially or in parallel
-  waves), integrates completed work, validates citation coverage, and closes
-  stories with a pull request. Does not require a worker identity (skip
-  worker-init). Requires arm on PATH (run make install).
-compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.

@@ -1,4 +1,11 @@
-<!-- CANONICAL SOURCE: edit this file, not .claude/skills/armature-worker/SKILL.md — run `make skill` to regenerate the deployed copy -->
+---
+name: armature-worker
+description: >
+  Use when starting work in a armature-managed repository — picks up ready
+  issues, claims them, assembles context, and drives implementation. Enforces
+  per-task commits and story-level push/PR strategy.
+compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH (run make install).
+---
 
 # Armature Worker
 

@@ -1,4 +1,11 @@
-<!-- CANONICAL SOURCE: edit this file, not .claude/skills/armature-auditor/SKILL.md — run `make skill` to regenerate the deployed copy -->
+---
+name: armature-auditor
+description: >
+  Use when verifying completed work before story sign-off — checks citation
+  coverage, source UUID integrity, outcome quality, and repo health. Runs
+  validate, sources verify, render-context, and doctor --strict.
+compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
+---
 
 # Armature Auditor
 
