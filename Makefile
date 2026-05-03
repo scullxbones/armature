@@ -78,16 +78,7 @@ deploy-skills:
 		[ -f "internal/skillsembed/skills/$$name/SKILL.md" ] || continue; \
 		for harness in claude gemini; do \
 			mkdir -p ".$$harness/skills/$$name"; \
-			cp "internal/skillsembed/skills/$$name/SKILL.md" ".$$harness/skills/$$name/SKILL.md"; \
-			if [ -d "internal/skillsembed/skills/$$name/scripts" ]; then \
-				mkdir -p ".$$harness/skills/$$name/scripts"; \
-				cp "internal/skillsembed/skills/$$name/scripts/"* ".$$harness/skills/$$name/scripts/"; \
-				chmod +x ".$$harness/skills/$$name/scripts/"*; \
-			fi; \
-			if [ -d "internal/skillsembed/skills/$$name/references" ]; then \
-				mkdir -p ".$$harness/skills/$$name/references"; \
-				cp "internal/skillsembed/skills/$$name/references/"* ".$$harness/skills/$$name/references/"; \
-			fi; \
+			cp -r "internal/skillsembed/skills/$$name/." ".$$harness/skills/$$name/"; \
 		done; \
 	done
 	@echo "Deployed skills to .claude/skills/ and .gemini/skills/"
