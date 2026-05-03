@@ -405,7 +405,7 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 			dirs[filepath.Dir(glob)] = struct{}{}
 		}
 		if len(dirs) >= 3 {
-			warns = append(warns, fmt.Sprintf("missing context_files on %s with broad scope — add via: arm amend %s --context-files <file>", id, id))
+			warns = append(warns, fmt.Sprintf("missing context_files on %s with broad scope — split the task into smaller pieces or narrow scope via: arm amend %s --scope <glob>", id, id))
 		}
 	}
 	return warns

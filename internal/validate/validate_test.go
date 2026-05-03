@@ -300,6 +300,16 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 	result := Validate(state, Options{})
 	assert.True(t, containsWarning(result, "missing context_files"),
 		"active issues spanning 3+ dirs without context_files should still warn")
+	// The warning must not reference the non-existent --context-files flag.
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "missing context_files") {
+			assert.NotContains(t, w, "--context-files",
+				"W5 warning must not reference non-existent --context-files flag")
+			assert.True(t,
+				strings.Contains(w, "arm amend") && strings.Contains(w, "--scope"),
+				"W5 warning should direct user to arm amend --scope or split the task: %s", w)
+		}
+	}
 }
 
 func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
