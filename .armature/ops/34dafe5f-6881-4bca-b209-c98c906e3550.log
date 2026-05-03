@@ -1659,3 +1659,4 @@
 ["note","SKOPT-2C",1777768909,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with SKOPT-2A (same worker, dismissed)"}]
 ["claim","SKOPT-2C",1777768909,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","SKOPT-2A",1777769064,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"armature/SKILL.md trimmed to ~55 lines of grouped command blocks; all arm subcommands preserved; workflow prose removed; description updated to Quick reference for arm command syntax; install-skills added to Setup section; make deploy-skills deploys trimmed skill"}]
+["transition","SKOPT-2B",1777769070,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"AGENTS.md populated with Setup section containing three steps: install arm via make install, run arm install-skills once to deploy bundled skills, run arm worker-init before first task; file is non-empty; make check green"}]
