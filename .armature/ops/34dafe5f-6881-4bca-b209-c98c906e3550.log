@@ -1664,3 +1664,4 @@
 ["transition","SKOPT-2A",1777769079,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","SKOPT-2B",1777769080,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","SKOPT-2C",1777769080,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["claim","SKOPT-3",1777769087,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
