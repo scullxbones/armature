@@ -1735,3 +1735,4 @@
 ["note","CRDX-T1",1777821983,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting TDD implementation: ExplainNotReady should append ' — run: arm merged --issue \u003cBLOCKER-ID\u003e' when blocker status is 'done'. Writing failing test first."}]
 ["note","CRDX-T4",1777821991,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting work: adding Bash limitation note to Dispatch Protocol and worktree cleanup step to After Workers Return checklist"}]
 ["note","task-1777819580",1777821995,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting TDD: updating test assertion first to expect new W5 message without --context-files flag reference"}]
+["note","CRDX-T2",1777822003,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Replacing per-subdir conditionals (scripts, references) in deploy-skills with a single cp -r of the entire skill source directory. No scripts/ dirs exist currently; only references/ subdirs. Output should be identical."}]
