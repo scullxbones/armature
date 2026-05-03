@@ -1673,3 +1673,4 @@
 ["transition","SKOPT-4B",1777769411,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"armature-coordinator/references/parallel-dispatch.md created with Parallel Dispatch and Log Slots sections; references/commands.md created with Querying JSON Output and Command Reference sections; SKILL.md core replaces those sections with trigger pointers; description fixed to 'an armature-managed'; core body 305 lines (under 500); make deploy-skills deploys both reference files"}]
 ["transition","SKOPT-4A",1777769415,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","SKOPT-4B",1777769415,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["claim","task-1777767332",1777769420,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
