@@ -1754,3 +1754,4 @@
 ["transition","CRDX-T3",1777841197,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","CRDX-T4",1777841197,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","task-1777819580",1777841197,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","story-1777815839",1777854613,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Coordinator DX improvements: arm ready --explain now appends arm merged hint for done blockers; deploy-skills simplified to cp -r; validate-skills target added to make check; coordinator skill documents background agent Bash limitation and worktree cleanup; W5 warning message fixed to reference arm amend --scope"}]
