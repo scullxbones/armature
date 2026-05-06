@@ -24,7 +24,7 @@ This feature requires the following additions to existing types before implement
 - `Payload.PreferredModel string` (`json:"preferred_model,omitempty"`) — added to `internal/ops/types.go` `Payload` struct
 - `Issue.PreferredModel string` — added to the materialized `Issue` struct, populated from the `create` op payload
 - `Config.Orchestrator OrchestratorConfig` — new sub-struct added to the config, populated from `.arm/config.json`
-- Citations check — the orchestrator implements a stricter variant than the existing `validate.go` `checkE7E8E12Citations`. The existing check verifies at least one source link or citation exists and that source entry IDs resolve in the manifest. The orchestrator's citations check additionally verifies that a `citation-accepted` op exists for every source linked via `source-link` to the task. This stricter check lives in the orchestrator's verification pipeline, not in `validate.go`.
+- Citations check — the orchestrator implements a stricter variant than the existing `validate.go` `checkE7E8E12Citations`. The existing check verifies at least one source link or citation exists and that source entry IDs resolve in the manifest. The orchestrator's citations check additionally verifies that a `citation-accepted` op exists for every source linked via `source-link` to the task. This stricter check lives in the orchestrator's verification pipeline, not in `validate.go`. To support per-source correlation, `CitationAcceptance` (in `internal/materialize/engine.go`) must be extended with a `SourceEntryID string` field, and the `citation-accepted` op payload must include `"source_entry_id"`. This is a required schema addition before implementing the citations check.
 
 ---
 
@@ -44,7 +44,7 @@ Exits zero on success, non-zero on escalation or preflight rejection.
 
 ## State Machine
 
-Eight named states. `staged` and `rollback` are transitional states between `dispatched` and `verifying`; they do not have their own event log ops but are described here for clarity. States with event log ops are: `idle`, `dispatched`, `verifying`, `correcting`, `escalated`, and `done`.
+Nine named states. `staged` and `rollback` are transitional states between `dispatched` and `verifying`; they do not have their own event log ops but are described here for clarity. States with event log ops are: `idle`, `dispatched`, `verifying`, `correcting`, `escalated`, and `done`.
 
 ```
 preflight → idle → dispatched → staged → verifying → done
@@ -87,7 +87,7 @@ State is derived by replaying the task's event log to the last orchestration op.
 | `orchestrate-start` | Re-dispatch run 1 (process assumed dead) |
 | `orchestrate-dispatch` | Re-dispatch same run (process assumed dead) |
 | `orchestrate-dispatch-complete` | Re-run staged → verifying |
-| `orchestrate-verify-fail` | Assemble feedback, enter correcting |
+| `orchestrate-verify-fail` | Verify worktree exists at path in `orchestrate-start` (re-create from `pre-dispatch-ref` if absent), then assemble feedback and enter correcting |
 | `orchestrate-retry` | Re-dispatch at `run` number from op |
 | `orchestrate-escalate` | Terminal — surface to human, no re-entry |
 | `orchestrate-complete` | Terminal — already done |
@@ -209,7 +209,7 @@ Hard fail if no matching test file found for any modified source file.
 
 Tasks with prose-only acceptance criteria are rejected at preflight. Tasks with a mix may mark prose items as `unverifiable` — these pass through as reviewer notes in the commit message but do not gate the pipeline.
 
-**citations** — "required citations" are all sources linked to the task via `source-link` ops (i.e., sources associated with the task in the event log, consistent with how `validate.go` resolves citation requirements). The check replays the event log for `citation-accepted` ops and hard fails if any `source-link`-associated source is uncited.
+**citations** — "required citations" are all sources linked to the task via `source-link` ops. The check replays the event log and hard fails if any `source-link`-associated source lacks a corresponding `citation-accepted` op (correlated by `source_entry_id`). This is stricter than the existing `validate.go` check, which only requires at least one citation to exist — see Prerequisites for the schema addition required to support per-source correlation.
 
 ### Language Adapters
 
