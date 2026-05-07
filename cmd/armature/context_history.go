@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
-	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +25,7 @@ func newContextHistoryCmd() *cobra.Command {
 				opsRepoPath = appCtx.WorktreePath
 			}
 
-			gc := git.New(opsRepoPath)
+			gc := adapters.New(opsRepoPath)
 
 			branch, err := gc.CurrentBranch()
 			if err != nil {

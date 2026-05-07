@@ -9,7 +9,7 @@ import (
 	"time"
 
 	claimPkg "github.com/scullxbones/armature/internal/claim"
-	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	armsync "github.com/scullxbones/armature/internal/sync"
@@ -68,7 +68,7 @@ Examples:
 
 // hookCurrentBranch returns the current git branch name, or empty string on error.
 func hookCurrentBranch() string {
-	gc := git.New(appCtx.RepoPath)
+	gc := adapters.New(appCtx.RepoPath)
 	branch, err := gc.CurrentBranch()
 	if err != nil {
 		return ""
@@ -309,7 +309,7 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		return fmt.Errorf("materialize: %w", err)
 	}
 
-	gc := git.New(appCtx.RepoPath)
+	gc := adapters.New(appCtx.RepoPath)
 	mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, branch, gc)
 	if err != nil {
 		return fmt.Errorf("detect merges: %w", err)

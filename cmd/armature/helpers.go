@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
-	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worker"
@@ -109,7 +109,7 @@ func initPushDeps() {
 		appTracker = ops.NoTracker{}
 		return
 	}
-	gc := git.New(appCtx.WorktreePath)
+	gc := adapters.New(appCtx.WorktreePath)
 	appPusher = &ops.AppendCommitAndPush{
 		Pusher:  gc,
 		Branch:  "_armature",
@@ -122,7 +122,7 @@ func initPushDeps() {
 func appendOp(logPath string, op ops.Op) error {
 	var gc ops.GitCommitter
 	if appCtx.WorktreePath != "" {
-		gc = git.New(appCtx.WorktreePath)
+		gc = adapters.New(appCtx.WorktreePath)
 	}
 	return ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc)
 }
@@ -133,7 +133,7 @@ func appendOp(logPath string, op ops.Op) error {
 func appendHighStakesOp(logPath string, op ops.Op) error {
 	var gc ops.GitCommitter
 	if appCtx.WorktreePath != "" {
-		gc = git.New(appCtx.WorktreePath)
+		gc = adapters.New(appCtx.WorktreePath)
 	}
 	// Append and commit — this is not best-effort
 	if err := ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc); err != nil {
@@ -142,7 +142,7 @@ func appendHighStakesOp(logPath string, op ops.Op) error {
 	// Push is best-effort: push via the pusher (which handles retries) but ignore errors
 	if appCtx.WorktreePath != "" {
 		// Use the underlying git client for push attempts
-		gc2 := git.New(appCtx.WorktreePath)
+		gc2 := adapters.New(appCtx.WorktreePath)
 		if err := gc2.Push("_armature"); err != nil {
 			// Best-effort: attempt fetch+rebase and retry once
 			if rbErr := gc2.FetchAndRebase("_armature"); rbErr == nil {
@@ -159,7 +159,7 @@ func appendHighStakesOp(logPath string, op ops.Op) error {
 func appendLowStakesOp(logPath string, op ops.Op) error {
 	var gc ops.GitCommitter
 	if appCtx.WorktreePath != "" {
-		gc = git.New(appCtx.WorktreePath)
+		gc = adapters.New(appCtx.WorktreePath)
 	}
 	if err := ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc); err != nil {
 		return err
@@ -178,7 +178,7 @@ func appendLowStakesOp(logPath string, op ops.Op) error {
 	if n >= threshold {
 		// Push now and reset counter
 		if appCtx.WorktreePath != "" {
-			pushGC := git.New(appCtx.WorktreePath)
+			pushGC := adapters.New(appCtx.WorktreePath)
 			_ = pushGC // push happens via AppendCommitAndPush on next high-stakes op
 		}
 		appTracker.Reset() //nolint:errcheck

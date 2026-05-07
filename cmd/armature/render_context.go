@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
-	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +41,7 @@ func newRenderContextCmd() *cobra.Command {
 				if appCtx.Mode == "dual-branch" && appCtx.WorktreePath != "" {
 					opsRepoPath = appCtx.WorktreePath
 				}
-				gc := git.New(opsRepoPath)
+				gc := adapters.New(opsRepoPath)
 				opsPrefix := filepath.Join(".armature", "ops")
 				var err error
 				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix)

@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
-	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
@@ -167,7 +167,7 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	}
 	repoPath = absRepoPath
 
-	gitClient := git.New(repoPath)
+	gitClient := adapters.New(repoPath)
 
 	var issuesDir string
 	if dualBranch {
