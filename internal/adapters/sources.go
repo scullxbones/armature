@@ -1,4 +1,4 @@
-package sources
+package adapters
 
 import (
 	"context"
@@ -7,20 +7,22 @@ import (
 	"net/http"
 )
 
-// fetchHTTP performs an authenticated HTTP GET to url using the given client
+// ===== HTTP Provider Logic (from sources/http.go, sources/confluence.go, sources/sharepoint.go) =====
+
+// FetchHTTP performs an authenticated HTTP GET to url using the given client
 // and credentials. If a Token is set, Bearer auth is used; otherwise Basic
 // auth is applied when Username or Password is non-empty.
 // Returns the response body or an error for non-2xx status codes.
-func fetchHTTP(ctx context.Context, client *http.Client, url string, creds Credentials) ([]byte, error) {
+func FetchHTTP(ctx context.Context, client *http.Client, url string, username, password, token string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	if creds.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+creds.Token)
-	} else if creds.Username != "" || creds.Password != "" {
-		req.SetBasicAuth(creds.Username, creds.Password)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	} else if username != "" || password != "" {
+		req.SetBasicAuth(username, password)
 	}
 
 	resp, err := client.Do(req)
@@ -39,4 +41,9 @@ func fetchHTTP(ctx context.Context, client *http.Client, url string, creds Crede
 	}
 
 	return body, nil
+}
+
+// NewHTTPClient creates a new HTTP client for making requests.
+func NewHTTPClient() *http.Client {
+	return &http.Client{}
 }

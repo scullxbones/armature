@@ -4,13 +4,13 @@ package doctor
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
@@ -134,14 +134,13 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
 	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
 
-	cmd := exec.Command("git", "-C", repoPath, "log", "--oneline", "--no-merges", "--pretty=%s")
-	out, err := cmd.Output()
+	out, err := adapters.GitLog(repoPath, "--oneline", "--no-merges", "--pretty=%s")
 	if err != nil {
 		// Not a git repo or no commits — skip
 		return f
 	}
 
-	lines := strings.Split(string(out), "\n")
+	lines := strings.Split(out, "\n")
 	seen := make(map[string]bool)
 	var diverged []string
 
