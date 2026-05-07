@@ -123,4 +123,3 @@ func ResolveContext(repoPath string) (*Context, error) {
 		Config:       cfg,
 	}, nil
 }
-
