@@ -123,15 +123,59 @@ type HarnessConfig struct {
 }
 ```
 
+### Sandbox-Based Permission Model
+
+All three harnesses support OS-level sandboxing (Seatbelt on macOS, bubblewrap on Linux/WSL2). The orchestrator runs each dispatch inside a sandbox configured to restrict writes to the worktree path. This allows `--dangerouslySkipPermissions` (or equivalent) without risk — the OS enforces the actual boundaries; the agent cannot exceed them regardless of what it attempts.
+
+The sandbox doubles as a second scope enforcement layer: the OS physically prevents writes outside the configured paths, complementing the verification pipeline's `scope-boundary` check. Both are kept — the sandbox prevents violations; the check generates precise feedback when violations are attempted.
+
+Before each dispatch, the orchestrator writes harness-specific config into the worktree:
+
+**Claude Code** — writes `.claude/settings.json`:
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "filesystem": {
+      "allowWrite": ["<scope-paths>"],
+      "denyWrite": ["../"]
+    }
+  }
+}
+```
+Invoked as: `claude --dangerouslySkipPermissions --model <model> -p "<prompt>"`
+
+**Codex** — writes `config.toml` in worktree:
+```toml
+sandbox_mode = "workspace-write"
+approval_policy = "never"
+[permissions.default.filesystem]
+writable_roots = ["<scope-paths>"]
+```
+Invoked as: `codex --model <model> "<prompt>"`
+
+**Devin** — writes `.devin/config.json` in worktree pre-granting write access to declared scope paths (required because Devin's `edit`/`write` tools run in the CLI process, not the OS sandbox, so they still require explicit permission grants):
+```json
+{
+  "permissions": [
+    { "allow": "Write(<scope-glob>)" }
+  ]
+}
+```
+Invoked as: `devin --sandbox --permission-mode autonomous -- "<prompt>"` (model selection not yet supported by Devin CLI — `Model` field is ignored and a warning is logged)
+
+Sandbox availability is checked at preflight (`failIfUnavailable: true` equivalent). If the sandbox cannot be initialized (e.g., bubblewrap not installed, WSL1), `arm orchestrate` fails at preflight with a clear error. Running without a sandbox is not supported.
+
 ### Invocation per Harness
 
 | Harness | Command |
 |---|---|
-| Claude Code | `claude --model <model> -p "<prompt>"` |
+| Claude Code | `claude --dangerouslySkipPermissions --model <model> -p "<prompt>"` |
 | Codex | `codex --model <model> "<prompt>"` |
-| Devin | `devin -- "<prompt>"` (model selection not yet supported by Devin CLI — `Model` field is ignored and a warning is logged) |
+| Devin | `devin --sandbox --permission-mode autonomous -- "<prompt>"` |
 
-The adapter's sole responsibility: spawn the process in `workdir`, stream stdout/stderr to `.arm/orchestration/<task-id>/run-<N>.log`, return a normalized `InvocationResult`. Prompt assembly is handled entirely by the orchestrator before the adapter is called.
+The adapter's sole responsibility: write harness config into worktree, spawn the process in `workdir`, stream stdout/stderr to `.arm/orchestration/<task-id>/run-<N>.log`, return a normalized `InvocationResult`. Prompt assembly is handled entirely by the orchestrator before the adapter is called.
 
 ### Prompt Assembly
 
@@ -450,11 +494,23 @@ The orchestrator fully replaces the `armature-worker` skill for task execution. 
 
 ### armature-coordinator
 
-The coordinator skill is not immediately replaced but becomes optional for standard workflows. The coordinator currently uses LLM judgment for: finding ready tasks, determining parallelism, dispatching workers, integrating work, and closing stories with PRs. All of these are deterministic given the existing DAG:
+The coordinator skill is not immediately replaced but becomes optional for standard workflows. The coordinator currently uses LLM judgment for: finding ready tasks, determining parallelism, dispatching workers, integrating work, and closing stories with PRs. All of these are deterministic given the existing DAG.
 
-- **Ready task selection** — `arm ready` already provides this
-- **Parallelism** — fully derivable from the DAG: all tasks whose dependencies are met run concurrently
-- **Dispatch** — `arm orchestrate` per task
-- **Integration and PRs** — templatable from task outcomes and commit messages
+#### Pull model replaces push dispatch
 
-A future `arm coordinate <story-id>` command built on top of `arm orchestrate` would handle this path deterministically. The coordinator skill is retained as an escape hatch for edge cases requiring LLM judgment (unusual DAG shapes, partial failures, situations where the deterministic path lacks sufficient signal). It is no longer the default execution path for repos using the orchestrator.
+The coordinator skill uses a **push model**: an LLM surveys the DAG, decides which tasks to run, and assigns them to subagents. The orchestrator enables a **pull model** instead: multiple `arm orchestrate` instances run concurrently, each polling `arm ready` for the next available task, claiming it, executing it, and immediately pulling the next one. No central coordinator needed.
+
+The pull model is architecturally superior for this workload:
+
+- **Backpressure resilience** — orchestrators naturally idle when no tasks are ready (waiting on dependencies) rather than requiring a coordinator to track and schedule the dependency-unblocking sequence
+- **Crash resilience** — a crashed orchestrator releases no work; unclaimed tasks remain in the queue and are picked up by the next orchestrator to poll
+- **Horizontal scaling** — throughput scales by adding orchestrator processes; shedding load is removing them
+- **No central bottleneck** — the coordinator LLM is a single point of failure and requires reasoning about DAG state that the DAG already encodes
+
+Parallel wave execution happens naturally: when task A completes and unblocks B, C, and D, the next three orchestrators to call `arm ready` claim them immediately. No coordinator needed to plan the wave.
+
+**Claim collision** is handled by the existing MRDT claim mechanism: two orchestrators polling simultaneously both see the same task as ready, but the first `claim` op written wins. The second detects the conflict on log replay and polls again for the next available task.
+
+**Model routing** is handled per-task via `preferred_model`, not by a coordinator assigning tasks to agents by capability. Each task carries its own routing preference; the orchestrator reads it at claim time.
+
+A future `arm coordinate <story-id>` command encapsulates the pull model: start N orchestrator processes pointed at a story, let them pull until all tasks are done, then open a PR from the story outcomes. The coordinator skill is retained as an escape hatch for edge cases requiring LLM judgment (unusual DAG shapes, partial failures needing narrative summaries). It is no longer the default execution path for repos using the orchestrator.
