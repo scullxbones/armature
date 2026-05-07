@@ -1,0 +1,251 @@
+package adapters
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestAppendRawLines_and_ReadLog(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	if err := AppendRawLines(logPath, []byte("{\"a\":1}\n{\"b\":2}\n")); err != nil {
+		t.Fatal(err)
+	}
+	lines, err := ReadLog(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+}
+
+func TestReadLogFromOffset(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	_ = os.WriteFile(logPath, []byte("{\"a\":1}\n{\"b\":2}\n"), 0644)
+
+	lines, err := ReadLogFromOffset(logPath, 8) // skip first line
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line from offset, got %d", len(lines))
+	}
+}
+
+func TestReadLog_MissingFile(t *testing.T) {
+	_, err := ReadLog("/nonexistent/path/x.log")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestWorkerIDFromFilename(t *testing.T) {
+	cases := []struct{ input, want string }{
+		{"3357fe85.log", "3357fe85"},
+		{"3357fe85~a.log", "3357fe85"},
+		{"/path/to/abc123~t2.log", "abc123"},
+	}
+	for _, c := range cases {
+		if got := WorkerIDFromFilename(c.input); got != c.want {
+			t.Errorf("WorkerIDFromFilename(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+func TestWriteAndLoadIssueJSON(t *testing.T) {
+	dir := t.TempDir()
+	type payload struct{ X int }
+	if err := WriteIssueJSON(dir, "T1", payload{X: 42}); err != nil {
+		t.Fatal(err)
+	}
+	var got payload
+	if err := LoadIssueJSON(filepath.Join(dir, "T1.json"), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.X != 42 {
+		t.Fatalf("expected X=42, got %d", got.X)
+	}
+}
+
+func TestLoadIssueJSON_Missing(t *testing.T) {
+	var v struct{}
+	err := LoadIssueJSON("/nonexistent/file.json", &v)
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestReadIssuesDir(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "A.json"), []byte("{}"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "B.json"), []byte("{}"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "skip.txt"), []byte("x"), 0644)
+
+	ids, err := ReadIssuesDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 IDs, got %d: %v", len(ids), ids)
+	}
+}
+
+func TestReadIssuesDir_Missing(t *testing.T) {
+	ids, err := ReadIssuesDir("/nonexistent/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected empty slice, got %v", ids)
+	}
+}
+
+func TestWriteAndLoadCheckpointJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ckpt.json")
+	type ckpt struct{ N int }
+	if err := WriteCheckpointJSON(path, ckpt{N: 7}); err != nil {
+		t.Fatal(err)
+	}
+	var got ckpt
+	if err := LoadCheckpointJSON(path, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.N != 7 {
+		t.Fatalf("expected N=7, got %d", got.N)
+	}
+}
+
+func TestLoadCheckpointJSON_Missing(t *testing.T) {
+	var v struct{}
+	if err := LoadCheckpointJSON("/nonexistent/ckpt.json", &v); err != nil {
+		t.Fatal("expected nil for missing checkpoint, got", err)
+	}
+}
+
+func TestReadWriteManifestFile(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte(`{"sources":[]}`)
+	if err := WriteManifestFile(dir, data); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadManifestFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(data) {
+		t.Fatalf("manifest mismatch: %s", got)
+	}
+}
+
+func TestReadManifestFile_Missing(t *testing.T) {
+	got, err := ReadManifestFile("/nonexistent/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatal("expected nil for missing manifest")
+	}
+}
+
+func TestWriteAndReadCacheFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteCacheFile(dir, "abc", []byte("cached")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadCacheFile(dir, "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "cached" {
+		t.Fatalf("expected 'cached', got %q", got)
+	}
+}
+
+func TestReadCacheFile_Missing(t *testing.T) {
+	got, err := ReadCacheFile(t.TempDir(), "nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatal("expected nil for missing cache")
+	}
+}
+
+func TestWriteAndLoadConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cfg.json")
+	type cfg struct{ Mode string }
+	if err := WriteConfigFile(path, cfg{Mode: "dual"}); err != nil {
+		t.Fatal(err)
+	}
+	var got cfg
+	if err := LoadConfigFile(path, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Mode != "dual" {
+		t.Fatalf("expected Mode=dual, got %q", got.Mode)
+	}
+}
+
+func TestStatFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "f.txt")
+	if StatFile(p) {
+		t.Fatal("expected false for missing file")
+	}
+	_ = os.WriteFile(p, []byte("x"), 0644)
+	if !StatFile(p) {
+		t.Fatal("expected true for existing file")
+	}
+}
+
+func TestReadPlanFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "plan.json")
+	_ = os.WriteFile(p, []byte(`{"tasks":[]}`), 0644)
+	data, err := ReadPlanFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `{"tasks":[]}` {
+		t.Fatalf("unexpected plan data: %s", data)
+	}
+}
+
+func TestReadPlanFile_Missing(t *testing.T) {
+	_, err := ReadPlanFile("/nonexistent/plan.json")
+	if err == nil {
+		t.Fatal("expected error for missing plan file")
+	}
+}
+
+func TestWriteAndReadCoverageFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "coverage.json")
+	type cov struct{ Total int }
+	if err := WriteCoverageFile(p, cov{Total: 99}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := ReadCoverageFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) == 0 {
+		t.Fatal("expected non-empty coverage data")
+	}
+}
+
+func TestReadCoverageFile_Missing(t *testing.T) {
+	data, err := ReadCoverageFile("/nonexistent/coverage.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data != nil {
+		t.Fatal("expected nil for missing coverage file")
+	}
+}

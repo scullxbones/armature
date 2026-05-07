@@ -339,3 +339,51 @@ func TestLogBranch_InvalidBranch(t *testing.T) {
 	_, err := c.LogBranch("no-such-branch", 10)
 	assert.Error(t, err)
 }
+
+func TestCurrentBranch(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	branch, err := c.CurrentBranch()
+	require.NoError(t, err)
+	assert.NotEmpty(t, branch)
+}
+
+func TestCommitMessage(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOut))
+
+	msg, err := c.CommitMessage(sha)
+	require.NoError(t, err)
+	assert.Contains(t, msg, "init")
+}
+
+func TestCommitMessage_InvalidSHA(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	_, err := c.CommitMessage("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	assert.Error(t, err)
+}
+
+func TestPush_ErrorOnNoRemote(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	branch := strings.TrimSpace(string(branchOut))
+
+	err = c.Push(branch)
+	assert.Error(t, err)
+}

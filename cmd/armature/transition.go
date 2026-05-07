@@ -97,7 +97,7 @@ This enforces branch + PR discipline.`,
 				currentEntry = &entry
 			}
 
-			hookInput := hooks.HookInput{
+			hookInput := adapters.HookInput{
 				IssueID:    issueID,
 				FromStatus: currentStatus,
 				ToStatus:   to,
