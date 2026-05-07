@@ -3,9 +3,9 @@ package materialize
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // Issue represents the full materialized state of a single work item.
@@ -102,21 +102,13 @@ type IndexEntry struct {
 type Index map[string]IndexEntry
 
 func WriteIssue(issuesDir string, issue Issue) error {
-	data, err := json.MarshalIndent(issue, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal issue: %w", err)
-	}
-	path := filepath.Join(issuesDir, issue.ID+".json")
-	return os.WriteFile(path, data, 0644)
+	return adapters.WriteIssueJSON(issuesDir, issue.ID, issue)
 }
 
 func LoadIssue(path string) (Issue, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Issue{}, err
-	}
 	var issue Issue
-	return issue, json.Unmarshal(data, &issue)
+	err := adapters.LoadIssueJSON(path, &issue)
+	return issue, err
 }
 
 // LoadAllIssues loads all previously materialized issues from the given directory.
@@ -124,20 +116,13 @@ func LoadIssue(path string) (Issue, error) {
 func LoadAllIssues(issuesDir string) (map[string]*Issue, error) {
 	issues := make(map[string]*Issue)
 
-	entries, err := os.ReadDir(issuesDir)
+	issueIDs, err := adapters.ReadIssuesDir(issuesDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return issues, nil
-		}
 		return nil, err
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		issueID := strings.TrimSuffix(entry.Name(), ".json")
-		issuePath := filepath.Join(issuesDir, entry.Name())
+	for _, issueID := range issueIDs {
+		issuePath := filepath.Join(issuesDir, issueID+".json")
 		issue, err := LoadIssue(issuePath)
 		if err != nil {
 			return nil, fmt.Errorf("load issue %s: %w", issueID, err)
@@ -149,21 +134,16 @@ func LoadAllIssues(issuesDir string) (map[string]*Issue, error) {
 }
 
 func WriteIndex(path string, index Index) error {
-	data, err := json.MarshalIndent(index, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal index: %w", err)
-	}
-	return os.WriteFile(path, data, 0644)
+	return adapters.WriteCheckpointJSON(path, index)
 }
 
 func LoadIndex(path string) (Index, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return make(Index), nil
-		}
+	var index Index
+	if err := adapters.LoadCheckpointJSON(path, &index); err != nil {
 		return nil, err
 	}
-	var index Index
-	return index, json.Unmarshal(data, &index)
+	if index == nil {
+		index = make(Index)
+	}
+	return index, nil
 }
