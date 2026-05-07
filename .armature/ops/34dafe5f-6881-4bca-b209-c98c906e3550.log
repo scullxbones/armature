@@ -1802,3 +1802,4 @@
 ["link","E7-S1-T15",1778176616,"34dafe5f-6881-4bca-b209-c98c906e3550",{"dep":"E7-S1-T14","rel":"blocked_by"}]
 ["dag-transition","E7-S1",1778176618,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"verified","issue_id":"E7-S1"}]
 ["dag-transition","E7",1778176621,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"verified","issue_id":"E7"}]
+["source-fingerprint","b4297dfa-4c68-4c2b-928b-aacfa2820e13",1778176640,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"4f56f07266794e58e63f760251af29686b5690bcfec26b7417a433aba27b5042","provider":"filesystem"}]
