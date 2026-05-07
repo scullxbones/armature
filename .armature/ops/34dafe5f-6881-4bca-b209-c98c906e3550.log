@@ -1923,3 +1923,4 @@
 ["note","E6-S5-T2",1778187534,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Migration complete: internal/git/ → internal/adapters/git.go. All 9 callers updated: cmd/armature (7 files), internal/materialize (2 files). Tests pass for adapters and materialize packages. Ready to commit."}]
 ["transition","E6-S5-T2",1778187552,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Successfully relocated internal/git/ content to internal/adapters/git.go and updated all 9 callers across cmd and internal packages. All tests pass. internal/git/ package removed."}]
 ["claim","E6-S5-T4",1778188853,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","E6-S5-T4",1778188894,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting refactor: audit.Load and sync.DetectMerges to accept pre-loaded data via adapters. Creating adapters for file I/O consolidation."}]
