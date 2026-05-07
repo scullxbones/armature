@@ -1920,3 +1920,4 @@
 ["heartbeat","E6-S5-T3",1778187306,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E6-S5-T2",1778187365,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","E6-S5-T3",1778187366,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Successfully moved HTTP provider logic to internal/adapters/sources.go and shell execution to internal/adapters/shell.go. Core packages (sources, hooks, worker, config, doctor) no longer import os/exec or net/http for operations. All tests pass."}]
+["note","E6-S5-T2",1778187534,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Migration complete: internal/git/ → internal/adapters/git.go. All 9 callers updated: cmd/armature (7 files), internal/materialize (2 files). Tests pass for adapters and materialize packages. Ready to commit."}]
