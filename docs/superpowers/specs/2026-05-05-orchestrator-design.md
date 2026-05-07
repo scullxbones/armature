@@ -428,9 +428,33 @@ All orchestrator configuration lives under an `"orchestrator"` key in `.arm/conf
 
 ---
 
-## Open Questions
+## Resolved Design Decisions
 
-1. Should `arm orchestrate` support a `--dry-run` flag that runs preflight and prints the assembled prompt without dispatching?
-2. Should escalated tasks be automatically re-queued with a different harness on escalation, or always escalate to human?
-3. Should run logs (`.arm/orchestration/`) be committed to the task branch or kept local-only?
-4. Should the `preferred_model` field be settable via `arm amend`, or only at task creation via `arm decompose-apply`?
+1. **`--dry-run` flag** — yes, supported. Runs preflight and prints the assembled prompt without dispatching the harness. Useful for inspecting what the agent would receive before committing a run.
+
+2. **Escalation target** — always escalates to human. No automatic re-queue to a different harness. The structured escalation note provides enough signal for a human to decide the right recovery action.
+
+3. **Run logs** — local-only. `.arm/orchestration/<task-id>/` is gitignored. Logs are available for inspection during and after a run but are not committed. This avoids bloating the repo with potentially large agent output.
+
+4. **`preferred_model` field** — set at task creation time only (`arm decompose-apply`). Not settable via `arm amend`. To override per-invocation, use `arm orchestrate --model <model>`.
+
+5. **Framework auto-detection** — the orchestrator probes the repo for well-known framework indicators (`go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`, etc.) and pre-populates test patterns and adapter commands from a built-in registry. `.arm/config.json` is an override layer, not a requirement. If a framework is detected and no config override exists, the built-in defaults apply. If the framework cannot be detected, `arm orchestrate` fails at preflight with a clear message asking the user to add an `orchestrator` block to `.arm/config.json`.
+
+---
+
+## Relationship to Existing Skills
+
+### armature-worker
+
+The orchestrator fully replaces the `armature-worker` skill for task execution. The worker skill instructs an LLM how to claim, implement, and transition a task. The orchestrator does all of this deterministically — no LLM judgment is involved in driving the task lifecycle. The worker skill is deprecated for repos using the orchestrator.
+
+### armature-coordinator
+
+The coordinator skill is not immediately replaced but becomes optional for standard workflows. The coordinator currently uses LLM judgment for: finding ready tasks, determining parallelism, dispatching workers, integrating work, and closing stories with PRs. All of these are deterministic given the existing DAG:
+
+- **Ready task selection** — `arm ready` already provides this
+- **Parallelism** — fully derivable from the DAG: all tasks whose dependencies are met run concurrently
+- **Dispatch** — `arm orchestrate` per task
+- **Integration and PRs** — templatable from task outcomes and commit messages
+
+A future `arm coordinate <story-id>` command built on top of `arm orchestrate` would handle this path deterministically. The coordinator skill is retained as an escape hatch for edge cases requiring LLM judgment (unusual DAG shapes, partial failures, situations where the deterministic path lacks sufficient signal). It is no longer the default execution path for repos using the orchestrator.
