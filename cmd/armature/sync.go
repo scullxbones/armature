@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	armsync "github.com/scullxbones/armature/internal/sync"
@@ -41,7 +41,7 @@ preview changes without committing them.`,
 			}
 
 			if targetBranch == "" {
-				gc := git.New(appCtx.RepoPath)
+				gc := adapters.New(appCtx.RepoPath)
 				branch, err := gc.CurrentBranch()
 				if err != nil {
 					return fmt.Errorf("detect current branch: %w", err)
@@ -49,7 +49,7 @@ preview changes without committing them.`,
 				targetBranch = branch
 			}
 
-			gc := git.New(appCtx.RepoPath)
+			gc := adapters.New(appCtx.RepoPath)
 			mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, targetBranch, gc)
 			if err != nil {
 				return fmt.Errorf("detect merges: %w", err)

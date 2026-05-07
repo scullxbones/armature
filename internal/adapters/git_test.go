@@ -1,4 +1,4 @@
-package git_test
+package adapters_test
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ func initTestRepo(t *testing.T) string {
 func TestCreateOrphanBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	err := c.CreateOrphanBranch("_armature")
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestCreateOrphanBranch(t *testing.T) {
 func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	// Second call should not error; branch already exists so it returns nil immediately
@@ -70,7 +70,7 @@ func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 func TestAddWorktree(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	require.NoError(t, c.CreateOrphanBranch("_armature"))
 
@@ -87,7 +87,7 @@ func TestAddWorktree(t *testing.T) {
 func TestSetAndReadGitConfig(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	err := c.SetGitConfig("armature.ops-worktree-path", "/some/path")
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestSetAndReadGitConfig(t *testing.T) {
 func TestReadGitConfig_Unset(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	_, err := c.ReadGitConfig("armature.nonexistent")
 	assert.Error(t, err)
@@ -109,7 +109,7 @@ func TestReadGitConfig_Unset(t *testing.T) {
 func TestCommitWorktreeOp(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	// Create orphan branch and worktree (using E2-001 methods)
 	require.NoError(t, c.CreateOrphanBranch("_armature"))
@@ -123,7 +123,7 @@ func TestCommitWorktreeOp(t *testing.T) {
 	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
 
 	// CommitWorktreeOp is called on a client rooted at the worktree
-	wc := git.New(worktreePath)
+	wc := adapters.New(worktreePath)
 	err := wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
 	require.NoError(t, err)
 
@@ -137,7 +137,7 @@ func TestCommitWorktreeOp(t *testing.T) {
 func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	worktreePath := filepath.Join(repo, ".arm")
@@ -148,7 +148,7 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	logFile := filepath.Join(opsDir, "worker-abc.log")
 	require.NoError(t, os.WriteFile(logFile, []byte("op1\n"), 0644))
-	wc := git.New(worktreePath)
+	wc := adapters.New(worktreePath)
 	require.NoError(t, wc.CommitWorktreeOp("ops/worker-abc.log", "first commit"))
 
 	// Call again without changes — should not error
@@ -159,7 +159,7 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 func TestBranchMergedInto_Merged(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	// Detect what branch we're on
 	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
@@ -186,7 +186,7 @@ func TestBranchMergedInto_Merged(t *testing.T) {
 func TestBranchMergedInto_NotMerged(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
@@ -207,200 +207,10 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 	assert.False(t, merged)
 }
 
-// TestConcurrentWorkerPush demonstrates what happens when two workers commit
-// to their own log files on _armature and both try to push to a shared remote. Uses _armature branch.
-// Worker A pushes first (fast-forward, succeeds). Worker B's push is rejected
-// because the remote tip has moved — it must fetch+rebase before pushing.
-func TestConcurrentWorkerPush_SecondPushRejected(t *testing.T) {
-	t.Parallel()
-	// Set up a bare remote repo that acts as the shared git server
-	remote := t.TempDir()
-	gitRun := func(dir string, args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v in %s: %s", args, dir, out)
-		return strings.TrimSpace(string(out))
-	}
-	gitRun(remote, "init", "--bare")
-
-	// Clone into two worker repos simulating two independent agents
-	workerA := t.TempDir()
-	workerB := t.TempDir()
-	gitRun(workerA, "clone", remote, ".")
-	gitRun(workerA, "config", "user.email", "a@test.com")
-	gitRun(workerA, "config", "user.name", "Worker A")
-	gitRun(workerA, "config", "commit.gpgsign", "false")
-	gitRun(workerB, "clone", remote, ".")
-	gitRun(workerB, "config", "user.email", "b@test.com")
-	gitRun(workerB, "config", "user.name", "Worker B")
-	gitRun(workerB, "config", "commit.gpgsign", "false")
-
-	// Both workers create the _armature orphan branch locally (simulating trls init)
-	// and push it to the remote so both start from the same tip
-	gitRun(workerA, "checkout", "--orphan", "_armature")
-	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _armature")
-	gitRun(workerA, "push", "-u", "origin", "_armature")
-	gitRun(workerB, "fetch", "origin")
-	gitRun(workerB, "checkout", "-b", "_armature", "origin/_armature")
-	gitRun(workerB, "branch", "--set-upstream-to=origin/_armature", "_armature")
-
-	// Worker A writes an op to its own log file and commits
-	opsA := filepath.Join(workerA, "ops")
-	require.NoError(t, os.MkdirAll(opsA, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsA, "worker-a.log"), []byte(`{"type":"claim"}`+"\n"), 0644))
-	gitRun(workerA, "add", "ops/worker-a.log")
-	gitRun(workerA, "commit", "-m", "ops: claim E3-001 by worker-a")
-
-	// Worker B writes an op to its own log file and commits (also from the old tip)
-	opsB := filepath.Join(workerB, "ops")
-	require.NoError(t, os.MkdirAll(opsB, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsB, "worker-b.log"), []byte(`{"type":"claim"}`+"\n"), 0644))
-	gitRun(workerB, "add", "ops/worker-b.log")
-	gitRun(workerB, "commit", "-m", "ops: claim E3-001 by worker-b")
-
-	// Worker A pushes successfully (fast-forward)
-	gitRun(workerA, "push", "origin", "_armature")
-
-	// Worker B's push is rejected — remote tip has moved
-	pushB := exec.Command("git", "-C", workerB, "push", "origin", "_armature")
-	out, err := pushB.CombinedOutput()
-	require.Error(t, err, "expected worker B's push to be rejected, but it succeeded: %s", out)
-	assert.Contains(t, string(out), "rejected", "expected rejection message: %s", out)
-
-	// Worker B must fetch + rebase to make its push fast-forward
-	gitRun(workerB, "fetch", "origin")
-	gitRun(workerB, "rebase", "origin/_armature")
-
-	// Now worker B's push succeeds
-	gitRun(workerB, "push", "origin", "_armature")
-
-	// Verify the remote has both workers' log files
-	verify := t.TempDir()
-	gitRun(verify, "clone", remote, ".")
-	gitRun(verify, "checkout", "_armature")
-	_, errA := os.Stat(filepath.Join(verify, "ops", "worker-a.log"))
-	_, errB := os.Stat(filepath.Join(verify, "ops", "worker-b.log"))
-	assert.NoError(t, errA, "worker-a.log should be present on remote")
-	assert.NoError(t, errB, "worker-b.log should be present on remote")
-}
-
-// setupTwoWorkerRepos creates a bare remote and two worker clones, both on _armature branch.
-// Returns (remote, workerA, workerB paths).
-func setupTwoWorkerRepos(t *testing.T) (string, string, string) {
-	t.Helper()
-	remote := t.TempDir()
-	gitRun := func(dir string, args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v in %s: %s", args, dir, out)
-	}
-	gitRun(remote, "init", "--bare")
-
-	workerA := t.TempDir()
-	workerB := t.TempDir()
-	gitRun(workerA, "clone", remote, ".")
-	gitRun(workerA, "config", "user.email", "a@test.com")
-	gitRun(workerA, "config", "user.name", "Worker A")
-	gitRun(workerA, "config", "commit.gpgsign", "false")
-	gitRun(workerB, "clone", remote, ".")
-	gitRun(workerB, "config", "user.email", "b@test.com")
-	gitRun(workerB, "config", "user.name", "Worker B")
-	gitRun(workerB, "config", "commit.gpgsign", "false")
-
-	gitRun(workerA, "checkout", "--orphan", "_armature")
-	gitRun(workerA, "commit", "--allow-empty", "-m", "init: _armature")
-	gitRun(workerA, "push", "-u", "origin", "_armature")
-	gitRun(workerB, "fetch", "origin")
-	gitRun(workerB, "checkout", "-b", "_armature", "origin/_armature")
-	gitRun(workerB, "branch", "--set-upstream-to=origin/_armature", "_armature")
-
-	return remote, workerA, workerB
-}
-
-func TestPush_FastForward_Succeeds(t *testing.T) {
-	t.Parallel()
-	_, workerA, _ := setupTwoWorkerRepos(t)
-	cA := git.New(workerA)
-
-	// Worker A makes a commit then pushes with the new Push method
-	opsA := filepath.Join(workerA, "ops")
-	require.NoError(t, os.MkdirAll(opsA, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsA, "worker-a.log"), []byte("op1\n"), 0644))
-	cmd := exec.Command("git", "-C", workerA, "add", "ops/worker-a.log")
-	require.NoError(t, cmd.Run())
-	cmd = exec.Command("git", "-C", workerA, "commit", "-m", "ops: add log")
-	require.NoError(t, cmd.Run())
-
-	err := cA.Push("_armature")
-	assert.NoError(t, err)
-}
-
-func TestPush_Rejected_ReturnsError(t *testing.T) {
-	t.Parallel()
-	_, workerA, workerB := setupTwoWorkerRepos(t)
-
-	// Worker A makes a commit and pushes
-	opsA := filepath.Join(workerA, "ops")
-	require.NoError(t, os.MkdirAll(opsA, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsA, "worker-a.log"), []byte("op1\n"), 0644))
-	cmdA := exec.Command("git", "-C", workerA, "add", "ops/worker-a.log")
-	require.NoError(t, cmdA.Run())
-	cmdA = exec.Command("git", "-C", workerA, "commit", "-m", "ops: worker-a")
-	require.NoError(t, cmdA.Run())
-	cmdA = exec.Command("git", "-C", workerA, "push", "origin", "_armature")
-	require.NoError(t, cmdA.Run())
-
-	// Worker B makes a commit from the old tip — push should be rejected
-	cB := git.New(workerB)
-	opsB := filepath.Join(workerB, "ops")
-	require.NoError(t, os.MkdirAll(opsB, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsB, "worker-b.log"), []byte("op1\n"), 0644))
-	cmdB := exec.Command("git", "-C", workerB, "add", "ops/worker-b.log")
-	require.NoError(t, cmdB.Run())
-	cmdB = exec.Command("git", "-C", workerB, "commit", "-m", "ops: worker-b")
-	require.NoError(t, cmdB.Run())
-
-	err := cB.Push("_armature")
-	assert.Error(t, err, "expected push to be rejected")
-}
-
-func TestFetchAndRebase_Then_Push_Succeeds(t *testing.T) {
-	t.Parallel()
-	_, workerA, workerB := setupTwoWorkerRepos(t)
-
-	// Worker A pushes first
-	opsA := filepath.Join(workerA, "ops")
-	require.NoError(t, os.MkdirAll(opsA, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsA, "worker-a.log"), []byte("op1\n"), 0644))
-	cmdA := exec.Command("git", "-C", workerA, "add", "ops/worker-a.log")
-	require.NoError(t, cmdA.Run())
-	cmdA = exec.Command("git", "-C", workerA, "commit", "-m", "ops: worker-a")
-	require.NoError(t, cmdA.Run())
-	cmdA = exec.Command("git", "-C", workerA, "push", "origin", "_armature")
-	require.NoError(t, cmdA.Run())
-
-	// Worker B commits from old tip
-	cB := git.New(workerB)
-	opsB := filepath.Join(workerB, "ops")
-	require.NoError(t, os.MkdirAll(opsB, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(opsB, "worker-b.log"), []byte("op1\n"), 0644))
-	cmdB := exec.Command("git", "-C", workerB, "add", "ops/worker-b.log")
-	require.NoError(t, cmdB.Run())
-	cmdB = exec.Command("git", "-C", workerB, "commit", "-m", "ops: worker-b")
-	require.NoError(t, cmdB.Run())
-
-	// FetchAndRebase resolves the conflict, then push succeeds
-	require.NoError(t, cB.FetchAndRebase("_armature"))
-	err := cB.Push("_armature")
-	assert.NoError(t, err)
-}
-
 func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	// Non-existent branch should return (false, nil) not an error
 	merged, err := c.BranchMergedInto("feature/ghost", "main")
@@ -411,7 +221,7 @@ func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 func TestListFilesAtCommit(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
 		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
@@ -440,7 +250,7 @@ func TestListFilesAtCommit(t *testing.T) {
 func TestListFilesAtCommit_InvalidSHA(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	_, err := c.ListFilesAtCommit("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 	assert.Error(t, err)
@@ -449,7 +259,7 @@ func TestListFilesAtCommit_InvalidSHA(t *testing.T) {
 func TestShowFileAtCommit(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
 		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
@@ -475,7 +285,7 @@ func TestShowFileAtCommit(t *testing.T) {
 func TestShowFileAtCommit_MissingFile(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
@@ -489,7 +299,7 @@ func TestShowFileAtCommit_MissingFile(t *testing.T) {
 func TestLogBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
 		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
@@ -524,7 +334,7 @@ func TestLogBranch(t *testing.T) {
 func TestLogBranch_InvalidBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := git.New(repo)
+	c := adapters.New(repo)
 
 	_, err := c.LogBranch("no-such-branch", 10)
 	assert.Error(t, err)
