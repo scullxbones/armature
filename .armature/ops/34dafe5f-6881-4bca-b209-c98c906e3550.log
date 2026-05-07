@@ -1837,3 +1837,4 @@
 ["source-fingerprint","5ade6adc-4d24-4615-a04a-bd1ad48f4085",1778176642,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"9a964d32272014833d1da63b4f46a92a35776496dae4d3c81511030fdc00f013","provider":"filesystem"}]
 ["source-fingerprint","9d392cac-bdbe-4091-bd50-6bf56d7ade9d",1778176642,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"6e864e722782969b97e89e2d666bf4708b900026c61e03cecd50aa5fcd615684","provider":"filesystem"}]
 ["source-fingerprint","db7cb95b-1778-4992-908c-8eb26e8ddee7",1778176642,"34dafe5f-6881-4bca-b209-c98c906e3550",{"sha":"54b5ffed9d0188cd2c8e953148dbc9444530da87d2b2e2b3e240559545a30ae4","provider":"filesystem"}]
+["source-link","E7",1778183114,"34dafe5f-6881-4bca-b209-c98c906e3550",{"source_id":"7a92f2d9-c184-4acd-9538-113368e39692","source_url":"docs/superpowers/specs/2026-05-05-orchestrator-design.md"}]
