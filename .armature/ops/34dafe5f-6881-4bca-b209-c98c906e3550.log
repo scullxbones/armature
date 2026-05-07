@@ -1915,3 +1915,4 @@
 ["transition","E6-S5-T1",1778186701,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created internal/adapters/files.go consolidating all file I/O from 7 core packages (ops, materialize state/checkpoint, sources manifest, config, decompose plan, traceability). All source packages no longer import os directly for file I/O. All tests pass, make check green."}]
 ["claim","E6-S5-T2",1778187097,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","E6-S5-T3",1778187098,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","E6-S5-T2",1778187168,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting: internal/git/ → internal/adapters/git.go migration. Found 9 callers across cmd and internal/materialize. Plan: (1) Copy git.go to internal/adapters/git.go (2) Move git_test.go to internal/adapters/git_test.go (3) Update package declaration (4) Update imports in all 9 callers (5) Remove internal/git/ (6) Run tests"}]
