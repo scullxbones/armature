@@ -8,13 +8,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 )
 
-func sourcesDir() string {
-	return filepath.Join(appCtx.IssuesDir, "sources")
+func sourcesDir(args ...*config.Context) string {
+	ctx := appCtx
+	if len(args) > 0 && args[0] != nil {
+		ctx = args[0]
+	}
+	if ctx == nil {
+		return filepath.Join(".", "sources")
+	}
+	return filepath.Join(ctx.IssuesDir, "sources")
 }
 
 func newSourcesCmd() *cobra.Command {
@@ -37,7 +45,8 @@ func newSourcesAddCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Add a new source to the manifest",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := sourcesDir()
+			appCtx := currentCtx(cmd)
+			dir := sourcesDir(appCtx)
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)
@@ -81,7 +90,8 @@ func newSourcesSyncCmd() *cobra.Command {
 		Use:   "sync",
 		Short: "Fetch and cache content for all sources",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := sourcesDir()
+			appCtx := currentCtx(cmd)
+			dir := sourcesDir(appCtx)
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)
@@ -92,7 +102,7 @@ func newSourcesSyncCmd() *cobra.Command {
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -135,7 +145,7 @@ func newSourcesSyncCmd() *cobra.Command {
 						Provider: entry.ProviderType,
 					},
 				}
-				if err := appendLowStakesOp(logPath, o); err != nil {
+				if err := appendLowStakesOp(mustState(cmd), logPath, o); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", id, err)
 				}
 
@@ -162,7 +172,8 @@ func newSourcesVerifyCmd() *cobra.Command {
 		Use:   "verify",
 		Short: "Verify cached content matches stored fingerprints",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := sourcesDir()
+			appCtx := currentCtx(cmd)
+			dir := sourcesDir(appCtx)
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)

@@ -20,7 +20,7 @@ help:
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make clean      - Remove build artifacts and test outputs"
 	@echo "  make build      - Build CLI binary to ./bin/arm"
-	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/"
+	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
 	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
@@ -90,7 +90,7 @@ deploy-skills:
 	@for name in internal/skillsembed/skills/*/; do \
 		name=$$(basename "$$name"); \
 		[ -f "internal/skillsembed/skills/$$name/SKILL.md" ] || continue; \
-		for harness in claude gemini; do \
+		for harness in claude gemini codex; do \
 			mkdir -p ".$$harness/skills/$$name"; \
 			cp -r "internal/skillsembed/skills/$$name/." ".$$harness/skills/$$name/"; \
 		done; \

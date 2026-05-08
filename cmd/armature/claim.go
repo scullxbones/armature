@@ -38,6 +38,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
   $ arm claim --issue another-task-id`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -64,7 +65,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
@@ -80,7 +81,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 					if entry.Assignee == workerID {
 						noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 							WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
-						appendOp(logPath, noteOp) //nolint:errcheck
+						appendOp(appCtx, logPath, noteOp) //nolint:errcheck
 						continue
 					}
 					if !force {
@@ -90,10 +91,10 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
 					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
-					appendOp(logPath, noteOp) //nolint:errcheck
+					appendOp(appCtx, logPath, noteOp) //nolint:errcheck
 					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
-					appendOp(logPath, noteOp2) //nolint:errcheck
+					appendOp(appCtx, logPath, noteOp2) //nolint:errcheck
 				}
 			}
 
@@ -101,7 +102,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{TTL: ttl},
 			}
-			if err := appendHighStakesOp(logPath, op); err != nil {
+			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				return err
 			}
 
@@ -115,7 +116,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 						WorkerID:  workerID,
 						Payload:   ops.Payload{To: ops.StatusInProgress},
 					}
-					appendOp(logPath, advanceOp) //nolint:errcheck
+					appendOp(appCtx, logPath, advanceOp) //nolint:errcheck
 				}
 			}
 

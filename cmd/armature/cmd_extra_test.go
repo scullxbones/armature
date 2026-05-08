@@ -738,7 +738,11 @@ func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
 func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
-	_, err := runTrls(t, repo, "worker-init")
+
+	_, err := runTrls(t, repo, "create", "--title", "Task three", "--type", "task", "--id", "task-03")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "accept-citation",

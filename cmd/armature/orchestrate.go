@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/orchestrate"
@@ -59,6 +60,7 @@ Three-level model resolution:
   # Allow up to 5 retries with a 300-second timeout
   $ arm orchestrate --issue E7-S1-T1 --retries 5 --timeout 300`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			if issueID == "" {
 				return fmt.Errorf("--issue is required")
 			}
@@ -82,7 +84,7 @@ Three-level model resolution:
 			resolvedModel := resolveModel(model, issue.PreferredModel, appCtx.Config.Orchestrator.DefaultModel)
 
 			// --- Resolve worker ID ---
-			workerID, logPath, err := resolveWorkerAndLog()
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
@@ -108,7 +110,7 @@ Three-level model resolution:
 			}
 
 			// --- Build op log adapter ---
-			opLog := &fileOpLog{logPath: logPath}
+			opLog := &fileOpLog{ctx: appCtx, logPath: logPath}
 
 			// --- Gather active scopes from the index for overlap checking ---
 			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
@@ -144,16 +146,16 @@ Three-level model resolution:
 
 			// --- Run ---
 			var cancelFn context.CancelFunc
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
+			runCtx := cmd.Context()
+			if runCtx == nil {
+				runCtx = context.Background()
 			}
 			if timeout > 0 {
-				ctx, cancelFn = context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+				runCtx, cancelFn = context.WithTimeout(runCtx, time.Duration(timeout)*time.Second)
 				defer cancelFn()
 			}
 
-			state, err := engine.Run(ctx)
+			state, err := engine.Run(runCtx)
 			if err != nil {
 				return fmt.Errorf("orchestrate %s: %w", issueID, err)
 			}
@@ -190,6 +192,7 @@ Three-level model resolution:
 
 // fileOpLog is a thin adapter that bridges ops.AppendOp with orchestrate.OpLog.
 type fileOpLog struct {
+	ctx     *config.Context
 	logPath string
 }
 
@@ -198,5 +201,5 @@ func (f *fileOpLog) ReadAll() ([]ops.Op, error) {
 }
 
 func (f *fileOpLog) Append(op ops.Op) error {
-	return appendOp(f.logPath, op)
+	return appendOp(f.ctx, f.logPath, op)
 }

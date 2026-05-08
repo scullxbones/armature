@@ -10,6 +10,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	armsync "github.com/scullxbones/armature/internal/sync"
@@ -67,8 +68,8 @@ Examples:
 }
 
 // hookCurrentBranch returns the current git branch name, or empty string on error.
-func hookCurrentBranch() string {
-	gc := adapters.New(appCtx.RepoPath)
+func hookCurrentBranch(repoPath string) string {
+	gc := adapters.New(repoPath)
 	branch, err := gc.CurrentBranch()
 	if err != nil {
 		return ""
@@ -77,13 +78,13 @@ func hookCurrentBranch() string {
 }
 
 // hookIsDualBranch reports whether the repo is in dual-branch mode.
-func hookIsDualBranch() bool {
-	return appCtx.Mode == "dual-branch"
+func hookIsDualBranch(ctx *config.Context) bool {
+	return ctx.Mode == "dual-branch"
 }
 
 // hookFindActiveClaimID returns the active claim ID for the current worker, or empty string if none.
-func hookFindActiveClaimID() string {
-	workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+func hookFindActiveClaimID(ctx *config.Context) string {
+	workerID, err := worker.GetWorkerID(ctx.RepoPath)
 	if err != nil {
 		return ""
 	}
@@ -92,14 +93,14 @@ func hookFindActiveClaimID() string {
 	if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
 		logName = workerID + "~" + slot
 	}
-	logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, logName)
+	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, logName)
 
 	allOps, err := ops.ReadLog(logPath)
 	if err != nil {
 		return ""
 	}
 
-	defaultTTL := appCtx.Config.DefaultTTL
+	defaultTTL := ctx.Config.DefaultTTL
 	if defaultTTL <= 0 {
 		defaultTTL = 60
 	}
@@ -145,14 +146,15 @@ func hookFindActiveClaimID() string {
 // runPreCommitHook implements the pre-commit hook logic natively.
 // In dual-branch mode, it blocks additions/modifications to .armature/ops/ on non-_armature branches.
 func runPreCommitHook(cmd *cobra.Command) error {
+	appCtx := currentCtx(cmd)
 	// Allow all commits on _armature branch
-	branch := hookCurrentBranch()
+	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
 		return nil
 	}
 
 	// Single-branch mode: allow ops/ commits
-	if !hookIsDualBranch() {
+	if !hookIsDualBranch(appCtx) {
 		return nil
 	}
 
@@ -179,18 +181,19 @@ func runPreCommitHook(cmd *cobra.Command) error {
 // runPostCommitHook implements the post-commit hook logic natively.
 // Sends a heartbeat for any active claim and, in dual-branch mode, pushes ops.
 func runPostCommitHook(cmd *cobra.Command) error {
+	appCtx := currentCtx(cmd)
 	// Skip on _armature branch
-	branch := hookCurrentBranch()
+	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
 		return nil
 	}
 
-	claimID := hookFindActiveClaimID()
+	claimID := hookFindActiveClaimID(appCtx)
 	if claimID == "" {
 		return nil
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog()
+	workerID, logPath, err := resolveWorkerAndLog(appCtx)
 	if err != nil {
 		// Best-effort — don't block the commit
 		return nil
@@ -202,7 +205,7 @@ func runPostCommitHook(cmd *cobra.Command) error {
 		Timestamp: nowEpoch(),
 		WorkerID:  workerID,
 	}
-	if err := appendLowStakesOp(logPath, op); err != nil {
+	if err := appendLowStakesOp(mustState(cmd), logPath, op); err != nil {
 		// Best-effort — don't block the commit
 		return nil
 	}
@@ -217,6 +220,7 @@ func runPostCommitHook(cmd *cobra.Command) error {
 // then emits scope-rename / scope-delete ops for any issue whose scope is affected.
 // It skips silently when HEAD~1 is absent (initial commit) and swallows all errors.
 func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
+	appCtx := currentCtx(cmd)
 	// --name-status with diff-filter covers renames (R*) and deletions (D).
 	gitCmd := exec.Command("git", "-C", appCtx.RepoPath,
 		"diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
@@ -262,7 +266,7 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 								NewPath: newPath,
 							},
 						}
-						_ = appendLowStakesOp(logPath, op)
+						_ = appendLowStakesOp(mustState(cmd), logPath, op)
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-rename: %s %s -> %s\n", issueID, oldPath, newPath)
 						break
 					}
@@ -283,7 +287,7 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 								DeletedPath: deletedPath,
 							},
 						}
-						_ = appendLowStakesOp(logPath, op)
+						_ = appendLowStakesOp(mustState(cmd), logPath, op)
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-delete: %s %s\n", issueID, deletedPath)
 						break
 					}
@@ -296,8 +300,9 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 // runPostMergeHook implements the post-merge hook logic natively.
 // Runs the sync command to auto-transition done issues to merged.
 func runPostMergeHook(cmd *cobra.Command) error {
+	appCtx := currentCtx(cmd)
 	// Skip on _armature branch
-	branch := hookCurrentBranch()
+	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
 		return nil
 	}
@@ -331,7 +336,7 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		return nil
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog()
+	workerID, logPath, err := resolveWorkerAndLog(appCtx)
 	if err != nil {
 		return err
 	}
@@ -347,7 +352,7 @@ func runPostMergeHook(cmd *cobra.Command) error {
 				Outcome: "auto-detected merge into " + branch,
 			},
 		}
-		if err := appendOp(logPath, op); err != nil {
+		if err := appendOp(appCtx, logPath, op); err != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
 			continue
 		}
@@ -368,17 +373,18 @@ func runPostMergeHook(cmd *cobra.Command) error {
 // runPrepareCommitMsgHook implements the prepare-commit-msg hook logic natively.
 // If there is an active claim, prepends its ID to the commit message file.
 func runPrepareCommitMsgHook(cmd *cobra.Command, args []string) error {
+	appCtx := currentCtx(cmd)
 	if len(args) == 0 {
 		return fmt.Errorf("prepare-commit-msg requires a commit message file path argument")
 	}
 
 	// Skip on _armature branch
-	branch := hookCurrentBranch()
+	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
 		return nil
 	}
 
-	claimID := hookFindActiveClaimID()
+	claimID := hookFindActiveClaimID(appCtx)
 	if claimID == "" {
 		return nil
 	}
