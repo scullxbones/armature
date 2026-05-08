@@ -165,4 +165,10 @@ type Payload struct {
 
 	// create — preferred model hint for the assigned agent
 	PreferredModel string `json:"preferred_model,omitempty"`
+
+	// orchestrate-start, orchestrate-dispatch, orchestrate-retry payload fields
+	WorktreePath   string `json:"worktree_path,omitempty"`
+	PreDispatchRef string `json:"pre_dispatch_ref,omitempty"`
+	RetryBudget    int    `json:"retry_budget,omitempty"`
+	Run            int    `json:"run,omitempty"`
 }
