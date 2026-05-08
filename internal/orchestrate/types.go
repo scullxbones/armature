@@ -117,10 +117,11 @@ type RunOptions struct {
 }
 
 // OrchestrateState captures the runtime state of an orchestration run.
+// It is used both for live orchestration and for crash-resume state derivation.
 type OrchestrateState struct {
 	// RunID is a unique identifier for this orchestration run.
 	RunID string
-	// Phase is the current phase of the run (e.g. "build", "lint", "test").
+	// Phase is the current phase of the run (e.g. "pending", "dispatched", "running", "verify-failed", "retrying", "escalated", "complete").
 	Phase string
 	// Checks is the ordered list of check results accumulated so far.
 	Checks []CheckResult
@@ -130,6 +131,17 @@ type OrchestrateState struct {
 	StartedAt int64
 	// FinishedAt is the Unix timestamp (seconds) when the run ended (0 if still running).
 	FinishedAt int64
+
+	// Crash-resume fields derived from replaying the op log.
+
+	// Run is the 1-based count of how many dispatch cycles have been attempted.
+	Run int
+	// PreDispatchRef is the git commit ref recorded just before the last dispatch.
+	PreDispatchRef string
+	// WorktreePath is the path to the agent worktree for this task.
+	WorktreePath string
+	// RetryBudget is the number of retry attempts remaining.
+	RetryBudget int
 }
 
 // HarnessAdapter is the interface that every verification adapter must satisfy.
