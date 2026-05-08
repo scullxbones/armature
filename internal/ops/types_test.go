@@ -96,3 +96,90 @@ func TestPayload_SourceEntryID_OmittedWhenEmpty(t *testing.T) {
 		t.Errorf("expected source_entry_id to be absent from JSON when empty, got: %s", data)
 	}
 }
+
+// Orchestration op type constants must all be registered in ValidOpTypes.
+func TestOrchestrationOpConstants_RegisteredInValidOpTypes(t *testing.T) {
+	orchOps := []struct {
+		name   string
+		opType string
+	}{
+		{"OpOrchestrateStart", OpOrchestrateStart},
+		{"OpOrchestrateDispatch", OpOrchestrateDispatch},
+		{"OpOrchestrateDispatchComplete", OpOrchestrateDispatchComplete},
+		{"OpOrchestrateVerifyFail", OpOrchestrateVerifyFail},
+		{"OpOrchestrateRetry", OpOrchestrateRetry},
+		{"OpOrchestrateEscalate", OpOrchestrateEscalate},
+		{"OpOrchestrateComplete", OpOrchestrateComplete},
+		{"OpOrchestrateCheckResult", OpOrchestrateCheckResult},
+	}
+	for _, tc := range orchOps {
+		if !ValidOpTypes[tc.opType] {
+			t.Errorf("%s (%q) is not registered in ValidOpTypes", tc.name, tc.opType)
+		}
+	}
+}
+
+func TestOrchestrationOpConstants_Values(t *testing.T) {
+	// Verify the string values are as expected.
+	cases := []struct {
+		constant string
+		want     string
+	}{
+		{OpOrchestrateStart, "orchestrate-start"},
+		{OpOrchestrateDispatch, "orchestrate-dispatch"},
+		{OpOrchestrateDispatchComplete, "orchestrate-dispatch-complete"},
+		{OpOrchestrateVerifyFail, "orchestrate-verify-fail"},
+		{OpOrchestrateRetry, "orchestrate-retry"},
+		{OpOrchestrateEscalate, "orchestrate-escalate"},
+		{OpOrchestrateComplete, "orchestrate-complete"},
+		{OpOrchestrateCheckResult, "orchestrate-check-result"},
+	}
+	for _, tc := range cases {
+		if tc.constant != tc.want {
+			t.Errorf("expected %q, got %q", tc.want, tc.constant)
+		}
+	}
+}
+
+func TestFailureRecord_Fields(t *testing.T) {
+	// FailureRecord must be a typed struct with IssueID, Reason, and Timestamp fields.
+	fr := FailureRecord{
+		IssueID:   "E7-S1-T4",
+		Reason:    "test failure",
+		Timestamp: 1234567890,
+	}
+	if fr.IssueID != "E7-S1-T4" {
+		t.Errorf("expected IssueID %q, got %q", "E7-S1-T4", fr.IssueID)
+	}
+	if fr.Reason != "test failure" {
+		t.Errorf("expected Reason %q, got %q", "test failure", fr.Reason)
+	}
+	if fr.Timestamp != 1234567890 {
+		t.Errorf("expected Timestamp 1234567890, got %d", fr.Timestamp)
+	}
+}
+
+func TestFailureRecord_JSONRoundTrip(t *testing.T) {
+	fr := FailureRecord{
+		IssueID:   "E7-S1-T4",
+		Reason:    "verify failed",
+		Timestamp: 9999,
+	}
+	data, err := json.Marshal(fr)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	var fr2 FailureRecord
+	if err := json.Unmarshal(data, &fr2); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if fr2.IssueID != fr.IssueID {
+		t.Errorf("expected IssueID %q, got %q", fr.IssueID, fr2.IssueID)
+	}
+	if fr2.Reason != fr.Reason {
+		t.Errorf("expected Reason %q, got %q", fr.Reason, fr2.Reason)
+	}
+	if fr2.Timestamp != fr.Timestamp {
+		t.Errorf("expected Timestamp %d, got %d", fr.Timestamp, fr2.Timestamp)
+	}
+}
