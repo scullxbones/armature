@@ -1986,3 +1986,4 @@
 ["heartbeat","E7-S1-T8",1778256282,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T8",1778256311,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["citation-accepted","E7-S1-T12",1778256560,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Implementation files feedback.go and prompt.go are new code, no source document exists"}]
+["transition","E7-S1-T12",1778256565,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"AssembleFeedback adds negative scope constraint on retry 2, named file list on retry 3; AssemblePrompt renders context + scope constraint + named files + 'Do not commit' instruction + failed-checks block; 100% test coverage; make check green at 100% test efficacy"}]
