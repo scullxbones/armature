@@ -1973,3 +1973,4 @@
 ["transition","E7-S1-T5",1778255664,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","E7-S1-T4",1778255677,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","E7-S1-T8",1778255678,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["note","E7-S1-T12",1778255680,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with E7-S1-T8 (same worker, dismissed)"}]
