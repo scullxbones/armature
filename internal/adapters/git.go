@@ -241,6 +241,16 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	return entries, nil
 }
 
+// HeadSHA returns the full SHA of the current HEAD commit.
+func (c *Client) HeadSHA() (string, error) {
+	cmd := c.cmd("rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // RemoveWorktree removes a linked worktree at the given path. It runs
 // "git worktree remove --force <path>" so that it works even if the worktree
 // has uncommitted changes. Returns an error if git reports a failure (e.g.
