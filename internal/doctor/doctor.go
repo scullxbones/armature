@@ -2,8 +2,9 @@
 package doctor
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -163,7 +164,7 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 		path := filepath.Join(stateDir, "issues", id+".json")
 		issue, err := materialize.LoadIssue(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
 			return nil, fmt.Errorf("load issue %s: %w", id, err)
@@ -411,12 +412,8 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 
 // readAllOpsFromOpsDir reads all ops from the ops directory.
 func readAllOpsFromOpsDir(opsDir string) ([]ops.Op, error) {
-	entries, err := os.ReadDir(opsDir)
+	entries, err := adapters.ReadDir(opsDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// No ops dir yet — return empty slice
-			return []ops.Op{}, nil
-		}
 		return nil, err
 	}
 
@@ -439,12 +436,8 @@ func readAllOpsFromOpsDir(opsDir string) ([]ops.Op, error) {
 // readAllOpsFromOpsDirWithLocations reads all ops and tracks which log file each came from.
 // Returns ops and a map of target ID to (logfile:lineno) location strings.
 func readAllOpsFromOpsDirWithLocations(opsDir string) ([]ops.Op, map[string][]string, error) {
-	entries, err := os.ReadDir(opsDir)
+	entries, err := adapters.ReadDir(opsDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// No ops dir yet — return empty
-			return []ops.Op{}, make(map[string][]string), nil
-		}
 		return nil, nil, err
 	}
 

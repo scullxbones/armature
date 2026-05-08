@@ -332,3 +332,48 @@ func ExpandGlobs(globs map[string][]string) map[string][]string {
 	}
 	return result
 }
+
+// ===== Directory Operations (for state directories and ops directories) =====
+
+// MkdirAll creates directories recursively.
+func MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
+}
+
+// ReadDir lists all entries in a directory.
+// Returns empty slice if directory does not exist.
+func ReadDir(dir string) ([]os.DirEntry, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []os.DirEntry{}, nil
+		}
+		return nil, err
+	}
+	return entries, nil
+}
+
+// Stat returns file info for a path.
+// Returns nil if path does not exist.
+func Stat(path string) (os.FileInfo, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return info, nil
+}
+
+// ===== Generic File Read/Write (for packages that need raw I/O) =====
+
+// ReadFile reads the entire contents of a file.
+func ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+// WriteFile writes data to a file, creating it if it does not exist.
+func WriteFile(path string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(path, data, perm)
+}

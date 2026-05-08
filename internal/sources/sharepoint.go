@@ -3,7 +3,6 @@ package sources
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/scullxbones/armature/internal/adapters"
 )
@@ -12,7 +11,7 @@ import (
 type SharePointProvider struct {
 	baseURL string
 	creds   Credentials
-	client  *http.Client
+	client  adapters.HTTPClient
 }
 
 // NewSharePointProvider returns a new SharePointProvider targeting baseURL
