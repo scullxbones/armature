@@ -1970,3 +1970,4 @@
 ["citation-accepted","E7-S1-T2",1778255092,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"No external source; implementation derived from task spec and sibling outcomes"}]
 ["transition","E7-S1-T2",1778255096,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added SourceEntryID to Payload (JSONL round-trip with omitempty) and CitationAcceptance (JSON round-trip); applyCitationAccepted populates SourceEntryID from op payload; all tests pass, make check green at 100% test efficacy"}]
 ["transition","E7-S1-T2",1778255664,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","E7-S1-T5",1778255664,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
