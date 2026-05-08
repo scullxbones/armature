@@ -285,30 +285,6 @@ func (nilScreen) HelpBar() string                          { return "" }
 func (nilScreen) SetSize(_, _ int)                         {}
 func (nilScreen) SetState(_ *materialize.State)            {}
 
-// readAllOpsFromDir reads all ops from a directory of .log files.
-// Returns empty slice if directory doesn't exist.
-func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	entries, err := adapters.ReadDir(opsDir)
-	if err != nil {
-		return nil, err
-	}
-
-	var allOps []ops.Op
-	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
-			logPath := filepath.Join(opsDir, entry.Name())
-			logOps, err := ops.ReadLog(logPath)
-			if err != nil {
-				// Skip logs that can't be read
-				continue
-			}
-			allOps = append(allOps, logOps...)
-		}
-	}
-
-	return allOps, nil
-}
-
 // readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
 // Returns ops slice and a map of log filename -> byte offset (end position).
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {

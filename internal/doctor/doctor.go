@@ -148,16 +148,6 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 	return Report{Checks: checks}, nil
 }
 
-// buildD3VerboseContext builds the verbose context for D3 checks by mapping target IDs to op locations.
-func buildD3VerboseContext(allOps []ops.Op) map[string][]opLocation {
-	locations := make(map[string][]opLocation)
-	// For simplicity, we don't have line/file info from pre-read ops.
-	// The caller (cmd layer) is responsible for tracking these details.
-	// This function is a placeholder for future enhancement.
-	_ = allOps
-	return locations
-}
-
 func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materialize.Issue, error) {
 	result := make(map[string]*materialize.Issue, len(index))
 	for id := range index {
