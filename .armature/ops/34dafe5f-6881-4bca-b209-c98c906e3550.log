@@ -2023,3 +2023,4 @@
 ["heartbeat","E7-S1-T11",1778259581,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T11",1778259955,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T11",1778259999,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["note","E7-S1-T11",1778260020,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Implemented RunPreflight in preflight.go: checks scope paths exist, acceptance criteria parseable+verifiable, citation IDs resolve in manifest, token budget \u003e0, sandbox available when required. Returns PreflightResult with per-failure descriptive errors. make check green (81.7% coverage, all mutations killed)."}]
