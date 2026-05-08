@@ -2009,3 +2009,4 @@
 ["heartbeat","E7-S1-T9",1778258637,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T9",1778258649,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T9",1778259058,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["decision","E7-S1-T9",1778259145,"34dafe5f-6881-4bca-b209-c98c906e3550",{"topic":"RunProcess location","choice":"Added to adapters/shell.go","rationale":"RunProcess did not yet exist in the adapters package; added it alongside LookPath so harness.go has no direct os/exec imports"}]
