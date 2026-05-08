@@ -2030,3 +2030,4 @@
 ["claim","E7-S1-T13",1778261136,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","E7-S1-T13",1778261289,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting engine.go implementation: full state machine idle→dispatched→verifying→correcting→escalated→done, crash resume via DeriveState, zero-trust commit sequence"}]
 ["decision","E7-S1-T13",1778261309,"34dafe5f-6881-4bca-b209-c98c906e3550",{"topic":"Engine interface design","choice":"Engine.Run takes GitClient interface + OpLog path + materialize.Issue","rationale":"Engine needs to call git operations (HeadSHA, DiffFrom, ResetHard, ApplyPatch, AddAll, CommitWithMessage, RemoveWorktree) via adapters.Client; op log path for DeriveState crash resume; materialize.Issue for scope/acceptance data"}]
+["heartbeat","E7-S1-T13",1778261447,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
