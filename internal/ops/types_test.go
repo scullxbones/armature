@@ -68,3 +68,31 @@ func TestPayload_PreferredModel_OmittedWhenEmpty(t *testing.T) {
 		t.Errorf("expected preferred_model to be absent from JSON when empty, got: %s", data)
 	}
 }
+
+func TestPayload_SourceEntryID_RoundTripsJSON(t *testing.T) {
+	// Payload.SourceEntryID must survive JSONL encode/decode.
+	p := Payload{SourceEntryID: "entry-abc123"}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	var p2 Payload
+	if err := json.Unmarshal(data, &p2); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if p2.SourceEntryID != "entry-abc123" {
+		t.Errorf("expected SourceEntryID %q after round-trip, got %q", "entry-abc123", p2.SourceEntryID)
+	}
+}
+
+func TestPayload_SourceEntryID_OmittedWhenEmpty(t *testing.T) {
+	// When SourceEntryID is empty, it must not appear in JSON (omitempty).
+	p := Payload{Title: "some task"}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if bytes.Contains(data, []byte("source_entry_id")) {
+		t.Errorf("expected source_entry_id to be absent from JSON when empty, got: %s", data)
+	}
+}

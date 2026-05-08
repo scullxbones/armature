@@ -133,6 +133,10 @@ type Payload struct {
 	// scope-delete
 	DeletedPath string `json:"deleted_path,omitempty"`
 
+	// citation-accepted — source entry ID from the accept-citation command
+	// (populated when --source is passed to arm accept-citation)
+	SourceEntryID string `json:"source_entry_id,omitempty"`
+
 	// create — preferred model hint for the assigned agent
 	PreferredModel string `json:"preferred_model,omitempty"`
 }
