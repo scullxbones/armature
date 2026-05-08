@@ -1964,3 +1964,4 @@
 ["heartbeat","E7-S1-T5",1778254673,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T5",1778254723,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T2",1778254761,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["decision","E7-S1-T5",1778255034,"34dafe5f-6881-4bca-b209-c98c906e3550",{"topic":"ExitStatus/CheckSeverity as iota int","choice":"int-based iota constants","rationale":"Idiomatic Go for typed constants with String() methods; avoids string comparison overhead; forward-compatible for future values"}]
