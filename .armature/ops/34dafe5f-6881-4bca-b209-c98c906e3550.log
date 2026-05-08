@@ -2048,3 +2048,4 @@
 ["transition","E7-S1-T14",1778264836,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"arm orchestrate command wired in cmd/armature/orchestrate.go with all required flags (--issue, --harness, --model, --retries, --timeout, --dry-run), three-level model resolution (CLI flag \u003e task.PreferredModel \u003e config.Orchestrator.DefaultModel), fileOpLog adapter, and wired into main.go workflow group. DefaultModel field added to OrchestratorConfig. make check green at 81.1% coverage."}]
 ["transition","E7-S1-T14",1778267191,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","E7-S1-T15",1778267196,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","E7-S1-T15",1778267630,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"make check green: lint clean, all tests pass, 88.71% mutation coverage; arm validate 312/312 cited; arm doctor 6/6 checks pass"}]
