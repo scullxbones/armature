@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -10,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/tui"
@@ -288,11 +288,8 @@ func (nilScreen) SetState(_ *materialize.State)            {}
 // readAllOpsFromDir reads all ops from a directory of .log files.
 // Returns empty slice if directory doesn't exist.
 func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	entries, err := os.ReadDir(opsDir)
+	entries, err := adapters.ReadDir(opsDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []ops.Op{}, nil
-		}
 		return nil, err
 	}
 
@@ -315,11 +312,8 @@ func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
 // readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
 // Returns ops slice and a map of log filename -> byte offset (end position).
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	entries, err := os.ReadDir(opsDir)
+	entries, err := adapters.ReadDir(opsDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []ops.Op{}, make(map[string]int64), nil
-		}
 		return nil, nil, err
 	}
 
@@ -336,7 +330,7 @@ func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, er
 			}
 
 			// Get file size to track byte offset
-			if info, err := os.Stat(logPath); err == nil {
+			if info, err := adapters.Stat(logPath); err == nil && info != nil {
 				logName := filepath.Base(logPath)
 				offsets[logName] = info.Size()
 			}

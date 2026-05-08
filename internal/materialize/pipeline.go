@@ -3,10 +3,10 @@ package materialize
 import (
 	"cmp"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
 )
@@ -39,7 +39,7 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
-	if err := os.MkdirAll(issuesStateDir, 0755); err != nil {
+	if err := adapters.MkdirAll(issuesStateDir, 0755); err != nil {
 		return Result{}, fmt.Errorf("create state dir: %w", err)
 	}
 
@@ -88,11 +88,7 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 	}
 
 	readyPath := filepath.Join(stateDir, "ready.json")
-	_ = os.WriteFile(readyPath, []byte("[]"), 0644)
-
-	if fullReplay && len(allOps) > 100 {
-		fmt.Fprintf(os.Stderr, "Full replay: processed %d ops across %d issues\n", len(allOps), len(state.Issues))
-	}
+	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644)
 
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.
@@ -122,7 +118,7 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
-	if err := os.MkdirAll(issuesStateDir, 0755); err != nil {
+	if err := adapters.MkdirAll(issuesStateDir, 0755); err != nil {
 		return nil, Result{}, fmt.Errorf("create state dir: %w", err)
 	}
 
@@ -171,11 +167,7 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	}
 
 	readyPath := filepath.Join(stateDir, "ready.json")
-	_ = os.WriteFile(readyPath, []byte("[]"), 0644)
-
-	if fullReplay && len(allOps) > 100 {
-		fmt.Fprintf(os.Stderr, "Full replay: processed %d ops across %d issues\n", len(allOps), len(state.Issues))
-	}
+	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644)
 
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.

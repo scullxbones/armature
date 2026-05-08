@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -23,12 +22,12 @@ type Context struct {
 // In git worktrees, .git is a file containing "gitdir: <path>".
 func isGitWorktree(path string) (bool, error) {
 	gitPath := filepath.Join(path, ".git")
-	info, err := os.Stat(gitPath)
+	info, err := adapters.Stat(gitPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
 		return false, err
+	}
+	if info == nil {
+		return false, nil
 	}
 	// If .git is not a directory, it's a worktree
 	return !info.IsDir(), nil
@@ -38,7 +37,7 @@ func isGitWorktree(path string) (bool, error) {
 // The .git file contains "gitdir: <gitdir-path>". We resolve parent repo by going up from gitdir to find the .git directory.
 func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 	gitFile := filepath.Join(worktreePath, ".git")
-	content, err := os.ReadFile(gitFile)
+	content, err := adapters.ReadFile(gitFile)
 	if err != nil {
 		return "", fmt.Errorf("read .git file: %w", err)
 	}
@@ -64,7 +63,8 @@ func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 
 		// Check if parent/.git exists (the actual .git directory of the parent repo)
 		potentialGitDir := filepath.Join(parent, ".git")
-		if _, err := os.Stat(potentialGitDir); err == nil {
+		info, err := adapters.Stat(potentialGitDir)
+		if err == nil && info != nil {
 			// Found the parent repo's .git directory, so parent is the repo root
 			return parent, nil
 		}
