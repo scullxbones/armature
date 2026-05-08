@@ -1,0 +1,99 @@
+# E6-DOCFIX1: Repo Health — Fix D3 Phantom IDs, Broken Source UUID, and Add Guardrails
+
+## Context
+
+`trls doctor` exits non-zero with two findings discovered during E6 planning. `trls validate` reveals additional issues not surfaced by doctor. Root cause analysis identified three data corruption issues and two missing guardrails that allowed the state to become corrupt.
+
+## Root Cause Analysis
+
+### D3: Bare numeric IDs in op logs (ERROR)
+
+Eleven op log files in `.trellis/.issues/ops/` contain entries whose `target_id` field is a bare numeric timestamp (`1774960994`, `1774961009`, `1775311449`) rather than a properly prefixed issue ID (`bug-1774960994`, `task-1774961009`, `task-1775311449`). The D3 check scans raw JSONL op logs directly — not materialized state — so compensating entries cannot fix this. Direct JSONL mutation is required (one-time exception to the append-only principle; guardrails added in T4 and T5 prevent recurrence).
+
+**Proper prefixes established from the issue graph:**
+- `1774960994` → `bug-1774960994`
+- `1774961009` → `task-1774961009`
+- `1775311449` → `task-1775311449`
+
+### Broken source UUID in manifest (validate ERROR, 25 issues)
+
+The source document `/home/brian/.claude/plans/delegated-munching-ocean.md` was registered as UUID `dee6f489-a75b-46be-9f36-a1a99ec113ad` and linked to 25 E6 issues. The source entry was subsequently removed from the manifest (manual edit or a `sources` command gone wrong). The file still exists. The cleanest repair is to restore the manifest entry under the original UUID rather than re-linking 25 issues to a new UUID.
+
+### Uncited task-auto-serial-claim (D6 WARNING)
+
+`task-auto-serial-claim` was transitioned to `done` without a source-link or accepted-risk citation. No source document exists for this task (it was an ad-hoc addition). Accept-risk citation is the appropriate fix.
+
+## Missing Guardrails
+
+### No `--verbose` context on trls doctor violations
+
+`trls doctor` reports which IDs are problematic (D3) but not which op log file or line contains the reference. Diagnosing D3 required manual grep of 11 log files. A `--verbose` flag should emit file path and line context per violation, making root cause self-evident.
+
+### trls transition --to done permits uncited issues silently
+
+`task-auto-serial-claim` reached `done` status without citation. `transition --to done` should warn when the issue has no source_link and no accept-citation record, giving the worker a chance to cite before completing. Warning (not hard error) preserves flexibility; `--force` bypasses it when the worker intends to leave citation for a remediation pass (discouraged but not blocked).
+
+## Task Breakdown
+
+### T1: Repair bare numeric IDs in op logs (D3)
+
+For each of the 11 op log files, find every JSONL line whose `target_id` is one of the three bare numbers and rewrite it with the correct type prefix. Verify `trls doctor` D3 passes after repair.
+
+**Scope:** `.trellis/.issues/ops/34dafe5f-6881-4bca-b209-c98c906e3550.log` and ten slot variants (~w1, ~w2b–w2h, ~w3a–w3c)
+
+**DoD:** `trls doctor` D3 check passes; no bare numeric IDs remain as `target_id` in any op log
+
+**Acceptance:**
+- `trls doctor` exits 0 on D3 (or warning-only if D6 still pending)
+- grep for `"1774960994"\|"1774961009"\|"1775311449"` as standalone target_id values in ops/ returns no hits
+
+### T2: Restore missing source manifest entry (dee6f489)
+
+Re-insert the `dee6f489-a75b-46be-9f36-a1a99ec113ad` entry into `.trellis/.issues/sources/manifest.json` pointing to `/home/brian/.claude/plans/delegated-munching-ocean.md`, then run `trls sources sync` to fingerprint it. This restores all 25 existing source_link citations without re-linking.
+
+**Scope:** `.trellis/.issues/sources/manifest.json`
+
+**DoD:** `trls validate` shows no `unknown source: dee6f489-...` errors; `trls sources verify` shows OK for that UUID
+
+**Acceptance:**
+- `trls sources verify` lists `dee6f489-a75b-46be-9f36-a1a99ec113ad` as OK
+- `trls validate` produces no `unknown source: dee6f489` lines
+
+### T3: Accept-citation for task-auto-serial-claim (D6)
+
+Run `trls accept-citation --issue task-auto-serial-claim --rationale "Ad-hoc task created directly without a source planning document; accepted as known risk" --ci`. Verify D6 warning clears.
+
+**Scope:** `.trellis/.issues/ops/` (accept-citation op)
+
+**DoD:** `trls doctor` D6 passes with no uncited issues
+
+**Acceptance:**
+- `trls doctor` exits 0 after T1 and T3 are both applied
+- `trls validate` COVERAGE line shows N/N cited
+
+### T4: Add --verbose flag to trls doctor
+
+For each failed check, `--verbose` emits the specific file path (and line number for D3) containing the violation. D3 verbose output names the op log file and the offending `target_id` value. D6 verbose output names the uncited issue ID and which citation fields are empty.
+
+**Scope:** `internal/doctor/doctor.go`, `cmd/trellis/doctor.go`, `internal/doctor/doctor_test.go`
+
+**DoD:** `trls doctor --verbose` emits file:line context for each D3 violation; D6 verbose lists uncited IDs with field detail; `--verbose` on a clean repo produces no extra output
+
+**Acceptance:**
+- `trls doctor --verbose` output for a D3 failure includes the log file path
+- `trls doctor --verbose` with no errors produces same output as without --verbose
+- make check green
+
+### T5: Warn on uncited issue in trls transition --to done
+
+When `transition --to done` is called and the issue has no `source_links` and no `citation_acceptances`, emit a warning to stderr: `warning: issue <ID> has no citation — run source-link or accept-citation before closing, or use --force to proceed`. Exit 0 (warning only). `--force` suppresses the warning and proceeds.
+
+**Scope:** `cmd/trellis/transition.go`, `cmd/trellis/main_test.go`
+
+**DoD:** Transitioning an uncited issue without `--force` prints the warning and still succeeds (exit 0); with `--force` no warning is printed; cited issues are unaffected
+
+**Acceptance:**
+- `TestTransitionUncitedIssueWarns` passes
+- `TestTransitionUncitedIssueForceSkipsWarning` passes
+- Transitioning a cited issue produces no warning
+- make check green

@@ -1,0 +1,264 @@
+{
+  "version": 1,
+  "title": "arm orchestrate — Deterministic Orchestration Layer",
+  "issues": [
+    {
+      "id": "E7",
+      "title": "E7: arm orchestrate — Deterministic Agent Orchestration",
+      "type": "epic",
+      "scope": "",
+      "priority": "",
+      "dod": "arm orchestrate command is fully implemented, tested, and documented; make check green; all 15 plan tasks complete",
+      "parent": "",
+      "blocked_by": null,
+      "notes": ["Full plan at docs/superpowers/plans/2026-05-06-orchestrator.md. Requires E6-S5 (internal/adapters boundary) to be merged before implementation begins."]
+    },
+    {
+      "id": "E7-S1",
+      "title": "arm orchestrate — State Machine, Harness Adapters, Verification Pipeline, CLI",
+      "type": "story",
+      "scope": "",
+      "priority": "high",
+      "dod": "arm orchestrate dispatches agent harnesses inside an OS-level sandbox, verifies their output through the full pipeline (scope/build/lint/test/coverage/mutation/acceptance/citations), makes the canonical commit, and resumes correctly after a crash; make check green",
+      "parent": "E7",
+      "blocked_by": ["E6-S5"],
+      "notes": ["Implementation plan: docs/superpowers/plans/2026-05-06-orchestrator.md. Must not start until E6-S5 is merged — all new internal/orchestrate/ code relies on internal/adapters/ boundary established by E6-S5."]
+    },
+    {
+      "id": "E7-S1-T1",
+      "title": "Add PreferredModel to Payload and Issue",
+      "type": "task",
+      "scope": "internal/ops/types.go, internal/ops/types_test.go, internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go",
+      "priority": "high",
+      "dod": "Payload.PreferredModel field round-trips through JSONL; Issue.PreferredModel is populated by applyCreate; make check green",
+      "parent": "E7-S1",
+      "blocked_by": [],
+      "acceptance": [
+        "TestPayloadPreferredModel passes",
+        "TestApplyCreatePopulatesPreferredModel passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T2",
+      "title": "Add SourceEntryID to CitationAcceptance and citation-accepted payload",
+      "type": "task",
+      "scope": "internal/ops/types.go, internal/ops/types_test.go, internal/materialize/state.go, internal/materialize/engine.go, internal/materialize/engine_test.go",
+      "priority": "high",
+      "dod": "Payload.SourceEntryID round-trips through JSONL; CitationAcceptance.SourceEntryID is populated by applyCitationAccepted; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T1"],
+      "acceptance": [
+        "TestPayloadSourceEntryID passes",
+        "TestApplyCitationAcceptedPopulatesSourceEntryID passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T3",
+      "title": "Add OrchestratorConfig to Config",
+      "type": "task",
+      "scope": "internal/config/config.go, internal/config/config_test.go",
+      "priority": "high",
+      "dod": "OrchestratorConfig and AdapterCommands structs added to config.go; Config.Orchestrator field present; round-trip JSON serialization works; absent key deserializes to zero value; make check green",
+      "parent": "E7-S1",
+      "blocked_by": [],
+      "acceptance": [
+        "TestOrchestratorConfigRoundTrip passes",
+        "TestOrchestratorConfigAbsentKeyIsZeroValue passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T4",
+      "title": "Add 8 orchestration op type constants and FailureRecord type",
+      "type": "task",
+      "scope": "internal/ops/types.go, internal/ops/types_test.go, internal/materialize/engine.go",
+      "priority": "high",
+      "dod": "OpOrchestrateStart/Dispatch/DispatchComplete/VerifyFail/Retry/Escalate/Complete/CheckResult constants in ValidOpTypes; FailureRecord typed struct; materializer ignores all new op types without error; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T1", "E7-S1-T2"],
+      "acceptance": [
+        "TestOrchestrateOpTypesParseable passes with per-field assertions",
+        "TestMaterializeIgnoresOrchestrateOps passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T5",
+      "title": "Create internal/orchestrate/types.go — shared types and interfaces",
+      "type": "task",
+      "scope": "internal/orchestrate/types.go (new), internal/orchestrate/types_test.go (new)",
+      "priority": "high",
+      "dod": "HarnessAdapter interface, ExitStatus constants with String(), InvocationResult, HarnessConfig, CheckSeverity constants, CheckResult, RunOptions, OrchestrateState structs all defined and compile; round-trip and String() tests pass; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T3"],
+      "acceptance": [
+        "TestExitStatusString passes",
+        "TestCheckSeverityConstants passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T6",
+      "title": "Create internal/orchestrate/state.go — crash-resume state derivation",
+      "type": "task",
+      "scope": "internal/orchestrate/state.go (new), internal/orchestrate/state_test.go (new)",
+      "priority": "high",
+      "dod": "DeriveState replays op log for a single taskID and returns OrchestrateState{Phase, Run, PreDispatchRef, WorktreePath, RetryBudget}; all 7 phase transitions covered by tests; multi-task filter test passes; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T4", "E7-S1-T5"],
+      "acceptance": [
+        "TestDeriveStateIdle passes",
+        "TestDeriveStateAfterVerifyFail asserts PreDispatchRef",
+        "TestDeriveStateFiltersOtherTaskIDs passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T7",
+      "title": "Extend internal/adapters/git.go with worktree and diff operations",
+      "type": "task",
+      "scope": "internal/adapters/git.go, internal/adapters/git_test.go",
+      "priority": "high",
+      "dod": "RemoveWorktree, DiffFrom, DiffNameOnly, ResetHard, ApplyPatch, AddAll, CommitWithMessage methods added; each covered by a failing-then-passing TDD test using a real temp git repo; make check green",
+      "parent": "E7-S1",
+      "blocked_by": [],
+      "notes": ["File path is post-E6-S5 (internal/git/ → internal/adapters/). Do not start until E6-S5-T2 is merged."],
+      "acceptance": [
+        "TestGitDiffFrom passes",
+        "TestGitResetHardRestoresFile passes",
+        "TestGitCommitWithMessage passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T8",
+      "title": "Create internal/orchestrate/framework.go — language auto-detection",
+      "type": "task",
+      "scope": "internal/orchestrate/framework.go (new), internal/orchestrate/framework_test.go (new)",
+      "priority": "normal",
+      "dod": "DetectAdapters probes go.mod/package.json/pyproject.toml/Cargo.toml and returns AdapterCommands with built-in defaults; MergeAdapters lets non-empty override fields win; tests use temp dir fixtures; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T3", "E7-S1-T5"],
+      "acceptance": [
+        "TestDetectAdaptersGo passes",
+        "TestDetectAdaptersUnknown returns empty commands",
+        "TestMergeAdaptersOverrideWins passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T9",
+      "title": "Create internal/orchestrate/harness.go — harness adapters (Claude/Codex/Devin)",
+      "type": "task",
+      "scope": "internal/orchestrate/harness.go (new), internal/orchestrate/harness_test.go (new)",
+      "priority": "normal",
+      "dod": "NewHarnessAdapter returns adapter for claude/codex/devin; SandboxAvailable probes bwrap/sandbox-exec; each adapter writes harness config via adapters.WriteFile, spawns process via adapters.RunProcess (no os/exec direct calls); Claude settings.json has no dangerouslySkipPermissions; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T5", "E7-S1-T7", "E7-S1-T8"],
+      "acceptance": [
+        "TestNewHarnessAdapterUnknownReturnsError passes",
+        "TestBuildSandboxCmdNoUnshareNet passes",
+        "TestClaudeSettingsNoSkipPermissions passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T10",
+      "title": "Create internal/orchestrate/verify.go — verification pipeline",
+      "type": "task",
+      "scope": "internal/orchestrate/verify.go (new), internal/orchestrate/verify_test.go (new)",
+      "priority": "normal",
+      "dod": "RunPipeline executes checks in order (scope-boundary, build, lint, test-existence, coverage, mutation, acceptance-criteria, citations); stops on first hard fail; scope normalization uses filepath.ToSlash+Clean+trailing slash; citations check correlates per SourceEntryID; all-unverifiable acceptance array is rejected; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T5", "E7-S1-T8"],
+      "acceptance": [
+        "TestScopeBoundaryNormalization passes (no HasPrefix false positives)",
+        "TestRunPipelineStopsOnHardFail passes",
+        "TestCheckCitationsPerSourceEntry passes",
+        "TestAcceptanceCriteriaRejectsAllUnverifiable passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T11",
+      "title": "Create internal/orchestrate/preflight.go — pre-run validation",
+      "type": "task",
+      "scope": "internal/orchestrate/preflight.go (new), internal/orchestrate/preflight_test.go (new)",
+      "priority": "normal",
+      "dod": "RunPreflight checks: scope paths exist, acceptance criteria parseable + at least one verifiable, source citations resolve against manifest, token budget estimate, sandbox available; returns descriptive error for each failure; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T3", "E7-S1-T5", "E7-S1-T10"],
+      "acceptance": [
+        "TestPreflightMissingScope returns error",
+        "TestPreflightAllUnverifiableAcceptance returns error",
+        "TestPreflightCitationManifestCheck passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T12",
+      "title": "Create internal/orchestrate/feedback.go and prompt.go",
+      "type": "task",
+      "scope": "internal/orchestrate/feedback.go (new), internal/orchestrate/feedback_test.go (new), internal/orchestrate/prompt.go (new), internal/orchestrate/prompt_test.go (new)",
+      "priority": "normal",
+      "dod": "AssembleFeedback(retryNum, ...) adds negative scope constraint on retry 2, named file list on retry 3; AssemblePrompt renders context + scope constraint + 'Do not commit' instruction + feedback block; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T5"],
+      "acceptance": [
+        "TestAssembleFeedbackRetry1NoExtra passes",
+        "TestAssembleFeedbackRetry2AddsConstraint passes",
+        "TestAssembleFeedbackRetry3AddsFileList passes",
+        "TestAssemblePromptIncludesDoNotCommit passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T13",
+      "title": "Create internal/orchestrate/engine.go — main orchestration loop",
+      "type": "task",
+      "scope": "internal/orchestrate/engine.go (new), internal/orchestrate/engine_test.go (new)",
+      "priority": "high",
+      "dod": "Engine.Run implements full state machine (idle→dispatched→verifying→correcting→escalated→done); crash resume works by replaying DeriveState; zero-trust commit (DiffFrom→ResetHard→ApplyPatch→verify→AddAll+Commit); dry-run exits before dispatch op write; claimTask checks scope overlap via claimPkg.ScopesOverlap and auto-advances parent; no os/exec or os.WriteFile direct calls; make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T6", "E7-S1-T7", "E7-S1-T9", "E7-S1-T10", "E7-S1-T11", "E7-S1-T12"],
+      "acceptance": [
+        "TestEngineDryRunDoesNotWriteDispatchOp passes",
+        "TestEngineResumeFromCorrecting passes",
+        "TestEngineZeroTrustCommitFlow passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T14",
+      "title": "Create cmd/armature/orchestrate.go — CLI wiring",
+      "type": "task",
+      "scope": "cmd/armature/orchestrate.go (new), cmd/armature/main.go",
+      "priority": "high",
+      "dod": "arm orchestrate --issue ID [--harness claude|codex|devin] [--model MODEL] [--retries N] [--timeout SEC] [--dry-run] command wired; three-level model resolution (flag > task PreferredModel > config default); make check green",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T13"],
+      "acceptance": [
+        "arm orchestrate --help shows all flags",
+        "arm orchestrate --issue T-1 --dry-run exits 0 on valid issue",
+        "make check green"
+      ]
+    },
+    {
+      "id": "E7-S1-T15",
+      "title": "Final validation — make check + arm validate + arm doctor",
+      "type": "task",
+      "scope": "internal/orchestrate/engine.go, internal/orchestrate/verify.go, internal/orchestrate/harness.go, cmd/armature/orchestrate.go",
+      "priority": "high",
+      "dod": "make check fully green (lint + test + coverage ≥80% + mutation); arm validate reports no errors; arm doctor --strict reports no errors; all orchestration op types present in ValidOpTypes",
+      "parent": "E7-S1",
+      "blocked_by": ["E7-S1-T14"],
+      "acceptance": [
+        "make check green",
+        "arm validate exits 0",
+        "arm doctor --strict exits 0"
+      ]
+    }
+  ]
+}
