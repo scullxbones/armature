@@ -21,6 +21,9 @@ type OrchestratorConfig struct {
 	MaxParallel    int             `json:"max_parallel,omitempty"`
 	SandboxEnabled bool            `json:"sandbox_enabled,omitempty"`
 	Adapters       AdapterCommands `json:"adapters,omitempty"`
+	// DefaultModel is the fallback model name used when no CLI flag or task
+	// PreferredModel is set.  Empty string means the harness picks its own default.
+	DefaultModel string `json:"default_model,omitempty"`
 }
 
 // AdapterCommands holds the shell commands used by each verification phase.
