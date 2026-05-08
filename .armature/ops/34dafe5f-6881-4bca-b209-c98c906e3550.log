@@ -1938,3 +1938,4 @@
 ["transition","E6-S5",1778208689,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created internal/adapters/ boundary: consolidated file I/O (files.go), git operations (git.go), HTTP/shell execution (sources.go, shell.go); refactored audit, sync, materialize, validate, and doctor to accept pre-loaded data instead of filesystem paths; all cmd/ callers updated to load via adapters then pass pure data to core; grep for os/os.exec/net.http in internal/ only matches adapters and tui/tty.go; make check green at 91.1% mutation coverage."}]
 ["transition","E6-S5",1778250244,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["claim","E7-S1-T1",1778250713,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
+["transition","E7-S1",1778250714,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
