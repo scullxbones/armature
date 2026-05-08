@@ -306,3 +306,29 @@ func ReadCoverageFile(path string) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// ===== Glob Expansion (for scope validation) =====
+
+// ExpandGlobs expands a set of glob patterns and returns matching file paths.
+// Returns a map from issue ID to matching file paths.
+func ExpandGlobs(globs map[string][]string) map[string][]string {
+	result := make(map[string][]string)
+	for id, globList := range globs {
+		var matches []string
+		seen := make(map[string]bool)
+		for _, glob := range globList {
+			expanded, err := filepath.Glob(glob)
+			if err != nil {
+				continue
+			}
+			for _, path := range expanded {
+				if !seen[path] {
+					matches = append(matches, path)
+					seen[path] = true
+				}
+			}
+		}
+		result[id] = matches
+	}
+	return result
+}

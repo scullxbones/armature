@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/decompose"
@@ -180,7 +181,11 @@ plan, or --schema to view the JSON schema.`,
 				return err
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
 			if err != nil {
 				return err
 			}
@@ -244,7 +249,11 @@ func newDecomposeRevertCmd() *cobra.Command {
 				return err
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
 			if err != nil {
 				return err
 			}

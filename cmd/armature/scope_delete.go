@@ -40,7 +40,11 @@ func newScopeDeleteCmd() *cobra.Command {
 
 			// Materialize to ensure state is current before scanning scope entries.
 			singleBranch := appCtx.Mode == "single-branch"
-			if _, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, singleBranch); err != nil {
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 
@@ -89,7 +93,11 @@ func newScopeDeleteCmd() *cobra.Command {
 			}
 
 			// Rematerialize to apply the ops to state.
-			if _, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, singleBranch); err != nil {
+			allOps, err = readAllOpsFromDir(filepath.Join(appCtx.IssuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 				return fmt.Errorf("rematerialize: %w", err)
 			}
 

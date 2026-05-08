@@ -305,7 +305,11 @@ func runPostMergeHook(cmd *cobra.Command) error {
 	issuesDir := appCtx.IssuesDir
 	singleBranch := appCtx.Mode == "single-branch"
 
-	if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
+	allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read ops: %w", err)
+	}
+	if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 		return fmt.Errorf("materialize: %w", err)
 	}
 
@@ -350,7 +354,11 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 	}
 
-	if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
+	allOps, err = readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read ops: %w", err)
+	}
+	if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 		return fmt.Errorf("re-materialize: %w", err)
 	}
 

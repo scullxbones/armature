@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
 )
@@ -42,17 +45,47 @@ INFO lines while still printing COVERAGE and OK lines.`,
   # Suppress INFO lines (e.g. phantom-scope notices)
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			state, _, err := materialize.MaterializeAndReturn(appCtx.IssuesDir, appCtx.StateDir, true)
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
 			if err != nil {
 				return err
 			}
 
+			// Read manifest data
+			manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))
+			if err != nil {
+				return fmt.Errorf("read manifest: %w", err)
+			}
+
+			// Read coverage data
+			coverageData, err := adapters.ReadCoverageFile(filepath.Join(appCtx.StateDir, "traceability.json"))
+			if err != nil {
+				return fmt.Errorf("read coverage: %w", err)
+			}
+			var cov *traceability.Coverage
+			if coverageData != nil {
+				cov = &traceability.Coverage{}
+				if err := json.Unmarshal(coverageData, cov); err != nil {
+					return fmt.Errorf("parse coverage: %w", err)
+				}
+			}
+
+			// Expand globs for scope validation
+			scopeGlobs := make(map[string][]string)
+			for _, issue := range state.Issues {
+				scopeGlobs[issue.ID] = issue.Scope
+			}
+			preExpandedScopes := adapters.ExpandGlobs(scopeGlobs)
+
 			opts := validate.Options{
-				ScopeID:   scope,
-				Strict:    strict,
-				IssuesDir: appCtx.IssuesDir,
-				StateDir:  appCtx.StateDir,
-				RepoPath:  appCtx.RepoPath,
+				ScopeID:           scope,
+				Strict:            strict,
+				ManifestData:      manifestData,
+				Coverage:          cov,
+				PreExpandedScopes: preExpandedScopes,
 			}
 			result := validate.Validate(state, opts)
 

@@ -30,7 +30,11 @@ func newTUICmd() *cobra.Command {
 			}
 
 			if !tui.IsInteractive() {
-				state, _, err := materialize.MaterializeAndReturn(issuesDir, stateDir, true)
+				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+				if err != nil {
+					return fmt.Errorf("read ops: %w", err)
+				}
+				state, _, err := materialize.MaterializeAndReturn(stateDir, allOps, true, offsets)
 				if err != nil {
 					return err
 				}

@@ -83,7 +83,11 @@ This allows the issue to be claimed again by another worker.`,
 
 			// Check current status before unassigning so we can release claimed → open.
 			issuesDir := appCtx.IssuesDir
-			if _, matErr := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); matErr != nil {
+			allOps, offsets, matErr := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if matErr != nil {
+				return fmt.Errorf("read ops: %w", matErr)
+			}
+			if _, matErr := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); matErr != nil {
 				return matErr
 			}
 			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
