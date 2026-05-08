@@ -2018,3 +2018,4 @@
 ["transition","E7-S1-T10",1778259476,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"RunPipeline executes 8 checks in order with hard-fail stop; scope normalization via filepath.ToSlash+Clean+trailing slash; citations correlate per SourceEntryID; all-unverifiable acceptance array rejected; make check green"}]
 ["transition","E7-S1-T6",1778259503,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","E7-S1-T9",1778259503,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","E7-S1-T10",1778259503,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
