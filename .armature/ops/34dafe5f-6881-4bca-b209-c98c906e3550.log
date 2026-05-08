@@ -1924,3 +1924,4 @@
 ["transition","E6-S5-T2",1778187552,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Successfully relocated internal/git/ content to internal/adapters/git.go and updated all 9 callers across cmd and internal packages. All tests pass. internal/git/ package removed."}]
 ["claim","E6-S5-T4",1778188853,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","E6-S5-T4",1778188894,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting refactor: audit.Load and sync.DetectMerges to accept pre-loaded data via adapters. Creating adapters for file I/O consolidation."}]
+["decision","E6-S5-T4",1778199813,"34dafe5f-6881-4bca-b209-c98c906e3550",{"topic":"refactor pattern","choice":"Accept logContents and issues as parameters","rationale":"Core packages now accept pre-loaded data via adapters, removing filesystem concerns"}]
