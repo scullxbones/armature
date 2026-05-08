@@ -1977,3 +1977,4 @@
 ["claim","E7-S1-T12",1778255680,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","E7-S1-T4",1778255845,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: adding 8 orchestration op type constants, FailureRecord struct, and materializer ignore cases"}]
 ["note","E7-S1-T12",1778255852,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: AssembleFeedback and AssemblePrompt functions in feedback.go and prompt.go"}]
+["note","E7-S1-T8",1778255859,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: DetectAdapters and MergeAdapters in internal/orchestrate/framework.go"}]
