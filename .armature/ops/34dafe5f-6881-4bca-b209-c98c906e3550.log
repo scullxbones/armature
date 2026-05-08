@@ -2035,3 +2035,4 @@
 ["heartbeat","E7-S1-T13",1778261891,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["heartbeat","E7-S1-T13",1778262220,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["citation-accepted","E7-S1-T13",1778262228,"34dafe5f-6881-4bca-b209-c98c906e3550",{"confirmed_noninteractively":true,"rationale":"Engine.go implements the orchestration loop with all dependencies from E7-S1-T6 through T12"}]
+["transition","E7-S1-T13",1778262235,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Implemented Engine.Run with full state machine (idle→dispatched→running→complete/escalated), crash resume via DeriveState op-log replay, zero-trust commit sequence (DiffFrom→ResetHard→ApplyPatch→AddAll→CommitWithMessage), dry-run exits before dispatch op, scope overlap detection via claimPkg.ScopesOverlap, no os/exec or os.WriteFile direct calls, make check green with 80.0% orchestrate coverage"}]
