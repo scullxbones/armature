@@ -1992,3 +1992,4 @@
 ["transition","E7-S1-T8",1778256604,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Created internal/orchestrate/framework.go with DetectAdapters (probes go.mod/package.json/pyproject.toml/Cargo.toml, returns built-in defaults for go/node/python/rust, errors on nonexistent dir) and MergeAdapters (non-empty override fields win over base). framework_test.go has 100% coverage; make check green."}]
 ["transition","E7-S1-T4",1778257457,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"OpOrchestrateStart/Dispatch/DispatchComplete/VerifyFail/Retry/Escalate/Complete/CheckResult constants in ValidOpTypes; FailureRecord struct added; materializer ignores all 8 new op types without error; make check green"}]
 ["transition","E7-S1-T4",1778258012,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","E7-S1-T8",1778258012,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
