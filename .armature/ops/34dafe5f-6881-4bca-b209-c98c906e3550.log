@@ -1999,3 +1999,4 @@
 ["claim","E7-S1-T9",1778258023,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","E7-S1-T10",1778258024,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with E7-S1-T9 (same worker, dismissed)"}]
 ["note","E7-S1-T10",1778258024,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Serial claim: scope overlap with E7-S1-T6 (same worker, dismissed)"}]
+["claim","E7-S1-T10",1778258024,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
