@@ -309,8 +309,15 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		return fmt.Errorf("materialize: %w", err)
 	}
 
+	// Load materialized issues
+	stateIssuesDir := filepath.Join(appCtx.StateDir, "issues")
+	issues, err := loadIssuesFromDir(stateIssuesDir)
+	if err != nil {
+		return fmt.Errorf("load issues: %w", err)
+	}
+
 	gc := adapters.New(appCtx.RepoPath)
-	mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, branch, gc)
+	mergedIDs, err := armsync.DetectMerges(issues, branch, gc)
 	if err != nil {
 		return fmt.Errorf("detect merges: %w", err)
 	}
