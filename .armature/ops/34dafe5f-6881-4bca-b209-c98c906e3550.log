@@ -1942,3 +1942,4 @@
 ["claim","E7-S1-T3",1778250714,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","E7-S1-T7",1778250716,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","E7-S1-T3",1778251753,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: adding OrchestratorConfig and AdapterCommands structs to config.go, adding Config.Orchestrator field, tests for round-trip JSON and zero-value deserialization"}]
+["note","E7-S1-T7",1778251758,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: adding RemoveWorktree, DiffFrom, DiffNameOnly, ResetHard, ApplyPatch, AddAll, CommitWithMessage to git adapter"}]
