@@ -269,6 +269,7 @@ func (s *State) applyCitationAccepted(op ops.Op) error {
 		WorkerID:                  op.WorkerID,
 		Timestamp:                 op.Timestamp,
 		ConfirmedNoninteractively: op.Payload.ConfirmedNoninteractively,
+		SourceEntryID:             op.Payload.SourceEntryID,
 	})
 	issue.Updated = op.Timestamp
 	return nil

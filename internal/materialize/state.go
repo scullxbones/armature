@@ -80,6 +80,7 @@ type CitationAcceptance struct {
 	WorkerID                  string `json:"worker_id"`
 	Timestamp                 int64  `json:"timestamp"`
 	ConfirmedNoninteractively bool   `json:"confirmed_noninteractively,omitempty"`
+	SourceEntryID             string `json:"source_entry_id,omitempty"`
 }
 
 // IndexEntry is the denormalized summary stored in index.json.

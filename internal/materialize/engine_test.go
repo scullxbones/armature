@@ -667,6 +667,66 @@ func TestApplyCitationAccepted_UnknownIssue_NoError(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestApplyCitationAccepted_SourceEntryID_Populated(t *testing.T) {
+	// CitationAcceptance.SourceEntryID must be populated from op.Payload.SourceEntryID.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ConfirmedNoninteractively: true, SourceEntryID: "entry-xyz"},
+	}))
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.CitationAcceptances, 1)
+	assert.Equal(t, "entry-xyz", issue.CitationAcceptances[0].SourceEntryID)
+}
+
+func TestApplyCitationAccepted_SourceEntryID_EmptyWhenAbsent(t *testing.T) {
+	// CitationAcceptance.SourceEntryID must be empty string when not set in payload.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ConfirmedNoninteractively: false},
+	}))
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.CitationAcceptances, 1)
+	assert.Equal(t, "", issue.CitationAcceptances[0].SourceEntryID)
+}
+
+func TestCitationAcceptance_SourceEntryID_RoundTripsJSON(t *testing.T) {
+	// CitationAcceptance.SourceEntryID must survive WriteIssue/LoadIssue JSON round-trip.
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	issue := Issue{
+		ID:     "task-ca-rtrip",
+		Type:   "task",
+		Status: "open",
+		Title:  "Citation acceptance round-trip",
+		CitationAcceptances: []CitationAcceptance{
+			{WorkerID: "w1", Timestamp: 100, SourceEntryID: "entry-roundtrip"},
+		},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+
+	require.NoError(t, WriteIssue(issuesDir, issue))
+
+	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-ca-rtrip.json"))
+	require.NoError(t, err)
+	require.Len(t, loaded.CitationAcceptances, 1)
+	assert.Equal(t, "entry-roundtrip", loaded.CitationAcceptances[0].SourceEntryID)
+}
+
 func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 	issues := map[string]*Issue{
 		"task-01": {
