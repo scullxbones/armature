@@ -1,6 +1,10 @@
 package ops
 
-import "testing"
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+)
 
 func TestOpCitationAccepted_RegisteredInValidOpTypes(t *testing.T) {
 	if !ValidOpTypes[OpCitationAccepted] {
@@ -34,5 +38,33 @@ func TestPayload_ScopeDeleteField(t *testing.T) {
 	p := Payload{DeletedPath: "some/path"}
 	if p.DeletedPath != "some/path" {
 		t.Errorf("expected DeletedPath %q, got %q", "some/path", p.DeletedPath)
+	}
+}
+
+func TestPayload_PreferredModel_RoundTripsJSON(t *testing.T) {
+	// Payload.PreferredModel must survive JSONL encode/decode.
+	p := Payload{PreferredModel: "claude-opus-4"}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	var p2 Payload
+	if err := json.Unmarshal(data, &p2); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if p2.PreferredModel != "claude-opus-4" {
+		t.Errorf("expected PreferredModel %q after round-trip, got %q", "claude-opus-4", p2.PreferredModel)
+	}
+}
+
+func TestPayload_PreferredModel_OmittedWhenEmpty(t *testing.T) {
+	// When PreferredModel is empty, it must not appear in JSON (omitempty).
+	p := Payload{Title: "some task"}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if bytes.Contains(data, []byte("preferred_model")) {
+		t.Errorf("expected preferred_model to be absent from JSON when empty, got: %s", data)
 	}
 }

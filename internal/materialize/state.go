@@ -42,6 +42,7 @@ type Issue struct {
 	Branch              string               `json:"branch,omitempty"`
 	PR                  string               `json:"pr,omitempty"`
 	AssignedWorker      string               `json:"assigned_worker,omitempty"`
+	PreferredModel      string               `json:"preferred_model,omitempty"`
 	Updated             int64                `json:"updated"`
 }
 

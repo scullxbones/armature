@@ -76,6 +76,7 @@ func (s *State) applyCreate(op ops.Op) error {
 		Acceptance:       op.Payload.Acceptance,
 		Context:          op.Payload.Context,
 		SourceCitation:   op.Payload.SourceCitation,
+		PreferredModel:   op.Payload.PreferredModel,
 		Provenance: Provenance{
 			Method:       "decomposed",
 			Confidence:   confidenceOrDefault(op.Payload.Confidence),

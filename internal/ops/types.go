@@ -132,4 +132,7 @@ type Payload struct {
 
 	// scope-delete
 	DeletedPath string `json:"deleted_path,omitempty"`
+
+	// create — preferred model hint for the assigned agent
+	PreferredModel string `json:"preferred_model,omitempty"`
 }
