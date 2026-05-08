@@ -1932,3 +1932,4 @@
 ["heartbeat","E6-S5-T5",1778200097,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["claim","E6-S5-T6",1778206214,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["heartbeat","E6-S5-T6",1778206275,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["note","E6-S5-T6",1778207205,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Refactored architecture boundary: all I/O in internal packages now routes through adapters; compliance check passes (os/os.exec/net.http only in adapters and tui/tty.go)"}]
