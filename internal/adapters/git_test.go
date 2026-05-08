@@ -387,3 +387,263 @@ func TestPush_ErrorOnNoRemote(t *testing.T) {
 	err = c.Push(branch)
 	assert.Error(t, err)
 }
+
+func TestRemoveWorktree(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
+	worktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
+
+	// Verify the worktree exists
+	_, err := os.Stat(worktreePath)
+	require.NoError(t, err)
+
+	// Remove the worktree
+	err = c.RemoveWorktree(worktreePath)
+	require.NoError(t, err)
+
+	// Verify the worktree directory is gone
+	_, err = os.Stat(worktreePath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRemoveWorktree_NonExistent(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	// Removing a non-existent worktree path should return an error
+	err := c.RemoveWorktree(filepath.Join(repo, "no-such-worktree"))
+	assert.Error(t, err)
+}
+
+func TestDiffFrom(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Commit a file at a known point
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("original\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "add file")
+
+	// Get that SHA as the base
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	// Make another commit
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("modified\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "modify file")
+
+	diff, err := c.DiffFrom(baseSHA)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "modified")
+	assert.Contains(t, diff, "original")
+}
+
+func TestDiffFrom_InvalidSHA(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	_, err := c.DiffFrom("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	assert.Error(t, err)
+}
+
+func TestDiffNameOnly(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Commit two files at the base
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("a\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "beta.txt"), []byte("b\n"), 0644))
+	gitRun("add", "alpha.txt", "beta.txt")
+	gitRun("commit", "-m", "add files")
+
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	// Modify only alpha
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("changed\n"), 0644))
+	gitRun("add", "alpha.txt")
+	gitRun("commit", "-m", "change alpha")
+
+	names, err := c.DiffNameOnly(baseSHA)
+	require.NoError(t, err)
+	assert.Contains(t, names, "alpha.txt")
+	assert.NotContains(t, names, "beta.txt")
+}
+
+func TestDiffNameOnly_InvalidSHA(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	_, err := c.DiffNameOnly("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	assert.Error(t, err)
+}
+
+func TestResetHard(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Commit a file
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0644))
+	gitRun("add", "base.txt")
+	gitRun("commit", "-m", "base commit")
+
+	// Get base SHA
+	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	// Make a second commit
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "extra.txt"), []byte("extra\n"), 0644))
+	gitRun("add", "extra.txt")
+	gitRun("commit", "-m", "extra commit")
+
+	// Reset back to base
+	err = c.ResetHard(baseSHA)
+	require.NoError(t, err)
+
+	// extra.txt should no longer be tracked
+	headCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, baseSHA, strings.TrimSpace(string(headOut)))
+}
+
+func TestResetHard_InvalidRef(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	err := c.ResetHard("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	assert.Error(t, err)
+}
+
+func TestApplyPatch(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Commit a base file
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "patch_target.txt"), []byte("line1\nline2\n"), 0644))
+	gitRun("add", "patch_target.txt")
+	gitRun("commit", "-m", "base")
+
+	// Build a valid unified diff patch
+	patch := `diff --git a/patch_target.txt b/patch_target.txt
+index 0000000..1111111 100644
+--- a/patch_target.txt
++++ b/patch_target.txt
+@@ -1,2 +1,3 @@
+ line1
+ line2
++line3
+`
+
+	err := c.ApplyPatch([]byte(patch))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(repo, "patch_target.txt"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "line3")
+}
+
+func TestApplyPatch_InvalidPatch(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	err := c.ApplyPatch([]byte("this is not a valid patch\n"))
+	assert.Error(t, err)
+}
+
+func TestAddAll(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	// Write a file but don't stage it
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "new_file.txt"), []byte("content\n"), 0644))
+
+	err := c.AddAll()
+	require.NoError(t, err)
+
+	// Verify the file is staged
+	statusCmd := exec.Command("git", "-C", repo, "diff", "--cached", "--name-only")
+	out, err := statusCmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "new_file.txt")
+}
+
+func TestCommitWithMessage(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Stage a file
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "commit_me.txt"), []byte("data\n"), 0644))
+	gitRun("add", "commit_me.txt")
+
+	err := c.CommitWithMessage("test: my commit message")
+	require.NoError(t, err)
+
+	// Verify the commit message
+	logCmd := exec.Command("git", "-C", repo, "log", "-1", "--pretty=%s")
+	logOut, err := logCmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(logOut), "my commit message")
+}
+
+func TestCommitWithMessage_NothingStaged(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	// No staged changes — should return an error
+	err := c.CommitWithMessage("test: empty commit")
+	assert.Error(t, err)
+}
