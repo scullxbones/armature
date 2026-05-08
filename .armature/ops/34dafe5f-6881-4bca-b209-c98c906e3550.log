@@ -1960,3 +1960,4 @@
 ["claim","E7-S1-T2",1778254343,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["claim","E7-S1-T5",1778254344,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["note","E7-S1-T2",1778254409,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: adding SourceEntryID to Payload (types.go) and CitationAcceptance (state.go), then wiring it through applyCitationAccepted in engine.go. Following TDD: tests first."}]
+["note","E7-S1-T5",1778254498,"34dafe5f-6881-4bca-b209-c98c906e3550",{"msg":"Starting implementation: creating internal/orchestrate/types.go with HarnessAdapter interface, ExitStatus/CheckSeverity constants, and all required structs"}]
