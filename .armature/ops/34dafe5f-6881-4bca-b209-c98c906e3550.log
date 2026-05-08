@@ -1927,3 +1927,4 @@
 ["decision","E6-S5-T4",1778199813,"34dafe5f-6881-4bca-b209-c98c906e3550",{"topic":"refactor pattern","choice":"Accept logContents and issues as parameters","rationale":"Core packages now accept pre-loaded data via adapters, removing filesystem concerns"}]
 ["transition","E6-S5-T4",1778199832,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"audit.Load and sync.DetectMerges refactored to accept pre-loaded data via adapters; filepath.Glob removed from audit.go; all tests passing"}]
 ["heartbeat","E6-S5-T4",1778199839,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["claim","E6-S5-T5",1778199855,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
