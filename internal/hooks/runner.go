@@ -37,7 +37,10 @@ func RunPreTransition(cfg *config.Config, input HookInput) error {
 	}
 
 	for _, hook := range cfg.Hooks {
-		cmd := exec.Command("sh", "-c", hook.Command)
+		if len(hook.Command) == 0 {
+			continue
+		}
+		cmd := exec.Command(hook.Command[0], hook.Command[1:]...)
 		cmd.Stdin = bytes.NewReader(inputJSON)
 		var stdout bytes.Buffer
 		cmd.Stdout = &stdout
