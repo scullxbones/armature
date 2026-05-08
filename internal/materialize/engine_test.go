@@ -829,6 +829,53 @@ func TestApplyScopeDeleteOp_UnknownIssue_Tolerated(t *testing.T) {
 	assert.NoError(t, err, "scope-delete on unknown issue should be tolerated")
 }
 
+func TestApplyCreateOp_PreferredModel_Propagated(t *testing.T) {
+	// Issue.PreferredModel must be populated from Payload.PreferredModel on create.
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-pm", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task with model", NodeType: "task", PreferredModel: "claude-opus-4"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "claude-opus-4", state.Issues["task-pm"].PreferredModel)
+}
+
+func TestApplyCreateOp_PreferredModel_EmptyWhenAbsent(t *testing.T) {
+	// Issue.PreferredModel must be empty when not set in the create payload.
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-nopm", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task without model", NodeType: "task"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "", state.Issues["task-nopm"].PreferredModel)
+}
+
+func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
+	// Issue.PreferredModel must survive WriteIssue/LoadIssue JSON round-trip.
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	issue := Issue{
+		ID:             "task-rtrip",
+		Type:           "task",
+		Status:         "open",
+		Title:          "Round-trip test",
+		PreferredModel: "claude-sonnet-5",
+		Children:       []string{},
+		BlockedBy:      []string{},
+		Blocks:         []string{},
+		DecisionRefs:   []string{},
+	}
+
+	require.NoError(t, WriteIssue(issuesDir, issue))
+
+	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-rtrip.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "claude-sonnet-5", loaded.PreferredModel)
+}
+
 // BenchmarkRunRollup_10kIssues benchmarks the rollup operation on a large hierarchy.
 // This test demonstrates that RunRollup should complete in O(n) time.
 // With the previous O(n²) implementation, 10k issues would take too long.
