@@ -936,6 +936,31 @@ func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
 	assert.Equal(t, "claude-sonnet-5", loaded.PreferredModel)
 }
 
+func TestApplyOp_OrchestrationOps_IgnoredWithoutError(t *testing.T) {
+	// Materializer must silently ignore all 8 orchestration op types without error.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	orchOps := []string{
+		ops.OpOrchestrateStart,
+		ops.OpOrchestrateDispatch,
+		ops.OpOrchestrateDispatchComplete,
+		ops.OpOrchestrateVerifyFail,
+		ops.OpOrchestrateRetry,
+		ops.OpOrchestrateEscalate,
+		ops.OpOrchestrateComplete,
+		ops.OpOrchestrateCheckResult,
+	}
+	for _, opType := range orchOps {
+		err := state.ApplyOp(ops.Op{
+			Type: opType, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		})
+		assert.NoError(t, err, "op type %q should be ignored without error", opType)
+	}
+}
+
 // BenchmarkRunRollup_10kIssues benchmarks the rollup operation on a large hierarchy.
 // This test demonstrates that RunRollup should complete in O(n) time.
 // With the previous O(n²) implementation, 10k issues would take too long.

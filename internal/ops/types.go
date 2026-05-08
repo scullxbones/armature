@@ -20,6 +20,16 @@ const (
 	OpCitationAccepted  = "citation-accepted"
 	OpScopeRename       = "scope-rename"
 	OpScopeDelete       = "scope-delete"
+
+	// Orchestration op types for E7 orchestrator.
+	OpOrchestrateStart            = "orchestrate-start"
+	OpOrchestrateDispatch         = "orchestrate-dispatch"
+	OpOrchestrateDispatchComplete = "orchestrate-dispatch-complete"
+	OpOrchestrateVerifyFail       = "orchestrate-verify-fail"
+	OpOrchestrateRetry            = "orchestrate-retry"
+	OpOrchestrateEscalate         = "orchestrate-escalate"
+	OpOrchestrateComplete         = "orchestrate-complete"
+	OpOrchestrateCheckResult      = "orchestrate-check-result"
 )
 
 // ValidOpTypes for validation.
@@ -33,6 +43,22 @@ var ValidOpTypes = map[string]bool{
 	OpCitationAccepted: true,
 	OpScopeRename:      true,
 	OpScopeDelete:      true,
+
+	OpOrchestrateStart:            true,
+	OpOrchestrateDispatch:         true,
+	OpOrchestrateDispatchComplete: true,
+	OpOrchestrateVerifyFail:       true,
+	OpOrchestrateRetry:            true,
+	OpOrchestrateEscalate:         true,
+	OpOrchestrateComplete:         true,
+	OpOrchestrateCheckResult:      true,
+}
+
+// FailureRecord captures a single orchestration failure event.
+type FailureRecord struct {
+	IssueID   string `json:"issue_id"`
+	Reason    string `json:"reason"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 // Issue statuses.
