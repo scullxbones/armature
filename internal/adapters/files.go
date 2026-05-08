@@ -14,6 +14,26 @@ import (
 
 // ===== Log File Operations (from ops/log.go) =====
 
+// ListLogFiles finds all *.log files in the opsDir directory.
+// Returns their absolute paths.
+func ListLogFiles(opsDir string) ([]string, error) {
+	entries, err := os.ReadDir(opsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var logFiles []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".log") {
+			logFiles = append(logFiles, filepath.Join(opsDir, entry.Name()))
+		}
+	}
+	return logFiles, nil
+}
+
 // AppendRawLines appends raw bytes to a log file (for pre-formatted JSONL lines).
 func AppendRawLines(logPath string, buf []byte) error {
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

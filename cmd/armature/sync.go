@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -49,8 +50,15 @@ preview changes without committing them.`,
 				targetBranch = branch
 			}
 
+			// Load materialized issues
+			stateIssuesDir := filepath.Join(appCtx.StateDir, "issues")
+			issues, err := loadIssuesFromDir(stateIssuesDir)
+			if err != nil {
+				return fmt.Errorf("load issues: %w", err)
+			}
+
 			gc := adapters.New(appCtx.RepoPath)
-			mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, targetBranch, gc)
+			mergedIDs, err := armsync.DetectMerges(issues, targetBranch, gc)
 			if err != nil {
 				return fmt.Errorf("detect merges: %w", err)
 			}
@@ -103,4 +111,26 @@ preview changes without committing them.`,
 	cmd.Flags().StringVar(&targetBranch, "into", "", "target branch to check merges against (default: current branch)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print which issues would be transitioned without writing ops")
 	return cmd
+}
+
+// loadIssuesFromDir loads all materialized issues from a directory.
+// Returns a slice of Issue structs.
+func loadIssuesFromDir(issuesDir string) ([]materialize.Issue, error) {
+	var issues []materialize.Issue
+
+	entries, err := adapters.ReadIssuesDir(issuesDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, issueID := range entries {
+		issueFile := filepath.Join(issuesDir, issueID+".json")
+		var issue materialize.Issue
+		if err := adapters.LoadIssueJSON(issueFile, &issue); err != nil {
+			continue // Skip unreadable issues
+		}
+		issues = append(issues, issue)
+	}
+
+	return issues, nil
 }
