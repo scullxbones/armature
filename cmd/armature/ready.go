@@ -44,7 +44,11 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); err != nil {
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/detail"
 )
@@ -243,7 +245,13 @@ func (m Model) doRefresh() tea.Cmd {
 	issuesDir := m.issuesDir
 	stateDir := m.stateDir
 	return func() tea.Msg {
-		state, _, err := materialize.MaterializeAndReturn(issuesDir, stateDir, true)
+		// Read ops from disk and materialize
+		opsDir := filepath.Join(issuesDir, "ops")
+		allOps, offsets, err := readAllOpsFromDirWithOffsets(opsDir)
+		if err != nil {
+			return nil
+		}
+		state, _, err := materialize.MaterializeAndReturn(stateDir, allOps, true, offsets)
 		if err != nil || state == nil {
 			return nil
 		}
@@ -276,3 +284,66 @@ func (nilScreen) View() string                             { return "" }
 func (nilScreen) HelpBar() string                          { return "" }
 func (nilScreen) SetSize(_, _ int)                         {}
 func (nilScreen) SetState(_ *materialize.State)            {}
+
+// readAllOpsFromDir reads all ops from a directory of .log files.
+// Returns empty slice if directory doesn't exist.
+func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
+	entries, err := os.ReadDir(opsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []ops.Op{}, nil
+		}
+		return nil, err
+	}
+
+	var allOps []ops.Op
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
+			logPath := filepath.Join(opsDir, entry.Name())
+			logOps, err := ops.ReadLog(logPath)
+			if err != nil {
+				// Skip logs that can't be read
+				continue
+			}
+			allOps = append(allOps, logOps...)
+		}
+	}
+
+	return allOps, nil
+}
+
+// readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
+// Returns ops slice and a map of log filename -> byte offset (end position).
+func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
+	entries, err := os.ReadDir(opsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []ops.Op{}, make(map[string]int64), nil
+		}
+		return nil, nil, err
+	}
+
+	var allOps []ops.Op
+	offsets := make(map[string]int64)
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
+			logPath := filepath.Join(opsDir, entry.Name())
+			logOps, err := ops.ReadLog(logPath)
+			if err != nil {
+				// Skip logs that can't be read
+				continue
+			}
+
+			// Get file size to track byte offset
+			if info, err := os.Stat(logPath); err == nil {
+				logName := filepath.Base(logPath)
+				offsets[logName] = info.Size()
+			}
+
+			allOps = append(allOps, logOps...)
+		}
+	}
+
+	return allOps, offsets, nil
+}

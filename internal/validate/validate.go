@@ -2,9 +2,7 @@ package validate
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -15,11 +13,13 @@ import (
 )
 
 type Options struct {
-	ScopeID   string
-	Strict    bool
-	IssuesDir string
-	StateDir  string
-	RepoPath  string
+	ScopeID      string
+	Strict       bool
+	ManifestData []byte                 // Pre-read manifest bytes (may be nil/empty if citations not available)
+	Coverage     *traceability.Coverage // Pre-loaded traceability coverage
+	// PreExpandedScopes maps issue ID to pre-expanded file paths (for W10 phantom scope check)
+	// If nil, W10 phantom scope checks are skipped
+	PreExpandedScopes map[string][]string
 }
 
 type Result struct {
@@ -43,8 +43,8 @@ func Validate(state *materialize.State, opts Options) Result {
 	errors = append(errors, checkE10ScopeGlobs(targets)...)
 	// TODO(E4-S3): E11 check not yet implemented — spec definition pending.
 
-	if opts.IssuesDir != "" {
-		errors = append(errors, checkE7E8E12Citations(targets, opts.IssuesDir)...)
+	if len(opts.ManifestData) > 0 {
+		errors = append(errors, checkE7E8E12Citations(targets, opts.ManifestData)...)
 	}
 
 	warnings = append(warnings, checkW1ScopeOverlap(targets, state)...)
@@ -59,17 +59,8 @@ func Validate(state *materialize.State, opts Options) Result {
 	// should warn when a claimed issue's last heartbeat exceeds its ClaimTTL.
 	warnings = append(warnings, checkW11VagueOutcomes(targets)...)
 
-	if opts.RepoPath != "" {
-		infos = append(infos, checkW10PhantomScope(targets, opts.RepoPath)...)
-	}
-
-	var cov *traceability.Coverage
-	if opts.StateDir != "" {
-		tracePath := filepath.Join(opts.StateDir, "traceability.json")
-		c, err := traceability.Read(tracePath)
-		if err == nil {
-			cov = &c
-		}
+	if opts.PreExpandedScopes != nil {
+		infos = append(infos, checkW10PhantomScope(targets, opts.PreExpandedScopes)...)
 	}
 
 	if opts.Strict {
@@ -77,7 +68,7 @@ func Validate(state *materialize.State, opts Options) Result {
 		warnings = nil
 	}
 
-	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: cov}
+	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
 }
 
 func issueSubset(state *materialize.State, scopeID string) map[string]*materialize.Issue {
@@ -207,17 +198,15 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []string {
 	return errs
 }
 
-func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir string) []string {
+func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []byte) []string {
 	var errs []string
-	manifest, err := readManifestForValidate(issuesDir)
+
+	manifest, err := parseManifestData(manifestData)
 	if err != nil {
-		// Manifest absent or unreadable — citation checks skipped.
-		// Run `trls sources add` to register sources before validating citations.
-		if !errors.Is(err, os.ErrNotExist) {
-			errs = append(errs, fmt.Sprintf("citation check skipped: cannot read source manifest: %v", err))
-		}
+		errs = append(errs, fmt.Sprintf("citation check skipped: cannot parse source manifest: %v", err))
 		return errs
 	}
+
 	for id, issue := range issues {
 		if len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0 {
 			errs = append(errs, fmt.Sprintf("uncited node: %s", id))
@@ -232,19 +221,10 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir strin
 	return errs
 }
 
-func readManifestForValidate(issuesDir string) (map[string]struct{}, error) {
-	sourcesPath := filepath.Join(issuesDir, "sources")
-	m, err := sources.ReadManifest(sourcesPath)
-	if err != nil {
+func parseManifestData(manifestData []byte) (map[string]struct{}, error) {
+	m := sources.Manifest{}
+	if err := json.Unmarshal(manifestData, &m); err != nil {
 		return nil, err
-	}
-	// ReadManifest returns empty Manifest (not error) when file is absent;
-	// propagate a synthetic ErrNotExist so the caller skips citation checks.
-	if len(m.Entries) == 0 {
-		// Check whether the file actually exists to distinguish absent from empty.
-		if _, statErr := os.Stat(filepath.Join(sourcesPath, "manifest.json")); os.IsNotExist(statErr) {
-			return nil, os.ErrNotExist
-		}
 	}
 	result := make(map[string]struct{}, len(m.Entries))
 	for id := range m.Entries {
@@ -465,28 +445,76 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []string 
 	return warns
 }
 
-func checkW10PhantomScope(issues map[string]*materialize.Issue, repoPath string) []string {
+func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string) []string {
 	var warns []string
 	for id, issue := range issues {
 		// Terminal-status issues have already been delivered; their scope no longer needs to exist.
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}
+		expandedFiles, ok := preExpandedScopes[id]
+		if !ok {
+			// No pre-expanded data for this issue; skip check
+			continue
+		}
+
+		// If expandedFiles is not empty, at least some globs matched files
+		// If it's empty, no globs matched any files
+		hasMatches := len(expandedFiles) > 0
+
+		// Check each scope entry against the expanded files
 		for _, entry := range issue.Scope {
 			// Legacy ops may store multiple comma-separated paths as one entry; check each individually.
-			for path := range strings.SplitSeq(entry, ", ") {
+			for _, path := range splitSeq(entry, ", ") {
+				path = strings.TrimSpace(path) // trim whitespace
 				// "(new)" entries are planned files not yet created; skip them.
-				if strings.HasSuffix(path, " (new)") {
+				if hasNewSuffix(path) {
 					continue
 				}
-				matches, err := filepath.Glob(filepath.Join(repoPath, path))
-				if err != nil || len(matches) == 0 {
+				// Determine if this path is phantom
+				isPhantom := false
+				if !hasMatches {
+					// No files matched any globs — this entry is phantom
+					isPhantom = true
+				} else if !isGlobPattern(path) && !contains(expandedFiles, path) {
+					// This is a literal path and it doesn't appear in the expanded files
+					isPhantom = true
+				}
+				// If it's a glob pattern and we have matches, assume it matched (can't validate further without the glob)
+
+				if isPhantom {
 					warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id))
 				}
 			}
 		}
 	}
 	return warns
+}
+
+// isGlobPattern checks if a string contains glob characters
+func isGlobPattern(s string) bool {
+	return strings.ContainsAny(s, "*?[]")
+}
+
+// contains checks if a string slice contains a value
+func contains(slice []string, value string) bool {
+	for _, v := range slice {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+// splitSeq is a helper that splits a string on a separator using strings.Split.
+func splitSeq(s, sep string) []string {
+	return strings.Split(s, sep)
+}
+
+// hasNewSuffix checks if a string ends with " (new)".
+func hasNewSuffix(s string) bool {
+	const newSuffix = " (new)"
+	return len(s) >= len(newSuffix) && s[len(s)-len(newSuffix):] == newSuffix
 }
 
 const minOutcomeLength = 20

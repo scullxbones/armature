@@ -37,7 +37,11 @@ preview changes without committing them.`,
 			singleBranch := appCtx.Mode == "single-branch"
 
 			// Materialize to ensure state files are up to date
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
 
@@ -100,7 +104,11 @@ preview changes without committing them.`,
 			}
 
 			// Re-materialize so state files reflect the new merged status
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
+			allOps, err = readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 				return fmt.Errorf("re-materialize: %w", err)
 			}
 

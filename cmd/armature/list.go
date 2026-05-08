@@ -52,7 +52,11 @@ func newListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
 				return err
 			}
 

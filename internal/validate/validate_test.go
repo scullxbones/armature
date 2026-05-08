@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -315,7 +316,6 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 	// Issues with merged, done, or cancelled status should not trigger phantom scope warnings
 	// even if their scope globs match no files.
-	dir := t.TempDir() // empty dir — no files match any glob
 	for _, status := range []string{"merged", "done", "cancelled"} {
 		state := makeState(
 			&materialize.Issue{
@@ -325,7 +325,8 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 				Scope:  []string{"nonexistent/path/*.go"},
 			},
 		)
-		result := Validate(state, Options{RepoPath: dir})
+		// For terminal statuses, W10 check is skipped anyway
+		result := Validate(state, Options{PreExpandedScopes: nil})
 		assert.False(t, containsInfo(result, "phantom scope"),
 			"status=%s: phantom scope should be skipped for terminal status", status)
 	}
@@ -333,7 +334,6 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 
 func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 	// Blocked issues are not terminal — their scope should still be validated.
-	dir := t.TempDir() // empty dir — no files match any glob
 	state := makeState(
 		&materialize.Issue{
 			ID:     "TSK-1",
@@ -342,14 +342,17 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 			Scope:  []string{"nonexistent/path/*.go"},
 		},
 	)
-	result := Validate(state, Options{RepoPath: dir})
+	// Provide pre-expanded scopes showing no files match
+	preExpandedScopes := map[string][]string{
+		"TSK-1": {}, // empty list means globs matched no files
+	}
+	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
 	assert.True(t, containsInfo(result, "phantom scope"),
 		"blocked status should still trigger phantom scope warning")
 }
 
 func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) {
 	// Terminal status applies across all issue types, not just tasks.
-	dir := t.TempDir() // empty dir — no files match any glob
 	for _, issueType := range []string{"epic", "story"} {
 		state := makeState(
 			&materialize.Issue{
@@ -359,7 +362,8 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 				Scope:  []string{"nonexistent/path/*.go"},
 			},
 		)
-		result := Validate(state, Options{RepoPath: dir})
+		// Terminal status skips W10 check anyway
+		result := Validate(state, Options{PreExpandedScopes: nil})
 		assert.False(t, containsInfo(result, "phantom scope"),
 			"type=%s status=done: phantom scope should be skipped for terminal status", issueType)
 	}
@@ -368,7 +372,6 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 	// Scope entries ending with " (new)" mark files not yet created; they should not
 	// trigger phantom scope warnings because the file is intentionally planned, not missing.
-	dir := t.TempDir()
 	state := makeState(
 		&materialize.Issue{
 			ID:     "ISSUE-1",
@@ -377,7 +380,11 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 			Scope:  []string{"internal/adapters/files.go (new)", "internal/adapters/git.go (new)"},
 		},
 	)
-	result := Validate(state, Options{RepoPath: dir})
+	// "(new)" entries don't trigger phantom scope checks
+	preExpandedScopes := map[string][]string{
+		"ISSUE-1": {}, // empty list means no files matched
+	}
+	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
 	assert.False(t, containsInfo(result, "phantom scope"),
 		"scope entries with (new) suffix should not trigger phantom scope warnings")
 }
@@ -397,7 +404,11 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 			Scope:  []string{"real.go", "planned.go (new)", "ghost.go"},
 		},
 	)
-	result := Validate(state, Options{RepoPath: dir})
+	// Provide pre-expanded scopes showing real.go exists but ghost.go doesn't
+	preExpandedScopes := map[string][]string{
+		"ISSUE-1": {"real.go"}, // ghost.go and planned.go (new) don't appear
+	}
+	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
 	// ghost.go is phantom (no (new) suffix, doesn't exist)
 	assert.True(t, containsInfo(result, "phantom scope"),
 		"nonexistent file without (new) suffix should still trigger phantom scope warning")
@@ -429,7 +440,10 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 			Scope: []string{"planned.go (new), real.go, ghost.go"},
 		},
 	)
-	result := Validate(state, Options{RepoPath: dir})
+	preExpandedScopes := map[string][]string{
+		"ISSUE-1": {"real.go"}, // only real.go exists; planned.go (new) and ghost.go don't
+	}
+	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
 	var phantomInfos []string
 	for _, info := range result.Infos {
 		if strings.Contains(info, "phantom scope") {
@@ -443,17 +457,16 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 	assert.NotContains(t, phantomInfos[0], "real.go")
 }
 
-func TestValidateUsesStateDir(t *testing.T) {
-	dir := t.TempDir()
-	stateDir := filepath.Join(dir, "state")
-	require.NoError(t, os.MkdirAll(stateDir, 0755))
-
-	// Write a mock traceability.json
-	cov := `{"cited_nodes": 1, "total_nodes": 1, "coverage_pct": 100}`
-	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "traceability.json"), []byte(cov), 0644))
+func TestValidateUsesCoverage(t *testing.T) {
+	// Pass coverage data directly
+	coverage := &traceability.Coverage{
+		CitedNodes:  1,
+		TotalNodes:  1,
+		CoveragePct: 100,
+	}
 
 	state := makeState(&materialize.Issue{ID: "A"})
-	result := Validate(state, Options{StateDir: stateDir})
+	result := Validate(state, Options{Coverage: coverage})
 	assert.NotNil(t, result.Coverage)
 	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }

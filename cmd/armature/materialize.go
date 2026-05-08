@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
@@ -14,8 +15,14 @@ func newMaterializeCmd() *cobra.Command {
 		Use:   "materialize",
 		Short: "Replay op logs and update materialized state files",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Read all ops from log files
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+
 			if excludeWorker != "" {
-				_, result, err := materialize.MaterializeExcludeWorker(appCtx.IssuesDir, appCtx.StateDir, excludeWorker, appCtx.Mode == "single-branch")
+				_, result, err := materialize.MaterializeExcludeWorker(allOps, excludeWorker, appCtx.Mode == "single-branch")
 				if err != nil {
 					return err
 				}
@@ -23,7 +30,7 @@ func newMaterializeCmd() *cobra.Command {
 				return nil
 			}
 
-			result, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, appCtx.Mode == "single-branch")
+			result, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets)
 			if err != nil {
 				return err
 			}

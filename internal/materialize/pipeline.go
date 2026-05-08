@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -33,8 +32,10 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 }
 
 // Materialize runs the full materialization pipeline.
-func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) {
-	opsDir := filepath.Join(issuesDir, "ops")
+// It accepts pre-read ops and writes state and checkpoint files to stateDir.
+// issuesDir is used to resolve stateDir paths; allOps should be pre-read from the log files.
+// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
+func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -47,17 +48,6 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 		return Result{}, fmt.Errorf("load checkpoint: %w", err)
 	}
 
-	entries, err := os.ReadDir(opsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// No ops dir yet — empty result
-			return Result{}, nil
-		}
-		return Result{}, fmt.Errorf("read ops dir: %w", err)
-	}
-
-	var allOps []ops.Op
-	newOffsets := make(map[string]int64)
 	// Detect incremental vs full replay based on checkpoint
 	fullReplay := len(cp.ByteOffsets) == 0
 	var state *State
@@ -74,39 +64,6 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 	} else {
 		state = NewState()
 		state.SingleBranchMode = singleBranch
-	}
-
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-		logPath := filepath.Join(opsDir, entry.Name())
-		workerID := ops.WorkerIDFromFilename(logPath)
-
-		// Get the offset from checkpoint (0 if not present for this log)
-		offset := int64(0)
-		if cp.ByteOffsets != nil {
-			if savedOffset, ok := cp.ByteOffsets[entry.Name()]; ok {
-				offset = savedOffset
-			}
-		}
-
-		logOps, err := ops.ReadLogFromOffset(logPath, offset)
-		if err != nil {
-			return Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
-		}
-
-		for _, op := range logOps {
-			if op.WorkerID != workerID {
-				continue
-			}
-			allOps = append(allOps, op)
-		}
-
-		info, _ := os.Stat(logPath)
-		if info != nil {
-			newOffsets[entry.Name()] = info.Size()
-		}
 	}
 
 	sortOpsByTimestamp(allOps)
@@ -137,7 +94,13 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 		fmt.Fprintf(os.Stderr, "Full replay: processed %d ops across %d issues\n", len(allOps), len(state.Issues))
 	}
 
-	newCp := Checkpoint{ByteOffsets: newOffsets}
+	// Write checkpoint with byte offsets for next incremental replay.
+	// If byteOffsets not provided, use empty map.
+	offsets := byteOffsets
+	if offsets == nil {
+		offsets = make(map[string]int64)
+	}
+	newCp := Checkpoint{ByteOffsets: offsets}
 	if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
 		return Result{}, fmt.Errorf("write checkpoint: %w", err)
 	}
@@ -153,8 +116,9 @@ func Materialize(issuesDir, stateDir string, singleBranch bool) (Result, error) 
 }
 
 // MaterializeAndReturn runs the full materialization pipeline and returns the resulting State.
-func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State, Result, error) {
-	opsDir := filepath.Join(issuesDir, "ops")
+// It accepts pre-read ops and writes state and checkpoint files to stateDir.
+// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
+func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (*State, Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -167,16 +131,6 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 		return nil, Result{}, fmt.Errorf("load checkpoint: %w", err)
 	}
 
-	entries, err := os.ReadDir(opsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return NewState(), Result{}, nil
-		}
-		return nil, Result{}, fmt.Errorf("read ops dir: %w", err)
-	}
-
-	var allOps []ops.Op
-	newOffsets := make(map[string]int64)
 	// Detect incremental vs full replay based on checkpoint
 	fullReplay := len(cp.ByteOffsets) == 0
 	var state *State
@@ -193,39 +147,6 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 	} else {
 		state = NewState()
 		state.SingleBranchMode = singleBranch
-	}
-
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-		logPath := filepath.Join(opsDir, entry.Name())
-		workerID := ops.WorkerIDFromFilename(logPath)
-
-		// Get the offset from checkpoint (0 if not present for this log)
-		offset := int64(0)
-		if cp.ByteOffsets != nil {
-			if savedOffset, ok := cp.ByteOffsets[entry.Name()]; ok {
-				offset = savedOffset
-			}
-		}
-
-		logOps, err := ops.ReadLogFromOffset(logPath, offset)
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
-		}
-
-		for _, op := range logOps {
-			if op.WorkerID != workerID {
-				continue
-			}
-			allOps = append(allOps, op)
-		}
-
-		info, _ := os.Stat(logPath)
-		if info != nil {
-			newOffsets[entry.Name()] = info.Size()
-		}
 	}
 
 	sortOpsByTimestamp(allOps)
@@ -256,7 +177,13 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 		fmt.Fprintf(os.Stderr, "Full replay: processed %d ops across %d issues\n", len(allOps), len(state.Issues))
 	}
 
-	newCp := Checkpoint{ByteOffsets: newOffsets}
+	// Write checkpoint with byte offsets for next incremental replay.
+	// If byteOffsets not provided, use empty map.
+	offsets := byteOffsets
+	if offsets == nil {
+		offsets = make(map[string]int64)
+	}
+	newCp := Checkpoint{ByteOffsets: offsets}
 	if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
 		return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
 	}
@@ -272,55 +199,25 @@ func MaterializeAndReturn(issuesDir, stateDir string, singleBranch bool) (*State
 	return state, result, nil
 }
 
-// MaterializeExcludeWorker replays the op log excluding all ops from the given
+// MaterializeExcludeWorker replays ops excluding all ops from the given
 // workerID. This is a diagnostic-only mode: state files and checkpoint are NOT
 // updated. Returns the resulting State and Result.
-func MaterializeExcludeWorker(issuesDir, stateDir, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
-	opsDir := filepath.Join(issuesDir, "ops")
-
-	entries, err := os.ReadDir(opsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return NewState(), Result{}, nil
-		}
-		return nil, Result{}, fmt.Errorf("read ops dir: %w", err)
-	}
-
-	var allOps []ops.Op
-
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-		// Skip the log file belonging to the excluded worker.
-		if strings.Contains(entry.Name(), excludeWorkerID) {
-			continue
-		}
-		logPath := filepath.Join(opsDir, entry.Name())
-		workerID := ops.WorkerIDFromFilename(logPath)
-		if workerID == excludeWorkerID {
-			continue
-		}
-
-		logOps, err := ops.ReadLogFromOffset(logPath, 0)
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("read log %s: %w", entry.Name(), err)
-		}
-
-		for _, op := range logOps {
-			if op.WorkerID != workerID {
-				continue
-			}
-			allOps = append(allOps, op)
+// allOps should be pre-read from log files.
+func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
+	// Filter out ops from the excluded worker
+	var filteredOps []ops.Op
+	for _, op := range allOps {
+		if op.WorkerID != excludeWorkerID {
+			filteredOps = append(filteredOps, op)
 		}
 	}
 
-	sortOpsByTimestamp(allOps)
+	sortOpsByTimestamp(filteredOps)
 
 	state := NewState()
 	state.SingleBranchMode = singleBranch
 
-	for _, op := range allOps {
+	for _, op := range filteredOps {
 		if err := state.ApplyOp(op); err != nil {
 			continue
 		}
@@ -330,7 +227,7 @@ func MaterializeExcludeWorker(issuesDir, stateDir, excludeWorkerID string, singl
 
 	return state, Result{
 		IssueCount:   len(state.Issues),
-		OpsProcessed: len(allOps),
+		OpsProcessed: len(filteredOps),
 		FullReplay:   true,
 	}, nil
 }

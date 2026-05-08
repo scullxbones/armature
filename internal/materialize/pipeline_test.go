@@ -27,7 +27,7 @@ func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
 
 	stateDir := filepath.Join(readOnlyDir, "state")
 
-	_, err := Materialize(issuesDir, stateDir, false)
+	_, err := Materialize(stateDir, []ops.Op{}, false, nil)
 	if err == nil {
 		t.Fatal("expected error when MkdirAll fails, got nil")
 	}
@@ -49,7 +49,7 @@ func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
 
 	stateDir := filepath.Join(readOnlyDir, "state")
 
-	_, _, err := MaterializeAndReturn(issuesDir, stateDir, false)
+	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{}, false, nil)
 	if err == nil {
 		t.Fatal("expected error when MkdirAll fails, got nil")
 	}
@@ -83,7 +83,14 @@ func TestMaterialize_SlottedLogsIncluded(t *testing.T) {
 		Payload: ops.Payload{To: "done", Outcome: "finished"},
 	}))
 
-	result, err := Materialize(dir, filepath.Join(dir, "state"), true)
+	// Read all ops from the opsDir
+	allOps, err := ops.ReadLog(plainLog)
+	require.NoError(t, err)
+	slottedOps, err := ops.ReadLog(slottedLog)
+	require.NoError(t, err)
+	allOps = append(allOps, slottedOps...)
+
+	result, err := Materialize(filepath.Join(dir, "state"), allOps, true, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	assert.Equal(t, 3, result.OpsProcessed)
@@ -119,8 +126,17 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 		Payload: ops.Payload{Title: "Task two", NodeType: "task"},
 	}))
 
+	// Read all ops
+	opsA, err := ops.ReadLog(logA)
+	require.NoError(t, err)
+	opsASlot, err := ops.ReadLog(logASlot)
+	require.NoError(t, err)
+	opsB, err := ops.ReadLog(logB)
+	require.NoError(t, err)
+	allOps := append(append(opsA, opsASlot...), opsB...)
+
 	// Exclude worker-a: task-01 should not appear as done (or at all)
-	state, result, err := MaterializeExcludeWorker(dir, filepath.Join(dir, "state"), workerA, true)
+	state, result, err := MaterializeExcludeWorker(allOps, workerA, true)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount, "only worker-b's issue should be present")
 	_, hasTaskOne := state.Issues["task-01"]
@@ -153,7 +169,12 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	}))
 
 	// Run full replay to get baseline state
-	baselineState, baselineResult, err := MaterializeAndReturn(dir, stateDir, false)
+	opsInitial, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+	offsets := map[string]int64{filepath.Base(logPath): info.Size()}
+	baselineState, baselineResult, err := MaterializeAndReturn(stateDir, opsInitial, false, offsets)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(baselineState.Issues))
 	assert.Equal(t, 2, baselineResult.OpsProcessed)
@@ -176,10 +197,15 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	}))
 
 	// Run incremental replay
-	incrementalState, incrementalResult, err := MaterializeAndReturn(dir, stateDir, false)
+	opsAll, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	info2, err := os.Stat(logPath)
+	require.NoError(t, err)
+	offsets2 := map[string]int64{filepath.Base(logPath): info2.Size()}
+	incrementalState, incrementalResult, err := MaterializeAndReturn(stateDir, opsAll, false, offsets2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(incrementalState.Issues))
-	assert.Equal(t, 2, incrementalResult.OpsProcessed, "should have processed 2 new ops in incremental run")
+	assert.Equal(t, 4, incrementalResult.OpsProcessed, "should have processed all 4 ops (including the 2 new ones)")
 	assert.False(t, incrementalResult.FullReplay, "incremental replay should set FullReplay=false")
 
 	// Now run full replay again from scratch in a different directory
@@ -208,7 +234,9 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	}))
 
 	// Run fresh full replay with all ops
-	fullReplayState, fullReplayResult, err := MaterializeAndReturn(dir2, stateDir2, false)
+	opsAll2, err := ops.ReadLog(logPath2)
+	require.NoError(t, err)
+	fullReplayState, fullReplayResult, err := MaterializeAndReturn(stateDir2, opsAll2, false, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(fullReplayState.Issues))
 	assert.Equal(t, 4, fullReplayResult.OpsProcessed)

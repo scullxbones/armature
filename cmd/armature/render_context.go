@@ -49,7 +49,11 @@ func newRenderContextCmd() *cobra.Command {
 					return fmt.Errorf("materialize at %s: %w", rcAt, err)
 				}
 			} else {
-				_, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch")
+				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+				if err != nil {
+					return fmt.Errorf("read ops: %w", err)
+				}
+				_, err = materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets)
 				if err != nil {
 					return fmt.Errorf("materialize: %w", err)
 				}

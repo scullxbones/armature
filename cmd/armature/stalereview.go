@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -32,7 +33,11 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("read manifest: %w", err)
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
 			if err != nil {
 				return fmt.Errorf("materialize: %w", err)
 			}
