@@ -2,15 +2,58 @@ package adapters
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 )
 
+// ProcessStatus is the outcome of a RunProcess call.
+type ProcessStatus int
+
+const (
+	// ProcessClean indicates the process exited with code 0.
+	ProcessClean ProcessStatus = iota
+	// ProcessError indicates the process exited with a non-zero code.
+	ProcessError
+	// ProcessTimeout indicates the process was killed due to a context deadline.
+	ProcessTimeout
+)
+
+// RunProcess launches cmd with args in workdir, streams stdout/stderr to the
+// supplied writers, and returns a ProcessStatus plus any error.
+// Context cancellation causes the process to be killed.
+func RunProcess(ctx context.Context, workdir string, cmdArgs []string, stdout, stderr io.Writer) (ProcessStatus, error) {
+	if len(cmdArgs) == 0 {
+		return ProcessError, fmt.Errorf("RunProcess: cmdArgs must not be empty")
+	}
+	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...) //nolint:gosec
+	cmd.Dir = workdir
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		// Distinguish context-caused failures from ordinary exit errors.
+		ctxErr := ctx.Err()
+		if ctxErr != nil {
+			return ProcessTimeout, ctxErr
+		}
+		return ProcessError, err
+	}
+	return ProcessClean, nil
+}
+
 // ===== Shell Execution (from hooks/runner.go, worker/identity.go, config/context.go, doctor/doctor.go) =====
+
+// LookPath reports whether a binary is available in PATH.
+// It wraps exec.LookPath so callers do not need to import os/exec directly.
+func LookPath(file string) (string, error) {
+	return exec.LookPath(file)
+}
 
 // RunCommand executes a shell command with args and returns combined output.
 // Returns error if exit code is non-zero.

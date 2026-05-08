@@ -74,6 +74,12 @@ type InvocationResult struct {
 
 // HarnessConfig holds configuration for a single harness adapter instance.
 type HarnessConfig struct {
+	// Adapter selects the harness implementation: "claude", "codex", or "devin".
+	Adapter string `json:"adapter,omitempty"`
+	// Model is the LLM model name to pass to the harness CLI (e.g. "claude-haiku-4-5").
+	Model string `json:"model,omitempty"`
+	// Timeout is the per-invocation timeout in seconds (0 = no limit).
+	Timeout int `json:"timeout,omitempty"`
 	// BuildCmd is the shell command used to build the project.
 	BuildCmd string `json:"build_cmd,omitempty"`
 	// LintCmd is the shell command used to lint the project.
