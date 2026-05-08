@@ -7,12 +7,29 @@ import (
 )
 
 type Config struct {
-	Mode                   string       `json:"mode"` // "single-branch" or "dual-branch"
-	ProjectType            string       `json:"project_type"`
-	DefaultTTL             int          `json:"default_ttl"` // minutes
-	TokenBudget            int          `json:"token_budget"`
-	LowStakesPushThreshold int          `json:"low_stakes_push_threshold"` // ops before auto-push
-	Hooks                  []HookConfig `json:"hooks"`
+	Mode                   string             `json:"mode"` // "single-branch" or "dual-branch"
+	ProjectType            string             `json:"project_type"`
+	DefaultTTL             int                `json:"default_ttl"` // minutes
+	TokenBudget            int                `json:"token_budget"`
+	LowStakesPushThreshold int                `json:"low_stakes_push_threshold"` // ops before auto-push
+	Hooks                  []HookConfig       `json:"hooks"`
+	Orchestrator           OrchestratorConfig `json:"orchestrator,omitempty"`
+}
+
+// OrchestratorConfig holds settings for arm orchestrate.
+type OrchestratorConfig struct {
+	MaxParallel    int             `json:"max_parallel,omitempty"`
+	SandboxEnabled bool            `json:"sandbox_enabled,omitempty"`
+	Adapters       AdapterCommands `json:"adapters,omitempty"`
+}
+
+// AdapterCommands holds the shell commands used by each verification phase.
+type AdapterCommands struct {
+	Build    string `json:"build,omitempty"`
+	Lint     string `json:"lint,omitempty"`
+	Test     string `json:"test,omitempty"`
+	Coverage string `json:"coverage,omitempty"`
+	Mutate   string `json:"mutate,omitempty"`
 }
 
 type HookConfig struct {
