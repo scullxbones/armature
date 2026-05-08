@@ -34,7 +34,7 @@ func (c *Client) CurrentBranch() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-	return string(output[:len(output)-1]), nil // Strip newline
+	return strings.TrimSpace(string(output)), nil
 }
 
 // CommitMessage returns the commit message for a given SHA.
