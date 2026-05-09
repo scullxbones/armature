@@ -202,14 +202,26 @@ If workers operated in separate git worktrees or branches, merge them into the
 story feature branch now. Resolve any conflicts before proceeding. Check for
 files that were modified by multiple workers.
 
-### c. Verify build integrity
+### c. Mark completed tasks merged
+
+For every task that finished in the wave, run:
+
+```bash
+arm merged --issue TASK-ID
+```
+
+This promotes each completed task from `done` to `merged` so dependent work can
+unblock cleanly before the next wave begins. Do this immediately after task
+status verification and before the build check.
+
+### d. Verify build integrity
 ```bash
 make check    # or the repo's equivalent: lint, tests, coverage
 ```
 
 Do not proceed to the next wave or story close if the build is red.
 
-### d. Check citation coverage
+### e. Check citation coverage
 ```bash
 arm validate
 ```
@@ -224,7 +236,7 @@ arm accept-citation --issue ID --ci               # if no source, mark as self-c
 
 Repeat until `arm validate` shows no errors.
 
-### e. Clean up worktrees
+### f. Clean up worktrees
 
 If workers used git worktrees, remove them after their branches are merged into
 the story feature branch:
@@ -238,7 +250,7 @@ git branch -d <worker-branch>             # delete the local branch if no longer
 Leaving stale worktrees causes `git worktree list` clutter and can block future
 worktree operations on the same path.
 
-### f. Continue to next wave
+### g. Continue to next wave
 ```bash
 arm ready    # next wave should now be unblocked
 ```
