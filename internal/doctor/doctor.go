@@ -2,15 +2,16 @@
 package doctor
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"os/exec"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
@@ -85,7 +86,26 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Report, error) {
 	singleBranch := true // single-branch is the default for doctor
 
-	if _, err := materialize.Materialize(issuesDir, stateDir, singleBranch); err != nil {
+	// Read ops from the ops directory
+	opsDir := filepath.Join(issuesDir, "ops")
+	var allOps []ops.Op
+	var opLocations map[string][]string
+	var err error
+
+	if verbose {
+		// Read with location tracking for verbose output
+		allOps, opLocations, err = readAllOpsFromOpsDirWithLocations(opsDir)
+	} else {
+		// Read without location tracking
+		allOps, err = readAllOpsFromOpsDir(opsDir)
+		opLocations = make(map[string][]string)
+	}
+
+	if err != nil {
+		return Report{}, fmt.Errorf("read ops: %w", err)
+	}
+
+	if _, err := materialize.Materialize(stateDir, allOps, singleBranch, nil); err != nil {
 		return Report{}, fmt.Errorf("materialize: %w", err)
 	}
 
@@ -100,11 +120,27 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 		return Report{}, fmt.Errorf("load issues: %w", err)
 	}
 
+	// Extract target IDs from ops for D3 check
+	opsTargetIDs := make([]string, 0, len(allOps))
+	for _, op := range allOps {
+		if op.Type != ops.OpSourceFingerprint && op.TargetID != "" {
+			opsTargetIDs = append(opsTargetIDs, op.TargetID)
+		}
+	}
+
+	// Build verbose context from location strings
+	var verboseD3Context map[string][]opLocation
+	if verbose {
+		verboseD3Context = convertLocationsToOpLocations(opLocations)
+	} else {
+		verboseD3Context = make(map[string][]opLocation)
+	}
+
 	var checks []Finding
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
 	checks = append(checks, checkD2StaleClaims(allIssues))
-	checks = append(checks, checkD3OrphanedOps(issuesDir, index, verbose))
+	checks = append(checks, checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, verboseD3Context))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
@@ -118,7 +154,7 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 		path := filepath.Join(stateDir, "issues", id+".json")
 		issue, err := materialize.LoadIssue(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
 			return nil, fmt.Errorf("load issue %s: %w", id, err)
@@ -134,14 +170,13 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
 	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
 
-	cmd := exec.Command("git", "-C", repoPath, "log", "--oneline", "--no-merges", "--pretty=%s")
-	out, err := cmd.Output()
+	out, err := adapters.GitLog(repoPath, "--oneline", "--no-merges", "--pretty=%s")
 	if err != nil {
 		// Not a git repo or no commits — skip
 		return f
 	}
 
-	lines := strings.Split(string(out), "\n")
+	lines := strings.Split(out, "\n")
 	seen := make(map[string]bool)
 	var diverged []string
 
@@ -190,54 +225,33 @@ type opLocation struct {
 	line int
 }
 
-// D3: orphaned ops — op files referencing issue IDs not in the graph.
-// When verbose=true, VerboseItems is populated with "id (file:line, ...)" context.
-func checkD3OrphanedOps(issuesDir string, index materialize.Index, verbose bool) Finding {
-	opsDir := filepath.Join(issuesDir, "ops")
-	entries, err := os.ReadDir(opsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return Finding{Check: "D3", Severity: SeverityOK, Message: "No orphaned ops"}
-		}
-		return Finding{
-			Check:    "D3",
-			Severity: SeverityError,
-			Message:  fmt.Sprintf("Cannot read ops directory: %v", err),
-		}
-	}
-
-	var targetIDs []string
-	// locations maps targetID -> list of op log file:line references (verbose mode only).
-	locations := make(map[string][]opLocation)
-
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-		logPath := filepath.Join(opsDir, entry.Name())
-		logOps, err := ops.ReadLog(logPath)
-		if err != nil {
-			continue
-		}
-		for lineNum, op := range logOps {
-			if op.Type == ops.OpSourceFingerprint {
-				continue
-			}
-			if op.TargetID != "" {
-				targetIDs = append(targetIDs, op.TargetID)
-				if verbose {
-					locations[op.TargetID] = append(locations[op.TargetID], opLocation{
-						file: entry.Name(),
-						line: lineNum + 1,
-					})
+// convertLocationsToOpLocations converts string locations (e.g., "worker.log:5") to opLocation structs.
+func convertLocationsToOpLocations(locations map[string][]string) map[string][]opLocation {
+	result := make(map[string][]opLocation)
+	for targetID, locStrs := range locations {
+		var opLocs []opLocation
+		for _, locStr := range locStrs {
+			parts := strings.SplitN(locStr, ":", 2)
+			if len(parts) == 2 {
+				lineNo := 0
+				if ln, err := fmt.Sscanf(parts[1], "%d", &lineNo); err == nil && ln == 1 {
+					opLocs = append(opLocs, opLocation{file: parts[0], line: lineNo})
 				}
 			}
 		}
+		if len(opLocs) > 0 {
+			result[targetID] = opLocs
+		}
 	}
+	return result
+}
 
+// checkD3OrphanedOpsFromListWithContext checks for orphaned ops given a flat list of target IDs
+// and optional verbose context (file:line locations).
+func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []string, locations map[string][]opLocation) Finding {
 	f := checkD3OrphanedOpsFromList(index, targetIDs)
 
-	if verbose && f.Severity == SeverityError && len(f.Items) > 0 {
+	if f.Severity == SeverityError && len(f.Items) > 0 && len(locations) > 0 {
 		orphanedSet := make(map[string]bool, len(f.Items))
 		for _, id := range f.Items {
 			orphanedSet[id] = true
@@ -384,4 +398,61 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 		f.Items = uncited
 	}
 	return f
+}
+
+// readAllOpsFromOpsDir reads all ops from the ops directory.
+func readAllOpsFromOpsDir(opsDir string) ([]ops.Op, error) {
+	entries, err := adapters.ReadDir(opsDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var allOps []ops.Op
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
+			logPath := filepath.Join(opsDir, entry.Name())
+			logOps, err := ops.ReadLog(logPath)
+			if err != nil {
+				// Skip logs that can't be read
+				continue
+			}
+			allOps = append(allOps, logOps...)
+		}
+	}
+
+	return allOps, nil
+}
+
+// readAllOpsFromOpsDirWithLocations reads all ops and tracks which log file each came from.
+// Returns ops and a map of target ID to (logfile:lineno) location strings.
+func readAllOpsFromOpsDirWithLocations(opsDir string) ([]ops.Op, map[string][]string, error) {
+	entries, err := adapters.ReadDir(opsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var allOps []ops.Op
+	locations := make(map[string][]string)
+	lineNo := 0
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
+			logPath := filepath.Join(opsDir, entry.Name())
+			logOps, err := ops.ReadLog(logPath)
+			if err != nil {
+				// Skip logs that can't be read
+				continue
+			}
+
+			logFileName := filepath.Base(logPath)
+			for i, op := range logOps {
+				lineNo++
+				allOps = append(allOps, op)
+				locStr := fmt.Sprintf("%s:%d", logFileName, i+1)
+				locations[op.TargetID] = append(locations[op.TargetID], locStr)
+			}
+		}
+	}
+
+	return allOps, locations, nil
 }

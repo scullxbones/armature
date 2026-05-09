@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var runTrlsMu sync.Mutex
 
 // getTestStateDir returns the absolute path to the worker-specific state directory.
 // In dual-branch mode, state lives at the worktree root (.arm/state/); in single-branch,
@@ -47,6 +50,8 @@ func TestStateDirFor(t *testing.T) {
 // runTrls invokes the armature cobra command tree with --repo injected and returns stdout + error.
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()
@@ -60,6 +65,8 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 // runTrlsWithStderr invokes the armature cobra command tree and returns stdout, stderr, and error.
 func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) {
 	t.Helper()
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()

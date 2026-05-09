@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 func TestFetchHTTP_BearerToken(t *testing.T) {
@@ -21,12 +23,11 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	creds := Credentials{Token: token}
 	client := &http.Client{}
 
-	got, err := fetchHTTP(context.Background(), client, srv.URL+"/", creds)
+	got, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/", "", "", token)
 	if err != nil {
-		t.Fatalf("fetchHTTP returned unexpected error: %v", err)
+		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
 	if string(got) != wantBody {
 		t.Errorf("body mismatch: got %q, want %q", string(got), wantBody)
@@ -47,12 +48,11 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	creds := Credentials{Username: "alice", Password: "secret"}
 	client := &http.Client{}
 
-	got, err := fetchHTTP(context.Background(), client, srv.URL+"/", creds)
+	got, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/", "alice", "secret", "")
 	if err != nil {
-		t.Fatalf("fetchHTTP returned unexpected error: %v", err)
+		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
 	if string(got) != wantBody {
 		t.Errorf("body mismatch: got %q, want %q", string(got), wantBody)
@@ -67,7 +67,7 @@ func TestFetchHTTP_ErrorStatus(t *testing.T) {
 
 	client := &http.Client{}
 
-	_, err := fetchHTTP(context.Background(), client, srv.URL+"/missing", Credentials{})
+	_, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/missing", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
@@ -84,9 +84,9 @@ func TestFetchHTTP_NoAuth(t *testing.T) {
 
 	client := &http.Client{}
 
-	got, err := fetchHTTP(context.Background(), client, srv.URL+"/", Credentials{})
+	got, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/", "", "", "")
 	if err != nil {
-		t.Fatalf("fetchHTTP returned unexpected error: %v", err)
+		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
 	if string(got) != wantBody {
 		t.Errorf("body mismatch: got %q, want %q", string(got), wantBody)

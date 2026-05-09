@@ -18,6 +18,7 @@ func newAssignCmd() *cobra.Command {
 		Short: "Assign an issue to a worker",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -25,7 +26,7 @@ func newAssignCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			myWorkerID, logPath, err := resolveWorkerAndLog()
+			myWorkerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
@@ -36,7 +37,7 @@ func newAssignCmd() *cobra.Command {
 				WorkerID:  myWorkerID,
 				Payload:   ops.Payload{AssignedTo: workerID},
 			}
-			if err := appendHighStakesOp(logPath, op); err != nil {
+			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				return err
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -69,6 +70,7 @@ If the issue was claimed, it will automatically transition back to open status.
 This allows the issue to be claimed again by another worker.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -76,14 +78,18 @@ This allows the issue to be claimed again by another worker.`,
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
 
 			// Check current status before unassigning so we can release claimed → open.
 			issuesDir := appCtx.IssuesDir
-			if _, matErr := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); matErr != nil {
+			allOps, offsets, matErr := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if matErr != nil {
+				return fmt.Errorf("read ops: %w", matErr)
+			}
+			if _, matErr := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); matErr != nil {
 				return matErr
 			}
 			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
@@ -99,7 +105,7 @@ This allows the issue to be claimed again by another worker.`,
 				WorkerID:  workerID,
 				Payload:   ops.Payload{AssignedTo: ""},
 			}
-			if err := appendHighStakesOp(logPath, op); err != nil {
+			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				return err
 			}
 
@@ -112,7 +118,7 @@ This allows the issue to be claimed again by another worker.`,
 					WorkerID:  workerID,
 					Payload:   ops.Payload{To: ops.StatusOpen},
 				}
-				appendOp(logPath, transitionOp) //nolint:errcheck
+				appendOp(appCtx, logPath, transitionOp) //nolint:errcheck
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")

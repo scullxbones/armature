@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -57,7 +57,7 @@ This enforces branch + PR discipline.`,
 			// Check branch discipline when transitioning to done (unless --force)
 			if to == "done" && !force {
 				repoPath := appCtx.RepoPath
-				gc := git.New(repoPath)
+				gc := adapters.New(repoPath)
 				currentBranch, err := gc.CurrentBranch()
 				if err == nil {
 					// Only reject if we successfully detected we're on main/master
@@ -97,7 +97,7 @@ This enforces branch + PR discipline.`,
 				currentEntry = &entry
 			}
 
-			hookInput := hooks.HookInput{
+			hookInput := adapters.HookInput{
 				IssueID:    issueID,
 				FromStatus: currentStatus,
 				ToStatus:   to,

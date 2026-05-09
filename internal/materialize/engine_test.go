@@ -117,7 +117,10 @@ func TestMaterializePipeline(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
 		WorkerID: "worker-a1", Payload: ops.Payload{TTL: 60}}))
 
-	result, err := Materialize(dir, filepath.Join(dir, "state"), true)
+	// Read ops from disk
+	allOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	result, err := Materialize(filepath.Join(dir, "state"), allOps, true, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.IssueCount)
 
@@ -380,7 +383,10 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "worker-b1", Payload: ops.Payload{Title: "My Task", NodeType: "task"}}))
 
-	state, result, err := MaterializeAndReturn(dir, filepath.Join(dir, "state"), true)
+	// Read ops from disk
+	allOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), allOps, true, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	require.NotNil(t, state)
@@ -391,7 +397,7 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 func TestMaterializeAndReturn_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	// No ops dir — should return empty state
-	state, result, err := MaterializeAndReturn(dir, filepath.Join(dir, "state"), false)
+	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), []ops.Op{}, false, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.IssueCount)
@@ -661,6 +667,66 @@ func TestApplyCitationAccepted_UnknownIssue_NoError(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestApplyCitationAccepted_SourceEntryID_Populated(t *testing.T) {
+	// CitationAcceptance.SourceEntryID must be populated from op.Payload.SourceEntryID.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ConfirmedNoninteractively: true, SourceEntryID: "entry-xyz"},
+	}))
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.CitationAcceptances, 1)
+	assert.Equal(t, "entry-xyz", issue.CitationAcceptances[0].SourceEntryID)
+}
+
+func TestApplyCitationAccepted_SourceEntryID_EmptyWhenAbsent(t *testing.T) {
+	// CitationAcceptance.SourceEntryID must be empty string when not set in payload.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ConfirmedNoninteractively: false},
+	}))
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.CitationAcceptances, 1)
+	assert.Equal(t, "", issue.CitationAcceptances[0].SourceEntryID)
+}
+
+func TestCitationAcceptance_SourceEntryID_RoundTripsJSON(t *testing.T) {
+	// CitationAcceptance.SourceEntryID must survive WriteIssue/LoadIssue JSON round-trip.
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	issue := Issue{
+		ID:     "task-ca-rtrip",
+		Type:   "task",
+		Status: "open",
+		Title:  "Citation acceptance round-trip",
+		CitationAcceptances: []CitationAcceptance{
+			{WorkerID: "w1", Timestamp: 100, SourceEntryID: "entry-roundtrip"},
+		},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+
+	require.NoError(t, WriteIssue(issuesDir, issue))
+
+	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-ca-rtrip.json"))
+	require.NoError(t, err)
+	require.Len(t, loaded.CitationAcceptances, 1)
+	assert.Equal(t, "entry-roundtrip", loaded.CitationAcceptances[0].SourceEntryID)
+}
+
 func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 	issues := map[string]*Issue{
 		"task-01": {
@@ -821,6 +887,78 @@ func TestApplyScopeDeleteOp_UnknownIssue_Tolerated(t *testing.T) {
 		Payload: ops.Payload{DeletedPath: "internal/auth/handler.go"},
 	})
 	assert.NoError(t, err, "scope-delete on unknown issue should be tolerated")
+}
+
+func TestApplyCreateOp_PreferredModel_Propagated(t *testing.T) {
+	// Issue.PreferredModel must be populated from Payload.PreferredModel on create.
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-pm", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task with model", NodeType: "task", PreferredModel: "claude-opus-4"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "claude-opus-4", state.Issues["task-pm"].PreferredModel)
+}
+
+func TestApplyCreateOp_PreferredModel_EmptyWhenAbsent(t *testing.T) {
+	// Issue.PreferredModel must be empty when not set in the create payload.
+	state := NewState()
+	op := ops.Op{
+		Type: ops.OpCreate, TargetID: "task-nopm", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task without model", NodeType: "task"},
+	}
+	require.NoError(t, state.ApplyOp(op))
+	assert.Equal(t, "", state.Issues["task-nopm"].PreferredModel)
+}
+
+func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
+	// Issue.PreferredModel must survive WriteIssue/LoadIssue JSON round-trip.
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	issue := Issue{
+		ID:             "task-rtrip",
+		Type:           "task",
+		Status:         "open",
+		Title:          "Round-trip test",
+		PreferredModel: "claude-sonnet-5",
+		Children:       []string{},
+		BlockedBy:      []string{},
+		Blocks:         []string{},
+		DecisionRefs:   []string{},
+	}
+
+	require.NoError(t, WriteIssue(issuesDir, issue))
+
+	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-rtrip.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "claude-sonnet-5", loaded.PreferredModel)
+}
+
+func TestApplyOp_OrchestrationOps_IgnoredWithoutError(t *testing.T) {
+	// Materializer must silently ignore all 8 orchestration op types without error.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	orchOps := []string{
+		ops.OpOrchestrateStart,
+		ops.OpOrchestrateDispatch,
+		ops.OpOrchestrateDispatchComplete,
+		ops.OpOrchestrateVerifyFail,
+		ops.OpOrchestrateRetry,
+		ops.OpOrchestrateEscalate,
+		ops.OpOrchestrateComplete,
+		ops.OpOrchestrateCheckResult,
+	}
+	for _, opType := range orchOps {
+		err := state.ApplyOp(ops.Op{
+			Type: opType, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		})
+		assert.NoError(t, err, "op type %q should be ignored without error", opType)
+	}
 }
 
 // BenchmarkRunRollup_10kIssues benchmarks the rollup operation on a large hierarchy.

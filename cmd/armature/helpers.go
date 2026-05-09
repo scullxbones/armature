@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
-	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worker"
+	"github.com/spf13/cobra"
 )
 
 // jsonErrorPayload is the structured JSON error format emitted to stderr when
@@ -67,11 +68,49 @@ func classifyError(err error) exitcodes.Code {
 	}
 }
 
-// pushDeps holds push-related dependencies set up by initPushDeps.
+type executionState struct {
+	ctx     *config.Context
+	pusher  ops.Pusher
+	tracker ops.PendingPushTracker
+}
+
+type executionStateKey struct{}
+
 var (
+	appCtx     *config.Context
 	appPusher  ops.Pusher
 	appTracker ops.PendingPushTracker
 )
+
+func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
+	if cmd == nil {
+		return nil, fmt.Errorf("command context unavailable")
+	}
+	raw := cmd.Context()
+	if raw == nil {
+		return nil, fmt.Errorf("command context unavailable")
+	}
+	state, _ := raw.Value(executionStateKey{}).(*executionState)
+	if state == nil || state.ctx == nil {
+		return nil, fmt.Errorf("command execution state unavailable")
+	}
+	return state, nil
+}
+
+func mustState(cmd *cobra.Command) *executionState {
+	state, err := stateFromCmd(cmd)
+	if err != nil {
+		if appCtx != nil {
+			return &executionState{ctx: appCtx, pusher: appPusher, tracker: appTracker}
+		}
+		panic(err)
+	}
+	return state
+}
+
+func currentCtx(cmd *cobra.Command) *config.Context {
+	return mustState(cmd).ctx
+}
 
 // stateDirFor returns the worker-specific state directory.
 // In dual-branch mode, state lives at the worktree root (not inside .armature/).
@@ -82,8 +121,15 @@ func stateDirFor(ctx *config.Context, workerID string) string {
 	return filepath.Join(ctx.IssuesDir, "state", workerID)
 }
 
-func resolveWorkerAndLog() (string, string, error) {
-	workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+func resolveWorkerAndLog(args ...*config.Context) (string, string, error) {
+	ctx := appCtx
+	if len(args) > 0 && args[0] != nil {
+		ctx = args[0]
+	}
+	if ctx == nil {
+		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
+	}
+	workerID, err := worker.GetWorkerID(ctx.RepoPath)
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
@@ -91,7 +137,7 @@ func resolveWorkerAndLog() (string, string, error) {
 	if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
 		logName = workerID + "~" + slot
 	}
-	logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, logName)
+	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, logName)
 	return workerID, logPath, nil
 }
 
@@ -102,86 +148,147 @@ func nowEpoch() int64 {
 // initPushDeps wires up the pusher and tracker based on the current context.
 // In single-branch mode: NoPusher + NoTracker.
 // In dual-branch mode: AppendCommitAndPush with FilePushTracker.
-func initPushDeps() {
-	if appCtx.WorktreePath == "" {
-		// single-branch: no push needed
-		appPusher = ops.NoPusher{}
-		appTracker = ops.NoTracker{}
-		return
+func initPushDeps(ctx *config.Context) (ops.Pusher, ops.PendingPushTracker) {
+	if ctx.WorktreePath == "" {
+		return ops.NoPusher{}, ops.NoTracker{}
 	}
-	gc := git.New(appCtx.WorktreePath)
-	appPusher = &ops.AppendCommitAndPush{
+	gc := adapters.New(ctx.WorktreePath)
+	return &ops.AppendCommitAndPush{
 		Pusher:  gc,
 		Branch:  "_armature",
 		Backoff: nil, // use defaults: 1s, 2s, 4s
-	}
-	appTracker = ops.NewFilePushTracker(appCtx.StateDir)
+	}, ops.NewFilePushTracker(ctx.StateDir)
 }
 
 // appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.
-func appendOp(logPath string, op ops.Op) error {
-	var gc ops.GitCommitter
-	if appCtx.WorktreePath != "" {
-		gc = git.New(appCtx.WorktreePath)
+func appendOp(args ...any) error {
+	var ctx *config.Context
+	var logPath string
+	var op ops.Op
+
+	switch len(args) {
+	case 2:
+		ctx = appCtx
+		logPath = args[0].(string)
+		op = args[1].(ops.Op)
+	case 3:
+		ctx = args[0].(*config.Context)
+		logPath = args[1].(string)
+		op = args[2].(ops.Op)
+	default:
+		return fmt.Errorf("appendOp: unexpected arguments")
 	}
-	return ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc)
+	if ctx == nil {
+		return fmt.Errorf("appendOp: command context unavailable")
+	}
+	var gc ops.GitCommitter
+	if ctx.WorktreePath != "" {
+		gc = adapters.New(ctx.WorktreePath)
+	}
+	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc)
 }
 
 // appendHighStakesOp appends an op, commits it (dual-branch), and attempts to push.
 // Push errors are best-effort — the op is still committed locally.
 // Used for claim, transition, assign, unassign — ops that must not be delayed.
-func appendHighStakesOp(logPath string, op ops.Op) error {
+func appendHighStakesOp(args ...any) error {
+	var ctx *config.Context
+	var tracker ops.PendingPushTracker
+	var logPath string
+	var op ops.Op
+
+	switch len(args) {
+	case 2:
+		ctx = appCtx
+		tracker = appTracker
+		logPath = args[0].(string)
+		op = args[1].(ops.Op)
+	case 3:
+		state := args[0].(*executionState)
+		ctx = state.ctx
+		tracker = state.tracker
+		logPath = args[1].(string)
+		op = args[2].(ops.Op)
+	default:
+		return fmt.Errorf("appendHighStakesOp: unexpected arguments")
+	}
+	if ctx == nil {
+		return fmt.Errorf("appendHighStakesOp: command context unavailable")
+	}
 	var gc ops.GitCommitter
-	if appCtx.WorktreePath != "" {
-		gc = git.New(appCtx.WorktreePath)
+	if ctx.WorktreePath != "" {
+		gc = adapters.New(ctx.WorktreePath)
 	}
 	// Append and commit — this is not best-effort
-	if err := ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc); err != nil {
+	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
 		return err
 	}
 	// Push is best-effort: push via the pusher (which handles retries) but ignore errors
-	if appCtx.WorktreePath != "" {
+	if ctx.WorktreePath != "" {
 		// Use the underlying git client for push attempts
-		gc2 := git.New(appCtx.WorktreePath)
+		gc2 := adapters.New(ctx.WorktreePath)
 		if err := gc2.Push("_armature"); err != nil {
 			// Best-effort: attempt fetch+rebase and retry once
 			if rbErr := gc2.FetchAndRebase("_armature"); rbErr == nil {
 				gc2.Push("_armature") //nolint:errcheck
 			}
 		}
-		appTracker.Reset() //nolint:errcheck
+		tracker.Reset() //nolint:errcheck
 	}
 	return nil
 }
 
 // appendLowStakesOp appends an op, increments the pending counter, and only
 // pushes when the threshold is reached.
-func appendLowStakesOp(logPath string, op ops.Op) error {
-	var gc ops.GitCommitter
-	if appCtx.WorktreePath != "" {
-		gc = git.New(appCtx.WorktreePath)
+func appendLowStakesOp(args ...any) error {
+	var ctx *config.Context
+	var tracker ops.PendingPushTracker
+	var logPath string
+	var op ops.Op
+
+	switch len(args) {
+	case 2:
+		ctx = appCtx
+		tracker = appTracker
+		logPath = args[0].(string)
+		op = args[1].(ops.Op)
+	case 3:
+		state := args[0].(*executionState)
+		ctx = state.ctx
+		tracker = state.tracker
+		logPath = args[1].(string)
+		op = args[2].(ops.Op)
+	default:
+		return fmt.Errorf("appendLowStakesOp: unexpected arguments")
 	}
-	if err := ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc); err != nil {
+	if ctx == nil {
+		return fmt.Errorf("appendLowStakesOp: command context unavailable")
+	}
+	var gc ops.GitCommitter
+	if ctx.WorktreePath != "" {
+		gc = adapters.New(ctx.WorktreePath)
+	}
+	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
 		return err
 	}
 
-	threshold := appCtx.Config.LowStakesPushThreshold
+	threshold := ctx.Config.LowStakesPushThreshold
 	if threshold <= 0 {
 		threshold = 5
 	}
 
-	n, err := appTracker.Increment()
+	n, err := tracker.Increment()
 	if err != nil {
 		return err
 	}
 
 	if n >= threshold {
 		// Push now and reset counter
-		if appCtx.WorktreePath != "" {
-			pushGC := git.New(appCtx.WorktreePath)
+		if ctx.WorktreePath != "" {
+			pushGC := adapters.New(ctx.WorktreePath)
 			_ = pushGC // push happens via AppendCommitAndPush on next high-stakes op
 		}
-		appTracker.Reset() //nolint:errcheck
+		tracker.Reset() //nolint:errcheck
 	}
 	return nil
 }
@@ -221,6 +328,10 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 			value = issue.AssignedWorker
 		case "claimed_by":
 			value = issue.ClaimedBy
+		case "blocked_by":
+			value = renderStringSlice(issue.BlockedBy)
+		case "blocks":
+			value = renderStringSlice(issue.Blocks)
 		default:
 			value = ""
 		}
@@ -228,4 +339,74 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 	}
 
 	return result
+}
+
+func renderStringSlice(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	rendered, err := json.Marshal(values)
+	if err != nil {
+		return "[]"
+	}
+	return string(rendered)
+}
+
+// readAllOpsFromDir reads all ops from a directory of .log files.
+// Returns empty slice if directory doesn't exist.
+func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
+	logFiles, err := adapters.ListLogFiles(opsDir)
+	if err != nil {
+		// If directory doesn't exist, return empty slice
+		if logFiles == nil {
+			return []ops.Op{}, nil
+		}
+		return nil, err
+	}
+
+	var allOps []ops.Op
+	for _, logPath := range logFiles {
+		logOps, err := ops.ReadLog(logPath)
+		if err != nil {
+			// Skip logs that can't be read
+			continue
+		}
+		allOps = append(allOps, logOps...)
+	}
+
+	return allOps, nil
+}
+
+// readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
+// Returns ops slice and a map of log filename -> byte offset (end position).
+func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
+	logFiles, err := adapters.ListLogFiles(opsDir)
+	if err != nil {
+		// If directory doesn't exist, return empty
+		if logFiles == nil {
+			return []ops.Op{}, make(map[string]int64), nil
+		}
+		return nil, nil, err
+	}
+
+	var allOps []ops.Op
+	offsets := make(map[string]int64)
+
+	for _, logPath := range logFiles {
+		logOps, err := ops.ReadLog(logPath)
+		if err != nil {
+			// Skip logs that can't be read
+			continue
+		}
+
+		// Get file size to track byte offset
+		if info, err := os.Stat(logPath); err == nil {
+			logName := filepath.Base(logPath)
+			offsets[logName] = info.Size()
+		}
+
+		allOps = append(allOps, logOps...)
+	}
+
+	return allOps, offsets, nil
 }

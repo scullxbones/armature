@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // initAtSHATestRepo creates a temp dir with a git repo configured for testing.
-func initAtSHATestRepo(t *testing.T) (string, *git.Client) {
+func initAtSHATestRepo(t *testing.T) (string, *adapters.Client) {
 	t.Helper()
 	dir := t.TempDir()
 	gitRun := func(args ...string) string {
@@ -29,7 +29,7 @@ func initAtSHATestRepo(t *testing.T) (string, *git.Client) {
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
 	gitRun("commit", "--allow-empty", "-m", "init")
-	return dir, git.New(dir)
+	return dir, adapters.New(dir)
 }
 
 // captureHEAD returns the current HEAD SHA of the repo at dir.

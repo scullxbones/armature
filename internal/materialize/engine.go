@@ -54,6 +54,15 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyScopeRename(op)
 	case ops.OpScopeDelete:
 		return s.applyScopeDelete(op)
+	case ops.OpOrchestrateStart,
+		ops.OpOrchestrateDispatch,
+		ops.OpOrchestrateDispatchComplete,
+		ops.OpOrchestrateVerifyFail,
+		ops.OpOrchestrateRetry,
+		ops.OpOrchestrateEscalate,
+		ops.OpOrchestrateComplete,
+		ops.OpOrchestrateCheckResult:
+		return nil
 	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
@@ -76,6 +85,7 @@ func (s *State) applyCreate(op ops.Op) error {
 		Acceptance:       op.Payload.Acceptance,
 		Context:          op.Payload.Context,
 		SourceCitation:   op.Payload.SourceCitation,
+		PreferredModel:   op.Payload.PreferredModel,
 		Provenance: Provenance{
 			Method:       "decomposed",
 			Confidence:   confidenceOrDefault(op.Payload.Confidence),
@@ -268,6 +278,7 @@ func (s *State) applyCitationAccepted(op ops.Op) error {
 		WorkerID:                  op.WorkerID,
 		Timestamp:                 op.Timestamp,
 		ConfirmedNoninteractively: op.Payload.ConfirmedNoninteractively,
+		SourceEntryID:             op.Payload.SourceEntryID,
 	})
 	issue.Updated = op.Timestamp
 	return nil

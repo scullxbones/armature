@@ -20,6 +20,16 @@ const (
 	OpCitationAccepted  = "citation-accepted"
 	OpScopeRename       = "scope-rename"
 	OpScopeDelete       = "scope-delete"
+
+	// Orchestration op types for E7 orchestrator.
+	OpOrchestrateStart            = "orchestrate-start"
+	OpOrchestrateDispatch         = "orchestrate-dispatch"
+	OpOrchestrateDispatchComplete = "orchestrate-dispatch-complete"
+	OpOrchestrateVerifyFail       = "orchestrate-verify-fail"
+	OpOrchestrateRetry            = "orchestrate-retry"
+	OpOrchestrateEscalate         = "orchestrate-escalate"
+	OpOrchestrateComplete         = "orchestrate-complete"
+	OpOrchestrateCheckResult      = "orchestrate-check-result"
 )
 
 // ValidOpTypes for validation.
@@ -33,6 +43,22 @@ var ValidOpTypes = map[string]bool{
 	OpCitationAccepted: true,
 	OpScopeRename:      true,
 	OpScopeDelete:      true,
+
+	OpOrchestrateStart:            true,
+	OpOrchestrateDispatch:         true,
+	OpOrchestrateDispatchComplete: true,
+	OpOrchestrateVerifyFail:       true,
+	OpOrchestrateRetry:            true,
+	OpOrchestrateEscalate:         true,
+	OpOrchestrateComplete:         true,
+	OpOrchestrateCheckResult:      true,
+}
+
+// FailureRecord captures a single orchestration failure event.
+type FailureRecord struct {
+	IssueID   string `json:"issue_id"`
+	Reason    string `json:"reason"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 // Issue statuses.
@@ -132,4 +158,17 @@ type Payload struct {
 
 	// scope-delete
 	DeletedPath string `json:"deleted_path,omitempty"`
+
+	// citation-accepted — source entry ID from the accept-citation command
+	// (populated when --source is passed to arm accept-citation)
+	SourceEntryID string `json:"source_entry_id,omitempty"`
+
+	// create — preferred model hint for the assigned agent
+	PreferredModel string `json:"preferred_model,omitempty"`
+
+	// orchestrate-start, orchestrate-dispatch, orchestrate-retry payload fields
+	WorktreePath   string `json:"worktree_path,omitempty"`
+	PreDispatchRef string `json:"pre_dispatch_ref,omitempty"`
+	RetryBudget    int    `json:"retry_budget,omitempty"`
+	Run            int    `json:"run,omitempty"`
 }

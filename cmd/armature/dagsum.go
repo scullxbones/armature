@@ -47,7 +47,11 @@ mode (agents) to auto-approve all pending draft items.`,
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
 			if err != nil {
 				return err
 			}

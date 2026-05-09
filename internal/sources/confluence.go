@@ -3,14 +3,15 @@ package sources
 import (
 	"context"
 	"fmt"
-	"net/http"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // ConfluenceProvider implements Provider for Atlassian Confluence sources.
 type ConfluenceProvider struct {
 	baseURL string
 	creds   Credentials
-	client  *http.Client
+	client  adapters.HTTPClient
 }
 
 // NewConfluenceProvider returns a new ConfluenceProvider targeting baseURL
@@ -19,7 +20,7 @@ func NewConfluenceProvider(baseURL string, creds Credentials) *ConfluenceProvide
 	return &ConfluenceProvider{
 		baseURL: baseURL,
 		creds:   creds,
-		client:  &http.Client{},
+		client:  adapters.NewHTTPClient(),
 	}
 }
 
@@ -33,7 +34,7 @@ func (p *ConfluenceProvider) Type() string {
 // uses Bearer authentication; otherwise it falls back to Basic auth using
 // Username and Password.
 func (p *ConfluenceProvider) Fetch(ctx context.Context, entry SourceEntry) ([]byte, error) {
-	body, err := fetchHTTP(ctx, p.client, p.baseURL+entry.URL, p.creds)
+	body, err := adapters.FetchHTTP(ctx, p.client, p.baseURL+entry.URL, p.creds.Username, p.creds.Password, p.creds.Token)
 	if err != nil {
 		return nil, fmt.Errorf("confluence provider: %w", err)
 	}

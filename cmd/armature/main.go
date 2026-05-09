@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -13,8 +14,6 @@ import (
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
-
-var appCtx *config.Context
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -51,7 +50,16 @@ func newRootCmd() *cobra.Command {
 			}
 			ctx.StateDir = stateDirFor(ctx, workerID)
 			appCtx = ctx
-			initPushDeps()
+
+			state := &executionState{ctx: ctx}
+			state.pusher, state.tracker = initPushDeps(ctx)
+			appPusher = state.pusher
+			appTracker = state.tracker
+			baseCtx := cmd.Context()
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 			return nil
 		},
 	}
@@ -246,6 +254,10 @@ func newRootCmd() *cobra.Command {
 	contextHistoryCmd := newContextHistoryCmd()
 	contextHistoryCmd.GroupID = "admin"
 	root.AddCommand(contextHistoryCmd)
+
+	orchestrateCmd := newOrchestrateCmd()
+	orchestrateCmd.GroupID = "workflow"
+	root.AddCommand(orchestrateCmd)
 
 	return root
 }

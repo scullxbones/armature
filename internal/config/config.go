@@ -1,19 +1,38 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
 	"path/filepath"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type Config struct {
-	Mode                   string       `json:"mode"` // "single-branch" or "dual-branch"
-	ProjectType            string       `json:"project_type"`
-	DefaultTTL             int          `json:"default_ttl"` // minutes
-	TokenBudget            int          `json:"token_budget"`
-	LowStakesPushThreshold int          `json:"low_stakes_push_threshold"` // ops before auto-push
-	Hooks                  []HookConfig `json:"hooks"`
+	Mode                   string             `json:"mode"` // "single-branch" or "dual-branch"
+	ProjectType            string             `json:"project_type"`
+	DefaultTTL             int                `json:"default_ttl"` // minutes
+	TokenBudget            int                `json:"token_budget"`
+	LowStakesPushThreshold int                `json:"low_stakes_push_threshold"` // ops before auto-push
+	Hooks                  []HookConfig       `json:"hooks"`
+	Orchestrator           OrchestratorConfig `json:"orchestrator,omitempty"`
+}
+
+// OrchestratorConfig holds settings for arm orchestrate.
+type OrchestratorConfig struct {
+	MaxParallel    int             `json:"max_parallel,omitempty"`
+	SandboxEnabled bool            `json:"sandbox_enabled,omitempty"`
+	Adapters       AdapterCommands `json:"adapters,omitempty"`
+	// DefaultModel is the fallback model name used when no CLI flag or task
+	// PreferredModel is set.  Empty string means the harness picks its own default.
+	DefaultModel string `json:"default_model,omitempty"`
+}
+
+// AdapterCommands holds the shell commands used by each verification phase.
+type AdapterCommands struct {
+	Build    string `json:"build,omitempty"`
+	Lint     string `json:"lint,omitempty"`
+	Test     string `json:"test,omitempty"`
+	Coverage string `json:"coverage,omitempty"`
+	Mutate   string `json:"mutate,omitempty"`
 }
 
 type HookConfig struct {
@@ -23,21 +42,13 @@ type HookConfig struct {
 }
 
 func WriteConfig(path string, cfg Config) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	return os.WriteFile(path, data, 0644)
+	return adapters.WriteConfigFile(path, cfg)
 }
 
 func LoadConfig(path string) (Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Config{}, fmt.Errorf("read config: %w", err)
-	}
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config: %w", err)
+	if err := adapters.LoadConfigFile(path, &cfg); err != nil {
+		return Config{}, err
 	}
 	return cfg, nil
 }
@@ -55,7 +66,7 @@ func DetectProjectType(repoPath string) string {
 		{"Makefile", "make"},
 	}
 	for _, m := range markers {
-		if _, err := os.Stat(filepath.Join(repoPath, m.file)); err == nil {
+		if adapters.StatFile(filepath.Join(repoPath, m.file)) {
 			return m.projType
 		}
 	}

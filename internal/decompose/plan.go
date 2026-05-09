@@ -3,7 +3,8 @@ package decompose
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // PlanIssue represents a single issue in a plan file.
@@ -29,9 +30,9 @@ type Plan struct {
 
 // ParsePlan parses a plan JSON file from the given path.
 func ParsePlan(path string) (*Plan, error) {
-	data, err := os.ReadFile(path)
+	data, err := adapters.ReadPlanFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read plan file %s: %w", path, err)
+		return nil, err
 	}
 
 	var plan Plan

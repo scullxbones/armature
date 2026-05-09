@@ -3,14 +3,15 @@ package sources
 import (
 	"context"
 	"fmt"
-	"net/http"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // SharePointProvider implements Provider for Microsoft SharePoint sources.
 type SharePointProvider struct {
 	baseURL string
 	creds   Credentials
-	client  *http.Client
+	client  adapters.HTTPClient
 }
 
 // NewSharePointProvider returns a new SharePointProvider targeting baseURL
@@ -19,7 +20,7 @@ func NewSharePointProvider(baseURL string, creds Credentials) *SharePointProvide
 	return &SharePointProvider{
 		baseURL: baseURL,
 		creds:   creds,
-		client:  &http.Client{},
+		client:  adapters.NewHTTPClient(),
 	}
 }
 
@@ -32,7 +33,7 @@ func (p *SharePointProvider) Type() string {
 // It makes an HTTP GET request to baseURL + entry.URL using Bearer
 // authentication from the configured Credentials Token.
 func (p *SharePointProvider) Fetch(ctx context.Context, entry SourceEntry) ([]byte, error) {
-	body, err := fetchHTTP(ctx, p.client, p.baseURL+entry.URL, p.creds)
+	body, err := adapters.FetchHTTP(ctx, p.client, p.baseURL+entry.URL, p.creds.Username, p.creds.Password, p.creds.Token)
 	if err != nil {
 		return nil, fmt.Errorf("sharepoint provider: %w", err)
 	}

@@ -1,4 +1,4 @@
-package git
+package adapters
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ func (c *Client) CurrentBranch() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-	return string(output[:len(output)-1]), nil // Strip newline
+	return strings.TrimSpace(string(output)), nil
 }
 
 // CommitMessage returns the commit message for a given SHA.
@@ -239,6 +239,98 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+// HeadSHA returns the full SHA of the current HEAD commit.
+func (c *Client) HeadSHA() (string, error) {
+	cmd := c.cmd("rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// RemoveWorktree removes a linked worktree at the given path. It runs
+// "git worktree remove --force <path>" so that it works even if the worktree
+// has uncommitted changes. Returns an error if git reports a failure (e.g.
+// the path is not a registered worktree).
+func (c *Client) RemoveWorktree(path string) error {
+	cmd := c.cmd("worktree", "remove", "--force", path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git worktree remove %s: %w\n%s", path, err, out)
+	}
+	return nil
+}
+
+// DiffFrom returns the unified diff between the given base commit and HEAD.
+func (c *Client) DiffFrom(baseSHA string) (string, error) {
+	cmd := c.cmd("diff", baseSHA, "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git diff %s HEAD: %w", baseSHA, err)
+	}
+	return string(out), nil
+}
+
+// DiffNameOnly returns the list of file names that differ between the given
+// base commit and HEAD.
+func (c *Client) DiffNameOnly(baseSHA string) ([]string, error) {
+	cmd := c.cmd("diff", "--name-only", baseSHA, "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --name-only %s HEAD: %w", baseSHA, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []string{}, nil
+	}
+	return strings.Split(raw, "\n"), nil
+}
+
+// ResetHard resets the working tree and index to the given ref (e.g. a SHA or
+// branch name).
+func (c *Client) ResetHard(ref string) error {
+	cmd := c.cmd("reset", "--hard", ref)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git reset --hard %s: %w\n%s", ref, err, out)
+	}
+	return nil
+}
+
+// ApplyPatch applies a unified-diff patch to the working tree via
+// "git apply". Returns an error if the patch cannot be applied.
+func (c *Client) ApplyPatch(patch []byte) error {
+	cmd := c.cmd("apply")
+	cmd.Stdin = strings.NewReader(string(patch))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git apply: %w\n%s", err, out)
+	}
+	return nil
+}
+
+// AddAll stages all changes in the working tree (equivalent to "git add -A").
+func (c *Client) AddAll() error {
+	cmd := c.cmd("add", "-A")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add -A: %w\n%s", err, out)
+	}
+	return nil
+}
+
+// CommitWithMessage creates a commit with the given message. Returns an error
+// if there is nothing staged to commit.
+func (c *Client) CommitWithMessage(message string) error {
+	// Fail fast if nothing is staged
+	diff := c.cmd("diff", "--cached", "--quiet")
+	if err := diff.Run(); err == nil {
+		return fmt.Errorf("nothing to commit: index is clean")
+	}
+	cmd := c.cmd("commit", "-m", message)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git commit: %w\n%s", err, out)
+	}
+	return nil
 }
 
 // BranchMergedInto checks if branch has been fully merged into target.

@@ -347,6 +347,16 @@ func TestExtractFieldsFromIssue_MixedKnownAndUnknown(t *testing.T) {
 	assert.Equal(t, []string{"open", "", "Test task"}, fields)
 }
 
+func TestExtractFieldsFromIssue_BlockedByAbsent(t *testing.T) {
+	issue := &materialize.Issue{
+		ID:    "task-01",
+		Title: "Test task",
+	}
+
+	fields := extractFieldsFromIssue(issue, "blocked_by")
+	assert.Equal(t, []string{"[]"}, fields)
+}
+
 // Test trls show --field flag
 func TestShowCommand_WithFieldFlag_SingleField(t *testing.T) {
 	repo := setupRepoWithTask(t)
@@ -365,6 +375,14 @@ func TestShowCommand_WithFieldFlag_MultipleFields(t *testing.T) {
 	assert.Equal(t, 2, len(lines))
 	assert.Equal(t, "open", lines[0])
 	assert.Equal(t, "Test task", lines[1])
+}
+
+func TestShowCommand_WithFieldFlag_BlockedByAbsent(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "show", "task-01", "--field", "blocked_by")
+	require.NoError(t, err)
+	assert.Equal(t, "[]\n", out)
 }
 
 // Test trls status --status filter
@@ -738,7 +756,11 @@ func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
 func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
-	_, err := runTrls(t, repo, "worker-init")
+
+	_, err := runTrls(t, repo, "create", "--title", "Task three", "--type", "task", "--id", "task-03")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "accept-citation",
