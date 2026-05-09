@@ -27,7 +27,11 @@ help:
 check: lint test coverage-check mutate validate-skills skill
 
 test:
-	$(GO) test -v ./...
+	@tmp=$$(mktemp); \
+	$(GO) test -json -count=1 ./... > "$$tmp"; status=$$?; \
+	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
+	rm -f "$$tmp"; \
+	exit $$status
 
 coverage:
 	$(GO) test -coverprofile=coverage.out ./...
@@ -60,9 +64,16 @@ mutate:
 		exit 1; \
 	}
 	@echo "Running mutation tests on internal..."
-	gremlins unleash ./internal
+	@mkdir -p mutesting-report
+	@report=mutesting-report/internal.json; \
+	gremlins --silent unleash --output "$$report" ./internal; status=$$?; \
+	$(PYTHON) scripts/summarize_gremlins_report.py "$$report" internal; \
+	exit $$status
 	@echo "Running mutation tests on cmd..."
-	gremlins unleash ./cmd
+	@report=mutesting-report/cmd.json; \
+	gremlins --silent unleash --output "$$report" ./cmd; status=$$?; \
+	$(PYTHON) scripts/summarize_gremlins_report.py "$$report" cmd; \
+	exit $$status
 
 validate-skills:
 	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md 2>/dev/null; then \
@@ -95,7 +106,7 @@ deploy-skills:
 			cp -r "internal/skillsembed/skills/$$name/." ".$$harness/skills/$$name/"; \
 		done; \
 	done
-	@echo "Deployed skills to .claude/skills/ and .gemini/skills/"
+	@echo "Deployed skills to .claude/skills/ and .gemini/skills/ and .codex/skills/"
 
 skill: build deploy-skills
 

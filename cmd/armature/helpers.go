@@ -328,6 +328,10 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 			value = issue.AssignedWorker
 		case "claimed_by":
 			value = issue.ClaimedBy
+		case "blocked_by":
+			value = renderStringSlice(issue.BlockedBy)
+		case "blocks":
+			value = renderStringSlice(issue.Blocks)
 		default:
 			value = ""
 		}
@@ -335,6 +339,17 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 	}
 
 	return result
+}
+
+func renderStringSlice(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	rendered, err := json.Marshal(values)
+	if err != nil {
+		return "[]"
+	}
+	return string(rendered)
 }
 
 // readAllOpsFromDir reads all ops from a directory of .log files.
