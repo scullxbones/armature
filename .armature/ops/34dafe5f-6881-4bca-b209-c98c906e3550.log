@@ -2054,3 +2054,4 @@
 ["claim","task-1777124841",1778285447,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
 ["transition","ARM",1778285448,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"in-progress"}]
 ["heartbeat","task-1777124841",1778285506,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","ARM-S1",1778287417,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
