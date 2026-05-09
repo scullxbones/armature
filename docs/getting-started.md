@@ -58,33 +58,33 @@ arm decompose-context --sources all > context.json
 arm decompose-apply plan.json
 ```
 
-## 5. Your First Agent Task
+## 5. Your First Orchestrated Task
 
-Now your AI agent can pick up work.
+Armature's default execution path is pull-based orchestration:
+
+1. Pull a ready task from the queue
+2. Run deterministic orchestration for that issue
+3. Repeat
 
 ### Find Ready Tasks
 ```bash
 arm ready
 ```
 
-### Claim a Task
+### Run Orchestration
 ```bash
-arm claim <issue-id>
+arm orchestrate --issue <issue-id>
 ```
 
-### Get Task Context
-The `render-context` command provides the agent with exactly what it needs to know, minimizing token usage.
+### Optional: Preview Without Dispatch
 ```bash
-arm render-context <issue-id>
+arm orchestrate --issue <issue-id> --dry-run
 ```
 
-### Complete the Task
-Once the code changes are made and verified:
-```bash
-arm transition --issue <issue-id> --to done --outcome "Implemented the feature X in Y."
-```
+### Repeat the Pull Loop
+Run `arm ready` again and orchestrate the next available task until the queue is empty.
 
-In dual-branch mode, Armature will automatically detect when your PR is merged to promote the task to `merged`.
+Manual worker commands (`claim`, `render-context`, `transition`) remain available for exceptional workflows, but are no longer the default path for routine task execution.
 
 ## Summary of Commands
 | Command | Purpose |
@@ -92,7 +92,8 @@ In dual-branch mode, Armature will automatically detect when your PR is merged t
 | `arm init` | Initialize Armature in a repo |
 | `arm sources add` | Register a source document |
 | `arm ready` | List tasks ready for work |
-| `arm claim` | Start working on a task |
-| `arm render-context` | Get task-specific context |
-| `arm transition` | Move task to a new status |
+| `arm orchestrate` | Run deterministic task execution + verification |
+| `arm claim` | Manual claim for non-orchestrated workflows |
+| `arm render-context` | Manual task context assembly |
+| `arm transition` | Manual status transition |
 | `arm list --group` | Show project overview grouped by status |

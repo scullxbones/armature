@@ -1,19 +1,19 @@
 ---
 name: armature-coordinator
 description: >
-  Use when orchestrating work in an armature-managed repository — finds unblocked
-  tasks, assembles context, dispatches worker agents (sequentially or in parallel
-  waves), integrates completed work, validates citation coverage, and closes
-  stories with a pull request. Does not require a worker identity (skip
-  worker-init). Requires arm on PATH.
+  Use when operating orchestration in an armature-managed repository — runs the
+  pull loop (`arm ready` + `arm orchestrate`), scales concurrent orchestrators,
+  integrates outcomes, validates citation coverage, and closes stories with a
+  pull request. Manual worker dispatch remains available as a fallback path.
+  Does not require a worker identity (skip worker-init). Requires arm on PATH.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
-# Armature Coordinator Loop
+# Armature Coordinator Loop (Orchestrator-First)
 
 The coordinator manages execution flow — it does not implement features itself.
-Its job is to find ready work, assemble context, dispatch workers, verify their
-output, and close the story.
+Its default job is to run and supervise orchestrators that pull from `arm ready`
+and execute via `arm orchestrate`.
 
 ## Prerequisites
 
@@ -89,7 +89,6 @@ reviewed via PR.
 
 ```bash
 arm ready                              # unblocked, unclaimed tasks
-arm ready --assigned-to WORKER-ID      # verify a pre-assignment wave
 ```
 
 If `arm ready` returns nothing and not all tasks are `done`, check for
@@ -104,25 +103,41 @@ arm list --status blocked              # diagnose blockers
 did not make it into the ready queue. Use it as the first step whenever the
 queue looks unexpectedly empty.
 
-### 3. Sequential Dispatch (one task at a time)
+### 3. Default Dispatch: Orchestrator Pull Loop
 
-Use sequential dispatch when tasks have ordering dependencies or shared-file
-scope. For each task:
+For each ready task:
 
 ```bash
-arm claim --issue TASK-ID
-arm render-context --issue TASK-ID --budget 4000
+arm orchestrate --issue TASK-ID
 ```
 
-Then dispatch a single worker agent with the context package (see
-[Dispatch Protocol](#dispatch-protocol) below). Wait for the worker to return
-before claiming the next task.
+If it succeeds, run `arm ready` again. If it escalates, inspect task state with
+`arm show TASK-ID`, resolve the issue (scope, acceptance, harness/model), then
+retry orchestration.
 
 ### 4. Parallel Dispatch (independent tasks in one wave)
 
-For parallel dispatch details and log slot setup, see `references/parallel-dispatch.md`.
+Run multiple orchestrator processes concurrently. Each process:
+1. calls `arm ready`
+2. selects a ready task
+3. runs `arm orchestrate --issue TASK-ID`
+4. repeats until no tasks are ready
+
+Claim collisions are normal under concurrency. The loser should simply poll
+`arm ready` again and continue with the next task.
+
+### 5. Manual Worker Dispatch (Fallback Path)
+
+Use this only for exceptional cases that require human-guided execution. For
+manual dispatch details and log slot setup, see
+`references/parallel-dispatch.md`.
 
 ---
+
+## Manual Fallback Appendix
+
+Everything below is for manual worker dispatch only. Do not use this appendix
+for normal orchestrator pull-mode operations.
 
 ## Dispatch Protocol
 

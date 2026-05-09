@@ -2,8 +2,8 @@
 name: armature
 description: >
   Quick reference for arm command syntax — use when working in an
-  armature-managed repo to find actionable work, claim issues, record
-  progress, and complete work with transition.
+  armature-managed repo to find actionable work, run orchestrated execution,
+  and manage issue state.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -20,8 +20,10 @@ arm install-skills                                      # deploy bundled skills 
 
 ```
 arm ready                                               # list actionable issues
-arm claim --issue ID [--ttl 3600]                       # claim an issue
-arm render-context --issue ID [--budget 4000]           # assemble task context
+arm orchestrate --issue ID [--harness claude]           # run deterministic orchestration
+arm orchestrate --issue ID --dry-run                    # inspect orchestration state
+arm claim --issue ID [--ttl 3600]                       # manual claim fallback
+arm render-context --issue ID [--budget 4000]           # manual context fallback
 ```
 
 ## During Work

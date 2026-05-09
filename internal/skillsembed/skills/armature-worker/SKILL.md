@@ -1,16 +1,21 @@
 ---
 name: armature-worker
 description: >
-  Use when starting work in an armature-managed repository — picks up ready
-  issues, claims them, assembles context, and drives implementation. Enforces
-  per-task commits and story-level push/PR strategy.
+  Use for manual task execution in an armature-managed repository. Default
+  execution is now `arm orchestrate`; this skill is for fallback workflows where
+  a coordinator intentionally dispatches a worker outside orchestrator mode.
+  Enforces per-task commits and story-level push/PR strategy.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
-# Armature Worker
+# Armature Worker (Manual Fallback)
 
 A worker receives a pre-claimed task from the Coordinator, implements it, records
 progress, and transitions the task to `done`.
+
+For orchestrator-first workflows, prefer `arm orchestrate --issue ID`. In that
+mode, orchestration owns claim, context assembly, verification, retries, and
+completion transitions.
 
 ## Prerequisites
 
@@ -27,8 +32,9 @@ arm worker-init --check || arm worker-init
 `--check` generates a new UUID, which is almost never what you want.
 
 > Workers receive task context from the Coordinator at dispatch time.
-> For finding work, claiming issues, dispatching workers, and story-level PR:
-> see the **armature-coordinator** skill.
+> For default pull-model execution (`arm ready` + `arm orchestrate`) and
+> story-level PR flow, see the **armature-coordinator** and
+> **armature-orchestrator** skills.
 
 ## Step-by-Step
 

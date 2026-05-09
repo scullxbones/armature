@@ -434,6 +434,46 @@ arm note TASK-001 --msg "Started implementation after architectural review."
 
 ---
 
+## orchestrate
+
+Run deterministic task orchestration with an AI harness.
+
+**Synopsis:**
+`arm orchestrate [flags]`
+
+**Flags:**
+- `--dry-run`: Inspect orchestration state without dispatching a harness.
+- `--harness string`: Harness adapter: `claude`, `codex`, or `devin` (default `claude`).
+- `--issue string`: Issue ID to orchestrate (required).
+- `--model string`: Model override for this invocation.
+- `--retries int`: Retry budget after verification failures (default `3`).
+- `--timeout int`: Per-dispatch timeout in seconds (`0` disables timeout).
+
+**Model Resolution Order:**
+1. `--model`
+2. Task `preferred_model`
+3. `config.orchestrator.default_model`
+
+**Behaviour:**
+- Claims and executes work via the orchestrator engine instead of a manual worker loop.
+- Runs verification and retry/escalation logic automatically.
+- Exits non-zero when orchestration escalates or preflight validation fails.
+- Prints either human output (`phase`, `run`) or machine-readable JSON (`--format json|agent`).
+
+**Examples:**
+```bash
+# Run with defaults
+arm orchestrate --issue E7-S1-T1
+
+# Override harness and model
+arm orchestrate --issue E7-S1-T1 --harness codex --model gpt-4o
+
+# Inspect state without dispatching a harness
+arm orchestrate --issue E7-S1-T1 --dry-run
+```
+
+---
+
 ## ready
 
 Show tasks ready to be claimed.
@@ -444,6 +484,16 @@ Show tasks ready to be claimed.
 **Flags:**
 - `--parent string`: Filter to descendants of this issue ID.
 - `--worker string`: Worker ID for assignment-aware sorting.
+
+**Pull-Model Loop (Orchestrator):**
+Use `ready` as the queue front for orchestration workers:
+
+1. `arm ready`
+2. Pick the highest-priority task
+3. `arm orchestrate --issue <id>`
+4. Repeat until the queue is empty
+
+Claim collisions are expected under concurrency; losing workers simply call `arm ready` again.
 
 ---
 
