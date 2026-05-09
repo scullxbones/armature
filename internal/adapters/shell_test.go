@@ -83,17 +83,17 @@ func TestGitLog_InvalidRepo(t *testing.T) {
 }
 
 func TestExecuteHook_Allow(t *testing.T) {
-	script := `echo '{"allowed":true,"message":""}'`
+	cmd := []string{"echo", `{"allowed":true,"message":""}`}
 	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
-	if err := ExecuteHook("test-hook", script, input); err != nil {
+	if err := ExecuteHook("test-hook", cmd, input); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestExecuteHook_Reject(t *testing.T) {
-	script := `echo '{"allowed":false,"message":"blocked"}'`
+	cmd := []string{"echo", `{"allowed":false,"message":"blocked"}`}
 	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
-	err := ExecuteHook("test-hook", script, input)
+	err := ExecuteHook("test-hook", cmd, input)
 	if err == nil {
 		t.Fatal("expected error for rejected hook")
 	}
@@ -103,9 +103,9 @@ func TestExecuteHook_Reject(t *testing.T) {
 }
 
 func TestExecuteHook_BadOutput(t *testing.T) {
-	script := `echo 'not-json'`
+	cmd := []string{"echo", "not-json"}
 	input := HookInput{}
-	err := ExecuteHook("test-hook", script, input)
+	err := ExecuteHook("test-hook", cmd, input)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON output")
 	}

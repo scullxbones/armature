@@ -36,9 +36,9 @@ type AdapterCommands struct {
 }
 
 type HookConfig struct {
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-	Required bool   `json:"required"`
+	Name     string   `json:"name"`
+	Command  []string `json:"command"`
+	Required bool     `json:"required"`
 }
 
 func WriteConfig(path string, cfg Config) error {

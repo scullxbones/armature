@@ -19,7 +19,7 @@ func TestRunPreTransition_NoHooks(t *testing.T) {
 func TestRunPreTransition_AllowingHook(t *testing.T) {
 	cfg := &config.Config{
 		Hooks: []config.HookConfig{
-			{Name: "allow-hook", Command: `echo '{"allowed":true}'`},
+			{Name: "allow-hook", Command: []string{"sh", "-c", `echo '{"allowed":true}'`}},
 		},
 	}
 	input := adapters.HookInput{IssueID: "1", FromStatus: "open", ToStatus: "in-progress", WorkerID: "w1"}
@@ -31,7 +31,7 @@ func TestRunPreTransition_AllowingHook(t *testing.T) {
 func TestRunPreTransition_RejectingHook(t *testing.T) {
 	cfg := &config.Config{
 		Hooks: []config.HookConfig{
-			{Name: "reject-hook", Command: `echo '{"allowed":false,"message":"not ready"}'`},
+			{Name: "reject-hook", Command: []string{"sh", "-c", `echo '{"allowed":false,"message":"not ready"}'`}},
 		},
 	}
 	input := adapters.HookInput{IssueID: "1", FromStatus: "open", ToStatus: "in-progress", WorkerID: "w1"}
@@ -47,7 +47,7 @@ func TestRunPreTransition_RejectingHook(t *testing.T) {
 func TestRunPreTransition_FailingHook(t *testing.T) {
 	cfg := &config.Config{
 		Hooks: []config.HookConfig{
-			{Name: "fail-hook", Command: `exit 1`},
+			{Name: "fail-hook", Command: []string{"sh", "-c", `exit 1`}},
 		},
 	}
 	input := adapters.HookInput{IssueID: "1", FromStatus: "open", ToStatus: "in-progress", WorkerID: "w1"}

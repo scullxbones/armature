@@ -159,15 +159,19 @@ type HookResult struct {
 	Message string `json:"message"`
 }
 
-// ExecuteHook runs a single hook script command with the given input.
-// Returns error if the script fails, output is invalid JSON, or the hook rejects.
-func ExecuteHook(hookName string, hookCommand string, input HookInput) error {
+// ExecuteHook runs a single hook command with the given input.
+// Returns error if the command fails, output is invalid JSON, or the hook rejects.
+func ExecuteHook(hookName string, hookCommand []string, input HookInput) error {
+	if len(hookCommand) == 0 {
+		return nil
+	}
+
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		return fmt.Errorf("marshal hook input: %w", err)
 	}
 
-	cmd := exec.Command("sh", "-c", hookCommand)
+	cmd := exec.Command(hookCommand[0], hookCommand[1:]...) //nolint:gosec
 	cmd.Stdin = bytes.NewReader(inputJSON)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
