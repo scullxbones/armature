@@ -2070,3 +2070,4 @@
 ["transition","task-1775311522",1778288136,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["transition","task-1777124841",1778288261,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added blocked_by array rendering for show --field output and covered empty-field CLI behavior; make check green"}]
 ["transition","task-1777124841",1778288270,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
+["transition","CRDX-T6",1778288466,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added explicit arm merged step to the After Workers Return checklist immediately after task status verification, before build validation; make skill green"}]
