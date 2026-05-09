@@ -9,6 +9,9 @@ conversation context light.
 - `orchestrate-runtime-direction.md`
   - Core direction for queue draining, deterministic runtime ownership, and the
     role of exception agents.
+- `orchestrate-runtime-decisions.md`
+  - Compact decision ledger for locked decisions, derived decisions,
+    assumptions, open questions, deferred questions, and source notes.
 - `orchestrate-readiness-and-executability.md`
   - Separation of Definition of Ready (DoR) and Definition of Executability
     (DoE), including tagged checks.
