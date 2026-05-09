@@ -2051,3 +2051,4 @@
 ["transition","E7-S1",1778268252,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"arm orchestrate command delivered: full state machine (idle→dispatched→verifying→correcting→escalated→done), crash-resume via op-log replay, zero-trust commit pipeline, claude/codex/devin harness adapters, verification pipeline (8 checks), preflight validation, language auto-detection, feedback/prompt assembly; arm orchestrate --issue ID [--harness] [--model] [--retries] [--timeout] [--dry-run] wired in CLI; make check green at 88.71% mutation coverage; 312/312 cited"}]
 ["transition","task-1777124841",1778285415,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"open"}]
 ["transition","ARM",1778285431,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"open"}]
+["claim","task-1777124841",1778285447,"34dafe5f-6881-4bca-b209-c98c906e3550",{"ttl":60}]
