@@ -1,7 +1,7 @@
 # Orchestrate Runtime Phase 1 Decision Record Design
 
 **Date:** 2026-05-09
-**Status:** Draft
+**Status:** Approved
 
 ---
 
