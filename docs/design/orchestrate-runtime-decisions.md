@@ -169,11 +169,6 @@ Source: derived from `docs/design/orchestrate-policy-subworkflows.md`
 
 ## Open Questions
 
-- What exact signals make up the enforceable DoR and DoE matrix?
-- Which command or subsystem owns each DoR and DoE check?
-- When does each DoR and DoE check run?
-- Which DoR and DoE outcomes are `pass`, `informational`,
-  `policy_evaluable`, or `blocked`?
 - What are the exact inputs, deterministic rules, policy knobs, outputs,
   exception-agent entry conditions, and human escalation conditions for each
   reusable policy sub-workflow?
@@ -184,6 +179,12 @@ Source: derived from `docs/design/orchestrate-policy-subworkflows.md`
 - Which exception-agent recovery cases are included in `v1`?
 - Which existing command surfaces can be reused directly, and which need new
   flags or operations?
+
+## Resolved Questions
+
+- The exact DoR and DoE signals, owners, run timing, outcome classes, and
+  initial policy routes are defined in
+  `docs/design/orchestrate-readiness-and-executability.md`.
 
 ## Deferred Questions
 
