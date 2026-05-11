@@ -255,6 +255,19 @@ Output:
 
 - implementation plan suitable for decomposition into Armature work items
 
+### Phase 4 Status
+
+Phase 4 is completed as a docs-first v1 slicing pass:
+
+- `docs/design/orchestrate-runtime-v1-scope.md` selects the thinnest valuable
+  v1 runtime slice.
+- `docs/superpowers/plans/2026-05-11-orchestrate-runtime-v1.md` decomposes the
+  selected slice into implementation work.
+
+Phase 4 intentionally does not add production runtime code, command behavior,
+policy parsing, or audit op schemas. Those belong to the v1 implementation
+plan.
+
 ## Phase 5: Resume Targeted Deep Dives
 
 After the above is stable, resume deeper brainstorming only where needed.

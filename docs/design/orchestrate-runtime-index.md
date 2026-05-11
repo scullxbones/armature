@@ -41,6 +41,10 @@ conversation context light.
   - Phase 3 review of Go workflow and state-machine libraries, with a
     recommendation to build the `v1` runtime directly while selectively
     borrowing patterns.
+- `orchestrate-runtime-v1-scope.md`
+  - Phase 4 v1 scope note selecting the thinnest valuable runtime slice,
+    included and deferred sub-workflows, CLI posture, audit posture, policy
+    posture, exception-agent posture, and acceptance criteria.
 
 ## Current Position
 
@@ -59,15 +63,16 @@ The current direction is:
 6. The Go OSS review recommends building the `v1` runtime directly while
    selectively borrowing state-machine, replay, retry, and activity-boundary
    patterns instead of integrating a distributed workflow engine.
+7. Phase 4 selects `arm worker run` as the v1 runtime surface, keeps
+   `arm orchestrate` as the single-task execution engine, and defers bounded
+   exception-agent execution while preserving its future hooks.
+8. Future implementation work should follow
+   `docs/superpowers/plans/2026-05-11-orchestrate-runtime-v1.md`.
 
 ## Open Follow-Ups
 
-- Choose the thinnest valuable Phase 4 `v1` runtime slice.
-- Decide whether the runtime surface should be a new command such as
-  `arm worker run`, an expanded `arm orchestrate --loop` mode, or a temporary
-  internal runtime surface.
-- Decide whether `v1` includes bounded exception-agent execution or only the
-  deterministic hooks and audit envelope for it.
-- Define the final on-disk policy and audit serialization formats.
-- Turn the chosen `v1` slice into an implementation plan suitable for Armature
-  work items.
+- Implement `docs/superpowers/plans/2026-05-11-orchestrate-runtime-v1.md`.
+- Define the final on-disk policy and audit serialization formats during the v1
+  implementation slice.
+- Decide whether a later phase should activate bounded exception-agent
+  execution on top of the deterministic hooks chosen for v1.
