@@ -34,6 +34,13 @@ conversation context light.
 - `orchestrate-audit-model.md`
   - Audit event model for policy evaluations, bounded recovery, retries,
     reroutes, cooldowns, and human escalations.
+- `orchestrate-runtime-gap-analysis.md`
+  - Phase 3 reconciliation of the proposed runtime model against current
+    Armature commands, packages, skills, ops, policy seams, and audit seams.
+- `orchestrate-runtime-oss-review.md`
+  - Phase 3 review of Go workflow and state-machine libraries, with a
+    recommendation to build the `v1` runtime directly while selectively
+    borrowing patterns.
 
 ## Current Position
 
@@ -45,15 +52,22 @@ The current direction is:
 3. A deterministic embedded worker runtime should own normal execution.
 4. Exception agents are allowed, but only for bounded recovery within policy and
    with audit traceability.
-5. Human escalation remains available, but should be reserved for ambiguous,
-   high-impact, or exhausted-recovery cases.
+5. Phase 3 found that the runtime can wrap and reuse existing `ready`, `claim`,
+   and single-task `orchestrate` surfaces, but needs explicit runtime gates,
+   policy-result types, cooldown/pause state, and audit records before
+   implementation.
+6. The Go OSS review recommends building the `v1` runtime directly while
+   selectively borrowing state-machine, replay, retry, and activity-boundary
+   patterns instead of integrating a distributed workflow engine.
 
 ## Open Follow-Ups
 
-- Perform the Phase 3 architecture and command gap review against current
-  Armature surfaces.
-- Perform a Go OSS review for embedded workflow libraries once the requirements
-  are firm enough to compare against real extension points.
+- Choose the thinnest valuable Phase 4 `v1` runtime slice.
 - Decide whether the runtime surface should be a new command such as
-  `arm worker run` or an expanded `arm orchestrate --loop` mode.
+  `arm worker run`, an expanded `arm orchestrate --loop` mode, or a temporary
+  internal runtime surface.
+- Decide whether `v1` includes bounded exception-agent execution or only the
+  deterministic hooks and audit envelope for it.
 - Define the final on-disk policy and audit serialization formats.
+- Turn the chosen `v1` slice into an implementation plan suitable for Armature
+  work items.
