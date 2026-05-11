@@ -20,6 +20,20 @@ conversation context light.
     recoverables, and agent-worthy exceptions.
 - `orchestrate-policy-subworkflows.md`
   - Reusable policy-evaluable sub-workflows that resolve ambiguous conditions.
+- `orchestrate-policy-subworkflow-specification.md`
+  - Full Phase 2 specification for the five reusable sub-workflows, their
+    shared invocation model, result shape, and bounded exception-agent entry
+    rules.
+- `orchestrate-worker-runtime-state-machine.md`
+  - Deterministic state machine above the existing single-task orchestrator,
+    including transitions, gates, and runtime event stubs.
+- `orchestrate-runtime-policy-model.md`
+  - Runtime policy surface separating built-in defaults from tunables across
+    retry, cooldown, workers, models, harnesses, quota, decomposition,
+    escalation, and sub-workflows.
+- `orchestrate-audit-model.md`
+  - Audit event model for policy evaluations, bounded recovery, retries,
+    reroutes, cooldowns, and human escalations.
 
 ## Current Position
 
@@ -36,9 +50,10 @@ The current direction is:
 
 ## Open Follow-Ups
 
+- Perform the Phase 3 architecture and command gap review against current
+  Armature surfaces.
 - Perform a Go OSS review for embedded workflow libraries once the requirements
   are firm enough to compare against real extension points.
 - Decide whether the runtime surface should be a new command such as
   `arm worker run` or an expanded `arm orchestrate --loop` mode.
-- Define the audit record schema for policy decisions and agent-selected
-  recovery actions.
+- Define the final on-disk policy and audit serialization formats.

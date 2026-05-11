@@ -85,7 +85,7 @@ For each, specify:
 
 Output:
 
-- one focused section or one file per sub-workflow, depending on complexity
+- `docs/design/orchestrate-policy-subworkflow-specification.md`
 
 ### 5. Define the worker runtime state machine
 
@@ -113,7 +113,7 @@ For each state transition, define:
 
 Output:
 
-- a runtime state-machine design note
+- `docs/design/orchestrate-worker-runtime-state-machine.md`
 
 ### 6. Define the policy model
 
@@ -129,7 +129,7 @@ Write down the configurable policy surface, including:
 
 Output:
 
-- a policy configuration note that distinguishes defaults from tunables
+- `docs/design/orchestrate-runtime-policy-model.md`
 
 ### 7. Define the audit model
 
@@ -145,7 +145,14 @@ Specify the audit records needed for:
 
 Output:
 
-- an audit schema or audit event catalog
+- `docs/design/orchestrate-audit-model.md`
+
+### Phase 2 Status
+
+Phase 2 now defines the control-model documentation set as four focused notes
+plus index updates. These notes describe control semantics, policy surfaces,
+audit expectations, and runtime gates without claiming that the worker runtime
+implementation, final CLI shape, or final `v1` slice is decided.
 
 ## Phase 3: Reconcile With Existing Armature Surfaces
 
