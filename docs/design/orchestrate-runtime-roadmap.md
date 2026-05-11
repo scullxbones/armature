@@ -204,6 +204,20 @@ Output:
   - selectively borrow
   - integrate a library
 
+### Phase 3 Status
+
+Phase 3 is completed as a docs-only reconciliation pass:
+
+- `docs/design/orchestrate-runtime-gap-analysis.md` compares the Phase 2 runtime
+  model against current Armature commands, packages, skills, ops, policy seams,
+  and audit seams.
+- `docs/design/orchestrate-runtime-oss-review.md` recommends building the
+  Phase 4 `v1` runtime directly while selectively borrowing library patterns
+  rather than integrating a distributed workflow engine.
+
+Phase 3 intentionally does not choose the final CLI shape, final policy/audit
+serialization, or thinnest valuable `v1` slice. Those remain Phase 4 decisions.
+
 ## Phase 4: Choose And Plan A V1 Slice
 
 ### 10. Define the thinnest valuable v1
