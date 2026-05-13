@@ -2176,3 +2176,4 @@
 ["amend","story-1778637796",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/armature/*.go","internal/*/*.go"]}]
 ["amend","ORCH-RUNTIME-V1-T0",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["cmd/armature/*.go","internal/*/*.go"]}]
 ["amend","ORCH-RUNTIME-V1-T2",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/*/*.go"]}]
+["amend","ORCH-RUNTIME-V1-T8",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["README.md","docs/*.md"]}]
