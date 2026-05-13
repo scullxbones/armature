@@ -2178,3 +2178,4 @@
 ["amend","ORCH-RUNTIME-V1-T2",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/*/*.go"]}]
 ["amend","ORCH-RUNTIME-V1-T8",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["README.md","docs/*.md"]}]
 ["amend","ORCH-RUNTIME-V1-T9",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/skillsembed/skills/*/SKILL.md"]}]
+["amend","ORCH-RUNTIME-V1-T10",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/materialize/*.go","internal/workerruntime/*.go"]}]
