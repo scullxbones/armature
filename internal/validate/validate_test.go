@@ -105,6 +105,24 @@ func TestW1ScopeOverlap_SuppressedByBlockedBy(t *testing.T) {
 	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when one sibling blocks the other")
 }
 
+func TestW1ScopeOverlap_SkipsTerminalTasks(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "done"},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "merged"},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsWarning(result, "scope overlap"), "terminal sibling tasks should not trigger scope overlap warnings")
+}
+
+func TestW1ScopeOverlap_SkipsNonTaskIssues(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "STORY-A", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
+		&materialize.Issue{ID: "STORY-B", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsWarning(result, "scope overlap"), "story-level aggregate scopes should not trigger worker collision warnings")
+}
+
 func TestW2NoTestCriteria(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{
@@ -147,6 +165,21 @@ func TestW8ConflictingDecisions(t *testing.T) {
 	)
 	result := Validate(state, Options{})
 	assert.True(t, containsWarning(result, "conflicting decisions"))
+}
+
+func TestW8ConflictingDecisions_IgnoresDuplicateChoices(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{
+			ID: "TSK-1", Type: "task",
+			Decisions: []materialize.Decision{
+				{Topic: "storage", Choice: "postgres"},
+				{Topic: "storage", Choice: "postgres"},
+				{Topic: "storage", Choice: "postgres"},
+			},
+		},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsWarning(result, "conflicting decisions"), "repeating the same choice should not trigger a conflict warning")
 }
 
 func TestW11VagueOutcome(t *testing.T) {

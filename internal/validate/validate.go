@@ -261,6 +261,9 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	var warns []string
 	byParent := make(map[string][]*materialize.Issue)
 	for _, issue := range issues {
+		if issue.Type != "task" || isTerminalStatus(issue.Status) {
+			continue
+		}
 		byParent[issue.Parent] = append(byParent[issue.Parent], issue)
 	}
 	for _, siblings := range byParent {
@@ -432,8 +435,21 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []string 
 	var warns []string
 	for id, issue := range issues {
 		byTopic := make(map[string][]string)
+		seenByTopic := make(map[string]map[string]struct{})
 		for _, d := range issue.Decisions {
-			byTopic[d.Topic] = append(byTopic[d.Topic], d.Choice)
+			topic := strings.TrimSpace(d.Topic)
+			choice := strings.TrimSpace(d.Choice)
+			if topic == "" || choice == "" {
+				continue
+			}
+			if seenByTopic[topic] == nil {
+				seenByTopic[topic] = make(map[string]struct{})
+			}
+			if _, seen := seenByTopic[topic][choice]; seen {
+				continue
+			}
+			seenByTopic[topic][choice] = struct{}{}
+			byTopic[topic] = append(byTopic[topic], choice)
 		}
 		for topic, choices := range byTopic {
 			if len(choices) > 1 {
@@ -443,6 +459,10 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []string 
 		}
 	}
 	return warns
+}
+
+func isTerminalStatus(status string) bool {
+	return status == ops.StatusMerged || status == ops.StatusDone || status == ops.StatusCancelled
 }
 
 func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string) []string {
