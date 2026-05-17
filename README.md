@@ -78,19 +78,18 @@ arm decompose-context --sources src-001 > context.json
 arm decompose-apply plan.json
 ```
 
-### 4. Claim and Execute Work
+### 4. Run the Worker Runtime (Default)
 
-Find the next ready task, claim it, and start working:
+Start the runtime loop and let it drain ready work:
 
 ```bash
-# See ready tasks
-arm ready
+arm worker run
+```
 
-# Claim the highest priority task
-arm claim <issue-id>
+Use single-task orchestration when you need manual control:
 
-# Get the task context
-arm render-context <issue-id>
+```bash
+arm orchestrate --issue <issue-id>
 ```
 
 ### 5. Complete and Verify
