@@ -28,6 +28,39 @@ func resolveModel(flagModel, taskModel, configDefault string) string {
 	return configDefault
 }
 
+func newOrchestrateCmdForService(service orchestrate.Runner) *cobra.Command {
+	var (
+		issueID string
+		dryRun  bool
+	)
+
+	cmd := &cobra.Command{
+		Use: "orchestrate",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" {
+				return fmt.Errorf("--issue is required")
+			}
+			state, err := service.Run(cmd.Context(), orchestrate.RunInput{
+				TaskID: issueID,
+				Opts:   orchestrate.RunOptions{DryRun: dryRun},
+			})
+			if err != nil {
+				return err
+			}
+			data, _ := json.Marshal(map[string]any{
+				"issue": issueID,
+				"phase": state.Phase,
+				"run":   state.Run,
+			})
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to orchestrate (required)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "exit before dispatch — inspect state without running the agent")
+	return cmd
+}
+
 func newOrchestrateCmd() *cobra.Command {
 	var (
 		issueID string
@@ -126,23 +159,11 @@ Three-level model resolution:
 
 			// --- Assemble engine config ---
 			gitClient := adapters.New(appCtx.RepoPath)
-			engineCfg := orchestrate.EngineConfig{
-				TaskID:       issueID,
-				Git:          gitClient,
-				OpLog:        opLog,
-				Harness:      harnessAdapter,
-				HarnessCfg:   harnessCfg,
-				Scope:        issue.Scope,
-				ActiveScopes: activeScopes,
-				Opts: orchestrate.RunOptions{
-					DryRun:  dryRun,
-					WorkDir: appCtx.RepoPath,
-				},
-				RetryBudget: retries,
-				WorkerID:    workerID,
-			}
-
-			engine := orchestrate.NewEngine(engineCfg)
+			service := orchestrate.NewService(orchestrate.ServiceConfig{
+				Git:     gitClient,
+				OpLog:   opLog,
+				Harness: harnessAdapter,
+			})
 
 			// --- Run ---
 			var cancelFn context.CancelFunc
@@ -155,7 +176,18 @@ Three-level model resolution:
 				defer cancelFn()
 			}
 
-			state, err := engine.Run(runCtx)
+			state, err := service.Run(runCtx, orchestrate.RunInput{
+				TaskID:       issueID,
+				WorkerID:     workerID,
+				RetryBudget:  retries,
+				Scope:        issue.Scope,
+				ActiveScopes: activeScopes,
+				HarnessCfg:   harnessCfg,
+				Opts: orchestrate.RunOptions{
+					DryRun:  dryRun,
+					WorkDir: appCtx.RepoPath,
+				},
+			})
 			if err != nil {
 				return fmt.Errorf("orchestrate %s: %w", issueID, err)
 			}

@@ -168,31 +168,38 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 // D1: git/armature divergence — scan git log for issue IDs referenced in commits
 // that are not in done/merged state.
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
-	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
-
 	out, err := adapters.GitLog(repoPath, "--oneline", "--no-merges", "--pretty=%s")
 	if err != nil {
-		// Not a git repo or no commits — skip
-		return f
+		return Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
 	}
 
 	lines := strings.Split(out, "\n")
+	statuses := make(map[string]string, len(index))
+	for id, entry := range index {
+		statuses[id] = entry.Status
+	}
+	return EvaluateD1GitDivergence(lines, statuses)
+}
+
+// EvaluateD1GitDivergence evaluates already-collected git subjects and issue statuses.
+func EvaluateD1GitDivergence(commitSubjects []string, statuses map[string]string) Finding {
+	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
 	seen := make(map[string]bool)
 	var diverged []string
 
-	for _, line := range lines {
+	for _, line := range commitSubjects {
 		matches := issueIDPattern.FindAllString(line, -1)
 		for _, id := range matches {
 			if seen[id] {
 				continue
 			}
 			seen[id] = true
-			entry, ok := index[id]
+			status, ok := statuses[id]
 			if !ok {
 				continue
 			}
-			if entry.Status != "done" && entry.Status != "merged" {
-				diverged = append(diverged, fmt.Sprintf("%s (%s)", id, entry.Status))
+			if status != "done" && status != "merged" {
+				diverged = append(diverged, fmt.Sprintf("%s (%s)", id, status))
 			}
 		}
 	}
