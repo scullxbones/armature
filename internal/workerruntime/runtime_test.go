@@ -1,12 +1,52 @@
 package workerruntime
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 )
+
+type readyStub struct {
+	ids []string
+	i   int
+}
+
+func (s *readyStub) NextReady(_ context.Context) (string, bool, error) {
+	if s.i >= len(s.ids) {
+		return "", false, nil
+	}
+	id := s.ids[s.i]
+	s.i++
+	return id, true, nil
+}
+
+type claimStub struct {
+	lose map[string]bool
+}
+
+func (s *claimStub) Claim(_ context.Context, issueID string) (bool, error) {
+	return !s.lose[issueID], nil
+}
+
+type execStub struct {
+	ran []string
+}
+
+func (s *execStub) Run(_ context.Context, issueID string) error {
+	s.ran = append(s.ran, issueID)
+	return nil
+}
+
+type traceStub struct {
+	events []string
+}
+
+func (s *traceStub) Trace(event string) {
+	s.events = append(s.events, event)
+}
 
 func TestDefaultPolicyAndStatesExposeV1RuntimeSurface(t *testing.T) {
 	policy := DefaultPolicy()
@@ -41,4 +81,24 @@ func TestDurableRuntimeEventCarriesCorrelationForSharedDecision(t *testing.T) {
 	assert.Equal(t, "corr-123", op.Payload.CorrelationID)
 	assert.Equal(t, "cause-456", op.Payload.CausationID)
 	assert.Equal(t, "human_accountable_escalation", op.Payload.DecisionClass)
+}
+
+func TestRuntimeDrainsMultipleTasksAndHandlesClaimContention(t *testing.T) {
+	ready := &readyStub{ids: []string{"T1", "T2", "T3"}}
+	claim := &claimStub{lose: map[string]bool{"T2": true}}
+	exec := &execStub{}
+	trace := &traceStub{}
+	rt := &Runtime{
+		Ready: ready,
+		Claim: claim,
+		Exec:  exec,
+		Trace: trace,
+	}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "w1"})
+	assert.NoError(t, err)
+	assert.Equal(t, 2, result.TasksCompleted)
+	assert.Equal(t, StateIdle, result.FinalState)
+	assert.Equal(t, []string{"T1", "T3"}, exec.ran)
+	assert.Contains(t, trace.events, EventClaimLost)
 }
