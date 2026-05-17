@@ -2183,3 +2183,4 @@
 ["orchestrate-dispatch-complete","ORCH-RUNTIME-V1-T0",1778975268,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","ORCH-RUNTIME-V1-T0",1778976686,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Pass issue scope into harness context so orchestrate can configure sandbox writes."}]
 ["transition","ORCH-RUNTIME-V1-T0",1778976692,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Pass issue scope into harness context so orchestrate can configure sandbox writes."}]
+["transition","ORCH-RUNTIME-V1-T0",1778976708,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
