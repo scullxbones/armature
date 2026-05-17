@@ -205,8 +205,9 @@ func (e *Engine) runningPhase(ctx context.Context, state OrchestrateState) (Orch
 		state.Phase = "running"
 	}
 
-	// Run the harness adapter.
-	checkResult, err := e.cfg.Harness.Run(ctx, e.cfg.HarnessCfg, e.cfg.Opts)
+	// Run the harness adapter with issue scope injected for sandbox configuration.
+	harnessCtx := WithIssueScope(ctx, e.cfg.Scope)
+	checkResult, err := e.cfg.Harness.Run(harnessCtx, e.cfg.HarnessCfg, e.cfg.Opts)
 	if err != nil {
 		return state, fmt.Errorf("harness run: %w", err)
 	}
