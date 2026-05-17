@@ -90,7 +90,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 	}
 
 	logName := workerID
-	if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
+	if slot := os.Getenv("ARM_LOG_SLOT"); slot != "" {
 		logName = workerID + "~" + slot
 	}
 	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, logName)

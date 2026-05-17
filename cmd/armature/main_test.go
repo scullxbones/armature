@@ -1975,13 +1975,13 @@ func TestInitCommand_AlreadyInitialized(t *testing.T) {
 	assert.Contains(t, out, "already")
 }
 
-// TestLogSlot_EnvVar verifies that TRLS_LOG_SLOT routes ops to a slotted log file.
+// TestLogSlot_EnvVar verifies that ARM_LOG_SLOT routes ops to a slotted log file.
 func TestLogSlot_EnvVar(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "beta")
+	t.Setenv("ARM_LOG_SLOT", "beta")
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "slotted note")
 	require.NoError(t, err)
@@ -2013,13 +2013,13 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	}
 }
 
-// TestLogSlot_Empty_UsesPlainLog verifies that an empty TRLS_LOG_SLOT uses the normal log path.
+// TestLogSlot_Empty_UsesPlainLog verifies that an empty ARM_LOG_SLOT uses the normal log path.
 func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "") // explicitly empty
+	t.Setenv("ARM_LOG_SLOT", "") // explicitly empty
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
@@ -2030,7 +2030,26 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 
 	for _, e := range entries {
 		assert.NotContains(t, e.Name(), "~",
-			"no slotted file should exist when TRLS_LOG_SLOT is empty")
+			"no slotted file should exist when ARM_LOG_SLOT is empty")
+	}
+}
+
+func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	t.Setenv("TRLS_LOG_SLOT", "legacy")
+	t.Setenv("ARM_LOG_SLOT", "")
+
+	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), "~legacy", "legacy TRLS_LOG_SLOT must be ignored")
 	}
 }
 
@@ -2049,21 +2068,21 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Slot "one" transitions task-a to done
-	t.Setenv("TRLS_LOG_SLOT", "one")
+	t.Setenv("ARM_LOG_SLOT", "one")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-a")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--force", "--outcome", "slot one")
 	require.NoError(t, err)
 
 	// Slot "two" transitions task-b to done
-	t.Setenv("TRLS_LOG_SLOT", "two")
+	t.Setenv("ARM_LOG_SLOT", "two")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-b")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--force", "--outcome", "slot two")
 	require.NoError(t, err)
 
 	// Unset slot so materialize uses the main context
-	t.Setenv("TRLS_LOG_SLOT", "")
+	t.Setenv("ARM_LOG_SLOT", "")
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -2411,10 +2430,10 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write an op via a slotted log (transition done)
-	t.Setenv("TRLS_LOG_SLOT", "w")
+	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
-	t.Setenv("TRLS_LOG_SLOT", "")
+	t.Setenv("ARM_LOG_SLOT", "")
 
 	// The workers output must show the worker as active/idle (not missing)
 	// and must reflect ops from both log files
