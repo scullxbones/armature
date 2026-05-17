@@ -137,6 +137,8 @@ func TestBuildClaudeLaunchArgs_NonInteractive(t *testing.T) {
 	assert.Contains(t, args, "--print")
 	assert.Contains(t, args, "--output-format")
 	assert.Contains(t, args, "text")
+	assert.Contains(t, args, "--permission-mode")
+	assert.Contains(t, args, "dontAsk")
 	assert.Contains(t, args, "--model")
 	assert.Equal(t, "do the task", args[len(args)-1])
 }

@@ -154,7 +154,7 @@ func buildHarnessPrompt(scope []string) string {
 }
 
 func buildClaudeLaunchArgs(model, prompt string) []string {
-	args := []string{"claude", "--print", "--output-format", "text"}
+	args := []string{"claude", "--print", "--output-format", "text", "--permission-mode", "dontAsk"}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
