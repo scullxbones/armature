@@ -107,11 +107,16 @@ queue looks unexpectedly empty.
 For normal queue draining:
 
 ```bash
-arm worker run
+arm worker run --max-runtime 20m
 ```
 
-If runtime escalates, inspect task state with `arm show TASK-ID`, resolve the
-issue (scope, acceptance, harness/model), then retry runtime execution.
+If runtime escalates, first capture diagnostics:
+```bash
+arm worker run --format json --max-runtime 20m
+```
+When idle, inspect `idle_diagnostics` in the JSON payload. On timeout, use
+`arm ready --explain --format json` to identify blocked gates, then inspect
+the affected issue with `arm show TASK-ID` before retrying.
 
 ### 4. Parallel Dispatch (independent tasks in one wave)
 
