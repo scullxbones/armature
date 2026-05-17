@@ -2186,3 +2186,4 @@
 ["transition","ORCH-RUNTIME-V1-T0",1778976708,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
 ["orchestrate-dispatch","ORCH-RUNTIME-V1-T1",1778976718,"34dafe5f-6881-4bca-b209-c98c906e3550",{"worktree_path":".","pre_dispatch_ref":"2f89fb4cd6185913187a0a66782b772e3aef795c","retry_budget":3}]
 ["orchestrate-dispatch-complete","ORCH-RUNTIME-V1-T1",1778976725,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","ORCH-RUNTIME-V1-T1",1778977981,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added workerruntime state/trigger types and conservative default policy with exception agents disabled."}]
