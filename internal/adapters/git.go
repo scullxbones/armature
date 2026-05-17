@@ -138,7 +138,10 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 	// Stage the specific file
 	add := c.cmd("add", relPath)
 	if out, err := add.CombinedOutput(); err != nil {
-		return fmt.Errorf("git add %s: %w\n%s", relPath, err, out)
+		return fmt.Errorf("%s", enhanceGitLockfileError(
+			fmt.Sprintf("git add %s: %v\n%s", relPath, err, out),
+			string(out),
+		))
 	}
 
 	// Check if there is actually something staged
@@ -153,6 +156,20 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 		return fmt.Errorf("git commit: %w\n%s", err, out)
 	}
 	return nil
+}
+
+func enhanceGitLockfileError(base, out string) string {
+	// In constrained sandboxes, nested git writes to .git/worktrees/*/index.lock
+	// can be denied even when direct top-level git works. Add an actionable hint.
+	if strings.Contains(out, "index.lock") && strings.Contains(strings.ToLower(out), "read-only file system") {
+		return base + "\nHint: sandbox blocked git lockfile writes (.git/worktrees/*/index.lock). Re-run this arm command with elevated permissions/approval."
+	}
+	return base
+}
+
+// EnhanceGitLockfileErrorForTest exposes lockfile hint behavior to package tests.
+func EnhanceGitLockfileErrorForTest(base, out string) string {
+	return enhanceGitLockfileError(base, out)
 }
 
 // Push pushes the current branch to origin. Returns an error if the push is

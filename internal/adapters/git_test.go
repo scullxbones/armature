@@ -331,6 +331,22 @@ func TestLogBranch(t *testing.T) {
 	assert.NotEmpty(t, entries[0].Date)
 }
 
+func TestEnhanceGitLockfileError_AddsSandboxHint(t *testing.T) {
+	t.Parallel()
+	base := "git add foo: exit status 128"
+	out := "fatal: Unable to create '/repo/.git/worktrees/-arm/index.lock': Read-only file system"
+	got := adapters.EnhanceGitLockfileErrorForTest(base, out)
+	assert.Contains(t, got, "sandbox blocked git lockfile writes")
+}
+
+func TestEnhanceGitLockfileError_NoHintForOtherErrors(t *testing.T) {
+	t.Parallel()
+	base := "git add foo: exit status 1"
+	out := "fatal: pathspec 'foo' did not match any files"
+	got := adapters.EnhanceGitLockfileErrorForTest(base, out)
+	assert.Equal(t, base, got)
+}
+
 func TestLogBranch_InvalidBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

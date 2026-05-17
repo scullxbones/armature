@@ -662,6 +662,15 @@ Transition an issue to a new status.
 arm transition TASK-001 --to in-progress --branch feature/login
 ```
 
+**Sandbox Note (Codex/agent sessions):**
+- In some sandboxed sessions, `arm transition` may fail with:
+  `Unable to create .../.git/worktrees/.../index.lock: Read-only file system`.
+- This is a sandbox lockfile restriction on nested git writes, not an issue-graph bug.
+- Re-run the same command with elevated approval so git can write worktree locks.
+- If this happens repeatedly, approve the command prefix:
+  `go run ./cmd/armature transition`
+  so future transitions work without re-troubleshooting.
+
 ---
 
 ## tui
