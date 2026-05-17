@@ -2181,3 +2181,5 @@
 ["amend","ORCH-RUNTIME-V1-T10",1778639419,"34dafe5f-6881-4bca-b209-c98c906e3550",{"scope":["internal/materialize/*.go","internal/workerruntime/*.go"]}]
 ["orchestrate-dispatch","ORCH-RUNTIME-V1-T0",1778975258,"34dafe5f-6881-4bca-b209-c98c906e3550",{"worktree_path":".","pre_dispatch_ref":"bc326cda05de388d7fb1b21d4c0d0aa3ce27a754","retry_budget":3}]
 ["orchestrate-dispatch-complete","ORCH-RUNTIME-V1-T0",1778975268,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
+["transition","ORCH-RUNTIME-V1-T0",1778976686,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Pass issue scope into harness context so orchestrate can configure sandbox writes."}]
+["transition","ORCH-RUNTIME-V1-T0",1778976692,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Pass issue scope into harness context so orchestrate can configure sandbox writes."}]
