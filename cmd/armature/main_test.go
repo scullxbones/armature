@@ -2562,6 +2562,38 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	assert.NotContains(t, errBuf.String(), "Error:", "no error should be emitted to stderr")
 }
 
+func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "A")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "B")
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(errBuf)
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
+	err = root.Execute()
+	assert.Error(t, err, "same worker but different slots should be treated as different claim owners")
+	assert.Contains(t, errBuf.String(), "overlap")
+}
+
 // TestUnassignHelp verifies unassign --help mentions auto-transition side effect
 func TestUnassignHelp(t *testing.T) {
 	buf := new(bytes.Buffer)
