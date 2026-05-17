@@ -2191,3 +2191,4 @@
 ["orchestrate-dispatch","ORCH-RUNTIME-V1-T2",1778978008,"34dafe5f-6881-4bca-b209-c98c906e3550",{"worktree_path":".","pre_dispatch_ref":"d2e4d4c41ced9d4a8ebe388b3b34d22871a6a0dc","retry_budget":3}]
 ["orchestrate-dispatch-complete","ORCH-RUNTIME-V1-T2",1778978008,"34dafe5f-6881-4bca-b209-c98c906e3550",{}]
 ["transition","ORCH-RUNTIME-V1-T2",1778979031,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"done","outcome":"Added deterministic poll and claim gates with typed outcomes for no-ready-work, worker-disabled, inferred-node block, claim-loss, and claim-win."}]
+["transition","ORCH-RUNTIME-V1-T2",1778979042,"34dafe5f-6881-4bca-b209-c98c906e3550",{"to":"merged"}]
