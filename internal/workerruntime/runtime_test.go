@@ -169,3 +169,49 @@ func TestWorkerRuntimeIntegratesReadyClaimAndOrchestrate(t *testing.T) {
 	assert.Contains(t, trace.events, EventClaimLost)
 	assert.Contains(t, trace.events, EventExecutionCompleted)
 }
+
+type inMemoryReadyProvider struct {
+	ids []string
+	idx int
+}
+
+func (p *inMemoryReadyProvider) NextReady(context.Context) (string, bool, error) {
+	if p.idx >= len(p.ids) {
+		return "", false, nil
+	}
+	id := p.ids[p.idx]
+	p.idx++
+	return id, true, nil
+}
+
+type inMemoryClaimer struct {
+	claimed []string
+}
+
+func (c *inMemoryClaimer) Claim(context.Context, string) (bool, error) {
+	c.claimed = append(c.claimed, "claimed")
+	return true, nil
+}
+
+type inMemoryOrchestrator struct {
+	ran []string
+}
+
+func (o *inMemoryOrchestrator) Run(_ context.Context, issueID string) error {
+	o.ran = append(o.ran, issueID)
+	return nil
+}
+
+func TestWorkerRuntimeRunsClaimedReadyTaskWithRealAdapters(t *testing.T) {
+	ready := &inMemoryReadyProvider{ids: []string{"TASK-READY-1"}}
+	claim := &inMemoryClaimer{}
+	exec := &inMemoryOrchestrator{}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1", MaxTasks: 1})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.TasksCompleted)
+	assert.Equal(t, StateStopped, result.FinalState)
+	assert.Equal(t, []string{"TASK-READY-1"}, exec.ran)
+	assert.Len(t, claim.claimed, 1)
+}

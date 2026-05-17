@@ -4,30 +4,156 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/orchestrate"
+	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/workerruntime"
 	"github.com/spf13/cobra"
 )
 
-var newWorkerRuntime = func() *workerruntime.Runtime {
+type workerRuntimeDeps struct {
+	state    *executionState
+	workerID string
+	logPath  string
+	dryRun   bool
+}
+
+var newWorkerRuntime = func(deps *workerRuntimeDeps) *workerruntime.Runtime {
 	return &workerruntime.Runtime{
-		Ready: noReadyProvider{},
-		Claim: passClaimer{},
-		Exec:  noopOrchestrator{},
+		Ready: &repoReadyProvider{ctx: deps.state.ctx, workerID: deps.workerID},
+		Claim: &repoClaimer{state: deps.state, workerID: deps.workerID, logPath: deps.logPath},
+		Exec:  &repoOrchestrator{ctx: deps.state.ctx, workerID: deps.workerID, logPath: deps.logPath, dryRun: deps.dryRun},
 	}
 }
 
-type noReadyProvider struct{}
+type idleDiagnosticsProvider interface {
+	IdleDiagnostics() map[string]any
+}
 
-func (noReadyProvider) NextReady(context.Context) (string, bool, error) { return "", false, nil }
+type repoReadyProvider struct {
+	ctx         *config.Context
+	workerID    string
+	diagnostics map[string]any
+}
 
-type passClaimer struct{}
+func (r *repoReadyProvider) NextReady(context.Context) (string, bool, error) {
+	index, issues, err := loadRuntimeIssueState(r.ctx)
+	if err != nil {
+		return "", false, err
+	}
+	entries := ready.ComputeReady(index, issues, r.workerID)
+	if len(entries) == 0 {
+		notReady := ready.ExplainNotReady(index, issues)
+		diag := map[string]any{
+			"reason": "no_ready_work",
+			"hint":   "run `arm ready --explain --format json` to inspect blocking gates",
+		}
+		if len(notReady) > 0 {
+			ids := make([]string, 0, len(notReady))
+			for id := range notReady {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			diag["blocked_count"] = len(ids)
+			diag["blocked_preview"] = formatBlockedPreview(notReady, ids)
+		}
+		r.diagnostics = diag
+		return "", false, nil
+	}
+	r.diagnostics = nil
+	return entries[0].Issue, true, nil
+}
 
-func (passClaimer) Claim(context.Context, string) (bool, error) { return true, nil }
+func (r *repoReadyProvider) IdleDiagnostics() map[string]any { return r.diagnostics }
 
-type noopOrchestrator struct{}
+type repoClaimer struct {
+	state    *executionState
+	workerID string
+	logPath  string
+}
 
-func (noopOrchestrator) Run(context.Context, string) error { return nil }
+func (c *repoClaimer) Claim(_ context.Context, issueID string) (bool, error) {
+	op := ops.Op{Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(), WorkerID: c.workerID, Payload: ops.Payload{TTL: c.state.ctx.Config.DefaultTTL}}
+	if err := appendHighStakesOp(c.state, c.logPath, op); err != nil {
+		return false, err
+	}
+	_, issues, err := loadRuntimeIssueState(c.state.ctx)
+	if err != nil {
+		return false, err
+	}
+	issue := issues[issueID]
+	if issue == nil {
+		return false, nil
+	}
+	return issue.ClaimedBy == c.workerID, nil
+}
+
+type repoOrchestrator struct {
+	ctx      *config.Context
+	workerID string
+	logPath  string
+	dryRun   bool
+}
+
+func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
+	issue, err := materialize.LoadIssue(filepath.Join(o.ctx.StateDir, "issues", issueID+".json"))
+	if err != nil {
+		return fmt.Errorf("load issue %s: %w", issueID, err)
+	}
+	harnessCfg := orchestrate.HarnessConfig{
+		Adapter:        "claude",
+		Model:          resolveModel("", issue.PreferredModel, o.ctx.Config.Orchestrator.DefaultModel),
+		WorkDir:        o.ctx.RepoPath,
+		BuildCmd:       o.ctx.Config.Orchestrator.Adapters.Build,
+		LintCmd:        o.ctx.Config.Orchestrator.Adapters.Lint,
+		TestCmd:        o.ctx.Config.Orchestrator.Adapters.Test,
+		CoverageCmd:    o.ctx.Config.Orchestrator.Adapters.Coverage,
+		MutateCmd:      o.ctx.Config.Orchestrator.Adapters.Mutate,
+		TimeoutSeconds: 0,
+	}
+	harnessAdapter, err := orchestrate.NewHarnessAdapter(harnessCfg)
+	if err != nil {
+		return err
+	}
+	service := orchestrate.NewService(orchestrate.ServiceConfig{
+		Git:     adapters.New(o.ctx.RepoPath),
+		OpLog:   &fileOpLog{ctx: o.ctx, logPath: o.logPath},
+		Harness: harnessAdapter,
+	})
+
+	index, _ := materialize.LoadIndex(filepath.Join(o.ctx.StateDir, "index.json"))
+	activeScopes := make(map[string][]string)
+	for id, entry := range index {
+		if id == issueID {
+			continue
+		}
+		if entry.Status == ops.StatusClaimed || entry.Status == ops.StatusInProgress {
+			activeScopes[id] = entry.Scope
+		}
+	}
+	_, err = service.Run(ctx, orchestrate.RunInput{
+		TaskID:       issueID,
+		WorkerID:     o.workerID,
+		RetryBudget:  3,
+		Scope:        issue.Scope,
+		ActiveScopes: activeScopes,
+		HarnessCfg:   harnessCfg,
+		Opts: orchestrate.RunOptions{
+			DryRun:            o.dryRun,
+			WorkDir:           o.ctx.RepoPath,
+			HeartbeatInterval: 5 * time.Second,
+		},
+	})
+	return err
+}
 
 func newWorkerRunCmd() *cobra.Command {
 	var (
@@ -38,24 +164,28 @@ func newWorkerRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run the worker runtime loop",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rt := newWorkerRuntime()
-			res, err := rt.Run(cmd.Context(), workerruntime.RuntimeOptions{
-				WorkerID: "worker",
-				MaxTasks: maxTasks,
-				DryRun:   dryRun,
-				Policy:   workerruntime.DefaultPolicy(),
-			})
+			state := mustState(cmd)
+			workerID, logPath, err := resolveWorkerAndLog(state.ctx)
+			if err != nil {
+				return err
+			}
+			deps := &workerRuntimeDeps{state: state, workerID: workerID, logPath: logPath, dryRun: dryRun}
+			rt := newWorkerRuntime(deps)
+			res, err := rt.Run(cmd.Context(), workerruntime.RuntimeOptions{WorkerID: workerID, MaxTasks: maxTasks, DryRun: dryRun, Policy: workerruntime.DefaultPolicy()})
 			if err != nil {
 				return err
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				data, _ := json.Marshal(map[string]any{
-					"tasks_completed": res.TasksCompleted,
-					"final_state":     res.FinalState,
-					"dry_run":         dryRun,
-					"max_tasks":       maxTasks,
-				})
+				payload := map[string]any{"tasks_completed": res.TasksCompleted, "final_state": res.FinalState, "dry_run": dryRun, "max_tasks": maxTasks}
+				if res.FinalState == workerruntime.StateIdle && res.TasksCompleted == 0 {
+					if dp, ok := rt.Ready.(idleDiagnosticsProvider); ok {
+						if idle := dp.IdleDiagnostics(); len(idle) > 0 {
+							payload["idle_diagnostics"] = idle
+						}
+					}
+				}
+				data, _ := json.Marshal(payload)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
@@ -67,4 +197,38 @@ func newWorkerRunCmd() *cobra.Command {
 	cmd.Flags().IntVar(&maxTasks, "max-tasks", 0, "maximum tasks to execute before stopping (0 = no limit)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "inspect runtime behavior without task mutation")
 	return cmd
+}
+
+func loadRuntimeIssueState(ctx *config.Context) (materialize.Index, map[string]*materialize.Issue, error) {
+	allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(ctx.IssuesDir, "ops"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read ops: %w", err)
+	}
+	if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
+		return nil, nil, fmt.Errorf("materialize: %w", err)
+	}
+	index, err := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	issues := make(map[string]*materialize.Issue, len(index))
+	for id := range index {
+		issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", id+".json"))
+		if err == nil {
+			clone := issue
+			issues[id] = &clone
+		}
+	}
+	return index, issues, nil
+}
+
+func formatBlockedPreview(notReady map[string]string, ids []string) []string {
+	if len(ids) > 3 {
+		ids = ids[:3]
+	}
+	preview := make([]string, 0, len(ids))
+	for _, id := range ids {
+		preview = append(preview, fmt.Sprintf("%s: %s", id, strings.TrimSpace(notReady[id])))
+	}
+	return preview
 }

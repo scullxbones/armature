@@ -34,7 +34,7 @@ func (fixedExec) Run(_ context.Context, _ string) error { return nil }
 
 func TestWorkerRunMaxTasksOneExecutesSingleTask(t *testing.T) {
 	prev := newWorkerRuntime
-	newWorkerRuntime = func() *workerruntime.Runtime {
+	newWorkerRuntime = func(*workerRuntimeDeps) *workerruntime.Runtime {
 		return &workerruntime.Runtime{
 			Ready: &fixedReady{ids: []string{"T1", "T2"}},
 			Claim: fixedClaim{},
@@ -54,7 +54,7 @@ func TestWorkerRunMaxTasksOneExecutesSingleTask(t *testing.T) {
 
 func TestWorkerRunCommandSupportsSingleTaskDogfood(t *testing.T) {
 	prev := newWorkerRuntime
-	newWorkerRuntime = func() *workerruntime.Runtime {
+	newWorkerRuntime = func(*workerRuntimeDeps) *workerruntime.Runtime {
 		return &workerruntime.Runtime{
 			Ready: &fixedReady{ids: []string{"T1"}},
 			Claim: fixedClaim{},
@@ -71,4 +71,29 @@ func TestWorkerRunCommandSupportsSingleTaskDogfood(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "\"tasks_completed\":1")
 	assert.Contains(t, out.String(), "\"dry_run\":true")
+}
+
+func TestWorkerRunUsesRealAdaptersByDefault(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "story-1", "--type", "story", "--title", "Story")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-1", "--type", "task", "--title", "Task", "--parent", "story-1")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "story-1", "--to", "in-progress")
+	require.NoError(t, err)
+
+	prev := newWorkerRuntime
+	t.Cleanup(func() { newWorkerRuntime = prev })
+
+	out, err := runTrls(t, repo, "worker", "run", "--max-tasks", "1", "--dry-run", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, "\"tasks_completed\":1")
+	assert.NotContains(t, out, "\"final_state\":\"idle\"")
 }
