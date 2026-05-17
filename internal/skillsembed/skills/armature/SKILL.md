@@ -20,8 +20,9 @@ arm install-skills                                      # deploy bundled skills 
 
 ```
 arm ready                                               # list actionable issues
-arm orchestrate --issue ID [--harness claude]           # run deterministic orchestration
-arm orchestrate --issue ID --dry-run                    # inspect orchestration state
+arm worker run [--max-tasks 1]                          # default runtime-owned execution loop
+arm orchestrate --issue ID [--harness claude]           # single-task manual fallback
+arm orchestrate --issue ID --dry-run                    # inspect single-task orchestration state
 arm claim --issue ID [--ttl 3600]                       # manual claim fallback
 arm render-context --issue ID [--budget 4000]           # manual context fallback
 ```
