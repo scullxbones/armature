@@ -631,6 +631,29 @@ func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
 	assert.Equal(t, []string{"cmd/x.go", "cmd/y.go"}, state.Issues["T1"].Scope)
 }
 
+func TestMaterializedStateCollapsesHistoricalClaims(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "Task", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a",
+		Payload: ops.Payload{TTL: 60},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300, WorkerID: "worker-b",
+		Payload: ops.Payload{TTL: 90},
+	}))
+
+	issue := state.Issues["task-01"]
+	require.NotNil(t, issue)
+	assert.Equal(t, "claimed", issue.Status)
+	assert.Equal(t, "worker-b", issue.ClaimedBy)
+	assert.Equal(t, int64(300), issue.ClaimedAt)
+	assert.Equal(t, 90, issue.ClaimTTL)
+}
+
 func TestApplyAmendOp_UnknownIssue_NoError(t *testing.T) {
 	state := NewState()
 	err := state.ApplyOp(ops.Op{

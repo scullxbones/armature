@@ -7,6 +7,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type readyStub struct {
@@ -146,4 +147,25 @@ func TestExecutionHandoffInvokesSingleTaskOrchestrator(t *testing.T) {
 		Type:           EventExecutionSummary,
 		SharedDecision: true,
 	}))
+}
+
+func TestWorkerRuntimeIntegratesReadyClaimAndOrchestrate(t *testing.T) {
+	ready := &readyStub{ids: []string{"TASK-1", "TASK-2"}}
+	claim := &claimStub{lose: map[string]bool{"TASK-2": true}}
+	exec := &execStub{}
+	trace := &traceStub{}
+	rt := &Runtime{
+		Ready: ready,
+		Claim: claim,
+		Exec:  exec,
+		Trace: trace,
+	}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1"})
+	require.NoError(t, err)
+	assert.Equal(t, StateIdle, result.FinalState)
+	assert.Equal(t, 1, result.TasksCompleted)
+	assert.Equal(t, []string{"TASK-1"}, exec.ran)
+	assert.Contains(t, trace.events, EventClaimLost)
+	assert.Contains(t, trace.events, EventExecutionCompleted)
 }
