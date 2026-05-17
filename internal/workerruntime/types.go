@@ -50,11 +50,15 @@ var transitions = map[[2]string]string{
 	{StateExecuting, TriggerMaxTasksReached}:   StateStopped,
 	{StateRecovering, TriggerRecoveryComplete}: StatePolling,
 	{StateRecovering, TriggerRecoveryFailed}:   StateEscalated,
+	{StateRecovering, TriggerPause}:            StatePaused,
+	{StateRecovering, TriggerStop}:             StateStopped,
 	{StatePolling, TriggerPause}:               StatePaused,
 	{StateIdle, TriggerPause}:                  StatePaused,
 	{StatePaused, TriggerResume}:               StatePolling,
 	{StatePolling, TriggerStop}:                StateStopped,
 	{StateIdle, TriggerStop}:                   StateStopped,
+	{StatePaused, TriggerStop}:                 StateStopped,
+	{StateEscalated, TriggerStop}:              StateStopped,
 }
 
 // InitialState returns the starting state for a new runtime.

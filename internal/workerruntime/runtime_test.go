@@ -102,3 +102,22 @@ func TestRuntimeDrainsMultipleTasksAndHandlesClaimContention(t *testing.T) {
 	assert.Equal(t, []string{"T1", "T3"}, exec.ran)
 	assert.Contains(t, trace.events, EventClaimLost)
 }
+
+func TestRecoveryPauseAndStopTransitionsRemainDeterministic(t *testing.T) {
+	assert.Equal(t, StatePolling, NextState(StateRecovering, TriggerRecoveryComplete))
+	assert.Equal(t, StateEscalated, NextState(StateRecovering, TriggerRecoveryFailed))
+	assert.Equal(t, StatePaused, NextState(StateRecovering, TriggerPause))
+	assert.Equal(t, StateStopped, NextState(StateRecovering, TriggerStop))
+	assert.Equal(t, StateStopped, NextState(StatePaused, TriggerStop))
+	assert.Equal(t, StateStopped, NextState(StateEscalated, TriggerStop))
+
+	assert.Equal(t, EventTierSnapshot, DurableAdmission(RuntimeEvent{Type: EventCooldownScheduled}))
+	assert.Equal(t, EventTierSnapshot, DurableAdmission(RuntimeEvent{Type: EventPauseCheckpoint}))
+	assert.Equal(t, EventTierSnapshot, DurableAdmission(RuntimeEvent{Type: EventStopRequested}))
+
+	assert.Equal(t, EventTierSnapshot, DurableAdmission(RuntimeEvent{Type: EventHumanEscalation}))
+	assert.Equal(t, EventTierDurable, DurableAdmission(RuntimeEvent{
+		Type:           EventHumanEscalation,
+		SharedDecision: true,
+	}))
+}
