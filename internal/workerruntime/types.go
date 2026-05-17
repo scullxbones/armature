@@ -18,43 +18,43 @@ const (
 
 // Trigger constants for deterministic state transitions.
 const (
-	TriggerClaimSelected      = "claim_selected"
-	TriggerClaimLost          = "claim_lost"
-	TriggerClaimWon           = "claim_won"
-	TriggerExecutionComplete  = "execution_complete"
-	TriggerExecutionFailed    = "execution_failed"
-	TriggerRecoveryComplete   = "recovery_complete"
-	TriggerRecoveryFailed     = "recovery_failed"
-	TriggerNoReadyWork        = "no_ready_work"
-	TriggerPause              = "pause"
-	TriggerResume             = "resume"
-	TriggerEscalate           = "escalate"
-	TriggerStop               = "stop"
-	TriggerMaxTasksReached    = "max_tasks_reached"
+	TriggerClaimSelected     = "claim_selected"
+	TriggerClaimLost         = "claim_lost"
+	TriggerClaimWon          = "claim_won"
+	TriggerExecutionComplete = "execution_complete"
+	TriggerExecutionFailed   = "execution_failed"
+	TriggerRecoveryComplete  = "recovery_complete"
+	TriggerRecoveryFailed    = "recovery_failed"
+	TriggerNoReadyWork       = "no_ready_work"
+	TriggerPause             = "pause"
+	TriggerResume            = "resume"
+	TriggerEscalate          = "escalate"
+	TriggerStop              = "stop"
+	TriggerMaxTasksReached   = "max_tasks_reached"
 )
 
 // transitions maps (state, trigger) -> next state.
 var transitions = map[[2]string]string{
-	{StateIdle, TriggerClaimSelected}:         StateClaimPending,
-	{StatePolling, TriggerClaimSelected}:      StateClaimPending,
-	{StatePolling, TriggerNoReadyWork}:        StateIdle,
-	{StateClaimPending, TriggerClaimWon}:      StateClaimWon,
-	{StateClaimPending, TriggerClaimLost}:     StateClaimLost,
-	{StateClaimLost, TriggerClaimSelected}:    StateClaimPending,
-	{StateClaimLost, TriggerNoReadyWork}:      StateIdle,
-	{StateClaimWon, TriggerClaimSelected}:     StateExecuting,
-	{StateClaimWon, TriggerExecutionComplete}: StateExecuting,
+	{StateIdle, TriggerClaimSelected}:          StateClaimPending,
+	{StatePolling, TriggerClaimSelected}:       StateClaimPending,
+	{StatePolling, TriggerNoReadyWork}:         StateIdle,
+	{StateClaimPending, TriggerClaimWon}:       StateClaimWon,
+	{StateClaimPending, TriggerClaimLost}:      StateClaimLost,
+	{StateClaimLost, TriggerClaimSelected}:     StateClaimPending,
+	{StateClaimLost, TriggerNoReadyWork}:       StateIdle,
+	{StateClaimWon, TriggerClaimSelected}:      StateExecuting,
+	{StateClaimWon, TriggerExecutionComplete}:  StateExecuting,
 	{StateExecuting, TriggerExecutionComplete}: StatePolling,
-	{StateExecuting, TriggerExecutionFailed}:  StateRecovering,
-	{StateExecuting, TriggerEscalate}:         StateEscalated,
-	{StateExecuting, TriggerMaxTasksReached}:  StateStopped,
+	{StateExecuting, TriggerExecutionFailed}:   StateRecovering,
+	{StateExecuting, TriggerEscalate}:          StateEscalated,
+	{StateExecuting, TriggerMaxTasksReached}:   StateStopped,
 	{StateRecovering, TriggerRecoveryComplete}: StatePolling,
 	{StateRecovering, TriggerRecoveryFailed}:   StateEscalated,
-	{StatePolling, TriggerPause}:              StatePaused,
-	{StateIdle, TriggerPause}:                 StatePaused,
-	{StatePaused, TriggerResume}:              StatePolling,
-	{StatePolling, TriggerStop}:               StateStopped,
-	{StateIdle, TriggerStop}:                  StateStopped,
+	{StatePolling, TriggerPause}:               StatePaused,
+	{StateIdle, TriggerPause}:                  StatePaused,
+	{StatePaused, TriggerResume}:               StatePolling,
+	{StatePolling, TriggerStop}:                StateStopped,
+	{StateIdle, TriggerStop}:                   StateStopped,
 }
 
 // InitialState returns the starting state for a new runtime.
@@ -112,8 +112,8 @@ type StopResult struct {
 
 // Poll outcome constants.
 const (
-	PollReadyWork     = "ready_work"
-	PollNoReadyWork   = "no_ready_work"
+	PollReadyWork      = "ready_work"
+	PollNoReadyWork    = "no_ready_work"
 	PollWorkerDisabled = "worker_disabled"
 )
 

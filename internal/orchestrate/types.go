@@ -1,6 +1,9 @@
 package orchestrate
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ExitStatus represents the outcome of a harness invocation.
 type ExitStatus int
@@ -120,6 +123,22 @@ type RunOptions struct {
 	WorkDir string
 	// Env holds additional environment variables to inject into commands.
 	Env map[string]string
+	// Progress receives phase/heartbeat updates during orchestration.
+	Progress func(ProgressEvent)
+	// HeartbeatInterval controls heartbeat cadence while the harness runs.
+	// Zero means 15s.
+	HeartbeatInterval time.Duration
+}
+
+// ProgressEvent is a user-facing progress update emitted during orchestration.
+type ProgressEvent struct {
+	Kind      string
+	Phase     string
+	Message   string
+	Elapsed   time.Duration
+	Harness   string
+	Retry     int
+	Timestamp time.Time
 }
 
 // OrchestrateState captures the runtime state of an orchestration run.

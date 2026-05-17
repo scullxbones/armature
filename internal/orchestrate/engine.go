@@ -2,6 +2,7 @@ package orchestrate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -89,6 +90,7 @@ func NewEngine(cfg EngineConfig) *Engine {
 //
 // Dry-run: exits before any dispatch op is written.
 func (e *Engine) Run(ctx context.Context) (OrchestrateState, error) {
+	started := time.Now()
 	// Honour cancellation before touching anything.
 	if err := ctx.Err(); err != nil {
 		return OrchestrateState{}, err
@@ -119,6 +121,7 @@ func (e *Engine) Run(ctx context.Context) (OrchestrateState, error) {
 
 	// --- 5. Dispatch (pending or retrying) ---
 	if state.Phase == "pending" || state.Phase == "retrying" {
+		e.emitProgress("phase", state.Phase, "starting dispatch phase", started)
 		state, err = e.dispatchPhase(ctx, state)
 		if err != nil {
 			return state, err
@@ -127,9 +130,26 @@ func (e *Engine) Run(ctx context.Context) (OrchestrateState, error) {
 
 	// --- 6. Running: zero-trust commit + verify ---
 	if state.Phase == "dispatched" || state.Phase == "running" {
+		e.emitProgress("phase", state.Phase, "starting running phase", started)
 		state, err = e.runningPhase(ctx, state)
 		if err != nil {
-			return state, err
+			diag := TimeoutDiagnostics{
+				ElapsedMs: time.Since(started).Milliseconds(),
+				LastPhase: state.Phase,
+				Harness:   e.cfg.Harness.Name(),
+				Retries:   state.RetryBudget,
+				NextStep:  "re-run arm orchestrate after checking harness logs and timeout settings",
+				Reason:    err.Error(),
+			}
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				note, noteErr := buildTimeoutNote(diag)
+				if noteErr == nil {
+					note.TargetID = e.cfg.TaskID
+					note.WorkerID = e.cfg.WorkerID
+					_ = e.cfg.OpLog.Append(note)
+				}
+			}
+			return state, &RunError{Cause: err, Diagnostics: diag}
 		}
 	}
 
@@ -207,7 +227,7 @@ func (e *Engine) runningPhase(ctx context.Context, state OrchestrateState) (Orch
 
 	// Run the harness adapter with issue scope injected for sandbox configuration.
 	harnessCtx := WithIssueScope(ctx, e.cfg.Scope)
-	checkResult, err := e.cfg.Harness.Run(harnessCtx, e.cfg.HarnessCfg, e.cfg.Opts)
+	checkResult, err := e.runHarnessWithHeartbeat(harnessCtx, e.cfg.HarnessCfg, e.cfg.Opts)
 	if err != nil {
 		return state, fmt.Errorf("harness run: %w", err)
 	}
@@ -231,6 +251,45 @@ func (e *Engine) runningPhase(ctx context.Context, state OrchestrateState) (Orch
 
 	// Harness passed — proceed with zero-trust commit sequence.
 	return e.zeroTrustCommit(ctx, state)
+}
+
+func (e *Engine) runHarnessWithHeartbeat(ctx context.Context, cfg HarnessConfig, opts RunOptions) (CheckResult, error) {
+	done := make(chan struct{})
+	interval := opts.HeartbeatInterval
+	if interval <= 0 {
+		interval = 15 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				e.emitProgress("heartbeat", "running", "harness still running", time.Now())
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	result, err := e.cfg.Harness.Run(ctx, cfg, opts)
+	close(done)
+	return result, err
+}
+
+func (e *Engine) emitProgress(kind, phase, message string, started time.Time) {
+	if e.cfg.Opts.Progress == nil {
+		return
+	}
+	e.cfg.Opts.Progress(ProgressEvent{
+		Kind:      kind,
+		Phase:     phase,
+		Message:   message,
+		Elapsed:   time.Since(started),
+		Harness:   e.cfg.Harness.Name(),
+		Timestamp: time.Now(),
+	})
 }
 
 // handleVerifyFailure records a verify-fail op and either schedules a retry

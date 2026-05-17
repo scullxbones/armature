@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -45,6 +46,17 @@ func newOrchestrateCmdForService(service orchestrate.Runner) *cobra.Command {
 				Opts:   orchestrate.RunOptions{DryRun: dryRun},
 			})
 			if err != nil {
+				var runErr *orchestrate.RunError
+				if errors.As(err, &runErr) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"orchestrate timeout/failure summary: elapsed=%dms phase=%s harness=%s retries=%d next=%s\n",
+						runErr.Diagnostics.ElapsedMs,
+						runErr.Diagnostics.LastPhase,
+						runErr.Diagnostics.Harness,
+						runErr.Diagnostics.Retries,
+						runErr.Diagnostics.NextStep,
+					)
+				}
 				return err
 			}
 			data, _ := json.Marshal(map[string]any{
@@ -184,11 +196,27 @@ Three-level model resolution:
 				ActiveScopes: activeScopes,
 				HarnessCfg:   harnessCfg,
 				Opts: orchestrate.RunOptions{
-					DryRun:  dryRun,
-					WorkDir: appCtx.RepoPath,
+					DryRun:            dryRun,
+					WorkDir:           appCtx.RepoPath,
+					HeartbeatInterval: 5 * time.Second,
+					Progress: func(ev orchestrate.ProgressEvent) {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "orchestrate progress: kind=%s phase=%s elapsed=%s harness=%s msg=%s\n",
+							ev.Kind, ev.Phase, ev.Elapsed.Truncate(time.Second), ev.Harness, ev.Message)
+					},
 				},
 			})
 			if err != nil {
+				var runErr *orchestrate.RunError
+				if errors.As(err, &runErr) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"orchestrate timeout/failure summary: elapsed=%dms phase=%s harness=%s retries=%d next=%s\n",
+						runErr.Diagnostics.ElapsedMs,
+						runErr.Diagnostics.LastPhase,
+						runErr.Diagnostics.Harness,
+						runErr.Diagnostics.Retries,
+						runErr.Diagnostics.NextStep,
+					)
+				}
 				return fmt.Errorf("orchestrate %s: %w", issueID, err)
 			}
 
