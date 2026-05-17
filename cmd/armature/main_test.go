@@ -2594,6 +2594,34 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 	assert.Contains(t, errBuf.String(), "overlap")
 }
 
+func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
+	out, err := runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"claimed":false`)
+	assert.Contains(t, out, `"reason":"lost_claim_race"`)
+
+	showOut, err := runTrls(t, repo, "show", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.NotContains(t, showOut, "other-worker-abc")
+}
+
 // TestUnassignHelp verifies unassign --help mentions auto-transition side effect
 func TestUnassignHelp(t *testing.T) {
 	buf := new(bytes.Buffer)

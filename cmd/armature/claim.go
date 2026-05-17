@@ -106,6 +106,35 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				return err
 			}
 
+			allOps, offsets, err = readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			if err != nil {
+				return fmt.Errorf("read ops: %w", err)
+			}
+			if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
+				return err
+			}
+			issueAfter, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", issueID+".json"))
+			if err != nil {
+				return fmt.Errorf("issue %s not found after claim: %w", issueID, err)
+			}
+			won := issueAfter.ClaimedBy == workerID
+			if !won {
+				format, _ := cmd.Root().PersistentFlags().GetString("format")
+				if format == "json" || format == "agent" {
+					result := map[string]any{
+						"issue":      issueID,
+						"claimed":    false,
+						"claimed_by": issueAfter.ClaimedBy,
+						"reason":     "lost_claim_race",
+					}
+					data, _ := json.Marshal(result)
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				} else {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claim lost for %s (claimed by %s)\n", issueID, issueAfter.ClaimedBy)
+				}
+				return nil
+			}
+
 			// Auto-advance any open ancestor story/epic to in-progress.
 			if parentID := issue.Parent; parentID != "" {
 				if parentEntry, ok := index[parentID]; ok && parentEntry.Status == ops.StatusOpen {
