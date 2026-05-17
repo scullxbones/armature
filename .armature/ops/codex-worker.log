@@ -1,2 +1,3 @@
 ["transition","ORCH-RUNTIME-V1-T10",1779021325,"codex-worker",{"to":"done"}]
 ["transition","ORCH-RUNTIME-V1-T10",1779021332,"codex-worker",{"to":"merged"}]
+["create","task-1779043141",1779043141,"codex-worker",{"title":"Wire arm worker run to real ready/claim/orchestrate adapters","parent":"story-1778637796","type":"task","scope":["cmd/armature/worker_run.go","cmd/armature/helpers.go","internal/workerruntime/runtime.go","internal/workerruntime/runtime_test.go"],"definition_of_done":"arm worker run uses real repository adapters by default (not placeholder no-op adapters), executes at least one eligible ready task in integration scenarios, and documents fallback/diagnostic behavior when no work is ready.","priority":"high"}]
