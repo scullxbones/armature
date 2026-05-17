@@ -76,6 +76,11 @@ arm ready
 arm orchestrate --issue <issue-id>
 ```
 
+Prerequisites for `arm orchestrate`:
+- Linux requires `bubblewrap` (`bwrap`) and `socat` on `PATH` for sandboxed harness execution.
+- macOS requires `sandbox-exec` on `PATH`.
+- The selected harness CLI (`claude`, `codex`, or `devin`) must support non-interactive execution from `arm orchestrate` in the current terminal/session.
+
 ### Optional: Preview Without Dispatch
 ```bash
 arm orchestrate --issue <issue-id> --dry-run

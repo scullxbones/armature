@@ -460,6 +460,11 @@ Run deterministic task orchestration with an AI harness.
 - Exits non-zero when orchestration escalates or preflight validation fails.
 - Prints either human output (`phase`, `run`) or machine-readable JSON (`--format json|agent`).
 
+**Runtime Requirements:**
+- Linux sandbox mode requires `bubblewrap` (`bwrap`) and `socat` installed and discoverable on `PATH`.
+- macOS sandbox mode requires `sandbox-exec`.
+- Harness binaries must be installed and invocable in non-interactive mode from the current shell session.
+
 **Examples:**
 ```bash
 # Run with defaults
