@@ -33,11 +33,12 @@ func (s *claimStub) Claim(_ context.Context, issueID string) (bool, error) {
 
 type execStub struct {
 	ran []string
+	err error
 }
 
 func (s *execStub) Run(_ context.Context, issueID string) error {
 	s.ran = append(s.ran, issueID)
-	return nil
+	return s.err
 }
 
 type traceStub struct {
@@ -118,6 +119,31 @@ func TestRecoveryPauseAndStopTransitionsRemainDeterministic(t *testing.T) {
 	assert.Equal(t, EventTierSnapshot, DurableAdmission(RuntimeEvent{Type: EventHumanEscalation}))
 	assert.Equal(t, EventTierDurable, DurableAdmission(RuntimeEvent{
 		Type:           EventHumanEscalation,
+		SharedDecision: true,
+	}))
+}
+
+func TestExecutionHandoffInvokesSingleTaskOrchestrator(t *testing.T) {
+	ready := &readyStub{ids: []string{"T1"}}
+	claim := &claimStub{}
+	exec := &execStub{err: assert.AnError}
+	trace := &traceStub{}
+	rt := &Runtime{
+		Ready: ready,
+		Claim: claim,
+		Exec:  exec,
+		Trace: trace,
+	}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "w1"})
+	assert.Error(t, err)
+	assert.Equal(t, StateEscalated, result.FinalState)
+	assert.Equal(t, 0, result.TasksCompleted)
+	assert.Equal(t, []string{"T1"}, exec.ran)
+
+	assert.Equal(t, EventTierTrace, DurableAdmission(RuntimeEvent{Type: EventExecutionFailed}))
+	assert.Equal(t, EventTierDurable, DurableAdmission(RuntimeEvent{
+		Type:           EventExecutionSummary,
 		SharedDecision: true,
 	}))
 }

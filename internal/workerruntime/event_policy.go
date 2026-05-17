@@ -20,6 +20,8 @@ const (
 	EventNoReadyWork        = "no_ready_work"
 	EventClaimLost          = "claim_lost"
 	EventExecutionCompleted = "execution_completed"
+	EventExecutionFailed    = "execution_failed"
+	EventExecutionSummary   = "execution_summary"
 	EventCooldownScheduled  = "cooldown_scheduled"
 	EventPauseCheckpoint    = "pause_checkpoint"
 	EventStopRequested      = "stop_requested"
@@ -29,7 +31,7 @@ const (
 // DurableAdmission classifies runtime events into persistence tiers.
 func DurableAdmission(ev RuntimeEvent) EventTier {
 	switch ev.Type {
-	case EventPollStarted, EventNoReadyWork, EventClaimLost, EventExecutionCompleted:
+	case EventPollStarted, EventNoReadyWork, EventClaimLost, EventExecutionCompleted, EventExecutionFailed:
 		return EventTierTrace
 	case EventCooldownScheduled, EventPauseCheckpoint, EventStopRequested:
 		return EventTierSnapshot

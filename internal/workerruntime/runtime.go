@@ -72,6 +72,9 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			continue
 		}
 		if err := r.Exec.Run(ctx, issueID); err != nil {
+			if r.Trace != nil {
+				r.Trace.Trace(EventExecutionFailed)
+			}
 			result.FinalState = StateEscalated
 			result.Err = err
 			return result, err
