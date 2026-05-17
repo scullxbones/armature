@@ -139,10 +139,11 @@ const (
 
 // RuntimeOptions configures a worker runtime instance.
 type RuntimeOptions struct {
-	WorkerID string
-	MaxTasks int
-	DryRun   bool
-	Policy   Policy
+	WorkerID   string
+	MaxTasks   int
+	MaxRuntime time.Duration
+	DryRun     bool
+	Policy     Policy
 }
 
 // RunResult summarises the outcome of a completed runtime run.

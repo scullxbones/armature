@@ -42,6 +42,16 @@ func (s *execStub) Run(_ context.Context, issueID string) error {
 	return s.err
 }
 
+type blockingExecStub struct {
+	ran []string
+}
+
+func (s *blockingExecStub) Run(ctx context.Context, issueID string) error {
+	s.ran = append(s.ran, issueID)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
 type traceStub struct {
 	events []string
 }
@@ -214,4 +224,21 @@ func TestWorkerRuntimeRunsClaimedReadyTaskWithRealAdapters(t *testing.T) {
 	assert.Equal(t, StateStopped, result.FinalState)
 	assert.Equal(t, []string{"TASK-READY-1"}, exec.ran)
 	assert.Len(t, claim.claimed, 1)
+}
+
+func TestRuntimeEscalatesOnMaxRuntimeTimeout(t *testing.T) {
+	ready := &readyStub{ids: []string{"T1"}}
+	claim := &claimStub{}
+	exec := &blockingExecStub{}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{
+		WorkerID:   "worker-1",
+		MaxRuntime: 50 * time.Millisecond,
+	})
+	require.Error(t, err)
+	assert.Equal(t, StateEscalated, result.FinalState)
+	assert.Equal(t, context.DeadlineExceeded, result.Err)
+	assert.Contains(t, err.Error(), "runtime timeout")
+	assert.Contains(t, err.Error(), "Action:")
 }

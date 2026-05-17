@@ -1,6 +1,9 @@
 package workerruntime
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ReadyProvider returns the next ready issue ID.
 type ReadyProvider interface {
@@ -36,8 +39,20 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 	if r.Ready == nil || r.Claim == nil || r.Exec == nil {
 		return RunResult{FinalState: StateStopped}, nil
 	}
+	runCtx := ctx
+	if opts.MaxRuntime > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(ctx, opts.MaxRuntime)
+		defer cancel()
+	}
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := runCtx.Err(); err != nil {
+			if err == context.DeadlineExceeded && opts.MaxRuntime > 0 {
+				timeoutErr := fmt.Errorf("runtime timeout after %s\nAction: rerun with a larger --max-runtime or inspect blocked work with `arm ready --explain --format json`", opts.MaxRuntime)
+				result.FinalState = StateEscalated
+				result.Err = err
+				return result, timeoutErr
+			}
 			result.FinalState = StateStopped
 			result.Err = err
 			return result, err
@@ -46,7 +61,7 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			result.FinalState = StateStopped
 			return result, nil
 		}
-		issueID, ok, err := r.Ready.NextReady(ctx)
+		issueID, ok, err := r.Ready.NextReady(runCtx)
 		if err != nil {
 			result.FinalState = StateEscalated
 			result.Err = err
@@ -59,7 +74,7 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			result.FinalState = StateIdle
 			return result, nil
 		}
-		won, err := r.Claim.Claim(ctx, issueID)
+		won, err := r.Claim.Claim(runCtx, issueID)
 		if err != nil {
 			result.FinalState = StateEscalated
 			result.Err = err
@@ -71,7 +86,13 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			}
 			continue
 		}
-		if err := r.Exec.Run(ctx, issueID); err != nil {
+		if err := r.Exec.Run(runCtx, issueID); err != nil {
+			if err == context.DeadlineExceeded && runCtx.Err() == context.DeadlineExceeded && opts.MaxRuntime > 0 {
+				timeoutErr := fmt.Errorf("runtime timeout after %s\nAction: rerun with a larger --max-runtime or inspect blocked work with `arm ready --explain --format json`", opts.MaxRuntime)
+				result.FinalState = StateEscalated
+				result.Err = err
+				return result, timeoutErr
+			}
 			if r.Trace != nil {
 				r.Trace.Trace(EventExecutionFailed)
 			}

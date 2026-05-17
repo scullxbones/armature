@@ -159,6 +159,7 @@ func newWorkerRunCmd() *cobra.Command {
 	var (
 		maxTasks int
 		dryRun   bool
+		maxRun   time.Duration
 	)
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -171,7 +172,13 @@ func newWorkerRunCmd() *cobra.Command {
 			}
 			deps := &workerRuntimeDeps{state: state, workerID: workerID, logPath: logPath, dryRun: dryRun}
 			rt := newWorkerRuntime(deps)
-			res, err := rt.Run(cmd.Context(), workerruntime.RuntimeOptions{WorkerID: workerID, MaxTasks: maxTasks, DryRun: dryRun, Policy: workerruntime.DefaultPolicy()})
+			res, err := rt.Run(cmd.Context(), workerruntime.RuntimeOptions{
+				WorkerID:   workerID,
+				MaxTasks:   maxTasks,
+				MaxRuntime: maxRun,
+				DryRun:     dryRun,
+				Policy:     workerruntime.DefaultPolicy(),
+			})
 			if err != nil {
 				return err
 			}
@@ -195,6 +202,7 @@ func newWorkerRunCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&maxTasks, "max-tasks", 0, "maximum tasks to execute before stopping (0 = no limit)")
+	cmd.Flags().DurationVar(&maxRun, "max-runtime", 20*time.Minute, "maximum runtime before escalating (0 = no timeout)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "inspect runtime behavior without task mutation")
 	return cmd
 }
