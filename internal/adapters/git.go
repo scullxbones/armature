@@ -6,12 +6,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Client wraps git operations (boundary adapter).
 type Client struct {
 	repoPath string
 }
+
+const (
+	gitContentionMaxAttempts = 3
+	gitContentionBackoff     = 100 * time.Millisecond
+)
 
 // New creates a git client for a repository path.
 func New(repoPath string) *Client {
@@ -136,8 +142,7 @@ func (c *Client) ReadGitConfig(key string) (string, error) {
 // relPath is relative to the worktree root. If there is nothing to commit, this is a no-op.
 func (c *Client) CommitWorktreeOp(relPath, message string) error {
 	// Stage the specific file
-	add := c.cmd("add", relPath)
-	if out, err := add.CombinedOutput(); err != nil {
+	if out, err := c.runMutatingWithRetry("git add "+relPath, "add", relPath); err != nil {
 		return fmt.Errorf("%s", enhanceGitLockfileError(
 			fmt.Sprintf("git add %s: %v\n%s", relPath, err, out),
 			string(out),
@@ -151,11 +156,39 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 	}
 
 	// Commit
-	commit := c.cmd("commit", "-m", message)
-	if out, err := commit.CombinedOutput(); err != nil {
+	if out, err := c.runMutatingWithRetry("git commit", "commit", "-m", message); err != nil {
 		return fmt.Errorf("git commit: %w\n%s", err, out)
 	}
 	return nil
+}
+
+func (c *Client) runMutatingWithRetry(label string, args ...string) ([]byte, error) {
+	var lastOut []byte
+	var lastErr error
+	for attempt := 1; attempt <= gitContentionMaxAttempts; attempt++ {
+		cmd := c.cmd(args...)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return out, nil
+		}
+		lastOut, lastErr = out, err
+		if !isGitContentionError(string(out)) || attempt == gitContentionMaxAttempts {
+			break
+		}
+		time.Sleep(gitContentionBackoff)
+	}
+	if isGitContentionError(string(lastOut)) {
+		return lastOut, fmt.Errorf("%s failed after %d contention retries: %w\nAction: another process updated git state concurrently; retry the arm command or run lanes with distinct slots", label, gitContentionMaxAttempts, lastErr)
+	}
+	return lastOut, lastErr
+}
+
+func isGitContentionError(out string) bool {
+	lower := strings.ToLower(out)
+	return strings.Contains(lower, "index.lock") ||
+		strings.Contains(lower, "cannot lock ref") ||
+		strings.Contains(lower, "another git process seems to be running") ||
+		(strings.Contains(lower, "is at") && strings.Contains(lower, "expected"))
 }
 
 func enhanceGitLockfileError(base, out string) string {
@@ -170,6 +203,11 @@ func enhanceGitLockfileError(base, out string) string {
 // EnhanceGitLockfileErrorForTest exposes lockfile hint behavior to package tests.
 func EnhanceGitLockfileErrorForTest(base, out string) string {
 	return enhanceGitLockfileError(base, out)
+}
+
+// IsGitContentionErrorForTest exposes contention detection behavior to package tests.
+func IsGitContentionErrorForTest(out string) bool {
+	return isGitContentionError(out)
 }
 
 // Push pushes the current branch to origin. Returns an error if the push is
@@ -328,8 +366,8 @@ func (c *Client) ApplyPatch(patch []byte) error {
 
 // AddAll stages all changes in the working tree (equivalent to "git add -A").
 func (c *Client) AddAll() error {
-	cmd := c.cmd("add", "-A")
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := c.runMutatingWithRetry("git add -A", "add", "-A")
+	if err != nil {
 		return fmt.Errorf("git add -A: %w\n%s", err, out)
 	}
 	return nil
@@ -343,8 +381,8 @@ func (c *Client) CommitWithMessage(message string) error {
 	if err := diff.Run(); err == nil {
 		return fmt.Errorf("nothing to commit: index is clean")
 	}
-	cmd := c.cmd("commit", "-m", message)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := c.runMutatingWithRetry("git commit", "commit", "-m", message)
+	if err != nil {
 		return fmt.Errorf("git commit: %w\n%s", err, out)
 	}
 	return nil
