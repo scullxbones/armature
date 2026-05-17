@@ -131,6 +131,45 @@ func TestValidateIssueScope(t *testing.T) {
 	assert.NoError(t, validateIssueScope([]string{"internal/foo/"}))
 }
 
+func TestBuildClaudeLaunchArgs_NonInteractive(t *testing.T) {
+	args := buildClaudeLaunchArgs("claude-sonnet-4-6", "do the task")
+	assert.Equal(t, "claude", args[0])
+	assert.Contains(t, args, "--print")
+	assert.Contains(t, args, "--output-format")
+	assert.Contains(t, args, "text")
+	assert.Contains(t, args, "--model")
+	assert.Equal(t, "do the task", args[len(args)-1])
+}
+
+func TestBuildCodexLaunchArgs_NonInteractive(t *testing.T) {
+	args := buildCodexLaunchArgs("gpt-5", "do the task")
+	assert.Equal(t, "codex", args[0])
+	assert.Equal(t, "exec", args[1])
+	assert.Contains(t, args, "--color")
+	assert.Contains(t, args, "never")
+	assert.Contains(t, args, "--model")
+	assert.Equal(t, "do the task", args[len(args)-1])
+}
+
+func TestBuildHarnessPrompt_IncludesScope(t *testing.T) {
+	prompt := buildHarnessPrompt([]string{"internal/orchestrate/", "cmd/armature/"})
+	assert.Contains(t, prompt, defaultHarnessPrompt)
+	assert.Contains(t, prompt, "internal/orchestrate/")
+	assert.Contains(t, prompt, "cmd/armature/")
+}
+
+func TestCodexAdapterRunDryRun(t *testing.T) {
+	dir := t.TempDir()
+	a, err := NewHarnessAdapter(HarnessConfig{Adapter: "codex"})
+	require.NoError(t, err)
+
+	ctx := WithIssueScope(context.Background(), []string{"internal/foo/"})
+	result, err := a.Run(ctx, HarnessConfig{WorkDir: dir}, RunOptions{DryRun: true})
+	require.NoError(t, err)
+	assert.Equal(t, "codex", result.Name)
+	assert.True(t, result.Passed)
+}
+
 // TestBuildSandboxCmd verifies that buildSandboxCmd returns a non-empty command list.
 func TestBuildSandboxCmd(t *testing.T) {
 	result := buildSandboxCmd("/tmp/worktree", []string{"echo", "hello"})
@@ -162,18 +201,6 @@ func TestClaudeAdapterRunDryRun(t *testing.T) {
 
 // TestCodexAdapterRunDryRun verifies that Run returns a result without panicking
 // when DryRun is true.
-func TestCodexAdapterRunDryRun(t *testing.T) {
-	dir := t.TempDir()
-	a, err := NewHarnessAdapter(HarnessConfig{Adapter: "codex"})
-	require.NoError(t, err)
-
-	ctx := WithIssueScope(context.Background(), []string{"internal/foo/"})
-	result, err := a.Run(ctx, HarnessConfig{WorkDir: dir}, RunOptions{DryRun: true})
-	require.NoError(t, err)
-	assert.Equal(t, "codex", result.Name)
-	assert.True(t, result.Passed)
-}
-
 // TestDevinAdapterRunDryRun verifies that Run returns a result without panicking
 // when DryRun is true.
 func TestDevinAdapterRunDryRun(t *testing.T) {
