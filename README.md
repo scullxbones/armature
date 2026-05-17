@@ -28,6 +28,38 @@ All state lives in git. No database, no server, no daemon. A single Go binary (`
 
 - **Workflow Skills Included**: Ships skills in the agentskills.io format for every workflow role — planner, coordinator, worker, and auditor — usable by any compatible tool. No custom prompt engineering required to wire your agents in.
 
+## Runtime Architecture
+
+```mermaid
+flowchart LR
+    U[User / Coordinator] --> C[arm worker run]
+    C --> R[internal/workerruntime Runtime Loop]
+    R --> Q[ready queue read]
+    R --> CL[claim gate]
+    R --> O[internal/orchestrate single-task engine]
+    O --> H[Harness adapter: Claude or Codex]
+    O --> OP[(append-only ops log)]
+    OP --> M[materialize state]
+    M --> V[ready/list/show/validate views]
+    V --> U
+```
+
+## Runtime Flow
+
+```mermaid
+flowchart TD
+    S([start arm worker run]) --> P[poll ready]
+    P -->|none ready| I[final_state=idle]
+    P -->|ready issue| C[attempt claim]
+    C -->|lost| P
+    C -->|won| E[run orchestrate for issue]
+    E -->|success| D[tasks_completed +1]
+    D --> L{max tasks reached?}
+    L -->|no| P
+    L -->|yes| T[final_state=stopped]
+    E -->|failure| X[final_state=escalated]
+```
+
 ## Installation
 
 ### Prerequisites
@@ -101,6 +133,10 @@ arm transition <issue-id> done --outcome "Brief summary of work"
 ```
 
 Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
+
+## Provider Smoke Tests
+
+Runbook: [docs/provider-smoke-tests.md](docs/provider-smoke-tests.md)
 
 ---
 
