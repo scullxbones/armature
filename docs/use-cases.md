@@ -2,7 +2,7 @@
 
 This document shows how different roles use Armature in practice. Each section follows a realistic workflow for one of the five Armature personas, using actual `arm` commands. If you are unsure which persona fits you, read the short description at the top of each section.
 
-Orchestrator pull mode is now the default execution path: workers pull from `arm ready` and execute via `arm orchestrate --issue <id>`. Manual `claim`/`render-context`/`transition` flows are retained for edge cases and advanced operator control.
+Worker runtime mode is now the default execution path: workers run `arm worker run` to pull, claim, orchestrate, and repeat. `arm orchestrate --issue <id>` remains the single-task manual fallback, and manual `claim`/`render-context`/`transition` flows are retained for edge cases and advanced operator control.
 
 ---
 
@@ -42,10 +42,10 @@ arm ready
 # TASK-002  Add user profile endpoint         [ready]
 ```
 
-Pick a task and run orchestration.
+Run the default runtime loop.
 
 ```bash
-arm orchestrate --issue TASK-001
+arm worker run
 ```
 
 Check the project overview at any time.
@@ -92,9 +92,7 @@ Downstream tasks only unblock after `merged`. This prevents agents from starting
 ### Daily Workflow
 
 ```bash
-arm ready
-# TASK-010  Implement rate limiter   [ready]
-arm orchestrate --issue TASK-010
+arm worker run --max-tasks 1
 ```
 
 The orchestrator executes the task lifecycle for you (claim, context assembly,

@@ -1,0 +1,14 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "filesystem": {
+      "allowWrite": [
+        "internal/*/*.go"
+      ],
+      "denyWrite": [
+        "../"
+      ]
+    }
+  }
+}

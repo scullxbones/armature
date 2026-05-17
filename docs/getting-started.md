@@ -60,36 +60,37 @@ arm decompose-apply plan.json
 
 ## 5. Your First Orchestrated Task
 
-Armature's default execution path is pull-based orchestration:
+Armature's default execution path is runtime-owned queue draining:
 
-1. Pull a ready task from the queue
-2. Run deterministic orchestration for that issue
-3. Repeat
+1. Start the worker runtime loop
+2. Let it pull ready tasks, claim, orchestrate, and repeat until drained
 
-### Find Ready Tasks
+### Run Worker Runtime (Default)
 ```bash
-arm ready
+arm worker run
 ```
 
-### Run Orchestration
+### Optional: Run One Task Then Stop
+```bash
+arm worker run --max-tasks 1
+```
+
+### Single-Task Fallback
 ```bash
 arm orchestrate --issue <issue-id>
 ```
 
-Prerequisites for `arm orchestrate`:
+Prerequisites for `arm worker run` and `arm orchestrate`:
 - Linux requires `bubblewrap` (`bwrap`) and `socat` on `PATH` for sandboxed harness execution.
 - macOS requires `sandbox-exec` on `PATH`.
 - The selected harness CLI (`claude`, `codex`, or `devin`) must support non-interactive execution from `arm orchestrate` in the current terminal/session.
 
-### Optional: Preview Without Dispatch
+### Optional: Preview Single-Task Orchestration Without Dispatch
 ```bash
 arm orchestrate --issue <issue-id> --dry-run
 ```
 
-### Repeat the Pull Loop
-Run `arm ready` again and orchestrate the next available task until the queue is empty.
-
-Manual worker commands (`claim`, `render-context`, `transition`) remain available for exceptional workflows, but are no longer the default path for routine task execution.
+Manual worker commands (`claim`, `render-context`, `transition`) remain available for exceptional workflows, and `arm orchestrate --issue` remains the manual single-task fallback.
 
 ## Summary of Commands
 | Command | Purpose |
@@ -97,6 +98,7 @@ Manual worker commands (`claim`, `render-context`, `transition`) remain availabl
 | `arm init` | Initialize Armature in a repo |
 | `arm sources add` | Register a source document |
 | `arm ready` | List tasks ready for work |
+| `arm worker run` | Default runtime loop for queue-draining execution |
 | `arm orchestrate` | Run deterministic task execution + verification |
 | `arm claim` | Manual claim for non-orchestrated workflows |
 | `arm render-context` | Manual task context assembly |

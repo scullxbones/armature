@@ -37,3 +37,5 @@ skills/*/scripts/
 gha-creds-*.json
 
 .claude/worktrees/
+
+.codex-home

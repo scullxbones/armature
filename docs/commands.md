@@ -490,15 +490,48 @@ Show tasks ready to be claimed.
 - `--parent string`: Filter to descendants of this issue ID.
 - `--worker string`: Worker ID for assignment-aware sorting.
 
-**Pull-Model Loop (Orchestrator):**
-Use `ready` as the queue front for orchestration workers:
+**Queue Inspection:**
+Use `ready` to inspect what the runtime loop will pick next:
 
 1. `arm ready`
-2. Pick the highest-priority task
-3. `arm orchestrate --issue <id>`
-4. Repeat until the queue is empty
+2. Start or continue `arm worker run`
+3. Use `arm orchestrate --issue <id>` only for single-task manual fallback
 
 Claim collisions are expected under concurrency; losing workers simply call `arm ready` again.
+
+---
+
+## worker
+
+Worker runtime commands.
+
+**Synopsis:**
+`arm worker [command]`
+
+**Available Subcommands:**
+- `run`: Execute the deterministic worker runtime loop.
+
+---
+
+## worker run
+
+Run the worker runtime loop (default queue-draining execution path).
+
+**Synopsis:**
+`arm worker run [flags]`
+
+**Flags:**
+- `--dry-run`: Inspect runtime behavior without mutating task state.
+- `--max-tasks int`: Maximum tasks to execute before stopping (`0` means no limit).
+
+**Examples:**
+```bash
+# Drain the queue until empty
+arm worker run
+
+# Execute exactly one task (dogfood/smoke mode)
+arm worker run --max-tasks 1
+```
 
 ---
 
