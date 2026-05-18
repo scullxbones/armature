@@ -128,10 +128,11 @@ type issueCtxKey struct{}
 
 // issueContext holds the scope paths for a harness invocation.
 type issueContext struct {
-	Scope        []string
-	TaskID       string
-	TaskTitle    string
-	TaskContract string
+	Scope             []string
+	TaskID            string
+	TaskTitle         string
+	TaskContract      string
+	StructuredContext string
 }
 
 // WithIssueScope injects scope paths into ctx so harness adapters can read them.
@@ -141,11 +142,17 @@ func WithIssueScope(ctx context.Context, scope []string) context.Context {
 
 // WithIssueContext injects issue metadata and scope into ctx for harness adapters.
 func WithIssueContext(ctx context.Context, taskID, taskTitle, taskContract string, scope []string) context.Context {
+	return WithStructuredIssueContext(ctx, taskID, taskTitle, taskContract, "", scope)
+}
+
+// WithStructuredIssueContext injects issue metadata, structured context, and scope into ctx.
+func WithStructuredIssueContext(ctx context.Context, taskID, taskTitle, taskContract, structuredContext string, scope []string) context.Context {
 	return context.WithValue(ctx, issueCtxKey{}, &issueContext{
-		Scope:        scope,
-		TaskID:       taskID,
-		TaskTitle:    taskTitle,
-		TaskContract: taskContract,
+		Scope:             scope,
+		TaskID:            taskID,
+		TaskTitle:         taskTitle,
+		TaskContract:      taskContract,
+		StructuredContext: structuredContext,
 	})
 }
 
@@ -177,7 +184,12 @@ func buildHarnessPrompt(issue *issueContext) string {
 	if contract == "" {
 		contract = "none provided"
 	}
-	return fmt.Sprintf("%s Task: %s. Acceptance contract: %s. Scope: %s", defaultHarnessPrompt, task, contract, scope)
+	prompt := fmt.Sprintf("%s Task: %s. Acceptance contract: %s. Scope: %s", defaultHarnessPrompt, task, contract, scope)
+	structured := strings.TrimSpace(issue.StructuredContext)
+	if structured == "" {
+		return prompt
+	}
+	return fmt.Sprintf("%s\n\nTask context (arm render-context --format agent):\n%s", prompt, structured)
 }
 
 func buildClaudeLaunchArgs(model, prompt string) []string {

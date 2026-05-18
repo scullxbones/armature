@@ -57,6 +57,9 @@ type EngineConfig struct {
 	TaskTitle string
 	// TaskContract captures acceptance contract details to include in harness context.
 	TaskContract string
+	// BuildTaskContext assembles and truncates structured task context at dispatch time.
+	// It should run as late as possible to minimize staleness.
+	BuildTaskContext func(context.Context, string) (string, error)
 	// ActiveScopes maps other task IDs to their scope lists for overlap checking.
 	ActiveScopes map[string][]string
 	// Opts controls dry-run, parallelism, etc.
@@ -229,8 +232,18 @@ func (e *Engine) runningPhase(ctx context.Context, state OrchestrateState) (Orch
 		state.Phase = "running"
 	}
 
+	// Build structured context at the latest point before harness invocation.
+	structuredContext := ""
+	if e.cfg.BuildTaskContext != nil {
+		rendered, err := e.cfg.BuildTaskContext(ctx, e.cfg.TaskID)
+		if err != nil {
+			return state, fmt.Errorf("build task context: %w", err)
+		}
+		structuredContext = rendered
+	}
+
 	// Run the harness adapter with issue scope injected for sandbox configuration.
-	harnessCtx := WithIssueContext(ctx, e.cfg.TaskID, e.cfg.TaskTitle, e.cfg.TaskContract, e.cfg.Scope)
+	harnessCtx := WithStructuredIssueContext(ctx, e.cfg.TaskID, e.cfg.TaskTitle, e.cfg.TaskContract, structuredContext, e.cfg.Scope)
 	checkResult, err := e.runHarnessWithHeartbeat(harnessCtx, e.cfg.HarnessCfg, e.cfg.Opts)
 	if err != nil {
 		return state, fmt.Errorf("harness run: %w", err)

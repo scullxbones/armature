@@ -15,15 +15,16 @@ type ServiceConfig struct {
 
 // RunInput carries the dynamic orchestration inputs for one run.
 type RunInput struct {
-	TaskID       string
-	TaskTitle    string
-	TaskContract string
-	WorkerID     string
-	RetryBudget  int
-	Scope        []string
-	ActiveScopes map[string][]string
-	HarnessCfg   HarnessConfig
-	Opts         RunOptions
+	TaskID           string
+	TaskTitle        string
+	TaskContract     string
+	BuildTaskContext func(context.Context, string) (string, error)
+	WorkerID         string
+	RetryBudget      int
+	Scope            []string
+	ActiveScopes     map[string][]string
+	HarnessCfg       HarnessConfig
+	Opts             RunOptions
 }
 
 // Service is the orchestration application-service boundary used by command code.
@@ -41,18 +42,19 @@ func NewService(cfg ServiceConfig) *Service {
 func (s *Service) Run(ctx context.Context, input RunInput) (OrchestrateState, error) {
 	if s.Config.Harness != nil {
 		engine := NewEngine(EngineConfig{
-			TaskID:       input.TaskID,
-			Git:          s.Config.Git,
-			OpLog:        s.Config.OpLog,
-			Harness:      s.Config.Harness,
-			HarnessCfg:   input.HarnessCfg,
-			TaskTitle:    input.TaskTitle,
-			TaskContract: input.TaskContract,
-			Scope:        input.Scope,
-			ActiveScopes: input.ActiveScopes,
-			Opts:         input.Opts,
-			RetryBudget:  input.RetryBudget,
-			WorkerID:     input.WorkerID,
+			TaskID:           input.TaskID,
+			Git:              s.Config.Git,
+			OpLog:            s.Config.OpLog,
+			Harness:          s.Config.Harness,
+			HarnessCfg:       input.HarnessCfg,
+			TaskTitle:        input.TaskTitle,
+			TaskContract:     input.TaskContract,
+			BuildTaskContext: input.BuildTaskContext,
+			Scope:            input.Scope,
+			ActiveScopes:     input.ActiveScopes,
+			Opts:             input.Opts,
+			RetryBudget:      input.RetryBudget,
+			WorkerID:         input.WorkerID,
 		})
 		return engine.Run(ctx)
 	}

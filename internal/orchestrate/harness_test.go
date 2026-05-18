@@ -176,6 +176,20 @@ func TestBuildHarnessPrompt_IncludesScope(t *testing.T) {
 	assert.Contains(t, prompt, "cmd/armature/")
 }
 
+func TestBuildHarnessPrompt_IncludesStructuredTaskContext(t *testing.T) {
+	prompt := buildHarnessPrompt(&issueContext{
+		TaskID:            "TASK-42",
+		TaskTitle:         "Add context wiring",
+		TaskContract:      `[{"type":"test_passes","cmd":"go test ./..."}]`,
+		Scope:             []string{"internal/orchestrate/"},
+		StructuredContext: `{"issue_id":"TASK-42","layers":[{"name":"core_spec","priority":1,"content":"Definition of Done"}]}`,
+	})
+
+	assert.Contains(t, prompt, "Task context (arm render-context --format agent):")
+	assert.Contains(t, prompt, `"issue_id":"TASK-42"`)
+	assert.Contains(t, prompt, `"name":"core_spec"`)
+}
+
 func TestCodexAdapterRunDryRun(t *testing.T) {
 	dir := t.TempDir()
 	a, err := NewHarnessAdapter(HarnessConfig{Adapter: "codex"})
