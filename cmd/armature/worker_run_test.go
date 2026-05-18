@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/workerruntime"
@@ -32,7 +33,19 @@ type fixedExec struct{}
 
 func (fixedExec) Run(_ context.Context, _ string) error { return nil }
 
+var workerRuntimeFactoryMu sync.Mutex
+
 func TestWorkerRunMaxTasksOneExecutesSingleTask(t *testing.T) {
+	workerRuntimeFactoryMu.Lock()
+	defer workerRuntimeFactoryMu.Unlock()
+
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
 	prev := newWorkerRuntime
 	newWorkerRuntime = func(*workerRuntimeDeps) *workerruntime.Runtime {
 		return &workerruntime.Runtime{
@@ -46,13 +59,23 @@ func TestWorkerRunMaxTasksOneExecutesSingleTask(t *testing.T) {
 	root := newRootCmd()
 	out := &bytes.Buffer{}
 	root.SetOut(out)
-	root.SetArgs([]string{"worker", "run", "--max-tasks", "1"})
-	err := root.Execute()
+	root.SetArgs([]string{"worker", "run", "--repo", repo, "--max-tasks", "1", "--format", "json"})
+	err = root.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "\"tasks_completed\":1")
 }
 
 func TestWorkerRunCommandSupportsSingleTaskDogfood(t *testing.T) {
+	workerRuntimeFactoryMu.Lock()
+	defer workerRuntimeFactoryMu.Unlock()
+
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
 	prev := newWorkerRuntime
 	newWorkerRuntime = func(*workerRuntimeDeps) *workerruntime.Runtime {
 		return &workerruntime.Runtime{
@@ -66,8 +89,8 @@ func TestWorkerRunCommandSupportsSingleTaskDogfood(t *testing.T) {
 	root := newRootCmd()
 	out := &bytes.Buffer{}
 	root.SetOut(out)
-	root.SetArgs([]string{"worker", "run", "--max-tasks", "1", "--dry-run", "--format", "json"})
-	err := root.Execute()
+	root.SetArgs([]string{"worker", "run", "--repo", repo, "--max-tasks", "1", "--dry-run", "--format", "json"})
+	err = root.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "\"tasks_completed\":1")
 	assert.Contains(t, out.String(), "\"dry_run\":true")

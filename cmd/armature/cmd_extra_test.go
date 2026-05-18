@@ -719,26 +719,17 @@ func setupRepoWithTwoTasks(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
-	require.NoError(t, cmd.Execute())
-
-	cmd2 := newRootCmd()
-	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Task one", "--type", "task", "--id", "task-01"})
-	require.NoError(t, cmd2.Execute())
-
-	cmd3 := newRootCmd()
-	cmd3.SetOut(new(bytes.Buffer))
-	cmd3.SetArgs([]string{"create", "--repo", repo, "--title", "Task two", "--type", "task", "--id", "task-02"})
-	require.NoError(t, cmd3.Execute())
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
+	require.NoError(t, err)
 
 	return repo
 }
 
 func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
-	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -754,7 +745,6 @@ func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
-	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "Task three", "--type", "task", "--id", "task-03")
