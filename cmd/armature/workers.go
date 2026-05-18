@@ -40,8 +40,9 @@ func newWorkersCmd() *cobra.Command {
 			}
 
 			statuses := make([]WorkerStatus, 0, len(workers))
+			winners := claimWinnersByIssue(workers)
 			for workerID, allOps := range workers {
-				s := buildWorkerStatus(workerID, allOps, defaultTTL, now)
+				s := buildWorkerStatus(workerID, allOps, defaultTTL, now, winners)
 				statuses = append(statuses, s)
 			}
 
@@ -107,7 +108,7 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 //   - active: has a live (non-stale) claim
 //   - stale: had claims but all are stale
 //   - idle: last op was within 2*defaultTTL minutes window (no active claim)
-func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64) WorkerStatus {
+func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64, winners map[string]string) WorkerStatus {
 	lastOp := lastOpTimestampFromLog(allOps)
 
 	// Find active claims: look for claims not yet overtaken by a transition to done/merged
@@ -136,6 +137,9 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 
 	// Check each claimed issue
 	for issueID, ca := range claimedAt {
+		if winner, ok := winners[issueID]; ok && winner != workerID {
+			continue
+		}
 		if transitioned[issueID] {
 			continue
 		}
@@ -177,6 +181,27 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		Status:     "idle",
 		LastOpTime: lastOp,
 	}
+}
+
+func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
+	claimsByIssue := make(map[string][]ops.Op)
+	for _, allOps := range workers {
+		for _, op := range allOps {
+			if op.Type != ops.OpClaim {
+				continue
+			}
+			claimsByIssue[op.TargetID] = append(claimsByIssue[op.TargetID], op)
+		}
+	}
+	winners := make(map[string]string, len(claimsByIssue))
+	for issueID, claims := range claimsByIssue {
+		if len(claims) == 0 {
+			continue
+		}
+		winner := claim.ResolveClaim(claims)
+		winners[issueID] = winner.WorkerID
+	}
+	return winners
 }
 
 // lastOpTimestampFromLog returns the timestamp of the most recent op in the list.

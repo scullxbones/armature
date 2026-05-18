@@ -1146,7 +1146,7 @@ func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 10}}, // TTL 10 min = 600 sec; 900+600=1500 > now(1000) → active
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "active", status.Status)
 	assert.Equal(t, "T-001", status.ActiveIssue)
 	assert.Equal(t, "worker-a", status.WorkerID)
@@ -1158,7 +1158,7 @@ func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 1}}, // TTL 1 min = 60 sec; 100+60=160 < now(10000) → stale
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
@@ -1169,7 +1169,7 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
 	}
 	// No claims, but recent op — idle within 2*TTL window
-	status := buildWorkerStatus("worker-a", allOps, 1, now) // 2*1min=120s; 1000-900=100 < 120 → idle
+	status := buildWorkerStatus("worker-a", allOps, 1, now, map[string]string{}) // 2*1min=120s; 1000-900=100 < 120 → idle
 	assert.Equal(t, "idle", status.Status)
 	assert.Equal(t, int64(900), status.LastOpTime)
 }
@@ -1182,7 +1182,7 @@ func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a",
 			Payload: ops.Payload{To: "done"}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1197,7 +1197,7 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 	}
 	// With the last heartbeat at 9500 and TTL 1 min = 60s: 9500+60=9560 < 10000 → still stale by expiry
 	// But lastHeartbeat should be 9500, not 200
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	// The claim expired and even the heartbeat didn't extend it far enough — check that the heartbeat was tracked
 	assert.NotEqual(t, "active", status.Status)
 }
@@ -2620,6 +2620,10 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 	showOut, err := runTrls(t, repo, "show", "--issue", "task-01")
 	require.NoError(t, err)
 	assert.NotContains(t, showOut, "other-worker-abc")
+
+	workersOut, err := runTrls(t, repo, "workers", "--format", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, workersOut, `"worker_id":"other-worker-abc","status":"active"`)
 }
 
 // TestUnassignHelp verifies unassign --help mentions auto-transition side effect
