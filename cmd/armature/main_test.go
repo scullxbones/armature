@@ -2053,6 +2053,15 @@ func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
 	}
 }
 
+func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
+	t.Setenv("ARM_LOG_SLOT", "lane-a")
+	workerID := workerIdentityWithSlot("worker-123")
+	assert.Equal(t, "worker-123~lane-a", workerID)
+
+	ctx := &config.Context{IssuesDir: "/repo/.armature"}
+	assert.Equal(t, "/repo/.armature/state/worker-123~lane-a", stateDirFor(ctx, workerID))
+}
+
 // TestLogSlot_ReplayIncludesSlottedOps verifies that ops written to a slotted log
 // are included in materialised state alongside ops from the plain log.
 func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {

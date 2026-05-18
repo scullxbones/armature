@@ -48,6 +48,7 @@ func newRootCmd() *cobra.Command {
 			if workerID == "" {
 				workerID = "default"
 			}
+			workerID = workerIdentityWithSlot(workerID)
 			ctx.StateDir = stateDirFor(ctx, workerID)
 			appCtx = ctx
 

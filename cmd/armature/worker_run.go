@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -75,12 +76,24 @@ func (r *repoReadyProvider) NextReady(context.Context) (string, bool, error) {
 		if entry.RequiresConfirmation {
 			continue
 		}
+		if hasActiveScopeOverlap(entry.Issue, entry.Scope, index) {
+			continue
+		}
 		r.diagnostics = nil
 		return entry.Issue, true, nil
 	}
+	reason := "requires_confirmation"
+	hint := "confirm inferred/imported work before running the worker runtime"
+	for _, entry := range entries {
+		if hasActiveScopeOverlap(entry.Issue, entry.Scope, index) {
+			reason = "scope_conflict"
+			hint = "resolve conflicting claimed/in-progress scope before running this worker lane"
+			break
+		}
+	}
 	r.diagnostics = map[string]any{
-		"reason": "requires_confirmation",
-		"hint":   "confirm inferred/imported work before running the worker runtime",
+		"reason": reason,
+		"hint":   hint,
 	}
 	return "", false, nil
 }
@@ -98,7 +111,11 @@ func (c *repoClaimer) Claim(_ context.Context, issueID string) (bool, error) {
 	if c.dryRun {
 		return true, nil
 	}
-	op := ops.Op{Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(), WorkerID: c.workerID, Payload: ops.Payload{TTL: c.state.ctx.Config.DefaultTTL}}
+	ttl := c.state.ctx.Config.DefaultTTL
+	if ttl <= 0 {
+		ttl = 60
+	}
+	op := ops.Op{Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(), WorkerID: c.workerID, Payload: ops.Payload{TTL: ttl}}
 	if err := appendHighStakesOp(c.state, c.logPath, op); err != nil {
 		return false, err
 	}
@@ -158,6 +175,8 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 	}
 	_, err = service.Run(ctx, orchestrate.RunInput{
 		TaskID:       issueID,
+		TaskTitle:    issue.Title,
+		TaskContract: string(issue.Acceptance),
 		WorkerID:     o.workerID,
 		RetryBudget:  3,
 		Scope:        issue.Scope,
@@ -170,6 +189,21 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 		},
 	})
 	return err
+}
+
+func hasActiveScopeOverlap(issueID string, scope []string, index materialize.Index) bool {
+	for otherID, entry := range index {
+		if otherID == issueID {
+			continue
+		}
+		if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
+			continue
+		}
+		if claimPkg.ScopesOverlap(scope, entry.Scope) {
+			return true
+		}
+	}
+	return false
 }
 
 func newWorkerRunCmd() *cobra.Command {

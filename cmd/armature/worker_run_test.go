@@ -226,3 +226,67 @@ func TestWorkerRunSortsAssignmentsByBaseWorkerIDWhenSlotted(t *testing.T) {
 	require.NotEmpty(t, seen.seen)
 	assert.Equal(t, "task-assigned", seen.seen[0])
 }
+
+func TestWorkerRunSkipsReadyTaskWhenScopeConflicts(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-1", "--type", "task", "--title", "Task1", "--scope", "src/foo/*")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-2", "--type", "task", "--title", "Task2", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-1")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "worker", "run", "--max-tasks", "1", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, "\"tasks_completed\":0")
+	assert.Contains(t, out, "\"reason\":\"scope_conflict\"")
+}
+
+func TestWorkerRunClaimDefaultsTTLWhenConfigMissing(t *testing.T) {
+	workerRuntimeFactoryMu.Lock()
+	defer workerRuntimeFactoryMu.Unlock()
+
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Zero out default_ttl to simulate hand-written/legacy config.
+	cfgPath := filepath.Join(repo, ".armature", "config.json")
+	cfgData, err := os.ReadFile(cfgPath)
+	require.NoError(t, err)
+	var cfg map[string]any
+	require.NoError(t, json.Unmarshal(cfgData, &cfg))
+	cfg["default_ttl"] = float64(0)
+	cfgOut, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cfgPath, cfgOut, 0o644))
+
+	_, err = runTrls(t, repo, "create", "--id", "task-1", "--type", "task", "--title", "Task1", "--scope", "src/foo.go")
+	require.NoError(t, err)
+
+	prev := newWorkerRuntime
+	newWorkerRuntime = func(deps *workerRuntimeDeps) *workerruntime.Runtime {
+		return &workerruntime.Runtime{
+			Ready: &fixedReady{ids: []string{"task-1"}},
+			Claim: &repoClaimer{state: deps.state, workerID: deps.workerID, logPath: deps.logPath},
+			Exec:  fixedExec{},
+		}
+	}
+	t.Cleanup(func() { newWorkerRuntime = prev })
+
+	_, err = runTrls(t, repo, "worker", "run", "--max-tasks", "1", "--format", "json")
+	require.NoError(t, err)
+
+	stateDir := getTestStateDir(t, repo)
+	issue, err := materialize.LoadIssue(filepath.Join(stateDir, "issues", "task-1.json"))
+	require.NoError(t, err)
+	assert.Equal(t, 60, issue.ClaimTTL)
+}
