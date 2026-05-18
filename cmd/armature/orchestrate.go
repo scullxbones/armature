@@ -192,6 +192,9 @@ Three-level model resolution:
 				TaskID:       issueID,
 				TaskTitle:    issue.Title,
 				TaskContract: string(issue.Acceptance),
+				BuildTaskContext: func(ctx context.Context, issueID string) (string, error) {
+					return buildHarnessStructuredContext(appCtx, issueID)
+				},
 				WorkerID:     workerID,
 				RetryBudget:  retries,
 				Scope:        issue.Scope,
