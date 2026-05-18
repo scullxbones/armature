@@ -145,6 +145,13 @@ func workerIdentityWithSlot(workerID string) string {
 	return workerID
 }
 
+func baseWorkerIdentity(workerID string) string {
+	if idx := strings.Index(workerID, "~"); idx >= 0 {
+		return workerID[:idx]
+	}
+	return workerID
+}
+
 func nowEpoch() int64 {
 	return time.Now().Unix()
 }

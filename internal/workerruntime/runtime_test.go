@@ -2,6 +2,7 @@ package workerruntime
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -238,7 +239,33 @@ func TestRuntimeEscalatesOnMaxRuntimeTimeout(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Equal(t, StateEscalated, result.FinalState)
-	assert.Equal(t, context.DeadlineExceeded, result.Err)
+	assert.ErrorIs(t, result.Err, context.DeadlineExceeded)
 	assert.Contains(t, err.Error(), "runtime timeout")
 	assert.Contains(t, err.Error(), "Action:")
+}
+
+type wrappedBlockingExecStub struct {
+	ran []string
+}
+
+func (s *wrappedBlockingExecStub) Run(ctx context.Context, issueID string) error {
+	s.ran = append(s.ran, issueID)
+	<-ctx.Done()
+	return fmt.Errorf("wrapped exec failure: %w", ctx.Err())
+}
+
+func TestRuntimeEscalatesOnWrappedMaxRuntimeTimeout(t *testing.T) {
+	ready := &readyStub{ids: []string{"T1"}}
+	claim := &claimStub{}
+	exec := &wrappedBlockingExecStub{}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{
+		WorkerID:   "worker-1",
+		MaxRuntime: 50 * time.Millisecond,
+	})
+	require.Error(t, err)
+	assert.Equal(t, StateEscalated, result.FinalState)
+	assert.ErrorIs(t, result.Err, context.DeadlineExceeded)
+	assert.Contains(t, err.Error(), "runtime timeout")
 }

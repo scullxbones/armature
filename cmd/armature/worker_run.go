@@ -26,10 +26,12 @@ type workerRuntimeDeps struct {
 	dryRun   bool
 }
 
+var runtimeIssueStateLoader = loadRuntimeIssueState
+
 var newWorkerRuntime = func(deps *workerRuntimeDeps) *workerruntime.Runtime {
 	return &workerruntime.Runtime{
-		Ready: &repoReadyProvider{ctx: deps.state.ctx, workerID: deps.workerID},
-		Claim: &repoClaimer{state: deps.state, workerID: deps.workerID, logPath: deps.logPath},
+		Ready: &repoReadyProvider{ctx: deps.state.ctx, workerID: deps.workerID, logicalWorkerID: baseWorkerIdentity(deps.workerID)},
+		Claim: &repoClaimer{state: deps.state, workerID: deps.workerID, logPath: deps.logPath, dryRun: deps.dryRun},
 		Exec:  &repoOrchestrator{ctx: deps.state.ctx, workerID: deps.workerID, logPath: deps.logPath, dryRun: deps.dryRun},
 	}
 }
@@ -39,17 +41,18 @@ type idleDiagnosticsProvider interface {
 }
 
 type repoReadyProvider struct {
-	ctx         *config.Context
-	workerID    string
-	diagnostics map[string]any
+	ctx             *config.Context
+	workerID        string
+	logicalWorkerID string
+	diagnostics     map[string]any
 }
 
 func (r *repoReadyProvider) NextReady(context.Context) (string, bool, error) {
-	index, issues, err := loadRuntimeIssueState(r.ctx)
+	index, issues, err := runtimeIssueStateLoader(r.ctx)
 	if err != nil {
 		return "", false, err
 	}
-	entries := ready.ComputeReady(index, issues, r.workerID)
+	entries := ready.ComputeReady(index, issues, r.logicalWorkerID)
 	if len(entries) == 0 {
 		notReady := ready.ExplainNotReady(index, issues)
 		diag := map[string]any{
@@ -68,8 +71,18 @@ func (r *repoReadyProvider) NextReady(context.Context) (string, bool, error) {
 		r.diagnostics = diag
 		return "", false, nil
 	}
-	r.diagnostics = nil
-	return entries[0].Issue, true, nil
+	for _, entry := range entries {
+		if entry.RequiresConfirmation {
+			continue
+		}
+		r.diagnostics = nil
+		return entry.Issue, true, nil
+	}
+	r.diagnostics = map[string]any{
+		"reason": "requires_confirmation",
+		"hint":   "confirm inferred/imported work before running the worker runtime",
+	}
+	return "", false, nil
 }
 
 func (r *repoReadyProvider) IdleDiagnostics() map[string]any { return r.diagnostics }
@@ -78,14 +91,18 @@ type repoClaimer struct {
 	state    *executionState
 	workerID string
 	logPath  string
+	dryRun   bool
 }
 
 func (c *repoClaimer) Claim(_ context.Context, issueID string) (bool, error) {
+	if c.dryRun {
+		return true, nil
+	}
 	op := ops.Op{Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(), WorkerID: c.workerID, Payload: ops.Payload{TTL: c.state.ctx.Config.DefaultTTL}}
 	if err := appendHighStakesOp(c.state, c.logPath, op); err != nil {
 		return false, err
 	}
-	_, issues, err := loadRuntimeIssueState(c.state.ctx)
+	_, issues, err := runtimeIssueStateLoader(c.state.ctx)
 	if err != nil {
 		return false, err
 	}

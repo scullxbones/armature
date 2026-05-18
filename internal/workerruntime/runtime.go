@@ -2,6 +2,7 @@ package workerruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -47,7 +48,7 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 	}
 	for {
 		if err := runCtx.Err(); err != nil {
-			if err == context.DeadlineExceeded && opts.MaxRuntime > 0 {
+			if errors.Is(err, context.DeadlineExceeded) && opts.MaxRuntime > 0 {
 				timeoutErr := fmt.Errorf("runtime timeout after %s\nAction: rerun with a larger --max-runtime or inspect blocked work with `arm ready --explain --format json`", opts.MaxRuntime)
 				result.FinalState = StateEscalated
 				result.Err = err
@@ -87,7 +88,7 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			continue
 		}
 		if err := r.Exec.Run(runCtx, issueID); err != nil {
-			if err == context.DeadlineExceeded && runCtx.Err() == context.DeadlineExceeded && opts.MaxRuntime > 0 {
+			if errors.Is(err, context.DeadlineExceeded) && runCtx.Err() == context.DeadlineExceeded && opts.MaxRuntime > 0 {
 				timeoutErr := fmt.Errorf("runtime timeout after %s\nAction: rerun with a larger --max-runtime or inspect blocked work with `arm ready --explain --format json`", opts.MaxRuntime)
 				result.FinalState = StateEscalated
 				result.Err = err
