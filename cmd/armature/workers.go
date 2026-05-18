@@ -184,17 +184,77 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 }
 
 func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
+	type issueState struct {
+		claimedAt     int64
+		lastHeartbeat int64
+		ttl           int
+		transitioned  bool
+	}
 	claimsByIssue := make(map[string][]ops.Op)
+	opsByIssue := make(map[string][]ops.Op)
 	for _, allOps := range workers {
 		for _, op := range allOps {
-			if op.Type != ops.OpClaim {
-				continue
+			opsByIssue[op.TargetID] = append(opsByIssue[op.TargetID], op)
+			if op.Type == ops.OpClaim {
+				claimsByIssue[op.TargetID] = append(claimsByIssue[op.TargetID], op)
 			}
-			claimsByIssue[op.TargetID] = append(claimsByIssue[op.TargetID], op)
 		}
 	}
 	winners := make(map[string]string, len(claimsByIssue))
-	for issueID, claims := range claimsByIssue {
+	for issueID, issueOps := range opsByIssue {
+		sort.Slice(issueOps, func(i, j int) bool {
+			if issueOps[i].Timestamp != issueOps[j].Timestamp {
+				return issueOps[i].Timestamp < issueOps[j].Timestamp
+			}
+			if issueOps[i].WorkerID != issueOps[j].WorkerID {
+				return issueOps[i].WorkerID < issueOps[j].WorkerID
+			}
+			return issueOps[i].Type < issueOps[j].Type
+		})
+		stateByWorker := make(map[string]*issueState)
+		var activeWorker string
+		for _, op := range issueOps {
+			staleAt := func(workerID string, now int64) bool {
+				s := stateByWorker[workerID]
+				if s == nil {
+					return true
+				}
+				ttl := s.ttl
+				if ttl <= 0 {
+					ttl = 60
+				}
+				return claim.IsClaimStale(s.claimedAt, s.lastHeartbeat, ttl, now)
+			}
+			switch op.Type {
+			case ops.OpClaim:
+				if staleAt(activeWorker, op.Timestamp) {
+					activeWorker = op.WorkerID
+					stateByWorker[op.WorkerID] = &issueState{
+						claimedAt:     op.Timestamp,
+						lastHeartbeat: op.Timestamp,
+						ttl:           op.Payload.TTL,
+					}
+				}
+			case ops.OpHeartbeat:
+				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastHeartbeat {
+					s.lastHeartbeat = op.Timestamp
+				}
+			case ops.OpTransition:
+				if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged || op.Payload.To == ops.StatusCancelled {
+					if s := stateByWorker[op.WorkerID]; s != nil {
+						s.transitioned = true
+					}
+					activeWorker = ""
+				}
+			}
+		}
+		if activeWorker != "" {
+			if s := stateByWorker[activeWorker]; s != nil && !s.transitioned {
+				winners[issueID] = activeWorker
+				continue
+			}
+		}
+		claims := claimsByIssue[issueID]
 		if len(claims) == 0 {
 			continue
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/workerruntime"
 	"github.com/stretchr/testify/assert"
@@ -245,6 +246,42 @@ func TestWorkerRunSkipsReadyTaskWhenScopeConflicts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "\"tasks_completed\":0")
 	assert.Contains(t, out, "\"reason\":\"scope_conflict\"")
+}
+
+func TestWorkerRunDryRunWithoutMaxTasksStopsAfterSingleSimulation(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "story-1", "--type", "story", "--title", "Story")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-1", "--type", "task", "--title", "Task", "--parent", "story-1")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "story-1", "--to", "in-progress")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "worker", "run", "--dry-run", "--max-runtime", "1s", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, "\"tasks_completed\":1")
+	assert.Contains(t, out, "\"final_state\":\"stopped\"")
+}
+
+func TestHasActiveScopeOverlap_IgnoresStaleClaims(t *testing.T) {
+	now := int64(1000)
+	index := materialize.Index{
+		"task-a": {Status: ops.StatusClaimed, Scope: []string{"cmd/armature/*"}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-a": {
+			ID:            "task-a",
+			ClaimedAt:     1,
+			LastHeartbeat: 1,
+			ClaimTTL:      1,
+		},
+	}
+	assert.False(t, hasActiveScopeOverlap("task-b", []string{"cmd/armature/main.go"}, index, issues, now))
 }
 
 func TestWorkerRunClaimDefaultsTTLWhenConfigMissing(t *testing.T) {

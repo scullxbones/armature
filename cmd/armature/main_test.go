@@ -1202,6 +1202,19 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 	assert.NotEqual(t, "active", status.Status)
 }
 
+func TestClaimWinnersByIssue_StaleClaimTakeoverPrefersCurrentOwner(t *testing.T) {
+	workers := map[string][]ops.Op{
+		"worker-a": {
+			{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 100, WorkerID: "worker-a", Payload: ops.Payload{TTL: 1}},
+		},
+		"worker-b": {
+			{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 200, WorkerID: "worker-b", Payload: ops.Payload{TTL: 10}},
+		},
+	}
+	winners := claimWinnersByIssue(workers)
+	assert.Equal(t, "worker-b", winners["task-1"])
+}
+
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

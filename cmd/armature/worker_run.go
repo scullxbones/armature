@@ -76,7 +76,7 @@ func (r *repoReadyProvider) NextReady(context.Context) (string, bool, error) {
 		if entry.RequiresConfirmation {
 			continue
 		}
-		if hasActiveScopeOverlap(entry.Issue, entry.Scope, index) {
+		if hasActiveScopeOverlap(entry.Issue, entry.Scope, index, issues, nowEpoch()) {
 			continue
 		}
 		r.diagnostics = nil
@@ -85,7 +85,7 @@ func (r *repoReadyProvider) NextReady(context.Context) (string, bool, error) {
 	reason := "requires_confirmation"
 	hint := "confirm inferred/imported work before running the worker runtime"
 	for _, entry := range entries {
-		if hasActiveScopeOverlap(entry.Issue, entry.Scope, index) {
+		if hasActiveScopeOverlap(entry.Issue, entry.Scope, index, issues, nowEpoch()) {
 			reason = "scope_conflict"
 			hint = "resolve conflicting claimed/in-progress scope before running this worker lane"
 			break
@@ -173,7 +173,7 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 			activeScopes[id] = entry.Scope
 		}
 	}
-	_, err = service.Run(ctx, orchestrate.RunInput{
+	state, err := service.Run(ctx, orchestrate.RunInput{
 		TaskID:       issueID,
 		TaskTitle:    issue.Title,
 		TaskContract: string(issue.Acceptance),
@@ -191,16 +191,33 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 			HeartbeatInterval: 5 * time.Second,
 		},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if !o.dryRun {
+		if state.Phase != "complete" {
+			return fmt.Errorf("orchestration did not complete: phase=%s", state.Phase)
+		}
+	}
+	return nil
 }
 
-func hasActiveScopeOverlap(issueID string, scope []string, index materialize.Index) bool {
+func hasActiveScopeOverlap(issueID string, scope []string, index materialize.Index, issues map[string]*materialize.Issue, now int64) bool {
 	for otherID, entry := range index {
 		if otherID == issueID {
 			continue
 		}
 		if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
 			continue
+		}
+		if issue := issues[otherID]; issue != nil {
+			ttl := issue.ClaimTTL
+			if ttl <= 0 {
+				ttl = 60
+			}
+			if claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, ttl, now) {
+				continue
+			}
 		}
 		if claimPkg.ScopesOverlap(scope, entry.Scope) {
 			return true
@@ -226,9 +243,13 @@ func newWorkerRunCmd() *cobra.Command {
 			}
 			deps := &workerRuntimeDeps{state: state, workerID: workerID, logPath: logPath, dryRun: dryRun}
 			rt := newWorkerRuntime(deps)
+			effectiveMaxTasks := maxTasks
+			if dryRun && effectiveMaxTasks == 0 {
+				effectiveMaxTasks = 1
+			}
 			res, err := rt.Run(cmd.Context(), workerruntime.RuntimeOptions{
 				WorkerID:   workerID,
-				MaxTasks:   maxTasks,
+				MaxTasks:   effectiveMaxTasks,
 				MaxRuntime: maxRun,
 				DryRun:     dryRun,
 				Policy:     workerruntime.DefaultPolicy(),

@@ -62,7 +62,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		ops.OpOrchestrateRetry,
 		ops.OpOrchestrateEscalate,
 		ops.OpOrchestrateComplete,
-		ops.OpOrchestrateCheckResult:
+		ops.OpOrchestrateCheckResult,
+		ops.OpWorkerRuntimeDecision:
 		return nil
 	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)

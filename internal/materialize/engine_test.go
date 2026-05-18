@@ -55,6 +55,17 @@ func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T
 	assert.Equal(t, int64(200), issue.ClaimedAt)
 }
 
+func TestApplyWorkerRuntimeDecisionOp_NoOp(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type:      ops.OpWorkerRuntimeDecision,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  "worker-a",
+		Payload:   ops.Payload{Msg: "runtime decision"},
+	}))
+}
+
 func TestApplyTransitionOp(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
