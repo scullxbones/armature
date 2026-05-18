@@ -206,3 +206,34 @@ func TestMaterializeAtSHA_SlottedWorkerLogPreserved(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, state.Issues, "E1-SLOT")
 }
+
+func TestMaterializeAtSHA_SlottedWorkerLogAcceptsLegacyWorkerID(t *testing.T) {
+	dir, gc := initAtSHATestRepo(t)
+	opsDir := filepath.Join(dir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o755))
+
+	op := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "E1-SLOT-LEGACY",
+		Timestamp: 3001,
+		WorkerID:  "worker-alpha",
+		Payload:   ops.Payload{NodeType: "task", Title: "Legacy slotted task"},
+	}
+	line, err := ops.MarshalOp(op)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(opsDir, "worker-alpha~slot-a.log"), append(line, '\n'), 0o644))
+
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("add", "ops/worker-alpha~slot-a.log")
+	gitRun("commit", "-m", "add legacy slotted worker op")
+	sha := captureHEAD(t, dir)
+
+	state, err := MaterializeAtSHA(gc, sha, "ops")
+	require.NoError(t, err)
+	assert.Contains(t, state.Issues, "E1-SLOT-LEGACY")
+}

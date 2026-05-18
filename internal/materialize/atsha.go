@@ -31,6 +31,10 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 		}
 
 		expectedWorkerID := strings.TrimSuffix(filepath.Base(f), ".log")
+		legacyWorkerID := expectedWorkerID
+		if i := strings.Index(expectedWorkerID, "~"); i >= 0 {
+			legacyWorkerID = expectedWorkerID[:i]
+		}
 
 		content, err := history.ShowFileAtCommit(sha, f)
 		if err != nil {
@@ -49,7 +53,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 				// Skip corrupt lines
 				continue
 			}
-			if op.WorkerID != expectedWorkerID {
+			if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
 				continue
 			}
 			allOps = append(allOps, op)

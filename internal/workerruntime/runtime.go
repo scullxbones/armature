@@ -6,6 +6,9 @@ import (
 	"fmt"
 )
 
+// ErrTaskRetrying signals recoverable unfinished orchestration work.
+var ErrTaskRetrying = errors.New("task orchestration retrying")
+
 // ReadyProvider returns the next ready issue ID.
 type ReadyProvider interface {
 	NextReady(ctx context.Context) (issueID string, ok bool, err error)
@@ -88,6 +91,12 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			continue
 		}
 		if err := r.Exec.Run(runCtx, issueID); err != nil {
+			if errors.Is(err, ErrTaskRetrying) {
+				if r.Trace != nil {
+					r.Trace.Trace(EventExecutionFailed)
+				}
+				continue
+			}
 			if errors.Is(err, context.DeadlineExceeded) && runCtx.Err() == context.DeadlineExceeded && opts.MaxRuntime > 0 {
 				timeoutErr := fmt.Errorf("runtime timeout after %s\nAction: rerun with a larger --max-runtime or inspect blocked work with `arm ready --explain --format json`", opts.MaxRuntime)
 				result.FinalState = StateEscalated

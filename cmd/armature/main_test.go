@@ -1215,6 +1215,16 @@ func TestClaimWinnersByIssue_StaleClaimTakeoverPrefersCurrentOwner(t *testing.T)
 	assert.Equal(t, "worker-b", winners["task-1"])
 }
 
+func TestBuildWorkerStatus_SlottedWinnerMatchesBaseWorker(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a~slot-1"})
+	assert.Equal(t, "active", status.Status)
+	assert.Equal(t, "task-1", status.ActiveIssue)
+}
+
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

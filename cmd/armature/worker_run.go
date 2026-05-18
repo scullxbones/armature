@@ -195,6 +195,9 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 		return err
 	}
 	if !o.dryRun {
+		if state.Phase == "retrying" {
+			return fmt.Errorf("%w: %s", workerruntime.ErrTaskRetrying, state.Phase)
+		}
 		if state.Phase != "complete" {
 			return fmt.Errorf("orchestration did not complete: phase=%s", state.Phase)
 		}
@@ -210,6 +213,9 @@ func hasActiveScopeOverlap(issueID string, scope []string, index materialize.Ind
 		if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
 			continue
 		}
+		if isAncestorIssue(otherID, issueID, issues) {
+			continue
+		}
 		if issue := issues[otherID]; issue != nil {
 			ttl := issue.ClaimTTL
 			if ttl <= 0 {
@@ -222,6 +228,20 @@ func hasActiveScopeOverlap(issueID string, scope []string, index materialize.Ind
 		if claimPkg.ScopesOverlap(scope, entry.Scope) {
 			return true
 		}
+	}
+	return false
+}
+
+func isAncestorIssue(candidateAncestorID, issueID string, issues map[string]*materialize.Issue) bool {
+	for cur := issueID; cur != ""; {
+		issue := issues[cur]
+		if issue == nil || issue.Parent == "" {
+			return false
+		}
+		if issue.Parent == candidateAncestorID {
+			return true
+		}
+		cur = issue.Parent
 	}
 	return false
 }

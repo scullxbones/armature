@@ -137,7 +137,7 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 
 	// Check each claimed issue
 	for issueID, ca := range claimedAt {
-		if winner, ok := winners[issueID]; ok && winner != workerID {
+		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
 			continue
 		}
 		if transitioned[issueID] {
@@ -250,7 +250,7 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 		}
 		if activeWorker != "" {
 			if s := stateByWorker[activeWorker]; s != nil && !s.transitioned {
-				winners[issueID] = activeWorker
+				winners[issueID] = baseWorkerIdentity(activeWorker)
 				continue
 			}
 		}
@@ -259,7 +259,7 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 			continue
 		}
 		winner := claim.ResolveClaim(claims)
-		winners[issueID] = winner.WorkerID
+		winners[issueID] = baseWorkerIdentity(winner.WorkerID)
 	}
 	return winners
 }

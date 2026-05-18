@@ -160,6 +160,19 @@ func TestExecutionHandoffInvokesSingleTaskOrchestrator(t *testing.T) {
 	}))
 }
 
+func TestRuntimeContinuesWhenTaskIsRetrying(t *testing.T) {
+	ready := &readyStub{ids: []string{"TASK-1", "TASK-2"}}
+	claim := &claimStub{}
+	exec := &execStub{err: ErrTaskRetrying}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1", MaxTasks: 1})
+	require.NoError(t, err)
+	assert.Equal(t, StateIdle, result.FinalState)
+	assert.Equal(t, 0, result.TasksCompleted)
+	assert.Equal(t, []string{"TASK-1", "TASK-2"}, exec.ran)
+}
+
 func TestWorkerRuntimeIntegratesReadyClaimAndOrchestrate(t *testing.T) {
 	ready := &readyStub{ids: []string{"TASK-1", "TASK-2"}}
 	claim := &claimStub{lose: map[string]bool{"TASK-2": true}}
