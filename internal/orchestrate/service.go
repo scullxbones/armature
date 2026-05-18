@@ -16,6 +16,8 @@ type ServiceConfig struct {
 // RunInput carries the dynamic orchestration inputs for one run.
 type RunInput struct {
 	TaskID       string
+	TaskTitle    string
+	TaskContract string
 	WorkerID     string
 	RetryBudget  int
 	Scope        []string
@@ -44,6 +46,8 @@ func (s *Service) Run(ctx context.Context, input RunInput) (OrchestrateState, er
 			OpLog:        s.Config.OpLog,
 			Harness:      s.Config.Harness,
 			HarnessCfg:   input.HarnessCfg,
+			TaskTitle:    input.TaskTitle,
+			TaskContract: input.TaskContract,
 			Scope:        input.Scope,
 			ActiveScopes: input.ActiveScopes,
 			Opts:         input.Opts,

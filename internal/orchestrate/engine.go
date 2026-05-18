@@ -53,6 +53,10 @@ type EngineConfig struct {
 	HarnessCfg HarnessConfig
 	// Scope is the list of file paths the task is permitted to touch.
 	Scope []string
+	// TaskTitle is the human-readable issue title to include in harness context.
+	TaskTitle string
+	// TaskContract captures acceptance contract details to include in harness context.
+	TaskContract string
 	// ActiveScopes maps other task IDs to their scope lists for overlap checking.
 	ActiveScopes map[string][]string
 	// Opts controls dry-run, parallelism, etc.
@@ -226,7 +230,7 @@ func (e *Engine) runningPhase(ctx context.Context, state OrchestrateState) (Orch
 	}
 
 	// Run the harness adapter with issue scope injected for sandbox configuration.
-	harnessCtx := WithIssueScope(ctx, e.cfg.Scope)
+	harnessCtx := WithIssueContext(ctx, e.cfg.TaskID, e.cfg.TaskTitle, e.cfg.TaskContract, e.cfg.Scope)
 	checkResult, err := e.runHarnessWithHeartbeat(harnessCtx, e.cfg.HarnessCfg, e.cfg.Opts)
 	if err != nil {
 		return state, fmt.Errorf("harness run: %w", err)

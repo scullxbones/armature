@@ -190,6 +190,8 @@ Three-level model resolution:
 
 			state, err := service.Run(runCtx, orchestrate.RunInput{
 				TaskID:       issueID,
+				TaskTitle:    issue.Title,
+				TaskContract: string(issue.Acceptance),
 				WorkerID:     workerID,
 				RetryBudget:  retries,
 				Scope:        issue.Scope,

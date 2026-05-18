@@ -118,6 +118,14 @@ func TestWithIssueScope(t *testing.T) {
 	assert.Equal(t, scope, got.Scope)
 }
 
+func TestWithIssueContextIncludesTaskMetadata(t *testing.T) {
+	ctx := WithIssueContext(context.Background(), "TASK-1", "Implement X", `[{"type":"test_passes","cmd":"go test ./..."}]`, []string{"cmd/armature/"})
+	got := issueFromCtx(ctx)
+	assert.Equal(t, "TASK-1", got.TaskID)
+	assert.Equal(t, "Implement X", got.TaskTitle)
+	assert.Contains(t, got.TaskContract, "test_passes")
+}
+
 // TestIssueFromCtxEmpty verifies issueFromCtx returns empty scope for a plain context.
 func TestIssueFromCtxEmpty(t *testing.T) {
 	got := issueFromCtx(context.Background())
@@ -154,8 +162,16 @@ func TestBuildCodexLaunchArgs_NonInteractive(t *testing.T) {
 }
 
 func TestBuildHarnessPrompt_IncludesScope(t *testing.T) {
-	prompt := buildHarnessPrompt([]string{"internal/orchestrate/", "cmd/armature/"})
+	prompt := buildHarnessPrompt(&issueContext{
+		TaskID:       "TASK-7",
+		TaskTitle:    "Fix runtime",
+		TaskContract: `[{"type":"test_passes","cmd":"go test ./cmd/armature"}]`,
+		Scope:        []string{"internal/orchestrate/", "cmd/armature/"},
+	})
 	assert.Contains(t, prompt, defaultHarnessPrompt)
+	assert.Contains(t, prompt, "TASK-7")
+	assert.Contains(t, prompt, "Fix runtime")
+	assert.Contains(t, prompt, "test_passes")
 	assert.Contains(t, prompt, "internal/orchestrate/")
 	assert.Contains(t, prompt, "cmd/armature/")
 }

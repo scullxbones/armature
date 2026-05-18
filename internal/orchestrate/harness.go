@@ -127,11 +127,26 @@ func errAs(err error, target *interface{ ExitCode() int }) bool {
 type issueCtxKey struct{}
 
 // issueContext holds the scope paths for a harness invocation.
-type issueContext struct{ Scope []string }
+type issueContext struct {
+	Scope        []string
+	TaskID       string
+	TaskTitle    string
+	TaskContract string
+}
 
 // WithIssueScope injects scope paths into ctx so harness adapters can read them.
 func WithIssueScope(ctx context.Context, scope []string) context.Context {
-	return context.WithValue(ctx, issueCtxKey{}, &issueContext{Scope: scope})
+	return WithIssueContext(ctx, "", "", "", scope)
+}
+
+// WithIssueContext injects issue metadata and scope into ctx for harness adapters.
+func WithIssueContext(ctx context.Context, taskID, taskTitle, taskContract string, scope []string) context.Context {
+	return context.WithValue(ctx, issueCtxKey{}, &issueContext{
+		Scope:        scope,
+		TaskID:       taskID,
+		TaskTitle:    taskTitle,
+		TaskContract: taskContract,
+	})
 }
 
 func issueFromCtx(ctx context.Context) *issueContext {
@@ -149,8 +164,20 @@ func validateIssueScope(scope []string) error {
 	return nil
 }
 
-func buildHarnessPrompt(scope []string) string {
-	return fmt.Sprintf("%s Scope: %s", defaultHarnessPrompt, strings.Join(scope, ", "))
+func buildHarnessPrompt(issue *issueContext) string {
+	scope := strings.Join(issue.Scope, ", ")
+	task := issue.TaskID
+	if issue.TaskTitle != "" {
+		task = fmt.Sprintf("%s (%s)", issue.TaskID, issue.TaskTitle)
+	}
+	if strings.TrimSpace(task) == "" {
+		task = "unspecified"
+	}
+	contract := strings.TrimSpace(issue.TaskContract)
+	if contract == "" {
+		contract = "none provided"
+	}
+	return fmt.Sprintf("%s Task: %s. Acceptance contract: %s. Scope: %s", defaultHarnessPrompt, task, contract, scope)
 }
 
 func buildClaudeLaunchArgs(model, prompt string) []string {
@@ -194,7 +221,7 @@ func (a *claudeAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOpti
 		return CheckResult{Name: "claude", Severity: SeverityError, Passed: false, Message: err.Error()}, err
 	}
 
-	prompt := buildHarnessPrompt(issue.Scope)
+	prompt := buildHarnessPrompt(issue)
 	args := buildClaudeLaunchArgs(a.cfg.Model, prompt)
 
 	absWork, err := filepath.Abs(workDir)
@@ -275,7 +302,7 @@ func (a *codexAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOptio
 		return CheckResult{Name: "codex", Severity: SeverityError, Passed: false, Message: err.Error()}, err
 	}
 
-	prompt := buildHarnessPrompt(issue.Scope)
+	prompt := buildHarnessPrompt(issue)
 	args := buildCodexLaunchArgs(a.cfg.Model, prompt)
 	args = append([]string{"env", "CODEX_HOME=" + codexHome}, args...)
 
