@@ -1,4 +1,4 @@
 sandbox_mode = "workspace-write"
 approval_policy = "never"
 [permissions.default.filesystem]
-writable_roots = ["internal/workerruntime/types.go (new)", "internal/workerruntime/policy.go (new)", "internal/workerruntime/runtime_test.go (new)"]
+writable_roots = ["/home/brian/development/armature"]
