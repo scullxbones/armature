@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -29,7 +30,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 			continue
 		}
 
-		workerID := ops.WorkerIDFromFilename(f)
+		expectedWorkerID := strings.TrimSuffix(filepath.Base(f), ".log")
 
 		content, err := history.ShowFileAtCommit(sha, f)
 		if err != nil {
@@ -48,7 +49,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 				// Skip corrupt lines
 				continue
 			}
-			if op.WorkerID != workerID {
+			if op.WorkerID != expectedWorkerID {
 				continue
 			}
 			allOps = append(allOps, op)
