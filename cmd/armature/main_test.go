@@ -1225,6 +1225,15 @@ func TestBuildWorkerStatus_SlottedWinnerMatchesBaseWorker(t *testing.T) {
 	assert.Equal(t, "task-1", status.ActiveIssue)
 }
 
+func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 980, WorkerID: "worker-a", Payload: ops.Payload{TTL: 60}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-b"})
+	assert.Equal(t, "idle", status.Status)
+}
+
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

@@ -130,6 +130,18 @@ func (c *repoClaimer) Claim(_ context.Context, issueID string) (bool, error) {
 	return issue.ClaimedBy == c.workerID, nil
 }
 
+func (c *repoClaimer) StillClaimed(_ context.Context, issueID string) (bool, error) {
+	_, issues, err := runtimeIssueStateLoader(c.state.ctx)
+	if err != nil {
+		return false, err
+	}
+	issue := issues[issueID]
+	if issue == nil {
+		return false, nil
+	}
+	return issue.ClaimedBy == c.workerID, nil
+}
+
 type repoOrchestrator struct {
 	ctx      *config.Context
 	workerID string
@@ -163,16 +175,11 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 		Harness: harnessAdapter,
 	})
 
-	index, _ := materialize.LoadIndex(filepath.Join(o.ctx.StateDir, "index.json"))
-	activeScopes := make(map[string][]string)
-	for id, entry := range index {
-		if id == issueID {
-			continue
-		}
-		if entry.Status == ops.StatusClaimed || entry.Status == ops.StatusInProgress {
-			activeScopes[id] = entry.Scope
-		}
+	index, issues, err := runtimeIssueStateLoader(o.ctx)
+	if err != nil {
+		return err
 	}
+	activeScopes := runtimeActiveScopes(issueID, index, issues, nowEpoch())
 	state, err := service.Run(ctx, orchestrate.RunInput{
 		TaskID:       issueID,
 		TaskTitle:    issue.Title,
@@ -203,6 +210,32 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 		}
 	}
 	return nil
+}
+
+func runtimeActiveScopes(issueID string, index materialize.Index, issues map[string]*materialize.Issue, now int64) map[string][]string {
+	activeScopes := make(map[string][]string)
+	for id, entry := range index {
+		if id == issueID {
+			continue
+		}
+		if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
+			continue
+		}
+		if isAncestorIssue(id, issueID, issues) {
+			continue
+		}
+		if issue := issues[id]; issue != nil {
+			ttl := issue.ClaimTTL
+			if ttl <= 0 {
+				ttl = 60
+			}
+			if claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, ttl, now) {
+				continue
+			}
+		}
+		activeScopes[id] = entry.Scope
+	}
+	return activeScopes
 }
 
 func hasActiveScopeOverlap(issueID string, scope []string, index materialize.Index, issues map[string]*materialize.Issue, now int64) bool {

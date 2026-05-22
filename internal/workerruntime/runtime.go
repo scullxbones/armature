@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // ErrTaskRetrying signals recoverable unfinished orchestration work.
@@ -17,6 +18,11 @@ type ReadyProvider interface {
 // Claimer attempts to claim a task for this worker.
 type Claimer interface {
 	Claim(ctx context.Context, issueID string) (won bool, err error)
+}
+
+// RetryClaimVerifier checks whether the worker still owns a previously claimed issue.
+type RetryClaimVerifier interface {
+	StillClaimed(ctx context.Context, issueID string) (bool, error)
 }
 
 // Orchestrator executes one claimed issue.
@@ -40,6 +46,8 @@ type Runtime struct {
 // Run drains ready work until queue empty, max-tasks reached, or cancellation.
 func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, error) {
 	var result RunResult
+	var retryIssueID string
+	retryAttempts := 0
 	if r.Ready == nil || r.Claim == nil || r.Exec == nil {
 		return RunResult{FinalState: StateStopped}, nil
 	}
@@ -65,36 +73,65 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			result.FinalState = StateStopped
 			return result, nil
 		}
-		issueID, ok, err := r.Ready.NextReady(runCtx)
-		if err != nil {
-			result.FinalState = StateEscalated
-			result.Err = err
-			return result, err
-		}
-		if !ok {
-			if r.Trace != nil {
-				r.Trace.Trace(EventNoReadyWork)
+		issueID := retryIssueID
+		if issueID == "" {
+			var ok bool
+			var err error
+			issueID, ok, err = r.Ready.NextReady(runCtx)
+			if err != nil {
+				result.FinalState = StateEscalated
+				result.Err = err
+				return result, err
 			}
-			result.FinalState = StateIdle
-			return result, nil
-		}
-		won, err := r.Claim.Claim(runCtx, issueID)
-		if err != nil {
-			result.FinalState = StateEscalated
-			result.Err = err
-			return result, err
-		}
-		if !won {
-			if r.Trace != nil {
-				r.Trace.Trace(EventClaimLost)
+			if !ok {
+				if r.Trace != nil {
+					r.Trace.Trace(EventNoReadyWork)
+				}
+				result.FinalState = StateIdle
+				return result, nil
 			}
-			continue
+			won, err := r.Claim.Claim(runCtx, issueID)
+			if err != nil {
+				result.FinalState = StateEscalated
+				result.Err = err
+				return result, err
+			}
+			if !won {
+				if r.Trace != nil {
+					r.Trace.Trace(EventClaimLost)
+				}
+				continue
+			}
+			retryAttempts = 0
+		} else {
+			if verifier, ok := r.Claim.(RetryClaimVerifier); ok {
+				stillClaimed, err := verifier.StillClaimed(runCtx, issueID)
+				if err != nil {
+					result.FinalState = StateEscalated
+					result.Err = err
+					return result, err
+				}
+				if !stillClaimed {
+					retryIssueID = ""
+					retryAttempts = 0
+					continue
+				}
+			}
 		}
 		if err := r.Exec.Run(runCtx, issueID); err != nil {
 			if errors.Is(err, ErrTaskRetrying) {
+				retryAttempts++
+				if retryAttempts > 20 {
+					err = fmt.Errorf("task %s exceeded retry loop guard after %d attempts", issueID, retryAttempts)
+					result.FinalState = StateEscalated
+					result.Err = err
+					return result, err
+				}
+				retryIssueID = issueID
 				if r.Trace != nil {
 					r.Trace.Trace(EventExecutionFailed)
 				}
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			if errors.Is(err, context.DeadlineExceeded) && runCtx.Err() == context.DeadlineExceeded && opts.MaxRuntime > 0 {
@@ -110,6 +147,8 @@ func (r *Runtime) Run(ctx context.Context, opts RuntimeOptions) (RunResult, erro
 			result.Err = err
 			return result, err
 		}
+		retryIssueID = ""
+		retryAttempts = 0
 		result.TasksCompleted++
 		if r.Trace != nil {
 			r.Trace.Trace(EventExecutionCompleted)

@@ -27,10 +27,24 @@ func (s *readyStub) NextReady(_ context.Context) (string, bool, error) {
 
 type claimStub struct {
 	lose map[string]bool
+	ran  []string
+	own  map[string]bool
 }
 
 func (s *claimStub) Claim(_ context.Context, issueID string) (bool, error) {
+	s.ran = append(s.ran, issueID)
 	return !s.lose[issueID], nil
+}
+
+func (s *claimStub) StillClaimed(_ context.Context, issueID string) (bool, error) {
+	if s.own == nil {
+		return true, nil
+	}
+	owned, ok := s.own[issueID]
+	if !ok {
+		return true, nil
+	}
+	return owned, nil
 }
 
 type execStub struct {
@@ -163,14 +177,75 @@ func TestExecutionHandoffInvokesSingleTaskOrchestrator(t *testing.T) {
 func TestRuntimeContinuesWhenTaskIsRetrying(t *testing.T) {
 	ready := &readyStub{ids: []string{"TASK-1", "TASK-2"}}
 	claim := &claimStub{}
-	exec := &execStub{err: ErrTaskRetrying}
+	exec := &retryThenSuccessExec{
+		retryRemaining: map[string]int{"TASK-1": 1},
+	}
 	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
 
 	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1", MaxTasks: 1})
 	require.NoError(t, err)
-	assert.Equal(t, StateIdle, result.FinalState)
-	assert.Equal(t, 0, result.TasksCompleted)
+	assert.Equal(t, StateStopped, result.FinalState)
+	assert.Equal(t, 1, result.TasksCompleted)
+	assert.Equal(t, []string{"TASK-1", "TASK-1"}, exec.ran)
+	assert.Equal(t, []string{"TASK-1"}, claim.ran)
+}
+
+func TestRuntimeRetriesSameClaimedTaskBeforePollingReadyQueue(t *testing.T) {
+	ready := &readyStub{ids: []string{"TASK-1", "TASK-2"}}
+	claim := &claimStub{}
+	exec := &retryThenSuccessExec{
+		retryRemaining: map[string]int{"TASK-1": 1},
+	}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1", MaxTasks: 1})
+	require.NoError(t, err)
+	assert.Equal(t, StateStopped, result.FinalState)
+	assert.Equal(t, 1, result.TasksCompleted)
+	assert.Equal(t, []string{"TASK-1", "TASK-1"}, exec.ran)
+	assert.Equal(t, []string{"TASK-1"}, claim.ran)
+}
+
+func TestRuntimeStopsRetryingIssueWhenClaimOwnershipIsLost(t *testing.T) {
+	ready := &readyStub{ids: []string{"TASK-1", "TASK-2"}}
+	claim := &claimStub{own: map[string]bool{"TASK-1": false}}
+	exec := &retryThenSuccessExec{
+		retryRemaining: map[string]int{"TASK-1": 1},
+	}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1", MaxTasks: 1})
+	require.NoError(t, err)
+	assert.Equal(t, StateStopped, result.FinalState)
+	assert.Equal(t, 1, result.TasksCompleted)
 	assert.Equal(t, []string{"TASK-1", "TASK-2"}, exec.ran)
+	assert.Equal(t, []string{"TASK-1", "TASK-2"}, claim.ran)
+}
+
+func TestRuntimeEscalatesAfterRetryLoopGuard(t *testing.T) {
+	ready := &readyStub{ids: []string{"TASK-1"}}
+	claim := &claimStub{}
+	exec := &execStub{err: ErrTaskRetrying}
+	rt := &Runtime{Ready: ready, Claim: claim, Exec: exec}
+
+	result, err := rt.Run(context.Background(), RuntimeOptions{WorkerID: "worker-1"})
+	require.Error(t, err)
+	assert.Equal(t, StateEscalated, result.FinalState)
+	assert.Contains(t, err.Error(), "exceeded retry loop guard")
+}
+
+type retryThenSuccessExec struct {
+	ran            []string
+	retryRemaining map[string]int
+}
+
+func (s *retryThenSuccessExec) Run(_ context.Context, issueID string) error {
+	s.ran = append(s.ran, issueID)
+	if s.retryRemaining[issueID] > 0 {
+		s.retryRemaining[issueID]--
+		return ErrTaskRetrying
+	}
+	return nil
 }
 
 func TestWorkerRuntimeIntegratesReadyClaimAndOrchestrate(t *testing.T) {

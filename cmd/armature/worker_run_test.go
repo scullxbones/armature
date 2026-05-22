@@ -296,6 +296,27 @@ func TestHasActiveScopeOverlap_IgnoresAncestorContainers(t *testing.T) {
 	assert.False(t, hasActiveScopeOverlap("task-1", []string{"cmd/armature/main.go"}, index, issues, now))
 }
 
+func TestRuntimeActiveScopes_FiltersAncestorAndStaleClaims(t *testing.T) {
+	now := int64(1000)
+	index := materialize.Index{
+		"task-1":  {Status: ops.StatusClaimed, Scope: []string{"cmd/armature/*"}},
+		"story-1": {Status: ops.StatusInProgress, Scope: []string{"cmd/armature/*"}},
+		"task-2":  {Status: ops.StatusClaimed, Scope: []string{"internal/*"}},
+		"task-3":  {Status: ops.StatusClaimed, Scope: []string{"pkg/*"}},
+	}
+	issues := map[string]*materialize.Issue{
+		"story-1": {ID: "story-1"},
+		"task-1":  {ID: "task-1", Parent: "story-1", ClaimedAt: 900, LastHeartbeat: 950, ClaimTTL: 60},
+		"task-2":  {ID: "task-2", ClaimedAt: 10, LastHeartbeat: 10, ClaimTTL: 1},
+		"task-3":  {ID: "task-3", ClaimedAt: 900, LastHeartbeat: 950, ClaimTTL: 60},
+	}
+
+	active := runtimeActiveScopes("task-1", index, issues, now)
+	assert.NotContains(t, active, "story-1")
+	assert.NotContains(t, active, "task-2")
+	assert.Contains(t, active, "task-3")
+}
+
 func TestWorkerRunClaimDefaultsTTLWhenConfigMissing(t *testing.T) {
 	workerRuntimeFactoryMu.Lock()
 	defer workerRuntimeFactoryMu.Unlock()

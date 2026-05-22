@@ -157,8 +157,17 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		}
 	}
 
-	// Check if any claim was made (all stale)
-	if len(claimedAt) > 0 {
+	// Check if any winner claim was made by this worker (all stale).
+	// Losing race claims should not classify a worker as stale.
+	hasWinnerClaim := false
+	for issueID := range claimedAt {
+		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
+			continue
+		}
+		hasWinnerClaim = true
+		break
+	}
+	if hasWinnerClaim {
 		return WorkerStatus{
 			WorkerID:   workerID,
 			Status:     "stale",
