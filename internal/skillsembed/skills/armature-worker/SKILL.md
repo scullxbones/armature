@@ -17,6 +17,10 @@ For orchestrator-first workflows, prefer `arm orchestrate --issue ID`. In that
 mode, orchestration owns claim, context assembly, verification, retries, and
 completion transitions.
 
+If using runtime pull mode, prefer a bounded run:
+`arm worker run --max-runtime 20m --format json` and inspect `idle_diagnostics`
+when no work is executed.
+
 ## Prerequisites
 
 If `arm` is not found, stop and resolve this before proceeding.

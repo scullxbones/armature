@@ -28,6 +28,38 @@ All state lives in git. No database, no server, no daemon. A single Go binary (`
 
 - **Workflow Skills Included**: Ships skills in the agentskills.io format for every workflow role — planner, coordinator, worker, and auditor — usable by any compatible tool. No custom prompt engineering required to wire your agents in.
 
+## Runtime Architecture
+
+```mermaid
+flowchart LR
+    U[User / Coordinator] --> C[arm worker run]
+    C --> R[internal/workerruntime Runtime Loop]
+    R --> Q[ready queue read]
+    R --> CL[claim gate]
+    R --> O[internal/orchestrate single-task engine]
+    O --> H[Harness adapter: Claude or Codex]
+    O --> OP[(append-only ops log)]
+    OP --> M[materialize state]
+    M --> V[ready/list/show/validate views]
+    V --> U
+```
+
+## Runtime Flow
+
+```mermaid
+flowchart TD
+    S([start arm worker run]) --> P[poll ready]
+    P -->|none ready| I[final_state=idle]
+    P -->|ready issue| C[attempt claim]
+    C -->|lost| P
+    C -->|won| E[run orchestrate for issue]
+    E -->|success| D[tasks_completed +1]
+    D --> L{max tasks reached?}
+    L -->|no| P
+    L -->|yes| T[final_state=stopped]
+    E -->|failure| X[final_state=escalated]
+```
+
 ## Installation
 
 ### Prerequisites
@@ -78,19 +110,18 @@ arm decompose-context --sources src-001 > context.json
 arm decompose-apply plan.json
 ```
 
-### 4. Claim and Execute Work
+### 4. Run the Worker Runtime (Default)
 
-Find the next ready task, claim it, and start working:
+Start the runtime loop and let it drain ready work:
 
 ```bash
-# See ready tasks
-arm ready
+arm worker run
+```
 
-# Claim the highest priority task
-arm claim <issue-id>
+Use single-task orchestration when you need manual control:
 
-# Get the task context
-arm render-context <issue-id>
+```bash
+arm orchestrate --issue <issue-id>
 ```
 
 ### 5. Complete and Verify
@@ -102,6 +133,10 @@ arm transition <issue-id> done --outcome "Brief summary of work"
 ```
 
 Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
+
+## Provider Smoke Tests
+
+Runbook: [docs/provider-smoke-tests.md](docs/provider-smoke-tests.md)
 
 ---
 

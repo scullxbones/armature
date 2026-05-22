@@ -1146,7 +1146,7 @@ func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 10}}, // TTL 10 min = 600 sec; 900+600=1500 > now(1000) → active
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "active", status.Status)
 	assert.Equal(t, "T-001", status.ActiveIssue)
 	assert.Equal(t, "worker-a", status.WorkerID)
@@ -1158,7 +1158,7 @@ func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 1}}, // TTL 1 min = 60 sec; 100+60=160 < now(10000) → stale
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
@@ -1169,7 +1169,7 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
 	}
 	// No claims, but recent op — idle within 2*TTL window
-	status := buildWorkerStatus("worker-a", allOps, 1, now) // 2*1min=120s; 1000-900=100 < 120 → idle
+	status := buildWorkerStatus("worker-a", allOps, 1, now, map[string]string{}) // 2*1min=120s; 1000-900=100 < 120 → idle
 	assert.Equal(t, "idle", status.Status)
 	assert.Equal(t, int64(900), status.LastOpTime)
 }
@@ -1182,7 +1182,7 @@ func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a",
 			Payload: ops.Payload{To: "done"}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1197,9 +1197,41 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 	}
 	// With the last heartbeat at 9500 and TTL 1 min = 60s: 9500+60=9560 < 10000 → still stale by expiry
 	// But lastHeartbeat should be 9500, not 200
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	// The claim expired and even the heartbeat didn't extend it far enough — check that the heartbeat was tracked
 	assert.NotEqual(t, "active", status.Status)
+}
+
+func TestClaimWinnersByIssue_StaleClaimTakeoverPrefersCurrentOwner(t *testing.T) {
+	workers := map[string][]ops.Op{
+		"worker-a": {
+			{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 100, WorkerID: "worker-a", Payload: ops.Payload{TTL: 1}},
+		},
+		"worker-b": {
+			{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 200, WorkerID: "worker-b", Payload: ops.Payload{TTL: 10}},
+		},
+	}
+	winners := claimWinnersByIssue(workers)
+	assert.Equal(t, "worker-b", winners["task-1"])
+}
+
+func TestBuildWorkerStatus_SlottedWinnerMatchesBaseWorker(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a~slot-1"})
+	assert.Equal(t, "active", status.Status)
+	assert.Equal(t, "task-1", status.ActiveIssue)
+}
+
+func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 980, WorkerID: "worker-a", Payload: ops.Payload{TTL: 60}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-b"})
+	assert.Equal(t, "idle", status.Status)
 }
 
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
@@ -1975,13 +2007,13 @@ func TestInitCommand_AlreadyInitialized(t *testing.T) {
 	assert.Contains(t, out, "already")
 }
 
-// TestLogSlot_EnvVar verifies that TRLS_LOG_SLOT routes ops to a slotted log file.
+// TestLogSlot_EnvVar verifies that ARM_LOG_SLOT routes ops to a slotted log file.
 func TestLogSlot_EnvVar(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "beta")
+	t.Setenv("ARM_LOG_SLOT", "beta")
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "slotted note")
 	require.NoError(t, err)
@@ -2013,13 +2045,13 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	}
 }
 
-// TestLogSlot_Empty_UsesPlainLog verifies that an empty TRLS_LOG_SLOT uses the normal log path.
+// TestLogSlot_Empty_UsesPlainLog verifies that an empty ARM_LOG_SLOT uses the normal log path.
 func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "") // explicitly empty
+	t.Setenv("ARM_LOG_SLOT", "") // explicitly empty
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
@@ -2030,8 +2062,36 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 
 	for _, e := range entries {
 		assert.NotContains(t, e.Name(), "~",
-			"no slotted file should exist when TRLS_LOG_SLOT is empty")
+			"no slotted file should exist when ARM_LOG_SLOT is empty")
 	}
+}
+
+func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	t.Setenv("TRLS_LOG_SLOT", "legacy")
+	t.Setenv("ARM_LOG_SLOT", "")
+
+	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), "~legacy", "legacy TRLS_LOG_SLOT must be ignored")
+	}
+}
+
+func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
+	t.Setenv("ARM_LOG_SLOT", "lane-a")
+	workerID := workerIdentityWithSlot("worker-123")
+	assert.Equal(t, "worker-123~lane-a", workerID)
+
+	ctx := &config.Context{IssuesDir: "/repo/.armature"}
+	assert.Equal(t, "/repo/.armature/state/worker-123~lane-a", stateDirFor(ctx, workerID))
 }
 
 // TestLogSlot_ReplayIncludesSlottedOps verifies that ops written to a slotted log
@@ -2049,21 +2109,21 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Slot "one" transitions task-a to done
-	t.Setenv("TRLS_LOG_SLOT", "one")
+	t.Setenv("ARM_LOG_SLOT", "one")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-a")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--force", "--outcome", "slot one")
 	require.NoError(t, err)
 
 	// Slot "two" transitions task-b to done
-	t.Setenv("TRLS_LOG_SLOT", "two")
+	t.Setenv("ARM_LOG_SLOT", "two")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-b")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--force", "--outcome", "slot two")
 	require.NoError(t, err)
 
 	// Unset slot so materialize uses the main context
-	t.Setenv("TRLS_LOG_SLOT", "")
+	t.Setenv("ARM_LOG_SLOT", "")
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -2411,10 +2471,10 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write an op via a slotted log (transition done)
-	t.Setenv("TRLS_LOG_SLOT", "w")
+	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
-	t.Setenv("TRLS_LOG_SLOT", "")
+	t.Setenv("ARM_LOG_SLOT", "")
 
 	// The workers output must show the worker as active/idle (not missing)
 	// and must reflect ops from both log files
@@ -2541,6 +2601,70 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	err = root.Execute()
 	assert.NoError(t, err, "same-worker overlap should not require --force")
 	assert.NotContains(t, errBuf.String(), "Error:", "no error should be emitted to stderr")
+}
+
+func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "A")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "B")
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(errBuf)
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
+	err = root.Execute()
+	assert.Error(t, err, "same worker but different slots should be treated as different claim owners")
+	assert.Contains(t, errBuf.String(), "overlap")
+}
+
+func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
+	out, err := runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"claimed":false`)
+	assert.Contains(t, out, `"reason":"lost_claim_race"`)
+
+	showOut, err := runTrls(t, repo, "show", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.NotContains(t, showOut, "other-worker-abc")
+
+	workersOut, err := runTrls(t, repo, "workers", "--format", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, workersOut, `"worker_id":"other-worker-abc","status":"active"`)
 }
 
 // TestUnassignHelp verifies unassign --help mentions auto-transition side effect

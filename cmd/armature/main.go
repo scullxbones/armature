@@ -48,6 +48,7 @@ func newRootCmd() *cobra.Command {
 			if workerID == "" {
 				workerID = "default"
 			}
+			workerID = workerIdentityWithSlot(workerID)
 			ctx.StateDir = stateDirFor(ctx, workerID)
 			appCtx = ctx
 
@@ -258,6 +259,10 @@ func newRootCmd() *cobra.Command {
 	orchestrateCmd := newOrchestrateCmd()
 	orchestrateCmd.GroupID = "workflow"
 	root.AddCommand(orchestrateCmd)
+
+	workerCmd := newWorkerCmd()
+	workerCmd.GroupID = "workflow"
+	root.AddCommand(workerCmd)
 
 	return root
 }

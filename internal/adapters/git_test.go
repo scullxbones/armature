@@ -5,7 +5,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/stretchr/testify/assert"
@@ -329,6 +331,63 @@ func TestLogBranch(t *testing.T) {
 	assert.NotEmpty(t, entries[0].SHA)
 	assert.NotEmpty(t, entries[0].Author)
 	assert.NotEmpty(t, entries[0].Date)
+}
+
+func TestEnhanceGitLockfileError_AddsSandboxHint(t *testing.T) {
+	t.Parallel()
+	base := "git add foo: exit status 128"
+	out := "fatal: Unable to create '/repo/.git/worktrees/-arm/index.lock': Read-only file system"
+	got := adapters.EnhanceGitLockfileErrorForTest(base, out)
+	assert.Contains(t, got, "sandbox blocked git lockfile writes")
+}
+
+func TestEnhanceGitLockfileError_NoHintForOtherErrors(t *testing.T) {
+	t.Parallel()
+	base := "git add foo: exit status 1"
+	out := "fatal: pathspec 'foo' did not match any files"
+	got := adapters.EnhanceGitLockfileErrorForTest(base, out)
+	assert.Equal(t, base, got)
+}
+
+func TestIsGitContentionError(t *testing.T) {
+	t.Parallel()
+	assert.True(t, adapters.IsGitContentionErrorForTest("fatal: Unable to create '/repo/.git/index.lock': File exists"))
+	assert.True(t, adapters.IsGitContentionErrorForTest("fatal: cannot lock ref 'HEAD': is at abc but expected def"))
+	assert.False(t, adapters.IsGitContentionErrorForTest("fatal: pathspec 'foo' did not match any files"))
+}
+
+func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
+	worktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
+
+	opsDir := filepath.Join(worktreePath, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	logFile := filepath.Join(opsDir, "worker-abc.log")
+	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
+
+	gitDirCmd := exec.Command("git", "-C", worktreePath, "rev-parse", "--git-dir")
+	gitDirOut, err := gitDirCmd.Output()
+	require.NoError(t, err)
+	gitDir := strings.TrimSpace(string(gitDirOut))
+	lockPath := filepath.Join(gitDir, "index.lock")
+	require.NoError(t, os.WriteFile(lockPath, []byte("lock"), 0644))
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(120 * time.Millisecond)
+		_ = os.Remove(lockPath)
+	}()
+
+	wc := adapters.New(worktreePath)
+	err = wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
+	wg.Wait()
+	require.NoError(t, err)
 }
 
 func TestLogBranch_InvalidBranch(t *testing.T) {

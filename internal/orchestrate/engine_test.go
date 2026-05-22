@@ -2,10 +2,13 @@ package orchestrate_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/orchestrate"
@@ -44,10 +47,19 @@ type stubHarness struct {
 	name   string
 	result orchestrate.CheckResult
 	err    error
+	delay  time.Duration
+	block  bool
 }
 
 func (h *stubHarness) Name() string { return h.name }
-func (h *stubHarness) Run(_ context.Context, _ orchestrate.HarnessConfig, _ orchestrate.RunOptions) (orchestrate.CheckResult, error) {
+func (h *stubHarness) Run(ctx context.Context, _ orchestrate.HarnessConfig, _ orchestrate.RunOptions) (orchestrate.CheckResult, error) {
+	if h.block {
+		<-ctx.Done()
+		return orchestrate.CheckResult{Name: h.name}, ctx.Err()
+	}
+	if h.delay > 0 {
+		time.Sleep(h.delay)
+	}
 	return h.result, h.err
 }
 
@@ -368,6 +380,88 @@ func TestEngine_ContextCancelled_ReturnsError(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestEngine_LongHarnessRun_EmitsPeriodicHeartbeat(t *testing.T) {
+	log := &stubOpLog{ops: []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1", Payload: ops.Payload{PreDispatchRef: "base", RetryBudget: 1}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+	}}
+	git := &stubGit{diffOut: "diff", diffFiles: []string{"internal/foo/bar.go"}}
+	harness := passingHarness("build")
+	harness.delay = 120 * time.Millisecond
+	var heartbeatCount int32
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		Git:         git,
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 1,
+		Opts: orchestrate.RunOptions{
+			HeartbeatInterval: 20 * time.Millisecond,
+			Progress: func(ev orchestrate.ProgressEvent) {
+				if ev.Kind == "heartbeat" {
+					atomic.AddInt32(&heartbeatCount, 1)
+				}
+			},
+		},
+	}
+	_, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if atomic.LoadInt32(&heartbeatCount) < 1 {
+		t.Fatalf("expected at least one heartbeat")
+	}
+}
+
+func TestEngine_TimeoutFailure_EmitsStructuredNoteAndDiagnostics(t *testing.T) {
+	log := &stubOpLog{ops: []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1", Payload: ops.Payload{PreDispatchRef: "base", RetryBudget: 2}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+	}}
+	git := &stubGit{}
+	harness := &stubHarness{name: "codex", block: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		Git:         git,
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 2,
+		Opts:        orchestrate.RunOptions{HeartbeatInterval: 5 * time.Millisecond},
+	}
+	_, err := orchestrate.NewEngine(cfg).Run(ctx)
+	if err == nil {
+		t.Fatalf("expected timeout error")
+	}
+	var runErr *orchestrate.RunError
+	if !errors.As(err, &runErr) {
+		t.Fatalf("expected RunError, got %T", err)
+	}
+	if runErr.Diagnostics.Harness != "codex" {
+		t.Fatalf("harness diag mismatch: %s", runErr.Diagnostics.Harness)
+	}
+	foundNote := false
+	for _, op := range log.appended {
+		if op.Type != ops.OpNote {
+			continue
+		}
+		foundNote = true
+		var diag orchestrate.TimeoutDiagnostics
+		if uerr := json.Unmarshal([]byte(op.Payload.Msg), &diag); uerr != nil {
+			t.Fatalf("invalid timeout diagnostic note: %v", uerr)
+		}
+		if diag.Harness == "" || diag.LastPhase == "" {
+			t.Fatalf("incomplete diagnostics: %+v", diag)
+		}
+	}
+	if !foundNote {
+		t.Fatalf("expected timeout diagnostic note op")
 	}
 }
 

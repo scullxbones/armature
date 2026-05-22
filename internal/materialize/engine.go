@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -61,7 +62,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		ops.OpOrchestrateRetry,
 		ops.OpOrchestrateEscalate,
 		ops.OpOrchestrateComplete,
-		ops.OpOrchestrateCheckResult:
+		ops.OpOrchestrateCheckResult,
+		ops.OpWorkerRuntimeDecision:
 		return nil
 	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)
@@ -110,6 +112,17 @@ func (s *State) applyClaim(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
 		return fmt.Errorf("claim: issue %s not found", op.TargetID)
+	}
+	if (issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress) &&
+		issue.ClaimedBy != "" && issue.ClaimedBy != op.WorkerID {
+		ttl := issue.ClaimTTL
+		if ttl <= 0 {
+			ttl = 60
+		}
+		if !claimpkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, ttl, op.Timestamp) {
+			// Keep existing active owner; this claim loses the race.
+			return nil
+		}
 	}
 	issue.Status = ops.StatusClaimed
 	issue.ClaimedBy = op.WorkerID

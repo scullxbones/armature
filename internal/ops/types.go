@@ -30,6 +30,7 @@ const (
 	OpOrchestrateEscalate         = "orchestrate-escalate"
 	OpOrchestrateComplete         = "orchestrate-complete"
 	OpOrchestrateCheckResult      = "orchestrate-check-result"
+	OpWorkerRuntimeDecision       = "worker-runtime-decision"
 )
 
 // ValidOpTypes for validation.
@@ -52,6 +53,7 @@ var ValidOpTypes = map[string]bool{
 	OpOrchestrateEscalate:         true,
 	OpOrchestrateComplete:         true,
 	OpOrchestrateCheckResult:      true,
+	OpWorkerRuntimeDecision:       true,
 }
 
 // FailureRecord captures a single orchestration failure event.
@@ -171,4 +173,9 @@ type Payload struct {
 	PreDispatchRef string `json:"pre_dispatch_ref,omitempty"`
 	RetryBudget    int    `json:"retry_budget,omitempty"`
 	Run            int    `json:"run,omitempty"`
+
+	// worker-runtime durable audit fields
+	CorrelationID string `json:"correlation_id,omitempty"`
+	CausationID   string `json:"causation_id,omitempty"`
+	DecisionClass string `json:"decision_class,omitempty"`
 }

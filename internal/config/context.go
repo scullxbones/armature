@@ -18,6 +18,18 @@ type Context struct {
 	Config       Config // loaded from IssuesDir/config.json
 }
 
+// RepoProbeResult holds the repository facts collected through adapter-backed probing.
+type RepoProbeResult struct {
+	RepoPath     string
+	Mode         string
+	WorktreePath string
+}
+
+// RepoProbe collects repository facts needed to derive a Context.
+type RepoProbe interface {
+	Probe(repoPath string) (RepoProbeResult, error)
+}
+
 // isGitWorktree checks if the given path is a git worktree by verifying if .git is a file (not a directory).
 // In git worktrees, .git is a file containing "gitdir: <path>".
 func isGitWorktree(path string) (bool, error) {
@@ -76,38 +88,13 @@ func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 // ResolveContext reads git config for mode and resolves the issues directory path.
 // If invoked from a git worktree, resolves IssuesDir relative to the parent repo root.
 func ResolveContext(repoPath string) (*Context, error) {
-	// Detect if we're in a git worktree and resolve to parent repo if so
-	isWorktree, err := isGitWorktree(repoPath)
+	probeResult, err := defaultRepoProbe{}.Probe(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("check git worktree: %w", err)
+		return nil, err
 	}
-
-	actualRepoPath := repoPath
-	if isWorktree {
-		actualRepoPath, err = resolveParentRepoFromWorktree(repoPath)
-		if err != nil {
-			return nil, fmt.Errorf("resolve parent repo from worktree: %w", err)
-		}
-	}
-
-	mode, err := adapters.GitConfigMode(actualRepoPath)
-	if err != nil {
-		return nil, fmt.Errorf("read armature mode: %w", err)
-	}
-
-	var issuesDir string
-	var worktreePath string
-	switch mode {
-	case "single-branch":
-		issuesDir = filepath.Join(actualRepoPath, ".armature")
-	case "dual-branch":
-		worktreePath, err = adapters.GitConfig(actualRepoPath, "armature.ops-worktree-path")
-		if err != nil {
-			return nil, fmt.Errorf("dual-branch mode requires armature.ops-worktree-path to be set: %w", err)
-		}
-		issuesDir = filepath.Join(worktreePath, ".armature")
-	default:
-		return nil, fmt.Errorf("unknown armature mode: %q", mode)
+	issuesDir := filepath.Join(probeResult.RepoPath, ".armature")
+	if probeResult.Mode == "dual-branch" {
+		issuesDir = filepath.Join(probeResult.WorktreePath, ".armature")
 	}
 
 	cfg, err := LoadConfig(filepath.Join(issuesDir, "config.json"))
@@ -115,11 +102,76 @@ func ResolveContext(repoPath string) (*Context, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	return ResolveContextWithProbe(repoPath, staticRepoProbe{result: probeResult}, cfg)
+}
+
+// ResolveContextWithProbe derives a Context from probe results and config without
+// performing filesystem or git I/O itself.
+func ResolveContextWithProbe(repoPath string, probe RepoProbe, cfg Config) (*Context, error) {
+	probeResult, err := probe.Probe(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	issuesDir := filepath.Join(probeResult.RepoPath, ".armature")
+	if probeResult.Mode == "dual-branch" {
+		if probeResult.WorktreePath == "" {
+			return nil, fmt.Errorf("dual-branch mode requires armature.ops-worktree-path to be set")
+		}
+		issuesDir = filepath.Join(probeResult.WorktreePath, ".armature")
+	}
+	if probeResult.Mode != "single-branch" && probeResult.Mode != "dual-branch" {
+		return nil, fmt.Errorf("unknown armature mode: %q", probeResult.Mode)
+	}
+
 	return &Context{
-		RepoPath:     actualRepoPath,
+		RepoPath:     probeResult.RepoPath,
 		IssuesDir:    issuesDir,
-		WorktreePath: worktreePath,
-		Mode:         mode,
+		WorktreePath: probeResult.WorktreePath,
+		Mode:         probeResult.Mode,
 		Config:       cfg,
 	}, nil
+}
+
+type staticRepoProbe struct {
+	result RepoProbeResult
+}
+
+func (s staticRepoProbe) Probe(string) (RepoProbeResult, error) {
+	return s.result, nil
+}
+
+type defaultRepoProbe struct{}
+
+func (defaultRepoProbe) Probe(repoPath string) (RepoProbeResult, error) {
+	isWorktree, err := isGitWorktree(repoPath)
+	if err != nil {
+		return RepoProbeResult{}, fmt.Errorf("check git worktree: %w", err)
+	}
+
+	actualRepoPath := repoPath
+	if isWorktree {
+		actualRepoPath, err = resolveParentRepoFromWorktree(repoPath)
+		if err != nil {
+			return RepoProbeResult{}, fmt.Errorf("resolve parent repo from worktree: %w", err)
+		}
+	}
+
+	mode, err := adapters.GitConfigMode(actualRepoPath)
+	if err != nil {
+		return RepoProbeResult{}, fmt.Errorf("read armature mode: %w", err)
+	}
+
+	result := RepoProbeResult{
+		RepoPath: actualRepoPath,
+		Mode:     mode,
+	}
+	if mode == "dual-branch" {
+		worktreePath, err := adapters.GitConfig(actualRepoPath, "armature.ops-worktree-path")
+		if err != nil {
+			return RepoProbeResult{}, fmt.Errorf("dual-branch mode requires armature.ops-worktree-path to be set: %w", err)
+		}
+		result.WorktreePath = worktreePath
+	}
+	return result, nil
 }

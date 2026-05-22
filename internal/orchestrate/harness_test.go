@@ -118,6 +118,14 @@ func TestWithIssueScope(t *testing.T) {
 	assert.Equal(t, scope, got.Scope)
 }
 
+func TestWithIssueContextIncludesTaskMetadata(t *testing.T) {
+	ctx := WithIssueContext(context.Background(), "TASK-1", "Implement X", `[{"type":"test_passes","cmd":"go test ./..."}]`, []string{"cmd/armature/"})
+	got := issueFromCtx(ctx)
+	assert.Equal(t, "TASK-1", got.TaskID)
+	assert.Equal(t, "Implement X", got.TaskTitle)
+	assert.Contains(t, got.TaskContract, "test_passes")
+}
+
 // TestIssueFromCtxEmpty verifies issueFromCtx returns empty scope for a plain context.
 func TestIssueFromCtxEmpty(t *testing.T) {
 	got := issueFromCtx(context.Background())
@@ -129,6 +137,69 @@ func TestValidateIssueScope(t *testing.T) {
 	assert.Error(t, validateIssueScope(nil))
 	assert.Error(t, validateIssueScope([]string{}))
 	assert.NoError(t, validateIssueScope([]string{"internal/foo/"}))
+}
+
+func TestBuildClaudeLaunchArgs_NonInteractive(t *testing.T) {
+	args := buildClaudeLaunchArgs("claude-sonnet-4-6", "do the task")
+	assert.Equal(t, "claude", args[0])
+	assert.Contains(t, args, "--print")
+	assert.Contains(t, args, "--output-format")
+	assert.Contains(t, args, "text")
+	assert.Contains(t, args, "--permission-mode")
+	assert.Contains(t, args, "dontAsk")
+	assert.Contains(t, args, "--model")
+	assert.Equal(t, "do the task", args[len(args)-1])
+}
+
+func TestBuildCodexLaunchArgs_NonInteractive(t *testing.T) {
+	args := buildCodexLaunchArgs("gpt-5", "do the task")
+	assert.Equal(t, "codex", args[0])
+	assert.Equal(t, "exec", args[1])
+	assert.Contains(t, args, "--color")
+	assert.Contains(t, args, "never")
+	assert.Contains(t, args, "--model")
+	assert.Equal(t, "do the task", args[len(args)-1])
+}
+
+func TestBuildHarnessPrompt_IncludesScope(t *testing.T) {
+	prompt := buildHarnessPrompt(&issueContext{
+		TaskID:       "TASK-7",
+		TaskTitle:    "Fix runtime",
+		TaskContract: `[{"type":"test_passes","cmd":"go test ./cmd/armature"}]`,
+		Scope:        []string{"internal/orchestrate/", "cmd/armature/"},
+	})
+	assert.Contains(t, prompt, defaultHarnessPrompt)
+	assert.Contains(t, prompt, "TASK-7")
+	assert.Contains(t, prompt, "Fix runtime")
+	assert.Contains(t, prompt, "test_passes")
+	assert.Contains(t, prompt, "internal/orchestrate/")
+	assert.Contains(t, prompt, "cmd/armature/")
+}
+
+func TestBuildHarnessPrompt_IncludesStructuredTaskContext(t *testing.T) {
+	prompt := buildHarnessPrompt(&issueContext{
+		TaskID:            "TASK-42",
+		TaskTitle:         "Add context wiring",
+		TaskContract:      `[{"type":"test_passes","cmd":"go test ./..."}]`,
+		Scope:             []string{"internal/orchestrate/"},
+		StructuredContext: `{"issue_id":"TASK-42","layers":[{"name":"core_spec","priority":1,"content":"Definition of Done"}]}`,
+	})
+
+	assert.Contains(t, prompt, "Task context (arm render-context --format agent):")
+	assert.Contains(t, prompt, `"issue_id":"TASK-42"`)
+	assert.Contains(t, prompt, `"name":"core_spec"`)
+}
+
+func TestCodexAdapterRunDryRun(t *testing.T) {
+	dir := t.TempDir()
+	a, err := NewHarnessAdapter(HarnessConfig{Adapter: "codex"})
+	require.NoError(t, err)
+
+	ctx := WithIssueScope(context.Background(), []string{"internal/foo/"})
+	result, err := a.Run(ctx, HarnessConfig{WorkDir: dir}, RunOptions{DryRun: true})
+	require.NoError(t, err)
+	assert.Equal(t, "codex", result.Name)
+	assert.True(t, result.Passed)
 }
 
 // TestBuildSandboxCmd verifies that buildSandboxCmd returns a non-empty command list.
@@ -162,18 +233,6 @@ func TestClaudeAdapterRunDryRun(t *testing.T) {
 
 // TestCodexAdapterRunDryRun verifies that Run returns a result without panicking
 // when DryRun is true.
-func TestCodexAdapterRunDryRun(t *testing.T) {
-	dir := t.TempDir()
-	a, err := NewHarnessAdapter(HarnessConfig{Adapter: "codex"})
-	require.NoError(t, err)
-
-	ctx := WithIssueScope(context.Background(), []string{"internal/foo/"})
-	result, err := a.Run(ctx, HarnessConfig{WorkDir: dir}, RunOptions{DryRun: true})
-	require.NoError(t, err)
-	assert.Equal(t, "codex", result.Name)
-	assert.True(t, result.Passed)
-}
-
 // TestDevinAdapterRunDryRun verifies that Run returns a result without panicking
 // when DryRun is true.
 func TestDevinAdapterRunDryRun(t *testing.T) {

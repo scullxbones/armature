@@ -1,8 +1,8 @@
 ---
 name: armature-coordinator
 description: >
-  Use when operating orchestration in an armature-managed repository — runs the
-  pull loop (`arm ready` + `arm orchestrate`), scales concurrent orchestrators,
+  Use when operating orchestration in an armature-managed repository — supervises
+  runtime loops (`arm worker run`), scales concurrent workers,
   integrates outcomes, validates citation coverage, and closes stories with a
   pull request. Manual worker dispatch remains available as a fallback path.
   Does not require a worker identity (skip worker-init). Requires arm on PATH.
@@ -12,8 +12,7 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 # Armature Coordinator Loop (Orchestrator-First)
 
 The coordinator manages execution flow — it does not implement features itself.
-Its default job is to run and supervise orchestrators that pull from `arm ready`
-and execute via `arm orchestrate`.
+Its default job is to run and supervise runtime workers via `arm worker run`.
 
 ## Prerequisites
 
@@ -103,28 +102,30 @@ arm list --status blocked              # diagnose blockers
 did not make it into the ready queue. Use it as the first step whenever the
 queue looks unexpectedly empty.
 
-### 3. Default Dispatch: Orchestrator Pull Loop
+### 3. Default Dispatch: Runtime Loop
 
-For each ready task:
+For normal queue draining:
 
 ```bash
-arm orchestrate --issue TASK-ID
+arm worker run --max-runtime 20m
 ```
 
-If it succeeds, run `arm ready` again. If it escalates, inspect task state with
-`arm show TASK-ID`, resolve the issue (scope, acceptance, harness/model), then
-retry orchestration.
+If runtime escalates, first capture diagnostics:
+```bash
+arm worker run --format json --max-runtime 20m
+```
+When idle, inspect `idle_diagnostics` in the JSON payload. On timeout, use
+`arm ready --explain --format json` to identify blocked gates, then inspect
+the affected issue with `arm show TASK-ID` before retrying.
 
 ### 4. Parallel Dispatch (independent tasks in one wave)
 
-Run multiple orchestrator processes concurrently. Each process:
-1. calls `arm ready`
-2. selects a ready task
-3. runs `arm orchestrate --issue TASK-ID`
-4. repeats until no tasks are ready
+Run multiple runtime processes concurrently. Each process:
+1. runs `arm worker run`
+2. handles claim contention internally
+3. repeats until no tasks are ready
 
-Claim collisions are normal under concurrency. The loser should simply poll
-`arm ready` again and continue with the next task.
+Claim collisions are normal under concurrency and should be retried automatically.
 
 ### 5. Manual Worker Dispatch (Fallback Path)
 

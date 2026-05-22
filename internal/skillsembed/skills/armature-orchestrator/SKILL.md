@@ -1,9 +1,10 @@
 ---
 name: armature-orchestrator
 description: >
-  Use when running Armature's default pull-model execution loop. Polls ready
-  work, runs `arm orchestrate`, handles retries/escalations, and scales out via
-  concurrent orchestrator processes. Requires arm on PATH.
+  Use when running Armature's default runtime execution loop. Runs
+  `arm worker run` to drain ready work deterministically, handles operational
+  escalations, and uses `arm orchestrate --issue` as single-task fallback.
+  Requires arm on PATH.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -12,9 +13,9 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 This is the default execution path for task delivery in Armature.
 
 Use this loop:
-1. Pull a ready task with `arm ready`
-2. Run deterministic orchestration with `arm orchestrate --issue ID`
-3. Repeat until the queue is empty
+1. Run deterministic runtime execution with `arm worker run`
+2. Let the runtime pull ready work and orchestrate tasks
+3. Repeat when needed until the queue is empty
 
 ## Prerequisites
 
@@ -28,19 +29,18 @@ Recommended preflight checks:
 
 ```bash
 arm doctor
-arm orchestrate --issue TASK-ID --dry-run
+arm worker run --max-tasks 1 --dry-run
 ```
 
-## Single-Orchestrator Loop
+## Default Runtime Loop
 
 ```bash
-arm ready
-arm orchestrate --issue TASK-ID
+arm worker run
 ```
 
-If orchestration succeeds, repeat with the next ready task.
+If runtime exits `final_state=idle`, the queue is drained for now.
 
-If orchestration fails before dispatch, use dry-run to inspect state:
+Use single-task fallback when you need targeted control:
 
 ```bash
 arm orchestrate --issue TASK-ID --dry-run
@@ -48,11 +48,10 @@ arm orchestrate --issue TASK-ID --dry-run
 
 ## Multi-Orchestrator Scaling
 
-Run multiple orchestrator processes in parallel. Each process independently:
+Run multiple runtime processes in parallel. Each process independently:
 
 ```bash
-arm ready
-arm orchestrate --issue TASK-ID
+arm worker run
 ```
 
 Claim collisions are expected. If a claim is lost, immediately poll `arm ready`
@@ -60,12 +59,12 @@ again and continue.
 
 ## Escalation Handling
 
-When orchestration escalates:
+When runtime or orchestration escalates:
 
 1. Inspect issue details: `arm show TASK-ID`
 2. Review outcome notes and verification failures
 3. Fix root cause (scope, acceptance criteria, test setup, harness/model)
-4. Re-run `arm orchestrate --issue TASK-ID`
+4. Re-run `arm worker run` or use targeted fallback `arm orchestrate --issue TASK-ID`
 
 Use explicit model override when needed:
 

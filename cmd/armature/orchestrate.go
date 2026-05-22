@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -26,6 +27,50 @@ func resolveModel(flagModel, taskModel, configDefault string) string {
 		return taskModel
 	}
 	return configDefault
+}
+
+func newOrchestrateCmdForService(service orchestrate.Runner) *cobra.Command {
+	var (
+		issueID string
+		dryRun  bool
+	)
+
+	cmd := &cobra.Command{
+		Use: "orchestrate",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if issueID == "" {
+				return fmt.Errorf("--issue is required")
+			}
+			state, err := service.Run(cmd.Context(), orchestrate.RunInput{
+				TaskID: issueID,
+				Opts:   orchestrate.RunOptions{DryRun: dryRun},
+			})
+			if err != nil {
+				var runErr *orchestrate.RunError
+				if errors.As(err, &runErr) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"orchestrate timeout/failure summary: elapsed=%dms phase=%s harness=%s retries=%d next=%s\n",
+						runErr.Diagnostics.ElapsedMs,
+						runErr.Diagnostics.LastPhase,
+						runErr.Diagnostics.Harness,
+						runErr.Diagnostics.Retries,
+						runErr.Diagnostics.NextStep,
+					)
+				}
+				return err
+			}
+			data, _ := json.Marshal(map[string]any{
+				"issue": issueID,
+				"phase": state.Phase,
+				"run":   state.Run,
+			})
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to orchestrate (required)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "exit before dispatch — inspect state without running the agent")
+	return cmd
 }
 
 func newOrchestrateCmd() *cobra.Command {
@@ -126,23 +171,11 @@ Three-level model resolution:
 
 			// --- Assemble engine config ---
 			gitClient := adapters.New(appCtx.RepoPath)
-			engineCfg := orchestrate.EngineConfig{
-				TaskID:       issueID,
-				Git:          gitClient,
-				OpLog:        opLog,
-				Harness:      harnessAdapter,
-				HarnessCfg:   harnessCfg,
-				Scope:        issue.Scope,
-				ActiveScopes: activeScopes,
-				Opts: orchestrate.RunOptions{
-					DryRun:  dryRun,
-					WorkDir: appCtx.RepoPath,
-				},
-				RetryBudget: retries,
-				WorkerID:    workerID,
-			}
-
-			engine := orchestrate.NewEngine(engineCfg)
+			service := orchestrate.NewService(orchestrate.ServiceConfig{
+				Git:     gitClient,
+				OpLog:   opLog,
+				Harness: harnessAdapter,
+			})
 
 			// --- Run ---
 			var cancelFn context.CancelFunc
@@ -155,8 +188,40 @@ Three-level model resolution:
 				defer cancelFn()
 			}
 
-			state, err := engine.Run(runCtx)
+			state, err := service.Run(runCtx, orchestrate.RunInput{
+				TaskID:       issueID,
+				TaskTitle:    issue.Title,
+				TaskContract: string(issue.Acceptance),
+				BuildTaskContext: func(ctx context.Context, issueID string) (string, error) {
+					return buildHarnessStructuredContext(appCtx, issueID)
+				},
+				WorkerID:     workerID,
+				RetryBudget:  retries,
+				Scope:        issue.Scope,
+				ActiveScopes: activeScopes,
+				HarnessCfg:   harnessCfg,
+				Opts: orchestrate.RunOptions{
+					DryRun:            dryRun,
+					WorkDir:           appCtx.RepoPath,
+					HeartbeatInterval: 5 * time.Second,
+					Progress: func(ev orchestrate.ProgressEvent) {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "orchestrate progress: kind=%s phase=%s elapsed=%s harness=%s msg=%s\n",
+							ev.Kind, ev.Phase, ev.Elapsed.Truncate(time.Second), ev.Harness, ev.Message)
+					},
+				},
+			})
 			if err != nil {
+				var runErr *orchestrate.RunError
+				if errors.As(err, &runErr) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"orchestrate timeout/failure summary: elapsed=%dms phase=%s harness=%s retries=%d next=%s\n",
+						runErr.Diagnostics.ElapsedMs,
+						runErr.Diagnostics.LastPhase,
+						runErr.Diagnostics.Harness,
+						runErr.Diagnostics.Retries,
+						runErr.Diagnostics.NextStep,
+					)
+				}
 				return fmt.Errorf("orchestrate %s: %w", issueID, err)
 			}
 

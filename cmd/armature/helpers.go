@@ -133,12 +133,23 @@ func resolveWorkerAndLog(args ...*config.Context) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
-	logName := workerID
-	if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
-		logName = workerID + "~" + slot
+	ownerID := workerIdentityWithSlot(workerID)
+	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, ownerID)
+	return ownerID, logPath, nil
+}
+
+func workerIdentityWithSlot(workerID string) string {
+	if slot := os.Getenv("ARM_LOG_SLOT"); slot != "" {
+		return workerID + "~" + slot
 	}
-	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, logName)
-	return workerID, logPath, nil
+	return workerID
+}
+
+func baseWorkerIdentity(workerID string) string {
+	if idx := strings.Index(workerID, "~"); idx >= 0 {
+		return workerID[:idx]
+	}
+	return workerID
 }
 
 func nowEpoch() int64 {

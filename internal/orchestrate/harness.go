@@ -14,6 +14,8 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
+const defaultHarnessPrompt = "Execute the assigned Armature task in this repository, complete the required code changes, run relevant verification, and exit."
+
 // NewHarnessAdapter creates a harness adapter for the given config.
 // Valid adapter names are "claude", "codex", and "devin".
 func NewHarnessAdapter(cfg HarnessConfig) (HarnessAdapter, error) {
@@ -125,11 +127,33 @@ func errAs(err error, target *interface{ ExitCode() int }) bool {
 type issueCtxKey struct{}
 
 // issueContext holds the scope paths for a harness invocation.
-type issueContext struct{ Scope []string }
+type issueContext struct {
+	Scope             []string
+	TaskID            string
+	TaskTitle         string
+	TaskContract      string
+	StructuredContext string
+}
 
 // WithIssueScope injects scope paths into ctx so harness adapters can read them.
 func WithIssueScope(ctx context.Context, scope []string) context.Context {
-	return context.WithValue(ctx, issueCtxKey{}, &issueContext{Scope: scope})
+	return WithIssueContext(ctx, "", "", "", scope)
+}
+
+// WithIssueContext injects issue metadata and scope into ctx for harness adapters.
+func WithIssueContext(ctx context.Context, taskID, taskTitle, taskContract string, scope []string) context.Context {
+	return WithStructuredIssueContext(ctx, taskID, taskTitle, taskContract, "", scope)
+}
+
+// WithStructuredIssueContext injects issue metadata, structured context, and scope into ctx.
+func WithStructuredIssueContext(ctx context.Context, taskID, taskTitle, taskContract, structuredContext string, scope []string) context.Context {
+	return context.WithValue(ctx, issueCtxKey{}, &issueContext{
+		Scope:             scope,
+		TaskID:            taskID,
+		TaskTitle:         taskTitle,
+		TaskContract:      taskContract,
+		StructuredContext: structuredContext,
+	})
 }
 
 func issueFromCtx(ctx context.Context) *issueContext {
@@ -145,6 +169,43 @@ func validateIssueScope(scope []string) error {
 		return fmt.Errorf("issue has no declared scope paths — cannot configure harness sandbox")
 	}
 	return nil
+}
+
+func buildHarnessPrompt(issue *issueContext) string {
+	scope := strings.Join(issue.Scope, ", ")
+	task := issue.TaskID
+	if issue.TaskTitle != "" {
+		task = fmt.Sprintf("%s (%s)", issue.TaskID, issue.TaskTitle)
+	}
+	if strings.TrimSpace(task) == "" {
+		task = "unspecified"
+	}
+	contract := strings.TrimSpace(issue.TaskContract)
+	if contract == "" {
+		contract = "none provided"
+	}
+	prompt := fmt.Sprintf("%s Task: %s. Acceptance contract: %s. Scope: %s", defaultHarnessPrompt, task, contract, scope)
+	structured := strings.TrimSpace(issue.StructuredContext)
+	if structured == "" {
+		return prompt
+	}
+	return fmt.Sprintf("%s\n\nTask context (arm render-context --format agent):\n%s", prompt, structured)
+}
+
+func buildClaudeLaunchArgs(model, prompt string) []string {
+	args := []string{"claude", "--print", "--output-format", "text", "--permission-mode", "dontAsk"}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	return append(args, prompt)
+}
+
+func buildCodexLaunchArgs(model, prompt string) []string {
+	args := []string{"codex", "exec", "--color", "never"}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	return append(args, prompt)
 }
 
 // ===== Claude adapter =====
@@ -172,11 +233,8 @@ func (a *claudeAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOpti
 		return CheckResult{Name: "claude", Severity: SeverityError, Passed: false, Message: err.Error()}, err
 	}
 
-	model := a.cfg.Model
-	args := []string{"claude"}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
+	prompt := buildHarnessPrompt(issue)
+	args := buildClaudeLaunchArgs(a.cfg.Model, prompt)
 
 	absWork, err := filepath.Abs(workDir)
 	if err != nil {
@@ -251,11 +309,14 @@ func (a *codexAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOptio
 	if err := writeCodexConfig(workDir, issue.Scope); err != nil {
 		return CheckResult{Name: "codex", Severity: SeverityError, Passed: false, Message: err.Error()}, err
 	}
-
-	args := []string{"codex"}
-	if a.cfg.Model != "" {
-		args = append(args, "--model", a.cfg.Model)
+	codexHome := filepath.Join(workDir, ".codex-home")
+	if err := adapters.MkdirAll(codexHome, 0o755); err != nil {
+		return CheckResult{Name: "codex", Severity: SeverityError, Passed: false, Message: err.Error()}, err
 	}
+
+	prompt := buildHarnessPrompt(issue)
+	args := buildCodexLaunchArgs(a.cfg.Model, prompt)
+	args = append([]string{"env", "CODEX_HOME=" + codexHome}, args...)
 
 	absWork, err := filepath.Abs(workDir)
 	if err != nil {

@@ -460,6 +460,11 @@ Run deterministic task orchestration with an AI harness.
 - Exits non-zero when orchestration escalates or preflight validation fails.
 - Prints either human output (`phase`, `run`) or machine-readable JSON (`--format json|agent`).
 
+**Runtime Requirements:**
+- Linux sandbox mode requires `bubblewrap` (`bwrap`) and `socat` installed and discoverable on `PATH`.
+- macOS sandbox mode requires `sandbox-exec`.
+- Harness binaries must be installed and invocable in non-interactive mode from the current shell session.
+
 **Examples:**
 ```bash
 # Run with defaults
@@ -485,15 +490,48 @@ Show tasks ready to be claimed.
 - `--parent string`: Filter to descendants of this issue ID.
 - `--worker string`: Worker ID for assignment-aware sorting.
 
-**Pull-Model Loop (Orchestrator):**
-Use `ready` as the queue front for orchestration workers:
+**Queue Inspection:**
+Use `ready` to inspect what the runtime loop will pick next:
 
 1. `arm ready`
-2. Pick the highest-priority task
-3. `arm orchestrate --issue <id>`
-4. Repeat until the queue is empty
+2. Start or continue `arm worker run`
+3. Use `arm orchestrate --issue <id>` only for single-task manual fallback
 
 Claim collisions are expected under concurrency; losing workers simply call `arm ready` again.
+
+---
+
+## worker
+
+Worker runtime commands.
+
+**Synopsis:**
+`arm worker [command]`
+
+**Available Subcommands:**
+- `run`: Execute the deterministic worker runtime loop.
+
+---
+
+## worker run
+
+Run the worker runtime loop (default queue-draining execution path).
+
+**Synopsis:**
+`arm worker run [flags]`
+
+**Flags:**
+- `--dry-run`: Inspect runtime behavior without mutating task state.
+- `--max-tasks int`: Maximum tasks to execute before stopping (`0` means no limit).
+
+**Examples:**
+```bash
+# Drain the queue until empty
+arm worker run
+
+# Execute exactly one task (dogfood/smoke mode)
+arm worker run --max-tasks 1
+```
 
 ---
 
@@ -656,6 +694,15 @@ Transition an issue to a new status.
 ```bash
 arm transition TASK-001 --to in-progress --branch feature/login
 ```
+
+**Sandbox Note (Codex/agent sessions):**
+- In some sandboxed sessions, `arm transition` may fail with:
+  `Unable to create .../.git/worktrees/.../index.lock: Read-only file system`.
+- This is a sandbox lockfile restriction on nested git writes, not an issue-graph bug.
+- Re-run the same command with elevated approval so git can write worktree locks.
+- If this happens repeatedly, approve the command prefix:
+  `go run ./cmd/armature transition`
+  so future transitions work without re-troubleshooting.
 
 ---
 
