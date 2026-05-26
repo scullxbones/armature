@@ -183,6 +183,21 @@ Both triggers use the same service and result model.
 
 ## Architecture
 
+The hook system must be modular and adapter-based. Claude Code, Codex, and
+Devin are the first supported platforms, not a closed set. Adding a future
+harness must require a new platform adapter and tests, not changes to task
+policy, scope matching, verification semantics, or orchestrator state logic.
+
+The architecture has three layers:
+
+1. Shared policy and verification core.
+2. Generic hook event evaluation.
+3. Platform adapters for config generation, event decoding, and decision
+   encoding.
+
+Only the platform adapter layer may depend on harness-specific hook schemas,
+matcher names, output formats, or exit-code conventions.
+
 ### TaskPolicyResolver
 
 Responsibilities:
@@ -216,7 +231,7 @@ There must be one implementation and one test suite for this logic.
 
 Responsibilities:
 
-- Convert platform hook input to generic events:
+- Evaluate generic hook events:
   - `PreToolUse`
   - `Stop`
   - `PostToolUse` if needed for advisory feedback
@@ -228,7 +243,30 @@ Responsibilities:
   - add context
   - no decision
 
-### PlatformHookEncoder
+The evaluator must not parse platform-specific JSON directly. Platform adapters
+decode hook payloads into generic event structs before calling the evaluator.
+
+### PlatformAdapter
+
+Responsibilities:
+
+- Generate ephemeral platform-native hook configuration for one harness run.
+- Decode platform hook input into generic hook events.
+- Encode generic decisions into platform-native hook responses.
+- Declare platform capability metadata such as supported hook events, supported
+  edit tools, shell visibility, stop-hook blocking support, and timeout
+  behavior.
+
+Each supported harness has one adapter:
+
+- `ClaudeHookAdapter`
+- `CodexHookAdapter`
+- `DevinHookAdapter`
+
+Future harnesses must add a new adapter that implements the same interface.
+They must not add branches to shared policy code.
+
+### Platform Decision Encoding
 
 Responsibilities:
 
@@ -238,7 +276,8 @@ Responsibilities:
 - Keep platform differences isolated to input/output shape, exit-code behavior,
   and matcher naming.
 
-The encoder must not contain scope matching, task lookup, or verification logic.
+Decision encoding must not contain scope matching, task lookup, or verification
+logic.
 
 ### VerificationService
 
@@ -251,6 +290,11 @@ Responsibilities:
 - Produce results usable by both hook feedback and orchestration state.
 
 ## Platform Mapping
+
+Platform mappings are adapter implementations. The table below documents the
+initial adapters and their expected capabilities. New platforms should extend
+this section by adding a new adapter entry rather than modifying shared policy
+contracts.
 
 ### Claude Code
 
@@ -304,7 +348,7 @@ kept behind the platform encoder so future differences remain localized.
 6. The platform invokes `arm harness-hook` with event JSON on stdin.
 7. `arm harness-hook` resolves task state from Armature.
 8. `HarnessHookEvaluator` calls shared policy/services.
-9. `PlatformHookEncoder` returns the platform-specific decision.
+9. The active `PlatformAdapter` returns the platform-specific decision.
 10. If allowed, the tool proceeds. If blocked, the harness receives the reason.
 11. On stop, the hook path invokes `VerificationService` and blocks or allows
     stopping based on results.
@@ -385,4 +429,3 @@ Regression tests:
   smoke tests.
 - If a platform cannot guarantee a hook is active for a control, the control
   cannot be considered replaced for that platform.
-
