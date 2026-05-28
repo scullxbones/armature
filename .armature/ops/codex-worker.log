@@ -106,3 +106,4 @@
 ["amend","HKREFACT-T12",1779968643,"codex-worker",{"scope":["internal/orchestrate/","internal/adapters/","cmd/armature/","docs/commands.md","docs/provider-smoke-tests.md"]}]
 ["link","HKREFACT-T09",1779968643,"codex-worker",{"dep":"HKREFACT-T08","rel":"blocked_by"}]
 ["amend","HKREFACT",1779968659,"codex-worker",{"scope":["internal/orchestrate/harness.go","internal/orchestrate/engine.go","internal/orchestrate/service.go","internal/adapters/shell.go","cmd/armature/harness_hook.go","cmd/armature/main.go"]}]
+["amend","HKREFACT-T12",1779968659,"codex-worker",{"scope":["internal/orchestrate/engine.go","internal/orchestrate/service.go","internal/orchestrate/harness.go","internal/adapters/shell.go","cmd/armature/orchestrate.go","cmd/armature/worker_run.go"]}]
