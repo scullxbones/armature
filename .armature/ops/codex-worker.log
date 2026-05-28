@@ -108,3 +108,4 @@
 ["amend","HKREFACT",1779968659,"codex-worker",{"scope":["internal/orchestrate/harness.go","internal/orchestrate/engine.go","internal/orchestrate/service.go","internal/adapters/shell.go","cmd/armature/harness_hook.go","cmd/armature/main.go"]}]
 ["amend","HKREFACT-T12",1779968659,"codex-worker",{"scope":["internal/orchestrate/engine.go","internal/orchestrate/service.go","internal/orchestrate/harness.go","internal/adapters/shell.go","cmd/armature/orchestrate.go","cmd/armature/worker_run.go"]}]
 ["amend","HKREFACT",1779968673,"codex-worker",{"scope":["docs/superpowers/plans/2026-05-26-harness-hooks-guardrail-refactor.md"]}]
+["amend","HKREFACT-T12",1779968673,"codex-worker",{"type":"story","scope":["docs/superpowers/plans/2026-05-26-harness-hooks-guardrail-refactor.md"]}]
