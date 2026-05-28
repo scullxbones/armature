@@ -103,3 +103,4 @@
 ["amend","HKREFACT-T04",1779968642,"codex-worker",{"scope":["internal/harnesshook/platform_claude.go (new)","internal/harnesshook/platform_codex.go (new)","internal/harnesshook/platform_devin.go (new)","internal/harnesshook/platform_test.go (new)"],"definition_of_done":"Claude, Codex, and Devin hook adapters generate config and translate hook payloads with deterministic adapter tests."}]
 ["amend","HKREFACT-T05",1779968642,"codex-worker",{"scope":["internal/harnesspolicy/resolver.go (new)","internal/harnesspolicy/resolver_test.go (new)"]}]
 ["amend","HKREFACT-T06",1779968642,"codex-worker",{"scope":["cmd/armature/harness_hook.go (new)","cmd/armature/harness_hook_test.go (new)","cmd/armature/main.go"]}]
+["amend","HKREFACT-T12",1779968643,"codex-worker",{"scope":["internal/orchestrate/","internal/adapters/","cmd/armature/","docs/commands.md","docs/provider-smoke-tests.md"]}]
