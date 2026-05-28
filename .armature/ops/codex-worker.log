@@ -114,3 +114,4 @@
 ["transition","task-1779045542",1779968695,"codex-worker",{"to":"merged","outcome":"Removed runtime TRLS naming, standardized ARM_LOG_SLOT usage, and validated slot behavior."}]
 ["transition","task-1779046292",1779968695,"codex-worker",{"to":"merged","outcome":"Added bounded optimistic concurrency retries for mutating commands with actionable contention diagnostics."}]
 ["transition","task-1779044874",1779968696,"codex-worker",{"to":"merged","outcome":"Added bounded worker-run timeout controls and structured escalation diagnostics for stalled harness execution."}]
+["orchestrate-dispatch","HKREFACT-T01",1779968895,"codex-worker",{"worktree_path":".","pre_dispatch_ref":"1556290ebcc91bc7d03256bb93304e3aa90b8c15","retry_budget":3}]
