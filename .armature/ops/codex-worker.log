@@ -99,3 +99,4 @@
 ["amend","HKREFACT",1779968641,"codex-worker",{"scope":["internal/orchestrate/","internal/adapters/","cmd/armature/","docs/commands.md","docs/provider-smoke-tests.md"],"definition_of_done":"Refactor harness guardrails to hook adapters with shared policy and verification, preserving equivalent provider behavior and passing repository verification."}]
 ["amend","HKREFACT-T01",1779968642,"codex-worker",{"scope":["internal/harnesspolicy/scope.go (new)","internal/harnesspolicy/scope_test.go (new)"]}]
 ["amend","HKREFACT-T02",1779968642,"codex-worker",{"scope":["internal/orchestrate/verification_service.go (new)","internal/orchestrate/verify_test.go"]}]
+["amend","HKREFACT-T03",1779968642,"codex-worker",{"scope":["internal/harnesshook/types.go (new)","internal/harnesshook/evaluator.go (new)","internal/harnesshook/evaluator_test.go (new)"]}]
