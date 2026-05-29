@@ -72,7 +72,7 @@ func buildSandboxCmd(worktreeAbs string, cmdArgs []string) []string {
 
 // invokeProcess launches cmdArgs in workdir, captures stdout+stderr, and returns
 // an InvocationResult. In dry-run mode no process is spawned.
-func invokeProcess(ctx context.Context, workdir string, cmdArgs []string, dryRun bool) (InvocationResult, error) {
+func invokeProcess(ctx context.Context, workdir string, cmdArgs []string, env map[string]string, dryRun bool) (InvocationResult, error) {
 	if dryRun {
 		return InvocationResult{Status: ExitSuccess}, nil
 	}
@@ -82,7 +82,7 @@ func invokeProcess(ctx context.Context, workdir string, cmdArgs []string, dryRun
 	mwErr := io.MultiWriter(&stderr, os.Stderr)
 
 	start := time.Now()
-	status, err := adapters.RunProcess(ctx, workdir, cmdArgs, mw, mwErr)
+	status, err := adapters.RunProcessWithEnv(ctx, workdir, cmdArgs, env, mw, mwErr)
 	durationMs := time.Since(start).Milliseconds()
 
 	result := InvocationResult{
@@ -242,7 +242,7 @@ func (a *claudeAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOpti
 	}
 	sandboxed := buildSandboxCmd(absWork, args)
 
-	inv, err := invokeProcess(ctx, workDir, sandboxed, opts.DryRun)
+	inv, err := invokeProcess(ctx, workDir, sandboxed, cfg.Env, opts.DryRun)
 	result := CheckResult{
 		Name:       "claude",
 		Severity:   SeverityError,
@@ -309,14 +309,8 @@ func (a *codexAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOptio
 	if err := writeCodexConfig(workDir, issue.Scope); err != nil {
 		return CheckResult{Name: "codex", Severity: SeverityError, Passed: false, Message: err.Error()}, err
 	}
-	codexHome := filepath.Join(workDir, ".codex-home")
-	if err := adapters.MkdirAll(codexHome, 0o755); err != nil {
-		return CheckResult{Name: "codex", Severity: SeverityError, Passed: false, Message: err.Error()}, err
-	}
-
 	prompt := buildHarnessPrompt(issue)
 	args := buildCodexLaunchArgs(a.cfg.Model, prompt)
-	args = append([]string{"env", "CODEX_HOME=" + codexHome}, args...)
 
 	absWork, err := filepath.Abs(workDir)
 	if err != nil {
@@ -324,7 +318,7 @@ func (a *codexAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOptio
 	}
 	sandboxed := buildSandboxCmd(absWork, args)
 
-	inv, err := invokeProcess(ctx, workDir, sandboxed, opts.DryRun)
+	inv, err := invokeProcess(ctx, workDir, sandboxed, cfg.Env, opts.DryRun)
 	result := CheckResult{
 		Name:       "codex",
 		Severity:   SeverityError,
@@ -389,7 +383,7 @@ func (a *devinAdapter) Run(ctx context.Context, cfg HarnessConfig, opts RunOptio
 	}
 	sandboxed := buildSandboxCmd(absWork, args)
 
-	inv, err := invokeProcess(ctx, workDir, sandboxed, opts.DryRun)
+	inv, err := invokeProcess(ctx, workDir, sandboxed, cfg.Env, opts.DryRun)
 	result := CheckResult{
 		Name:       "devin",
 		Severity:   SeverityError,

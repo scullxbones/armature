@@ -39,7 +39,7 @@ func TestOrchestrateCmd_RequiredFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	flags := cmd.Flags()
-	for _, name := range []string{"issue", "harness", "model", "retries", "timeout", "dry-run"} {
+	for _, name := range []string{"issue", "harness", "model", "retries", "timeout", "dry-run", "show-network-plan", "auth-check"} {
 		assert.NotNil(t, flags.Lookup(name), "expected flag --%s to be registered", name)
 	}
 }

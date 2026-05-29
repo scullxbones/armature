@@ -28,6 +28,13 @@ const (
 // supplied writers, and returns a ProcessStatus plus any error.
 // Context cancellation causes the process to be killed.
 func RunProcess(ctx context.Context, workdir string, cmdArgs []string, stdout, stderr io.Writer) (ProcessStatus, error) {
+	return RunProcessWithEnv(ctx, workdir, cmdArgs, nil, stdout, stderr)
+}
+
+// RunProcessWithEnv launches cmd with args in workdir using optional env
+// overrides, streams stdout/stderr to the supplied writers, and returns a
+// ProcessStatus plus any error.
+func RunProcessWithEnv(ctx context.Context, workdir string, cmdArgs []string, extraEnv map[string]string, stdout, stderr io.Writer) (ProcessStatus, error) {
 	if len(cmdArgs) == 0 {
 		return ProcessError, fmt.Errorf("RunProcess: cmdArgs must not be empty")
 	}
@@ -35,6 +42,13 @@ func RunProcess(ctx context.Context, workdir string, cmdArgs []string, stdout, s
 	cmd.Dir = workdir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	if len(extraEnv) > 0 {
+		base := os.Environ()
+		for k, v := range extraEnv {
+			base = append(base, k+"="+v)
+		}
+		cmd.Env = base
+	}
 
 	if err := cmd.Run(); err != nil {
 		// Distinguish context-caused failures from ordinary exit errors.

@@ -30,10 +30,13 @@ Devin is intentionally deferred for a later phase.
 ## Claude Harness Smoke
 
 1. Validate adapter path:
-   - `arm orchestrate --issue <ISSUE-ID> --harness claude --dry-run`
-2. Run live single-task orchestration:
+   - `arm orchestrate --issue <ISSUE-ID> --harness claude --dry-run --show-network-plan`
+2. Validate auth paths:
+   - API key mode: set `ANTHROPIC_API_KEY`, run dry-run again.
+   - OAuth/session mode: `claude auth status`, then run dry-run with API key unset.
+3. Run live single-task orchestration:
    - `arm orchestrate --issue <ISSUE-ID> --harness claude --timeout 900`
-3. Verify:
+4. Verify:
    - command exits 0 on success
    - task transitions as expected
    - no sandbox/preflight errors
@@ -41,10 +44,13 @@ Devin is intentionally deferred for a later phase.
 ## Codex Harness Smoke
 
 1. Validate adapter path:
-   - `arm orchestrate --issue <ISSUE-ID> --harness codex --dry-run`
-2. Run live single-task orchestration:
+   - `arm orchestrate --issue <ISSUE-ID> --harness codex --dry-run --show-network-plan`
+2. Validate auth paths:
+   - API key mode: set `OPENAI_API_KEY`, run dry-run again.
+   - OAuth/session mode: `codex login status`, then run dry-run with API key unset.
+3. Run live single-task orchestration:
    - `arm orchestrate --issue <ISSUE-ID> --harness codex --timeout 900`
-3. Verify:
+4. Verify:
    - command exits 0 on success
    - task transitions as expected
    - no sandbox/preflight errors

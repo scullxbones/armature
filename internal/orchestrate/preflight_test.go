@@ -209,6 +209,26 @@ func TestRunPreflight_SandboxNotRequired(t *testing.T) {
 	assert.True(t, result.OK, "sandbox not required — unavailability should not fail")
 }
 
+func TestRunPreflight_AuthRequiredUnavailable(t *testing.T) {
+	in := validPreflightInput(t)
+	in.AuthRequired = true
+	in.AuthOK = false
+	in.AuthError = "missing credentials"
+
+	result := orchestrate.RunPreflight(in)
+	assert.False(t, result.OK)
+	assert.Contains(t, result.Error(), "auth: missing credentials")
+}
+
+func TestRunPreflight_AuthRequiredAvailable(t *testing.T) {
+	in := validPreflightInput(t)
+	in.AuthRequired = true
+	in.AuthOK = true
+
+	result := orchestrate.RunPreflight(in)
+	assert.True(t, result.OK)
+}
+
 // --- multiple errors at once ---
 
 func TestRunPreflight_MultipleFailures(t *testing.T) {

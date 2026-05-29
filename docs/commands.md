@@ -447,6 +447,7 @@ Run deterministic task orchestration with an AI harness.
 - `--issue string`: Issue ID to orchestrate (required).
 - `--model string`: Model override for this invocation.
 - `--retries int`: Retry budget after verification failures (default `3`).
+- `--show-network-plan`: Print selected auth source and outbound data classes before dispatch.
 - `--timeout int`: Per-dispatch timeout in seconds (`0` disables timeout).
 
 **Model Resolution Order:**
@@ -464,6 +465,7 @@ Run deterministic task orchestration with an AI harness.
 - Linux sandbox mode requires `bubblewrap` (`bwrap`) and `socat` installed and discoverable on `PATH`.
 - macOS sandbox mode requires `sandbox-exec`.
 - Harness binaries must be installed and invocable in non-interactive mode from the current shell session.
+- Auth can come from API key env vars or existing harness OAuth/session login.
 
 **Examples:**
 ```bash
@@ -475,6 +477,9 @@ arm orchestrate --issue E7-S1-T1 --harness codex --model gpt-4o
 
 # Inspect state without dispatching a harness
 arm orchestrate --issue E7-S1-T1 --dry-run
+
+# Show auth/network disclosure during dry-run
+arm orchestrate --issue E7-S1-T1 --dry-run --show-network-plan
 ```
 
 ---

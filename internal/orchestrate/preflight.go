@@ -41,6 +41,13 @@ type PreflightInput struct {
 	// SandboxOK is the result of a prior SandboxAvailable() call.
 	// Only meaningful when SandboxRequired is true.
 	SandboxOK bool
+
+	// AuthRequired indicates harness auth must be validated before dispatch.
+	AuthRequired bool
+	// AuthOK is the result of auth resolution/status checks.
+	AuthOK bool
+	// AuthError is a human-readable auth failure detail.
+	AuthError string
 }
 
 // PreflightResult holds the outcome of RunPreflight.
@@ -104,6 +111,15 @@ func RunPreflight(in PreflightInput) PreflightResult {
 	// --- 5. Sandbox ---
 	if in.SandboxRequired && !in.SandboxOK {
 		errs = append(errs, "sandbox is required but not available on this host")
+	}
+
+	// --- 6. Harness auth ---
+	if in.AuthRequired && !in.AuthOK {
+		msg := strings.TrimSpace(in.AuthError)
+		if msg == "" {
+			msg = "harness auth is unavailable"
+		}
+		errs = append(errs, "auth: "+msg)
 	}
 
 	return PreflightResult{

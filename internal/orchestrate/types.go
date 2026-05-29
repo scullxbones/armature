@@ -97,6 +97,10 @@ type HarnessConfig struct {
 	WorkDir string `json:"work_dir,omitempty"`
 	// TimeoutSeconds is the per-command timeout in seconds (0 = no limit).
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+	// Env are optional process-level environment overrides for harness execution.
+	Env map[string]string `json:"-"`
+	// AuthSource reports which auth path was selected (api-key or oauth-session).
+	AuthSource string `json:"auth_source,omitempty"`
 }
 
 // CheckResult holds the outcome of a single verification check.

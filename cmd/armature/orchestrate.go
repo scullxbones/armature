@@ -81,6 +81,8 @@ func newOrchestrateCmd() *cobra.Command {
 		retries int
 		timeout int
 		dryRun  bool
+		showNetworkPlan bool
+		authCheck bool
 	)
 
 	cmd := &cobra.Command{
@@ -148,6 +150,51 @@ Three-level model resolution:
 				WorkDir:        appCtx.RepoPath,
 				TimeoutSeconds: timeout,
 			}
+
+			authPlan, authErr := orchestrate.ResolveAuthPlan(harness, orchestrate.AuthConfig{
+				Mode:    orcCfg.Auth.Mode,
+				EnvFile: orcCfg.Auth.EnvFile,
+			})
+			if showNetworkPlan || authCheck {
+				payloadClasses := []string{
+					"issue metadata (id/title/acceptance/scope)",
+					"rendered task context",
+					"harness/model selection",
+				}
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+					"network plan: harness=%s provider=%s endpoint_hint=%q auth_source=%s auth_mode=%s payload=%q repo_mutation=%t\n",
+					harness,
+					authPlan.Provider,
+					authPlan.EndpointHint,
+					authPlan.Source,
+					authPlan.Mode,
+					payloadClasses,
+					!dryRun,
+				)
+			}
+			if authErr != nil {
+				return fmt.Errorf("orchestrate preflight auth: %w", authErr)
+			}
+			if authCheck {
+				format, _ := cmd.Root().PersistentFlags().GetString("format")
+				if format == "json" || format == "agent" {
+					data, _ := json.Marshal(map[string]any{
+						"issue":         issueID,
+						"harness":       harness,
+						"provider":      authPlan.Provider,
+						"endpoint_hint": authPlan.EndpointHint,
+						"auth_source":   authPlan.Source,
+						"auth_mode":     authPlan.Mode,
+						"auth_ok":       true,
+					})
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				} else {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "auth check ok: harness=%s source=%s provider=%s\n", harness, authPlan.Source, authPlan.Provider)
+				}
+				return nil
+			}
+			harnessCfg.Env = authPlan.Env
+			harnessCfg.AuthSource = authPlan.Source
 
 			harnessAdapter, err := orchestrate.NewHarnessAdapter(harnessCfg)
 			if err != nil {
@@ -234,6 +281,8 @@ Three-level model resolution:
 					"run":     state.Run,
 					"dry_run": dryRun,
 					"model":   resolvedModel,
+					"harness": harness,
+					"auth_source": harnessCfg.AuthSource,
 				}
 				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
@@ -251,6 +300,8 @@ Three-level model resolution:
 	cmd.Flags().IntVar(&retries, "retries", 3, "maximum number of retry attempts on verify failure")
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "per-invocation timeout in seconds (0 = no limit)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "exit before dispatch — inspect state without running the agent")
+	cmd.Flags().BoolVar(&showNetworkPlan, "show-network-plan", false, "print harness auth/network disclosure before dispatch")
+	cmd.Flags().BoolVar(&authCheck, "auth-check", false, "run harness auth preflight and exit without dispatch")
 
 	return cmd
 }

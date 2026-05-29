@@ -72,7 +72,13 @@ func TestHarnessConfigRoundTrip(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
-	if decoded != original {
+	if decoded.BuildCmd != original.BuildCmd ||
+		decoded.LintCmd != original.LintCmd ||
+		decoded.TestCmd != original.TestCmd ||
+		decoded.CoverageCmd != original.CoverageCmd ||
+		decoded.MutateCmd != original.MutateCmd ||
+		decoded.WorkDir != original.WorkDir ||
+		decoded.TimeoutSeconds != original.TimeoutSeconds {
 		t.Errorf("round-trip mismatch\n got:  %+v\n want: %+v", decoded, original)
 	}
 }

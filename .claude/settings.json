@@ -4,7 +4,8 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
-        "**/*"
+        "internal/harnesspolicy/scope.go (new)",
+        "internal/harnesspolicy/scope_test.go (new)"
       ],
       "denyWrite": [
         "../"

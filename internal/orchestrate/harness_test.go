@@ -249,14 +249,14 @@ func TestDevinAdapterRunDryRun(t *testing.T) {
 
 // TestInvokeProcessDryRun verifies that dry-run returns ExitSuccess with no process spawned.
 func TestInvokeProcessDryRun(t *testing.T) {
-	result, err := invokeProcess(context.Background(), t.TempDir(), []string{"false"}, true)
+	result, err := invokeProcess(context.Background(), t.TempDir(), []string{"false"}, nil, true)
 	require.NoError(t, err)
 	assert.Equal(t, ExitSuccess, result.Status)
 }
 
 // TestInvokeProcessSuccess verifies that a successful command yields ExitSuccess.
 func TestInvokeProcessSuccess(t *testing.T) {
-	result, err := invokeProcess(context.Background(), t.TempDir(), []string{"echo", "hello"}, false)
+	result, err := invokeProcess(context.Background(), t.TempDir(), []string{"echo", "hello"}, nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, ExitSuccess, result.Status)
 	assert.Equal(t, 0, result.ExitCode)
@@ -264,7 +264,7 @@ func TestInvokeProcessSuccess(t *testing.T) {
 
 // TestInvokeProcessFailure verifies that a failing command yields ExitFailure.
 func TestInvokeProcessFailure(t *testing.T) {
-	result, _ := invokeProcess(context.Background(), t.TempDir(), []string{"false"}, false)
+	result, _ := invokeProcess(context.Background(), t.TempDir(), []string{"false"}, nil, false)
 	assert.Equal(t, ExitFailure, result.Status)
 }
 
@@ -272,7 +272,7 @@ func TestInvokeProcessFailure(t *testing.T) {
 func TestInvokeProcessTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
-	result, _ := invokeProcess(ctx, t.TempDir(), []string{"sleep", "10"}, false)
+	result, _ := invokeProcess(ctx, t.TempDir(), []string{"sleep", "10"}, nil, false)
 	assert.Equal(t, ExitTimeout, result.Status)
 }
 
