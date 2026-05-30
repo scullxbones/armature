@@ -148,3 +148,4 @@
 ["citation-accepted","HKREFACT-T18",1780150377,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Derived from HKREFACT-T17 dogfood incident and revert 9fd9f5d; internal control-hardening task"}]
 ["amend","HKREFACT-T18",1780150530,"codex-worker",{"scope":["internal/orchestrate/engine.go","internal/orchestrate/harness.go"]}]
 ["link","HKREFACT-T18",1780150531,"codex-worker",{"dep":"HKREFACT-T07","rel":"blocked_by"}]
+["link","HKREFACT-T18",1780150531,"codex-worker",{"dep":"HKREFACT-T08","rel":"blocked_by"}]
