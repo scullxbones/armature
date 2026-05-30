@@ -143,3 +143,4 @@
 ["orchestrate-dispatch-complete","HKREFACT-T17",1780149767,"codex-worker",{}]
 ["orchestrate-check-result","HKREFACT-T17",1780150155,"codex-worker",{"msg":"codex invocation succeeded"}]
 ["orchestrate-complete","HKREFACT-T17",1780150155,"codex-worker",{}]
+["note","HKREFACT-T17",1780150377,"codex-worker",{"msg":"Dogfood incident: orchestrate run committed runtime artifacts (.codex-sqlite/*.sqlite*, .devin/config.json) via zero-trust commit flow. Commit reverted in 9fd9f5d. Follow-up needed: artifact path denylist and pre-commit guardrails for harness runtime state/config files."}]
