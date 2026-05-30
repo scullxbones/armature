@@ -141,3 +141,4 @@
 ["amend","HKREFACT-T17",1780149682,"codex-worker",{"scope":["docs/adr/adr-context-files.md"]}]
 ["orchestrate-dispatch","HKREFACT-T17",1780149767,"codex-worker",{"worktree_path":".","pre_dispatch_ref":"8c348d70ec36c4268d3a0d8bfbdd86ee454b8701","retry_budget":3}]
 ["orchestrate-dispatch-complete","HKREFACT-T17",1780149767,"codex-worker",{}]
+["orchestrate-check-result","HKREFACT-T17",1780150155,"codex-worker",{"msg":"codex invocation succeeded"}]
