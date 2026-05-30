@@ -284,6 +284,9 @@ Three-level model resolution:
 					"harness":     harness,
 					"auth_source": harnessCfg.AuthSource,
 				}
+				if state.CompletionMessage != "" {
+					result["completion_message"] = state.CompletionMessage
+				}
 				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {

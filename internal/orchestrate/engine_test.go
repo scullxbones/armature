@@ -203,13 +203,20 @@ func TestEngine_ZeroTrustCommit_HappyPath(t *testing.T) {
 
 	// Verify commit op was written
 	hasComplete := false
+	hasDoneTransition := false
 	for _, op := range log.appended {
 		if op.Type == ops.OpOrchestrateComplete {
 			hasComplete = true
 		}
+		if op.Type == ops.OpTransition && op.TargetID == "T1" && op.Payload.To == ops.StatusDone {
+			hasDoneTransition = true
+		}
 	}
 	if !hasComplete {
 		t.Error("expected OrchestrateComplete op to be written")
+	}
+	if !hasDoneTransition {
+		t.Error("expected lifecycle transition to done after committed orchestration")
 	}
 }
 
@@ -405,6 +412,15 @@ func TestEngine_RunningPhase_ProcessesZeroTrustCommit(t *testing.T) {
 	}
 	if result.Phase != "complete" {
 		t.Errorf("Phase: got %q, want %q", result.Phase, "complete")
+	}
+	hasDoneTransition := false
+	for _, op := range log.appended {
+		if op.Type == ops.OpTransition && op.Payload.To == ops.StatusDone {
+			hasDoneTransition = true
+		}
+	}
+	if !hasDoneTransition {
+		t.Fatal("non-empty diff must transition issue to done")
 	}
 }
 
@@ -703,6 +719,23 @@ func TestEngine_EmptyDiff_StillCompletes(t *testing.T) {
 	}
 	if result.Phase != "complete" {
 		t.Errorf("Phase: got %q, want %q", result.Phase, "complete")
+	}
+	if !strings.Contains(result.CompletionMessage, "no changes committed") {
+		t.Fatalf("completion message: got %q, want no-op reason", result.CompletionMessage)
+	}
+	for _, op := range log.appended {
+		if op.Type == ops.OpTransition && op.Payload.To == ops.StatusDone {
+			t.Fatalf("empty diff must not transition issue to done; got %+v", op)
+		}
+	}
+	foundExplicitNoop := false
+	for _, op := range log.appended {
+		if op.Type == ops.OpOrchestrateComplete && strings.Contains(op.Payload.Msg, "no changes committed") {
+			foundExplicitNoop = true
+		}
+	}
+	if !foundExplicitNoop {
+		t.Fatal("empty diff completion must record an explicit no-op reason")
 	}
 }
 

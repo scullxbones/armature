@@ -176,11 +176,14 @@ func TestDeriveState_Complete_TransitionsToComplete(t *testing.T) {
 			RetryBudget:    3,
 		}),
 		makeOp(ops.OpOrchestrateDispatchComplete, "T1", ops.Payload{}),
-		makeOp(ops.OpOrchestrateComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateComplete, "T1", ops.Payload{Msg: "no changes committed; lifecycle transition skipped"}),
 	}
 	state := orchestrate.DeriveState(taskOps, "T1")
 	if state.Phase != "complete" {
 		t.Errorf("Phase: got %q, want %q", state.Phase, "complete")
+	}
+	if state.CompletionMessage != "no changes committed; lifecycle transition skipped" {
+		t.Errorf("CompletionMessage: got %q", state.CompletionMessage)
 	}
 }
 

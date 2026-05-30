@@ -415,24 +415,50 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 		}
 	}
 
+	committed := false
 	commitMsg := fmt.Sprintf("feat(%s): automated implementation run %d", e.cfg.TaskID, state.Run)
-	if err := e.cfg.Git.CommitWithMessage(commitMsg); err != nil {
-		// Nothing to commit is acceptable (patch was empty); log as info.
-		// Any other error is fatal.
-		if err.Error() != "nothing to commit: index is clean" {
-			return state, fmt.Errorf("zero-trust commit: %w", err)
+	if len(stagePaths) > 0 {
+		if err := e.cfg.Git.CommitWithMessage(commitMsg); err != nil {
+			// Nothing to commit is acceptable (patch was empty); log as info.
+			// Any other error is fatal.
+			if err.Error() != "nothing to commit: index is clean" {
+				return state, fmt.Errorf("zero-trust commit: %w", err)
+			}
+		} else {
+			committed = true
 		}
 	}
 
-	// Step 5: write complete op.
+	// Step 5: write complete op and lifecycle transition for committed changes.
+	completeMsg := ""
+	if !committed {
+		completeMsg = "no changes committed; lifecycle transition skipped"
+	}
 	completeOp := ops.Op{
 		Type:      ops.OpOrchestrateComplete,
 		TargetID:  e.cfg.TaskID,
 		Timestamp: time.Now().Unix(),
 		WorkerID:  e.cfg.WorkerID,
+		Payload:   ops.Payload{Msg: completeMsg},
 	}
 	if err := e.cfg.OpLog.Append(completeOp); err != nil {
 		return state, fmt.Errorf("append complete op: %w", err)
+	}
+	state.CompletionMessage = completeMsg
+	if committed {
+		transitionOp := ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  e.cfg.TaskID,
+			Timestamp: time.Now().Unix(),
+			WorkerID:  e.cfg.WorkerID,
+			Payload: ops.Payload{
+				To:      ops.StatusDone,
+				Outcome: "orchestrate completed with committed changes",
+			},
+		}
+		if err := e.cfg.OpLog.Append(transitionOp); err != nil {
+			return state, fmt.Errorf("append done transition op: %w", err)
+		}
 	}
 	state.Phase = "complete"
 

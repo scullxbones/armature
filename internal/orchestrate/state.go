@@ -76,6 +76,7 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 		case ops.OpOrchestrateComplete:
 			// Transition: running → complete.
 			state.Phase = "complete"
+			state.CompletionMessage = op.Payload.Msg
 
 		case ops.OpOrchestrateCheckResult:
 			// Accumulate check results without changing phase.

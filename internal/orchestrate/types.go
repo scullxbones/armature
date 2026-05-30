@@ -156,6 +156,8 @@ type OrchestrateState struct {
 	Checks []CheckResult
 	// Failed is true if any error-severity check has failed.
 	Failed bool
+	// CompletionMessage explains complete-phase outcomes that need operator attention.
+	CompletionMessage string
 	// StartedAt is the Unix timestamp (seconds) when the run began.
 	StartedAt int64
 	// FinishedAt is the Unix timestamp (seconds) when the run ended (0 if still running).
