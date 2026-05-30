@@ -25,6 +25,7 @@ func (s *contextStubGit) DiffNameOnly(string) ([]string, error) { return s.diffF
 func (s *contextStubGit) ResetHard(string) error                { return nil }
 func (s *contextStubGit) ApplyPatch([]byte) error               { return nil }
 func (s *contextStubGit) AddAll() error                         { return nil }
+func (s *contextStubGit) AddPaths([]string) error               { return nil }
 func (s *contextStubGit) CommitWithMessage(string) error        { return s.commitErr }
 func (s *contextStubGit) RemoveWorktree(string) error           { return nil }
 

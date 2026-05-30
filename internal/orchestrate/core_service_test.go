@@ -25,6 +25,7 @@ func (f *fakeServiceGit) DiffNameOnly(string) ([]string, error) { return nil, ni
 func (f *fakeServiceGit) ResetHard(string) error                { return nil }
 func (f *fakeServiceGit) ApplyPatch([]byte) error               { return nil }
 func (f *fakeServiceGit) AddAll() error                         { return nil }
+func (f *fakeServiceGit) AddPaths([]string) error               { return nil }
 func (f *fakeServiceGit) CommitWithMessage(string) error        { return nil }
 func (f *fakeServiceGit) RemoveWorktree(string) error           { return nil }
 

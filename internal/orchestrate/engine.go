@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	claimPkg "github.com/scullxbones/armature/internal/claim"
@@ -25,6 +26,8 @@ type GitClient interface {
 	ApplyPatch(patch []byte) error
 	// AddAll stages all changes (git add -A).
 	AddAll() error
+	// AddPaths stages only the given repository-relative paths.
+	AddPaths(paths []string) error
 	// CommitWithMessage creates a commit with the given message.
 	CommitWithMessage(message string) error
 	// RemoveWorktree removes a linked worktree at path.
@@ -371,7 +374,7 @@ func (e *Engine) handleVerifyFailure(ctx context.Context, state OrchestrateState
 
 // zeroTrustCommit implements the zero-trust commit sequence:
 //
-//	DiffFrom(preDispatchRef) → ResetHard(preDispatchRef) → ApplyPatch → RunPipeline → AddAll + CommitWithMessage
+//	DiffFrom(preDispatchRef) → ResetHard(preDispatchRef) → ApplyPatch → RunPipeline → AddPaths + CommitWithMessage
 func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (OrchestrateState, error) {
 	if err := ctx.Err(); err != nil {
 		return state, err
@@ -387,6 +390,10 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 	if err != nil {
 		return state, fmt.Errorf("zero-trust diff: %w", err)
 	}
+	changedFiles, err := e.cfg.Git.DiffNameOnly(preRef)
+	if err != nil {
+		return state, fmt.Errorf("zero-trust changed files: %w", err)
+	}
 
 	// Step 2: reset to pre-dispatch state.
 	if err := e.cfg.Git.ResetHard(preRef); err != nil {
@@ -400,9 +407,12 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 		}
 	}
 
-	// Step 4: stage all changes and commit.
-	if err := e.cfg.Git.AddAll(); err != nil {
-		return state, fmt.Errorf("zero-trust add: %w", err)
+	// Step 4: stage only verified diff paths and commit.
+	stagePaths := filterCommitStagePaths(changedFiles)
+	if len(stagePaths) > 0 {
+		if err := e.cfg.Git.AddPaths(stagePaths); err != nil {
+			return state, fmt.Errorf("zero-trust add: %w", err)
+		}
 	}
 
 	commitMsg := fmt.Sprintf("feat(%s): automated implementation run %d", e.cfg.TaskID, state.Run)
@@ -427,4 +437,30 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 	state.Phase = "complete"
 
 	return state, nil
+}
+
+func filterCommitStagePaths(paths []string) []string {
+	filtered := make([]string, 0, len(paths))
+	for _, path := range paths {
+		normalized := strings.TrimPrefix(strings.TrimSpace(strings.ReplaceAll(path, "\\", "/")), "./")
+		if normalized == "" || isRuntimeArtifactPath(normalized) {
+			continue
+		}
+		filtered = append(filtered, normalized)
+	}
+	return filtered
+}
+
+func isRuntimeArtifactPath(path string) bool {
+	for _, prefix := range []string{
+		".codex-sqlite",
+		".devin",
+		".codex-home",
+		".claude/worktrees",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }

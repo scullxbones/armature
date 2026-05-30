@@ -27,6 +27,16 @@ Devin is intentionally deferred for a later phase.
    - `max_tasks`
    - `dry_run`
 
+## Dogfood Worktree Posture
+
+- Run provider dogfood tasks from a disposable branch or linked worktree.
+- Keep provider-local runtime state out of the task diff. The orchestrate
+  zero-trust commit path stages only verified diff paths and excludes generated
+  runtime directories such as `.codex-sqlite/`, `.devin/`, `.codex-home/`, and
+  `.claude/worktrees/`.
+- After each live run, inspect `git status --short` before pushing. Runtime
+  state may remain on disk for the provider, but it must not be committed.
+
 ## Claude Harness Smoke
 
 1. Validate adapter path:

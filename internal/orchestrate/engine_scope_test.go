@@ -19,6 +19,7 @@ func (g *scopeTestGit) DiffNameOnly(string) ([]string, error) { return g.diffFil
 func (g *scopeTestGit) ResetHard(string) error                { return nil }
 func (g *scopeTestGit) ApplyPatch([]byte) error               { return nil }
 func (g *scopeTestGit) AddAll() error                         { return nil }
+func (g *scopeTestGit) AddPaths([]string) error               { return nil }
 func (g *scopeTestGit) CommitWithMessage(string) error        { return nil }
 func (g *scopeTestGit) RemoveWorktree(string) error           { return nil }
 

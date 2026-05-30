@@ -41,10 +41,10 @@ func ResolveAuthPlan(harness string, cfg AuthConfig) (AuthPlan, error) {
 	}
 
 	plan := AuthPlan{
-		Harness:  harness,
-		Provider: providerForHarness(harness),
-		Mode:     mode,
-		Env:      map[string]string{},
+		Harness:      harness,
+		Provider:     providerForHarness(harness),
+		Mode:         mode,
+		Env:          map[string]string{},
 		EndpointHint: endpointHintForHarness(harness),
 	}
 
@@ -196,7 +196,9 @@ func loadEnvFile(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open env file %q: %w", path, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

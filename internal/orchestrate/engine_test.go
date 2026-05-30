@@ -24,10 +24,13 @@ type stubGit struct {
 	resetErr     error
 	applyErr     error
 	addErr       error
+	addPathsErr  error
 	commitErr    error
 	removeErr    error
 	diffFiles    []string
 	diffFilesErr error
+	addAllCalled bool
+	addPaths     []string
 }
 
 func (s *stubGit) HeadSHA() (string, error)             { return s.headSHA, s.headSHAErr }
@@ -35,9 +38,16 @@ func (s *stubGit) DiffFrom(base string) (string, error) { return s.diffOut, s.di
 func (s *stubGit) DiffNameOnly(base string) ([]string, error) {
 	return s.diffFiles, s.diffFilesErr
 }
-func (s *stubGit) ResetHard(ref string) error         { return s.resetErr }
-func (s *stubGit) ApplyPatch(patch []byte) error      { return s.applyErr }
-func (s *stubGit) AddAll() error                      { return s.addErr }
+func (s *stubGit) ResetHard(ref string) error    { return s.resetErr }
+func (s *stubGit) ApplyPatch(patch []byte) error { return s.applyErr }
+func (s *stubGit) AddAll() error {
+	s.addAllCalled = true
+	return s.addErr
+}
+func (s *stubGit) AddPaths(paths []string) error {
+	s.addPaths = append(s.addPaths, paths...)
+	return s.addPathsErr
+}
 func (s *stubGit) CommitWithMessage(msg string) error { return s.commitErr }
 func (s *stubGit) RemoveWorktree(path string) error   { return s.removeErr }
 
@@ -200,6 +210,49 @@ func TestEngine_ZeroTrustCommit_HappyPath(t *testing.T) {
 	}
 	if !hasComplete {
 		t.Error("expected OrchestrateComplete op to be written")
+	}
+}
+
+func TestEngine_ZeroTrustCommit_StagesOnlyVerifiedDiffPaths(t *testing.T) {
+	priorOps := []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "base123", WorktreePath: "/wt/T1", RetryBudget: 1}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+	}
+	git := &stubGit{
+		headSHA: "head456",
+		diffOut: "diff --git a/internal/foo/bar.go b/internal/foo/bar.go\n",
+		diffFiles: []string{
+			"internal/foo/bar.go",
+			".codex-sqlite/session.sqlite",
+			".devin/config.json",
+		},
+		addErr: errors.New("unsafe broad add would stage provider runtime artifacts"),
+	}
+	log := &stubOpLog{ops: priorOps}
+	harness := passingHarness("build")
+
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		Git:         git,
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 1,
+	}
+
+	result, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Phase != "complete" {
+		t.Errorf("Phase: got %q, want %q", result.Phase, "complete")
+	}
+	if git.addAllCalled {
+		t.Fatal("zero-trust commit must not use broad git add -A")
+	}
+	if got, want := git.addPaths, []string{"internal/foo/bar.go"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("staged paths: got %v, want %v", got, want)
 	}
 }
 

@@ -672,6 +672,24 @@ func TestAddAll(t *testing.T) {
 	assert.Contains(t, string(out), "new_file.txt")
 }
 
+func TestAddPathsStagesOnlySelectedPaths(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "selected.txt"), []byte("selected\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "artifact.txt"), []byte("artifact\n"), 0644))
+
+	err := c.AddPaths([]string{"selected.txt"})
+	require.NoError(t, err)
+
+	statusCmd := exec.Command("git", "-C", repo, "diff", "--cached", "--name-only")
+	out, err := statusCmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "selected.txt")
+	assert.NotContains(t, string(out), "artifact.txt")
+}
+
 func TestCommitWithMessage(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

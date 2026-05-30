@@ -373,6 +373,19 @@ func (c *Client) AddAll() error {
 	return nil
 }
 
+// AddPaths stages only the given repository-relative paths.
+func (c *Client) AddPaths(paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	args := append([]string{"add", "--"}, paths...)
+	out, err := c.runMutatingWithRetry("git add -- <paths>", args...)
+	if err != nil {
+		return fmt.Errorf("git add paths: %w\n%s", err, out)
+	}
+	return nil
+}
+
 // CommitWithMessage creates a commit with the given message. Returns an error
 // if there is nothing staged to commit.
 func (c *Client) CommitWithMessage(message string) error {

@@ -75,14 +75,14 @@ func newOrchestrateCmdForService(service orchestrate.Runner) *cobra.Command {
 
 func newOrchestrateCmd() *cobra.Command {
 	var (
-		issueID string
-		harness string
-		model   string
-		retries int
-		timeout int
-		dryRun  bool
+		issueID         string
+		harness         string
+		model           string
+		retries         int
+		timeout         int
+		dryRun          bool
 		showNetworkPlan bool
-		authCheck bool
+		authCheck       bool
 	)
 
 	cmd := &cobra.Command{
@@ -276,12 +276,12 @@ Three-level model resolution:
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]any{
-					"issue":   issueID,
-					"phase":   state.Phase,
-					"run":     state.Run,
-					"dry_run": dryRun,
-					"model":   resolvedModel,
-					"harness": harness,
+					"issue":       issueID,
+					"phase":       state.Phase,
+					"run":         state.Run,
+					"dry_run":     dryRun,
+					"model":       resolvedModel,
+					"harness":     harness,
 					"auth_source": harnessCfg.AuthSource,
 				}
 				data, _ := json.Marshal(result)
