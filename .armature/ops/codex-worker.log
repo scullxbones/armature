@@ -128,3 +128,4 @@
 ["citation-accepted","HKREFACT-T14",1780147939,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Task created from in-repo operator request to add note deletion for context-noise control; no external spec document yet."}]
 ["link","HKREFACT-T14",1780147939,"codex-worker",{"dep":"HKREFACT-T06","rel":"blocked_by"}]
 ["link","HKREFACT-T14",1780147940,"codex-worker",{"dep":"HKREFACT-T11","rel":"blocked_by"}]
+["amend","HKREFACT-T14",1780148412,"codex-worker",{"scope":["cmd/armature/note.go","internal/ops/types.go","internal/materialize/engine.go","internal/context/assemble.go"]}]
