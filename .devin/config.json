@@ -1,0 +1,7 @@
+{
+  "permissions": [
+    {
+      "allow": "Write(docs/adr/adr-context-files.md)"
+    }
+  ]
+}
