@@ -130,3 +130,4 @@
 ["link","HKREFACT-T14",1780147940,"codex-worker",{"dep":"HKREFACT-T11","rel":"blocked_by"}]
 ["amend","HKREFACT-T14",1780148412,"codex-worker",{"scope":["cmd/armature/note.go","internal/ops/types.go","internal/materialize/engine.go","internal/context/assemble.go"]}]
 ["amend","HKREFACT-T14",1780148427,"codex-worker",{"scope":["cmd/armature/note.go","internal/ops/types.go","internal/materialize/engine.go"]}]
+["amend","HKREFACT-T14",1780148539,"codex-worker",{"scope":["cmd/armature/note.go","internal/materialize/engine.go"]}]
