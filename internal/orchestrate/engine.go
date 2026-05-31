@@ -18,8 +18,6 @@ type GitClient interface {
 	HeadSHA() (string, error)
 	// DiffFrom returns the unified diff between baseSHA and HEAD.
 	DiffFrom(baseSHA string) (string, error)
-	// DiffNameOnly returns the list of files changed between baseSHA and HEAD.
-	DiffNameOnly(baseSHA string) ([]string, error)
 	// ResetHard resets the working tree and index to ref.
 	ResetHard(ref string) error
 	// ApplyPatch applies a unified diff patch to the working tree.
@@ -374,7 +372,7 @@ func (e *Engine) handleVerifyFailure(ctx context.Context, state OrchestrateState
 
 // zeroTrustCommit implements the zero-trust commit sequence:
 //
-//	DiffFrom(preDispatchRef) → ResetHard(preDispatchRef) → ApplyPatch → RunPipeline → AddPaths + CommitWithMessage
+//	DiffFrom(preDispatchRef) → ResetHard(preDispatchRef) → ApplyPatch → RunPipeline → AddPaths(scope) + CommitWithMessage
 func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (OrchestrateState, error) {
 	if err := ctx.Err(); err != nil {
 		return state, err
@@ -390,10 +388,6 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 	if err != nil {
 		return state, fmt.Errorf("zero-trust diff: %w", err)
 	}
-	changedFiles, err := e.cfg.Git.DiffNameOnly(preRef)
-	if err != nil {
-		return state, fmt.Errorf("zero-trust changed files: %w", err)
-	}
 
 	// Step 2: reset to pre-dispatch state.
 	if err := e.cfg.Git.ResetHard(preRef); err != nil {
@@ -407,8 +401,8 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 		}
 	}
 
-	// Step 4: stage only verified diff paths and commit.
-	stagePaths := filterCommitStagePaths(changedFiles)
+	// Step 4: stage only declared task scope and commit.
+	stagePaths := filterCommitScopePaths(e.cfg.Scope)
 	if len(stagePaths) > 0 {
 		if err := e.cfg.Git.AddPaths(stagePaths); err != nil {
 			return state, fmt.Errorf("zero-trust add: %w", err)
@@ -465,7 +459,7 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 	return state, nil
 }
 
-func filterCommitStagePaths(paths []string) []string {
+func filterCommitScopePaths(paths []string) []string {
 	filtered := make([]string, 0, len(paths))
 	for _, path := range paths {
 		normalized := strings.TrimPrefix(strings.TrimSpace(strings.ReplaceAll(path, "\\", "/")), "./")

@@ -220,7 +220,7 @@ func TestEngine_ZeroTrustCommit_HappyPath(t *testing.T) {
 	}
 }
 
-func TestEngine_ZeroTrustCommit_StagesOnlyVerifiedDiffPaths(t *testing.T) {
+func TestEngine_ZeroTrustCommit_StagesOnlyScopePaths(t *testing.T) {
 	priorOps := []ops.Op{
 		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
 			Payload: ops.Payload{PreDispatchRef: "base123", WorktreePath: "/wt/T1", RetryBudget: 1}},
@@ -231,6 +231,7 @@ func TestEngine_ZeroTrustCommit_StagesOnlyVerifiedDiffPaths(t *testing.T) {
 		diffOut: "diff --git a/internal/foo/bar.go b/internal/foo/bar.go\n",
 		diffFiles: []string{
 			"internal/foo/bar.go",
+			"internal/outside/escape.go",
 			".codex-sqlite/session.sqlite",
 			".devin/config.json",
 		},
@@ -244,7 +245,7 @@ func TestEngine_ZeroTrustCommit_StagesOnlyVerifiedDiffPaths(t *testing.T) {
 		Git:         git,
 		OpLog:       log,
 		Harness:     harness,
-		Scope:       []string{"internal/foo/bar.go"},
+		Scope:       []string{"internal/foo/"},
 		RetryBudget: 1,
 	}
 
@@ -258,7 +259,7 @@ func TestEngine_ZeroTrustCommit_StagesOnlyVerifiedDiffPaths(t *testing.T) {
 	if git.addAllCalled {
 		t.Fatal("zero-trust commit must not use broad git add -A")
 	}
-	if got, want := git.addPaths, []string{"internal/foo/bar.go"}; fmt.Sprint(got) != fmt.Sprint(want) {
+	if got, want := git.addPaths, []string{"internal/foo/"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("staged paths: got %v, want %v", got, want)
 	}
 }
