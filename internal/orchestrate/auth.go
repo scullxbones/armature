@@ -31,10 +31,29 @@ type AuthPlan struct {
 	EndpointHint    string
 }
 
-var authStatusCommand = runAuthStatusCommand
-var lookPathCommand = exec.LookPath
+// AuthProbe is the imperative port used by auth planning to inspect the host
+// environment. Tests can provide a fake probe so auth policy stays independent
+// of optional harness CLI installation.
+type AuthProbe interface {
+	HarnessBinaryPath(harness string) (string, error)
+	AuthStatus(harness string) (bool, error)
+}
+
+type shellAuthProbe struct{}
+
+func (shellAuthProbe) HarnessBinaryPath(harness string) (string, error) {
+	return harnessBinaryPath(harness)
+}
+
+func (shellAuthProbe) AuthStatus(harness string) (bool, error) {
+	return runAuthStatusCommand(harness)
+}
 
 func ResolveAuthPlan(harness string, cfg AuthConfig) (AuthPlan, error) {
+	return ResolveAuthPlanWithProbe(harness, cfg, shellAuthProbe{})
+}
+
+func ResolveAuthPlanWithProbe(harness string, cfg AuthConfig, probe AuthProbe) (AuthPlan, error) {
 	mode := strings.TrimSpace(cfg.Mode)
 	if mode == "" {
 		mode = AuthModeAuto
@@ -76,7 +95,7 @@ func ResolveAuthPlan(harness string, cfg AuthConfig) (AuthPlan, error) {
 		return plan, nil
 	}
 
-	if _, err := harnessBinaryPath(harness); err != nil {
+	if _, err := probe.HarnessBinaryPath(harness); err != nil {
 		return plan, err
 	}
 
@@ -84,7 +103,7 @@ func ResolveAuthPlan(harness string, cfg AuthConfig) (AuthPlan, error) {
 		return plan, fmt.Errorf("missing API key env for %s in env-file mode (expected one of: %s)", harness, strings.Join(apiVars, ", "))
 	}
 
-	ok, err := authStatusCommand(harness)
+	ok, err := probe.AuthStatus(harness)
 	if err != nil {
 		if harness == "devin" && (mode == AuthModeAuto || mode == AuthModeOAuthSession) {
 			plan.Source = "oauth-session"
@@ -164,7 +183,7 @@ func harnessBinaryPath(harness string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown harness %q", harness)
 	}
-	path, err := lookPathCommand(bin)
+	path, err := exec.LookPath(bin)
 	if err != nil {
 		return "", fmt.Errorf("%s CLI not found on PATH; install %s before orchestrating", harness, harness)
 	}

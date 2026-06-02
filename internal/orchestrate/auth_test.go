@@ -10,6 +10,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type fakeAuthProbe struct {
+	binaryErr error
+	statusOK  bool
+	statusErr error
+}
+
+func (p fakeAuthProbe) HarnessBinaryPath(string) (string, error) {
+	if p.binaryErr != nil {
+		return "", p.binaryErr
+	}
+	return "/fake/harness", nil
+}
+
+func (p fakeAuthProbe) AuthStatus(string) (bool, error) {
+	return p.statusOK, p.statusErr
+}
+
 func TestResolveAuthPlan_AutoPrefersAPIKey(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	plan, err := ResolveAuthPlan("codex", AuthConfig{Mode: AuthModeAuto})
@@ -20,11 +37,8 @@ func TestResolveAuthPlan_AutoPrefersAPIKey(t *testing.T) {
 
 func TestResolveAuthPlan_AutoUsesOAuthSession(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
-	orig := authStatusCommand
-	authStatusCommand = func(harness string) (bool, error) { return harness == "codex", nil }
-	t.Cleanup(func() { authStatusCommand = orig })
 
-	plan, err := ResolveAuthPlan("codex", AuthConfig{Mode: AuthModeAuto})
+	plan, err := ResolveAuthPlanWithProbe("codex", AuthConfig{Mode: AuthModeAuto}, fakeAuthProbe{statusOK: true})
 	require.NoError(t, err)
 	assert.Equal(t, "oauth-session", plan.Source)
 	assert.True(t, plan.SessionDetected)
@@ -32,11 +46,8 @@ func TestResolveAuthPlan_AutoUsesOAuthSession(t *testing.T) {
 
 func TestResolveAuthPlan_FailsWhenUnavailable(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
-	orig := authStatusCommand
-	authStatusCommand = func(string) (bool, error) { return false, nil }
-	t.Cleanup(func() { authStatusCommand = orig })
 
-	_, err := ResolveAuthPlan("codex", AuthConfig{Mode: AuthModeAuto})
+	_, err := ResolveAuthPlanWithProbe("codex", AuthConfig{Mode: AuthModeAuto}, fakeAuthProbe{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "codex auth unavailable")
 	assert.Contains(t, err.Error(), "codex login")
@@ -55,15 +66,7 @@ func TestResolveAuthPlan_EnvFile(t *testing.T) {
 
 func TestResolveAuthPlan_MissingBinaryFirst(t *testing.T) {
 	t.Setenv("DEVIN_API_KEY", "")
-	origLookup := lookPathCommand
-	lookPathCommand = func(file string) (string, error) {
-		if file == "devin" {
-			return "", fmt.Errorf("not found")
-		}
-		return origLookup(file)
-	}
-	t.Cleanup(func() { lookPathCommand = origLookup })
-	_, err := ResolveAuthPlan("devin", AuthConfig{Mode: AuthModeAuto})
+	_, err := ResolveAuthPlanWithProbe("devin", AuthConfig{Mode: AuthModeAuto}, fakeAuthProbe{binaryErr: fmt.Errorf("devin CLI not found on PATH")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "CLI not found on PATH")
 }
