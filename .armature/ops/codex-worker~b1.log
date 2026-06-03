@@ -1,2 +1,3 @@
 ["note","ORCRUN-S2-B1",1780505720,"codex-worker~b1",{"msg":"Implemented stale-claim takeover: prepare() now calls claim.IsClaimStale before blocking on another worker's claim. Two new tests added: stale allows takeover, fresh still blocks."}]
 ["citation-accepted","ORCRUN-S2-B1",1780505727,"codex-worker~b1",{"confirmed_noninteractively":true,"rationale":"No external source document; implementation derived from existing claim.IsClaimStale API in internal/claim/claim.go"}]
+["transition","ORCRUN-S2-B1",1780505735,"codex-worker~b1",{"to":"done","outcome":"prepare() checks IsClaimStale before blocking; stale claims allow takeover; tests cover the path"}]
