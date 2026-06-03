@@ -188,6 +188,10 @@ func newRootCmd() *cobra.Command {
 	createCmd.GroupID = "admin"
 	root.AddCommand(createCmd)
 
+	reparentCmd := newReparentCmd()
+	reparentCmd.GroupID = "admin"
+	root.AddCommand(reparentCmd)
+
 	validateCmd := newValidateCmd()
 	validateCmd.GroupID = "admin"
 	root.AddCommand(validateCmd)

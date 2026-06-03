@@ -503,3 +503,50 @@ func TestValidateUsesCoverage(t *testing.T) {
 	assert.NotNil(t, result.Coverage)
 	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }
+
+// TestE5TypeHierarchy_SkipsTerminalStatus verifies that cancelled, done, and merged
+// issues are not flagged for hierarchy violations — they have already been delivered.
+func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
+	for _, status := range []string{"cancelled", "done", "merged"} {
+		t.Run("status="+status, func(t *testing.T) {
+			// task parenting another task is normally invalid, but terminal tasks are exempt
+			state := makeState(
+				&materialize.Issue{ID: "TASK-1", Type: "task", Status: status, Children: []string{"TASK-2"}},
+				&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
+			)
+			result := Validate(state, Options{})
+			assert.False(t, containsError(result, "invalid hierarchy"),
+				"terminal parent (status=%s) must not trigger hierarchy error", status)
+		})
+	}
+}
+
+// TestE5TypeHierarchy_BugUnderStoryIsValid verifies that bug is a valid child of story.
+func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"BUG-1"}},
+		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "STORY-1"},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsError(result, "invalid hierarchy"), "bug under story should be valid")
+}
+
+// TestE5TypeHierarchy_BugUnderEpicIsValid verifies that bug is a valid child of epic.
+func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"BUG-1"}},
+		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "EPIC-1"},
+	)
+	result := Validate(state, Options{})
+	assert.False(t, containsError(result, "invalid hierarchy"), "bug under epic should be valid")
+}
+
+// TestE5TypeHierarchy_BugUnderTaskIsInvalid verifies that bug cannot be parented under a task.
+func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
+		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1"},
+	)
+	result := Validate(state, Options{})
+	assert.True(t, containsError(result, "invalid hierarchy"), "bug under task should be invalid")
+}

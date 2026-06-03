@@ -21,6 +21,9 @@ const (
 	OpScopeRename       = "scope-rename"
 	OpScopeDelete       = "scope-delete"
 
+	// OpReparent moves an issue to a new parent.
+	OpReparent = "reparent"
+
 	// Orchestration op types for E7 orchestrator.
 	OpOrchestrateStart            = "orchestrate-start"
 	OpOrchestrateDispatch         = "orchestrate-dispatch"
@@ -44,6 +47,7 @@ var ValidOpTypes = map[string]bool{
 	OpCitationAccepted: true,
 	OpScopeRename:      true,
 	OpScopeDelete:      true,
+	OpReparent:         true,
 
 	OpOrchestrateStart:            true,
 	OpOrchestrateDispatch:         true,

@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1173,6 +1176,8 @@ func TestDoctorCmd_JSONFormat(t *testing.T) {
 }
 
 // TestDoctorCmd_BrokenParentRef verifies D4 detects broken parent references.
+// Since arm create now validates parent existence, we inject the broken op directly
+// into the ops log to simulate a task with a non-existent parent.
 func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1182,11 +1187,22 @@ func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a task with a non-existent parent.
-	_, err = runTrls(t, repo, "create",
-		"--title", "Orphan task", "--type", "task", "--id", "orphan-01",
-		"--parent", "nonexistent-parent")
-	require.NoError(t, err)
+	// Directly inject a create op with a non-existent parent into the ops log,
+	// bypassing the arm create validation layer.
+	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
+	logPath := filepath.Join(repo, ".armature", "ops", workerID+".log")
+	brokenOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "orphan-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			Title:    "Orphan task",
+			NodeType: "task",
+			Parent:   "nonexistent-parent",
+		},
+	}
+	require.NoError(t, ops.AppendOp(logPath, brokenOp), "injecting broken op must succeed")
 
 	out, err := runTrls(t, repo, "doctor")
 	assert.Error(t, err, "doctor should fail on broken parent ref (D4 error)")

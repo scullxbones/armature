@@ -1829,8 +1829,8 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create parent and two children
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Parent", "--id", "parent-01")
+	// Create a story as the parent, then two tasks under it (valid hierarchy: story→task).
+	_, err = runTrls(t, repo, "create", "--type", "story", "--title", "Parent", "--id", "parent-01")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child A", "--id", "child-a", "--parent", "parent-01")
 	require.NoError(t, err)
@@ -3295,4 +3295,127 @@ func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 	validateOut, err := runTrls(t, repo, "validate")
 	require.NoError(t, err)
 	assert.NotContains(t, validateOut, "uncited node: sl-01")
+}
+
+// TestCreateCommand_InvalidType verifies that arm create rejects unrecognized types
+// with an explicit error listing valid types.
+func TestCreateCommand_InvalidType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "create", "--title", "Bad type", "--type", "bogustype", "--id", "bad-01")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogustype", "error must name the invalid type")
+	assert.Contains(t, err.Error(), "valid types", "error must list valid types")
+}
+
+// TestCreateCommand_BugTypeAccepted verifies that arm create accepts the bug type.
+func TestCreateCommand_BugTypeAccepted(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "create", "--title", "Bug report", "--type", "bug", "--id", "bug-01")
+	require.NoError(t, err, "bug type must be accepted as a valid type")
+}
+
+// TestCreateCommand_InvalidParentTypeCombo verifies that arm create rejects
+// a bug issued under a task (which is an invalid hierarchy).
+func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// task-01 is a task; trying to create a bug under it must fail
+	_, err := runTrls(t, repo, "create",
+		"--title", "Bug under task",
+		"--type", "bug",
+		"--id", "bug-under-task",
+		"--parent", "task-01",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parent", "error must indicate invalid parent/type combo")
+}
+
+// TestCreateCommand_ValidParentTypeCombo verifies that a bug under a story is accepted.
+func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	// Create a story first
+	_, err = runTrls(t, repo, "create", "--title", "My Story", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+
+	// Creating a bug under the story should succeed
+	_, err = runTrls(t, repo, "create",
+		"--title", "Bug in story",
+		"--type", "bug",
+		"--id", "bug-01",
+		"--parent", "story-01",
+	)
+	require.NoError(t, err, "bug under story must be accepted")
+}
+
+// TestReparentCommand_HappyPath verifies that arm reparent moves an issue to a new parent.
+func TestReparentCommand_HappyPath(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	// Create two stories and a task under story-01
+	_, err = runTrls(t, repo, "create", "--title", "Story One", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Story Two", "--type", "story", "--id", "story-02")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "My Task", "--type", "task", "--id", "task-01", "--parent", "story-01")
+	require.NoError(t, err)
+
+	// Reparent task-01 from story-01 to story-02
+	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "story-02")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "story-02")
+
+	// Materialize and verify the parent changed
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
+	require.NoError(t, err)
+	entry, ok := index["task-01"]
+	require.True(t, ok, "task-01 must exist")
+	assert.Equal(t, "story-02", entry.Parent, "task-01 should now have parent=story-02")
+}
+
+// TestReparentCommand_InvalidCombo verifies that arm reparent rejects an invalid
+// parent/type combination.
+func TestReparentCommand_InvalidCombo(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a second task to use as (invalid) parent
+	_, err := runTrls(t, repo, "create", "--title", "Parent task", "--type", "task", "--id", "task-parent")
+	require.NoError(t, err)
+
+	// task cannot parent task
+	_, err = runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "task-parent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parent", "reparent must reject invalid parent/type combos")
+}
+
+// TestReparentCommand_ParentNotFound verifies that arm reparent returns an error
+// when the target parent does not exist.
+func TestReparentCommand_ParentNotFound(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "nonexistent-parent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found", "reparent must fail when parent does not exist")
+}
+
+// TestReparentCommand_IssueNotFound verifies that arm reparent returns an error
+// when the issue being reparented does not exist.
+func TestReparentCommand_IssueNotFound(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "reparent", "--issue", "nonexistent-issue", "--parent", "task-01")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found", "reparent must fail when issue does not exist")
 }
