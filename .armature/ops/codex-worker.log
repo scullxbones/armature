@@ -312,3 +312,4 @@
 ["dag-transition","ORCRUN-S2-B6",1780502783,"codex-worker",{"to":"verified","issue_id":"ORCRUN-S2-B6"}]
 ["dag-transition","ORCRUN-S2-B7",1780502783,"codex-worker",{"to":"verified","issue_id":"ORCRUN-S2-B7"}]
 ["citation-accepted","ORCRUN-S2-B1",1780502794,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Bugs identified via automated review of PR #28 (https://github.com/scullxbones/armature/pull/28); requirements captured in each issue body"}]
+["citation-accepted","ORCRUN-S2-B2",1780502794,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Bugs identified via automated review of PR #28 (https://github.com/scullxbones/armature/pull/28); requirements captured in each issue body"}]
