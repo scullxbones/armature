@@ -141,6 +141,15 @@ func (c *repoClaimer) StillClaimed(_ context.Context, issueID string) (bool, err
 	return issue.ClaimedBy == c.workerID, nil
 }
 
+var newRepoRunner = func(ctx *config.Context, workerID string) orchestrateRunner {
+	return orchestrate.NewRepoRunner(ctx, workerID)
+}
+
+// orchestrateRunner is the minimal interface needed by repoOrchestrator.
+type orchestrateRunner interface {
+	Run(ctx context.Context, req orchestrate.RunRequest) (orchestrate.RunResult, error)
+}
+
 type repoOrchestrator struct {
 	ctx      *config.Context
 	workerID string
@@ -154,7 +163,7 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 		return fmt.Errorf("load issue %s: %w", issueID, err)
 	}
 	_ = issue
-	runner := orchestrate.NewRepoRunner(o.ctx, o.workerID)
+	runner := newRepoRunner(o.ctx, o.workerID)
 	result, err := runner.Run(ctx, orchestrate.RunRequest{
 		TaskID:      issueID,
 		WorkerID:    o.workerID,
@@ -166,6 +175,9 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 		return err
 	}
 	if !o.dryRun {
+		if result.LifecycleOutcome.Status == ops.StatusBlocked {
+			return fmt.Errorf("task %s lifecycle blocked: %s", issueID, result.LifecycleOutcome.Outcome)
+		}
 		if result.Phase == "retrying" {
 			return fmt.Errorf("%w: %s", workerruntime.ErrTaskRetrying, result.Phase)
 		}
