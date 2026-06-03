@@ -376,3 +376,4 @@
 ["note","story-1780487664",1780505393,"codex-worker",{"msg":"Scope overlap with task-1780487888 detected at claim time"}]
 ["note","task-1780487888",1780505393,"codex-worker",{"msg":"Serial claim: scope overlap with ORCRUN-S2-T3 (same worker, dismissed)"}]
 ["note","task-1780487888",1780505393,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
+["note","HKREFACT-T14",1780505393,"codex-worker",{"msg":"Scope overlap with task-1780487888 detected at claim time"}]
