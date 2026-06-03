@@ -287,3 +287,4 @@
 ["citation-accepted","ORCRUN-S2-B5",1780487998,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Bugs identified via automated review of PR #28 (https://github.com/scullxbones/armature/pull/28); requirements captured in each issue body"}]
 ["citation-accepted","ORCRUN-S2-B6",1780487998,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Bugs identified via automated review of PR #28 (https://github.com/scullxbones/armature/pull/28); requirements captured in each issue body"}]
 ["citation-accepted","ORCRUN-S2-B7",1780487998,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Bugs identified via automated review of PR #28 (https://github.com/scullxbones/armature/pull/28); requirements captured in each issue body"}]
+["citation-accepted","story-1780487664",1780488002,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Story groups PR #28 review bug fixes; requirements captured in child issues"}]
