@@ -227,3 +227,4 @@
 ["claim","ORCRUN-S1",1780452646,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN",1780452646,"codex-worker",{"to":"in-progress"}]
 ["transition","ORCRUN-S1",1780452653,"codex-worker",{"to":"done","outcome":"Moved orchestration wiring behind a strict repo-backed internal contract with shared prep, thin command shells, and explicit lifecycle reporting."}]
+["create","bug-1780487596",1780487596,"codex-worker",{"title":"RepoRunner blocks on stale claims instead of taking over","parent":"ORCRUN","type":"bug","scope":["internal/orchestrate/run.go","internal/orchestrate/run_test.go"],"acceptance":["TestPrepare_StaleClaim_AllowsTakeover passes","make check green"],"definition_of_done":"prepare() calls claimPkg.IsClaimStale before returning a blocked result for another worker's claim. A stale claim allows takeover rather than blocking forever. Tests cover the stale-claim takeover path.","priority":"high"}]
