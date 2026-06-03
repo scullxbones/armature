@@ -280,3 +280,4 @@
 ["dag-transition","ORCRUN-S2-B5",1780487992,"codex-worker",{"to":"verified","issue_id":"ORCRUN-S2-B5"}]
 ["dag-transition","ORCRUN-S2-B6",1780487993,"codex-worker",{"to":"verified","issue_id":"ORCRUN-S2-B6"}]
 ["dag-transition","ORCRUN-S2-B7",1780487993,"codex-worker",{"to":"verified","issue_id":"ORCRUN-S2-B7"}]
+["citation-accepted","bug-1780487944",1780487998,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Bugs identified via automated review of PR #28 (https://github.com/scullxbones/armature/pull/28); requirements captured in each issue body"}]
