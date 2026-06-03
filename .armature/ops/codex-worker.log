@@ -221,3 +221,4 @@
 ["claim","ORCRUN-T02",1780452618,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN-T02",1780452628,"codex-worker",{"to":"done","outcome":"Implemented repo-backed orchestration preparation with shared dry-run parity, claim-if-needed, and post-claim scope conflict checks."}]
 ["claim","ORCRUN-T03",1780452628,"codex-worker",{"ttl":60}]
+["transition","ORCRUN-T03",1780452637,"codex-worker",{"to":"done","outcome":"Moved arm orchestrate and arm worker run onto the shared internal repo runner contract and kept command output driven by RunResult."}]
