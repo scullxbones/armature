@@ -341,3 +341,4 @@
 ["link","ORCRUN-S2-T5",1780503103,"codex-worker",{"dep":"ORCRUN-S2-T2","rel":"blocked_by"}]
 ["link","ORCRUN-S2-T6",1780503103,"codex-worker",{"dep":"ORCRUN-S2-T5","rel":"blocked_by"}]
 ["link","ORCRUN-S2-T7",1780503104,"codex-worker",{"dep":"ORCRUN-S2-T6","rel":"blocked_by"}]
+["amend","task-1780487888",1780503131,"codex-worker",{"definition_of_done":"arm create rejects unsupported/unrecognized types at creation time with an explicit error listing valid types — no silent pass-through that corrupts graph state. arm create rejects invalid parent/type combinations (e.g. bug under task). The bug type is added to the valid hierarchy. arm validate skips issues in terminal states (cancelled, done, merged) for hierarchy checks — cancelled issues must not block validation. A new arm reparent command moves an issue to a new parent with hierarchy validation."}]
