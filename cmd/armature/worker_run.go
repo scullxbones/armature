@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -154,59 +153,24 @@ func (o *repoOrchestrator) Run(ctx context.Context, issueID string) error {
 	if err != nil {
 		return fmt.Errorf("load issue %s: %w", issueID, err)
 	}
-	harnessCfg := orchestrate.HarnessConfig{
-		Adapter:        "claude",
-		Model:          resolveModel("", issue.PreferredModel, o.ctx.Config.Orchestrator.DefaultModel),
-		WorkDir:        o.ctx.RepoPath,
-		BuildCmd:       o.ctx.Config.Orchestrator.Adapters.Build,
-		LintCmd:        o.ctx.Config.Orchestrator.Adapters.Lint,
-		TestCmd:        o.ctx.Config.Orchestrator.Adapters.Test,
-		CoverageCmd:    o.ctx.Config.Orchestrator.Adapters.Coverage,
-		MutateCmd:      o.ctx.Config.Orchestrator.Adapters.Mutate,
-		TimeoutSeconds: 0,
-	}
-	harnessAdapter, err := orchestrate.NewHarnessAdapter(harnessCfg)
-	if err != nil {
-		return err
-	}
-	service := orchestrate.NewService(orchestrate.ServiceConfig{
-		Git:     adapters.New(o.ctx.RepoPath),
-		OpLog:   &fileOpLog{ctx: o.ctx, logPath: o.logPath},
-		Harness: harnessAdapter,
-	})
-
-	index, issues, err := runtimeIssueStateLoader(o.ctx)
-	if err != nil {
-		return err
-	}
-	activeScopes := runtimeActiveScopes(issueID, index, issues, nowEpoch())
-	state, err := service.Run(ctx, orchestrate.RunInput{
-		TaskID:       issueID,
-		TaskTitle:    issue.Title,
-		TaskContract: string(issue.Acceptance),
-		BuildTaskContext: func(ctx context.Context, issueID string) (string, error) {
-			return buildHarnessStructuredContext(o.ctx, issueID)
-		},
-		WorkerID:     o.workerID,
-		RetryBudget:  3,
-		Scope:        issue.Scope,
-		ActiveScopes: activeScopes,
-		HarnessCfg:   harnessCfg,
-		Opts: orchestrate.RunOptions{
-			DryRun:            o.dryRun,
-			WorkDir:           o.ctx.RepoPath,
-			HeartbeatInterval: 5 * time.Second,
-		},
+	_ = issue
+	runner := orchestrate.NewRepoRunner(o.ctx, o.workerID)
+	result, err := runner.Run(ctx, orchestrate.RunRequest{
+		TaskID:      issueID,
+		WorkerID:    o.workerID,
+		Harness:     "claude",
+		RetryBudget: 3,
+		DryRun:      o.dryRun,
 	})
 	if err != nil {
 		return err
 	}
 	if !o.dryRun {
-		if state.Phase == "retrying" {
-			return fmt.Errorf("%w: %s", workerruntime.ErrTaskRetrying, state.Phase)
+		if result.Phase == "retrying" {
+			return fmt.Errorf("%w: %s", workerruntime.ErrTaskRetrying, result.Phase)
 		}
-		if state.Phase != "complete" {
-			return fmt.Errorf("orchestration did not complete: phase=%s", state.Phase)
+		if result.Phase != "complete" {
+			return fmt.Errorf("orchestration did not complete: phase=%s", result.Phase)
 		}
 	}
 	return nil

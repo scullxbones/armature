@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/orchestrate"
 )
@@ -153,6 +154,60 @@ func TestRunOptionsZeroValue(t *testing.T) {
 	}
 	if opts.Env != nil {
 		t.Errorf("Env: expected nil, got %v", opts.Env)
+	}
+}
+
+func TestRunRequestCarriesCallerFacingInputs(t *testing.T) {
+	progress := func(orchestrate.ProgressEvent) {}
+	req := orchestrate.RunRequest{
+		TaskID:        "ORCRUN-T01",
+		WorkerID:      "worker-a",
+		Harness:       "codex",
+		ModelOverride: "gpt-test",
+		RetryBudget:   2,
+		Timeout:       30 * time.Second,
+		DryRun:        true,
+		Progress:      progress,
+	}
+
+	if req.TaskID != "ORCRUN-T01" {
+		t.Fatalf("TaskID = %q, want ORCRUN-T01", req.TaskID)
+	}
+	if req.Timeout != 30*time.Second {
+		t.Fatalf("Timeout = %s, want 30s", req.Timeout)
+	}
+	if req.Progress == nil {
+		t.Fatal("Progress should be preserved")
+	}
+}
+
+func TestRunResultSeparatesCallerSurfaceFromInternalState(t *testing.T) {
+	result := orchestrate.RunResult{
+		TaskID:        "ORCRUN-T01",
+		Phase:         "complete",
+		Run:           1,
+		DryRun:        true,
+		WouldClaim:    true,
+		ClaimHeld:     true,
+		ClaimOwner:    "worker-a",
+		WouldDispatch: true,
+		Harness:       "codex",
+		Model:         "gpt-test",
+		AuthSource:    "oauth-session",
+		LifecycleOutcome: orchestrate.LifecycleOutcome{
+			Status:  "done",
+			Outcome: "verified changes committed",
+		},
+		Diagnostics: orchestrate.RunDiagnostics{
+			Checks: []orchestrate.CheckResult{{Name: "test", Passed: true}},
+		},
+	}
+
+	if result.LifecycleOutcome.Status != "done" {
+		t.Fatalf("LifecycleOutcome.Status = %q, want done", result.LifecycleOutcome.Status)
+	}
+	if len(result.Diagnostics.Checks) != 1 {
+		t.Fatalf("Diagnostics.Checks len = %d, want 1", len(result.Diagnostics.Checks))
 	}
 }
 

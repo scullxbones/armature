@@ -9,8 +9,8 @@ import (
 	"github.com/scullxbones/armature/internal/sources"
 )
 
-// PreflightInput carries all data required to run pre-dispatch validation.
-type PreflightInput struct {
+// PreflightRequest carries all data required to run pre-dispatch validation.
+type PreflightRequest struct {
 	// ScopePaths is the list of file or directory paths that the task is
 	// permitted to modify. Each must exist on disk.
 	ScopePaths []string
@@ -50,6 +50,9 @@ type PreflightInput struct {
 	AuthError string
 }
 
+// PreflightInput is a compatibility alias for the older request name.
+type PreflightInput = PreflightRequest
+
 // PreflightResult holds the outcome of RunPreflight.
 type PreflightResult struct {
 	// OK is true when all checks passed.
@@ -76,7 +79,7 @@ func (r PreflightResult) Error() string {
 //  3. Source citations: each CitationID must resolve in Manifest.
 //  4. Token budget: must be > 0.
 //  5. Sandbox: when SandboxRequired, SandboxOK must be true.
-func RunPreflight(in PreflightInput) PreflightResult {
+func RunPreflight(in PreflightRequest) PreflightResult {
 	var errs []string
 
 	// --- 1. Scope paths ---
