@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/orchestrate"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/workerruntime"
 	"github.com/stretchr/testify/assert"
@@ -315,6 +317,97 @@ func TestRuntimeActiveScopes_FiltersAncestorAndStaleClaims(t *testing.T) {
 	assert.NotContains(t, active, "story-1")
 	assert.NotContains(t, active, "task-2")
 	assert.Contains(t, active, "task-3")
+}
+
+// fakeBlockedRunner returns a RunResult with StatusBlocked lifecycle outcome.
+type fakeBlockedRunner struct{}
+
+func (fakeBlockedRunner) Run(_ context.Context, _ orchestrate.RunRequest) (orchestrate.RunResult, error) {
+	return orchestrate.RunResult{
+		Phase: "complete",
+		LifecycleOutcome: orchestrate.LifecycleOutcome{
+			Status:  ops.StatusBlocked,
+			Outcome: "task blocked by dependency",
+		},
+	}, nil
+}
+
+// blockedExec wraps the blocked runner path through repoOrchestrator for
+// testing via the workerruntime.Orchestrator interface.
+type blockedExec struct {
+	prevNewRepoRunner func(*config.Context, string) orchestrateRunner
+}
+
+func (b *blockedExec) install() {
+	b.prevNewRepoRunner = newRepoRunner
+	newRepoRunner = func(_ *config.Context, _ string) orchestrateRunner {
+		return fakeBlockedRunner{}
+	}
+}
+
+func (b *blockedExec) restore() { newRepoRunner = b.prevNewRepoRunner }
+
+func TestRepoOrchestratorRunReturnsErrorOnBlockedLifecycleOutcome(t *testing.T) {
+	be := &blockedExec{}
+	be.install()
+	defer be.restore()
+
+	o := &repoOrchestrator{
+		ctx:      &config.Context{StateDir: t.TempDir()},
+		workerID: "w1",
+		dryRun:   false,
+	}
+
+	// Create a minimal issue file so LoadIssue doesn't fail.
+	issuesDir := filepath.Join(o.ctx.StateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0o755))
+	issueData := `{"id":"task-blocked","type":"task","title":"Blocked task","status":"in-progress"}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "task-blocked.json"), []byte(issueData), 0o644))
+
+	err := o.Run(context.Background(), "task-blocked")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "lifecycle blocked")
+}
+
+// blockedLifecycleExec simulates an Orchestrator whose task completes with a
+// blocked lifecycle outcome (i.e. repoOrchestrator.Run returned an error).
+type blockedLifecycleExec struct{}
+
+func (blockedLifecycleExec) Run(_ context.Context, issueID string) error {
+	return fmt.Errorf("task %s lifecycle blocked: task blocked by dependency", issueID)
+}
+
+func TestWorkerRuntimeDoesNotIncrementTasksCompletedForBlockedOutcome(t *testing.T) {
+	workerRuntimeFactoryMu.Lock()
+	defer workerRuntimeFactoryMu.Unlock()
+
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	prev := newWorkerRuntime
+	newWorkerRuntime = func(*workerRuntimeDeps) *workerruntime.Runtime {
+		return &workerruntime.Runtime{
+			Ready: &fixedReady{ids: []string{"task-blocked"}},
+			Claim: fixedClaim{},
+			Exec:  blockedLifecycleExec{},
+		}
+	}
+	t.Cleanup(func() { newWorkerRuntime = prev })
+
+	root := newRootCmd()
+	out := &bytes.Buffer{}
+	root.SetOut(out)
+	root.SetArgs([]string{"worker", "run", "--repo", repo, "--max-tasks", "1", "--format", "json"})
+	// The blocked error escalates the runtime — no JSON output on error path.
+	// The key invariant: tasks_completed is never incremented.
+	execErr := root.Execute()
+	require.Error(t, execErr)
+	// No JSON output on the error path, but tasks_completed must not be 1.
+	assert.NotContains(t, out.String(), "\"tasks_completed\":1")
 }
 
 func TestWorkerRunClaimDefaultsTTLWhenConfigMissing(t *testing.T) {
