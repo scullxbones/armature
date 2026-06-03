@@ -345,3 +345,4 @@
 ["claim","ORCRUN-S2-B1",1780504680,"codex-worker",{"ttl":60}]
 ["orchestrate-dispatch","ORCRUN-S2-B1",1780504682,"codex-worker",{"worktree_path":".","pre_dispatch_ref":"8819e91a6d4f385c5c83fc6b86b9c7ff4595c776","retry_budget":3}]
 ["orchestrate-dispatch-complete","ORCRUN-S2-B1",1780504682,"codex-worker",{}]
+["orchestrate-check-result","ORCRUN-S2-B1",1780504955,"codex-worker",{"msg":"claude invocation succeeded"}]
