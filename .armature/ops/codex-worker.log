@@ -220,3 +220,4 @@
 ["transition","ORCRUN-T01",1780452618,"codex-worker",{"to":"done","outcome":"Defined caller-facing RunRequest/RunResult and PreflightRequest/PreflightResult contracts with package tests."}]
 ["claim","ORCRUN-T02",1780452618,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN-T02",1780452628,"codex-worker",{"to":"done","outcome":"Implemented repo-backed orchestration preparation with shared dry-run parity, claim-if-needed, and post-claim scope conflict checks."}]
+["claim","ORCRUN-T03",1780452628,"codex-worker",{"ttl":60}]
