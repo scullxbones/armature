@@ -115,6 +115,82 @@ func TestRepoRunner_DryRunAndMutatingRunSharePreparationPath(t *testing.T) {
 	}
 }
 
+func TestRepoRunner_DryRunSkipsAuthAndHarnessResolution(t *testing.T) {
+	authCalled := false
+	harnessCalled := false
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL:  60,
+				TokenBudget: 1600,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-T02",
+					Title:      "task",
+					ClaimedBy:  "worker-a",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-T02": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T02"] = &materialize.Issue{ID: "ORCRUN-T02", Title: "task", Scope: []string{"internal/orchestrate/run.go"}}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				authCalled = true
+				return AuthPlan{}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				harnessCalled = true
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run for dry-run")
+				return OrchestrateState{}, nil
+			},
+			nowUnix: func() int64 { return 100 },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T02", WorkerID: "worker-a", Harness: "claude", DryRun: true})
+	if err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if authCalled {
+		t.Fatal("dry-run should not resolve harness auth")
+	}
+	if harnessCalled {
+		t.Fatal("dry-run should not construct harness adapter")
+	}
+	if result.Harness != "claude" {
+		t.Fatalf("Harness = %q, want claude", result.Harness)
+	}
+}
+
 func TestRepoRunner_ClaimsTaskWhenNeeded(t *testing.T) {
 	claimed := false
 	var appended []ops.Op

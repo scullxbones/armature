@@ -181,21 +181,12 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	}
 
 	model := resolveRunModel(req.ModelOverride, issue.PreferredModel, r.appCtx.Config.Orchestrator.DefaultModel)
-	authPlan, err := r.deps.resolveAuthPlan(harness, AuthConfig{
-		Mode:    r.appCtx.Config.Orchestrator.Auth.Mode,
-		EnvFile: r.appCtx.Config.Orchestrator.Auth.EnvFile,
-	})
-	if err != nil {
-		return preparedRun{}, fmt.Errorf("orchestrate preflight auth: %w", err)
-	}
-
 	result := RunResult{
 		TaskID:        req.TaskID,
 		Phase:         "pending",
 		DryRun:        req.DryRun,
 		Harness:       harness,
 		Model:         model,
-		AuthSource:    authPlan.Source,
 		WouldDispatch: true,
 	}
 
@@ -272,10 +263,23 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 		return preparedRun{result: result}, nil
 	}
 
+	if req.DryRun {
+		return preparedRun{result: result}, nil
+	}
+
 	renderedContext, err := r.buildTaskContext(ctx, stateDir, req.TaskID)
 	if err != nil {
 		return preparedRun{}, fmt.Errorf("build task context: %w", err)
 	}
+
+	authPlan, err := r.deps.resolveAuthPlan(harness, AuthConfig{
+		Mode:    r.appCtx.Config.Orchestrator.Auth.Mode,
+		EnvFile: r.appCtx.Config.Orchestrator.Auth.EnvFile,
+	})
+	if err != nil {
+		return preparedRun{}, fmt.Errorf("orchestrate preflight auth: %w", err)
+	}
+	result.AuthSource = authPlan.Source
 
 	harnessCfg := HarnessConfig{
 		Adapter:        harness,
