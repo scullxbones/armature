@@ -215,3 +215,4 @@
 ["source-link","ORCRUN-T04",1780450277,"codex-worker",{"source_id":"9542f8e2-ee3f-4bfb-b59d-dfa853fbf412","source_url":"docs/design/orchestration-run-contract.md"}]
 ["link","ORCRUN-T04",1780450305,"codex-worker",{"dep":"ORCRUN-T01","rel":"blocked_by"}]
 ["link","ORCRUN-T04",1780450305,"codex-worker",{"dep":"ORCRUN-T03","rel":"blocked_by"}]
+["claim","ORCRUN-T01",1780452605,"codex-worker",{"ttl":60}]
