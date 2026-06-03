@@ -216,3 +216,4 @@
 ["link","ORCRUN-T04",1780450305,"codex-worker",{"dep":"ORCRUN-T01","rel":"blocked_by"}]
 ["link","ORCRUN-T04",1780450305,"codex-worker",{"dep":"ORCRUN-T03","rel":"blocked_by"}]
 ["claim","ORCRUN-T01",1780452605,"codex-worker",{"ttl":60}]
+["transition","ORCRUN-S1",1780452605,"codex-worker",{"to":"in-progress"}]
