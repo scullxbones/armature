@@ -1,2 +1,3 @@
 ["note","ORCRUN-S2-T3",1780505553,"codex-worker~t3",{"msg":"Starting implementation: adding blocked_reason, would_dispatch, scope_conflicts, would_claim, claim_owner to JSON output in newOrchestrateCmd. Following TDD: writing tests first."}]
 ["citation-accepted","ORCRUN-S2-T3",1780506312,"codex-worker~t3",{"confirmed_noninteractively":true,"rationale":"Implementation is self-referential: the change is to the orchestrate command's JSON output, which is the deliverable itself"}]
+["transition","ORCRUN-S2-T3",1780506317,"codex-worker~t3",{"to":"done","outcome":"JSON output includes blocked_reason, would_dispatch, scope_conflicts, would_claim, claim_owner from RunResult"}]
