@@ -352,3 +352,4 @@
 ["orchestrate-dispatch-complete","HKREFACT-T15",1780504957,"codex-worker",{}]
 ["orchestrate-check-result","HKREFACT-T15",1780505242,"codex-worker",{"msg":"claude invocation succeeded"}]
 ["orchestrate-complete","HKREFACT-T15",1780505242,"codex-worker",{}]
+["claim","HKREFACT-T16",1780505243,"codex-worker",{"ttl":60}]
