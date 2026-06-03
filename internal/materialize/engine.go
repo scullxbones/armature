@@ -55,6 +55,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyScopeRename(op)
 	case ops.OpScopeDelete:
 		return s.applyScopeDelete(op)
+	case ops.OpReparent:
+		return s.applyReparent(op)
 	case ops.OpOrchestrateStart,
 		ops.OpOrchestrateDispatch,
 		ops.OpOrchestrateDispatchComplete,
@@ -349,6 +351,37 @@ func (s *State) applyScopeDelete(op ops.Op) error {
 		issue.Scope = result
 		issue.Updated = op.Timestamp
 	}
+	return nil
+}
+
+// applyReparent moves an issue to a new parent, updating the children lists
+// of both the old parent (removing the issue) and the new parent (adding it).
+func (s *State) applyReparent(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	oldParentID := issue.Parent
+	newParentID := op.Payload.Parent
+
+	// Remove from old parent's children list.
+	if oldParentID != "" {
+		if oldParent, ok := s.Issues[oldParentID]; ok {
+			oldParent.Children = removeString(oldParent.Children, op.TargetID)
+			oldParent.Updated = op.Timestamp
+		}
+	}
+
+	// Add to new parent's children list.
+	if newParentID != "" {
+		if newParent, ok := s.Issues[newParentID]; ok {
+			newParent.Children = appendUnique(newParent.Children, op.TargetID)
+			newParent.Updated = op.Timestamp
+		}
+	}
+
+	issue.Parent = newParentID
+	issue.Updated = op.Timestamp
 	return nil
 }
 

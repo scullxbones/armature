@@ -149,6 +149,10 @@ func dfs(startID, currentID string, visited map[string]bool, state *materialize.
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []string {
 	var errs []string
 	for id, issue := range issues {
+		// Terminal issues have already been delivered; skip hierarchy checks for them.
+		if isTerminalStatus(issue.Status) {
+			continue
+		}
 		for _, childID := range issue.Children {
 			child, ok := state.Issues[childID]
 			if !ok {
@@ -166,10 +170,12 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 func validHierarchy(parentType, childType string) bool {
 	switch parentType {
 	case "epic":
-		return childType == "story" || childType == "task"
+		return childType == "story" || childType == "task" || childType == "bug"
 	case "story":
-		return childType == "task"
+		return childType == "task" || childType == "bug"
 	case "task":
+		return false
+	case "bug":
 		return false
 	}
 	return true
