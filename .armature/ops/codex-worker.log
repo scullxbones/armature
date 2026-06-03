@@ -255,3 +255,4 @@
 ["citation-accepted","task-1780487888",1780487892,"codex-worker",{"confirmed_noninteractively":true,"rationale":"Requirements derived from operational gap discovered when trying to create bugs under ORCRUN epic — no external spec exists"}]
 ["transition","bug-1780487596",1780487912,"codex-worker",{"to":"cancelled"}]
 ["transition","bug-1780487602",1780487914,"codex-worker",{"to":"cancelled"}]
+["transition","bug-1780487607",1780487915,"codex-worker",{"to":"cancelled"}]
