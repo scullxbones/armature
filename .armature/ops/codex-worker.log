@@ -158,3 +158,4 @@
 ["transition","HKREFACT-T19",1780157967,"codex-worker",{"to":"done","outcome":"Orchestrate now appends a done transition after committed changes, records explicit no-op completion messages without marking done, exposes completion_message in JSON output, and passes make check."}]
 ["transition","HKREFACT-T17",1780158410,"codex-worker",{"to":"done","outcome":"Added ADR defining context_files purpose, lifecycle, command-surface requirements, validation policy, examples, anti-patterns, and migration plan; arm validate is clean."}]
 ["source-fingerprint","4af54cb6-d757-4f33-b247-c6341b3ef3d6",1780450232,"codex-worker",{"sha":"82aaf2d6818283c8908f89dd919e657534169befcec259dabb1aed90e1e2010d","provider":"filesystem"}]
+["source-fingerprint","1241e468-5c15-4f75-9c29-1a09b42adda7",1780450232,"codex-worker",{"sha":"304c0e4b38a67bc7c8a3773a8bb47a1f5c82c3b08d8569846bf7fc051abe22cb","provider":"filesystem"}]
