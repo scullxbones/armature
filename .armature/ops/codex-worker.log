@@ -208,3 +208,4 @@
 ["link","ORCRUN-T04",1780450256,"codex-worker",{"dep":"ORCRUN-T02","rel":"blocked_by"}]
 ["dag-transition","ORCRUN",1780450277,"codex-worker",{"to":"verified","issue_id":"ORCRUN"}]
 ["source-link","ORCRUN",1780450277,"codex-worker",{"source_id":"9542f8e2-ee3f-4bfb-b59d-dfa853fbf412","source_url":"docs/design/orchestration-run-contract.md"}]
+["source-link","ORCRUN-S1",1780450277,"codex-worker",{"source_id":"9542f8e2-ee3f-4bfb-b59d-dfa853fbf412","source_url":"docs/design/orchestration-run-contract.md"}]
