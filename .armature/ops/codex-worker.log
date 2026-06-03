@@ -236,3 +236,4 @@
 ["create","bug-1780487630",1780487630,"codex-worker",{"title":"scopesOverlap in RepoRunner uses prefix matching instead of globs","parent":"ORCRUN","type":"bug","scope":["internal/orchestrate/run.go","internal/orchestrate/run_test.go"],"acceptance":["TestScopesOverlap_GlobPattern passes","dry-run WouldDispatch matches real-run scope check for glob scopes","make check green"],"definition_of_done":"scopesOverlap replaced with claimPkg.ScopesOverlap so that glob patterns like src/*.go correctly match concrete paths like src/foo.go. Dry-run WouldDispatch result is consistent with the engine's glob-aware scope check.","priority":"medium"}]
 ["dag-transition","bug-1780487596",1780487635,"codex-worker",{"to":"verified","issue_id":"bug-1780487596"}]
 ["dag-transition","bug-1780487602",1780487635,"codex-worker",{"to":"verified","issue_id":"bug-1780487602"}]
+["dag-transition","bug-1780487607",1780487636,"codex-worker",{"to":"verified","issue_id":"bug-1780487607"}]
