@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	armcontext "github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -191,10 +192,13 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	}
 
 	if issue.ClaimedBy != "" && issue.ClaimedBy != workerID {
-		result.ClaimOwner = issue.ClaimedBy
-		result.BlockedReason = fmt.Sprintf("task claimed by %s", issue.ClaimedBy)
-		result.WouldDispatch = false
-		return preparedRun{result: result}, nil
+		if !claim.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, r.deps.nowUnix()) {
+			result.ClaimOwner = issue.ClaimedBy
+			result.BlockedReason = fmt.Sprintf("task claimed by %s", issue.ClaimedBy)
+			result.WouldDispatch = false
+			return preparedRun{result: result}, nil
+		}
+		// Stale claim: allow this worker to take over.
 	}
 
 	if issue.ClaimedBy == workerID {
