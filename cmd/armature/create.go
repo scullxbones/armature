@@ -3,12 +3,34 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 )
+
+// validNodeTypes is the complete set of accepted node types for arm create.
+var validNodeTypes = map[string]bool{
+	"epic":  true,
+	"story": true,
+	"task":  true,
+	"bug":   true,
+}
+
+// validNodeTypesList is the sorted list of valid types for error messages.
+var validNodeTypesList = []string{"epic", "story", "task", "bug"}
+
+// validParentChildTypes defines which parent types may contain which child types.
+var validParentChildTypes = map[string]map[string]bool{
+	"epic":  {"story": true, "task": true, "bug": true},
+	"story": {"task": true, "bug": true},
+	"task":  {},
+	"bug":   {},
+}
 
 func newCreateCmd() *cobra.Command {
 	var title, nodeType, parent, id, priority, dod, confidence, acceptanceJSON, sourceRef string
@@ -18,6 +40,32 @@ func newCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new work item",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate node type before doing anything else.
+			if !validNodeTypes[nodeType] {
+				return fmt.Errorf("invalid type %q: valid types are %s",
+					nodeType, strings.Join(validNodeTypesList, ", "))
+			}
+
+			// Validate parent/type combination when a parent is specified.
+			if parent != "" {
+				appCtx := currentCtx(cmd)
+				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+				if err != nil {
+					return fmt.Errorf("read ops: %w", err)
+				}
+				if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
+					return err
+				}
+				parentIssue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", parent+".json"))
+				if err != nil {
+					return fmt.Errorf("parent %s not found: %w", parent, err)
+				}
+				allowed, ok := validParentChildTypes[parentIssue.Type]
+				if !ok || !allowed[nodeType] {
+					return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", parent, parentIssue.Type, nodeType)
+				}
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
@@ -114,7 +162,7 @@ func newCreateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&title, "title", "", "item title")
-	cmd.Flags().StringVar(&nodeType, "type", "task", "item type: epic, story, task")
+	cmd.Flags().StringVar(&nodeType, "type", "task", "item type: epic, story, task, bug")
 	cmd.Flags().StringVar(&parent, "parent", "", "parent node ID")
 	cmd.Flags().StringVar(&id, "id", "", "explicit ID (auto-generated if empty)")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
