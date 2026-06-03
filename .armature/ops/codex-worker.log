@@ -159,3 +159,4 @@
 ["transition","HKREFACT-T17",1780158410,"codex-worker",{"to":"done","outcome":"Added ADR defining context_files purpose, lifecycle, command-surface requirements, validation policy, examples, anti-patterns, and migration plan; arm validate is clean."}]
 ["source-fingerprint","4af54cb6-d757-4f33-b247-c6341b3ef3d6",1780450232,"codex-worker",{"sha":"82aaf2d6818283c8908f89dd919e657534169befcec259dabb1aed90e1e2010d","provider":"filesystem"}]
 ["source-fingerprint","1241e468-5c15-4f75-9c29-1a09b42adda7",1780450232,"codex-worker",{"sha":"304c0e4b38a67bc7c8a3773a8bb47a1f5c82c3b08d8569846bf7fc051abe22cb","provider":"filesystem"}]
+["source-fingerprint","1b874777-6558-4835-9713-7553b8313733",1780450232,"codex-worker",{"sha":"05056d855f01116e8895f2a851a9633670ca42ba0a07463d271448a88c630e19","provider":"filesystem"}]
