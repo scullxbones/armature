@@ -347,3 +347,4 @@
 ["orchestrate-dispatch-complete","ORCRUN-S2-B1",1780504682,"codex-worker",{}]
 ["orchestrate-check-result","ORCRUN-S2-B1",1780504955,"codex-worker",{"msg":"claude invocation succeeded"}]
 ["orchestrate-complete","ORCRUN-S2-B1",1780504955,"codex-worker",{}]
+["claim","HKREFACT-T15",1780504956,"codex-worker",{"ttl":60}]
