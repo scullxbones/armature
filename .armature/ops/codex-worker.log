@@ -260,3 +260,4 @@
 ["transition","bug-1780487618",1780487918,"codex-worker",{"to":"cancelled"}]
 ["transition","bug-1780487624",1780487919,"codex-worker",{"to":"cancelled"}]
 ["transition","bug-1780487630",1780487920,"codex-worker",{"to":"cancelled"}]
+["create","bug-1780487944",1780487944,"codex-worker",{"title":"RepoRunner blocks on stale claims instead of taking over","parent":"story-1780487664","type":"bug","scope":["internal/orchestrate/run.go","internal/orchestrate/run_test.go"],"acceptance":["TestPrepare_StaleClaim_AllowsTakeover passes","make check green"],"definition_of_done":"prepare() calls claimPkg.IsClaimStale before returning a blocked result for another worker's claim. A stale claim allows takeover rather than blocking forever. Tests cover the stale-claim takeover path.","priority":"high"}]
