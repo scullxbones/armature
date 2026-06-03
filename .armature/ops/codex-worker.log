@@ -339,3 +339,4 @@
 ["amend","task-1780487888",1780503079,"codex-worker",{"definition_of_done":"arm create rejects unsupported or unrecognized types at creation time with an explicit error listing valid types — no silent pass-through that corrupts graph state. arm create rejects invalid parent/type combinations at creation time with a clear error. The bug type is added to the valid hierarchy (epic and story can parent bug). A new arm reparent --issue ID --parent NEW-PARENT command moves an issue to a new parent, validating hierarchy before writing the op."}]
 ["link","ORCRUN-S2-T2",1780503103,"codex-worker",{"dep":"ORCRUN-S2-B1","rel":"blocked_by"}]
 ["link","ORCRUN-S2-T5",1780503103,"codex-worker",{"dep":"ORCRUN-S2-T2","rel":"blocked_by"}]
+["link","ORCRUN-S2-T6",1780503103,"codex-worker",{"dep":"ORCRUN-S2-T5","rel":"blocked_by"}]
