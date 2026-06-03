@@ -267,6 +267,178 @@ func TestRepoRunner_ClaimsTaskWhenNeeded(t *testing.T) {
 	}
 }
 
+func TestRepoRunner_StaleClaimAllowsTakeover(t *testing.T) {
+	// A claim held by another worker that has exceeded its TTL is stale.
+	// prepare() should allow this worker to take over rather than blocking forever.
+	const (
+		claimedAt     = int64(1000)
+		ttlMinutes    = 1                                    // 60 seconds
+		staleNow      = claimedAt + int64(ttlMinutes)*60 + 1 // one second past TTL
+		lastHeartbeat = int64(0)                             // no heartbeat
+	)
+
+	var appended []ops.Op
+	claimed := false
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: ttlMinutes,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-b",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				appended = append(appended, op)
+				if op.Type == ops.OpClaim {
+					claimed = true
+				}
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				issue := materialize.Issue{
+					ID:         "ORCRUN-T03",
+					Title:      "task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+					// Stale claim held by another worker
+					ClaimedBy:     "worker-a",
+					ClaimedAt:     claimedAt,
+					ClaimTTL:      ttlMinutes,
+					LastHeartbeat: lastHeartbeat,
+				}
+				if claimed {
+					issue.ClaimedBy = "worker-b"
+				}
+				return issue, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-T03": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T03"] = &materialize.Issue{ID: "ORCRUN-T03", Title: "task", Scope: []string{"internal/orchestrate/run.go"}}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return staleNow },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T03", WorkerID: "worker-b", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "" {
+		t.Fatalf("BlockedReason = %q, want empty (stale claim should allow takeover)", result.BlockedReason)
+	}
+	if !result.ClaimHeld || result.ClaimOwner != "worker-b" {
+		t.Fatalf("claim state = held:%t owner:%q, want held:true owner:worker-b", result.ClaimHeld, result.ClaimOwner)
+	}
+	if len(appended) != 1 || appended[0].Type != ops.OpClaim {
+		t.Fatalf("expected one claim op for takeover, got %+v", appended)
+	}
+	if result.Phase != "complete" {
+		t.Fatalf("Phase = %q, want complete", result.Phase)
+	}
+}
+
+func TestRepoRunner_FreshClaimByOtherWorkerStillBlocks(t *testing.T) {
+	// A claim held by another worker that is still within TTL must block.
+	const (
+		claimedAt  = int64(1000)
+		ttlMinutes = 1
+		freshNow   = claimedAt + 10 // well within TTL
+	)
+
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: ttlMinutes,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-b",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:            "ORCRUN-T04",
+					Title:         "task",
+					Scope:         []string{"internal/orchestrate/run.go"},
+					Acceptance:    []byte(`["go test ./internal/orchestrate"]`),
+					ClaimedBy:     "worker-a",
+					ClaimedAt:     claimedAt,
+					ClaimTTL:      ttlMinutes,
+					LastHeartbeat: int64(0),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-T04": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				return materialize.NewState(), nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) { return AuthPlan{}, nil },
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run when claim is fresh")
+				return OrchestrateState{}, nil
+			},
+			nowUnix: func() int64 { return freshNow },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T04", WorkerID: "worker-b", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason == "" {
+		t.Fatal("BlockedReason should be set when claim is fresh and held by another worker")
+	}
+	if result.WouldDispatch {
+		t.Fatal("WouldDispatch should be false")
+	}
+}
+
 func TestRepoRunner_BlocksOnScopeConflictAfterClaimVerification(t *testing.T) {
 	claimed := false
 	runner := &RepoRunner{
