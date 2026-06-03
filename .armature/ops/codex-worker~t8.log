@@ -1,3 +1,4 @@
 ["heartbeat","task-1780487888",1780505601,"codex-worker~t8",{}]
 ["heartbeat","task-1780487888",1780506598,"codex-worker~t8",{}]
 ["citation-accepted","task-1780487888",1780506603,"codex-worker~t8",{"confirmed_noninteractively":true,"rationale":"task implementation is self-evidencing"}]
+["transition","task-1780487888",1780506608,"codex-worker~t8",{"to":"done","outcome":"arm create rejects invalid types and parent/type combos; bug type added to hierarchy; arm validate skips terminal states for hierarchy checks; arm reparent command added with hierarchy validation"}]
