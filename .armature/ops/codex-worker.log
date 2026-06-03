@@ -240,3 +240,4 @@
 ["dag-transition","bug-1780487613",1780487636,"codex-worker",{"to":"verified","issue_id":"bug-1780487613"}]
 ["dag-transition","bug-1780487618",1780487636,"codex-worker",{"to":"verified","issue_id":"bug-1780487618"}]
 ["dag-transition","bug-1780487624",1780487636,"codex-worker",{"to":"verified","issue_id":"bug-1780487624"}]
+["dag-transition","bug-1780487630",1780487636,"codex-worker",{"to":"verified","issue_id":"bug-1780487630"}]
