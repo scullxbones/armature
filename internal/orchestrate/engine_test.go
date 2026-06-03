@@ -425,6 +425,51 @@ func TestEngine_RunningPhase_ProcessesZeroTrustCommit(t *testing.T) {
 	}
 }
 
+func TestEngine_NoCommitRecordsBlockedLifecycleOutcome(t *testing.T) {
+	priorOps := []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "base123", WorktreePath: "/wt/T1", RetryBudget: 1}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+	}
+	git := &stubGit{
+		headSHA:   "head456",
+		diffOut:   "",
+		diffFiles: []string{"internal/foo/bar.go"},
+		commitErr: errors.New("nothing to commit: index is clean"),
+	}
+	log := &stubOpLog{ops: priorOps}
+	harness := passingHarness("make-check")
+
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		Git:         git,
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 1,
+	}
+
+	result, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Phase != "complete" {
+		t.Fatalf("Phase: got %q, want complete", result.Phase)
+	}
+	if result.CompletionMessage == "" {
+		t.Fatal("expected explicit completion message for no-commit run")
+	}
+	foundBlocked := false
+	for _, op := range log.appended {
+		if op.Type == ops.OpTransition && op.Payload.To == ops.StatusBlocked {
+			foundBlocked = true
+		}
+	}
+	if !foundBlocked {
+		t.Fatal("expected blocked lifecycle transition for no-commit run")
+	}
+}
+
 // --- Engine.Run: context cancellation is honoured ---
 
 func TestEngine_ContextCancelled_ReturnsError(t *testing.T) {

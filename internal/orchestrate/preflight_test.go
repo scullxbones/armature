@@ -44,6 +44,17 @@ func validPreflightInput(t *testing.T) orchestrate.PreflightInput {
 	}
 }
 
+func TestPreflightRequestAndResultContracts(t *testing.T) {
+	req := validPreflightInput(t)
+	contractReq := req
+	result := orchestrate.RunPreflight(contractReq)
+	contractResult := result
+
+	assert.Equal(t, req.ScopePaths, contractReq.ScopePaths)
+	assert.True(t, contractResult.OK)
+	assert.Empty(t, contractResult.Errors)
+}
+
 // --- RunPreflight: happy path ---
 
 func TestRunPreflight_AllChecksPass(t *testing.T) {

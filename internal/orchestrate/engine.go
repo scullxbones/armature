@@ -426,7 +426,7 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 	// Step 5: write complete op and lifecycle transition for committed changes.
 	completeMsg := ""
 	if !committed {
-		completeMsg = "no changes committed; lifecycle transition skipped"
+		completeMsg = "no changes committed; lifecycle blocked"
 	}
 	completeOp := ops.Op{
 		Type:      ops.OpOrchestrateComplete,
@@ -439,20 +439,25 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 		return state, fmt.Errorf("append complete op: %w", err)
 	}
 	state.CompletionMessage = completeMsg
-	if committed {
-		transitionOp := ops.Op{
-			Type:      ops.OpTransition,
-			TargetID:  e.cfg.TaskID,
-			Timestamp: time.Now().Unix(),
-			WorkerID:  e.cfg.WorkerID,
-			Payload: ops.Payload{
-				To:      ops.StatusDone,
-				Outcome: "orchestrate completed with committed changes",
-			},
-		}
-		if err := e.cfg.OpLog.Append(transitionOp); err != nil {
+	transitionOp := ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  e.cfg.TaskID,
+		Timestamp: time.Now().Unix(),
+		WorkerID:  e.cfg.WorkerID,
+		Payload: ops.Payload{
+			To:      ops.StatusDone,
+			Outcome: "orchestrate completed with committed changes",
+		},
+	}
+	if !committed {
+		transitionOp.Payload.To = ops.StatusBlocked
+		transitionOp.Payload.Outcome = completeMsg
+	}
+	if err := e.cfg.OpLog.Append(transitionOp); err != nil {
+		if committed {
 			return state, fmt.Errorf("append done transition op: %w", err)
 		}
+		return state, fmt.Errorf("append blocked transition op: %w", err)
 	}
 	state.Phase = "complete"
 

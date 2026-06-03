@@ -5,12 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/orchestrate"
 	"github.com/spf13/cobra"
@@ -112,45 +109,13 @@ Three-level model resolution:
 				return fmt.Errorf("--issue is required")
 			}
 
-			// --- Load and materialise the issue ---
-			issuesDir := appCtx.IssuesDir
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
-			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
-			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
-				return err
-			}
-
-			issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", issueID+".json"))
-			if err != nil {
-				return fmt.Errorf("issue %s not found: %w", issueID, err)
-			}
-
-			// --- Three-level model resolution ---
-			resolvedModel := resolveModel(model, issue.PreferredModel, appCtx.Config.Orchestrator.DefaultModel)
-
 			// --- Resolve worker ID ---
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, _, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
 
-			// --- Build harness config from issue + flags + config ---
 			orcCfg := appCtx.Config.Orchestrator
-			harnessCfg := orchestrate.HarnessConfig{
-				Adapter:        harness,
-				Model:          resolvedModel,
-				Timeout:        timeout,
-				BuildCmd:       orcCfg.Adapters.Build,
-				LintCmd:        orcCfg.Adapters.Lint,
-				TestCmd:        orcCfg.Adapters.Test,
-				CoverageCmd:    orcCfg.Adapters.Coverage,
-				MutateCmd:      orcCfg.Adapters.Mutate,
-				WorkDir:        appCtx.RepoPath,
-				TimeoutSeconds: timeout,
-			}
-
 			authPlan, authErr := orchestrate.ResolveAuthPlan(harness, orchestrate.AuthConfig{
 				Mode:    orcCfg.Auth.Mode,
 				EnvFile: orcCfg.Auth.EnvFile,
@@ -193,36 +158,7 @@ Three-level model resolution:
 				}
 				return nil
 			}
-			harnessCfg.Env = authPlan.Env
-			harnessCfg.AuthSource = authPlan.Source
-
-			harnessAdapter, err := orchestrate.NewHarnessAdapter(harnessCfg)
-			if err != nil {
-				return fmt.Errorf("create harness: %w", err)
-			}
-
-			// --- Build op log adapter ---
-			opLog := &fileOpLog{ctx: appCtx, logPath: logPath}
-
-			// --- Gather active scopes from the index for overlap checking ---
-			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
-			activeScopes := make(map[string][]string)
-			for id, entry := range index {
-				if id == issueID {
-					continue
-				}
-				if entry.Status == ops.StatusClaimed || entry.Status == ops.StatusInProgress {
-					activeScopes[id] = entry.Scope
-				}
-			}
-
-			// --- Assemble engine config ---
-			gitClient := adapters.New(appCtx.RepoPath)
-			service := orchestrate.NewService(orchestrate.ServiceConfig{
-				Git:     gitClient,
-				OpLog:   opLog,
-				Harness: harnessAdapter,
-			})
+			runner := orchestrate.NewRepoRunner(appCtx, workerID)
 
 			// --- Run ---
 			var cancelFn context.CancelFunc
@@ -235,26 +171,17 @@ Three-level model resolution:
 				defer cancelFn()
 			}
 
-			state, err := service.Run(runCtx, orchestrate.RunInput{
-				TaskID:       issueID,
-				TaskTitle:    issue.Title,
-				TaskContract: string(issue.Acceptance),
-				BuildTaskContext: func(ctx context.Context, issueID string) (string, error) {
-					return buildHarnessStructuredContext(appCtx, issueID)
-				},
-				WorkerID:     workerID,
-				RetryBudget:  retries,
-				Scope:        issue.Scope,
-				ActiveScopes: activeScopes,
-				HarnessCfg:   harnessCfg,
-				Opts: orchestrate.RunOptions{
-					DryRun:            dryRun,
-					WorkDir:           appCtx.RepoPath,
-					HeartbeatInterval: 5 * time.Second,
-					Progress: func(ev orchestrate.ProgressEvent) {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "orchestrate progress: kind=%s phase=%s elapsed=%s harness=%s msg=%s\n",
-							ev.Kind, ev.Phase, ev.Elapsed.Truncate(time.Second), ev.Harness, ev.Message)
-					},
+			runResult, err := runner.Run(runCtx, orchestrate.RunRequest{
+				TaskID:        issueID,
+				WorkerID:      workerID,
+				Harness:       harness,
+				ModelOverride: model,
+				RetryBudget:   retries,
+				Timeout:       time.Duration(timeout) * time.Second,
+				DryRun:        dryRun,
+				Progress: func(ev orchestrate.ProgressEvent) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "orchestrate progress: kind=%s phase=%s elapsed=%s harness=%s msg=%s\n",
+						ev.Kind, ev.Phase, ev.Elapsed.Truncate(time.Second), ev.Harness, ev.Message)
 				},
 			})
 			if err != nil {
@@ -275,22 +202,22 @@ Three-level model resolution:
 			// --- Output ---
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				result := map[string]any{
+				payload := map[string]any{
 					"issue":       issueID,
-					"phase":       state.Phase,
-					"run":         state.Run,
+					"phase":       runResult.Phase,
+					"run":         runResult.Run,
 					"dry_run":     dryRun,
-					"model":       resolvedModel,
-					"harness":     harness,
-					"auth_source": harnessCfg.AuthSource,
+					"model":       runResult.Model,
+					"harness":     runResult.Harness,
+					"auth_source": runResult.AuthSource,
 				}
-				if state.CompletionMessage != "" {
-					result["completion_message"] = state.CompletionMessage
+				if runResult.CompletionMessage != "" {
+					payload["completion_message"] = runResult.CompletionMessage
 				}
-				data, _ := json.Marshal(result)
+				data, _ := json.Marshal(payload)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "orchestrate %s: phase=%s run=%d\n", issueID, state.Phase, state.Run)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "orchestrate %s: phase=%s run=%d\n", issueID, runResult.Phase, runResult.Run)
 			}
 
 			return nil
