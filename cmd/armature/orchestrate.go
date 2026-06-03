@@ -202,18 +202,7 @@ Three-level model resolution:
 			// --- Output ---
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				payload := map[string]any{
-					"issue":       issueID,
-					"phase":       runResult.Phase,
-					"run":         runResult.Run,
-					"dry_run":     dryRun,
-					"model":       runResult.Model,
-					"harness":     runResult.Harness,
-					"auth_source": runResult.AuthSource,
-				}
-				if runResult.CompletionMessage != "" {
-					payload["completion_message"] = runResult.CompletionMessage
-				}
+				payload := buildOrchestateJSONPayload(issueID, dryRun, runResult)
 				data, _ := json.Marshal(payload)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
@@ -234,6 +223,39 @@ Three-level model resolution:
 	cmd.Flags().BoolVar(&authCheck, "auth-check", false, "run harness auth preflight and exit without dispatch")
 
 	return cmd
+}
+
+// buildOrchestateJSONPayload assembles the JSON payload for the orchestrate command output.
+// It always includes the core fields (issue, phase, run, dry_run, model, harness, auth_source)
+// and conditionally includes fields that carry meaningful values when set:
+// blocked_reason, would_dispatch, scope_conflicts, would_claim, and claim_owner.
+func buildOrchestateJSONPayload(issueID string, dryRun bool, result orchestrate.RunResult) map[string]any {
+	payload := map[string]any{
+		"issue":          issueID,
+		"phase":          result.Phase,
+		"run":            result.Run,
+		"dry_run":        dryRun,
+		"model":          result.Model,
+		"harness":        result.Harness,
+		"auth_source":    result.AuthSource,
+		"would_dispatch": result.WouldDispatch,
+	}
+	if result.CompletionMessage != "" {
+		payload["completion_message"] = result.CompletionMessage
+	}
+	if result.BlockedReason != "" {
+		payload["blocked_reason"] = result.BlockedReason
+	}
+	if len(result.ScopeConflicts) > 0 {
+		payload["scope_conflicts"] = result.ScopeConflicts
+	}
+	if result.WouldClaim {
+		payload["would_claim"] = result.WouldClaim
+	}
+	if result.ClaimOwner != "" {
+		payload["claim_owner"] = result.ClaimOwner
+	}
+	return payload
 }
 
 // fileOpLog is a thin adapter that bridges ops.AppendOp with orchestrate.OpLog.
