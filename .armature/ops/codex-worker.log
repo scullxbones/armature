@@ -355,3 +355,4 @@
 ["claim","HKREFACT-T16",1780505243,"codex-worker",{"ttl":60}]
 ["orchestrate-dispatch","HKREFACT-T16",1780505244,"codex-worker",{"worktree_path":".","pre_dispatch_ref":"8819e91a6d4f385c5c83fc6b86b9c7ff4595c776","retry_budget":3}]
 ["orchestrate-dispatch-complete","HKREFACT-T16",1780505244,"codex-worker",{}]
+["note","ORCRUN-S2-B1",1780505387,"codex-worker",{"msg":"Scope overlap with story-1780487664 detected at claim time"}]
