@@ -351,3 +351,4 @@
 ["orchestrate-dispatch","HKREFACT-T15",1780504957,"codex-worker",{"worktree_path":".","pre_dispatch_ref":"8819e91a6d4f385c5c83fc6b86b9c7ff4595c776","retry_budget":3}]
 ["orchestrate-dispatch-complete","HKREFACT-T15",1780504957,"codex-worker",{}]
 ["orchestrate-check-result","HKREFACT-T15",1780505242,"codex-worker",{"msg":"claude invocation succeeded"}]
+["orchestrate-complete","HKREFACT-T15",1780505242,"codex-worker",{}]
