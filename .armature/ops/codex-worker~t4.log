@@ -1,0 +1,1 @@
+["note","ORCRUN-S2-T4",1780505789,"codex-worker~t4",{"msg":"Added blocked lifecycle outcome check in repoOrchestrator.Run; returns error on StatusBlocked so TasksCompleted is not incremented. Added newRepoRunner injectable factory for testability."}]
