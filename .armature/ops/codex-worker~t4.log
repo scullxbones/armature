@@ -1,1 +1,2 @@
 ["note","ORCRUN-S2-T4",1780505789,"codex-worker~t4",{"msg":"Added blocked lifecycle outcome check in repoOrchestrator.Run; returns error on StatusBlocked so TasksCompleted is not incremented. Added newRepoRunner injectable factory for testability."}]
+["citation-accepted","ORCRUN-S2-T4",1780505795,"codex-worker~t4",{"confirmed_noninteractively":true,"rationale":"Implementation in cmd/armature/worker_run.go; no external source doc required"}]
