@@ -363,3 +363,4 @@
 ["note","ORCRUN-S2-T3",1780505389,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
 ["note","HKREFACT-T14",1780505389,"codex-worker",{"msg":"Scope overlap with ORCRUN-S2-T3 detected at claim time"}]
 ["note","ORCRUN-S2-T3",1780505389,"codex-worker",{"msg":"Serial claim: scope overlap with HKREFACT-T15 (same worker, dismissed)"}]
+["claim","ORCRUN-S2-T3",1780505389,"codex-worker",{"ttl":60}]
