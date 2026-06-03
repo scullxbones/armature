@@ -343,3 +343,4 @@
 ["link","ORCRUN-S2-T7",1780503104,"codex-worker",{"dep":"ORCRUN-S2-T6","rel":"blocked_by"}]
 ["amend","task-1780487888",1780503131,"codex-worker",{"definition_of_done":"arm create rejects unsupported/unrecognized types at creation time with an explicit error listing valid types — no silent pass-through that corrupts graph state. arm create rejects invalid parent/type combinations (e.g. bug under task). The bug type is added to the valid hierarchy. arm validate skips issues in terminal states (cancelled, done, merged) for hierarchy checks — cancelled issues must not block validation. A new arm reparent command moves an issue to a new parent with hierarchy validation."}]
 ["claim","ORCRUN-S2-B1",1780504680,"codex-worker",{"ttl":60}]
+["orchestrate-dispatch","ORCRUN-S2-B1",1780504682,"codex-worker",{"worktree_path":".","pre_dispatch_ref":"8819e91a6d4f385c5c83fc6b86b9c7ff4595c776","retry_budget":3}]
