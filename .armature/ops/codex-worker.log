@@ -218,3 +218,4 @@
 ["claim","ORCRUN-T01",1780452605,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN-S1",1780452605,"codex-worker",{"to":"in-progress"}]
 ["transition","ORCRUN-T01",1780452618,"codex-worker",{"to":"done","outcome":"Defined caller-facing RunRequest/RunResult and PreflightRequest/PreflightResult contracts with package tests."}]
+["claim","ORCRUN-T02",1780452618,"codex-worker",{"ttl":60}]
