@@ -224,3 +224,4 @@
 ["transition","ORCRUN-T03",1780452637,"codex-worker",{"to":"done","outcome":"Moved arm orchestrate and arm worker run onto the shared internal repo runner contract and kept command output driven by RunResult."}]
 ["claim","ORCRUN-T04",1780452637,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN-T04",1780452645,"codex-worker",{"to":"done","outcome":"Recorded explicit lifecycle outcomes for complete runs, including blocked no-commit completion paths and regression coverage."}]
+["claim","ORCRUN-S1",1780452646,"codex-worker",{"ttl":60}]
