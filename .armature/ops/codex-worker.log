@@ -370,3 +370,4 @@
 ["note","story-1780487664",1780505391,"codex-worker",{"msg":"Scope overlap with ORCRUN-S2-T4 detected at claim time"}]
 ["note","ORCRUN-S2-T4",1780505391,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
 ["note","HKREFACT-T14",1780505391,"codex-worker",{"msg":"Scope overlap with ORCRUN-S2-T4 detected at claim time"}]
+["claim","ORCRUN-S2-T4",1780505391,"codex-worker",{"ttl":60}]
