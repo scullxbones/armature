@@ -1,0 +1,1 @@
+["note","ORCRUN-S2-B1",1780505720,"codex-worker~b1",{"msg":"Implemented stale-claim takeover: prepare() now calls claim.IsClaimStale before blocking on another worker's claim. Two new tests added: stale allows takeover, fresh still blocks."}]
