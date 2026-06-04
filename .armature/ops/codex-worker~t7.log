@@ -1,3 +1,4 @@
 ["note","ORCRUN-S2-T7",1780540456,"codex-worker~t7",{"msg":"Reading claim.ScopesOverlap implementation. Will replace local scopesOverlap+normalizeScopePath with claimPkg.ScopesOverlap in run.go and add glob-aware test."}]
 ["heartbeat","ORCRUN-S2-T7",1780540828,"codex-worker~t7",{}]
 ["citation-accepted","ORCRUN-S2-T7",1780541499,"codex-worker~t7",{"confirmed_noninteractively":true,"rationale":"Replaced local scopesOverlap with claimPkg.ScopesOverlap; no external source doc exists for this internal refactor"}]
+["transition","ORCRUN-S2-T7",1780541504,"codex-worker~t7",{"to":"done","outcome":"Replaced local scopesOverlap+normalizeScopePath in RepoRunner with claimPkg.ScopesOverlap (filepath.Match-based glob). Added TestRepoRunner_GlobScopeConflictBlocksDispatch verifying src/*.go matches src/foo.go. All 11 RepoRunner tests pass; make check green at 80.0% coverage."}]
