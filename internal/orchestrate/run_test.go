@@ -110,8 +110,11 @@ func TestRepoRunner_DryRunAndMutatingRunSharePreparationPath(t *testing.T) {
 	if liveResult.Phase != "complete" {
 		t.Fatalf("Phase = %q, want complete", liveResult.Phase)
 	}
-	if materializeCalls != 1 || loadIssueCalls != 1 || loadIndexCalls != 1 || loadStateCalls != 1 {
-		t.Fatalf("prep path counts = %d/%d/%d/%d, want 1/1/1/1", materializeCalls, loadIssueCalls, loadIndexCalls, loadStateCalls)
+	// loadState is called twice on a live run: once to build the issue map for
+	// scope-conflict filtering (stale-claim and ancestor checks) and once to
+	// assemble the task context for the harness.
+	if materializeCalls != 1 || loadIssueCalls != 1 || loadIndexCalls != 1 || loadStateCalls != 2 {
+		t.Fatalf("prep path counts = %d/%d/%d/%d, want 1/1/1/2", materializeCalls, loadIssueCalls, loadIndexCalls, loadStateCalls)
 	}
 }
 
@@ -436,6 +439,185 @@ func TestRepoRunner_FreshClaimByOtherWorkerStillBlocks(t *testing.T) {
 	}
 	if result.WouldDispatch {
 		t.Fatal("WouldDispatch should be false")
+	}
+}
+
+func TestRepoRunner_ActiveScopesSkipsStaleClaimsFromOtherTasks(t *testing.T) {
+	// A scope-conflicting task with a stale claim should NOT block dispatch.
+	// If the activeScopes loop does not skip stale claims, this test will
+	// incorrectly see a scope conflict and set BlockedReason = "scope conflict".
+	const (
+		otherClaimedAt = int64(1000)
+		otherTTL       = 1 // 60 seconds
+		staleNow       = otherClaimedAt + int64(otherTTL)*60 + 1
+	)
+
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL:  60,
+				TokenBudget: 1600,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-T05",
+					Title:      "task",
+					ClaimedBy:  "worker-a",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{
+					"ORCRUN-T05": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}},
+					// OTHER has overlapping scope but a stale claim — should be skipped
+					"OTHER-STALE": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}},
+				}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T05"] = &materialize.Issue{
+					ID:    "ORCRUN-T05",
+					Title: "task",
+					Scope: []string{"internal/orchestrate/run.go"},
+				}
+				state.Issues["OTHER-STALE"] = &materialize.Issue{
+					ID:            "OTHER-STALE",
+					Title:         "stale task",
+					Scope:         []string{"internal/orchestrate/run.go"},
+					ClaimedBy:     "worker-b",
+					ClaimedAt:     otherClaimedAt,
+					ClaimTTL:      otherTTL,
+					LastHeartbeat: 0,
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return staleNow },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T05", WorkerID: "worker-a", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "" {
+		t.Fatalf("BlockedReason = %q, want empty: stale-claimed conflicting task should not block dispatch", result.BlockedReason)
+	}
+	if len(result.ScopeConflicts) != 0 {
+		t.Fatalf("ScopeConflicts = %+v, want none: stale claims should not appear as conflicts", result.ScopeConflicts)
+	}
+}
+
+func TestRepoRunner_ActiveScopesSkipsAncestorIssues(t *testing.T) {
+	// A scope-conflicting task that is an ancestor of the task being dispatched
+	// should NOT block dispatch — parent tasks legitimately share child scope.
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL:  60,
+				TokenBudget: 1600,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-CHILD",
+					Title:      "child task",
+					ClaimedBy:  "worker-a",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+					Parent:     "ORCRUN-PARENT",
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{
+					"ORCRUN-CHILD": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}, Parent: "ORCRUN-PARENT"},
+					// PARENT has overlapping scope and is in-progress, but is an ancestor — should be skipped
+					"ORCRUN-PARENT": {Status: ops.StatusInProgress, Scope: []string{"internal/orchestrate/run.go"}, Parent: ""},
+				}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-CHILD"] = &materialize.Issue{
+					ID:     "ORCRUN-CHILD",
+					Title:  "child task",
+					Scope:  []string{"internal/orchestrate/run.go"},
+					Parent: "ORCRUN-PARENT",
+				}
+				state.Issues["ORCRUN-PARENT"] = &materialize.Issue{
+					ID:    "ORCRUN-PARENT",
+					Title: "parent task",
+					Scope: []string{"internal/orchestrate/run.go"},
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return 100 },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-CHILD", WorkerID: "worker-a", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "" {
+		t.Fatalf("BlockedReason = %q, want empty: ancestor issue should not block dispatch", result.BlockedReason)
+	}
+	if len(result.ScopeConflicts) != 0 {
+		t.Fatalf("ScopeConflicts = %+v, want none: ancestor issues should not appear as conflicts", result.ScopeConflicts)
 	}
 }
 
