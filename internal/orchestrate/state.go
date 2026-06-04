@@ -21,6 +21,7 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 	state := OrchestrateState{
 		Phase: "pending",
 	}
+	sawComplete := false
 
 	for _, op := range allOps {
 		// Filter: only process ops targeting the requested task.
@@ -77,10 +78,14 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 			// Transition: running → complete.
 			state.Phase = "complete"
 			state.CompletionMessage = op.Payload.Msg
+			sawComplete = true
 
 		case ops.OpTransition:
-			// Mark that the lifecycle transition was durably recorded for this task.
-			state.TransitionWritten = true
+			// Only count a transition that follows OpOrchestrateComplete — a prior
+			// manual transition (e.g. in-progress) must not satisfy the completion guard.
+			if sawComplete {
+				state.TransitionWritten = true
+			}
 
 		case ops.OpOrchestrateCheckResult:
 			// Accumulate check results without changing phase.

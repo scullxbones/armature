@@ -133,6 +133,7 @@ func (e *Engine) Run(ctx context.Context) (OrchestrateState, error) {
 			if err := e.cfg.OpLog.Append(transitionOp); err != nil {
 				return state, fmt.Errorf("re-append missed transition op: %w", err)
 			}
+			state.TransitionWritten = true
 		}
 		return state, nil
 	case "escalated":
@@ -308,6 +309,13 @@ func (e *Engine) runHarnessWithHeartbeat(ctx context.Context, cfg HarnessConfig,
 				return
 			case <-ticker.C:
 				e.emitProgress("heartbeat", "running", "harness still running", time.Now())
+				heartbeatOp := ops.Op{
+					Type:      ops.OpHeartbeat,
+					TargetID:  e.cfg.TaskID,
+					Timestamp: time.Now().Unix(),
+					WorkerID:  e.cfg.WorkerID,
+				}
+				_ = e.cfg.OpLog.Append(heartbeatOp) //nolint:errcheck // best-effort; claim TTL is extended on success
 			case <-ctx.Done():
 				return
 			}
@@ -482,6 +490,7 @@ func (e *Engine) zeroTrustCommit(ctx context.Context, state OrchestrateState) (O
 		return state, fmt.Errorf("append blocked transition op: %w", err)
 	}
 	state.Phase = "complete"
+	state.TransitionWritten = true
 
 	return state, nil
 }
