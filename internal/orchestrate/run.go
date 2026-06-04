@@ -353,7 +353,7 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	}, nil
 }
 
-func (r *RepoRunner) buildTaskContext(ctx context.Context, stateDir, issueID string) (string, error) {
+func (r *RepoRunner) buildTaskContext(_ context.Context, stateDir, issueID string) (string, error) {
 	state, err := r.deps.loadState(stateDir)
 	if err != nil {
 		return "", fmt.Errorf("load state: %w", err)
