@@ -383,3 +383,4 @@
 ["transition","ORCRUN-S2-T3",1780518350,"codex-worker",{"to":"merged"}]
 ["transition","ORCRUN-S2-T4",1780518350,"codex-worker",{"to":"merged"}]
 ["transition","task-1780487888",1780518351,"codex-worker",{"to":"merged"}]
+["note","ORCRUN-S2-T2",1780537531,"codex-worker",{"msg":"Scope overlap with story-1780487664 detected at claim time"}]
