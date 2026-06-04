@@ -247,14 +247,33 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 		}
 	}
 
+	issueMap, err := r.loadIssueMap(stateDir)
+	if err != nil {
+		return preparedRun{}, fmt.Errorf("load issue map for scope check: %w", err)
+	}
+
+	now := r.deps.nowUnix()
 	activeScopes := make(map[string][]string)
 	for id, entry := range index {
 		if id == req.TaskID {
 			continue
 		}
-		if entry.Status == ops.StatusClaimed || entry.Status == ops.StatusInProgress {
-			activeScopes[id] = entry.Scope
+		if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
+			continue
 		}
+		if isAncestorIssue(id, req.TaskID, issueMap) {
+			continue
+		}
+		if other := issueMap[id]; other != nil {
+			ttl := other.ClaimTTL
+			if ttl <= 0 {
+				ttl = 60
+			}
+			if claim.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, now) {
+				continue
+			}
+		}
+		activeScopes[id] = entry.Scope
 	}
 	for otherID, scope := range activeScopes {
 		if scopesOverlap(issue.Scope, scope) {
@@ -442,6 +461,32 @@ func loadStateFromStateDir(stateDir string) (*materialize.State, error) {
 		state.Issues[issue.ID] = &issueCopy
 	}
 	return state, nil
+}
+
+// loadIssueMap returns all issues from the state directory keyed by ID.
+// It reuses the loadState dep so tests can stub it without extra wiring.
+func (r *RepoRunner) loadIssueMap(stateDir string) (map[string]*materialize.Issue, error) {
+	state, err := r.deps.loadState(stateDir)
+	if err != nil {
+		return nil, err
+	}
+	return state.Issues, nil
+}
+
+// isAncestorIssue reports whether candidateAncestorID is a direct or transitive
+// parent of issueID in the issue tree.
+func isAncestorIssue(candidateAncestorID, issueID string, issues map[string]*materialize.Issue) bool {
+	for cur := issueID; cur != ""; {
+		issue := issues[cur]
+		if issue == nil || issue.Parent == "" {
+			return false
+		}
+		if issue.Parent == candidateAncestorID {
+			return true
+		}
+		cur = issue.Parent
+	}
+	return false
 }
 
 func scopesOverlap(left, right []string) bool {
