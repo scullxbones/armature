@@ -521,6 +521,24 @@ func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 	}
 }
 
+// TestE5TypeHierarchy_SkipsTerminalChildren verifies that cancelled, done, and merged
+// children are not flagged for hierarchy violations even if the parent/child combo would
+// otherwise be invalid (e.g. bug under task).
+func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
+	for _, status := range []string{"cancelled", "done", "merged"} {
+		t.Run("status="+status, func(t *testing.T) {
+			// bug under task is normally invalid, but terminal children are exempt
+			state := makeState(
+				&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
+				&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1", Status: status},
+			)
+			result := Validate(state, Options{})
+			assert.False(t, containsError(result, "invalid hierarchy"),
+				"terminal child (status=%s) must not trigger hierarchy error", status)
+		})
+	}
+}
+
 // TestE5TypeHierarchy_BugUnderStoryIsValid verifies that bug is a valid child of story.
 func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
 	state := makeState(

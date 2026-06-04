@@ -158,6 +158,9 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 			if !ok {
 				continue
 			}
+			if isTerminalStatus(child.Status) {
+				continue
+			}
 			if !validHierarchy(issue.Type, child.Type) {
 				errs = append(errs, fmt.Sprintf("invalid hierarchy: %s %s cannot parent %s %s",
 					issue.Type, id, child.Type, childID))
