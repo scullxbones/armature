@@ -404,3 +404,4 @@
 ["note","story-1780487664",1780542385,"codex-worker",{"msg":"Scope overlap with HKREFACT-T15 detected at claim time"}]
 ["note","HKREFACT-T15",1780542385,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
 ["note","HKREFACT-T14",1780542386,"codex-worker",{"msg":"Scope overlap with HKREFACT-T15 detected at claim time"}]
+["claim","HKREFACT-T15",1780542386,"codex-worker",{"ttl":60}]
