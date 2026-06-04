@@ -621,6 +621,179 @@ func TestRepoRunner_ActiveScopesSkipsAncestorIssues(t *testing.T) {
 	}
 }
 
+func TestRepoRunner_DualBranchPushesClaimOpAfterAppendAndCommit(t *testing.T) {
+	// In dual-branch mode (WorktreePath set), prepare() must push the claim op
+	// to _armature after AppendAndCommit so other workers observe it immediately.
+	var appended []ops.Op
+	pushCalled := false
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:     t.TempDir(),
+			IssuesDir:    t.TempDir(),
+			StateDir:     t.TempDir(),
+			WorktreePath: t.TempDir(), // non-empty == dual-branch mode
+			Mode:         "dual-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				appended = append(appended, op)
+				return nil
+			},
+			pushClaimOp: func(worktreePath string) error {
+				pushCalled = true
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				issue := materialize.Issue{
+					ID:         "ORCRUN-DUAL-T01",
+					Title:      "dual-branch task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}
+				if len(appended) > 0 {
+					issue.ClaimedBy = "worker-a"
+				}
+				return issue, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-DUAL-T01": {Status: ops.StatusOpen}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-DUAL-T01"] = &materialize.Issue{
+					ID:    "ORCRUN-DUAL-T01",
+					Title: "dual-branch task",
+					Scope: []string{"internal/orchestrate/run.go"},
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return 100 },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-DUAL-T01", WorkerID: "worker-a", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(appended) != 1 || appended[0].Type != ops.OpClaim {
+		t.Fatalf("expected claim op, got %+v", appended)
+	}
+	if !pushCalled {
+		t.Fatal("pushClaimOp was not called in dual-branch mode after claim AppendAndCommit")
+	}
+	if !result.ClaimHeld || result.ClaimOwner != "worker-a" {
+		t.Fatalf("claim state = held:%t owner:%q", result.ClaimHeld, result.ClaimOwner)
+	}
+}
+
+func TestRepoRunner_SingleBranchDoesNotPushClaimOp(t *testing.T) {
+	// In single-branch mode (WorktreePath empty), pushClaimOp must NOT be called.
+	pushCalled := false
+	claimed := false
+	var appended []ops.Op
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			// WorktreePath intentionally empty
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				appended = append(appended, op)
+				claimed = true
+				return nil
+			},
+			pushClaimOp: func(worktreePath string) error {
+				pushCalled = true
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				issue := materialize.Issue{
+					ID:         "ORCRUN-SB-T01",
+					Title:      "single-branch task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}
+				if claimed {
+					issue.ClaimedBy = "worker-a"
+				}
+				return issue, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-SB-T01": {Status: ops.StatusOpen}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-SB-T01"] = &materialize.Issue{
+					ID:    "ORCRUN-SB-T01",
+					Title: "single-branch task",
+					Scope: []string{"internal/orchestrate/run.go"},
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return 100 },
+		},
+	}
+
+	_, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-SB-T01", WorkerID: "worker-a", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if pushCalled {
+		t.Fatal("pushClaimOp should not be called in single-branch mode")
+	}
+}
+
 func TestRepoRunner_BlocksOnScopeConflictAfterClaimVerification(t *testing.T) {
 	claimed := false
 	runner := &RepoRunner{

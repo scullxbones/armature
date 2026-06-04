@@ -80,15 +80,20 @@ type repoRunnerDeps struct {
 	readAllOpsWithOffsets func(string) ([]ops.Op, map[string]int64, error)
 	readLog               func(string) ([]ops.Op, error)
 	appendAndCommit       func(string, string, ops.Op, ops.GitCommitter) error
-	materialize           func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error)
-	loadIssue             func(string) (materialize.Issue, error)
-	loadIndex             func(string) (materialize.Index, error)
-	loadState             func(string) (*materialize.State, error)
-	resolveAuthPlan       func(string, AuthConfig) (AuthPlan, error)
-	newHarnessAdapter     func(HarnessConfig) (HarnessAdapter, error)
-	newGitClient          func(string) GitClient
-	execute               func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error)
-	nowUnix               func() int64
+	// pushClaimOp is called after AppendAndCommit in dual-branch mode to push the
+	// claim op to _armature so other workers observe it without waiting for an
+	// independent push. It is a best-effort operation: errors are not fatal.
+	// It is only called when appCtx.WorktreePath is non-empty.
+	pushClaimOp       func(worktreePath string) error
+	materialize       func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error)
+	loadIssue         func(string) (materialize.Issue, error)
+	loadIndex         func(string) (materialize.Index, error)
+	loadState         func(string) (*materialize.State, error)
+	resolveAuthPlan   func(string, AuthConfig) (AuthPlan, error)
+	newHarnessAdapter func(HarnessConfig) (HarnessAdapter, error)
+	newGitClient      func(string) GitClient
+	execute           func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error)
+	nowUnix           func() int64
 }
 
 type preparedRun struct {
@@ -105,6 +110,7 @@ func NewRepoRunner(appCtx *config.Context, workerID string) *RepoRunner {
 			readAllOpsWithOffsets: readAllOpsFromDirWithOffsets,
 			readLog:               ops.ReadLog,
 			appendAndCommit:       ops.AppendAndCommit,
+			pushClaimOp:           pushClaimOpToArmature,
 			materialize:           materialize.Materialize,
 			loadIssue:             materialize.LoadIssue,
 			loadIndex:             materialize.LoadIndex,
@@ -220,6 +226,11 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 			}
 			if err := r.deps.appendAndCommit(logPath, r.appCtx.WorktreePath, claimOp, gitCommitterForContext(r.appCtx)); err != nil {
 				return preparedRun{}, fmt.Errorf("append claim op: %w", err)
+			}
+			// In dual-branch mode, push the claim op to _armature so other workers
+			// observe it without waiting for an independent push (mirrors appendHighStakesOp).
+			if r.appCtx.WorktreePath != "" && r.deps.pushClaimOp != nil {
+				r.deps.pushClaimOp(r.appCtx.WorktreePath) //nolint:errcheck // best-effort
 			}
 			allOps, offsets, err = r.deps.readAllOpsWithOffsets(filepath.Join(r.appCtx.IssuesDir, "ops"))
 			if err != nil {
@@ -407,6 +418,20 @@ func gitCommitterForContext(appCtx *config.Context) ops.GitCommitter {
 		return nil
 	}
 	return adapters.New(appCtx.WorktreePath)
+}
+
+// pushClaimOpToArmature pushes _armature to origin from the given worktree path.
+// This is best-effort: if the push fails, a single fetch+rebase+push is attempted.
+// Errors from both attempts are ignored so a network hiccup never blocks claiming.
+func pushClaimOpToArmature(worktreePath string) error {
+	gc := adapters.New(worktreePath)
+	if err := gc.Push("_armature"); err != nil {
+		// Best-effort retry: fetch+rebase then push once more.
+		if rbErr := gc.FetchAndRebase("_armature"); rbErr == nil {
+			gc.Push("_armature") //nolint:errcheck
+		}
+	}
+	return nil
 }
 
 func gitCommitterForWorktree(worktreePath string) ops.GitCommitter {
