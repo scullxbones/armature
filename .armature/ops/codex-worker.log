@@ -399,3 +399,4 @@
 ["note","story-1780487664",1780540414,"codex-worker",{"msg":"Scope overlap with ORCRUN-S2-T7 detected at claim time"}]
 ["claim","ORCRUN-S2-T7",1780540414,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN-S2-T7",1780541652,"codex-worker",{"to":"merged"}]
+["amend","task-1780487888",1780542292,"codex-worker",{"definition_of_done":"arm create rejects unrecognized types with error listing valid types. arm create rejects invalid parent/type combos (e.g. bug under task). Bug type added to hierarchy. arm validate skips terminal-state issues for hierarchy checks. arm reparent command added with validation."}]
