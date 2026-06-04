@@ -794,6 +794,102 @@ func TestRepoRunner_SingleBranchDoesNotPushClaimOp(t *testing.T) {
 	}
 }
 
+func TestRepoRunner_GlobScopeConflictBlocksDispatch(t *testing.T) {
+	// Validates that glob patterns like "src/*.go" match concrete paths like
+	// "src/foo.go" — the old prefix-matching scopesOverlap would not catch this.
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				// This task has a concrete path scope
+				return materialize.Issue{
+					ID:        "ORCRUN-GLOB-NEW",
+					Title:     "new task",
+					ClaimedBy: "worker-a",
+					// Concrete file path — should match another task's glob pattern
+					Scope:      []string{"src/foo.go"},
+					Acceptance: []byte(`["go test ./..."]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{
+					"ORCRUN-GLOB-NEW": {Status: ops.StatusClaimed, Scope: []string{"src/foo.go"}},
+					// OTHER has a glob-pattern scope that matches src/foo.go
+					"ORCRUN-GLOB-OTHER": {Status: ops.StatusClaimed, Scope: []string{"src/*.go"}},
+				}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-GLOB-NEW"] = &materialize.Issue{
+					ID:    "ORCRUN-GLOB-NEW",
+					Title: "new task",
+					Scope: []string{"src/foo.go"},
+				}
+				state.Issues["ORCRUN-GLOB-OTHER"] = &materialize.Issue{
+					ID:        "ORCRUN-GLOB-OTHER",
+					Title:     "other task with glob",
+					Scope:     []string{"src/*.go"},
+					ClaimedBy: "worker-b",
+					ClaimedAt: 100,
+					ClaimTTL:  60,
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run when scope is blocked by glob match")
+				return OrchestrateState{}, nil
+			},
+			nowUnix: func() int64 { return 110 }, // within TTL of the other task's claim
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{
+		TaskID:   "ORCRUN-GLOB-NEW",
+		WorkerID: "worker-a",
+		Harness:  "codex",
+		DryRun:   true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "scope conflict" {
+		t.Fatalf("BlockedReason = %q, want 'scope conflict': glob pattern src/*.go should match concrete path src/foo.go", result.BlockedReason)
+	}
+	if result.WouldDispatch {
+		t.Fatal("WouldDispatch should be false when scope is blocked by glob match")
+	}
+	if len(result.ScopeConflicts) != 1 || result.ScopeConflicts[0].TaskID != "ORCRUN-GLOB-OTHER" {
+		t.Fatalf("ScopeConflicts = %+v, want one conflict with ORCRUN-GLOB-OTHER", result.ScopeConflicts)
+	}
+}
+
 func TestRepoRunner_BlocksOnScopeConflictAfterClaimVerification(t *testing.T) {
 	claimed := false
 	runner := &RepoRunner{

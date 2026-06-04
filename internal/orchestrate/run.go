@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/claim"
+	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	armcontext "github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -198,7 +198,7 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	}
 
 	if issue.ClaimedBy != "" && issue.ClaimedBy != workerID {
-		if !claim.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, r.deps.nowUnix()) {
+		if !claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, r.deps.nowUnix()) {
 			result.ClaimOwner = issue.ClaimedBy
 			result.BlockedReason = fmt.Sprintf("task claimed by %s", issue.ClaimedBy)
 			result.WouldDispatch = false
@@ -280,14 +280,14 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 			if ttl <= 0 {
 				ttl = 60
 			}
-			if claim.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, now) {
+			if claimPkg.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, now) {
 				continue
 			}
 		}
 		activeScopes[id] = entry.Scope
 	}
 	for otherID, scope := range activeScopes {
-		if scopesOverlap(issue.Scope, scope) {
+		if claimPkg.ScopesOverlap(issue.Scope, scope) {
 			result.ScopeConflicts = append(result.ScopeConflicts, ScopeConflict{TaskID: otherID, Paths: append([]string(nil), scope...)})
 		}
 	}
@@ -512,26 +512,6 @@ func isAncestorIssue(candidateAncestorID, issueID string, issues map[string]*mat
 		cur = issue.Parent
 	}
 	return false
-}
-
-func scopesOverlap(left, right []string) bool {
-	for _, l := range left {
-		ln := normalizeScopePath(l)
-		for _, r := range right {
-			rn := normalizeScopePath(r)
-			if ln == rn || strings.HasPrefix(ln, rn) || strings.HasPrefix(rn, ln) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func normalizeScopePath(path string) string {
-	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
-	path = strings.TrimPrefix(path, "./")
-	path = strings.TrimSuffix(path, "*")
-	return path
 }
 
 func resolveRunModel(flagModel, taskModel, configDefault string) string {
