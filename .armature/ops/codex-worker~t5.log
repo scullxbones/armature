@@ -1,1 +1,2 @@
 ["note","ORCRUN-S2-T5",1780538309,"codex-worker~t5",{"msg":"Implementing dual-branch push for claim op in RepoRunner. Will add pushClaimOp dep to repoRunnerDeps (best-effort push to _armature after AppendAndCommit, mirroring appendHighStakesOp semantics)."}]
+["citation-accepted","ORCRUN-S2-T5",1780538558,"codex-worker~t5",{"confirmed_noninteractively":true,"rationale":"Implementation verified through two new unit tests covering dual-branch push and single-branch no-push paths; no external source doc applies"}]
