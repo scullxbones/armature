@@ -391,3 +391,4 @@
 ["note","story-1780487664",1780538227,"codex-worker",{"msg":"Scope overlap with ORCRUN-S2-T5 detected at claim time"}]
 ["claim","ORCRUN-S2-T5",1780538227,"codex-worker",{"ttl":60}]
 ["transition","ORCRUN-S2-T5",1780538692,"codex-worker",{"to":"merged"}]
+["note","ORCRUN-S2-T6",1780538699,"codex-worker",{"msg":"Scope overlap with story-1780487664 detected at claim time"}]
