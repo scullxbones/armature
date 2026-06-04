@@ -1,0 +1,1 @@
+["note","ORCRUN-S2-T7",1780540456,"codex-worker~t7",{"msg":"Reading claim.ScopesOverlap implementation. Will replace local scopesOverlap+normalizeScopePath with claimPkg.ScopesOverlap in run.go and add glob-aware test."}]
