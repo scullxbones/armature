@@ -641,6 +641,9 @@ func TestEngine_AlreadyComplete_ReturnsCompleteImmediately(t *testing.T) {
 			Payload: ops.Payload{PreDispatchRef: "abc", WorktreePath: "/wt/T1", RetryBudget: 1}},
 		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
 		{Type: ops.OpOrchestrateComplete, TargetID: "T1"},
+		// OpTransition is present — already fully completed; no new ops expected.
+		{Type: ops.OpTransition, TargetID: "T1",
+			Payload: ops.Payload{To: ops.StatusDone, Outcome: "orchestrate completed with committed changes"}},
 	}
 	git := &stubGit{headSHA: "abc123"}
 	log := &stubOpLog{ops: priorOps}
@@ -662,9 +665,49 @@ func TestEngine_AlreadyComplete_ReturnsCompleteImmediately(t *testing.T) {
 	if result.Phase != "complete" {
 		t.Errorf("Phase: got %q, want %q", result.Phase, "complete")
 	}
-	// No new ops should be appended
+	// No new ops should be appended — transition was already written
 	if len(log.appended) != 0 {
 		t.Errorf("expected no new ops on re-entry into complete, got %d ops", len(log.appended))
+	}
+}
+
+// Fix 6: TestEngine_CompleteWithoutTransition_RetriesTransitionOp verifies that when
+// OpOrchestrateComplete is present but OpTransition is missing, re-entry appends
+// exactly one OpTransition op.
+func TestEngine_CompleteWithoutTransition_RetriesTransitionOp(t *testing.T) {
+	priorOps := []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "abc", WorktreePath: "/wt/T1", RetryBudget: 1}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+		// OpOrchestrateComplete written, but OpTransition was NOT written (e.g. network error)
+		{Type: ops.OpOrchestrateComplete, TargetID: "T1"},
+	}
+	git := &stubGit{headSHA: "abc123"}
+	log := &stubOpLog{ops: priorOps}
+	harness := passingHarness("test")
+
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		Git:         git,
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 1,
+	}
+
+	result, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Phase != "complete" {
+		t.Errorf("Phase: got %q, want %q", result.Phase, "complete")
+	}
+	// Exactly one new op should be appended: the missed OpTransition
+	if len(log.appended) != 1 {
+		t.Fatalf("expected exactly 1 new op (OpTransition retry), got %d: %+v", len(log.appended), log.appended)
+	}
+	if log.appended[0].Type != ops.OpTransition {
+		t.Errorf("appended op type: got %q, want %q", log.appended[0].Type, ops.OpTransition)
 	}
 }
 

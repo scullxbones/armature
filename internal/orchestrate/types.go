@@ -173,6 +173,10 @@ type OrchestrateState struct {
 	WorktreePath string
 	// RetryBudget is the number of retry attempts remaining.
 	RetryBudget int
+	// TransitionWritten is true if an OpTransition targeting this task has been durably recorded.
+	// Used to detect the case where OpOrchestrateComplete was written but the subsequent
+	// lifecycle transition op was lost (e.g. network error), so it can be re-attempted.
+	TransitionWritten bool
 }
 
 // HarnessAdapter is the interface that every verification adapter must satisfy.

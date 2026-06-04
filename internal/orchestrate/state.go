@@ -78,6 +78,10 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 			state.Phase = "complete"
 			state.CompletionMessage = op.Payload.Msg
 
+		case ops.OpTransition:
+			// Mark that the lifecycle transition was durably recorded for this task.
+			state.TransitionWritten = true
+
 		case ops.OpOrchestrateCheckResult:
 			// Accumulate check results without changing phase.
 			state.Checks = append(state.Checks, CheckResult{

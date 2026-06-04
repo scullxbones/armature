@@ -2,6 +2,7 @@ package orchestrate
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/config"
@@ -970,5 +971,175 @@ func TestRepoRunner_BlocksOnScopeConflictAfterClaimVerification(t *testing.T) {
 	}
 	if len(result.ScopeConflicts) != 1 || result.ScopeConflicts[0].TaskID != "OTHER" {
 		t.Fatalf("ScopeConflicts = %+v", result.ScopeConflicts)
+	}
+}
+
+// Fix 4: TestRepoRunner_ZeroTTLClaimStaleAllowsTakeover verifies that when another
+// worker holds a claim with ClaimTTL = 0, and current time is past the default TTL,
+// the current worker can take over (should NOT block forever).
+func TestRepoRunner_ZeroTTLClaimStaleAllowsTakeover(t *testing.T) {
+	const (
+		claimedAt     = int64(1000)
+		defaultTTL    = 60                                   // minutes (default TTL when ClaimTTL == 0)
+		staleNow      = claimedAt + int64(defaultTTL)*60 + 1 // one second past 60-minute default TTL
+		lastHeartbeat = int64(0)                             // no heartbeat
+	)
+
+	var appended []ops.Op
+	claimed := false
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 0, // no config default — should fall back to 60
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-b",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				appended = append(appended, op)
+				if op.Type == ops.OpClaim {
+					claimed = true
+				}
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				issue := materialize.Issue{
+					ID:         "ORCRUN-T04",
+					Title:      "task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+					// Claim held by another worker with ZERO TTL
+					ClaimedBy:     "worker-a",
+					ClaimedAt:     claimedAt,
+					ClaimTTL:      0, // zero TTL — should use default
+					LastHeartbeat: lastHeartbeat,
+				}
+				if claimed {
+					issue.ClaimedBy = "worker-b"
+				}
+				return issue, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-T04": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T04"] = &materialize.Issue{ID: "ORCRUN-T04", Title: "task", Scope: []string{"internal/orchestrate/run.go"}}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return staleNow },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T04", WorkerID: "worker-b", Harness: "codex"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// Should allow takeover, not block
+	if result.BlockedReason != "" {
+		t.Fatalf("BlockedReason = %q, want empty (zero-TTL stale claim should allow takeover)", result.BlockedReason)
+	}
+	if !result.ClaimHeld || result.ClaimOwner != "worker-b" {
+		t.Fatalf("claim state = held:%t owner:%q, want held:true owner:worker-b", result.ClaimHeld, result.ClaimOwner)
+	}
+	if len(appended) < 1 || appended[0].Type != ops.OpClaim {
+		t.Fatalf("expected claim op for takeover, got %+v", appended)
+	}
+}
+
+// Fix 5: TestRepoRunner_PrepFailureBeforeClaimDoesNotLeaveClaim verifies that when
+// resolveAuthPlan returns an error (prep step), no OpClaim is appended to the log.
+func TestRepoRunner_PrepFailureBeforeClaimDoesNotLeaveClaim(t *testing.T) {
+	var appended []ops.Op
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				appended = append(appended, op)
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-T05",
+					Title:      "task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-T05": {Status: ops.StatusOpen}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T05"] = &materialize.Issue{ID: "ORCRUN-T05", Title: "task", Scope: []string{"internal/orchestrate/run.go"}}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{}, fmt.Errorf("auth plan failed: credentials not found")
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run when prep fails")
+				return OrchestrateState{}, nil
+			},
+			nowUnix: func() int64 { return 100 },
+		},
+	}
+
+	_, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T05", WorkerID: "worker-a", Harness: "codex"})
+	if err == nil {
+		t.Fatal("expected error when resolveAuthPlan fails")
+	}
+	// Critical: no OpClaim should have been written before the failure
+	for _, op := range appended {
+		if op.Type == ops.OpClaim {
+			t.Errorf("OpClaim was appended before prep failure — claim leaked: %+v", op)
+		}
 	}
 }

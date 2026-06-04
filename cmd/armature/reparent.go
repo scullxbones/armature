@@ -30,9 +30,6 @@ with an explicit error message.`,
 			if issueID == "" {
 				return fmt.Errorf("issue ID is required (--issue flag)")
 			}
-			if newParent == "" {
-				return fmt.Errorf("new parent ID is required (--parent flag)")
-			}
 
 			appCtx := currentCtx(cmd)
 			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
@@ -49,16 +46,20 @@ with an explicit error message.`,
 				return fmt.Errorf("issue %s not found: %w", issueID, err)
 			}
 
-			// Look up the new parent and validate the hierarchy.
-			parentIssue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", newParent+".json"))
-			if err != nil {
-				return fmt.Errorf("parent %s not found: %w", newParent, err)
-			}
+			if newParent != "" {
+				// Look up the new parent and validate the hierarchy.
+				parentIssue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", newParent+".json"))
+				if err != nil {
+					return fmt.Errorf("parent %s not found: %w", newParent, err)
+				}
 
-			allowed, ok := validParentChildTypes[parentIssue.Type]
-			if !ok || !allowed[issue.Type] {
-				return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", newParent, parentIssue.Type, issue.Type)
+				allowed, ok := validParentChildTypes[parentIssue.Type]
+				if !ok || !allowed[issue.Type] {
+					return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", newParent, parentIssue.Type, issue.Type)
+				}
 			}
+			// Suppress unused variable warning: issue is used above for hierarchy check.
+			_ = issue
 
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
@@ -85,14 +86,18 @@ with an explicit error message.`,
 				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reparented %s to %s\n", issueID, newParent)
+				if newParent == "" {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reparented %s to root\n", issueID)
+				} else {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reparented %s to %s\n", issueID, newParent)
+				}
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to reparent")
-	cmd.Flags().StringVar(&newParent, "parent", "", "new parent issue ID")
+	cmd.Flags().StringVar(&newParent, "parent", "", "new parent issue ID (empty string makes issue top-level)")
 	_ = cmd.MarkFlagRequired("issue")
 	_ = cmd.MarkFlagRequired("parent")
 

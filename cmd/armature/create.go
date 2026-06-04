@@ -15,21 +15,23 @@ import (
 
 // validNodeTypes is the complete set of accepted node types for arm create.
 var validNodeTypes = map[string]bool{
-	"epic":  true,
-	"story": true,
-	"task":  true,
-	"bug":   true,
+	"epic":    true,
+	"story":   true,
+	"feature": true,
+	"task":    true,
+	"bug":     true,
 }
 
 // validNodeTypesList is the sorted list of valid types for error messages.
-var validNodeTypesList = []string{"epic", "story", "task", "bug"}
+var validNodeTypesList = []string{"epic", "story", "feature", "task", "bug"}
 
 // validParentChildTypes defines which parent types may contain which child types.
 var validParentChildTypes = map[string]map[string]bool{
-	"epic":  {"story": true, "task": true, "bug": true},
-	"story": {"task": true, "bug": true},
-	"task":  {},
-	"bug":   {},
+	"epic":    {"story": true, "feature": true, "task": true, "bug": true},
+	"story":   {"task": true, "bug": true},
+	"feature": {"task": true, "bug": true},
+	"task":    {},
+	"bug":     {},
 }
 
 func newCreateCmd() *cobra.Command {
