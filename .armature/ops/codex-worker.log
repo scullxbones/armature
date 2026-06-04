@@ -402,3 +402,4 @@
 ["amend","task-1780487888",1780542292,"codex-worker",{"definition_of_done":"arm create rejects unrecognized types with error listing valid types. arm create rejects invalid parent/type combos (e.g. bug under task). Bug type added to hierarchy. arm validate skips terminal-state issues for hierarchy checks. arm reparent command added with validation."}]
 ["note","HKREFACT-T15",1780542385,"codex-worker",{"msg":"Scope overlap with story-1780487664 detected at claim time"}]
 ["note","story-1780487664",1780542385,"codex-worker",{"msg":"Scope overlap with HKREFACT-T15 detected at claim time"}]
+["note","HKREFACT-T15",1780542385,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
