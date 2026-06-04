@@ -408,3 +408,4 @@
 ["transition","HKREFACT-T15",1780542387,"codex-worker",{"to":"open"}]
 ["note","HKREFACT-T16",1780542392,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
 ["note","HKREFACT-T14",1780542392,"codex-worker",{"msg":"Scope overlap with HKREFACT-T16 detected at claim time"}]
+["claim","HKREFACT-T16",1780542392,"codex-worker",{"ttl":60}]
