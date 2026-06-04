@@ -1143,3 +1143,262 @@ func TestRepoRunner_PrepFailureBeforeClaimDoesNotLeaveClaim(t *testing.T) {
 		}
 	}
 }
+
+// P1-4: TestRepoRunner_UnclaimedInProgressIsNotTreatedAsStale verifies that an
+// issue in in-progress status with no claim (ClaimedAt==0) is treated as always
+// active and contributes to scope conflict detection.
+func TestRepoRunner_UnclaimedInProgressIsNotTreatedAsStale(t *testing.T) {
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-T06",
+					Title:      "task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{
+					"ORCRUN-T06":      {Status: ops.StatusOpen, Scope: []string{"internal/orchestrate/run.go"}},
+					"OTHER-UNCLAIMED": {Status: ops.StatusInProgress, Scope: []string{"internal/orchestrate/run.go"}},
+				}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T06"] = &materialize.Issue{
+					ID:    "ORCRUN-T06",
+					Title: "task",
+					Scope: []string{"internal/orchestrate/run.go"},
+				}
+				// Manually transitioned to in-progress: no claim owner, no timestamps.
+				state.Issues["OTHER-UNCLAIMED"] = &materialize.Issue{
+					ID:            "OTHER-UNCLAIMED",
+					Title:         "manual in-progress task",
+					Scope:         []string{"internal/orchestrate/run.go"},
+					ClaimedBy:     "",
+					ClaimedAt:     0,
+					ClaimTTL:      0,
+					LastHeartbeat: 0,
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run when scope is blocked")
+				return OrchestrateState{}, nil
+			},
+			nowUnix: func() int64 { return 9_999_999_999 },
+		},
+	}
+
+	// DryRun=true so the test only exercises the pre-claim scope check path.
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T06", WorkerID: "worker-a", DryRun: true})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "scope conflict" {
+		t.Fatalf("BlockedReason = %q, want scope conflict: unclaimed in-progress task should block dispatch", result.BlockedReason)
+	}
+	if len(result.ScopeConflicts) == 0 || result.ScopeConflicts[0].TaskID != "OTHER-UNCLAIMED" {
+		t.Fatalf("ScopeConflicts = %+v, want conflict with OTHER-UNCLAIMED", result.ScopeConflicts)
+	}
+}
+
+// P1-1: TestRepoRunner_LifecycleOutcomeRequiresTransitionWritten verifies that when
+// execute returns phase=complete but TransitionWritten=false, no lifecycle outcome is set.
+func TestRepoRunner_LifecycleOutcomeRequiresTransitionWritten(t *testing.T) {
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-T07",
+					Title:      "task",
+					ClaimedBy:  "worker-a",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-T07": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T07"] = &materialize.Issue{ID: "ORCRUN-T07", Title: "task", Scope: []string{"internal/orchestrate/run.go"}}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				// Phase complete but transition was NOT durably written.
+				return OrchestrateState{Phase: "complete", Run: 1, TransitionWritten: false}, nil
+			},
+			nowUnix: func() int64 { return 100 },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T07", WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.LifecycleOutcome.Status != "" {
+		t.Fatalf("LifecycleOutcome.Status = %q, want empty when TransitionWritten=false", result.LifecycleOutcome.Status)
+	}
+}
+
+// P1-2: TestRepoRunner_ScopeConflictDetectedAfterClaiming verifies that when a
+// competing task acquires scope overlap during the claim window, the post-claim
+// scope re-check detects the conflict and blocks dispatch.
+func TestRepoRunner_ScopeConflictDetectedAfterClaiming(t *testing.T) {
+	claimed := false
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				if op.Type == ops.OpClaim {
+					claimed = true
+				}
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				issue := materialize.Issue{
+					ID:         "ORCRUN-T08",
+					Title:      "task",
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./internal/orchestrate"]`),
+				}
+				if claimed {
+					issue.ClaimedBy = "worker-a"
+				}
+				return issue, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				if claimed {
+					// Post-claim: competitor has appeared with overlapping scope.
+					return materialize.Index{
+						"ORCRUN-T08": {Status: ops.StatusOpen, Scope: []string{"internal/orchestrate/run.go"}},
+						"COMPETITOR": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}},
+					}, nil
+				}
+				return materialize.Index{
+					"ORCRUN-T08": {Status: ops.StatusOpen, Scope: []string{"internal/orchestrate/run.go"}},
+				}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T08"] = &materialize.Issue{
+					ID:    "ORCRUN-T08",
+					Title: "task",
+					Scope: []string{"internal/orchestrate/run.go"},
+				}
+				if claimed {
+					state.Issues["COMPETITOR"] = &materialize.Issue{
+						ID:        "COMPETITOR",
+						Title:     "competitor task",
+						Scope:     []string{"internal/orchestrate/run.go"},
+						ClaimedBy: "worker-b",
+						ClaimedAt: 1000,
+						ClaimTTL:  60,
+					}
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run when post-claim scope conflict is detected")
+				return OrchestrateState{}, nil
+			},
+			// nowUnix between claimedAt(1000) and TTL expiry(1000+3600=4600).
+			nowUnix: func() int64 { return 2000 },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T08", WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "scope conflict" {
+		t.Fatalf("BlockedReason = %q, want scope conflict after claiming", result.BlockedReason)
+	}
+	if len(result.ScopeConflicts) == 0 || result.ScopeConflicts[0].TaskID != "COMPETITOR" {
+		t.Fatalf("ScopeConflicts = %+v, want conflict with COMPETITOR", result.ScopeConflicts)
+	}
+}

@@ -315,3 +315,21 @@ func TestDeriveState_TransitionWritten_FalseWhenTransitionOpAbsent(t *testing.T)
 		t.Errorf("TransitionWritten: got true, want false when OpTransition is absent")
 	}
 }
+
+// P1-3: TestDeriveState_PriorManualTransitionDoesNotSatisfyCompletionTransitionWritten
+// verifies that an OpTransition written BEFORE OpOrchestrateComplete (e.g. a manual
+// in-progress transition) does not satisfy the TransitionWritten completion guard.
+func TestDeriveState_PriorManualTransitionDoesNotSatisfyCompletionTransitionWritten(t *testing.T) {
+	taskOps := []ops.Op{
+		// Manual in-progress transition BEFORE orchestration begins.
+		makeOp(ops.OpTransition, "T1", ops.Payload{To: "in-progress"}),
+		makeOp(ops.OpOrchestrateDispatch, "T1", ops.Payload{PreDispatchRef: "abc123"}),
+		makeOp(ops.OpOrchestrateDispatchComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateComplete, "T1", ops.Payload{}),
+		// No post-completion OpTransition (crash between complete and done-transition ops).
+	}
+	state := orchestrate.DeriveState(taskOps, "T1")
+	if state.TransitionWritten {
+		t.Error("TransitionWritten should be false: OpTransition before OpOrchestrateComplete must not satisfy completion-transition guard")
+	}
+}

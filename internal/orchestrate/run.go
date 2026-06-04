@@ -244,12 +244,18 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 			continue
 		}
 		if other := issueMap[id]; other != nil {
-			ttl := other.ClaimTTL
-			if ttl <= 0 {
-				ttl = 60
-			}
-			if claimPkg.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, now) {
-				continue
+			// Only apply staleness filtering to tasks that were claimed via an
+			// orchestration claim op (ClaimedAt > 0). An issue manually transitioned
+			// to in-progress without a claim has zero timestamps and must not be
+			// treated as stale — it is unconditionally active.
+			if other.ClaimedAt > 0 {
+				ttl := other.ClaimTTL
+				if ttl <= 0 {
+					ttl = 60
+				}
+				if claimPkg.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, now) {
+					continue
+				}
 			}
 		}
 		activeScopes[id] = entry.Scope
@@ -344,6 +350,52 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 		}
 		result.ClaimHeld = true
 		result.ClaimOwner = workerID
+
+		// Re-evaluate scope conflicts from the freshly materialized state.
+		// Another worker may have claimed an overlapping task during our claim window.
+		index, err = r.deps.loadIndex(filepath.Join(stateDir, "index.json"))
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("reload index after claim: %w", err)
+		}
+		postClaimIssueMap, err := r.loadIssueMap(stateDir)
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("reload issue map after claim: %w", err)
+		}
+		activeScopes = make(map[string][]string)
+		for id, entry := range index {
+			if id == req.TaskID {
+				continue
+			}
+			if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
+				continue
+			}
+			if isAncestorIssue(id, req.TaskID, postClaimIssueMap) {
+				continue
+			}
+			if other := postClaimIssueMap[id]; other != nil {
+				if other.ClaimedAt > 0 {
+					ttl := other.ClaimTTL
+					if ttl <= 0 {
+						ttl = 60
+					}
+					if claimPkg.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, now) {
+						continue
+					}
+				}
+			}
+			activeScopes[id] = entry.Scope
+		}
+		result.ScopeConflicts = nil
+		for otherID, scope := range activeScopes {
+			if claimPkg.ScopesOverlap(issue.Scope, scope) {
+				result.ScopeConflicts = append(result.ScopeConflicts, ScopeConflict{TaskID: otherID, Paths: append([]string(nil), scope...)})
+			}
+		}
+		if len(result.ScopeConflicts) > 0 {
+			result.BlockedReason = "scope conflict"
+			result.WouldDispatch = false
+			return preparedRun{result: result}, nil
+		}
 	}
 
 	serviceCfg := ServiceConfig{
@@ -402,9 +454,9 @@ func mergeRunResult(base RunResult, state OrchestrateState) RunResult {
 	base.CompletionMessage = state.CompletionMessage
 	base.Diagnostics.Checks = append([]CheckResult(nil), state.Checks...)
 	switch {
-	case state.Phase == "complete" && state.CompletionMessage == "":
+	case state.Phase == "complete" && state.TransitionWritten && state.CompletionMessage == "":
 		base.LifecycleOutcome = LifecycleOutcome{Status: ops.StatusDone, Outcome: "orchestrate completed with committed changes"}
-	case state.Phase == "complete" && state.CompletionMessage != "":
+	case state.Phase == "complete" && state.TransitionWritten && state.CompletionMessage != "":
 		base.LifecycleOutcome = LifecycleOutcome{Status: ops.StatusBlocked, Outcome: state.CompletionMessage}
 	case state.Phase == "escalated":
 		base.LifecycleOutcome = LifecycleOutcome{Status: ops.StatusBlocked, Outcome: "orchestration escalated"}

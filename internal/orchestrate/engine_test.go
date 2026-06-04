@@ -922,3 +922,81 @@ func TestEngine_ResetHardError_Propagates(t *testing.T) {
 		t.Errorf("expected 'cannot reset' in error, got %v", err)
 	}
 }
+
+// P1-3: TestEngine_PriorManualTransitionDoesNotPreventCompletionTransitionRetry verifies
+// that when a manual in-progress transition exists before orchestration, but the done
+// transition was not written after OpOrchestrateComplete, crash-resume still re-appends it.
+func TestEngine_PriorManualTransitionDoesNotPreventCompletionTransitionRetry(t *testing.T) {
+	priorOps := []ops.Op{
+		// Prior manual transition to in-progress (before orchestration).
+		{Type: ops.OpTransition, TargetID: "T1", Payload: ops.Payload{To: ops.StatusInProgress}},
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "abc", WorktreePath: "/wt/T1", RetryBudget: 1}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+		{Type: ops.OpOrchestrateComplete, TargetID: "T1"},
+		// No post-completion OpTransition (crash between complete and done-transition ops).
+	}
+	log := &stubOpLog{ops: priorOps}
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		Git:         &stubGit{headSHA: "abc123"},
+		OpLog:       log,
+		Harness:     passingHarness("test"),
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 1,
+	}
+
+	result, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Phase != "complete" {
+		t.Errorf("Phase: got %q, want complete", result.Phase)
+	}
+	// Must append exactly one OpTransition (the missed done-transition retry).
+	if len(log.appended) != 1 || log.appended[0].Type != ops.OpTransition {
+		t.Fatalf("expected 1 OpTransition retry, got %d ops: %+v", len(log.appended), log.appended)
+	}
+}
+
+// P1-5: TestEngine_DurableHeartbeatWrittenDuringHarnessRun verifies that OpHeartbeat
+// ops are appended to the durable op log while the harness runs, keeping the claim
+// window alive and preventing stale-claim takeover.
+func TestEngine_DurableHeartbeatWrittenDuringHarnessRun(t *testing.T) {
+	priorOps := []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "abc", WorktreePath: "/wt/T1", RetryBudget: 1}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+	}
+	log := &stubOpLog{ops: priorOps}
+	harness := &stubHarness{
+		name:   "test",
+		delay:  60 * time.Millisecond,
+		result: orchestrate.CheckResult{Name: "test", Passed: true, Severity: orchestrate.SeverityInfo},
+	}
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		WorkerID:    "worker-a",
+		Git:         &stubGit{headSHA: "abc123"},
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 1,
+		Opts:        orchestrate.RunOptions{HeartbeatInterval: 20 * time.Millisecond},
+	}
+
+	_, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var heartbeats int
+	for _, op := range log.appended {
+		if op.Type == ops.OpHeartbeat {
+			heartbeats++
+		}
+	}
+	if heartbeats < 1 {
+		t.Errorf("expected at least 1 OpHeartbeat in durable log, got %d", heartbeats)
+	}
+}
