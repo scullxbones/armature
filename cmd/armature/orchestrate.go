@@ -206,7 +206,7 @@ Three-level model resolution:
 				data, _ := json.Marshal(payload)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "orchestrate %s: phase=%s run=%d\n", issueID, runResult.Phase, runResult.Run)
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), formatOrchestrateHumanOutput(issueID, runResult))
 			}
 
 			return nil
@@ -223,6 +223,15 @@ Three-level model resolution:
 	cmd.Flags().BoolVar(&authCheck, "auth-check", false, "run harness auth preflight and exit without dispatch")
 
 	return cmd
+}
+
+// formatOrchestrateHumanOutput returns the human-readable one-line summary of an orchestrate run.
+// When the run is blocked, blocked_reason is included in the output.
+func formatOrchestrateHumanOutput(issueID string, result orchestrate.RunResult) string {
+	if result.BlockedReason != "" {
+		return fmt.Sprintf("orchestrate %s: phase=%s run=%d blocked_reason=%s\n", issueID, result.Phase, result.Run, result.BlockedReason)
+	}
+	return fmt.Sprintf("orchestrate %s: phase=%s run=%d\n", issueID, result.Phase, result.Run)
 }
 
 // buildOrchestateJSONPayload assembles the JSON payload for the orchestrate command output.

@@ -198,7 +198,14 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	}
 
 	if issue.ClaimedBy != "" && issue.ClaimedBy != workerID {
-		if !claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, r.deps.nowUnix()) {
+		effectiveTTL := issue.ClaimTTL
+		if effectiveTTL <= 0 {
+			effectiveTTL = r.appCtx.Config.DefaultTTL
+		}
+		if effectiveTTL <= 0 {
+			effectiveTTL = 60
+		}
+		if !claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, effectiveTTL, r.deps.nowUnix()) {
 			result.ClaimOwner = issue.ClaimedBy
 			result.BlockedReason = fmt.Sprintf("task claimed by %s", issue.ClaimedBy)
 			result.WouldDispatch = false
@@ -207,55 +214,16 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 		// Stale claim: allow this worker to take over.
 	}
 
-	if issue.ClaimedBy == workerID {
+	// Determine whether we already hold the claim or need to acquire one.
+	// The claim write is deferred until after all non-mutating prep steps succeed,
+	// so a failed buildTaskContext/resolveAuthPlan/newHarnessAdapter never leaves
+	// a leaked claim in the log.
+	wouldClaim := issue.ClaimedBy != workerID
+	if !wouldClaim {
 		result.ClaimHeld = true
 		result.ClaimOwner = workerID
 	} else {
 		result.WouldClaim = true
-		if !req.DryRun {
-			ttl := r.appCtx.Config.DefaultTTL
-			if ttl <= 0 {
-				ttl = 60
-			}
-			claimOp := ops.Op{
-				Type:      ops.OpClaim,
-				TargetID:  req.TaskID,
-				Timestamp: r.deps.nowUnix(),
-				WorkerID:  workerID,
-				Payload:   ops.Payload{TTL: ttl},
-			}
-			if err := r.deps.appendAndCommit(logPath, r.appCtx.WorktreePath, claimOp, gitCommitterForContext(r.appCtx)); err != nil {
-				return preparedRun{}, fmt.Errorf("append claim op: %w", err)
-			}
-			// In dual-branch mode, push the claim op to _armature so other workers
-			// observe it without waiting for an independent push (mirrors appendHighStakesOp).
-			if r.appCtx.WorktreePath != "" && r.deps.pushClaimOp != nil {
-				r.deps.pushClaimOp(r.appCtx.WorktreePath) //nolint:errcheck // best-effort
-			}
-			allOps, offsets, err = r.deps.readAllOpsWithOffsets(filepath.Join(r.appCtx.IssuesDir, "ops"))
-			if err != nil {
-				return preparedRun{}, fmt.Errorf("read ops after claim: %w", err)
-			}
-			if _, err := r.deps.materialize(stateDir, allOps, r.appCtx.Mode == "single-branch", offsets); err != nil {
-				return preparedRun{}, fmt.Errorf("materialize after claim: %w", err)
-			}
-			issue, err = r.deps.loadIssue(filepath.Join(stateDir, "issues", req.TaskID+".json"))
-			if err != nil {
-				return preparedRun{}, fmt.Errorf("reload issue %s: %w", req.TaskID, err)
-			}
-			index, err = r.deps.loadIndex(filepath.Join(stateDir, "index.json"))
-			if err != nil {
-				return preparedRun{}, fmt.Errorf("reload index: %w", err)
-			}
-			if issue.ClaimedBy != workerID {
-				result.ClaimOwner = issue.ClaimedBy
-				result.BlockedReason = fmt.Sprintf("task claimed by %s", issue.ClaimedBy)
-				result.WouldDispatch = false
-				return preparedRun{result: result}, nil
-			}
-			result.ClaimHeld = true
-			result.ClaimOwner = workerID
-		}
 	}
 
 	issueMap, err := r.loadIssueMap(stateDir)
@@ -301,6 +269,8 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 		return preparedRun{result: result}, nil
 	}
 
+	// Non-mutating prep: build task context, resolve auth, create harness adapter.
+	// These happen BEFORE writing the claim so a prep failure never leaves a leaked claim.
 	renderedContext, err := r.buildTaskContext(ctx, stateDir, req.TaskID)
 	if err != nil {
 		return preparedRun{}, fmt.Errorf("build task context: %w", err)
@@ -333,6 +303,49 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	if err != nil {
 		return preparedRun{}, fmt.Errorf("create harness: %w", err)
 	}
+
+	// Write the claim op now that all non-mutating prep has succeeded.
+	if wouldClaim {
+		ttl := r.appCtx.Config.DefaultTTL
+		if ttl <= 0 {
+			ttl = 60
+		}
+		claimOp := ops.Op{
+			Type:      ops.OpClaim,
+			TargetID:  req.TaskID,
+			Timestamp: r.deps.nowUnix(),
+			WorkerID:  workerID,
+			Payload:   ops.Payload{TTL: ttl},
+		}
+		if err := r.deps.appendAndCommit(logPath, r.appCtx.WorktreePath, claimOp, gitCommitterForContext(r.appCtx)); err != nil {
+			return preparedRun{}, fmt.Errorf("append claim op: %w", err)
+		}
+		// In dual-branch mode, push the claim op to _armature so other workers
+		// observe it without waiting for an independent push (mirrors appendHighStakesOp).
+		if r.appCtx.WorktreePath != "" && r.deps.pushClaimOp != nil {
+			r.deps.pushClaimOp(r.appCtx.WorktreePath) //nolint:errcheck // best-effort
+		}
+		allOps, offsets, err = r.deps.readAllOpsWithOffsets(filepath.Join(r.appCtx.IssuesDir, "ops"))
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("read ops after claim: %w", err)
+		}
+		if _, err := r.deps.materialize(stateDir, allOps, r.appCtx.Mode == "single-branch", offsets); err != nil {
+			return preparedRun{}, fmt.Errorf("materialize after claim: %w", err)
+		}
+		issue, err = r.deps.loadIssue(filepath.Join(stateDir, "issues", req.TaskID+".json"))
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("reload issue %s: %w", req.TaskID, err)
+		}
+		if issue.ClaimedBy != workerID {
+			result.ClaimOwner = issue.ClaimedBy
+			result.BlockedReason = fmt.Sprintf("task claimed by %s", issue.ClaimedBy)
+			result.WouldDispatch = false
+			return preparedRun{result: result}, nil
+		}
+		result.ClaimHeld = true
+		result.ClaimOwner = workerID
+	}
+
 	serviceCfg := ServiceConfig{
 		Git:     r.deps.newGitClient(r.appCtx.RepoPath),
 		OpLog:   &repoOpLog{deps: r.deps, logPath: logPath, worktreePath: r.appCtx.WorktreePath},

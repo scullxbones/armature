@@ -1422,3 +1422,66 @@ func TestCommandLongAndExampleFields(t *testing.T) {
 		})
 	}
 }
+
+// Fix 1: TestCreateCommand_FeatureType verifies that arm create --type feature succeeds.
+func TestCreateCommand_FeatureType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "create", "--title", "my feature", "--type", "feature", "--id", "feature-01")
+	require.NoError(t, err, "arm create --type feature should succeed")
+	assert.Contains(t, out, "feature-01", "output should include the created ID")
+}
+
+// Fix 1: TestCreateCommand_FeatureTypeInvalidMsg verifies that invalid type error includes "feature".
+func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
+	// Verify that the valid types list includes "feature" in the error message
+	// by attempting to create with a totally invalid type.
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "create", "--title", "my widget", "--type", "invalid-type", "--id", "widget-01")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "feature", "error message should list 'feature' as a valid type")
+}
+
+// Fix 1: TestValidParentChildTypes_EpicCanContainFeature verifies hierarchy rules for feature type.
+func TestValidParentChildTypes_EpicCanContainFeature(t *testing.T) {
+	assert.True(t, validParentChildTypes["epic"]["feature"],
+		"epic should be able to contain feature")
+}
+
+// Fix 1: TestValidParentChildTypes_FeatureCanContainTask verifies feature can contain task.
+func TestValidParentChildTypes_FeatureCanContainTask(t *testing.T) {
+	assert.True(t, validParentChildTypes["feature"]["task"],
+		"feature should be able to contain task")
+}
+
+// Fix 1: TestValidParentChildTypes_FeatureCanContainBug verifies feature can contain bug.
+func TestValidParentChildTypes_FeatureCanContainBug(t *testing.T) {
+	assert.True(t, validParentChildTypes["feature"]["bug"],
+		"feature should be able to contain bug")
+}
+
+// Fix 1: TestCreateCommand_FeatureUnderEpic verifies feature can be created under an epic.
+func TestCreateCommand_FeatureUnderEpic(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create an epic first
+	_, err := runTrls(t, repo, "create", "--title", "My Epic", "--type", "epic", "--id", "epic-01")
+	require.NoError(t, err)
+
+	// Create a feature under the epic
+	out, err := runTrls(t, repo, "create", "--title", "My Feature", "--type", "feature", "--id", "feature-02", "--parent", "epic-01")
+	require.NoError(t, err, "arm create --type feature --parent epic-01 should succeed")
+	assert.Contains(t, out, "feature-02")
+}
+
+// Fix 3: TestReparentCommand_EmptyParentMakesTopLevel verifies that --parent ""
+// makes an issue top-level (removes its parent).
+func TestReparentCommand_EmptyParentMakesTopLevel(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+
+	// task-01 has parent story-01; reparent with --parent "" should make it top-level.
+	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "")
+	require.NoError(t, err, "arm reparent --parent '' should succeed")
+	assert.Contains(t, out, "task-01", "output should include issue ID")
+}

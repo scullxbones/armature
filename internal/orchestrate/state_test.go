@@ -286,3 +286,32 @@ func TestDeriveState_NonOrchestrationOps_AreIgnored(t *testing.T) {
 		t.Errorf("Phase: got %q, want %q", state.Phase, "dispatched")
 	}
 }
+
+// Fix 6: TestDeriveState_TransitionWritten_WhenTransitionOpPresent verifies that
+// TransitionWritten is true when an OpTransition targeting the task is in the ops.
+func TestDeriveState_TransitionWritten_WhenTransitionOpPresent(t *testing.T) {
+	taskOps := []ops.Op{
+		makeOp(ops.OpOrchestrateDispatch, "T1", ops.Payload{PreDispatchRef: "abc123"}),
+		makeOp(ops.OpOrchestrateDispatchComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpTransition, "T1", ops.Payload{To: ops.StatusDone, Outcome: "done"}),
+	}
+	state := orchestrate.DeriveState(taskOps, "T1")
+	if !state.TransitionWritten {
+		t.Errorf("TransitionWritten: got false, want true when OpTransition is present")
+	}
+}
+
+// Fix 6: TestDeriveState_TransitionWritten_FalseWhenTransitionOpAbsent verifies
+// that TransitionWritten is false when no OpTransition is in the ops.
+func TestDeriveState_TransitionWritten_FalseWhenTransitionOpAbsent(t *testing.T) {
+	taskOps := []ops.Op{
+		makeOp(ops.OpOrchestrateDispatch, "T1", ops.Payload{PreDispatchRef: "abc123"}),
+		makeOp(ops.OpOrchestrateDispatchComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateComplete, "T1", ops.Payload{}),
+	}
+	state := orchestrate.DeriveState(taskOps, "T1")
+	if state.TransitionWritten {
+		t.Errorf("TransitionWritten: got true, want false when OpTransition is absent")
+	}
+}

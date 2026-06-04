@@ -223,6 +223,35 @@ func TestBuildOrchestateJSONPayload_WouldClaimOmittedWhenFalseAndNoOwner(t *test
 	assert.False(t, coPresent, "claim_owner should be omitted when empty")
 }
 
+// Fix 2: TestFormatOrchestrateHumanOutput_IncludesBlockedReason verifies that human
+// output includes blocked_reason when the run is blocked.
+func TestFormatOrchestrateHumanOutput_IncludesBlockedReason(t *testing.T) {
+	t.Parallel()
+	result := orchestrate.RunResult{
+		Phase:         "pending",
+		Run:           0,
+		BlockedReason: "task claimed by worker-42",
+	}
+	out := formatOrchestrateHumanOutput("TASK-001", result)
+	assert.Contains(t, out, "phase=pending", "human output must include phase")
+	assert.Contains(t, out, "run=0", "human output must include run")
+	assert.Contains(t, out, "blocked_reason=task claimed by worker-42",
+		"human output must include blocked_reason when set")
+}
+
+// Fix 2: TestFormatOrchestrateHumanOutput_OmitsBlockedReasonWhenEmpty verifies that
+// blocked_reason is not included when empty.
+func TestFormatOrchestrateHumanOutput_OmitsBlockedReasonWhenEmpty(t *testing.T) {
+	t.Parallel()
+	result := orchestrate.RunResult{
+		Phase: "complete",
+		Run:   1,
+	}
+	out := formatOrchestrateHumanOutput("TASK-001", result)
+	assert.Contains(t, out, "phase=complete", "human output must include phase")
+	assert.NotContains(t, out, "blocked_reason", "blocked_reason must be omitted when empty")
+}
+
 // TestBuildOrchestateJSONPayload_IsJSONSerializable verifies the payload round-trips through JSON cleanly.
 func TestBuildOrchestateJSONPayload_IsJSONSerializable(t *testing.T) {
 	t.Parallel()

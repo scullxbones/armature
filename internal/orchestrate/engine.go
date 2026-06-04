@@ -113,7 +113,29 @@ func (e *Engine) Run(ctx context.Context) (OrchestrateState, error) {
 
 	// --- 2. Terminal phases are idempotent ---
 	switch state.Phase {
-	case "complete", "escalated":
+	case "complete":
+		if !state.TransitionWritten {
+			// OpOrchestrateComplete was written but the lifecycle transition op was lost
+			// (e.g. network error, disk full). Re-attempt writing the transition op.
+			to := ops.StatusDone
+			outcome := "orchestrate completed with committed changes"
+			if state.CompletionMessage != "" {
+				to = ops.StatusBlocked
+				outcome = state.CompletionMessage
+			}
+			transitionOp := ops.Op{
+				Type:      ops.OpTransition,
+				TargetID:  e.cfg.TaskID,
+				Timestamp: time.Now().Unix(),
+				WorkerID:  e.cfg.WorkerID,
+				Payload:   ops.Payload{To: to, Outcome: outcome},
+			}
+			if err := e.cfg.OpLog.Append(transitionOp); err != nil {
+				return state, fmt.Errorf("re-append missed transition op: %w", err)
+			}
+		}
+		return state, nil
+	case "escalated":
 		return state, nil
 	}
 
