@@ -4,7 +4,7 @@ description: >
   Use when operating orchestration in an armature-managed repository — surveys
   the story DAG, dispatches workers wave by wave, integrates outcomes, validates
   citation coverage, and closes stories with a pull request.
-  Does not require a worker identity (skip worker-init). Requires arm on PATH.
+  Requires a worker identity (arm worker-init) and arm on PATH.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -18,7 +18,11 @@ and close the story when all tasks are done.
 
 1. If `arm` is not found, stop and resolve this before proceeding.
 
-2. **No worker identity required.** The coordinator skips `arm worker-init`.
+2. **Worker identity required.** Run `arm worker-init` once per clone before claiming any tasks:
+   ```bash
+   arm worker-init --check || arm worker-init
+   ```
+   `arm claim` calls `resolveWorkerAndLog`, which fails with "worker not initialized" if no worker ID is set in git config.
 
 3. Understand the story DAG before dispatching. Run:
    ```
@@ -104,9 +108,15 @@ For each wave of ready tasks:
 
 1. Claim and get context for each task:
    ```bash
-   arm claim TASK-ID [--ttl 3600]
+   arm claim TASK-ID --ttl <minutes>
    arm render-context TASK-ID --format agent
    ```
+   Set `--ttl` to exceed your expected worker runtime. Default is 60 minutes; use
+   `--ttl 240` or higher for complex tasks. If the TTL expires while a worker is
+   still running, the claim becomes stale and another coordinator may re-dispatch
+   the same task. Workers send periodic heartbeats (`arm heartbeat TASK-ID`) to
+   reset the TTL — the worker skill handles this — but the coordinator's initial
+   TTL must cover the time until the first heartbeat.
 
 2. Dispatch each task to a worker agent using your platform's agent dispatch
    capability. Pass the full `render-context` output as the task specification.

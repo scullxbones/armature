@@ -76,11 +76,16 @@ arm render-context TASK-001 --format agent
 # Pass the render-context output to your AI agent as its task spec
 ```
 
-### Record Progress and Complete
+### Create a Feature Branch and Complete
 ```bash
+git checkout -b feature/TASK-001
 arm note TASK-001 --msg "Started implementation"
 arm transition TASK-001 --to done --outcome "Implemented auth middleware with JWT support"
 ```
+
+> `arm transition --to done` rejects transitions on `main`/`master` to enforce
+> the PR workflow. Create a feature branch first, or pass `--force` to override
+> in single-branch repos.
 
 ### Loop Until Done
 ```bash
