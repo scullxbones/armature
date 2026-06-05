@@ -602,3 +602,4 @@
 ["transition","HKREFACT-T08",1780660179,"codex-worker",{"to":"done","outcome":"Made hook scope denials actionable by reporting the violating paths and the task's allowed scope boundary."}]
 ["note","HKREFACT-T11",1780660303,"codex-worker",{"msg":"Scope overlap with HKREFACT detected at claim time"}]
 ["note","HKREFACT",1780660303,"codex-worker",{"msg":"Scope overlap with HKREFACT-T11 detected at claim time"}]
+["claim","HKREFACT-T11",1780660303,"codex-worker",{"ttl":60}]
