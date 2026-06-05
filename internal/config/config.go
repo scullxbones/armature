@@ -7,41 +7,12 @@ import (
 )
 
 type Config struct {
-	Mode                   string             `json:"mode"` // "single-branch" or "dual-branch"
-	ProjectType            string             `json:"project_type"`
-	DefaultTTL             int                `json:"default_ttl"` // minutes
-	TokenBudget            int                `json:"token_budget"`
-	LowStakesPushThreshold int                `json:"low_stakes_push_threshold"` // ops before auto-push
-	Hooks                  []HookConfig       `json:"hooks"`
-	Orchestrator           OrchestratorConfig `json:"orchestrator,omitempty"`
-}
-
-// OrchestratorConfig holds settings for arm orchestrate.
-type OrchestratorConfig struct {
-	MaxParallel    int             `json:"max_parallel,omitempty"`
-	SandboxEnabled bool            `json:"sandbox_enabled,omitempty"`
-	Adapters       AdapterCommands `json:"adapters,omitempty"`
-	Auth           AuthConfig      `json:"auth,omitempty"`
-	// DefaultModel is the fallback model name used when no CLI flag or task
-	// PreferredModel is set.  Empty string means the harness picks its own default.
-	DefaultModel string `json:"default_model,omitempty"`
-}
-
-// AuthConfig controls how harness credentials are resolved for orchestrate runs.
-type AuthConfig struct {
-	// Mode: auto, inherit-env, env-file, oauth-session.
-	Mode string `json:"mode,omitempty"`
-	// EnvFile is an optional dotenv file read when mode includes env-file.
-	EnvFile string `json:"env_file,omitempty"`
-}
-
-// AdapterCommands holds the shell commands used by each verification phase.
-type AdapterCommands struct {
-	Build    string `json:"build,omitempty"`
-	Lint     string `json:"lint,omitempty"`
-	Test     string `json:"test,omitempty"`
-	Coverage string `json:"coverage,omitempty"`
-	Mutate   string `json:"mutate,omitempty"`
+	Mode                   string       `json:"mode"` // "single-branch" or "dual-branch"
+	ProjectType            string       `json:"project_type"`
+	DefaultTTL             int          `json:"default_ttl"` // minutes
+	TokenBudget            int          `json:"token_budget"`
+	LowStakesPushThreshold int          `json:"low_stakes_push_threshold"` // ops before auto-push
+	Hooks                  []HookConfig `json:"hooks"`
 }
 
 type HookConfig struct {
