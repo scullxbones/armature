@@ -3419,3 +3419,24 @@ func TestReparentCommand_IssueNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found", "reparent must fail when issue does not exist")
 }
+
+// TestManagedExecutionCommandsAreNotRegistered verifies that arm orchestrate and
+// arm worker run return unknown-command errors, and that worker-init --check still works.
+func TestManagedExecutionCommandsAreNotRegistered(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+
+	_, err := runTrls(t, repo, "orchestrate")
+	require.Error(t, err, "arm orchestrate must return an error")
+	assert.Contains(t, err.Error(), "unknown command", "arm orchestrate must return unknown-command error")
+
+	_, err = runTrls(t, repo, "worker", "run")
+	require.Error(t, err, "arm worker run must return an error")
+	assert.Contains(t, err.Error(), "unknown command", "arm worker run must return unknown-command error")
+
+	// worker-init --check must still execute (may fail if no worker ID, but must not be unknown command)
+	_, err = runTrls(t, repo, "worker-init", "--check")
+	if err != nil {
+		assert.NotContains(t, err.Error(), "unknown command", "worker-init must still be registered")
+	}
+}

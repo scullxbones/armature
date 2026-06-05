@@ -260,14 +260,6 @@ func newRootCmd() *cobra.Command {
 	contextHistoryCmd.GroupID = "admin"
 	root.AddCommand(contextHistoryCmd)
 
-	orchestrateCmd := newOrchestrateCmd()
-	orchestrateCmd.GroupID = "workflow"
-	root.AddCommand(orchestrateCmd)
-
-	workerCmd := newWorkerCmd()
-	workerCmd.GroupID = "workflow"
-	root.AddCommand(workerCmd)
-
 	return root
 }
 
