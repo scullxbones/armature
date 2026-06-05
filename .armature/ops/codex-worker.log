@@ -478,3 +478,4 @@
 ["transition","ORCRMV-T01",1780629015,"codex-worker",{"to":"merged"}]
 ["claim","ORCRMV-T02",1780629019,"codex-worker",{"ttl":60}]
 ["transition","ORCRMV-T02",1780629143,"codex-worker",{"to":"done","outcome":"Filtered 22 orchestrate-* op records from codex-worker.log and 34dafe5f log; state cleared and re-materialized 389 issues from 3813 ops; arm validate --ci exits 0; ORCRUN cancelled, story-1778637796 merged"}]
+["transition","ORCRMV-T02",1780629145,"codex-worker",{"to":"merged"}]
