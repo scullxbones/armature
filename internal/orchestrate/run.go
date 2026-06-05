@@ -220,6 +220,20 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 	// a leaked claim in the log.
 	wouldClaim := issue.ClaimedBy != workerID
 	if !wouldClaim {
+		// Reacquire our own claim if its TTL has expired; another worker may have
+		// taken it over concurrently.
+		effectiveOwnTTL := issue.ClaimTTL
+		if effectiveOwnTTL <= 0 {
+			effectiveOwnTTL = r.appCtx.Config.DefaultTTL
+		}
+		if effectiveOwnTTL <= 0 {
+			effectiveOwnTTL = 60
+		}
+		if claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, effectiveOwnTTL, r.deps.nowUnix()) {
+			wouldClaim = true
+		}
+	}
+	if !wouldClaim {
 		result.ClaimHeld = true
 		result.ClaimOwner = workerID
 	} else {
@@ -396,6 +410,61 @@ func (r *RepoRunner) prepare(ctx context.Context, req RunRequest) (preparedRun, 
 			result.WouldDispatch = false
 			return preparedRun{result: result}, nil
 		}
+	} else {
+		// Already own the claim. Re-materialise and rebuild activeScopes so that
+		// any concurrent claim written by another worker during context/auth/harness
+		// preparation is detected before dispatch.
+		allOps, offsets, err = r.deps.readAllOpsWithOffsets(filepath.Join(r.appCtx.IssuesDir, "ops"))
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("read ops for scope refresh: %w", err)
+		}
+		if _, err := r.deps.materialize(stateDir, allOps, r.appCtx.Mode == "single-branch", offsets); err != nil {
+			return preparedRun{}, fmt.Errorf("materialize for scope refresh: %w", err)
+		}
+		index, err = r.deps.loadIndex(filepath.Join(stateDir, "index.json"))
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("reload index for scope refresh: %w", err)
+		}
+		refreshedIssueMap, err := r.loadIssueMap(stateDir)
+		if err != nil {
+			return preparedRun{}, fmt.Errorf("reload issue map for scope refresh: %w", err)
+		}
+		nowRefresh := r.deps.nowUnix()
+		activeScopes = make(map[string][]string)
+		for id, entry := range index {
+			if id == req.TaskID {
+				continue
+			}
+			if entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress {
+				continue
+			}
+			if isAncestorIssue(id, req.TaskID, refreshedIssueMap) {
+				continue
+			}
+			if other := refreshedIssueMap[id]; other != nil {
+				if other.ClaimedAt > 0 {
+					ttl := other.ClaimTTL
+					if ttl <= 0 {
+						ttl = 60
+					}
+					if claimPkg.IsClaimStale(other.ClaimedAt, other.LastHeartbeat, ttl, nowRefresh) {
+						continue
+					}
+				}
+			}
+			activeScopes[id] = entry.Scope
+		}
+		result.ScopeConflicts = nil
+		for otherID, scope := range activeScopes {
+			if claimPkg.ScopesOverlap(issue.Scope, scope) {
+				result.ScopeConflicts = append(result.ScopeConflicts, ScopeConflict{TaskID: otherID, Paths: append([]string(nil), scope...)})
+			}
+		}
+		if len(result.ScopeConflicts) > 0 {
+			result.BlockedReason = "scope conflict"
+			result.WouldDispatch = false
+			return preparedRun{result: result}, nil
+		}
 	}
 
 	serviceCfg := ServiceConfig{
@@ -475,7 +544,15 @@ func (r *repoOpLog) ReadAll() ([]ops.Op, error) {
 }
 
 func (r *repoOpLog) Append(op ops.Op) error {
-	return r.deps.appendAndCommit(r.logPath, r.worktreePath, op, gitCommitterForWorktree(r.worktreePath))
+	if err := r.deps.appendAndCommit(r.logPath, r.worktreePath, op, gitCommitterForWorktree(r.worktreePath)); err != nil {
+		return err
+	}
+	// In dual-branch mode, push heartbeat ops to _armature so remote workers can
+	// observe claim renewal without waiting for an independent push.
+	if op.Type == ops.OpHeartbeat && r.worktreePath != "" && r.deps.pushClaimOp != nil {
+		r.deps.pushClaimOp(r.worktreePath) //nolint:errcheck // best-effort
+	}
+	return nil
 }
 
 func gitCommitterForContext(appCtx *config.Context) ops.GitCommitter {

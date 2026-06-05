@@ -111,11 +111,11 @@ func TestRepoRunner_DryRunAndMutatingRunSharePreparationPath(t *testing.T) {
 	if liveResult.Phase != "complete" {
 		t.Fatalf("Phase = %q, want complete", liveResult.Phase)
 	}
-	// loadState is called twice on a live run: once to build the issue map for
-	// scope-conflict filtering (stale-claim and ancestor checks) and once to
-	// assemble the task context for the harness.
-	if materializeCalls != 1 || loadIssueCalls != 1 || loadIndexCalls != 1 || loadStateCalls != 2 {
-		t.Fatalf("prep path counts = %d/%d/%d/%d, want 1/1/1/2", materializeCalls, loadIssueCalls, loadIndexCalls, loadStateCalls)
+	// loadState is called three times on a live run (already-owned claim path):
+	// once to build the issue map for scope-conflict filtering, once to assemble
+	// the task context for the harness, and once for the post-prep scope refresh.
+	if materializeCalls != 2 || loadIssueCalls != 1 || loadIndexCalls != 2 || loadStateCalls != 3 {
+		t.Fatalf("prep path counts = %d/%d/%d/%d, want 2/1/2/3", materializeCalls, loadIssueCalls, loadIndexCalls, loadStateCalls)
 	}
 }
 
@@ -1400,5 +1400,273 @@ func TestRepoRunner_ScopeConflictDetectedAfterClaiming(t *testing.T) {
 	}
 	if len(result.ScopeConflicts) == 0 || result.ScopeConflicts[0].TaskID != "COMPETITOR" {
 		t.Fatalf("ScopeConflicts = %+v, want conflict with COMPETITOR", result.ScopeConflicts)
+	}
+}
+
+// P1-8: TestRepoRunner_StaleOwnClaimIsReacquired verifies that when this worker holds a
+// claim whose TTL has expired, the runner reacquires it rather than proceeding with a
+// possibly-contested stale claim.
+func TestRepoRunner_StaleOwnClaimIsReacquired(t *testing.T) {
+	const (
+		claimedAt  = int64(1000)
+		ttlMinutes = 1
+		staleNow   = claimedAt + int64(ttlMinutes)*60 + 1
+	)
+
+	var appended []ops.Op
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: ttlMinutes,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog: func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(_ string, _ string, op ops.Op, _ ops.GitCommitter) error {
+				appended = append(appended, op)
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				issue := materialize.Issue{
+					ID:            "ORCRUN-STALE-OWN",
+					Title:         "task",
+					Scope:         []string{"internal/orchestrate/run.go"},
+					Acceptance:    []byte(`["go test ./..."]`),
+					ClaimedBy:     "worker-a",
+					ClaimedAt:     claimedAt,
+					ClaimTTL:      ttlMinutes,
+					LastHeartbeat: 0,
+				}
+				return issue, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-STALE-OWN": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-STALE-OWN"] = &materialize.Issue{
+					ID: "ORCRUN-STALE-OWN", Title: "task", Scope: []string{"internal/orchestrate/run.go"},
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				return OrchestrateState{Phase: "complete", Run: 1}, nil
+			},
+			nowUnix: func() int64 { return staleNow },
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-STALE-OWN", WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "" {
+		t.Fatalf("BlockedReason = %q, want empty: stale own claim should be reacquired, not blocked", result.BlockedReason)
+	}
+	// A claim op must have been written to renew the expired claim.
+	hasClaim := false
+	for _, op := range appended {
+		if op.Type == ops.OpClaim {
+			hasClaim = true
+		}
+	}
+	if !hasClaim {
+		t.Fatal("expected OpClaim to reacquire stale own claim")
+	}
+}
+
+// P1-7: TestRepoRunner_ScopeConflictRefreshedWhenClaimAlreadyOwned verifies that when
+// a worker already owns the task claim, a scope conflict introduced by another worker
+// during context/auth preparation is detected by the post-prep scope refresh.
+func TestRepoRunner_ScopeConflictRefreshedWhenClaimAlreadyOwned(t *testing.T) {
+	var loadIndexCalls int
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:  t.TempDir(),
+			IssuesDir: t.TempDir(),
+			StateDir:  t.TempDir(),
+			Mode:      "single-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-T09",
+					Title:      "task",
+					ClaimedBy:  "worker-a",
+					ClaimedAt:  100,
+					ClaimTTL:   60,
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./..."]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				loadIndexCalls++
+				if loadIndexCalls >= 2 {
+					// Second call: competitor has claimed overlapping scope during prep.
+					return materialize.Index{
+						"ORCRUN-T09": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}},
+						"COMPETITOR": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}},
+					}, nil
+				}
+				// First call: no conflicts yet.
+				return materialize.Index{
+					"ORCRUN-T09": {Status: ops.StatusClaimed, Scope: []string{"internal/orchestrate/run.go"}},
+				}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-T09"] = &materialize.Issue{
+					ID: "ORCRUN-T09", Title: "task", Scope: []string{"internal/orchestrate/run.go"},
+					ClaimedBy: "worker-a", ClaimedAt: 100, ClaimTTL: 60,
+				}
+				state.Issues["COMPETITOR"] = &materialize.Issue{
+					ID: "COMPETITOR", Title: "competitor", Scope: []string{"internal/orchestrate/run.go"},
+					ClaimedBy: "worker-b", ClaimedAt: 200, ClaimTTL: 60,
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(context.Context, ServiceConfig, RunInput) (OrchestrateState, error) {
+				t.Fatal("execute should not run when post-prep scope conflict is detected")
+				return OrchestrateState{}, nil
+			},
+			nowUnix: func() int64 { return 250 }, // within TTL of competitor (200+3600)
+		},
+	}
+
+	result, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-T09", WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.BlockedReason != "scope conflict" {
+		t.Fatalf("BlockedReason = %q, want scope conflict: already-owned claim must re-check scopes after prep", result.BlockedReason)
+	}
+	if len(result.ScopeConflicts) == 0 || result.ScopeConflicts[0].TaskID != "COMPETITOR" {
+		t.Fatalf("ScopeConflicts = %+v, want conflict with COMPETITOR", result.ScopeConflicts)
+	}
+}
+
+// P1-6: TestRepoRunner_DualBranchPushesHeartbeatOpDuringExecution verifies that in
+// dual-branch mode, each OpHeartbeat appended to the op log is also pushed to _armature
+// so remote workers can observe the claim renewal.
+func TestRepoRunner_DualBranchPushesHeartbeatOpDuringExecution(t *testing.T) {
+	var pushCount int
+	runner := &RepoRunner{
+		appCtx: &config.Context{
+			RepoPath:     t.TempDir(),
+			IssuesDir:    t.TempDir(),
+			StateDir:     t.TempDir(),
+			WorktreePath: t.TempDir(), // non-empty == dual-branch mode
+			Mode:         "dual-branch",
+			Config: config.Config{
+				DefaultTTL: 60,
+				Orchestrator: config.OrchestratorConfig{
+					DefaultModel: "gpt-test",
+				},
+			},
+		},
+		workerID: "worker-a",
+		deps: repoRunnerDeps{
+			readAllOpsWithOffsets: func(string) ([]ops.Op, map[string]int64, error) {
+				return nil, map[string]int64{}, nil
+			},
+			readLog:         func(string) ([]ops.Op, error) { return nil, nil },
+			appendAndCommit: func(string, string, ops.Op, ops.GitCommitter) error { return nil },
+			pushClaimOp: func(string) error {
+				pushCount++
+				return nil
+			},
+			materialize: func(string, []ops.Op, bool, map[string]int64) (materialize.Result, error) {
+				return materialize.Result{}, nil
+			},
+			loadIssue: func(string) (materialize.Issue, error) {
+				return materialize.Issue{
+					ID:         "ORCRUN-HB-T01",
+					Title:      "task",
+					ClaimedBy:  "worker-a",
+					ClaimedAt:  100,
+					ClaimTTL:   60,
+					Scope:      []string{"internal/orchestrate/run.go"},
+					Acceptance: []byte(`["go test ./..."]`),
+				}, nil
+			},
+			loadIndex: func(string) (materialize.Index, error) {
+				return materialize.Index{"ORCRUN-HB-T01": {Status: ops.StatusClaimed}}, nil
+			},
+			loadState: func(string) (*materialize.State, error) {
+				state := materialize.NewState()
+				state.Issues["ORCRUN-HB-T01"] = &materialize.Issue{
+					ID: "ORCRUN-HB-T01", Scope: []string{"internal/orchestrate/run.go"},
+				}
+				return state, nil
+			},
+			resolveAuthPlan: func(string, AuthConfig) (AuthPlan, error) {
+				return AuthPlan{Source: "oauth-session"}, nil
+			},
+			newHarnessAdapter: func(HarnessConfig) (HarnessAdapter, error) {
+				return repoRunnerHarness{}, nil
+			},
+			newGitClient: func(string) GitClient { return &repoRunnerGit{head: "abc123"} },
+			execute: func(_ context.Context, svcCfg ServiceConfig, _ RunInput) (OrchestrateState, error) {
+				// Simulate the engine writing a heartbeat op during harness execution.
+				_ = svcCfg.OpLog.Append(ops.Op{
+					Type:     ops.OpHeartbeat,
+					TargetID: "ORCRUN-HB-T01",
+					WorkerID: "worker-a",
+				})
+				return OrchestrateState{Phase: "complete", Run: 1, TransitionWritten: true}, nil
+			},
+			nowUnix: func() int64 { return 150 }, // within TTL of own claim (100+3600)
+		},
+	}
+
+	_, err := runner.Run(context.Background(), RunRequest{TaskID: "ORCRUN-HB-T01", WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if pushCount == 0 {
+		t.Fatal("pushClaimOp was not called for heartbeat op in dual-branch mode")
 	}
 }
