@@ -485,3 +485,4 @@
 ["transition","ORCRMV",1780628929,"codex-worker",{"to":"in-progress"}]
 ["transition","ORCRUN",1780628969,"codex-worker",{"to":"cancelled","outcome":"ORCRUN superseded by ORCRMV — removing managed execution entirely rather than deepening the contract"}]
 ["transition","HKREFACT-T09",1780628974,"codex-worker",{"to":"cancelled","outcome":"Cancelled: depends on internal/orchestrate VerificationService which will be deleted in ORCRMV-T04"}]
+["transition","HKREFACT-T10",1780628976,"codex-worker",{"to":"cancelled","outcome":"Cancelled: depends on arm orchestrate and arm worker run commands which will be removed in ORCRMV-T03"}]
