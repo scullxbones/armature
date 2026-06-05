@@ -599,3 +599,4 @@
 ["claim","HKREFACT-T07",1780659901,"codex-worker",{"ttl":60}]
 ["transition","HKREFACT-T07",1780660028,"codex-worker",{"to":"done","outcome":"Added retained-surface harness hook installer helpers and launcher env assembly without touching managed-execution paths."}]
 ["claim","HKREFACT-T08",1780660084,"codex-worker",{"ttl":60}]
+["transition","HKREFACT-T08",1780660179,"codex-worker",{"to":"done","outcome":"Made hook scope denials actionable by reporting the violating paths and the task's allowed scope boundary."}]
