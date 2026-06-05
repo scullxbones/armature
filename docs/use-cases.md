@@ -2,7 +2,7 @@
 
 This document shows how different roles use Armature in practice. Each section follows a realistic workflow for one of the five Armature personas, using actual `arm` commands. If you are unsure which persona fits you, read the short description at the top of each section.
 
-Worker runtime mode is now the default execution path: workers run `arm worker run` to pull, claim, orchestrate, and repeat. `arm orchestrate --issue <id>` remains the single-task manual fallback, and manual `claim`/`render-context`/`transition` flows are retained for edge cases and advanced operator control.
+The coordinator loop is the standard execution path: find ready tasks with `arm ready`, claim and render context for each, dispatch worker agents, integrate outcomes, and repeat until the story is done.
 
 ---
 
@@ -42,10 +42,13 @@ arm ready
 # TASK-002  Add user profile endpoint         [ready]
 ```
 
-Run the default runtime loop.
+Claim, dispatch, and complete each task.
 
 ```bash
-arm worker run
+arm claim TASK-001
+arm render-context TASK-001 --format agent
+# dispatch agent with the render-context output
+arm transition TASK-001 --to done --outcome "Implemented auth middleware"
 ```
 
 Check the project overview at any time.
@@ -57,7 +60,7 @@ arm list --group
 ### Notes for Lone Wolf
 
 - No branch protection means there is no PR step. Tasks move directly from `done` to complete.
-- Keep the workflow lightweight: `ready` → `orchestrate` → repeat.
+- Keep the workflow lightweight: `ready` → `claim` → `render-context` → agent → `transition done` → repeat.
 - If you need to pause and come back, `arm list --group` shows exactly where everything stands.
 
 ---
@@ -92,15 +95,15 @@ Downstream tasks only unblock after `merged`. This prevents agents from starting
 ### Daily Workflow
 
 ```bash
-arm worker run --max-tasks 1
+arm ready                                      # find unblocked tasks
+arm claim <task-id>
+arm render-context <task-id> --format agent    # get task spec for agent
+# dispatch agent — agent implements, transitions to done
 ```
 
-The orchestrator executes the task lifecycle for you (claim, context assembly,
-harness dispatch, verification, retries, transition).
+Open and merge PRs using your normal team workflow after each task is done.
 
-Open and merge PRs using your normal team workflow after orchestration succeeds.
-
-When orchestration succeeds, the task lifecycle is advanced by the orchestrator. In dual-branch workflows, dependent tasks still unblock at `merged`, not merely `done`.
+In dual-branch workflows, dependent tasks unblock at `merged`, not merely `done`.
 
 ### Notes for Gatekeeper
 
@@ -279,9 +282,9 @@ arm transition --issue TASK-055 --to ready \
 
 ---
 
-## P5: The Swarm — Orchestrator Fleet
+## P5: The Swarm — Agent Fleet
 
-**Who this is:** Operators running multiple orchestrators in parallel. Harnesses (Claude/Codex/Devin) are invoked by `arm orchestrate`; the orchestrator owns verification, retries, and completion.
+**Who this is:** Operators running multiple AI agents in parallel. A coordinator pre-claims tasks from each wave, dispatches agents concurrently, and integrates results before the next wave.
 
 ### Pulling Work
 
@@ -294,34 +297,33 @@ arm ready
 # TASK-044  Update API documentation        [ready]
 ```
 
-Run orchestrate on a ready task:
+Pre-claim and render context for each task in the wave, then dispatch agents concurrently:
 
 ```bash
-arm orchestrate --issue TASK-042
+arm claim TASK-042 && arm render-context TASK-042 --format agent > ctx-042.json
+arm claim TASK-043 && arm render-context TASK-043 --format agent > ctx-043.json
+# dispatch agents with their context packages; agents transition to done when complete
 ```
 
-The orchestrator claims, prepares context, dispatches the harness, verifies output, retries if needed, and exits with either success or escalation.
+### Notes for Agent Fleet
 
-### Notes for Orchestrator Fleet
-
-- Run multiple orchestrators in parallel for higher throughput.
-- If an orchestrator loses a claim race, it should call `arm ready` and pick the next task.
-- Use `--dry-run` to diagnose state and preflight problems before dispatch.
-- Manual worker commands are still available for exception handling, but are not required for routine flow.
+- Pre-claim all tasks in a wave before dispatching agents — this prevents claim races during parallel execution.
+- Assign each parallel agent a log slot: `export ARM_LOG_SLOT=<n>` before any `arm` command.
+- If a claim race occurs, the losing agent sees the task as `in-progress` and calls `arm ready` for the next available task.
+- After each wave, run `arm merged --issue <id>` for completed tasks to unblock the next wave.
 
 ---
 
 ## Multi-Agent Conflict Resolution
 
-When multiple orchestrators run concurrently, two processes can both see the same task as `ready` and race on the same issue. Armature handles this safely without locks.
+When multiple agents are dispatched concurrently, two can both see the same task as `ready` and race to claim it. Armature handles this safely without locks.
 
 ### How It Happens
 
-1. Orchestrator A runs `arm ready` and sees TASK-099 as ready.
-2. Orchestrator B runs `arm ready` at nearly the same time and also sees TASK-099 as ready.
-3. Both run `arm orchestrate --issue TASK-099`.
-4. Under the hood, each orchestration run performs claim logic; one claim wins, one loses.
-5. Both writes are merge-safe (MRDT guarantee).
+1. Agent A runs `arm claim TASK-099`; Agent B runs `arm claim TASK-099` at nearly the same time.
+2. Both claim ops are appended to their respective log files.
+3. On the next materialization cycle, claim race resolution runs — one claim wins, one loses.
+4. Both writes are merge-safe (MRDT guarantee).
 
 ### Resolution
 
@@ -330,14 +332,14 @@ On the next pull-and-materialize cycle, Armature merges all log files and applie
 - **First claim by timestamp wins.** The orchestrator run whose claim operation has the earlier timestamp retains the claim.
 - **Tiebreaker:** If timestamps are identical (rare), the agent with the lexicographically smaller worker ID wins.
 
-The losing orchestrator discovers it no longer holds the claim, exits that run, then polls `arm ready` again for a different task.
+The losing agent discovers it no longer holds the claim and calls `arm ready` again for a different task.
 
 ```bash
-# Orchestrator B discovers it lost the claim
+# Agent B discovers it lost the claim
 arm ready
 # TASK-099 is no longer listed as ready (Agent A holds it)
 # TASK-100  Add pagination support   [ready]
-arm orchestrate --issue TASK-100
+arm claim TASK-100 && arm render-context TASK-100 --format agent
 ```
 
 ### Observing Conflicts as the Conductor
@@ -354,7 +356,7 @@ If a conflict resolution produced an unexpected outcome (e.g., the wrong agent w
 ```bash
 arm transition --issue TASK-099 --to ready \
   --outcome "Releasing claim for manual reassignment."
-arm orchestrate --issue TASK-099   # or let another orchestrator pick it up naturally
+# the task will appear in the next arm ready output for any available agent
 ```
 
 ### Why This Is Safe
@@ -367,8 +369,8 @@ Armature uses a Merge-CRDT (MRDT) approach where each agent appends to its own l
 
 | Persona | Key Commands |
 |---|---|
-| P1 Lone Wolf | `arm init`, `arm ready`, `arm orchestrate` |
+| P1 Lone Wolf | `arm init`, `arm ready`, `arm claim`, `arm render-context`, `arm transition` |
 | P2 Gatekeeper | same as P1, plus dual-branch PR detection for `merged` promotion |
 | P3 Conductor | `arm sources add/sync`, `arm decompose-context`, `arm decompose-apply`, `arm dag-summary`, `arm validate`, `arm stale-review` |
 | P4 Wrangler | `arm init`, `arm init --repair`, config editing, `arm validate`, `arm stale-review` |
-| P5 Orchestrator Fleet | `arm ready`, `arm orchestrate`, `arm list --group`, `arm validate` |
+| P5 Agent Fleet | `arm ready`, `arm claim`, `arm render-context`, `arm merged`, `arm list --group` |

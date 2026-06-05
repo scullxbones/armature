@@ -434,56 +434,6 @@ arm note TASK-001 --msg "Started implementation after architectural review."
 
 ---
 
-## orchestrate
-
-Run deterministic task orchestration with an AI harness.
-
-**Synopsis:**
-`arm orchestrate [flags]`
-
-**Flags:**
-- `--dry-run`: Inspect orchestration state without dispatching a harness.
-- `--harness string`: Harness adapter: `claude`, `codex`, or `devin` (default `claude`).
-- `--issue string`: Issue ID to orchestrate (required).
-- `--model string`: Model override for this invocation.
-- `--retries int`: Retry budget after verification failures (default `3`).
-- `--show-network-plan`: Print selected auth source and outbound data classes before dispatch.
-- `--timeout int`: Per-dispatch timeout in seconds (`0` disables timeout).
-
-**Model Resolution Order:**
-1. `--model`
-2. Task `preferred_model`
-3. `config.orchestrator.default_model`
-
-**Behaviour:**
-- Claims and executes work via the orchestrator engine instead of a manual worker loop.
-- Runs verification and retry/escalation logic automatically.
-- Exits non-zero when orchestration escalates or preflight validation fails.
-- Prints either human output (`phase`, `run`) or machine-readable JSON (`--format json|agent`).
-
-**Runtime Requirements:**
-- Linux sandbox mode requires `bubblewrap` (`bwrap`) and `socat` installed and discoverable on `PATH`.
-- macOS sandbox mode requires `sandbox-exec`.
-- Harness binaries must be installed and invocable in non-interactive mode from the current shell session.
-- Auth can come from API key env vars or existing harness OAuth/session login.
-
-**Examples:**
-```bash
-# Run with defaults
-arm orchestrate --issue E7-S1-T1
-
-# Override harness and model
-arm orchestrate --issue E7-S1-T1 --harness codex --model gpt-4o
-
-# Inspect state without dispatching a harness
-arm orchestrate --issue E7-S1-T1 --dry-run
-
-# Show auth/network disclosure during dry-run
-arm orchestrate --issue E7-S1-T1 --dry-run --show-network-plan
-```
-
----
-
 ## ready
 
 Show tasks ready to be claimed.
@@ -496,47 +446,13 @@ Show tasks ready to be claimed.
 - `--worker string`: Worker ID for assignment-aware sorting.
 
 **Queue Inspection:**
-Use `ready` to inspect what the runtime loop will pick next:
+Use `ready` to find unblocked tasks before claiming:
 
 1. `arm ready`
-2. Start or continue `arm worker run`
-3. Use `arm orchestrate --issue <id>` only for single-task manual fallback
+2. `arm claim <id>` for each task to dispatch
+3. `arm render-context <id>` to get the task specification for the worker agent
 
 Claim collisions are expected under concurrency; losing workers simply call `arm ready` again.
-
----
-
-## worker
-
-Worker runtime commands.
-
-**Synopsis:**
-`arm worker [command]`
-
-**Available Subcommands:**
-- `run`: Execute the deterministic worker runtime loop.
-
----
-
-## worker run
-
-Run the worker runtime loop (default queue-draining execution path).
-
-**Synopsis:**
-`arm worker run [flags]`
-
-**Flags:**
-- `--dry-run`: Inspect runtime behavior without mutating task state.
-- `--max-tasks int`: Maximum tasks to execute before stopping (`0` means no limit).
-
-**Examples:**
-```bash
-# Drain the queue until empty
-arm worker run
-
-# Execute exactly one task (dogfood/smoke mode)
-arm worker run --max-tasks 1
-```
 
 ---
 

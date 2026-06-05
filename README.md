@@ -32,32 +32,28 @@ All state lives in git. No database, no server, no daemon. A single Go binary (`
 
 ```mermaid
 flowchart LR
-    U[User / Coordinator] --> C[arm worker run]
-    C --> R[internal/workerruntime Runtime Loop]
-    R --> Q[ready queue read]
-    R --> CL[claim gate]
-    R --> O[internal/orchestrate single-task engine]
-    O --> H[Harness adapter: Claude or Codex]
-    O --> OP[(append-only ops log)]
+    U[Coordinator] --> R[arm ready]
+    R --> CL[arm claim]
+    CL --> CTX[arm render-context]
+    CTX --> W[Worker agent]
+    W --> OP[(append-only ops log)]
     OP --> M[materialize state]
     M --> V[ready/list/show/validate views]
     V --> U
 ```
 
-## Runtime Flow
+## Coordinator Flow
 
 ```mermaid
 flowchart TD
-    S([start arm worker run]) --> P[poll ready]
-    P -->|none ready| I[final_state=idle]
-    P -->|ready issue| C[attempt claim]
-    C -->|lost| P
-    C -->|won| E[run orchestrate for issue]
-    E -->|success| D[tasks_completed +1]
-    D --> L{max tasks reached?}
-    L -->|no| P
-    L -->|yes| T[final_state=stopped]
-    E -->|failure| X[final_state=escalated]
+    S([survey story DAG]) --> R[arm ready]
+    R -->|none ready| V[arm validate]
+    R -->|ready tasks| C[arm claim + render-context]
+    C --> D[dispatch worker agents]
+    D --> I[wait + integrate]
+    I --> R
+    V --> T[arm transition story done]
+    T --> PR[push + open PR]
 ```
 
 ## Installation
@@ -110,18 +106,16 @@ arm decompose-context --sources src-001 > context.json
 arm decompose-apply plan.json
 ```
 
-### 4. Run the Worker Runtime (Default)
+### 4. Dispatch Work
 
-Start the runtime loop and let it drain ready work:
-
-```bash
-arm worker run
-```
-
-Use single-task orchestration when you need manual control:
+Find ready tasks and dispatch a worker agent for each one:
 
 ```bash
-arm orchestrate --issue <issue-id>
+arm ready                                      # list unblocked tasks
+arm claim <issue-id>                           # claim a task
+arm render-context <issue-id> --format agent   # get task context for the agent
+# dispatch agent with render-context output
+arm transition <issue-id> --to done --outcome "what was done"
 ```
 
 ### 5. Complete and Verify

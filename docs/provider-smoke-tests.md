@@ -1,7 +1,7 @@
 # Provider Smoke Tests (Claude + Codex)
 
-This runbook verifies live harness execution paths for `arm orchestrate` and
-runtime command behavior for `arm worker run`.
+This runbook verifies that worker agents can claim, implement, and complete tasks
+using the standard coordinator dispatch flow with Claude and Codex as the AI provider.
 
 Devin is intentionally deferred for a later phase.
 
@@ -11,59 +11,54 @@ Devin is intentionally deferred for a later phase.
 - `arm doctor` is green.
 - Worker identity exists:
   - `arm worker-init --check || arm worker-init`
-- A test issue exists with valid scope and acceptance criteria.
-- Required platform sandbox tools are present (`bwrap`/`socat` on Linux or
-  `sandbox-exec` on macOS).
+- A test story with at least one task exists with valid scope and acceptance criteria.
+- The selected AI provider CLI (`claude` or `codex`) is installed and authenticated.
 
-## Shared Runtime Smoke
+## Shared Coordinator Smoke
 
-1. Dry-run queue loop:
-   - `arm worker run --max-tasks 1 --dry-run --format json`
-2. Live queue loop:
-   - `arm worker run --max-tasks 1 --format json`
-3. Verify output fields:
-   - `tasks_completed`
-   - `final_state`
-   - `max_tasks`
-   - `dry_run`
+1. Confirm ready queue is not empty:
+   - `arm ready`
+2. Claim a task and render context:
+   - `arm claim <TASK-ID>`
+   - `arm render-context <TASK-ID> --format agent`
+3. Verify context output includes:
+   - `task_id`
+   - `description`
+   - `scope`
+   - `acceptance`
 
 ## Dogfood Worktree Posture
 
 - Run provider dogfood tasks from a disposable branch or linked worktree.
-- Keep provider-local runtime state out of the task diff. The orchestrate
-  zero-trust commit path stages only verified diff paths and excludes generated
-  runtime directories such as `.codex-sqlite/`, `.devin/`, `.codex-home/`, and
-  `.claude/worktrees/`.
-- After each live run, inspect `git status --short` before pushing. Runtime
-  state may remain on disk for the provider, but it must not be committed.
+- After each live run, inspect `git status --short` before pushing. Provider
+  runtime state may remain on disk but must not be committed.
+- Only stage files from the task's declared `scope` plus `.armature/`.
 
-## Claude Harness Smoke
+## Claude Provider Smoke
 
-1. Validate adapter path:
-   - `arm orchestrate --issue <ISSUE-ID> --harness claude --dry-run --show-network-plan`
-2. Validate auth paths:
-   - API key mode: set `ANTHROPIC_API_KEY`, run dry-run again.
-   - OAuth/session mode: `claude auth status`, then run dry-run with API key unset.
-3. Run live single-task orchestration:
-   - `arm orchestrate --issue <ISSUE-ID> --harness claude --timeout 900`
+1. Claim a test task and render context:
+   - `arm claim <TASK-ID>`
+   - `arm render-context <TASK-ID> --format agent`
+2. Dispatch Claude Code with the render-context output as the task spec.
+3. Worker agent implements the task using the `armature-worker` skill.
 4. Verify:
-   - command exits 0 on success
-   - task transitions as expected
-   - no sandbox/preflight errors
+   - task transitions to `done` via `arm transition`
+   - commit message follows `<type>(<TASK-ID>): <description>` format
+   - `.armature/` ops are staged alongside code files
+   - no out-of-scope files in the commit diff
 
-## Codex Harness Smoke
+## Codex Provider Smoke
 
-1. Validate adapter path:
-   - `arm orchestrate --issue <ISSUE-ID> --harness codex --dry-run --show-network-plan`
-2. Validate auth paths:
-   - API key mode: set `OPENAI_API_KEY`, run dry-run again.
-   - OAuth/session mode: `codex login status`, then run dry-run with API key unset.
-3. Run live single-task orchestration:
-   - `arm orchestrate --issue <ISSUE-ID> --harness codex --timeout 900`
+1. Claim a test task and render context:
+   - `arm claim <TASK-ID>`
+   - `arm render-context <TASK-ID> --format agent`
+2. Dispatch Codex with the render-context output as the task spec.
+3. Worker agent implements the task using the `armature-worker` skill.
 4. Verify:
-   - command exits 0 on success
-   - task transitions as expected
-   - no sandbox/preflight errors
+   - task transitions to `done` via `arm transition`
+   - commit message follows `<type>(<TASK-ID>): <description>` format
+   - `.armature/` ops are staged alongside code files
+   - no out-of-scope files in the commit diff
 
 ## Evidence Capture
 
@@ -72,9 +67,8 @@ Record these in task notes or PR description:
 - command lines used
 - exit codes
 - final issue status
-- any escalation output
-- environment notes (OS, shell, adapter versions)
+- environment notes (OS, shell, provider versions)
 
 ## Known Follow-Up
 
-- Add Devin smoke section after Devin harness path is enabled in runtime policy.
+- Add Devin smoke section after Devin support is enabled.
