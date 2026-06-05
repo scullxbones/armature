@@ -1967,7 +1967,33 @@ func TestNoteCommand_JSONOutput(t *testing.T) {
 	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"note"`)
+	assert.Contains(t, out, `"note_id"`)
 	assert.Contains(t, out, "task-01")
+}
+
+func TestNoteDeleteCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update", "--format", "json")
+	require.NoError(t, err)
+
+	var result struct {
+		Issue  string `json:"issue"`
+		NoteID string `json:"note_id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &result))
+	require.NotEmpty(t, result.NoteID)
+
+	deleteOut, err := runTrls(t, repo, "note", "delete", "--issue", "task-01", "--note-id", result.NoteID, "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, deleteOut, `"note":"deleted"`)
+	assert.Contains(t, deleteOut, result.NoteID)
+
+	ctxOut, err := runTrls(t, repo, "render-context", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.NotContains(t, ctxOut, "progress update")
 }
 
 // UX: transition should emit plain text in human mode, not JSON

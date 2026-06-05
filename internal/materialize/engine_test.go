@@ -91,6 +91,21 @@ func TestApplyNoteOp(t *testing.T) {
 	assert.Equal(t, "Found edge case", state.Issues["task-01"].Notes[0].Msg)
 }
 
+func TestApplyNoteDeleteOp_TombstonesExistingNote(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpNote, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Msg: "Found edge case", NoteID: "note-1"}}))
+
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpNoteDelete, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{NoteID: "note-1"}}))
+
+	require.Len(t, state.Issues["task-01"].Notes, 1)
+	assert.Equal(t, "note-1", state.Issues["task-01"].Notes[0].ID)
+	assert.True(t, state.Issues["task-01"].Notes[0].Deleted)
+}
+
 func TestApplyLinkOp(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,

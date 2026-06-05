@@ -33,6 +33,8 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyTransition(op)
 	case ops.OpNote:
 		return s.applyNote(op)
+	case ops.OpNoteDelete:
+		return s.applyNoteDelete(op)
 	case ops.OpLink:
 		return s.applyLink(op)
 	case ops.OpUnlink:
@@ -173,12 +175,52 @@ func (s *State) applyNote(op ops.Op) error {
 		return nil
 	}
 	issue.Notes = append(issue.Notes, Note{
+		ID:        resolveNoteID(issue, op),
 		WorkerID:  op.WorkerID,
 		Timestamp: op.Timestamp,
 		Msg:       op.Payload.Msg,
 	})
 	issue.Updated = op.Timestamp
 	return nil
+}
+
+func (s *State) applyNoteDelete(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return nil
+	}
+	for i := range issue.Notes {
+		if issue.Notes[i].ID == op.Payload.NoteID {
+			issue.Notes[i].Deleted = true
+			issue.Updated = op.Timestamp
+			break
+		}
+	}
+	return nil
+}
+
+func resolveNoteID(issue *Issue, op ops.Op) string {
+	if op.Payload.NoteID != "" {
+		return op.Payload.NoteID
+	}
+
+	base := fmt.Sprintf("note-%d-%s", op.Timestamp, op.WorkerID)
+	id := base
+	suffix := 2
+	for noteIDExists(issue.Notes, id) {
+		id = fmt.Sprintf("%s-%d", base, suffix)
+		suffix++
+	}
+	return id
+}
+
+func noteIDExists(notes []Note, id string) bool {
+	for _, note := range notes {
+		if note.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) applyLink(op ops.Op) error {
