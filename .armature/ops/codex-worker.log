@@ -609,3 +609,4 @@
 ["claim","HKREFACT-T12",1780660660,"codex-worker",{"ttl":60}]
 ["transition","HKREFACT-T12",1780660690,"codex-worker",{"to":"blocked","outcome":"Broad verification passed through go test ./..., lint, coverage, validate, doctor, validate-skills, and skill deploy. Full make check remains blocked because gremlins mutation testing on ./internal hangs instead of completing."}]
 ["note","HKREFACT-T15",1780661549,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
+["note","HKREFACT-T14",1780661549,"codex-worker",{"msg":"Scope overlap with HKREFACT-T15 detected at claim time"}]
