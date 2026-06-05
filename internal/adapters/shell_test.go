@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"os/exec"
 	"strings"
@@ -55,6 +56,29 @@ func TestRunShellScript_Error(t *testing.T) {
 	_, err := RunShellScript("exit 1", nil)
 	if err == nil {
 		t.Fatal("expected error from failing script")
+	}
+}
+
+func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	status, err := RunProcessWithEnv(
+		context.Background(),
+		t.TempDir(),
+		[]string{"sh", "-c", "printf %s \"$ARMATURE_TASK_ID\""},
+		map[string]string{"ARMATURE_TASK_ID": "TASK-1"},
+		&stdout,
+		&stderr,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v stderr=%s", err, stderr.String())
+	}
+	if status != ProcessClean {
+		t.Fatalf("expected clean status, got %v", status)
+	}
+	if stdout.String() != "TASK-1" {
+		t.Fatalf("expected injected env value, got %q", stdout.String())
 	}
 }
 
