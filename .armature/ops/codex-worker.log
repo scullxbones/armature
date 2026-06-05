@@ -587,3 +587,4 @@
 ["note","ORCRMV-T09",1780658362,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
 ["note","HKREFACT-T14",1780658362,"codex-worker",{"msg":"Scope overlap with ORCRMV-T09 detected at claim time"}]
 ["claim","ORCRMV-T09",1780658362,"codex-worker",{"ttl":60}]
+["claim","HKREFACT-T05",1780658488,"codex-worker",{"ttl":60}]
