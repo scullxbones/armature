@@ -68,9 +68,9 @@ func (a *ClaudeAdapter) Encode(decision Decision) ([]byte, int, error) {
 
 	data, err := json.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{
-			"hookEventName":             "PreToolUse",
-			"permissionDecision":        "deny",
-			"permissionDecisionReason":  decision.Message,
+			"hookEventName":            "PreToolUse",
+			"permissionDecision":       "deny",
+			"permissionDecisionReason": decision.Message,
 		},
 	})
 	return data, 0, err
