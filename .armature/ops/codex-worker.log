@@ -490,3 +490,4 @@
 ["note","HKREFACT-T02",1780629350,"codex-worker",{"msg":"Serial claim: scope overlap with HKREFACT-T01 (same worker, dismissed)"}]
 ["claim","HKREFACT-T02",1780629350,"codex-worker",{"ttl":60}]
 ["transition","ORCRMV-T04",1780629446,"codex-worker",{"to":"done","outcome":"Deleted internal/orchestrate/ (29 files) and internal/workerruntime/ (8 files); removed OrchestratorConfig/AuthConfig/AdapterCommands from config.go; TestDefaultConfigHasNoOrchestratorSection added; go test ./... passes"}]
+["transition","ORCRMV-T04",1780629448,"codex-worker",{"to":"merged"}]
