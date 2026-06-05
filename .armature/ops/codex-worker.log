@@ -483,3 +483,4 @@
 ["amend","ORCRMV-T09",1780628533,"codex-worker",{"scope":["cmd/armature/main.go"]}]
 ["claim","ORCRMV-T01",1780628928,"codex-worker",{"ttl":60}]
 ["transition","ORCRMV",1780628929,"codex-worker",{"to":"in-progress"}]
+["transition","ORCRUN",1780628969,"codex-worker",{"to":"cancelled","outcome":"ORCRUN superseded by ORCRMV — removing managed execution entirely rather than deepening the contract"}]
