@@ -2,10 +2,31 @@ package adapters
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+type mockTransport struct {
+	fn func(*http.Request) (*http.Response, error)
+}
+
+func (m *mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return m.fn(r)
+}
+
+func mockClient(fn func(*http.Request) (*http.Response, error)) *http.Client {
+	return &http.Client{Transport: &mockTransport{fn: fn}}
+}
+
+func mockResp(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+}
 
 func TestNewHTTPClient(t *testing.T) {
 	c := NewHTTPClient()
@@ -15,16 +36,14 @@ func TestNewHTTPClient(t *testing.T) {
 }
 
 func TestFetchHTTP_BearerAuth(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("Authorization") != "Bearer mytoken" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+			return mockResp(http.StatusUnauthorized, ""), nil
 		}
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
+		return mockResp(http.StatusOK, `{"ok":true}`), nil
+	})
 
-	body, err := FetchHTTP(context.Background(), srv.Client(), srv.URL, "", "", "mytoken")
+	body, err := FetchHTTP(context.Background(), client, "http://example.com", "", "", "mytoken")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,17 +53,15 @@ func TestFetchHTTP_BearerAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_BasicAuth(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
 		u, p, ok := r.BasicAuth()
 		if !ok || u != "user" || p != "pass" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+			return mockResp(http.StatusUnauthorized, ""), nil
 		}
-		_, _ = w.Write([]byte(`data`))
-	}))
-	defer srv.Close()
+		return mockResp(http.StatusOK, "data"), nil
+	})
 
-	body, err := FetchHTTP(context.Background(), srv.Client(), srv.URL, "user", "pass", "")
+	body, err := FetchHTTP(context.Background(), client, "http://example.com", "user", "pass", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,12 +71,11 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_Non2xx(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
+		return mockResp(http.StatusNotFound, ""), nil
+	})
 
-	_, err := FetchHTTP(context.Background(), srv.Client(), srv.URL, "", "", "")
+	_, err := FetchHTTP(context.Background(), client, "http://example.com", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for 404 response")
 	}
