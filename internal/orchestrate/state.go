@@ -22,6 +22,7 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 		Phase: "pending",
 	}
 	sawComplete := false
+	sawEscalated := false
 
 	for _, op := range allOps {
 		// Filter: only process ops targeting the requested task.
@@ -73,6 +74,7 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 		case ops.OpOrchestrateEscalate:
 			// Transition: retrying/verify-failed → escalated.
 			state.Phase = "escalated"
+			sawEscalated = true
 
 		case ops.OpOrchestrateComplete:
 			// Transition: running → complete.
@@ -81,9 +83,10 @@ func DeriveState(allOps []ops.Op, taskID string) OrchestrateState {
 			sawComplete = true
 
 		case ops.OpTransition:
-			// Only count a transition that follows OpOrchestrateComplete — a prior
-			// manual transition (e.g. in-progress) must not satisfy the completion guard.
-			if sawComplete {
+			// Only count a transition that follows OpOrchestrateComplete or
+			// OpOrchestrateEscalate — a prior manual transition must not satisfy
+			// the completion guard.
+			if sawComplete || sawEscalated {
 				state.TransitionWritten = true
 			}
 

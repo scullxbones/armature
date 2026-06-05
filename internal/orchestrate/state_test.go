@@ -316,6 +316,46 @@ func TestDeriveState_TransitionWritten_FalseWhenTransitionOpAbsent(t *testing.T)
 	}
 }
 
+// P1-9: TestDeriveState_EscalatedTransitionWritten_TrueAfterEscalateAndTransition verifies
+// that TransitionWritten is set when an OpTransition follows OpOrchestrateEscalate.
+func TestDeriveState_EscalatedTransitionWritten_TrueAfterEscalateAndTransition(t *testing.T) {
+	taskOps := []ops.Op{
+		makeOp(ops.OpOrchestrateDispatch, "T1", ops.Payload{PreDispatchRef: "abc123"}),
+		makeOp(ops.OpOrchestrateDispatchComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateVerifyFail, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateRetry, "T1", ops.Payload{RetryBudget: 0}),
+		makeOp(ops.OpOrchestrateEscalate, "T1", ops.Payload{Msg: "retry budget exhausted"}),
+		makeOp(ops.OpTransition, "T1", ops.Payload{To: ops.StatusBlocked, Outcome: "retry budget exhausted"}),
+	}
+	state := orchestrate.DeriveState(taskOps, "T1")
+	if state.Phase != "escalated" {
+		t.Errorf("Phase: got %q, want escalated", state.Phase)
+	}
+	if !state.TransitionWritten {
+		t.Error("TransitionWritten: got false, want true after OpTransition following OpOrchestrateEscalate")
+	}
+}
+
+// P1-9: TestDeriveState_EscalatedTransitionWritten_FalseWithoutPostEscalateTransition verifies
+// that TransitionWritten remains false when no OpTransition follows OpOrchestrateEscalate.
+func TestDeriveState_EscalatedTransitionWritten_FalseWithoutPostEscalateTransition(t *testing.T) {
+	taskOps := []ops.Op{
+		makeOp(ops.OpOrchestrateDispatch, "T1", ops.Payload{PreDispatchRef: "abc123"}),
+		makeOp(ops.OpOrchestrateDispatchComplete, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateVerifyFail, "T1", ops.Payload{}),
+		makeOp(ops.OpOrchestrateRetry, "T1", ops.Payload{RetryBudget: 0}),
+		makeOp(ops.OpOrchestrateEscalate, "T1", ops.Payload{Msg: "retry budget exhausted"}),
+		// No OpTransition here (crash between escalate and transition ops).
+	}
+	state := orchestrate.DeriveState(taskOps, "T1")
+	if state.Phase != "escalated" {
+		t.Errorf("Phase: got %q, want escalated", state.Phase)
+	}
+	if state.TransitionWritten {
+		t.Error("TransitionWritten: got true, want false when no OpTransition follows escalation")
+	}
+}
+
 // P1-3: TestDeriveState_PriorManualTransitionDoesNotSatisfyCompletionTransitionWritten
 // verifies that an OpTransition written BEFORE OpOrchestrateComplete (e.g. a manual
 // in-progress transition) does not satisfy the TransitionWritten completion guard.

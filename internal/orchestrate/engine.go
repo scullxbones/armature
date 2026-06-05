@@ -137,6 +137,19 @@ func (e *Engine) Run(ctx context.Context) (OrchestrateState, error) {
 		}
 		return state, nil
 	case "escalated":
+		if !state.TransitionWritten {
+			transitionOp := ops.Op{
+				Type:      ops.OpTransition,
+				TargetID:  e.cfg.TaskID,
+				Timestamp: time.Now().Unix(),
+				WorkerID:  e.cfg.WorkerID,
+				Payload:   ops.Payload{To: ops.StatusBlocked, Outcome: "orchestration escalated"},
+			}
+			if err := e.cfg.OpLog.Append(transitionOp); err != nil {
+				return state, fmt.Errorf("re-append missed escalated transition op: %w", err)
+			}
+			state.TransitionWritten = true
+		}
 		return state, nil
 	}
 
@@ -379,6 +392,17 @@ func (e *Engine) handleVerifyFailure(ctx context.Context, state OrchestrateState
 			return state, fmt.Errorf("append escalate op: %w", err)
 		}
 		state.Phase = "escalated"
+		transitionOp := ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  e.cfg.TaskID,
+			Timestamp: time.Now().Unix(),
+			WorkerID:  e.cfg.WorkerID,
+			Payload:   ops.Payload{To: ops.StatusBlocked, Outcome: "retry budget exhausted"},
+		}
+		if err := e.cfg.OpLog.Append(transitionOp); err != nil {
+			return state, fmt.Errorf("append blocked transition op: %w", err)
+		}
+		state.TransitionWritten = true
 		return state, nil
 	}
 

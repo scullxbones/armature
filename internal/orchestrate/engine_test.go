@@ -721,6 +721,9 @@ func TestEngine_AlreadyEscalated_ReturnsEscalatedImmediately(t *testing.T) {
 		{Type: ops.OpOrchestrateVerifyFail, TargetID: "T1"},
 		{Type: ops.OpOrchestrateRetry, TargetID: "T1", Payload: ops.Payload{RetryBudget: 0}},
 		{Type: ops.OpOrchestrateEscalate, TargetID: "T1"},
+		// OpTransition was written — already fully escalated; no new ops expected.
+		{Type: ops.OpTransition, TargetID: "T1",
+			Payload: ops.Payload{To: ops.StatusBlocked, Outcome: "retry budget exhausted"}},
 	}
 	git := &stubGit{headSHA: "abc123"}
 	log := &stubOpLog{ops: priorOps}
@@ -744,6 +747,96 @@ func TestEngine_AlreadyEscalated_ReturnsEscalatedImmediately(t *testing.T) {
 	}
 	if len(log.appended) != 0 {
 		t.Errorf("expected no new ops on re-entry into escalated, got %d ops", len(log.appended))
+	}
+}
+
+// P1-9: TestEngine_EscalateWritesBlockedTransition verifies that when the retry budget is
+// exhausted, the engine writes both OpOrchestrateEscalate and OpTransition to blocked.
+func TestEngine_EscalateWritesBlockedTransition(t *testing.T) {
+	priorOps := []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "base123", WorktreePath: "/wt/T1", RetryBudget: 0}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+	}
+	git := &stubGit{headSHA: "head456"}
+	log := &stubOpLog{ops: priorOps}
+	harness := failingHarness("build")
+
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		WorkerID:    "worker-a",
+		Git:         git,
+		OpLog:       log,
+		Harness:     harness,
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 0,
+	}
+
+	result, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Phase != "escalated" {
+		t.Errorf("Phase: got %q, want escalated", result.Phase)
+	}
+
+	hasEscalate := false
+	hasBlockedTransition := false
+	for _, op := range log.appended {
+		if op.Type == ops.OpOrchestrateEscalate {
+			hasEscalate = true
+		}
+		if op.Type == ops.OpTransition && op.Payload.To == ops.StatusBlocked {
+			hasBlockedTransition = true
+		}
+	}
+	if !hasEscalate {
+		t.Error("expected OpOrchestrateEscalate op")
+	}
+	if !hasBlockedTransition {
+		t.Error("expected OpTransition to blocked on escalation")
+	}
+}
+
+// P1-9: TestEngine_EscalatedWithoutTransition_RetriesBlockedTransitionOnReentry verifies
+// that when OpOrchestrateEscalate is present but OpTransition was not written (crash),
+// re-entry appends exactly one OpTransition to blocked.
+func TestEngine_EscalatedWithoutTransition_RetriesBlockedTransitionOnReentry(t *testing.T) {
+	priorOps := []ops.Op{
+		{Type: ops.OpOrchestrateDispatch, TargetID: "T1",
+			Payload: ops.Payload{PreDispatchRef: "abc", WorktreePath: "/wt/T1", RetryBudget: 0}},
+		{Type: ops.OpOrchestrateDispatchComplete, TargetID: "T1"},
+		{Type: ops.OpOrchestrateVerifyFail, TargetID: "T1"},
+		{Type: ops.OpOrchestrateRetry, TargetID: "T1", Payload: ops.Payload{RetryBudget: 0}},
+		{Type: ops.OpOrchestrateEscalate, TargetID: "T1"},
+		// No OpTransition (crashed between escalate and transition ops).
+	}
+	log := &stubOpLog{ops: priorOps}
+	cfg := orchestrate.EngineConfig{
+		TaskID:      "T1",
+		WorkerID:    "worker-a",
+		Git:         &stubGit{headSHA: "abc123"},
+		OpLog:       log,
+		Harness:     failingHarness("build"),
+		Scope:       []string{"internal/foo/bar.go"},
+		RetryBudget: 0,
+	}
+
+	result, err := orchestrate.NewEngine(cfg).Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Phase != "escalated" {
+		t.Errorf("Phase: got %q, want escalated", result.Phase)
+	}
+	if len(log.appended) != 1 {
+		t.Fatalf("expected exactly 1 new op (OpTransition retry), got %d: %+v", len(log.appended), log.appended)
+	}
+	if log.appended[0].Type != ops.OpTransition {
+		t.Errorf("appended op type: got %q, want OpTransition", log.appended[0].Type)
+	}
+	if log.appended[0].Payload.To != ops.StatusBlocked {
+		t.Errorf("transition target: got %q, want %q", log.appended[0].Payload.To, ops.StatusBlocked)
 	}
 }
 
