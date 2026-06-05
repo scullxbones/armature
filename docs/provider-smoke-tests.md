@@ -1,13 +1,15 @@
-# Provider Smoke Tests (Claude + Codex)
+# Hook Guardrail Smoke Checks (Claude + Codex)
 
 This runbook verifies that worker agents can claim, implement, and complete tasks
 using the standard coordinator dispatch flow with Claude and Codex as the AI provider.
+This runbook verifies harness-native hook enforcement for external workers that
+invoke `arm harness-hook`.
 
-Devin is intentionally deferred for a later phase.
+Devin remains deferred for a later phase.
 
 ## Preconditions
 
-- `arm` binary is built from current branch.
+- `arm` binary is built from the current branch.
 - `arm doctor` is green.
 - Worker identity exists:
   - `arm worker-init --check || arm worker-init`
@@ -49,6 +51,15 @@ Devin is intentionally deferred for a later phase.
 
 ## Codex Provider Smoke
 
+1. Confirm hook config exists:
+   - `codex.toml`
+2. Confirm the config calls `arm harness-hook`.
+3. Export:
+   - `ARMATURE_TASK_ID=<ISSUE-ID>`
+   - `ARMATURE_HOOK_PLATFORM=codex`
+4. Run an in-scope structured hook event through stdin and expect approval.
+5. Run an out-of-scope structured hook event through stdin and expect denial.
+6. Verify the denial includes the violating path and the task scope boundary.
 1. Claim a test task and render context:
    - `arm claim <TASK-ID>`
    - `arm render-context <TASK-ID> --format agent`
@@ -62,13 +73,16 @@ Devin is intentionally deferred for a later phase.
 
 ## Evidence Capture
 
-Record these in task notes or PR description:
+Record these in task notes or the PR description:
 
 - command lines used
 - exit codes
+- approval and denial payloads
 - final issue status
 - environment notes (OS, shell, provider versions)
 
 ## Known Follow-Up
 
+- Add Devin smoke coverage after the Devin hook path is exercised in the same
+  retained hook model.
 - Add Devin smoke section after Devin support is enabled.
