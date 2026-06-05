@@ -2,30 +2,47 @@ package sources
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
+// mockTransport is shared across test files in this package.
+type mockTransport struct {
+	fn func(*http.Request) (*http.Response, error)
+}
+
+func (m *mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return m.fn(r)
+}
+
+func mockClient(fn func(*http.Request) (*http.Response, error)) *http.Client {
+	return &http.Client{Transport: &mockTransport{fn: fn}}
+}
+
+func mockResp(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+}
+
 func TestFetchHTTP_BearerToken(t *testing.T) {
 	const wantBody = `{"data":"hello"}`
 	const token = "my-bearer-token"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("Authorization") != "Bearer "+token {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer srv.Close()
+		return mockResp(http.StatusOK, wantBody), nil
+	})
 
-	client := &http.Client{}
-
-	got, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/", "", "", token)
+	got, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/", "", "", token)
 	if err != nil {
 		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
@@ -37,20 +54,15 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 func TestFetchHTTP_BasicAuth(t *testing.T) {
 	const wantBody = `{"result":"ok"}`
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != "alice" || pass != "secret" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer srv.Close()
+		return mockResp(http.StatusOK, wantBody), nil
+	})
 
-	client := &http.Client{}
-
-	got, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/", "alice", "secret", "")
+	got, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/", "alice", "secret", "")
 	if err != nil {
 		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
@@ -60,14 +72,11 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_ErrorStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer srv.Close()
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
+		return mockResp(http.StatusNotFound, "not found"), nil
+	})
 
-	client := &http.Client{}
-
-	_, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/missing", "", "", "")
+	_, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/missing", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
@@ -76,15 +85,11 @@ func TestFetchHTTP_ErrorStatus(t *testing.T) {
 func TestFetchHTTP_NoAuth(t *testing.T) {
 	const wantBody = `{"public":"data"}`
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer srv.Close()
+	client := mockClient(func(r *http.Request) (*http.Response, error) {
+		return mockResp(http.StatusOK, wantBody), nil
+	})
 
-	client := &http.Client{}
-
-	got, err := adapters.FetchHTTP(context.Background(), client, srv.URL+"/", "", "", "")
+	got, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/", "", "", "")
 	if err != nil {
 		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}

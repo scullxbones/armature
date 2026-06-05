@@ -54,7 +54,7 @@ lint:
 		echo "Then ensure ~/go/bin is on your PATH."; \
 		exit 1; \
 	}
-	golangci-lint run ./...
+	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
 
 mutate:
 	@command -v gremlins >/dev/null 2>&1 || { \

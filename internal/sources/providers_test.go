@@ -1,51 +1,47 @@
-package sources_test
+package sources
 
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/sources"
+	"github.com/scullxbones/armature/internal/adapters"
 )
+
+func newConfluenceWithMock(fn func(*http.Request) (*http.Response, error), baseURL string, creds Credentials) *ConfluenceProvider {
+	return &ConfluenceProvider{baseURL: baseURL, creds: creds, client: mockClient(fn)}
+}
+
+func newSharePointWithMock(fn func(*http.Request) (*http.Response, error), baseURL string, creds Credentials) *SharePointProvider {
+	return &SharePointProvider{baseURL: baseURL, creds: creds, client: mockClient(fn)}
+}
 
 func TestConfluenceProviderFetch(t *testing.T) {
 	const expectedBody = `{"title":"Test Page","body":"hello confluence"}`
 	const token = "test-confluence-token"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	provider := newConfluenceWithMock(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path != "/wiki/pages/42" {
-			http.NotFound(w, r)
-			return
+			return mockResp(http.StatusNotFound, "not found"), nil
 		}
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+token {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(expectedBody))
-	}))
-	defer srv.Close()
-
-	creds := sources.Credentials{Token: token}
-	provider := sources.NewConfluenceProvider(srv.URL, creds)
+		resp := mockResp(http.StatusOK, expectedBody)
+		resp.Header.Set("Content-Type", "application/json")
+		return resp, nil
+	}, "http://example.com", Credentials{Token: token})
 
 	if provider.Type() != "confluence" {
 		t.Fatalf("expected Type() == %q, got %q", "confluence", provider.Type())
 	}
 
-	entry := sources.SourceEntry{
-		ID:  "page-42",
-		URL: "/wiki/pages/42",
-	}
+	entry := SourceEntry{ID: "page-42", URL: "/wiki/pages/42"}
 
 	got, err := provider.Fetch(context.Background(), entry)
 	if err != nil {
 		t.Fatalf("Fetch returned unexpected error: %v", err)
 	}
-
 	if string(got) != expectedBody {
 		t.Errorf("Fetch body mismatch:\n  got:  %q\n  want: %q", string(got), expectedBody)
 	}
@@ -54,27 +50,20 @@ func TestConfluenceProviderFetch(t *testing.T) {
 func TestConfluenceProviderFetchBasicAuth(t *testing.T) {
 	const expectedBody = `{"result":"ok"}`
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, pass, ok := r.BasicAuth()
-		if !ok || user != "admin" || pass != "secret" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+	provider := newConfluenceWithMock(func(r *http.Request) (*http.Response, error) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != "admin" || p != "secret" {
+			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(expectedBody))
-	}))
-	defer srv.Close()
+		return mockResp(http.StatusOK, expectedBody), nil
+	}, "http://example.com", Credentials{Username: "admin", Password: "secret"})
 
-	creds := sources.Credentials{Username: "admin", Password: "secret"}
-	provider := sources.NewConfluenceProvider(srv.URL, creds)
-
-	entry := sources.SourceEntry{ID: "doc-1", URL: "/"}
+	entry := SourceEntry{ID: "doc-1", URL: "/"}
 
 	got, err := provider.Fetch(context.Background(), entry)
 	if err != nil {
 		t.Fatalf("Fetch returned unexpected error: %v", err)
 	}
-
 	if string(got) != expectedBody {
 		t.Errorf("Fetch body mismatch:\n  got:  %q\n  want: %q", string(got), expectedBody)
 	}
@@ -84,55 +73,45 @@ func TestSharePointProviderFetch(t *testing.T) {
 	const expectedBody = `{"value":"SharePoint document content"}`
 	const token = "test-sharepoint-token"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	provider := newSharePointWithMock(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path != "/sites/docs/item/99" {
-			http.NotFound(w, r)
-			return
+			return mockResp(http.StatusNotFound, "not found"), nil
 		}
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+token {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(expectedBody))
-	}))
-	defer srv.Close()
-
-	creds := sources.Credentials{Token: token}
-	provider := sources.NewSharePointProvider(srv.URL, creds)
+		resp := mockResp(http.StatusOK, expectedBody)
+		resp.Header.Set("Content-Type", "application/json")
+		return resp, nil
+	}, "http://example.com", Credentials{Token: token})
 
 	if provider.Type() != "sharepoint" {
 		t.Fatalf("expected Type() == %q, got %q", "sharepoint", provider.Type())
 	}
 
-	entry := sources.SourceEntry{
-		ID:  "item-99",
-		URL: "/sites/docs/item/99",
-	}
+	entry := SourceEntry{ID: "item-99", URL: "/sites/docs/item/99"}
 
 	got, err := provider.Fetch(context.Background(), entry)
 	if err != nil {
 		t.Fatalf("Fetch returned unexpected error: %v", err)
 	}
-
 	if string(got) != expectedBody {
 		t.Errorf("Fetch body mismatch:\n  got:  %q\n  want: %q", string(got), expectedBody)
 	}
 }
 
 func TestSharePointProviderFetchErrorStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer srv.Close()
+	provider := newSharePointWithMock(func(r *http.Request) (*http.Response, error) {
+		return mockResp(http.StatusNotFound, "not found"), nil
+	}, "http://example.com", Credentials{Token: "tok"})
 
-	provider := sources.NewSharePointProvider(srv.URL, sources.Credentials{Token: "tok"})
-	entry := sources.SourceEntry{ID: "x", URL: "/missing"}
+	entry := SourceEntry{ID: "x", URL: "/missing"}
 
 	_, err := provider.Fetch(context.Background(), entry)
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
 }
+
+// Ensure the test helpers satisfy the adapters.HTTPClient interface.
+var _ adapters.HTTPClient = (*http.Client)(nil)
