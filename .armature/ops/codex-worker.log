@@ -481,3 +481,4 @@
 ["transition","ORCRMV-T02",1780629145,"codex-worker",{"to":"merged"}]
 ["note","ORCRMV-T03",1780629162,"codex-worker",{"msg":"Scope overlap with HKREFACT-T14 detected at claim time"}]
 ["note","HKREFACT-T14",1780629162,"codex-worker",{"msg":"Scope overlap with ORCRMV-T03 detected at claim time"}]
+["claim","ORCRMV-T03",1780629162,"codex-worker",{"ttl":60}]
