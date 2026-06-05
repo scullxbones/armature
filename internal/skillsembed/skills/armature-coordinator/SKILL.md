@@ -1,26 +1,24 @@
 ---
 name: armature-coordinator
 description: >
-  Use when operating orchestration in an armature-managed repository — supervises
-  runtime loops (`arm worker run`), scales concurrent workers,
-  integrates outcomes, validates citation coverage, and closes stories with a
-  pull request. Manual worker dispatch remains available as a fallback path.
+  Use when operating orchestration in an armature-managed repository — surveys
+  the story DAG, dispatches workers wave by wave, integrates outcomes, validates
+  citation coverage, and closes stories with a pull request.
   Does not require a worker identity (skip worker-init). Requires arm on PATH.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
-# Armature Coordinator Loop (Orchestrator-First)
+# Armature Coordinator
 
 The coordinator manages execution flow — it does not implement features itself.
-Its default job is to run and supervise runtime workers via `arm worker run`.
+Its job is to survey the story DAG, dispatch workers for each wave of ready tasks,
+and close the story when all tasks are done.
 
 ## Prerequisites
 
 1. If `arm` is not found, stop and resolve this before proceeding.
 
 2. **No worker identity required.** The coordinator skips `arm worker-init`.
-   Orchestrator ops (claims, story transitions) go to the plain `<worker-id>.log`;
-   if no worker ID is set, armature uses a fallback. Only workers need an identity.
 
 3. Understand the story DAG before dispatching. Run:
    ```
@@ -39,8 +37,7 @@ digraph coordinator_loop {
     "Parallel?" [shape=diamond];
     "Sequential wave" [shape=box];
     "Parallel wave" [shape=box];
-    "Assign slots + claim all" [shape=box];
-    "render-context all" [shape=box];
+    "Claim + render-context all" [shape=box];
     "dispatch workers" [shape=box];
     "wait + integrate" [shape=box];
     "arm validate" [shape=box];
@@ -51,12 +48,11 @@ digraph coordinator_loop {
     "arm ready" -> "Empty?";
     "Empty?" -> "arm validate" [label="yes — all done"];
     "Empty?" -> "Parallel?" [label="no"];
-    "Parallel?" -> "Sequential wave" [label="no deps between tasks"];
+    "Parallel?" -> "Sequential wave" [label="deps between tasks"];
     "Parallel?" -> "Parallel wave" [label="independent tasks"];
     "Sequential wave" -> "dispatch workers";
-    "Parallel wave" -> "Assign slots + claim all";
-    "Assign slots + claim all" -> "render-context all";
-    "render-context all" -> "dispatch workers";
+    "Parallel wave" -> "Claim + render-context all";
+    "Claim + render-context all" -> "dispatch workers";
     "dispatch workers" -> "wait + integrate";
     "wait + integrate" -> "arm ready";
     "arm validate" -> "transition story";
@@ -102,43 +98,36 @@ arm list --status blocked              # diagnose blockers
 did not make it into the ready queue. Use it as the first step whenever the
 queue looks unexpectedly empty.
 
-### 3. Default Dispatch: Runtime Loop
+### 3. Dispatch Workers
 
-For normal queue draining:
+For each wave of ready tasks:
 
-```bash
-arm worker run --max-runtime 20m
-```
+1. Claim and get context for each task:
+   ```bash
+   arm claim TASK-ID [--ttl 3600]
+   arm render-context TASK-ID --format agent
+   ```
 
-If runtime escalates, first capture diagnostics:
-```bash
-arm worker run --format json --max-runtime 20m
-```
-When idle, inspect `idle_diagnostics` in the JSON payload. On timeout, use
-`arm ready --explain --format json` to identify blocked gates, then inspect
-the affected issue with `arm show TASK-ID` before retrying.
+2. Dispatch each task to a worker agent using your platform's agent dispatch
+   capability. Pass the full `render-context` output as the task specification.
+
+3. For parallel waves, assign each worker a log slot before dispatch:
+   ```bash
+   export ARM_LOG_SLOT=<slot-number>
+   ```
+
+See [Dispatch Protocol](#dispatch-protocol) below for the full worker prompt format.
 
 ### 4. Parallel Dispatch (independent tasks in one wave)
 
-Run multiple runtime processes concurrently. Each process:
-1. runs `arm worker run`
-2. handles claim contention internally
-3. repeats until no tasks are ready
+Pre-claim all tasks in the wave, then dispatch workers concurrently. Each worker:
+1. receives the pre-claimed issue context
+2. implements and transitions to `done`
+3. does NOT run `arm claim` again
 
-Claim collisions are normal under concurrency and should be retried automatically.
-
-### 5. Manual Worker Dispatch (Fallback Path)
-
-Use this only for exceptional cases that require human-guided execution. For
-manual dispatch details and log slot setup, see
-`references/parallel-dispatch.md`.
+Claim collisions are handled at pre-claim time by the coordinator.
 
 ---
-
-## Manual Fallback Appendix
-
-Everything below is for manual worker dispatch only. Do not use this appendix
-for normal orchestrator pull-mode operations.
 
 ## Dispatch Protocol
 
@@ -149,16 +138,14 @@ Each worker's context package must contain:
    You are an armature worker. Invoke the `armature-worker` skill via the Skill tool before proceeding.
    ```
    This must appear before everything else — the skill loads the worker's
-   operating procedure and pre-flight checks. Workers that skip this step
-   may miss critical setup steps or validations.
+   operating procedure and pre-flight checks.
 
 1. **Log slot (second instruction, before any `arm` command):**
    ```
    Before running any arm command, run: export ARM_LOG_SLOT=<assigned-slot>
    ```
    This must be the second line of the worker's prompt — immediately after
-   the skill invocation and before any other instructions. See
-   [Log Slots](#log-slots-for-parallel-dispatch) for why.
+   the skill invocation.
 
 2. **Full `render-context` output** — this is the worker's complete task spec.
    Do not summarize it; pass it verbatim.
@@ -181,24 +168,19 @@ Each worker's context package must contain:
    ```
 
 6. **Commit instruction** — instruct the worker to stage files explicitly using
-   the task's `scope` field, not `git commit -am` (which silently skips new files):
+   the task's `scope` field, not `git commit -am`:
    ```
    Commit: git add <each file listed in scope> && git commit -m "feat(ISSUE-ID): ..."
    ```
 
-**Dispatch using your platform's agent dispatch capability** — the exact tool
-or API call depends on your runtime. The content above is what matters; the
-mechanism is platform-specific.
-
-> **Background agent Bash limitation:** Background agents (e.g. sub-agents
-> dispatched via the API without an active terminal session) cannot inherit the
-> parent session's Bash permissions. Shell commands will block silently, causing
-> the worker to hang indefinitely. To avoid this, prefer one of:
+> **Background agent Bash limitation:** Background agents dispatched without an
+> active terminal session cannot inherit the parent session's Bash permissions.
+> Shell commands will block silently, causing the worker to hang indefinitely.
+> To avoid this, prefer:
 > - **Direct implementation** — have the coordinator implement small, well-scoped
 >   tasks itself rather than dispatching a background agent.
 > - **Foreground worktrees** — create a git worktree manually and run the worker
->   in a foreground terminal session so it inherits Bash permissions from the
->   active shell.
+>   in a foreground terminal session so it inherits Bash permissions.
 
 ---
 
@@ -215,8 +197,7 @@ arm list --status in-progress         # any stragglers?
 ### b. Check for scope conflicts and merge conflicts
 
 If workers operated in separate git worktrees or branches, merge them into the
-story feature branch now. Resolve any conflicts before proceeding. Check for
-files that were modified by multiple workers.
+story feature branch now. Resolve any conflicts before proceeding.
 
 ### c. Mark completed tasks merged
 
@@ -227,8 +208,7 @@ arm merged --issue TASK-ID
 ```
 
 This promotes each completed task from `done` to `merged` so dependent work can
-unblock cleanly before the next wave begins. Do this immediately after task
-status verification and before the build check.
+unblock cleanly before the next wave begins.
 
 ### d. Verify build integrity
 ```bash
@@ -242,36 +222,27 @@ Do not proceed to the next wave or story close if the build is red.
 arm validate
 ```
 
-Every issue that was touched should appear as cited. If `validate` shows
-`uncited node: ID`, run:
+If `validate` shows `uncited node: ID`, run:
 ```bash
 arm source-link --issue ID --source SOURCE-UUID   # if a source doc exists
 # or
 arm accept-citation --issue ID --ci               # if no source, mark as self-citing
 ```
 
-Repeat until `arm validate` shows no errors.
-
 ### f. Clean up worktrees
 
-If workers used git worktrees, remove them after their branches are merged into
-the story feature branch:
+If workers used git worktrees, remove them after their branches are merged:
 
 ```bash
-git worktree list                          # confirm which worktrees exist
-git worktree remove <path> --force         # remove each worker worktree
-git branch -d <worker-branch>             # delete the local branch if no longer needed
+git worktree list
+git worktree remove <path> --force
+git branch -d <worker-branch>
 ```
-
-Leaving stale worktrees causes `git worktree list` clutter and can block future
-worktree operations on the same path.
 
 ### g. Continue to next wave
 ```bash
 arm ready    # next wave should now be unblocked
 ```
-
-Repeat the loop from step 2.
 
 ---
 
@@ -282,45 +253,35 @@ When `arm ready` returns empty and all tasks are `done`:
 ### 1. Run the Auditor (pre-merge gate)
 
 Dispatch the **armature-auditor** skill as a subagent before any story transition.
-The auditor is a five-step pre-merge gate — it must give all-clear before you
-proceed.
+The auditor is a five-step pre-merge gate — it must give all-clear before you proceed.
 
 **Invoke via the `Skill` tool:**
 ```
 Skill("armature-auditor")
 ```
 
-The auditor checks, in order:
+The auditor checks:
 1. Citation integrity (`arm validate` — zero ERRORs, `COVERAGE: N/N cited`)
 2. Source freshness (`arm sources verify` — zero MISSING)
-3. Outcome quality (concrete outcomes against acceptance criteria for each done task)
+3. Outcome quality (concrete outcomes against acceptance criteria)
 4. Scope overlap (`arm validate --strict` — zero overlap warnings)
 5. Repo health (`arm doctor --strict` — exit zero)
 
 **Do not proceed to step 2 until the auditor reports all five checks green.**
-If the auditor flags issues, return them to the relevant workers for remediation,
-then re-run the auditor before continuing.
 
 ### 2. Transition the story
 ```bash
 arm transition STORY-ID --to done --outcome "brief summary of what was delivered"
 ```
 
-`arm transition` will error if any uncited issues remain — the auditor in step 1
-should have caught this.
-
 ### 3. Commit armature ops (single-branch mode only)
 
-In single-branch mode, story and epic transitions generate ops that need a
-mop-up commit:
 ```bash
 git status
 git add .armature/ && git commit -m "chore(STORY-ID): sync armature state"
 ```
 
-In **dual-branch mode** (`git config --local armature.mode` returns `dual-branch`),
-ops are automatically committed to the `_armature` branch. Omit `.armature/` from
-the code commit; include only code files if any remain unstaged.
+In **dual-branch mode**, ops are automatically committed to the `_armature` branch.
 
 ### 4. Push and open PR
 ```bash
@@ -330,27 +291,7 @@ git push -u origin HEAD
 # PR body: list each task ISSUE-ID and its one-line outcome
 ```
 
-**One PR per story** — not per task (too many small PRs), not per epic (too
-large to review). Story-level PRs give reviewers clear scope.
-
-**CI and tag-push note:** If your CI pipeline triggers on tag pushes as well
-as branch pushes, story feature branches (e.g. `feat/STORY-ID`) will not
-accidentally fire tag-based workflows as long as your CI config uses a
-`branches:` filter. Example for GitHub Actions:
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-      - 'feat/**'
-```
-
-Without a `branches:` filter a `git push --tags` can trigger branch-push
-workflows unexpectedly. If you see spurious CI runs after tagging, add or
-tighten the `branches:` filter in your workflow file.
-
-For JSON query patterns and the full command reference, see `references/commands.md`.
+**One PR per story.**
 
 ---
 
@@ -359,6 +300,6 @@ For JSON query patterns and the full command reference, see `references/commands
 | Failure | Cause | Fix |
 |---|---|---|
 | Parallel agents share one log, attribution lost | Forgot to embed `ARM_LOG_SLOT` in each agent's prompt | Include `export ARM_LOG_SLOT=<slot>` as the first instruction in each agent's prompt before dispatch |
-| Build breaks after merging parallel branches | Skipped integration verification | After each wave, run `make check` (or equivalent) on the merged result before claiming the next wave |
+| Build breaks after merging parallel branches | Skipped integration verification | After each wave, run `make check` before claiming the next wave |
 | `arm transition STORY-ID --to done` errors with uncited nodes | Story transitioned before all issues were cited | Run `arm validate`; for each `uncited node: ID`, run `arm source-link` or `arm accept-citation --ci`; then retry transition |
-| Armature ops from story/epic transitions are never committed | Forgot mop-up commit before push | After story transition, run `git status`; if `.armature/` has changes, commit them with `git add .armature/ && git commit -m "chore(STORY-ID): sync armature state"` before pushing (single-branch mode only) |
+| Armature ops not committed | Forgot mop-up commit before push | After story transition, run `git status`; if `.armature/` has changes, commit them (single-branch mode only) |
