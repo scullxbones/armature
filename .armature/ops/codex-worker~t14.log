@@ -1,0 +1,1 @@
+["transition","HKREFACT-T14",1780697581,"codex-worker~t14",{"to":"done","outcome":"Durable note deletion implemented: arm note emits note_id, arm note delete writes tombstone op, materialization marks deleted notes, render-context filters them. Committed in 06c6eead."}]
