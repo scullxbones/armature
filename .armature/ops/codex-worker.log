@@ -488,3 +488,4 @@
 ["transition","ORCRMV-T03",1780629307,"codex-worker",{"to":"merged"}]
 ["claim","ORCRMV-T04",1780629311,"codex-worker",{"ttl":60}]
 ["note","HKREFACT-T02",1780629350,"codex-worker",{"msg":"Serial claim: scope overlap with HKREFACT-T01 (same worker, dismissed)"}]
+["claim","HKREFACT-T02",1780629350,"codex-worker",{"ttl":60}]
