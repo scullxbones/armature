@@ -582,3 +582,4 @@
 ["source-fingerprint","4af54cb6-d757-4f33-b247-c6341b3ef3d6",1780658290,"codex-worker",{"sha":"82aaf2d6818283c8908f89dd919e657534169befcec259dabb1aed90e1e2010d","provider":"filesystem"}]
 ["source-fingerprint","a6c55e83-7fee-408b-afb2-075517a897c3",1780658290,"codex-worker",{"sha":"0a2197269852f9b1f0045eb62fd1a95692363ce73a1d3d9cb380086973dab389","provider":"filesystem"}]
 ["transition","ORCRMV-T08",1780658321,"codex-worker",{"to":"done","outcome":"Updated 6 source URLs in manifest.json to archive paths (44fecba4, 7a92f2d9, 87d9e29e, 9542f8e2, b027c51e, c95548e6). arm sources sync completed with 0 MISSING. arm validate --ci and arm doctor exit 0."}]
+["claim","HKREFACT-T04",1780658347,"codex-worker",{"ttl":60}]
