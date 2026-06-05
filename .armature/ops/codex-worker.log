@@ -589,3 +589,5 @@
 ["claim","ORCRMV-T09",1780658362,"codex-worker",{"ttl":60}]
 ["claim","HKREFACT-T05",1780658488,"codex-worker",{"ttl":60}]
 ["heartbeat","ORCRMV-T09",1780658825,"codex-worker",{}]
+["transition","HKREFACT-T05",1780658998,"codex-worker",{"to":"done","outcome":"Added task policy resolver that loads scope, acceptance, and citation checks from materialized task state and source manifests."}]
+["transition","HKREFACT-T06",1780658998,"codex-worker",{"to":"done","outcome":"Added hidden harness-hook command that rematerializes task state, resolves hook policy, evaluates events, and emits platform-native decisions."}]
