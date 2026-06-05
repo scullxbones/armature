@@ -595,3 +595,4 @@
 ["transition","ORCRMV-T09",1780659139,"codex-worker",{"to":"done","outcome":"All deleted Go surfaces absent. No stale CLI/op vocab in docs/skills. make check passes. arm materialize, sources verify (0 MISSING), validate --ci (389/389 cited), and doctor all exit zero."}]
 ["transition","ORCRMV-T09",1780659150,"codex-worker",{"to":"merged"}]
 ["transition","ORCRMV-T05",1780659166,"codex-worker",{"to":"merged"}]
+["transition","ORCRMV",1780659201,"codex-worker",{"to":"done","outcome":"Removed arm orchestrate, arm worker run, internal/orchestrate (29 files), internal/workerruntime (8 files), 9 op vocab constants, OrchestratorConfig. Rewrote 3 skills. Archived 30 design docs. Updated 6 source registrations. make check green, 389/389 cited, doctor --strict clean."}]
