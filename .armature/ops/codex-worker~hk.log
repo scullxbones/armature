@@ -1,0 +1,1 @@
+["transition","HKREFACT",1780697604,"codex-worker~hk",{"to":"done","outcome":"All subtasks complete. Managed-execution removal design implemented across harness hooks, hook policy, platform adapters, note deletion with tombstone model. make check green: lint, tests (36 packages), coverage 80.2%, mutation testing 99.75% efficacy."}]
