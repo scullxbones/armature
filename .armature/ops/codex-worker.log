@@ -593,3 +593,4 @@
 ["transition","HKREFACT-T06",1780658998,"codex-worker",{"to":"done","outcome":"Added hidden harness-hook command that rematerializes task state, resolves hook policy, evaluates events, and emits platform-native decisions."}]
 ["transition","HKREFACT-T04",1780658998,"codex-worker",{"to":"done","outcome":"Added Claude, Codex, and Devin platform hook adapters with native config generation and decision encoding."}]
 ["transition","ORCRMV-T09",1780659139,"codex-worker",{"to":"done","outcome":"All deleted Go surfaces absent. No stale CLI/op vocab in docs/skills. make check passes. arm materialize, sources verify (0 MISSING), validate --ci (389/389 cited), and doctor all exit zero."}]
+["transition","ORCRMV-T09",1780659150,"codex-worker",{"to":"merged"}]
