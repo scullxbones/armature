@@ -485,3 +485,4 @@
 ["claim","HKREFACT-T01",1780629215,"codex-worker",{"ttl":60}]
 ["transition","HKREFACT",1780629215,"codex-worker",{"to":"in-progress"}]
 ["transition","ORCRMV-T03",1780629305,"codex-worker",{"to":"done","outcome":"Deleted orchestrate.go, worker_run.go, worker.go + tests; removed orchestrateCmd and workerCmd from main.go; TestManagedExecutionCommandsAreNotRegistered added and passing; go test ./cmd/armature passes"}]
+["transition","ORCRMV-T03",1780629307,"codex-worker",{"to":"merged"}]
