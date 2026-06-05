@@ -499,3 +499,4 @@
 ["transition","ORCRMV-T05",1780629625,"codex-worker",{"to":"done","outcome":"Removed 9 orchestrate-*/worker-runtime-decision constants, FailureRecord, payload fields, and no-op materialize case; TestManagedExecutionOperationTypesAreInvalid passes; arm materialize succeeds; go test ./... passes"}]
 ["claim","ORCRMV-T06",1780629631,"codex-worker",{"ttl":60}]
 ["transition","ORCRMV-T06",1780629780,"codex-worker",{"to":"done","outcome":"armature-orchestrator skill deleted; armature/armature-coordinator/armature-worker skills rewritten with no arm orchestrate/arm worker run references; TestInstallSkills passes"}]
+["transition","ORCRMV-T06",1780629781,"codex-worker",{"to":"merged"}]
