@@ -9,6 +9,7 @@ const (
 	OpHeartbeat         = "heartbeat"
 	OpTransition        = "transition"
 	OpNote              = "note"
+	OpNoteDelete        = "note-delete"
 	OpLink              = "link"
 	OpUnlink            = "unlink"
 	OpSourceLink        = "source-link"
@@ -28,7 +29,7 @@ const (
 // ValidOpTypes for validation.
 var ValidOpTypes = map[string]bool{
 	OpCreate: true, OpClaim: true, OpHeartbeat: true,
-	OpTransition: true, OpNote: true, OpLink: true, OpUnlink: true,
+	OpTransition: true, OpNote: true, OpNoteDelete: true, OpLink: true, OpUnlink: true,
 	OpSourceLink: true, OpSourceFingerprint: true,
 	OpDAGTransition: true, OpDecision: true,
 	OpAssign:           true,
@@ -94,7 +95,8 @@ type Payload struct {
 	PR      string `json:"pr,omitempty"`
 
 	// note
-	Msg string `json:"msg,omitempty"`
+	Msg    string `json:"msg,omitempty"`
+	NoteID string `json:"note_id,omitempty"`
 
 	// link
 	Dep string `json:"dep,omitempty"`

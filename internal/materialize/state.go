@@ -61,9 +61,11 @@ type SourceLink struct {
 }
 
 type Note struct {
+	ID        string `json:"id,omitempty"`
 	WorkerID  string `json:"worker_id"`
 	Timestamp int64  `json:"timestamp"`
 	Msg       string `json:"msg"`
+	Deleted   bool   `json:"deleted,omitempty"`
 }
 
 type Decision struct {

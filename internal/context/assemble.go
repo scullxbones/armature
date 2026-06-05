@@ -183,7 +183,16 @@ func buildNotes(issue *materialize.Issue) Layer {
 	if len(issue.Notes) == 0 {
 		return Layer{Name: "notes", Priority: 6, Content: ""}
 	}
-	notes := issue.Notes
+	notes := make([]materialize.Note, 0, len(issue.Notes))
+	for _, note := range issue.Notes {
+		if note.Deleted {
+			continue
+		}
+		notes = append(notes, note)
+	}
+	if len(notes) == 0 {
+		return Layer{Name: "notes", Priority: 6, Content: ""}
+	}
 	// Take most recent 5
 	if len(notes) > 5 {
 		notes = notes[len(notes)-5:]

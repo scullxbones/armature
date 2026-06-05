@@ -385,6 +385,38 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 	assert.NotContains(t, notesLayer.Content, "note-1")
 }
 
+func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:     "TST-001",
+		Title:  "Test",
+		Type:   "task",
+		Status: "open",
+		Notes: []materialize.Note{
+			{ID: "note-1", WorkerID: "w1", Msg: "visible note", Timestamp: 1000},
+			{ID: "note-2", WorkerID: "w1", Msg: "deleted note", Timestamp: 2000, Deleted: true},
+		},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+
+	ctx, err := Assemble("TST-001", stateDir, state)
+	require.NoError(t, err)
+
+	var notesLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "notes" {
+			notesLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, notesLayer)
+	assert.Contains(t, notesLayer.Content, "visible note")
+	assert.NotContains(t, notesLayer.Content, "deleted note")
+}
+
 func TestBuildSiblingOutcomes(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["TST-P"] = &materialize.Issue{
