@@ -606,3 +606,4 @@
 ["transition","HKREFACT-T11",1780660329,"codex-worker",{"to":"done","outcome":"Rewrote command and smoke-test docs around arm harness-hook and removed stale managed-execution guidance."}]
 ["note","HKREFACT-T12",1780660660,"codex-worker",{"msg":"Scope overlap with HKREFACT detected at claim time"}]
 ["note","HKREFACT",1780660660,"codex-worker",{"msg":"Scope overlap with HKREFACT-T12 detected at claim time"}]
+["claim","HKREFACT-T12",1780660660,"codex-worker",{"ttl":60}]
