@@ -57,16 +57,6 @@ func (s *State) ApplyOp(op ops.Op) error {
 		return s.applyScopeDelete(op)
 	case ops.OpReparent:
 		return s.applyReparent(op)
-	case ops.OpOrchestrateStart,
-		ops.OpOrchestrateDispatch,
-		ops.OpOrchestrateDispatchComplete,
-		ops.OpOrchestrateVerifyFail,
-		ops.OpOrchestrateRetry,
-		ops.OpOrchestrateEscalate,
-		ops.OpOrchestrateComplete,
-		ops.OpOrchestrateCheckResult,
-		ops.OpWorkerRuntimeDecision:
-		return nil
 	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}

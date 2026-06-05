@@ -55,15 +55,17 @@ func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T
 	assert.Equal(t, int64(200), issue.ClaimedAt)
 }
 
-func TestApplyWorkerRuntimeDecisionOp_NoOp(t *testing.T) {
+func TestApplyUnknownOpType_ReturnsError(t *testing.T) {
 	state := NewState()
-	require.NoError(t, state.ApplyOp(ops.Op{
-		Type:      ops.OpWorkerRuntimeDecision,
+	err := state.ApplyOp(ops.Op{
+		Type:      "worker-runtime-decision",
 		TargetID:  "task-01",
 		Timestamp: 100,
 		WorkerID:  "worker-a",
 		Payload:   ops.Payload{Msg: "runtime decision"},
-	}))
+	})
+	require.Error(t, err, "unknown op type must return an error")
+	assert.Contains(t, err.Error(), "unknown op type")
 }
 
 func TestApplyTransitionOp(t *testing.T) {
@@ -1007,28 +1009,30 @@ func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
 	assert.Equal(t, "claude-sonnet-5", loaded.PreferredModel)
 }
 
-func TestApplyOp_OrchestrationOps_IgnoredWithoutError(t *testing.T) {
-	// Materializer must silently ignore all 8 orchestration op types without error.
+func TestApplyOp_ManagedExecutionOps_ReturnUnknownError(t *testing.T) {
+	// Materializer must return unknown-op-type errors for managed-execution op types.
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
 		Payload: ops.Payload{Title: "T", NodeType: "task"},
 	}))
-	orchOps := []string{
-		ops.OpOrchestrateStart,
-		ops.OpOrchestrateDispatch,
-		ops.OpOrchestrateDispatchComplete,
-		ops.OpOrchestrateVerifyFail,
-		ops.OpOrchestrateRetry,
-		ops.OpOrchestrateEscalate,
-		ops.OpOrchestrateComplete,
-		ops.OpOrchestrateCheckResult,
+	removedOps := []string{
+		"orchestrate-start",
+		"orchestrate-dispatch",
+		"orchestrate-dispatch-complete",
+		"orchestrate-verify-fail",
+		"orchestrate-retry",
+		"orchestrate-escalate",
+		"orchestrate-complete",
+		"orchestrate-check-result",
+		"worker-runtime-decision",
 	}
-	for _, opType := range orchOps {
+	for _, opType := range removedOps {
 		err := state.ApplyOp(ops.Op{
 			Type: opType, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
 		})
-		assert.NoError(t, err, "op type %q should be ignored without error", opType)
+		assert.Error(t, err, "managed-execution op type %q must return an error", opType)
+		assert.Contains(t, err.Error(), "unknown op type", "error must say 'unknown op type'")
 	}
 }
 

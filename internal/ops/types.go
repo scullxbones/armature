@@ -23,17 +23,6 @@ const (
 
 	// OpReparent moves an issue to a new parent.
 	OpReparent = "reparent"
-
-	// Orchestration op types for E7 orchestrator.
-	OpOrchestrateStart            = "orchestrate-start"
-	OpOrchestrateDispatch         = "orchestrate-dispatch"
-	OpOrchestrateDispatchComplete = "orchestrate-dispatch-complete"
-	OpOrchestrateVerifyFail       = "orchestrate-verify-fail"
-	OpOrchestrateRetry            = "orchestrate-retry"
-	OpOrchestrateEscalate         = "orchestrate-escalate"
-	OpOrchestrateComplete         = "orchestrate-complete"
-	OpOrchestrateCheckResult      = "orchestrate-check-result"
-	OpWorkerRuntimeDecision       = "worker-runtime-decision"
 )
 
 // ValidOpTypes for validation.
@@ -48,23 +37,6 @@ var ValidOpTypes = map[string]bool{
 	OpScopeRename:      true,
 	OpScopeDelete:      true,
 	OpReparent:         true,
-
-	OpOrchestrateStart:            true,
-	OpOrchestrateDispatch:         true,
-	OpOrchestrateDispatchComplete: true,
-	OpOrchestrateVerifyFail:       true,
-	OpOrchestrateRetry:            true,
-	OpOrchestrateEscalate:         true,
-	OpOrchestrateComplete:         true,
-	OpOrchestrateCheckResult:      true,
-	OpWorkerRuntimeDecision:       true,
-}
-
-// FailureRecord captures a single orchestration failure event.
-type FailureRecord struct {
-	IssueID   string `json:"issue_id"`
-	Reason    string `json:"reason"`
-	Timestamp int64  `json:"timestamp"`
 }
 
 // Issue statuses.
@@ -171,15 +143,4 @@ type Payload struct {
 
 	// create — preferred model hint for the assigned agent
 	PreferredModel string `json:"preferred_model,omitempty"`
-
-	// orchestrate-start, orchestrate-dispatch, orchestrate-retry payload fields
-	WorktreePath   string `json:"worktree_path,omitempty"`
-	PreDispatchRef string `json:"pre_dispatch_ref,omitempty"`
-	RetryBudget    int    `json:"retry_budget,omitempty"`
-	Run            int    `json:"run,omitempty"`
-
-	// worker-runtime durable audit fields
-	CorrelationID string `json:"correlation_id,omitempty"`
-	CausationID   string `json:"causation_id,omitempty"`
-	DecisionClass string `json:"decision_class,omitempty"`
 }
