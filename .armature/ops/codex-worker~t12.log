@@ -1,0 +1,1 @@
+["transition","HKREFACT-T12",1780697506,"codex-worker~t12",{"to":"done","outcome":"make check fully green: lint passes with XDG_CACHE_HOME=/tmp fix; httptest tests replaced with mockTransport round-tripper; gremlins ./internal completes (99.75% efficacy, 91.87% coverage)"}]
