@@ -481,3 +481,4 @@
 ["source-link","ORCRMV-T09",1780628430,"codex-worker",{"source_id":"c95548e6-49bb-4680-9501-26ba3ec37c91","source_url":"docs/superpowers/plans/2026-06-03-remove-managed-execution.md"}]
 ["amend","ORCRMV-T09",1780628449,"codex-worker",{"scope":["cmd/armature/main.go","internal/ops/types.go","internal/materialize/engine.go","internal/config/config.go"]}]
 ["amend","ORCRMV-T09",1780628533,"codex-worker",{"scope":["cmd/armature/main.go"]}]
+["claim","ORCRMV-T01",1780628928,"codex-worker",{"ttl":60}]
