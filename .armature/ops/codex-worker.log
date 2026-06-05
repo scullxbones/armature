@@ -497,3 +497,4 @@
 ["claim","HKREFACT-T03",1780629512,"codex-worker",{"ttl":60}]
 ["transition","HKREFACT-T03",1780629605,"codex-worker",{"to":"done","outcome":"Added generic harness hook events and evaluator with scope enforcement, commit blocking, and stop verification."}]
 ["transition","ORCRMV-T05",1780629625,"codex-worker",{"to":"done","outcome":"Removed 9 orchestrate-*/worker-runtime-decision constants, FailureRecord, payload fields, and no-op materialize case; TestManagedExecutionOperationTypesAreInvalid passes; arm materialize succeeds; go test ./... passes"}]
+["claim","ORCRMV-T06",1780629631,"codex-worker",{"ttl":60}]
