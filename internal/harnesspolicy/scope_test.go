@@ -41,6 +41,8 @@ func TestScopePolicyRejectsOutOfScopePath(t *testing.T) {
 	require.Len(t, result.Violations, 1)
 	assert.Equal(t, "cmd/armature/main.go", result.Violations[0].Path)
 	assert.Contains(t, result.Message(), "outside task scope")
+	assert.Contains(t, result.Message(), "allowed scope")
+	assert.Contains(t, result.Message(), "internal/orchestrate/")
 }
 
 func TestScopePolicyCleansTraversal(t *testing.T) {
@@ -59,4 +61,5 @@ func TestScopePolicyRejectsEmptyScope(t *testing.T) {
 
 	require.False(t, result.Allowed)
 	assert.Contains(t, result.Message(), "task has no declared scope")
+	assert.Contains(t, result.Message(), "declare scope")
 }
