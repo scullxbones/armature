@@ -502,3 +502,4 @@
 ["transition","ORCRMV-T06",1780629781,"codex-worker",{"to":"merged"}]
 ["claim","ORCRMV-T07",1780629785,"codex-worker",{"ttl":60}]
 ["transition","ORCRMV-T07",1780653057,"codex-worker",{"to":"done","outcome":"Archived 30 managed-execution design/spec/plan files to docs/archive/orchestration/. Rewrote README quickstart, getting-started, commands, use-cases, provider-smoke-tests, adr-context-files, HKREFACT spec/plan, and CLAUDE.md to remove all arm orchestrate/worker run/internal/orchestrate/zero-trust commit references. Verification criterion passes."}]
+["transition","ORCRMV-T07",1780653062,"codex-worker",{"to":"merged"}]
