@@ -81,7 +81,7 @@ can be decided before side effects:
 - Block file edits outside the active task scope.
 - Block direct `git commit` during harness execution.
 - Block direct staging/commit-path commands when they bypass Armature's
-  zero-trust commit semantics.
+  arm-owned commit path.
 - Provide task-aware feedback when a tool request is denied.
 
 Stop hooks become the primary early verification trigger:
@@ -98,24 +98,20 @@ These controls are not overlapping harness guardrails and remain in Armature:
 - Ready queue computation.
 - Claim ownership and claim-race handling.
 - Active scope overlap scheduling gates.
-- Retry budgets and retry-loop guards.
 - Heartbeats and stale-claim handling.
-- Runtime timeout and max-task loop control.
 - DAG state transitions and op-log persistence.
 
 ### Defense-in-Depth Controls
 
-Final commit verification remains acceptable because committing or pushing
-out-of-scope files is sufficiently incorrect to justify a second trigger. The
-final trigger must call the same shared scope policy used by hooks.
+Final commit verification remains acceptable because committing out-of-scope
+files is sufficiently incorrect to justify a second trigger. The final trigger
+must call the same shared scope policy used by hooks.
 
-The zero-trust commit path remains responsible for commit construction:
+Armature's arm-owned commit path remains responsible for commit construction:
 
-1. Capture diff from the pre-dispatch ref.
-2. Reset to the pre-dispatch ref.
-3. Reapply the captured patch.
-4. Verify the changed paths through shared scope policy.
-5. Stage and commit through Armature.
+1. Verify the changed paths through shared scope policy.
+2. Stage only scope-approved files.
+3. Commit through Armature.
 
 The final scope verification is not a second implementation. It is a second
 trigger of the same implementation.
@@ -160,7 +156,7 @@ Out of scope:
 
 ## Verification Pipeline
 
-Armature already has verification concepts in `internal/orchestrate/verify.go`:
+A `VerificationService` must be created as a shared verification component:
 
 - Ordered adapter checks.
 - Stop-on-hard-failure semantics.
@@ -168,17 +164,13 @@ Armature already has verification concepts in `internal/orchestrate/verify.go`:
 - Acceptance criteria verification.
 - Citation verification.
 
-The live engine path must be reconciled with this shared verification pipeline.
-Current code comments describe a `RunPipeline` step in the zero-trust sequence,
-but the engine path currently records the harness result and proceeds to commit.
-The refactor should consolidate this into a single `VerificationService` used
-by both:
+This service is used by both:
 
 - Harness stop hooks.
-- The orchestrator before final commit completion.
+- The coordinator before marking a task done.
 
 Hook-triggered verification may provide faster feedback, but final
-orchestrator-triggered verification remains the authoritative completion gate.
+coordinator-triggered verification remains the authoritative completion gate.
 Both triggers use the same service and result model.
 
 ## Architecture
@@ -338,22 +330,21 @@ kept behind the platform encoder so future differences remain localized.
 
 ## Data Flow
 
-1. `arm orchestrate` or `arm worker run` selects a task using existing Armature
-   scheduling logic.
-2. Armature records dispatch state and pre-dispatch ref.
-3. Armature writes ephemeral platform hook config into the harness workdir.
-4. Armature launches the harness with `ARMATURE_TASK_ID` and
+1. The coordinator claims a task via `arm claim` and dispatches a worker agent
+   using the `arm render-context` output as the task specification.
+2. Armature writes ephemeral platform hook config into the harness workdir.
+3. Armature launches the harness with `ARMATURE_TASK_ID` and
    `ARMATURE_HOOK_PLATFORM`.
-5. The harness proposes a tool call.
-6. The platform invokes `arm harness-hook` with event JSON on stdin.
-7. `arm harness-hook` resolves task state from Armature.
-8. `HarnessHookEvaluator` calls shared policy/services.
-9. The active `PlatformAdapter` returns the platform-specific decision.
-10. If allowed, the tool proceeds. If blocked, the harness receives the reason.
-11. On stop, the hook path invokes `VerificationService` and blocks or allows
+4. The harness proposes a tool call.
+5. The platform invokes `arm harness-hook` with event JSON on stdin.
+6. `arm harness-hook` resolves task state from Armature.
+7. `HarnessHookEvaluator` calls shared policy/services.
+8. The active `PlatformAdapter` returns the platform-specific decision.
+9. If allowed, the tool proceeds. If blocked, the harness receives the reason.
+10. On stop, the hook path invokes `VerificationService` and blocks or allows
     stopping based on results.
-12. After harness exit, Armature performs final verification and zero-trust
-    commit using the same shared policy/services.
+11. After harness exit, the worker runs final verification and commits only
+    scope-approved files using the same shared policy/services.
 
 ## Error Handling
 
@@ -393,7 +384,7 @@ Integration tests:
 - A simulated pre-edit event inside task scope is allowed.
 - A simulated direct `git commit` event is blocked.
 - Stop-hook verification invokes `VerificationService`.
-- Orchestrator final verification invokes the same `VerificationService`.
+- Worker final verification invokes the same `VerificationService`.
 - Final commit path rejects an out-of-scope diff through shared `ScopePolicy`.
 
 Regression tests:
@@ -406,11 +397,10 @@ Regression tests:
 
 ## Migration Plan
 
-1. Extract shared `ScopePolicy` from existing scope/path behavior.
-2. Add final changed-path verification in the zero-trust commit path using
+1. Create shared `ScopePolicy` in `internal/harnesspolicy`.
+2. Add final changed-path verification in the arm-owned commit path using
    `ScopePolicy`.
-3. Consolidate verification into `VerificationService` and wire the live engine
-   to it.
+3. Create `VerificationService` in a new verification package.
 4. Add `arm harness-hook` with generic hook evaluation and platform encoders.
 5. Generate ephemeral hook config for Claude, Codex, and Devin harness runs.
 6. Remove overlapping harness config writes that implement task write scope

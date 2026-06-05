@@ -24,7 +24,7 @@ For active tasks with broad multi-directory scope, `context_files` remains an ad
 
 Good uses:
 
-- A task touching `cmd/armature`, `internal/orchestrate`, and `internal/workerruntime` includes `docs/design/orchestrate-runtime-direction.md`.
+- A task touching `cmd/armature`, `internal/materialize`, and `internal/ops` includes the relevant design doc that constrains the implementation.
 - A task implementing source sync behavior includes `docs/design/architecture.md` sections covering source manifests and provider cache semantics.
 - A refactor task includes the approved design or ADR that constrains architectural boundaries.
 

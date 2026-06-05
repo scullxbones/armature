@@ -58,39 +58,34 @@ arm decompose-context --sources all > context.json
 arm decompose-apply plan.json
 ```
 
-## 5. Your First Orchestrated Task
+## 5. Dispatch Work
 
-Armature's default execution path is runtime-owned queue draining:
+The coordinator loop: find ready tasks, claim each one, render context, dispatch a worker agent, and repeat until the story is done.
 
-1. Start the worker runtime loop
-2. Let it pull ready tasks, claim, orchestrate, and repeat until drained
-
-### Run Worker Runtime (Default)
+### Find Ready Tasks
 ```bash
-arm worker run
+arm ready
+# TASK-001  Write authentication middleware   [ready]
+# TASK-002  Add user profile endpoint         [ready]
 ```
 
-### Optional: Run One Task Then Stop
+### Claim and Dispatch
 ```bash
-arm worker run --max-tasks 1
+arm claim TASK-001
+arm render-context TASK-001 --format agent
+# Pass the render-context output to your AI agent as its task spec
 ```
 
-### Single-Task Fallback
+### Record Progress and Complete
 ```bash
-arm orchestrate --issue <issue-id>
+arm note TASK-001 --msg "Started implementation"
+arm transition TASK-001 --to done --outcome "Implemented auth middleware with JWT support"
 ```
 
-Prerequisites for `arm worker run` and `arm orchestrate`:
-- Linux requires `bubblewrap` (`bwrap`) and `socat` on `PATH` for sandboxed harness execution.
-- macOS requires `sandbox-exec` on `PATH`.
-- The selected harness CLI (`claude`, `codex`, or `devin`) must support non-interactive execution from `arm orchestrate` in the current terminal/session.
-
-### Optional: Preview Single-Task Orchestration Without Dispatch
+### Loop Until Done
 ```bash
-arm orchestrate --issue <issue-id> --dry-run
+arm ready   # check for the next wave of unblocked tasks
 ```
-
-Manual worker commands (`claim`, `render-context`, `transition`) remain available for exceptional workflows, and `arm orchestrate --issue` remains the manual single-task fallback.
 
 ## Summary of Commands
 | Command | Purpose |
@@ -98,9 +93,7 @@ Manual worker commands (`claim`, `render-context`, `transition`) remain availabl
 | `arm init` | Initialize Armature in a repo |
 | `arm sources add` | Register a source document |
 | `arm ready` | List tasks ready for work |
-| `arm worker run` | Default runtime loop for queue-draining execution |
-| `arm orchestrate` | Run deterministic task execution + verification |
-| `arm claim` | Manual claim for non-orchestrated workflows |
-| `arm render-context` | Manual task context assembly |
-| `arm transition` | Manual status transition |
+| `arm claim` | Claim a task |
+| `arm render-context` | Assemble task context for an agent |
+| `arm transition` | Record task completion or status change |
 | `arm list --group` | Show project overview grouped by status |
