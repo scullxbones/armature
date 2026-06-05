@@ -492,3 +492,5 @@
 ["transition","ORCRMV-T04",1780629446,"codex-worker",{"to":"done","outcome":"Deleted internal/orchestrate/ (29 files) and internal/workerruntime/ (8 files); removed OrchestratorConfig/AuthConfig/AdapterCommands from config.go; TestDefaultConfigHasNoOrchestratorSection added; go test ./... passes"}]
 ["transition","ORCRMV-T04",1780629448,"codex-worker",{"to":"merged"}]
 ["claim","ORCRMV-T05",1780629452,"codex-worker",{"ttl":60}]
+["transition","HKREFACT-T01",1780629459,"codex-worker",{"to":"done","outcome":"Added traversal-safe shared scope policy with exact, directory, and glob matching plus focused tests."}]
+["transition","HKREFACT-T02",1780629459,"codex-worker",{"to":"done","outcome":"Added harnesspolicy verification service for acceptance-criteria and citation checks without internal/orchestrate dependencies."}]
