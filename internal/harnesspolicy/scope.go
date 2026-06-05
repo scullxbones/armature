@@ -14,6 +14,7 @@ type ScopeCheckResult struct {
 	Allowed    bool
 	EmptyScope bool
 	Violations []ScopeViolation
+	Scope      []string
 }
 
 type ScopeViolation struct {
@@ -29,6 +30,7 @@ func (p ScopePolicy) CheckPaths(paths []string) ScopeCheckResult {
 		return ScopeCheckResult{
 			Allowed:    false,
 			EmptyScope: true,
+			Scope:      append([]string(nil), p.scope...),
 			Violations: violationsForPaths(paths),
 		}
 	}
@@ -44,6 +46,7 @@ func (p ScopePolicy) CheckPaths(paths []string) ScopeCheckResult {
 
 	return ScopeCheckResult{
 		Allowed:    len(violations) == 0,
+		Scope:      append([]string(nil), p.scope...),
 		Violations: violations,
 	}
 }
@@ -53,17 +56,26 @@ func (r ScopeCheckResult) Message() string {
 		return "all paths are within task scope"
 	}
 	if r.EmptyScope {
-		return "task has no declared scope"
+		return "task has no declared scope; declare scope before allowing file edits"
 	}
 	if len(r.Violations) == 0 {
-		return "task has no declared scope"
+		return "task has no declared scope; declare scope before allowing file edits"
 	}
 
 	paths := make([]string, 0, len(r.Violations))
 	for _, violation := range r.Violations {
 		paths = append(paths, violation.Path)
 	}
-	return fmt.Sprintf("path(s) outside task scope: %s", strings.Join(paths, ", "))
+
+	scope := strings.Join(r.Scope, ", ")
+	if scope == "" {
+		scope = "(none)"
+	}
+	return fmt.Sprintf(
+		"path(s) outside task scope: %s; allowed scope: %s",
+		strings.Join(paths, ", "),
+		scope,
+	)
 }
 
 func (p ScopePolicy) allows(path string) bool {
