@@ -110,3 +110,4 @@
 ["claim","CRDWVVRFY-T2",1780780034,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","CRDWVVRFY-T2",1780780080,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added 'Wave Verification Gate' section (step d2) to coordinator SKILL.md after-workers integration checklist. Includes: terminal check on wave manifest variables, changed-file set from git diff --name-only $WAVE_BASE_SHA..HEAD, code profile (go build ./..., make lint test coverage-check validate-skills build, arm validate --quiet, arm doctor), docs-skill-only profile with auto-promotion rule, go run ./cmd/armature fallback, and 2-attempt bounded remediation with escalation. make validate-skills passes."}]
 ["transition","CRDWVVRFY-T2",1780780088,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","CRDWVVRFY-T4",1780780096,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with CRDWVVRFY detected at claim time"}]
