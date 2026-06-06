@@ -115,6 +115,8 @@ func newSourcesSyncCmd() *cobra.Command {
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "skip %s: %v\n", id, err)
 					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
+					entry.SyncFailed = true
+					manifest.Upsert(entry)
 					continue
 				}
 
@@ -122,16 +124,21 @@ func newSourcesSyncCmd() *cobra.Command {
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "fetch %s: %v\n", id, err)
 					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
+					entry.SyncFailed = true
+					manifest.Upsert(entry)
 					continue
 				}
 
 				entry.Fingerprint = sources.Fingerprint(data)
 				entry.LastSynced = time.Now().UTC()
+				entry.SyncFailed = false
 				manifest.Upsert(entry)
 
 				if err := sources.WriteCache(dir, id, data); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "write cache %s: %v\n", id, err)
 					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
+					entry.SyncFailed = true
+					manifest.Upsert(entry)
 					continue
 				}
 
@@ -186,6 +193,13 @@ func newSourcesVerifyCmd() *cobra.Command {
 
 			allOK := true
 			for id, entry := range manifest.Entries {
+				// Check if the last sync attempt failed
+				if entry.SyncFailed {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  STALE  (cached content exists but last sync failed)\n", id)
+					allOK = false
+					continue
+				}
+
 				data, err := sources.ReadCache(dir, id)
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  ERROR  %v\n", id, err)
