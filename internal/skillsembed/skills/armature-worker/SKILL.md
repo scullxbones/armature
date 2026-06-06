@@ -100,7 +100,7 @@ go run ./cmd/armature --help   # confirms the binary at least compiles
 1. Run `go build ./...` — fix any compile errors.
 2. Run `make check` — fix any lint/test/coverage failures.
 3. `arm transition ISSUE-ID --to done --outcome "..."` — only after both pass.
-4. Immediately stage scoped files and commit (do not leave transition uncommitted):
+4. Immediately stage scoped files and commit — do not leave the transition uncommitted before moving to step 6.
 
 ### 6. Complete and Commit
 
