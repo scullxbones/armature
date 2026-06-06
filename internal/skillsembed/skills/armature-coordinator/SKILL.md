@@ -252,6 +252,26 @@ arm list --parent STORY-ID            # confirm all wave tasks are done
 arm list --status in-progress         # any stragglers?
 ```
 
+### a.1. Worker Recovery — Unkept `arm transition`
+
+If a worker returned but their task remains `in-progress` or `done` without running `arm transition` (e.g., the worker forgot or the agent timed out), manually transition the task:
+
+```bash
+# List all tasks still in-progress or done
+arm list --parent STORY-ID | grep -E '"status":\s*"(in-progress|done)"'
+
+# For each task that should be transitioned, manually run:
+arm transition TASK-ID --to done --outcome "CONCRETE_OUTCOME_DESCRIPTION"
+```
+
+The recovery step:
+1. **Identify the gap** — run `arm list --parent STORY-ID` and look for tasks with `"status": "in-progress"` or `"status": "done"` that do not appear in the wave manifest or were not marked `merged` in step (c) below.
+2. **Understand what the worker did** — check the commit log for `TASK-ID` commits and review the scope files modified. Use `git diff` to confirm the work is complete.
+3. **Write a concrete outcome** — do not re-use generic phrases like "Done" or "Completed". Reference specific files changed, tests added, or commands verified. Example: `"Implemented TokenParser.Parse() method; all 8 token types pass new tests; coverage 82%"`.
+4. **Transition manually** — run `arm transition TASK-ID --to done --outcome "..."` with the specific outcome. This unblocks dependent tasks and prepares the issue for merge validation.
+
+This is common when workers return from background dispatch without explicit handoff, or when TTL expiration causes a race with the heartbeat mechanism. Recovery is safe — `arm transition` is idempotent once an issue is already `done`.
+
 ### b. Check for scope conflicts and merge conflicts
 
 If workers operated in separate git worktrees or branches, merge them into the
