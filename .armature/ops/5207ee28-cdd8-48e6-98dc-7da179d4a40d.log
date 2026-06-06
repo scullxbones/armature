@@ -126,3 +126,4 @@
 ["note","DOCS-S5-T5",1780783082,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with DOCS-S5-T1 (same worker, dismissed)"}]
 ["note","DOCS-S5-T5",1780783082,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with DOCS-S5-T4 (same worker, dismissed)"}]
 ["claim","DOCS-S5-T5",1780783082,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["transition","DOCS-S5-T1",1780783891,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
