@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -103,16 +104,6 @@ func collectSubtree(id string, state *materialize.State, out map[string]*materia
 	for _, child := range issue.Children {
 		collectSubtree(child, state, out)
 	}
-}
-
-func parentFilter(issues map[string]*materialize.Issue, parentID string) map[string]*materialize.Issue {
-	filtered := make(map[string]*materialize.Issue)
-	for id, issue := range issues {
-		if issue.Parent == parentID {
-			filtered[id] = issue
-		}
-	}
-	return filtered
 }
 
 func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materialize.State) []string {
@@ -321,17 +312,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 // hasSerialDependency returns true if a blocks b or b blocks a,
 // meaning the two tasks execute serially and a shared scope is intentional.
 func hasSerialDependency(a, b *materialize.Issue) bool {
-	for _, id := range a.Blocks {
-		if id == b.ID {
-			return true
-		}
-	}
-	for _, id := range b.Blocks {
-		if id == a.ID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a.Blocks, b.ID) || slices.Contains(b.Blocks, a.ID)
 }
 
 func scopeIntersection(a, b []string) []string {
@@ -529,7 +510,7 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 				if !hasMatches {
 					// No files matched any globs — this entry is phantom
 					isPhantom = true
-				} else if !isGlobPattern(path) && !contains(expandedFiles, path) {
+				} else if !isGlobPattern(path) && !slices.Contains(expandedFiles, path) {
 					// This is a literal path and it doesn't appear in the expanded files
 					isPhantom = true
 				}
@@ -547,16 +528,6 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 // isGlobPattern checks if a string contains glob characters
 func isGlobPattern(s string) bool {
 	return strings.ContainsAny(s, "*?[]")
-}
-
-// contains checks if a string slice contains a value
-func contains(slice []string, value string) bool {
-	for _, v := range slice {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
 
 // splitSeq is a helper that splits a string on a separator using strings.Split.
@@ -585,11 +556,8 @@ func checkW11VagueOutcomes(issues map[string]*materialize.Issue) []string {
 			warns = append(warns, fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)))
 			continue
 		}
-		for _, vague := range vagueOutcomes {
-			if lower == vague {
-				warns = append(warns, fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)))
-				break
-			}
+		if slices.Contains(vagueOutcomes, lower) {
+			warns = append(warns, fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)))
 		}
 	}
 	return warns
