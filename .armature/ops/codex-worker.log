@@ -818,3 +818,4 @@
 ["transition","DOCS-S1",1780751834,"codex-worker",{"to":"in-progress"}]
 ["claim","DOCS-S1-T2",1780751834,"codex-worker",{"ttl":30}]
 ["note","DOCS-S1-T3",1780751836,"codex-worker",{"msg":"Serial claim: scope overlap with DOCS-S1-T2 (same worker, dismissed)"}]
+["claim","DOCS-S1-T3",1780751836,"codex-worker",{"ttl":30}]
