@@ -81,3 +81,4 @@
 ["transition","DOCS-S3-T2",1780773416,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["citation-accepted","DOCS-S4-T5",1780773468,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"Internal improvement task derived from doc friction analysis; no external source document"}]
 ["citation-accepted","DOCS-S5-T5",1780773468,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"Internal improvement task derived from doc friction analysis; no external source document"}]
+["transition","DOCS-S3",1780773476,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Delivered docs/harness-hook.md (harness hook integration guide with Claude Code/Codex setup) and docs/concepts.md (8-concept agent reference). Updated docs/commands.md and README.md with links."}]
