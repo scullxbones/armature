@@ -37,6 +37,7 @@ var validParentChildTypes = map[string]map[string]bool{
 func newCreateCmd() *cobra.Command {
 	var title, nodeType, parent, id, priority, dod, confidence, acceptanceJSON, sourceRef string
 	var scope []string
+	var contextFiles []string
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -82,6 +83,7 @@ func newCreateCmd() *cobra.Command {
 				NodeType:         nodeType,
 				Parent:           parent,
 				Scope:            scope,
+				ContextFiles:     contextFiles,
 				Priority:         priority,
 				DefinitionOfDone: dod,
 				Confidence:       confidence,
@@ -170,6 +172,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
+	cmd.Flags().StringSliceVar(&contextFiles, "context-file", nil, "stable reference file to render before work; may be repeated")
 	cmd.Flags().StringVar(&confidence, "confidence", "", "confidence level: draft or verified (default verified)")
 	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
 	cmd.Flags().StringVar(&sourceRef, "source", "", "source ID (UUID) or URL/path to source-link at creation time")

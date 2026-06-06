@@ -3070,6 +3070,67 @@ func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 	assert.Equal(t, "test_passes", criteria[0]["type"])
 }
 
+func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--title", "Feature with context",
+		"--type", "task",
+		"--id", "ctx-01",
+		"--context-file", "docs/adr.md",
+		"--context-file", "docs/design.md",
+	)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "ctx-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docs/adr.md", "docs/design.md"}, issue.ContextFiles)
+}
+
+func TestAmendCommand_ReplacesAndClearsContextFiles(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--title", "Feature with context",
+		"--type", "task",
+		"--id", "ctx-amend-01",
+		"--context-file", "docs/original.md",
+	)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "amend",
+		"--issue", "ctx-amend-01",
+		"--context-file", "docs/replaced.md",
+		"--context-file", "docs/extra.md",
+	)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issuePath := filepath.Join(getTestStateDir(t, repo), "issues", "ctx-amend-01.json")
+	issue, err := materialize.LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docs/replaced.md", "docs/extra.md"}, issue.ContextFiles)
+
+	_, err = runTrls(t, repo, "amend", "--issue", "ctx-amend-01", "--clear-context-files")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err = materialize.LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.Empty(t, issue.ContextFiles)
+}
+
 // TestTransitionCommand_WithFieldFlag verifies that --field extracts a single field
 // from transition output without needing post-processing.
 func TestTransitionCommand_WithFieldFlag(t *testing.T) {

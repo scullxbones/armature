@@ -3,6 +3,7 @@ package context
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,7 +25,7 @@ type Context struct {
 	Layers  []Layer `json:"layers"` // ordered by priority ascending
 }
 
-// Assemble builds a 7-layer context for the given issue from state.
+// Assemble builds a layered context for the given issue from state.
 func Assemble(issueID string, stateDir string, state *materialize.State) (*Context, error) {
 	issue, ok := state.Issues[issueID]
 	if !ok {
@@ -32,26 +33,30 @@ func Assemble(issueID string, stateDir string, state *materialize.State) (*Conte
 	}
 
 	var layers []Layer
+	repoRoot := inferRepoRoot(stateDir)
 
 	// Layer 1: core_spec
 	layers = append(layers, buildCoreSpec(issue))
 
-	// Layer 2: snippets
+	// Layer 2: context_files
+	layers = append(layers, buildContextFiles(issue, repoRoot))
+
+	// Layer 3: snippets
 	layers = append(layers, buildSnippets(issue))
 
-	// Layer 3: blocker_outcomes
+	// Layer 4: blocker_outcomes
 	layers = append(layers, buildBlockerOutcomes(issue, stateDir, state))
 
-	// Layer 4: parent_chain
+	// Layer 5: parent_chain
 	layers = append(layers, buildParentChain(issue, stateDir, state))
 
-	// Layer 5: decisions
+	// Layer 6: decisions
 	layers = append(layers, buildDecisions(issue))
 
-	// Layer 6: notes
+	// Layer 7: notes
 	layers = append(layers, buildNotes(issue))
 
-	// Layer 7: sibling_outcomes
+	// Layer 8: sibling_outcomes
 	layers = append(layers, buildSiblingOutcomes(issue, stateDir, state))
 
 	sort.Slice(layers, func(i, j int) bool {
@@ -62,6 +67,42 @@ func Assemble(issueID string, stateDir string, state *materialize.State) (*Conte
 		IssueID: issueID,
 		Layers:  layers,
 	}, nil
+}
+
+func inferRepoRoot(stateDir string) string {
+	clean := filepath.Clean(stateDir)
+	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
+		base := filepath.Base(dir)
+		if base == ".arm" || base == ".armature" {
+			return filepath.Dir(dir)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+	}
+	return clean
+}
+
+func buildContextFiles(issue *materialize.Issue, repoRoot string) Layer {
+	if len(issue.ContextFiles) == 0 {
+		return Layer{Name: "context_files", Priority: 2, Content: ""}
+	}
+	var sections []string
+	for _, relPath := range issue.ContextFiles {
+		fullPath := filepath.Join(repoRoot, relPath)
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			sections = append(sections, fmt.Sprintf("### %s\n(missing: %v)", relPath, err))
+			continue
+		}
+		sections = append(sections, fmt.Sprintf("### %s\n```text\n%s\n```", relPath, strings.TrimRight(string(data), "\n")))
+	}
+	return Layer{
+		Name:     "context_files",
+		Priority: 2,
+		Content:  "## Context Files\n" + strings.Join(sections, "\n\n"),
+	}
 }
 
 func buildCoreSpec(issue *materialize.Issue) Layer {
@@ -84,21 +125,21 @@ func buildCoreSpec(issue *materialize.Issue) Layer {
 
 func buildSnippets(issue *materialize.Issue) Layer {
 	if issue.Context == nil {
-		return Layer{Name: "snippets", Priority: 2, Content: ""}
+		return Layer{Name: "snippets", Priority: 3, Content: ""}
 	}
 	var ctxMap map[string]interface{}
 	if err := json.Unmarshal(issue.Context, &ctxMap); err != nil {
-		return Layer{Name: "snippets", Priority: 2, Content: ""}
+		return Layer{Name: "snippets", Priority: 3, Content: ""}
 	}
 	if len(ctxMap) == 0 {
-		return Layer{Name: "snippets", Priority: 2, Content: ""}
+		return Layer{Name: "snippets", Priority: 3, Content: ""}
 	}
 	var lines []string
 	for k, v := range ctxMap {
 		lines = append(lines, fmt.Sprintf("%s: %v", k, v))
 	}
 	sort.Strings(lines)
-	return Layer{Name: "snippets", Priority: 2, Content: strings.Join(lines, "\n")}
+	return Layer{Name: "snippets", Priority: 3, Content: strings.Join(lines, "\n")}
 }
 
 func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
@@ -131,7 +172,7 @@ func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *mate
 		lines = append(lines, fmt.Sprintf("- %s: %s", blockerID, outcome))
 	}
 	content := "## Blocking Issue Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "blocker_outcomes", Priority: 3, Content: content}
+	return Layer{Name: "blocker_outcomes", Priority: 4, Content: content}
 }
 
 func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
@@ -161,27 +202,27 @@ func buildParentChain(issue *materialize.Issue, stateDir string, state *material
 		currentParentID = nextParentID
 	}
 	if len(lines) == 0 {
-		return Layer{Name: "parent_chain", Priority: 4, Content: ""}
+		return Layer{Name: "parent_chain", Priority: 5, Content: ""}
 	}
 	content := "## Parent Chain\n" + strings.Join(lines, "\n")
-	return Layer{Name: "parent_chain", Priority: 4, Content: content}
+	return Layer{Name: "parent_chain", Priority: 5, Content: content}
 }
 
 func buildDecisions(issue *materialize.Issue) Layer {
 	if len(issue.Decisions) == 0 {
-		return Layer{Name: "decisions", Priority: 5, Content: ""}
+		return Layer{Name: "decisions", Priority: 6, Content: ""}
 	}
 	var lines []string
 	for _, d := range issue.Decisions {
 		lines = append(lines, fmt.Sprintf("- %s: %s — %s", d.Topic, d.Choice, d.Rationale))
 	}
 	content := "## Decisions\n" + strings.Join(lines, "\n")
-	return Layer{Name: "decisions", Priority: 5, Content: content}
+	return Layer{Name: "decisions", Priority: 6, Content: content}
 }
 
 func buildNotes(issue *materialize.Issue) Layer {
 	if len(issue.Notes) == 0 {
-		return Layer{Name: "notes", Priority: 6, Content: ""}
+		return Layer{Name: "notes", Priority: 7, Content: ""}
 	}
 	notes := make([]materialize.Note, 0, len(issue.Notes))
 	for _, note := range issue.Notes {
@@ -191,7 +232,7 @@ func buildNotes(issue *materialize.Issue) Layer {
 		notes = append(notes, note)
 	}
 	if len(notes) == 0 {
-		return Layer{Name: "notes", Priority: 6, Content: ""}
+		return Layer{Name: "notes", Priority: 7, Content: ""}
 	}
 	// Take most recent 5
 	if len(notes) > 5 {
@@ -203,12 +244,12 @@ func buildNotes(issue *materialize.Issue) Layer {
 		lines = append(lines, fmt.Sprintf("- [%s] %s", ts, n.Msg))
 	}
 	content := "## Notes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "notes", Priority: 6, Content: content}
+	return Layer{Name: "notes", Priority: 7, Content: content}
 }
 
 func buildSiblingOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	if issue.Parent == "" {
-		return Layer{Name: "sibling_outcomes", Priority: 7, Content: ""}
+		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
 	}
 	var children []string
 	if parent, ok := state.Issues[issue.Parent]; ok {
@@ -245,8 +286,8 @@ func buildSiblingOutcomes(issue *materialize.Issue, stateDir string, state *mate
 		}
 	}
 	if len(lines) == 0 {
-		return Layer{Name: "sibling_outcomes", Priority: 7, Content: ""}
+		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "sibling_outcomes", Priority: 7, Content: content}
+	return Layer{Name: "sibling_outcomes", Priority: 8, Content: content}
 }

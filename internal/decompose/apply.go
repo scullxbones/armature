@@ -163,6 +163,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 				Title:            issue.Title,
 				NodeType:         issue.Type,
 				Scope:            scope,
+				ContextFiles:     issue.ContextFiles,
 				Priority:         issue.Priority,
 				DefinitionOfDone: issue.DoD,
 				Parent:           issue.Parent,

@@ -74,16 +74,18 @@ type Op struct {
 // Only relevant fields are populated for each op type.
 type Payload struct {
 	// create
-	Title            string          `json:"title,omitempty"`
-	Parent           string          `json:"parent,omitempty"`
-	NodeType         string          `json:"type,omitempty"`
-	Scope            []string        `json:"scope,omitempty"`
-	Acceptance       json.RawMessage `json:"acceptance,omitempty"`
-	DefinitionOfDone string          `json:"definition_of_done,omitempty"`
-	Context          json.RawMessage `json:"context,omitempty"`
-	SourceCitation   json.RawMessage `json:"source_citation,omitempty"`
-	Priority         string          `json:"priority,omitempty"`
-	EstComplexity    string          `json:"estimated_complexity,omitempty"`
+	Title             string          `json:"title,omitempty"`
+	Parent            string          `json:"parent,omitempty"`
+	NodeType          string          `json:"type,omitempty"`
+	Scope             []string        `json:"scope,omitempty"`
+	Acceptance        json.RawMessage `json:"acceptance,omitempty"`
+	DefinitionOfDone  string          `json:"definition_of_done,omitempty"`
+	ContextFiles      []string        `json:"context_files,omitempty"`
+	ClearContextFiles bool            `json:"clear_context_files,omitempty"`
+	Context           json.RawMessage `json:"context,omitempty"`
+	SourceCitation    json.RawMessage `json:"source_citation,omitempty"`
+	Priority          string          `json:"priority,omitempty"`
+	EstComplexity     string          `json:"estimated_complexity,omitempty"`
 
 	// claim
 	TTL int `json:"ttl,omitempty"`

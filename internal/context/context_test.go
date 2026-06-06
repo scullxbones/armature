@@ -262,6 +262,70 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 	assert.Contains(t, snippetsLayer.Content, "value")
 }
 
+func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte("# Guide\nuse this"), 0644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "docs"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "docs", "design.md"), []byte("design context"), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:           "TST-001",
+		Title:        "Test",
+		Type:         "task",
+		Status:       "open",
+		ContextFiles: []string{"guide.md", "docs/design.md"},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+
+	ctx, err := Assemble("TST-001", dir, state)
+	require.NoError(t, err)
+
+	var contextFilesLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "context_files" {
+			contextFilesLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, contextFilesLayer)
+	assert.Contains(t, contextFilesLayer.Content, "## Context Files")
+	assert.Contains(t, contextFilesLayer.Content, "guide.md")
+	assert.Contains(t, contextFilesLayer.Content, "# Guide")
+	assert.Contains(t, contextFilesLayer.Content, "docs/design.md")
+	assert.Contains(t, contextFilesLayer.Content, "design context")
+	assert.NotContains(t, ctx.Layers[0].Content, "guide.md", "context files must stay separate from write scope")
+}
+
+func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:           "TST-001",
+		Title:        "Test",
+		Type:         "task",
+		Status:       "open",
+		ContextFiles: []string{"docs/missing.md"},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+
+	ctx, err := Assemble("TST-001", dir, state)
+	require.NoError(t, err)
+
+	for _, l := range ctx.Layers {
+		if l.Name == "context_files" {
+			assert.Contains(t, l.Content, "docs/missing.md")
+			assert.Contains(t, l.Content, "(missing:")
+		}
+	}
+}
+
 func TestBuildSnippets_InvalidJSON(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
