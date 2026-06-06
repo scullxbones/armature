@@ -1,0 +1,1 @@
+["transition","DOCS-S1-T2",1780751919,"codex-worker~2",{"to":"done","outcome":"Added arm worker-init and arm install-skills steps to Section 2 of getting-started.md with explanatory text. Both steps now appear after arm init and before the Register Knowledge Sources section, meeting all acceptance criteria."}]
