@@ -296,6 +296,10 @@ Run repository health checks (D1-D6).
 
 **Flags:**
 - `--strict`: Promote warnings to errors.
+- `--verbose`: Show file:line context for D3 violations; name uncited issue IDs for D6.
+
+**Doctor Checks:**
+See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D6), their triggers, and remediation steps.
 
 ---
 
@@ -685,6 +689,10 @@ Validate the issue graph for consistency.
 - `--ci`: Exit non-zero if errors found.
 - `--scope string`: Validate only the subtree rooted at this node ID.
 - `--strict`: Treat warnings as errors.
+- `--quiet`: Suppress INFO lines; still print COVERAGE and OK lines.
+
+**Validation Codes:**
+See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all error codes (E2–E10, E12), warnings (W1–W8, W10–W11), and their fixes.
 
 ---
 
