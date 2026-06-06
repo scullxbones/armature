@@ -92,6 +92,22 @@ func TestCodexAdapterEncodesBlockDecisionWithBlockNotDeny(t *testing.T) {
 	assert.Equal(t, "block", parsed["decision"], "codex requires 'block', not 'deny'")
 }
 
+func TestClaudeAdapterWriteConfigPreservesExistingSettings(t *testing.T) {
+	dir := t.TempDir()
+	claudeDir := filepath.Join(dir, ".claude")
+	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
+	existing := `{"permissions":{"allow":["Bash(git status)"]},"hooks":{}}`
+	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(existing), 0o644))
+
+	adapter := NewClaudeAdapter()
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "arm harness-hook")
+	assert.Contains(t, string(data), `"permissions"`, "existing permissions must be preserved")
+}
+
 func TestAdaptersExposeCapabilities(t *testing.T) {
 	adapters := []PlatformAdapter{NewClaudeAdapter(), NewCodexAdapter(), NewDevinAdapter()}
 	for _, adapter := range adapters {

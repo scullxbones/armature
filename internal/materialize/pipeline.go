@@ -224,13 +224,18 @@ func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBra
 	}, nil
 }
 
-// opSortKey returns a secondary sort key so that create ops are processed
-// before other op types when timestamps are equal.
+// opSortKey returns a secondary sort key so that at equal timestamps: creates
+// sort first, note-deletes sort after note-adds (so tombstones survive
+// same-second concurrent adds), and everything else sits in between.
 func opSortKey(op ops.Op) int {
-	if op.Type == ops.OpCreate {
+	switch op.Type {
+	case ops.OpCreate:
 		return 0
+	case ops.OpNoteDelete:
+		return 2
+	default:
+		return 1
 	}
-	return 1
 }
 
 func sortOpsByTimestamp(allOps []ops.Op) {

@@ -59,6 +59,29 @@ func TestEvaluatorBlocksGitCommit(t *testing.T) {
 	assert.Contains(t, decision.Message, "Armature owns commits")
 }
 
+func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
+	evaluator := NewEvaluator(EvaluatorConfig{
+		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
+	})
+
+	for _, cmd := range []string{
+		"git -C /repo commit -m 'msg'",
+		"git -c user.name=x commit -m 'msg'",
+		"git --no-pager commit -m 'msg'",
+	} {
+		t.Run(cmd, func(t *testing.T) {
+			decision, err := evaluator.Evaluate(context.Background(), Event{
+				Kind:    EventPreToolUse,
+				Tool:    "Bash",
+				Command: cmd,
+			})
+			require.NoError(t, err)
+			require.Equal(t, DecisionBlock, decision.Action, "should block: %s", cmd)
+			assert.Contains(t, decision.Message, "Armature owns commits")
+		})
+	}
+}
+
 func TestEvaluatorRunsStopVerification(t *testing.T) {
 	service := harnesspolicy.NewVerificationService()
 	evaluator := NewEvaluator(EvaluatorConfig{

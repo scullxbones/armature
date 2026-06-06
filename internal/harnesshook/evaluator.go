@@ -64,5 +64,23 @@ func (e *DefaultEvaluator) evaluateStop() Decision {
 
 func isDirectCommitCommand(command string) bool {
 	fields := strings.Fields(command)
-	return len(fields) >= 2 && fields[0] == "git" && fields[1] == "commit"
+	if len(fields) == 0 || fields[0] != "git" {
+		return false
+	}
+	// Skip git global options (flags and their arguments) before the subcommand.
+	// Flags that consume the next token as their argument:
+	flagsTakingArg := map[string]bool{"-C": true, "-c": true, "-f": true}
+	i := 1
+	for i < len(fields) {
+		f := fields[i]
+		if !strings.HasPrefix(f, "-") {
+			return f == "commit"
+		}
+		if flagsTakingArg[f] {
+			i += 2
+		} else {
+			i++
+		}
+	}
+	return false
 }

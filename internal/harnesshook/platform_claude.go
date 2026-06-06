@@ -29,28 +29,32 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 		return err
 	}
 
-	cfg := map[string]any{
-		"hooks": map[string]any{
-			"PreToolUse": []any{map[string]any{
-				"matcher": "Edit|Write|MultiEdit|Bash",
-				"hooks": []any{map[string]any{
-					"type":    "command",
-					"command": "arm harness-hook",
-				}},
+	settingsPath := filepath.Join(dir, "settings.json")
+	cfg := map[string]any{}
+	if existing, err := os.ReadFile(settingsPath); err == nil {
+		_ = json.Unmarshal(existing, &cfg)
+	}
+
+	cfg["hooks"] = map[string]any{
+		"PreToolUse": []any{map[string]any{
+			"matcher": "Edit|Write|MultiEdit|Bash",
+			"hooks": []any{map[string]any{
+				"type":    "command",
+				"command": "arm harness-hook",
 			}},
-			"Stop": []any{map[string]any{
-				"hooks": []any{map[string]any{
-					"type":    "command",
-					"command": "arm harness-hook",
-				}},
+		}},
+		"Stop": []any{map[string]any{
+			"hooks": []any{map[string]any{
+				"type":    "command",
+				"command": "arm harness-hook",
 			}},
-		},
+		}},
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "settings.json"), data, 0o644)
+	return os.WriteFile(settingsPath, data, 0o644)
 }
 
 func (a *ClaudeAdapter) Decode(input []byte) (Event, error) {

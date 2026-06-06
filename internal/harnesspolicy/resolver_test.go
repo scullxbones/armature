@@ -110,6 +110,48 @@ func TestResolverMarksUnacceptedSourceLinks(t *testing.T) {
 	assert.False(t, task.Citations[0].Accepted)
 }
 
+func TestResolverTreatsGlobalAcceptanceAsCitingAllSources(t *testing.T) {
+	repo := t.TempDir()
+	stateDir := filepath.Join(repo, ".armature", "state", "default")
+	sourcesDir := filepath.Join(repo, ".armature", "sources")
+	issuesDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0o755))
+	require.NoError(t, os.MkdirAll(sourcesDir, 0o755))
+
+	manifest := sources.Manifest{}
+	manifest.Upsert(sources.SourceEntry{
+		ID: "SRC-3", URL: "docs/api.md", Title: "API",
+		Fingerprint: "ghi789", LastSynced: time.Unix(3, 0), ProviderType: "filesystem",
+	})
+	require.NoError(t, sources.WriteManifest(sourcesDir, manifest))
+
+	// arm accept-citation writes CitationAcceptance with empty SourceEntryID
+	require.NoError(t, materialize.WriteIssue(issuesDir, materialize.Issue{
+		ID:    "TASK-3",
+		Title: "Linked source task",
+		Type:  "task",
+		SourceLinks: []materialize.SourceLink{
+			{SourceEntryID: "SRC-3", SourceURL: "docs/api.md", Title: "API"},
+		},
+		CitationAcceptances: []materialize.CitationAcceptance{
+			{WorkerID: "w1", Timestamp: 200, SourceEntryID: ""},
+		},
+	}))
+
+	resolver := NewTaskPolicyResolver(ResolverConfig{
+		RepoPath:   repo,
+		StateDir:   stateDir,
+		SourcesDir: sourcesDir,
+	})
+
+	task, err := resolver.Resolve("TASK-3")
+
+	require.NoError(t, err)
+	require.Len(t, task.Citations, 1)
+	assert.Equal(t, "SRC-3", task.Citations[0].SourceEntryID)
+	assert.True(t, task.Citations[0].Accepted, "global accept-citation should cover all linked sources")
+}
+
 func TestResolverRejectsUnknownTask(t *testing.T) {
 	repo := t.TempDir()
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
