@@ -131,3 +131,68 @@ func TestSourcesSyncCommand_PartialFailure(t *testing.T) {
 	assert.Contains(t, syncOut.String(), "synced", "should report the successful sync")
 	assert.NotEmpty(t, syncErr.String(), "should still print error for failed source")
 }
+
+// TestSourcesVerifyCommand_StaleAfterSyncFailure verifies that when a source
+// fails to sync, subsequent verify commands show it as STALE (not OK) and report
+// allOK as false.
+func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a temporary file that we'll later make unreachable.
+	tmpfile := filepath.Join(t.TempDir(), "source.txt")
+	require.NoError(t, os.WriteFile(tmpfile, []byte("initial content"), 0600))
+
+	// Add the source.
+	addCmd := newRootCmd()
+	addCmd.SetOut(new(bytes.Buffer))
+	addCmd.SetErr(new(bytes.Buffer))
+	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
+		"--url", tmpfile, "--type", "filesystem"})
+	require.NoError(t, addCmd.Execute())
+
+	// First sync: should succeed.
+	syncCmd1 := newRootCmd()
+	syncOut1 := new(bytes.Buffer)
+	syncCmd1.SetOut(syncOut1)
+	syncCmd1.SetErr(new(bytes.Buffer))
+	syncCmd1.SetArgs([]string{"sources", "sync", "--repo", repo})
+	require.NoError(t, syncCmd1.Execute())
+	assert.Contains(t, syncOut1.String(), "synced")
+
+	// Verify after successful sync: should show OK.
+	verifyCmd1 := newRootCmd()
+	verifyOut1 := new(bytes.Buffer)
+	verifyCmd1.SetOut(verifyOut1)
+	verifyCmd1.SetErr(new(bytes.Buffer))
+	verifyCmd1.SetArgs([]string{"sources", "verify", "--repo", repo})
+	err := verifyCmd1.Execute()
+	require.NoError(t, err)
+	assert.Contains(t, verifyOut1.String(), "OK")
+
+	// Delete the file to make the next sync fail.
+	require.NoError(t, os.Remove(tmpfile))
+
+	// Second sync: should fail but exit 0 (we have cache).
+	syncCmd2 := newRootCmd()
+	syncOut2 := new(bytes.Buffer)
+	syncErr2 := new(bytes.Buffer)
+	syncCmd2.SetOut(syncOut2)
+	syncCmd2.SetErr(syncErr2)
+	syncCmd2.SetArgs([]string{"sources", "sync", "--repo", repo})
+	err = syncCmd2.Execute()
+	// sync should exit with error since all sources failed
+	assert.Error(t, err)
+	assert.Contains(t, syncErr2.String(), "fetch")
+
+	// Verify after failed sync: should show STALE (not OK), allOK=false.
+	verifyCmd2 := newRootCmd()
+	verifyOut2 := new(bytes.Buffer)
+	verifyCmd2.SetOut(verifyOut2)
+	verifyCmd2.SetErr(new(bytes.Buffer))
+	verifyCmd2.SetArgs([]string{"sources", "verify", "--repo", repo})
+	err = verifyCmd2.Execute()
+	// verify should fail when STALE entries exist
+	assert.Error(t, err)
+	assert.Contains(t, verifyOut2.String(), "STALE")
+	assert.NotContains(t, verifyOut2.String(), "OK")
+}
