@@ -147,9 +147,15 @@ arm transition <issue-id> --to done --outcome "Brief summary of work"
 
 Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
 
-## Provider Smoke Tests
+## Documentation
 
-Runbook: [docs/provider-smoke-tests.md](docs/provider-smoke-tests.md)
+- **[Core Concepts](docs/concepts.md)** — Agent reference for the 8 operational concepts: ops log & materialization, worker identity, claim lifecycle, DAG hierarchy, citations, confidence levels, branch modes, and decomposition
+- **[Getting Started](docs/getting-started.md)** — Setup workflow and first task
+- **[Commands Reference](docs/commands.md)** — Complete command documentation
+- **[Configuration Reference](docs/configuration.md)** — TTL, token budgets, hooks, and mode settings
+- **[Use Cases](docs/use-cases.md)** — Persona-based workflow walkthroughs (lone wolf, gatekeeper, team coordinator, etc.)
+- **[Validation Codes](docs/validation-codes.md)** — Error and warning reference (E1–E12, W1–W11)
+- **[Provider Smoke Tests](docs/provider-smoke-tests.md)** — Testing source document providers
 
 ---
 
