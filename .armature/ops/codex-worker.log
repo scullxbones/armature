@@ -824,3 +824,4 @@
 ["transition","DOCS-S1-T2",1780752131,"codex-worker",{"to":"merged"}]
 ["transition","DOCS-S1-T3",1780752131,"codex-worker",{"to":"merged"}]
 ["transition","DOCS-S1-T4",1780752132,"codex-worker",{"to":"merged"}]
+["transition","DOCS-S1",1780752177,"codex-worker",{"to":"done","outcome":"Fixed all five quickstart accuracy bugs in README.md (sources add flags, worker-init/install-skills steps, decompose-context sources, arm transition dedup), added worker-init and install-skills steps to getting-started.md, removed fictitious --repair flag and corrected config schema in use-cases.md, and fixed armature-planner skill diagram to use decompose-apply --plan plan.json"}]
