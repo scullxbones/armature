@@ -126,8 +126,7 @@ A wave is docs-skill-only only when every changed file is a `SKILL.md`,
 # Collect scope files from arm render-context output for each task in WAVE_TASK_IDS,
 # or use `git diff --name-only "$WAVE_BASE_SHA"..HEAD` after workers return.
 # Example: auto-promote based on task scope fields before dispatch:
-WAVE_SCOPE_FILES=$(arm list --parent STORY-ID --status open \
-    | python3 -c "import sys,json; [print(f) for t in json.load(sys.stdin) for f in t.get('scope',[])]")
+WAVE_SCOPE_FILES=$(arm ready --parent STORY-ID | python3 -c "import sys,json; [print(f) for t in json.load(sys.stdin) for f in t.get('scope',[])]")
 
 if echo "$WAVE_SCOPE_FILES" | grep -E '\.(go|mod|sum)$' | grep -q . || \
    echo "$WAVE_SCOPE_FILES" | grep -E '^(Makefile|cmd/|internal/)' | grep -qvE 'internal/skillsembed'; then
