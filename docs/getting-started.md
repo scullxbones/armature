@@ -49,7 +49,7 @@ Deploy the bundled Armature skills to your agent platform directories.
 arm install-skills
 ```
 
-This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to the agent platform skill directories (`.claude/skills/`, `.gemini/skills/`, and `.codex/skills/`), making them available to your agents during task dispatch.
+This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `.claude/skills/` in the repository root (or `~/.claude/skills/` with `--global`), making them available to Claude Code agents. For other agent platforms, copy the skill files manually to the appropriate skills directory.
 
 ## 3. Register Knowledge Sources
 
