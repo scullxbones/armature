@@ -32,6 +32,22 @@ and close the story when all tasks are done.
    ```
    Fix any `doctor` errors before claiming work.
 
+## DAG Hygiene Mandate
+
+**`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+
+Before dispatching any worker and after each wave completes, run:
+```bash
+arm validate       # zero ERRORs; all issues cited
+arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+```
+
+If either exits non-zero, stop. Fix the reported issues before proceeding. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+
+Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before starting your coordination wave. DAG health is cumulative.
+
+---
+
 ## The Coordinator Loop
 
 ```dot

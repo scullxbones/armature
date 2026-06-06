@@ -23,6 +23,22 @@ issues ready for workers to claim.
   create must be citable. If no source exists yet, write one first or be
   prepared to use `arm accept-citation` with a clear rationale.
 
+## DAG Hygiene Mandate
+
+**`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+
+Before releasing any plan to the Coordinator and after every decomposition, run:
+```bash
+arm validate       # zero ERRORs; all issues cited
+arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+```
+
+If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+
+Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before planning your work. DAG health is cumulative.
+
+---
+
 ## The Planner Loop
 
 ```dot
