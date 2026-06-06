@@ -78,3 +78,4 @@
 ["transition","DOCS-S3-T1",1780773287,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Created docs/harness-hook.md covering harness-hook event interception, env vars, Claude Code and Codex setup with exact config, and verification steps. Updated docs/commands.md with link."}]
 ["transition","DOCS-S3-T2",1780773288,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Created docs/concepts.md covering 8 core system concepts (ops log, worker identity, claim lifecycle, DAG hierarchy, citations, confidence levels, branch modes, source decomposition) each with concrete commands. Updated README.md Documentation section with links."}]
 ["transition","DOCS-S3-T1",1780773415,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","DOCS-S3-T2",1780773416,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
