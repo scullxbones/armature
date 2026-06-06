@@ -513,3 +513,83 @@ func TestExplainNotReady_MixedBlockers_HintOnlyForDone(t *testing.T) {
 	assert.NotContains(t, reason, "run: arm merged --issue task-missing", "no hint for missing blocker")
 	assert.NotContains(t, reason, "run: arm merged --issue task-cancelled", "no hint for cancelled blocker")
 }
+
+func TestFilterByParent_IncludesDescendantsOnly(t *testing.T) {
+	// Create a hierarchy: story-01 > task-a, task-b > subtask-a1
+	//                     story-02 > task-c
+	// Mark story-01 as claimed so it doesn't appear in ready queue (only its descendants)
+	index := materialize.Index{
+		"story-01":   {Status: "claimed", Type: "story", Children: []string{"task-a", "task-b"}},
+		"task-a":     {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
+		"task-b":     {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}, Children: []string{"subtask-a1"}},
+		"subtask-a1": {Status: "open", Type: "task", Parent: "task-b", BlockedBy: []string{}},
+		"story-02":   {Status: "claimed", Type: "story", Children: []string{"task-c"}},
+		"task-c":     {Status: "open", Type: "task", Parent: "story-02", BlockedBy: []string{}},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-a":     {ID: "task-a", Status: "open", Type: "task"},
+		"task-b":     {ID: "task-b", Status: "open", Type: "task"},
+		"subtask-a1": {ID: "subtask-a1", Status: "open", Type: "task"},
+		"task-c":     {ID: "task-c", Status: "open", Type: "task"},
+	}
+
+	ready := ComputeReady(index, issues, "")
+	assert.Len(t, ready, 4, "should have 4 ready tasks before filtering")
+
+	// Filter by story-01 (should include task-a, task-b, subtask-a1)
+	descendants := CollectDescendants("story-01", index)
+	filtered := ready[:0]
+	for _, e := range ready {
+		if descendants[e.Issue] {
+			filtered = append(filtered, e)
+		}
+	}
+
+	assert.Len(t, filtered, 3, "should have 3 tasks under story-01")
+	ids := make(map[string]bool)
+	for _, e := range filtered {
+		ids[e.Issue] = true
+	}
+	assert.True(t, ids["task-a"], "task-a should be in descendants")
+	assert.True(t, ids["task-b"], "task-b should be in descendants")
+	assert.True(t, ids["subtask-a1"], "subtask-a1 should be in descendants")
+	assert.False(t, ids["task-c"], "task-c should not be in descendants")
+}
+
+func TestCollectDescendants_IncludesNestedChildren(t *testing.T) {
+	// Build a hierarchy with nested descendants
+	index := materialize.Index{
+		"root":         {Status: "open", Type: "story", Children: []string{"child1", "child2"}},
+		"child1":       {Status: "open", Type: "task", Parent: "root", Children: []string{"grandchild1a", "grandchild1b"}},
+		"child2":       {Status: "open", Type: "task", Parent: "root", Children: []string{}},
+		"grandchild1a": {Status: "open", Type: "task", Parent: "child1", Children: []string{}},
+		"grandchild1b": {Status: "open", Type: "task", Parent: "child1", Children: []string{}},
+	}
+
+	descendants := CollectDescendants("root", index)
+
+	assert.Len(t, descendants, 4, "should have 4 descendants")
+	assert.True(t, descendants["child1"], "child1 should be a descendant")
+	assert.True(t, descendants["child2"], "child2 should be a descendant")
+	assert.True(t, descendants["grandchild1a"], "grandchild1a should be a descendant")
+	assert.True(t, descendants["grandchild1b"], "grandchild1b should be a descendant")
+	assert.False(t, descendants["root"], "root should not be a descendant of itself")
+}
+
+func TestCollectDescendants_EmptyForLeaf(t *testing.T) {
+	index := materialize.Index{
+		"leaf": {Status: "open", Type: "task", Children: []string{}},
+	}
+
+	descendants := CollectDescendants("leaf", index)
+	assert.Len(t, descendants, 0, "leaf node should have no descendants")
+}
+
+func TestCollectDescendants_MissingRoot(t *testing.T) {
+	index := materialize.Index{
+		"child": {Status: "open", Type: "task", Parent: "missing-root"},
+	}
+
+	descendants := CollectDescendants("missing-root", index)
+	assert.Len(t, descendants, 0, "missing root should return empty set")
+}
