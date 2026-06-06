@@ -97,3 +97,4 @@
 ["transition","task-1780753026",1780778229,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","DOCS-S4",1780778293,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Remediated planner workflow friction: extended sources relative-path warning with actionable guidance (T1), added STALE tracking to sources verify for sync failures (T2), documented 500-char DoD cap in armature-planner skill (T3), added --parent filter to arm validate (T5), clarified notes field type in plan schema and --example output (task-1780753026)."}]
 ["claim","CRDWVVRFY-T1",1780779948,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["transition","CRDWVVRFY",1780779949,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
