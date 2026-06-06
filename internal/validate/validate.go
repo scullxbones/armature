@@ -14,6 +14,7 @@ import (
 
 type Options struct {
 	ScopeID      string
+	ParentID     string
 	Strict       bool
 	ManifestData []byte                 // Pre-read manifest bytes (may be nil/empty if citations not available)
 	Coverage     *traceability.Coverage // Pre-loaded traceability coverage
@@ -34,6 +35,9 @@ func Validate(state *materialize.State, opts Options) Result {
 	var errors, warnings, infos []string
 
 	targets := issueSubset(state, opts.ScopeID)
+	if opts.ParentID != "" {
+		targets = parentFilter(targets, opts.ParentID)
+	}
 
 	errors = append(errors, checkE2E3ParentLinks(targets, state)...)
 	errors = append(errors, checkE4Cycles(targets, state)...)
@@ -80,6 +84,16 @@ func issueSubset(state *materialize.State, scopeID string) map[string]*materiali
 	return subset
 }
 
+func parentFilter(issues map[string]*materialize.Issue, parentID string) map[string]*materialize.Issue {
+	subset := make(map[string]*materialize.Issue)
+	for id, issue := range issues {
+		if issue.Parent == parentID {
+			subset[id] = issue
+		}
+	}
+	return subset
+}
+
 func collectSubtree(id string, state *materialize.State, out map[string]*materialize.Issue) {
 	issue, ok := state.Issues[id]
 	if !ok {
@@ -89,6 +103,16 @@ func collectSubtree(id string, state *materialize.State, out map[string]*materia
 	for _, child := range issue.Children {
 		collectSubtree(child, state, out)
 	}
+}
+
+func parentFilter(issues map[string]*materialize.Issue, parentID string) map[string]*materialize.Issue {
+	filtered := make(map[string]*materialize.Issue)
+	for id, issue := range issues {
+		if issue.Parent == parentID {
+			filtered[id] = issue
+		}
+	}
+	return filtered
 }
 
 func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materialize.State) []string {

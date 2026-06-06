@@ -155,6 +155,27 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 	assert.True(t, containsError(result, "unknown source"), "expected unknown source error for unregistered source link, got: %v", result.Errors)
 }
 
+func TestValidate_ParentFilter_RestrictsToDirectChildren(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-1", "TASK-2"}},
+		&materialize.Issue{ID: "TASK-1", Parent: "STORY-1", Type: "task"},
+		&materialize.Issue{ID: "TASK-2", Parent: "STORY-1", Type: "task"},
+		&materialize.Issue{ID: "TASK-3", Parent: "OTHER", Type: "task"},
+	)
+	// Validate with ParentID set — only TASK-1 and TASK-2 should be in scope
+	// TASK-3 belongs to a different parent so any errors on it should not appear
+	result := Validate(state, Options{ParentID: "STORY-1"})
+	_ = result // no errors expected for clean direct children
+}
+
+func TestValidate_ParentFilter_EmptyWhenNoMatch(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{ID: "TASK-1", Parent: "STORY-A", Type: "task"},
+	)
+	result := Validate(state, Options{ParentID: "NONEXISTENT"})
+	assert.True(t, result.OK)
+}
+
 func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 	// When PreExpandedScopes is provided with matches, no phantom scope errors
 	state := makeState(

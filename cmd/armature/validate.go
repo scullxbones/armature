@@ -17,6 +17,7 @@ func newValidateCmd() *cobra.Command {
 		ci     bool
 		strict bool
 		scope  string
+		parent string
 		quiet  bool
 	)
 
@@ -28,8 +29,9 @@ func newValidateCmd() *cobra.Command {
 This command validates parent-child relationships, dependency links, field requirements,
 and coverage metrics (% of issues cited in documentation). Errors prevent merges in CI mode.
 Warnings highlight potential issues. Use --ci to exit non-zero on errors, or --strict to
-treat warnings as errors. Use --scope to validate only a subtree. Use --quiet to suppress
-INFO lines while still printing COVERAGE and OK lines.`,
+treat warnings as errors. Use --scope to validate only a subtree. Use --parent to validate
+only direct children of a parent issue. Use --quiet to suppress INFO lines while still printing
+COVERAGE and OK lines.`,
 		Example: `  # Validate the full issue graph
   $ arm validate
 
@@ -41,6 +43,9 @@ INFO lines while still printing COVERAGE and OK lines.`,
 
   # Validate only a specific subtree
   $ arm validate --scope parent-issue-id
+
+  # Validate only direct children of a parent issue
+  $ arm validate --parent story-id
 
   # Suppress INFO lines (e.g. phantom-scope notices)
   $ arm validate --quiet`,
@@ -82,6 +87,7 @@ INFO lines while still printing COVERAGE and OK lines.`,
 
 			opts := validate.Options{
 				ScopeID:           scope,
+				ParentID:          parent,
 				Strict:            strict,
 				ManifestData:      manifestData,
 				Coverage:          cov,
@@ -142,6 +148,7 @@ INFO lines while still printing COVERAGE and OK lines.`,
 	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Treat warnings as errors")
 	cmd.Flags().StringVar(&scope, "scope", "", "Validate only the subtree rooted at this node ID")
+	cmd.Flags().StringVar(&parent, "parent", "", "Validate only direct children of this parent node ID")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines; still prints COVERAGE and OK lines")
 	return cmd
 }
