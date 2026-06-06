@@ -255,6 +255,69 @@ make check    # or the repo's equivalent: lint, tests, coverage
 
 Do not proceed to the next wave or story close if the build is red.
 
+### d2. Wave Verification Gate
+
+After confirming all wave tasks are `done`, run the verification gate against the
+wave manifest recorded in step 3 before dispatch.
+
+**Terminal sanity check:**
+```bash
+echo "Wave: $WAVE_TASK_IDS"
+echo "Base SHA: $WAVE_BASE_SHA"
+echo "Branch: $WAVE_BRANCH"
+echo "Wave type: $WAVE_TYPE"
+```
+If any variable is unset, stop — the manifest was not recorded before dispatch.
+Reconstruct it from `arm list --status done` and `git log` before proceeding.
+
+**Determine changed-file set:**
+```bash
+CHANGED_FILES=$(git diff --name-only "$WAVE_BASE_SHA"..HEAD)
+```
+
+**Auto-promote wave type:**
+```bash
+if echo "$CHANGED_FILES" | grep -qE '\.(go|mod|sum)$|^(Makefile|cmd/|internal/)' && \
+   ! echo "$CHANGED_FILES" | grep -qvE 'internal/skillsembed|SKILL\.md|references/'; then
+    WAVE_TYPE=code
+fi
+```
+
+**Code profile** (run when `WAVE_TYPE=code`):
+```bash
+go build ./...                                          # compilation gate
+make lint test coverage-check validate-skills build     # full quality gate
+arm validate --quiet                                    # citation integrity
+arm doctor                                              # repo health
+```
+
+If `go build` fails and `make` is unavailable, fall back to:
+```bash
+go run ./cmd/armature --help   # confirms the binary compiles
+```
+
+**Docs-skill-only profile** (run when `WAVE_TYPE=docs-skill-only`):
+```bash
+make validate-skills   # skills must reference arm, not install steps
+arm validate --quiet   # citation integrity
+arm doctor             # repo health
+```
+
+If any `*.go`, `go.mod`, `go.sum`, `Makefile`, `cmd/`, or `internal/` file
+(outside `internal/skillsembed/`) appears in `$CHANGED_FILES`, auto-promote to
+the code profile and re-run.
+
+**Bounded remediation (2 attempts max):**
+
+- **Attempt 1:** Fix reported failures. Be strict — address every error and
+  warning before re-running the gate.
+- **Attempt 2:** If failures persist, escalate: add an `arm note` on the story
+  describing the blocker, do not transition, and surface the issue to the user
+  before proceeding to the next wave.
+
+Do not proceed to the next wave or story transition if the gate is red after
+2 remediation attempts.
+
 ### e. Check citation coverage
 ```bash
 arm validate
