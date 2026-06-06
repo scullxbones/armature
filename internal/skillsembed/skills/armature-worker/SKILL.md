@@ -30,6 +30,22 @@ arm worker-init --check || arm worker-init
 > Workers receive task context from the Coordinator at dispatch time.
 > For story-level coordination and PR flow, see the **armature-coordinator** skill.
 
+## DAG Hygiene Mandate
+
+**`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+
+Before transitioning any task to `done` and after completing your work, run:
+```bash
+arm validate       # zero ERRORs; all issues cited
+arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+```
+
+If either exits non-zero, fix the reported issues before transitioning. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+
+Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before completing your task. DAG health is cumulative.
+
+---
+
 ## Step-by-Step
 
 ### 1. Initialize
