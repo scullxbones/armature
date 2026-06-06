@@ -75,3 +75,4 @@
 ["transition","DOCS-S3",1780773124,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["note","DOCS-S3-T2",1780773124,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with DOCS-S3-T1 (same worker, dismissed)"}]
 ["claim","DOCS-S3-T2",1780773124,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["transition","DOCS-S3-T1",1780773287,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Created docs/harness-hook.md covering harness-hook event interception, env vars, Claude Code and Codex setup with exact config, and verification steps. Updated docs/commands.md with link."}]
