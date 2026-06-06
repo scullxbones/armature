@@ -726,3 +726,40 @@ Show worker activity status.
 
 **Flags:**
 - `--json`: Output as JSONL.
+
+---
+
+## Environment Variables
+
+### ARM_LOG_SLOT
+
+**Type:** string
+
+**Behavior:**
+Appends `~<slot>` to the worker UUID, forming the log filename. For example, a worker with UUID `abc123` and `ARM_LOG_SLOT=2` writes to `ops/abc123~2.log` instead of `ops/abc123.log`.
+
+**Purpose:**
+Enables parallel agent dispatch while preserving the single-writer-per-log invariant (MRDT). Each concurrent process must have a distinct slot to avoid log conflicts when multiple workers with the same identity run simultaneously.
+
+**Usage:**
+Export before invoking any `arm` command:
+
+```bash
+export ARM_LOG_SLOT=<n>
+arm <command> [flags]
+```
+
+**Example (two-agent parallel dispatch):**
+```bash
+# Agent 1: slot 0
+export ARM_LOG_SLOT=0
+arm claim TASK-001 &
+
+# Agent 2: slot 1
+export ARM_LOG_SLOT=1
+arm claim TASK-002 &
+
+wait
+```
+
+In this scenario, both agents operate with the same worker ID but write to separate log files (`ops/worker-id~0.log` and `ops/worker-id~1.log`), preventing conflicts.
