@@ -17,8 +17,8 @@ func newInstallSkillsCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:               "install-skills",
-		Short:             "Deploy bundled skills to .claude/skills/",
-		Long:              "Copies the embedded skills to .claude/skills/ (local) or ~/.claude/skills/ (--global).",
+		Short:             "Deploy bundled skills to .claude/skills/ and .claude/plugins/armature/",
+		Long:              "Copies the embedded skills to .claude/skills/ (local) or ~/.claude/skills/ (--global), and deploys plugin.json to .claude/plugins/armature/ for Skill tool registry.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var destBase string
@@ -40,11 +40,18 @@ func newInstallSkillsCmd() *cobra.Command {
 				destBase = absRepo
 			}
 
-			dest := filepath.Join(destBase, ".claude", "skills")
-			if err := deploySkills(skillsembed.SkillsFS, dest); err != nil {
+			skillsDest := filepath.Join(destBase, ".claude", "skills")
+			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skills deployed to %s\n", dest)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skills deployed to %s\n", skillsDest)
+
+			// Deploy plugin.json to .claude/plugins/armature for Skill tool registry
+			pluginsDest := filepath.Join(destBase, ".claude", "plugins", "armature")
+			if err := deployPlugin(skillsembed.SkillsFS, pluginsDest); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Plugin configuration deployed to %s\n", pluginsDest)
 			return nil
 		},
 	}
@@ -81,6 +88,17 @@ func deploySkills(src fs.FS, dest string) error {
 
 		return copyFile(src, path, target)
 	})
+}
+
+// deployPlugin copies the plugin.json file from src to dest, creating the
+// destination directory as needed. It is idempotent — existing files are overwritten.
+func deployPlugin(src fs.FS, dest string) error {
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return fmt.Errorf("create plugin directory %s: %w", dest, err)
+	}
+
+	target := filepath.Join(dest, "plugin.json")
+	return copyFile(src, "plugin.json", target)
 }
 
 func copyFile(src fs.FS, srcPath, destPath string) error {
