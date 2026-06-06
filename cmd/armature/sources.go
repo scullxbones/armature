@@ -62,7 +62,7 @@ func newSourcesAddCmd() *cobra.Command {
 			// Warn if filesystem path is relative.
 			if providerType == "filesystem" && !filepath.IsAbs(url) {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"warning: relative filesystem path %q will be resolved from working directory at sync time\n", url)
+					"warning: relative filesystem path %q will be resolved from working directory at sync time; safe when arm sync is always run from the repo root; use an absolute path to avoid this dependency\n", url)
 			}
 
 			manifest.Upsert(entry)
