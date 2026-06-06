@@ -31,6 +31,26 @@ arm init
 - **Solo Mode (Single-Branch):** If your repository doesn't have branch protection on `main`, Armature stores all data in a `.armature/` folder on your `main` branch.
 - **Dual-Branch Mode:** If `main` is protected (e.g., GitHub/GitLab PR workflow), Armature creates an orphan `_armature` branch for coordination data. It also creates a secondary worktree at `.arm/` so you can work on code and coordination state simultaneously without conflicts.
 
+### Initialize Worker
+
+Register the current clone as a worker in Armature's coordination system.
+
+```bash
+arm worker-init --check || arm worker-init
+```
+
+This command registers a unique worker UUID in your git config. It only needs to run once per clone—subsequent invocations will detect the existing registration and skip initialization.
+
+### Deploy Bundled Skills
+
+Deploy the bundled Armature skills to your agent platform directories.
+
+```bash
+arm install-skills
+```
+
+This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to the agent platform skill directories (`.claude/skills/`, `.gemini/skills/`, and `.codex/skills/`), making them available to your agents during task dispatch.
+
 ## 3. Register Knowledge Sources
 
 Armature uses source documents (PRDs, Architecture docs) to define work.
