@@ -123,9 +123,14 @@ A wave is docs-skill-only only when every changed file is a `SKILL.md`,
 `references/*.md`, or other non-compiled documentation.
 
 ```bash
-# Example: auto-promote if scope contains Go or build files
-if echo "$WAVE_SCOPE_FILES" | grep -qE '\.(go|mod|sum)$|^(Makefile|cmd/|internal/)' && \
-   ! echo "$WAVE_SCOPE_FILES" | grep -qvE 'internal/skillsembed|SKILL\.md|references/'; then
+# Collect scope files from arm render-context output for each task in WAVE_TASK_IDS,
+# or use `git diff --name-only "$WAVE_BASE_SHA"..HEAD` after workers return.
+# Example: auto-promote based on task scope fields before dispatch:
+WAVE_SCOPE_FILES=$(arm list --parent STORY-ID --status open \
+    | python3 -c "import sys,json; [print(f) for t in json.load(sys.stdin) for f in t.get('scope',[])]")
+
+if echo "$WAVE_SCOPE_FILES" | grep -E '\.(go|mod|sum)$' | grep -q . || \
+   echo "$WAVE_SCOPE_FILES" | grep -E '^(Makefile|cmd/|internal/)' | grep -qvE 'internal/skillsembed'; then
     WAVE_TYPE=code
 fi
 ```
@@ -248,14 +253,7 @@ arm merged --issue TASK-ID
 This promotes each completed task from `done` to `merged` so dependent work can
 unblock cleanly before the next wave begins.
 
-### d. Verify build integrity
-```bash
-make check    # or the repo's equivalent: lint, tests, coverage
-```
-
-Do not proceed to the next wave or story close if the build is red.
-
-### d2. Wave Verification Gate
+### d. Wave Verification Gate
 
 After confirming all wave tasks are `done`, run the verification gate against the
 wave manifest recorded in step 3 before dispatch.
@@ -277,16 +275,16 @@ CHANGED_FILES=$(git diff --name-only "$WAVE_BASE_SHA"..HEAD)
 
 **Auto-promote wave type:**
 ```bash
-if echo "$CHANGED_FILES" | grep -qE '\.(go|mod|sum)$|^(Makefile|cmd/|internal/)' && \
-   ! echo "$CHANGED_FILES" | grep -qvE 'internal/skillsembed|SKILL\.md|references/'; then
+if echo "$CHANGED_FILES" | grep -E '\.(go|mod|sum)$' | grep -q . || \
+   echo "$CHANGED_FILES" | grep -E '^(Makefile|cmd/|internal/)' | grep -qvE 'internal/skillsembed'; then
     WAVE_TYPE=code
 fi
 ```
 
 **Code profile** (run when `WAVE_TYPE=code`):
 ```bash
-go build ./...                                          # compilation gate
-make lint test coverage-check validate-skills build     # full quality gate
+go build ./...   # compilation gate
+make check       # lint + test + coverage-check + mutate + validate-skills + build
 arm validate --quiet                                    # citation integrity
 arm doctor                                              # repo health
 ```
