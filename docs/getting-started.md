@@ -31,6 +31,8 @@ arm init
 - **Solo Mode (Single-Branch):** If your repository doesn't have branch protection on `main`, Armature stores all data in a `.armature/` folder on your `main` branch.
 - **Dual-Branch Mode:** If `main` is protected (e.g., GitHub/GitLab PR workflow), Armature creates an orphan `_armature` branch for coordination data. It also creates a secondary worktree at `.arm/` so you can work on code and coordination state simultaneously without conflicts.
 
+For detailed configuration options (TTL, token budget, hooks), see [Configuration Reference](configuration.md).
+
 ### Initialize Worker
 
 Register the current clone as a worker in Armature's coordination system.
