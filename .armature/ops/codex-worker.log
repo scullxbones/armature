@@ -890,3 +890,4 @@
 ["claim","DOCS-S2-T3",1780755114,"codex-worker",{"ttl":240}]
 ["transition","DOCS-S2-T1",1780755297,"codex-worker",{"to":"done","outcome":"Created docs/validation-codes.md with E2-E10,E12 errors, W1-W8,W10,W11 warnings, D1-D6 doctor codes; each with trigger and fix. Updated docs/commands.md with --quiet/--verbose flags and cross-reference links."}]
 ["transition","DOCS-S2-T3",1780755299,"codex-worker",{"to":"done","outcome":"Created docs/configuration.md documenting all .armature/config.json fields (mode, project_type, default_ttl, token_budget, low_stakes_push_threshold, hooks) with types, defaults, and complete example. Updated docs/getting-started.md with link."}]
+["transition","DOCS-S2-T1",1780755305,"codex-worker",{"to":"merged"}]
