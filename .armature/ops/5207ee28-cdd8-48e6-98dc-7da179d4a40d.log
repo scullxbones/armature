@@ -112,3 +112,4 @@
 ["transition","CRDWVVRFY-T2",1780780088,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","CRDWVVRFY-T4",1780780096,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with CRDWVVRFY detected at claim time"}]
 ["note","CRDWVVRFY",1780780097,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with CRDWVVRFY-T4 detected at claim time"}]
+["claim","CRDWVVRFY-T4",1780780097,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
