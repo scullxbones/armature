@@ -33,7 +33,7 @@ digraph planner_loop {
     "Write plan.json" [shape=box];
     "decompose-apply --dry-run" [shape=box];
     "OK?" [shape=diamond];
-    "decompose-apply --apply" [shape=box];
+    "decompose-apply --plan plan.json" [shape=box];
     "dag-transition" [shape=box];
     "sources add/sync/verify" [shape=box];
     "source-link / accept-citation" [shape=box];
@@ -49,8 +49,8 @@ digraph planner_loop {
     "Write plan.json" -> "decompose-apply --dry-run";
     "decompose-apply --dry-run" -> "OK?" ;
     "OK?" -> "Write plan.json" [label="fix errors"];
-    "OK?" -> "decompose-apply --apply" [label="yes"];
-    "decompose-apply --apply" -> "dag-transition";
+    "OK?" -> "decompose-apply --plan plan.json" [label="yes"];
+    "decompose-apply --plan plan.json" -> "dag-transition";
     "dag-transition" -> "sources add/sync/verify";
     "sources add/sync/verify" -> "source-link / accept-citation";
     "source-link / accept-citation" -> "arm link (deps)";
