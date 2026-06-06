@@ -80,7 +80,29 @@ arm accept-citation --issue ISSUE-ID --ci               # if no source exists
 
 Do not leave issues uncited.
 
-### 5. Complete and Commit
+### 5. Pre-Transition Verification (mandatory)
+
+Before transitioning any task to `done`, you **must** run the following checks.
+Do NOT transition if either fails — fix the errors first.
+
+```bash
+go build ./...   # must exit zero; stops transition if compilation fails
+make check       # lint + test + coverage-check + mutate + validate-skills + build
+```
+
+If `make check` is unavailable (e.g., the repo has no Makefile), fall back to:
+
+```bash
+go run ./cmd/armature --help   # confirms the binary at least compiles
+```
+
+**Completion order (never deviate):**
+1. Run `go build ./...` — fix any compile errors.
+2. Run `make check` — fix any lint/test/coverage failures.
+3. `arm transition ISSUE-ID --to done --outcome "..."` — only after both pass.
+4. Immediately stage scoped files and commit (do not leave transition uncommitted):
+
+### 6. Complete and Commit
 
 ```
 arm transition ISSUE-ID --to done --outcome "what was accomplished"
