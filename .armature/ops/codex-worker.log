@@ -671,3 +671,4 @@
 ["link","ARCHIMP-S4-T2",1780750445,"codex-worker",{"dep":"ARCHIMP-S4-T1","rel":"blocked_by"}]
 ["dag-transition","ARCHIMP",1780750456,"codex-worker",{"to":"verified","issue_id":"ARCHIMP"}]
 ["source-link","ARCHIMP",1780750472,"codex-worker",{"source_id":"cda2751a-a9a6-4fa6-8fd1-1fea698d2152","source_url":"/home/brian/development/armature/docs/design/codebase-architecture-improvements.md"}]
+["source-link","ARCHIMP-S1",1780750472,"codex-worker",{"source_id":"cda2751a-a9a6-4fa6-8fd1-1fea698d2152","source_url":"/home/brian/development/armature/docs/design/codebase-architecture-improvements.md"}]
