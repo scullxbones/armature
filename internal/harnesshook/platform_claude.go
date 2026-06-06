@@ -57,11 +57,19 @@ func (a *ClaudeAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-func (a *ClaudeAdapter) Encode(decision Decision) ([]byte, int, error) {
+func (a *ClaudeAdapter) Encode(event Event, decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{
 			"continue":       true,
 			"suppressOutput": true,
+		})
+		return data, 0, err
+	}
+
+	if event.Kind == EventStop {
+		data, err := json.Marshal(map[string]any{
+			"decision": "block",
+			"reason":   decision.Message,
 		})
 		return data, 0, err
 	}

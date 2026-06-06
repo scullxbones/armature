@@ -2,12 +2,14 @@ package harnesspolicy
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
 
 type ScopePolicy struct {
 	scope []string
+	root  string
 }
 
 type ScopeCheckResult struct {
@@ -22,7 +24,12 @@ type ScopeViolation struct {
 }
 
 func NewScopePolicy(scope []string) ScopePolicy {
-	return ScopePolicy{scope: append([]string(nil), scope...)}
+	root, _ := os.Getwd()
+	return newScopePolicyWithRoot(scope, root)
+}
+
+func newScopePolicyWithRoot(scope []string, root string) ScopePolicy {
+	return ScopePolicy{scope: append([]string(nil), scope...), root: root}
 }
 
 func (p ScopePolicy) CheckPaths(paths []string) ScopeCheckResult {
@@ -37,7 +44,7 @@ func (p ScopePolicy) CheckPaths(paths []string) ScopeCheckResult {
 
 	violations := make([]ScopeViolation, 0)
 	for _, rawPath := range paths {
-		path := cleanRepoPath(rawPath)
+		path := p.cleanPath(rawPath)
 		if p.allows(path) {
 			continue
 		}
@@ -98,6 +105,15 @@ func (p ScopePolicy) allows(path string) bool {
 		}
 	}
 	return false
+}
+
+func (p ScopePolicy) cleanPath(path string) string {
+	if filepath.IsAbs(path) && p.root != "" {
+		if rel, err := filepath.Rel(p.root, path); err == nil {
+			return cleanRepoPath(rel)
+		}
+	}
+	return cleanRepoPath(path)
 }
 
 func violationsForPaths(paths []string) []ScopeViolation {
