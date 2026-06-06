@@ -186,3 +186,47 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 
 	properties.TestingRun(t)
 }
+
+func TestHasOverlapDismissalNote_NotFound(t *testing.T) {
+	ops := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Some other note"}},
+	}
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.False(t, found)
+}
+
+func TestHasOverlapDismissalNote_Found(t *testing.T) {
+	ops := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+	}
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.True(t, found)
+}
+
+func TestHasOverlapDismissalNote_FoundAmongMultiple(t *testing.T) {
+	ops := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Some other note"}},
+		{Type: ops.OpNote, TargetID: "task-03", Timestamp: 102, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 103, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+	}
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.True(t, found)
+}
+
+func TestHasOverlapDismissalNote_NotFoundDifferentTarget(t *testing.T) {
+	ops := []ops.Op{
+		{Type: ops.OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-02 (same worker, dismissed)"}},
+	}
+	// Looking for note on task-02 about task-01, but we have note on task-01 about task-02
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.False(t, found)
+}

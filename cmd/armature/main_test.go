@@ -2629,6 +2629,74 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	assert.NotContains(t, errBuf.String(), "Error:", "no error should be emitted to stderr")
 }
 
+// TestClaimCommand_SameWorkerOverlapDeduplicatesNotes verifies that when the same worker
+// claims a task with an existing overlap and the note already exists, it is not written again.
+// This ensures notes are written at most once per issue-pair per claim session.
+func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create two tasks with overlapping scopes
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	// Same worker claims task-01
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Same worker claims task-02 (overlaps with task-01) - writes first dismissal note
+	_, err = runTrls(t, repo, "claim", "--issue", "task-02")
+	require.NoError(t, err)
+
+	// Load ops and count dismissal notes for task-02
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
+	require.NoError(t, err)
+
+	// Count notes on task-02 that mention serial overlap with task-01
+	countBefore := 0
+	for _, op := range allOps {
+		if op.Type == ops.OpNote && op.TargetID == "task-02" && strings.Contains(op.Payload.Msg, "Serial claim: scope overlap with task-01") {
+			countBefore++
+		}
+	}
+	assert.Equal(t, 1, countBefore, "task-02 should have exactly 1 note about task-01 overlap after first claim")
+
+	// Now simulate claiming task-02 again in a new session (e.g., heartbeat/refresh)
+	// We do this by directly calling claim on an already-claimed task
+	// First, let's unassign task-02 so we can claim it again
+	_, err = runTrls(t, repo, "unassign", "task-02")
+	require.NoError(t, err)
+
+	// Claim task-02 again - should not create a duplicate note
+	_, err = runTrls(t, repo, "claim", "--issue", "task-02")
+	require.NoError(t, err)
+
+	// Load ops again and count dismissal notes
+	allOps, _, err = readAllOpsFromDirWithOffsets(opsDir)
+	require.NoError(t, err)
+
+	// Count notes on task-02 that mention serial overlap with task-01
+	countAfter := 0
+	for _, op := range allOps {
+		if op.Type == ops.OpNote && op.TargetID == "task-02" && strings.Contains(op.Payload.Msg, "Serial claim: scope overlap with task-01") {
+			countAfter++
+		}
+	}
+	assert.Equal(t, 1, countAfter, "task-02 should still have only 1 note about task-01 overlap after reclaiming (deduplication should prevent writing it again)")
+}
+
 func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

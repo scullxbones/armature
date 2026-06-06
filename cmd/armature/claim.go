@@ -79,9 +79,12 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 					msg := fmt.Sprintf("scope overlap with %s (%s)", id, entry.Title)
 					// Same worker claiming serially: auto-dismiss — log a note, no error or warning.
 					if entry.Assignee == workerID {
-						noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
-							WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
-						appendOp(appCtx, logPath, noteOp) //nolint:errcheck
+						// Only write the dismissal note if it hasn't been written before for this pair.
+						if !claimPkg.HasOverlapDismissalNote(allOps, issueID, id) {
+							noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
+								WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
+							appendOp(appCtx, logPath, noteOp) //nolint:errcheck
+						}
 						continue
 					}
 					if !force {
