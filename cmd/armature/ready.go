@@ -92,7 +92,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 			// Apply --parent filter: keep only descendants of the given issue.
 			if filterParent != "" {
-				descendants := collectDescendants(filterParent, index)
+				descendants := ready.CollectDescendants(filterParent, index)
 				filtered := entries[:0]
 				for _, e := range entries {
 					if descendants[e.Issue] {
@@ -169,25 +169,4 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "filter to tasks assigned to this worker ID")
 	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
 	return cmd
-}
-
-// collectDescendants returns the set of all descendant IDs of root (not including root itself).
-func collectDescendants(root string, index materialize.Index) map[string]bool {
-	result := make(map[string]bool)
-	queue := []string{root}
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		entry, ok := index[current]
-		if !ok {
-			continue
-		}
-		for _, child := range entry.Children {
-			if !result[child] {
-				result[child] = true
-				queue = append(queue, child)
-			}
-		}
-	}
-	return result
 }

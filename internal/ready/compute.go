@@ -241,3 +241,24 @@ func depth(id string, index materialize.Index) int {
 		}
 	}
 }
+
+// CollectDescendants returns the set of all descendant IDs of root (not including root itself).
+func CollectDescendants(root string, index materialize.Index) map[string]bool {
+	result := make(map[string]bool)
+	queue := []string{root}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		entry, ok := index[current]
+		if !ok {
+			continue
+		}
+		for _, child := range entry.Children {
+			if !result[child] {
+				result[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	return result
+}
