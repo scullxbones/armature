@@ -11,6 +11,8 @@ import (
 func newAmendCmd() *cobra.Command {
 	var issueID, nodeType, dod, acceptanceJSON string
 	var scope []string
+	var contextFiles []string
+	var clearContextFiles bool
 
 	cmd := &cobra.Command{
 		Use:   "amend [issue-id]",
@@ -31,8 +33,17 @@ func newAmendCmd() *cobra.Command {
 
 			payload := ops.Payload{
 				NodeType:         nodeType,
-				Scope:            scope,
 				DefinitionOfDone: dod,
+			}
+			scopeChanged := cmd.Flags().Changed("scope")
+			contextFilesChanged := cmd.Flags().Changed("context-file")
+			if scopeChanged {
+				payload.Scope = scope
+			}
+			if clearContextFiles {
+				payload.ClearContextFiles = true
+			} else if contextFilesChanged {
+				payload.ContextFiles = contextFiles
 			}
 
 			if acceptanceJSON != "" {
@@ -43,9 +54,10 @@ func newAmendCmd() *cobra.Command {
 				payload.Acceptance = raw
 			}
 
-			if payload.NodeType == "" && len(payload.Scope) == 0 &&
+			if payload.NodeType == "" && !scopeChanged &&
+				!contextFilesChanged && !clearContextFiles &&
 				len(payload.Acceptance) == 0 && payload.DefinitionOfDone == "" {
-				return fmt.Errorf("at least one of --type, --scope, --acceptance, --dod must be provided")
+				return fmt.Errorf("at least one of --type, --scope, --context-file, --clear-context-files, --acceptance, --dod must be provided")
 			}
 
 			op := ops.Op{
@@ -73,6 +85,8 @@ func newAmendCmd() *cobra.Command {
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to amend")
 	cmd.Flags().StringVar(&nodeType, "type", "", "new type (epic, story, task)")
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
+	cmd.Flags().StringSliceVar(&contextFiles, "context-file", nil, "stable reference file to render before work; replaces the full list")
+	cmd.Flags().BoolVar(&clearContextFiles, "clear-context-files", false, "remove all context_files entries from the issue")
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
 	return cmd

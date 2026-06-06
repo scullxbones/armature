@@ -668,6 +668,42 @@ func TestApplyAmendOp_PatchesScope(t *testing.T) {
 	assert.Equal(t, []string{"internal/**"}, state.Issues["T1"].Scope)
 }
 
+func TestApplyCreateOp_SetsContextFiles(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{
+			Title:        "Task",
+			NodeType:     "task",
+			ContextFiles: []string{"docs/adr.md", "docs/plan.md"},
+		},
+	}))
+	assert.Equal(t, []string{"docs/adr.md", "docs/plan.md"}, state.Issues["T1"].ContextFiles)
+}
+
+func TestApplyAmendOp_ReplacesAndClearsContextFiles(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{
+			Title:        "Task",
+			NodeType:     "task",
+			ContextFiles: []string{"docs/original.md"},
+		},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w2",
+		Payload: ops.Payload{ContextFiles: []string{"docs/replaced.md", "docs/extra.md"}},
+	}))
+	assert.Equal(t, []string{"docs/replaced.md", "docs/extra.md"}, state.Issues["T1"].ContextFiles)
+
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "T1", Timestamp: 300, WorkerID: "w2",
+		Payload: ops.Payload{ClearContextFiles: true},
+	}))
+	assert.Empty(t, state.Issues["T1"].ContextFiles)
+}
+
 func TestApplyCreateOp_NormalizesCommaSeparatedScope(t *testing.T) {
 	// Legacy ops stored scope as a single comma-joined string; materializer must split them.
 	state := NewState()
@@ -694,6 +730,19 @@ func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
 		Payload: ops.Payload{Scope: []string{"cmd/x.go, cmd/y.go"}},
 	}))
 	assert.Equal(t, []string{"cmd/x.go", "cmd/y.go"}, state.Issues["T1"].Scope)
+}
+
+func TestApplyAmendOp_NormalizesCommaSeparatedContextFiles(t *testing.T) {
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ContextFiles: []string{"docs/a.md, docs/b.md"}},
+	}))
+	assert.Equal(t, []string{"docs/a.md", "docs/b.md"}, state.Issues["T1"].ContextFiles)
 }
 
 func TestMaterializedStateCollapsesHistoricalClaims(t *testing.T) {

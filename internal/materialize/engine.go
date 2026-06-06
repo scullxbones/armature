@@ -75,6 +75,7 @@ func (s *State) applyCreate(op ops.Op) error {
 		Title:            op.Payload.Title,
 		Parent:           op.Payload.Parent,
 		Scope:            normalizeScopeEntries(op.Payload.Scope),
+		ContextFiles:     normalizeScopeEntries(op.Payload.ContextFiles),
 		Priority:         op.Payload.Priority,
 		EstComplexity:    op.Payload.EstComplexity,
 		DefinitionOfDone: op.Payload.DefinitionOfDone,
@@ -291,6 +292,12 @@ func (s *State) applyAmend(op ops.Op) error {
 	}
 	if len(op.Payload.Scope) > 0 {
 		issue.Scope = normalizeScopeEntries(op.Payload.Scope)
+	}
+	if op.Payload.ClearContextFiles {
+		issue.ContextFiles = []string{}
+	}
+	if op.Payload.ContextFiles != nil {
+		issue.ContextFiles = normalizeScopeEntries(op.Payload.ContextFiles)
 	}
 	if len(op.Payload.Acceptance) > 0 && string(op.Payload.Acceptance) != "null" {
 		issue.Acceptance = op.Payload.Acceptance
