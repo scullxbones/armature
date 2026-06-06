@@ -882,3 +882,4 @@
 ["create","task-1780753026",1780753026,"codex-worker",{"title":"Document notes field type in plan JSON schema and --example output","parent":"DOCS-S4","type":"task","scope":["cmd/armature/decompose.go"," internal/skillsembed/skills/armature-planner/SKILL.md"],"definition_of_done":"decompose-apply --example shows notes as [] (empty array) not null, and plan JSON schema docs clarify notes is []string. Planner skill Writing Good Plan JSON section mentions notes type.","priority":"high"}]
 ["amend","task-1780753026",1780753031,"codex-worker",{"acceptance":["decompose-apply --example shows notes as [] not null","planner skill mentions notes is string array","make check green"]}]
 ["source-link","task-1780753026",1780753035,"codex-worker",{"source_id":"309fad10-14cd-4faf-bb27-39d1d3da94ba","source_url":"docs/design/dogfooding-learnings.md"}]
+["claim","ARCHIMP-S1-T1",1780753610,"codex-worker",{"ttl":240}]
