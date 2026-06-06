@@ -110,8 +110,9 @@ arm install-skills
 Register source documents (PRDs, architecture docs) that define your project's work:
 
 ```bash
-arm sources add --url docs/armature-prd.md --type prd
+arm sources add --url docs/armature-prd.md --type filesystem
 arm sources sync
+arm sources verify   # note the UUID shown — you'll need it in the next step
 ```
 
 ### 5. Decompose into Tasks (via AI)
@@ -119,7 +120,7 @@ arm sources sync
 Generate a decomposition context for your AI agent to break down requirements into a task DAG:
 
 ```bash
-arm decompose-context --sources all > context.json
+arm decompose-context --sources <uuid-from-sources-verify> > context.json
 # Feed context.json to your AI agent to produce plan.json
 arm decompose-apply plan.json
 ```

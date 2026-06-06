@@ -209,12 +209,26 @@ cd project-repo
 arm init
 ```
 
-If Armature state becomes corrupted or inconsistent, delete the coordination data directory and reinitialize:
+If Armature state becomes corrupted or inconsistent, run `arm doctor` first to diagnose structural issues before taking any destructive action:
 
 ```bash
-rm -rf .armature         # single-branch mode
-rm -rf .arm/.armature    # dual-branch mode
-arm init                 # reinitialize from scratch
+arm doctor
+# Shows diagnostics for D1–D6 checks (config, ops logs, state files, hooks, worktree)
+```
+
+In **dual-branch mode**, the ops logs (source of truth for the issue DAG) live on the `_armature` git branch, not in the local `.arm/.armature/` directory. If the worktree checkout is corrupted, you can safely remove it and re-initialize — the history is preserved on the branch:
+
+```bash
+rm -rf .arm/.armature    # dual-branch mode only — ops are on _armature branch
+arm init
+```
+
+In **single-branch mode**, `.armature/ops/` contains the append-only ops logs that are the source of truth. Deleting this directory permanently destroys all issue history. Do not delete it without first backing up the ops logs:
+
+```bash
+cp -r .armature/ops /tmp/armature-ops-backup
+rm -rf .armature
+arm init
 ```
 
 Alternatively, use `arm doctor` to diagnose structural issues before repairing:
@@ -237,14 +251,14 @@ Armature reads configuration from `.armature/config.json`. Edit this file to set
   "low_stakes_push_threshold": 5,
   "hooks": [
     {
-      "name": "on_transition",
+      "name": "notify_slack",
       "command": ["scripts/notify-slack.sh"],
-      "required": false
+      "required": true
     },
     {
-      "name": "on_stale",
+      "name": "page_oncall",
       "command": ["scripts/page-on-call.sh"],
-      "required": false
+      "required": true
     }
   ]
 }
@@ -254,12 +268,12 @@ Key settings:
 
 | Setting | What it controls |
 |---|---|
-| `mode` | Coordination mode: `"single-branch"` (code and ops on main) or `"dual-branch"` (ops on _armature) |
+| `mode` | Informational label only — does not switch coordination mode at runtime. Active mode is set by `arm init` via git config (`armature.mode`). |
 | `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
-| `default_ttl` | Claim validity window in minutes before auto-stale (default: 60) |
-| `token_budget` | Context token limit for `arm render-context` (default: 1600 ≈ 6400 chars) |
-| `low_stakes_push_threshold` | Number of ops to batch before auto-pushing (default: 5) |
-| `hooks` | Array of event hooks: name, command array, and required flag |
+| `default_ttl` | TTL written to claim ops by some coordinator paths (minutes). Note: `arm claim --ttl` defaults to 60 min independently; this setting does not override that CLI default. |
+| `token_budget` | Context token budget used by the harness context path. Note: standalone `arm render-context` uses its own `--budget` flag (default: 4000) and does not read this config value. |
+| `low_stakes_push_threshold` | After this many low-stakes ops, the counter resets so the next high-stakes op triggers a push. This is a coalescing hint, not an auto-push trigger. |
+| `hooks` | Array of pre-transition hooks: name (label only), command array, and required flag |
 
 ### Hook Configuration
 
@@ -282,7 +296,7 @@ Armature can fire hooks on state transitions. Configure them in `.armature/confi
 }
 ```
 
-Each hook is invoked as `command[0] command[1] ... command[n]`. If `required` is true, the operation fails if the hook exits non-zero.
+Each hook is invoked as `command[0] command[1] ... command[n]` on every `arm transition` call — hooks run unconditionally and are not filtered by name or event type. If any hook exits non-zero, the transition is blocked regardless of the `required` field (the `required` field is reserved for future dispatcher-level filtering and has no effect in the current implementation).
 
 ### Routine Operations
 
