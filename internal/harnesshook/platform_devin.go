@@ -51,7 +51,7 @@ func (a *DevinAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-func (a *DevinAdapter) Encode(decision Decision) ([]byte, int, error) {
+func (a *DevinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{"decision": "approve"})
 		return data, 0, err

@@ -51,7 +51,7 @@ func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
 	err = cmd.Execute()
 
 	require.NoError(t, err)
-	assert.Contains(t, out.String(), `"decision":"deny"`)
+	assert.Contains(t, out.String(), `"decision":"block"`)
 	assert.Contains(t, out.String(), "outside task scope")
 }
 
@@ -94,6 +94,6 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 	err = cmd.Execute()
 
 	require.NoError(t, err)
-	assert.Contains(t, out.String(), `"decision":"deny"`)
+	assert.Contains(t, out.String(), `"decision":"block"`)
 	assert.Contains(t, out.String(), "unverifiable")
 }

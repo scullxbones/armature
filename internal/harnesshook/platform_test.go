@@ -49,15 +49,47 @@ func TestDevinAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 	assert.NotContains(t, string(data), "permissions")
 }
 
-func TestClaudeAdapterEncodesBlockDecision(t *testing.T) {
+func TestClaudeAdapterEncodesPreToolUseBlockWithPermissionDenial(t *testing.T) {
 	adapter := NewClaudeAdapter()
+	event := Event{Kind: EventPreToolUse}
 
-	out, code, err := adapter.Encode(Decision{Action: DecisionBlock, Message: "blocked"})
+	out, code, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "blocked"})
 
 	require.NoError(t, err)
 	require.Equal(t, 0, code)
-	assert.Contains(t, string(out), "blocked")
-	assert.Contains(t, string(out), "deny")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	hookOut, ok := parsed["hookSpecificOutput"].(map[string]any)
+	require.True(t, ok, "expected hookSpecificOutput key")
+	assert.Equal(t, "deny", hookOut["permissionDecision"])
+	assert.Contains(t, hookOut["permissionDecisionReason"], "blocked")
+}
+
+func TestClaudeAdapterEncodesStopBlockWithDecisionBlock(t *testing.T) {
+	adapter := NewClaudeAdapter()
+	event := Event{Kind: EventStop}
+
+	out, code, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "stop blocked"})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, code)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	assert.Equal(t, "block", parsed["decision"])
+	assert.Contains(t, parsed["reason"], "stop blocked")
+	assert.NotContains(t, string(out), "hookSpecificOutput")
+}
+
+func TestCodexAdapterEncodesBlockDecisionWithBlockNotDeny(t *testing.T) {
+	adapter := NewCodexAdapter()
+	event := Event{Kind: EventPreToolUse}
+
+	out, _, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "out of scope"})
+
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(out, &parsed))
+	assert.Equal(t, "block", parsed["decision"], "codex requires 'block', not 'deny'")
 }
 
 func TestAdaptersExposeCapabilities(t *testing.T) {

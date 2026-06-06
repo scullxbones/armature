@@ -71,7 +71,7 @@ func newHarnessHookCmd() *cobra.Command {
 				return err
 			}
 
-			output, exitCode, err := adapter.Encode(decision)
+			output, exitCode, err := adapter.Encode(event, decision)
 			if err != nil {
 				return err
 			}

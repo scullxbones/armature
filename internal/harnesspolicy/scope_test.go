@@ -63,3 +63,22 @@ func TestScopePolicyRejectsEmptyScope(t *testing.T) {
 	assert.Contains(t, result.Message(), "task has no declared scope")
 	assert.Contains(t, result.Message(), "declare scope")
 }
+
+func TestScopePolicyAllowsAbsolutePathWithinScope(t *testing.T) {
+	policy := newScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
+
+	result := policy.CheckPaths([]string{"/workspace/armature/internal/harnesshook/evaluator.go"})
+
+	require.True(t, result.Allowed)
+	assert.Empty(t, result.Violations)
+}
+
+func TestScopePolicyRejectsAbsolutePathOutsideScope(t *testing.T) {
+	policy := newScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
+
+	result := policy.CheckPaths([]string{"/workspace/armature/cmd/armature/main.go"})
+
+	require.False(t, result.Allowed)
+	require.Len(t, result.Violations, 1)
+	assert.Equal(t, "cmd/armature/main.go", result.Violations[0].Path)
+}

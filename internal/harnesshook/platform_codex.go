@@ -33,12 +33,12 @@ func (a *CodexAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-func (a *CodexAdapter) Encode(decision Decision) ([]byte, int, error) {
+func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{"decision": "approve"})
 		return data, 0, err
 	}
-	data, err := json.Marshal(map[string]any{"decision": "deny", "reason": decision.Message})
+	data, err := json.Marshal(map[string]any{"decision": "block", "reason": decision.Message})
 	return data, 0, err
 }
 

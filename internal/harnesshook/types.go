@@ -45,7 +45,7 @@ type PlatformAdapter interface {
 	Capabilities() PlatformCapabilities
 	WriteConfig(workdir string) error
 	Decode(input []byte) (Event, error)
-	Encode(decision Decision) ([]byte, int, error)
+	Encode(event Event, decision Decision) ([]byte, int, error)
 }
 
 type Evaluator interface {
