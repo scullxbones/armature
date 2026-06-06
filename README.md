@@ -87,26 +87,44 @@ arm init
 
 Armature will detect if your repository has branch protection and set up either a dual-branch (`_armature` orphan branch) or single-branch mode accordingly.
 
-### 2. Add Requirements
+### 2. Register Worker (Once Per Clone)
+
+Initialize the worker coordination system. Run this once per clone before decomposing tasks:
+
+```bash
+arm worker-init
+```
+
+This registers your worker identity and sets up log coordination.
+
+### 3. Install Skills
+
+Deploy workflow skills for all agent roles:
+
+```bash
+arm install-skills
+```
+
+### 4. Add Requirements
 
 Register source documents (PRDs, architecture docs) that define your project's work:
 
 ```bash
-arm sources add docs/armature-prd.md
+arm sources add --url docs/armature-prd.md --type prd
 arm sources sync
 ```
 
-### 3. Decompose into Tasks (via AI)
+### 5. Decompose into Tasks (via AI)
 
 Generate a decomposition context for your AI agent to break down requirements into a task DAG:
 
 ```bash
-arm decompose-context --sources src-001 > context.json
+arm decompose-context --sources all > context.json
 # Feed context.json to your AI agent to produce plan.json
 arm decompose-apply plan.json
 ```
 
-### 4. Dispatch Work
+### 6. Dispatch Work
 
 Find ready tasks and dispatch a worker agent for each one:
 
@@ -118,12 +136,12 @@ arm render-context <issue-id> --format agent   # get task context for the agent
 arm transition <issue-id> --to done --outcome "what was done"
 ```
 
-### 5. Complete and Verify
+### 7. Complete and Verify
 
 Once you've finished the code changes, transition the task to `done`:
 
 ```bash
-arm transition <issue-id> done --outcome "Brief summary of work"
+arm transition <issue-id> --to done --outcome "Brief summary of work"
 ```
 
 Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
