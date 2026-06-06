@@ -102,7 +102,35 @@ arm list --status blocked              # diagnose blockers
 did not make it into the ready queue. Use it as the first step whenever the
 queue looks unexpectedly empty.
 
-### 3. Dispatch Workers
+### 3. Record Wave Manifest
+
+Before dispatching any worker, record the wave manifest so the verification gate
+has a stable baseline to diff against:
+
+```bash
+WAVE_TASK_IDS="TASK-A TASK-B ..."      # exact IDs in dispatch order
+WAVE_BASE_SHA=$(git rev-parse HEAD)    # commit HEAD at wave start
+WAVE_BRANCH=$(git rev-parse --abbrev-ref HEAD)  # story feature branch
+
+# Classify wave type (determines which verification profile to run)
+WAVE_TYPE=docs-skill-only              # default; promoted below if code files present
+```
+
+**Wave type auto-promotion rule:** inspect the ready-task scope fields. If any
+task touches files matching `*.go`, `go.mod`, `go.sum`, `Makefile`, `cmd/**`,
+or `internal/**` outside of `internal/skillsembed/`, set `WAVE_TYPE=code`.
+A wave is docs-skill-only only when every changed file is a `SKILL.md`,
+`references/*.md`, or other non-compiled documentation.
+
+```bash
+# Example: auto-promote if scope contains Go or build files
+if echo "$WAVE_SCOPE_FILES" | grep -qE '\.(go|mod|sum)$|^(Makefile|cmd/|internal/)' && \
+   ! echo "$WAVE_SCOPE_FILES" | grep -qvE 'internal/skillsembed|SKILL\.md|references/'; then
+    WAVE_TYPE=code
+fi
+```
+
+### 4. Dispatch Workers
 
 For each wave of ready tasks:
 
@@ -128,7 +156,7 @@ For each wave of ready tasks:
 
 See [Dispatch Protocol](#dispatch-protocol) below for the full worker prompt format.
 
-### 4. Parallel Dispatch (independent tasks in one wave)
+### 5. Parallel Dispatch (independent tasks in one wave)
 
 Pre-claim all tasks in the wave, then dispatch workers concurrently. Each worker:
 1. receives the pre-claimed issue context
