@@ -224,9 +224,9 @@ Task spec (rendered by `arm render-context`):
 
 When the harness stops:
 
-1. Verification service checks each criterion against implementation changes in scope.
-2. If all pass, completion is allowed.
-3. If any fail, completion is blocked with a message listing which criteria failed.
+1. Verification service scans each acceptance criterion for machine-verifiable keywords (e.g. `go test`, `make check`, `arm validate`). At least one such criterion must be present; purely human-review criteria are flagged but not individually verified against the implementation.
+2. If the keyword check passes, completion is allowed.
+3. If no machine-verifiable criterion exists, completion is blocked with a message prompting you to add one.
 
 ## Common Issues and Troubleshooting
 

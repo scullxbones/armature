@@ -150,9 +150,9 @@ arm sources sync
 # Verify sources and get UUIDs
 arm sources verify
 
-# Create a task with a citation
+# Create a task linked to a source at creation time
 arm create --title "Task X" --parent STORY-001 \
-  --source-citation '{"source_id":"uuid","section":"Requirements","quote":"..."}'
+  --source <source-uuid>
 
 # Accept a citation with rationale
 arm accept-citation TASK-001 --rationale "Requirement reviewed and approved by stakeholders"
@@ -265,7 +265,7 @@ arm list   # auto-detects merge via commit-message scan, transitions to "merged"
 - **Decomposition context:** `arm decompose-context --sources <uuid>` generates a JSON context document summarizing the source
 - **AI decomposition:** The context is fed to an AI agent (e.g., Claude, Gemini) with instructions to produce a `plan.json`
 - **Plan structure:** A plan is a JSON array of issue objects (id, type, title, parent, acceptance, definition_of_done, scope, source_citation)
-- **Plan application:** `arm decompose-apply plan.json` creates the DAG from the plan
+- **Plan application:** `arm decompose-apply --plan plan.json` creates the DAG from the plan
 - **Idempotency:** Re-running decomposition on the same source can yield new/updated tasks or detect conflicts
 
 **Source providers:**
@@ -296,7 +296,7 @@ arm decompose-context --sources SOURCE-UUID > context.json
 # - Instructions for decomposition
 
 # Feed to AI agent and get back plan.json, then apply:
-arm decompose-apply plan.json
+arm decompose-apply --plan plan.json
 
 # List tasks created by decomposition
 arm list --confidence draft   # newly created draft tasks
