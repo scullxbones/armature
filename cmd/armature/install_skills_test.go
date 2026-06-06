@@ -94,3 +94,60 @@ func TestInstallSkillsCommandGlobal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, ".claude/skills")
 }
+
+// TestDeployPluginCreatesPluginJSON verifies that deployPlugin creates the
+// plugin directory and copies plugin.json.
+func TestDeployPluginCreatesPluginJSON(t *testing.T) {
+	t.Parallel()
+	src := makeTestFSWithPlugin(t)
+	dest := t.TempDir()
+
+	err := deployPlugin(src, dest)
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(filepath.Join(dest, "plugin.json"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "armature")
+}
+
+// TestInstallSkillsDeploysPluginLocal verifies the CLI command deploys plugin.json
+// to .claude/plugins/armature when --global is not set.
+func TestInstallSkillsDeploysPluginLocal(t *testing.T) {
+	repo := initTempRepo(t)
+
+	out, err := runTrls(t, repo, "install-skills")
+	require.NoError(t, err)
+	assert.Contains(t, out, ".claude/plugins/armature")
+
+	pluginPath := filepath.Join(repo, ".claude", "plugins", "armature", "plugin.json")
+	_, statErr := os.Stat(pluginPath)
+	require.NoError(t, statErr, "plugin.json should be deployed to .claude/plugins/armature/")
+}
+
+// TestInstallSkillsDeploysPluginGlobal verifies the CLI command deploys plugin.json
+// to ~/.claude/plugins/armature when --global is set.
+func TestInstallSkillsDeploysPluginGlobal(t *testing.T) {
+	repo := initTempRepo(t)
+
+	// Override HOME to a temp dir so we don't pollute the real home dir.
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	out, err := runTrls(t, repo, "install-skills", "--global")
+	require.NoError(t, err)
+	assert.Contains(t, out, ".claude/plugins/armature")
+
+	pluginPath := filepath.Join(fakeHome, ".claude", "plugins", "armature", "plugin.json")
+	_, statErr := os.Stat(pluginPath)
+	require.NoError(t, statErr, "plugin.json should be deployed to ~/.claude/plugins/armature/")
+}
+
+// makeTestFSWithPlugin builds an in-memory FS that includes plugin.json
+func makeTestFSWithPlugin(t *testing.T) fs.FS {
+	t.Helper()
+	return fstest.MapFS{
+		"plugin.json": {
+			Data: []byte(`{"name":"armature","description":"Test plugin"}`),
+		},
+	}
+}
