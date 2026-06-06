@@ -49,7 +49,7 @@ cat .armature/state/checkpoint.json
 arm worker-init
 
 # Check your worker ID
-arm worker-id
+arm worker-init --check
 
 # Verify worker registration
 arm doctor   # includes worker ID verification
@@ -186,10 +186,10 @@ arm validate
 arm create --title "Task X" --parent STORY-001 --confidence draft
 
 # Review draft tasks
-arm list --confidence draft
+arm dag-summary   # filter by provenance.confidence manually or via `jq`
 
 # Promote a draft to verified
-arm confirm TASK-001
+arm dag-transition --issue TASK-001 --confidence verified
 
 # View confidence in task details
 arm show TASK-001 | jq '.provenance.confidence'
@@ -233,7 +233,7 @@ arm init
 arm init --dual-branch
 
 # Check current mode
-arm show-config | jq '.mode'
+cat .armature/config.json | jq '.mode'
 ```
 
 **Command examples:**
