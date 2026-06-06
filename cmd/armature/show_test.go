@@ -9,6 +9,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestShowOmitsTombstonedNotes(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "note-task", "--title", "Note task", "--type", "task")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "note", "--issue", "note-task", "--msg", "visible note")
+	require.NoError(t, err)
+
+	out2, err := runTrls(t, repo, "note", "--issue", "note-task", "--msg", "deleted note")
+	require.NoError(t, err)
+	var noteResult map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out2)), &noteResult))
+	deletedID, _ := noteResult["note_id"].(string)
+	require.NotEmpty(t, deletedID)
+
+	_, err = runTrls(t, repo, "note", "delete", "--issue", "note-task", "--note-id", deletedID)
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "show", "--format", "json", "note-task")
+	require.NoError(t, err)
+	var showResult map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &showResult))
+	notes, _ := showResult["notes"].([]any)
+	assert.Len(t, notes, 1, "deleted note should be hidden from show output")
+	if len(notes) > 0 {
+		assert.Equal(t, "visible note", notes[0])
+	}
+}
+
 // TestShow_BlockedBy verifies that arm show displays blocked_by and blocks lists
 // when they are non-empty, in both human-readable and JSON formats.
 func TestShow_BlockedBy(t *testing.T) {

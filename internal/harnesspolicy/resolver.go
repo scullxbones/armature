@@ -71,9 +71,14 @@ func resolveCitationChecks(issue materialize.Issue, manifest sources.Manifest) [
 		return nil
 	}
 
+	// An accept-citation op with no SourceEntryID is a global acceptance that
+	// covers all linked sources (matching the CLI behaviour of arm accept-citation).
+	globallyAccepted := false
 	accepted := make(map[string]bool, len(issue.CitationAcceptances))
 	for _, acceptance := range issue.CitationAcceptances {
-		if acceptance.SourceEntryID != "" {
+		if acceptance.SourceEntryID == "" {
+			globallyAccepted = true
+		} else {
 			accepted[acceptance.SourceEntryID] = true
 		}
 	}
@@ -86,13 +91,13 @@ func resolveCitationChecks(issue materialize.Issue, manifest sources.Manifest) [
 		if _, ok := manifest.Get(link.SourceEntryID); !ok {
 			checks = append(checks, CitationCheck{
 				SourceEntryID: link.SourceEntryID,
-				Accepted:      false,
+				Accepted:      globallyAccepted,
 			})
 			continue
 		}
 		checks = append(checks, CitationCheck{
 			SourceEntryID: link.SourceEntryID,
-			Accepted:      accepted[link.SourceEntryID],
+			Accepted:      globallyAccepted || accepted[link.SourceEntryID],
 		})
 	}
 	return checks

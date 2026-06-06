@@ -82,3 +82,19 @@ func TestScopePolicyRejectsAbsolutePathOutsideScope(t *testing.T) {
 	require.Len(t, result.Violations, 1)
 	assert.Equal(t, "cmd/armature/main.go", result.Violations[0].Path)
 }
+
+func TestScopePolicyAllowsDoubleStarGlobForNestedPaths(t *testing.T) {
+	policy := NewScopePolicy([]string{"src/**"})
+
+	result := policy.CheckPaths([]string{"src/auth/login.go"})
+
+	require.True(t, result.Allowed)
+}
+
+func TestScopePolicyRejectsPathOutsideDoubleStarScope(t *testing.T) {
+	policy := NewScopePolicy([]string{"src/**"})
+
+	result := policy.CheckPaths([]string{"cmd/main.go"})
+
+	require.False(t, result.Allowed)
+}

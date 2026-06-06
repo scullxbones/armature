@@ -69,6 +69,9 @@ func newShowCmd() *cobra.Command {
 					}
 					noteTexts := make([]string, 0, len(issue.Notes))
 					for _, n := range issue.Notes {
+						if n.Deleted {
+							continue
+						}
 						noteTexts = append(noteTexts, n.Msg)
 					}
 					results = append(results, showJSON{
@@ -133,6 +136,9 @@ func newShowCmd() *cobra.Command {
 					}
 					noteTexts := make([]string, 0, len(issue.Notes))
 					for _, n := range issue.Notes {
+						if n.Deleted {
+							continue
+						}
 						noteTexts = append(noteTexts, n.Msg)
 					}
 					out := showJSON{
@@ -192,9 +198,15 @@ func newShowCmd() *cobra.Command {
 				if len(issue.Blocks) > 0 {
 					_, _ = fmt.Fprintf(w, "Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
 				}
-				if len(issue.Notes) > 0 {
+				activeNotes := make([]materialize.Note, 0, len(issue.Notes))
+				for _, n := range issue.Notes {
+					if !n.Deleted {
+						activeNotes = append(activeNotes, n)
+					}
+				}
+				if len(activeNotes) > 0 {
 					_, _ = fmt.Fprintf(w, "Notes:\n")
-					for _, n := range issue.Notes {
+					for _, n := range activeNotes {
 						_, _ = fmt.Fprintf(w, "  - %s\n", n.Msg)
 					}
 				}

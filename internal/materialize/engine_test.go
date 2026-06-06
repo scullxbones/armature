@@ -106,6 +106,29 @@ func TestApplyNoteDeleteOp_TombstonesExistingNote(t *testing.T) {
 	assert.True(t, state.Issues["task-01"].Notes[0].Deleted)
 }
 
+func TestNoteDeleteAtSameTimestampAsAdd_TombstonesViaSort(t *testing.T) {
+	// Simulates two workers at the same Unix second: one adds, one deletes.
+	// After sortOpsByTimestamp the note-add must precede note-delete so the
+	// tombstone is not silently dropped.
+	allOps := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+		{Type: ops.OpNoteDelete, TargetID: "task-01", Timestamp: 200, WorkerID: "w2",
+			Payload: ops.Payload{NoteID: "note-1"}},
+		{Type: ops.OpNote, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+			Payload: ops.Payload{Msg: "Found edge case", NoteID: "note-1"}},
+	}
+	sortOpsByTimestamp(allOps)
+
+	state := NewState()
+	for _, op := range allOps {
+		require.NoError(t, state.ApplyOp(op))
+	}
+
+	require.Len(t, state.Issues["task-01"].Notes, 1)
+	assert.True(t, state.Issues["task-01"].Notes[0].Deleted, "tombstone from w2 must survive same-tick sort")
+}
+
 func TestApplyLinkOp(t *testing.T) {
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,

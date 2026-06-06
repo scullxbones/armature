@@ -97,6 +97,13 @@ func (p ScopePolicy) allows(path string) bool {
 		if isDir && strings.HasPrefix(path, scope+"/") {
 			return true
 		}
+		if strings.Contains(scope, "**") {
+			prefix, _, _ := strings.Cut(scope, "**")
+			if strings.HasPrefix(path, prefix) {
+				return true
+			}
+			continue
+		}
 		if strings.ContainsAny(scope, "*?[") {
 			matched, err := filepath.Match(scope, path)
 			if err == nil && matched {
