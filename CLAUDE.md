@@ -15,7 +15,7 @@ Never commit implementation code without a corresponding test.
 ## `make check` must be green before every commit and push
 
 ```bash
-make check   # lint + test + coverage-check (≥80%) + mutate + validate-skills + skill
+make check   # lint + test + coverage-check (≥80%) + mutate + validate-skills + build
 ```
 
 All stages must be green. Do not ignore or suppress failures — fix them.
@@ -34,6 +34,7 @@ make lint            # golangci-lint run ./...
 make coverage        # generate coverage.html
 make coverage-check  # fail if total coverage < 80%
 make mutate          # gremlins mutation testing on ./internal
+make validate-skills # validate embedded skill source
 make skill           # build + deploy skills to .claude/skills/, .gemini/skills/, .codex/skills/
 make clean           # remove bin/, dist/, *.out, coverage.html, mutesting-report/, .claude/skills/
 

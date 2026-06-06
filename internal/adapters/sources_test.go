@@ -43,7 +43,7 @@ func TestFetchHTTP_BearerAuth(t *testing.T) {
 		return mockResp(http.StatusOK, `{"ok":true}`), nil
 	})
 
-	body, err := FetchHTTP(context.Background(), client, "http://example.com", "", "", "mytoken")
+	body, err := FetchHTTP(context.Background(), client, "https://example.test/resource", "", "", "mytoken")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 		return mockResp(http.StatusOK, "data"), nil
 	})
 
-	body, err := FetchHTTP(context.Background(), client, "http://example.com", "user", "pass", "")
+	body, err := FetchHTTP(context.Background(), client, "https://example.test/resource", "user", "pass", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestFetchHTTP_Non2xx(t *testing.T) {
 		return mockResp(http.StatusNotFound, ""), nil
 	})
 
-	_, err := FetchHTTP(context.Background(), client, "http://example.com", "", "", "")
+	_, err := FetchHTTP(context.Background(), client, "https://example.test/missing", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for 404 response")
 	}

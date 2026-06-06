@@ -42,7 +42,7 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 		return mockResp(http.StatusOK, wantBody), nil
 	})
 
-	got, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/", "", "", token)
+	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "", "", token)
 	if err != nil {
 		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 		return mockResp(http.StatusOK, wantBody), nil
 	})
 
-	got, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/", "alice", "secret", "")
+	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "alice", "secret", "")
 	if err != nil {
 		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestFetchHTTP_ErrorStatus(t *testing.T) {
 		return mockResp(http.StatusNotFound, "not found"), nil
 	})
 
-	_, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/missing", "", "", "")
+	_, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/missing", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
@@ -89,7 +89,7 @@ func TestFetchHTTP_NoAuth(t *testing.T) {
 		return mockResp(http.StatusOK, wantBody), nil
 	})
 
-	got, err := adapters.FetchHTTP(context.Background(), client, "http://example.com/", "", "", "")
+	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "", "", "")
 	if err != nil {
 		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}

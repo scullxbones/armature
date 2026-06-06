@@ -12,19 +12,20 @@ INSTALL_DIR ?= $(HOME)/.local/bin
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check      - Run full CI validation: lint, test, coverage-check, mutate"
+	@echo "  make check      - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, build"
 	@echo "  make test       - Run all tests"
 	@echo "  make coverage   - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check - Check coverage meets 80% threshold (fails build if not)"
 	@echo "  make lint       - Run golangci-lint"
 	@echo "  make mutate     - Run mutation testing on core packages"
+	@echo "  make validate-skills - Validate embedded skill source"
 	@echo "  make clean      - Remove build artifacts and test outputs"
 	@echo "  make build      - Build CLI binary to ./bin/arm"
 	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
 	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint test coverage-check mutate validate-skills skill
+check: lint test coverage-check mutate validate-skills build
 
 test:
 	@tmp=$$(mktemp); \
@@ -42,7 +43,7 @@ coverage-check:
 	$(GO) test -coverprofile=coverage.out ./...
 	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
 	echo "Total coverage: $${COVERAGE}%"; \
-	if [ $$(echo "$${COVERAGE} < 80" | bc -l) -eq 1 ]; then \
+	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 80) }'; then \
 		echo "FAIL: coverage $${COVERAGE}% is below 80% threshold"; \
 		exit 1; \
 	fi
@@ -66,13 +67,19 @@ mutate:
 	@echo "Running mutation tests on internal..."
 	@mkdir -p mutesting-report
 	@report=mutesting-report/internal.json; \
-	gremlins --silent unleash --output "$$report" ./internal; status=$$?; \
-	$(PYTHON) scripts/summarize_gremlins_report.py "$$report" internal; \
+	rm -f "$$report"; \
+	gremlins --config .gremlins.yaml --silent unleash --output "$$report" ./internal; status=$$?; \
+	if [ -f "$$report" ]; then \
+		$(PYTHON) scripts/summarize_gremlins_report.py "$$report" internal; \
+	fi; \
 	exit $$status
 	@echo "Running mutation tests on cmd..."
 	@report=mutesting-report/cmd.json; \
-	gremlins --silent unleash --output "$$report" ./cmd; status=$$?; \
-	$(PYTHON) scripts/summarize_gremlins_report.py "$$report" cmd; \
+	rm -f "$$report"; \
+	gremlins --config .gremlins.yaml --silent unleash --output "$$report" ./cmd; status=$$?; \
+	if [ -f "$$report" ]; then \
+		$(PYTHON) scripts/summarize_gremlins_report.py "$$report" cmd; \
+	fi; \
 	exit $$status
 
 validate-skills:
