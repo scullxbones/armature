@@ -146,11 +146,14 @@ This section is critical. **Every task in the plan MUST have `dod`, `scope`, and
 **`dod` — Definition of Done**
 
 Describes what "complete" looks like. Must be concrete and verifiable by the
-worker without asking the Planner.
+worker without asking the Planner. **Limited to 500 characters** (E9 validation error
+if exceeded). Summarize the outcome in the DoD; place extended requirements in
+the `notes` array instead.
 
 - Good: `"The parser handles all five token types defined in spec §3.2 and returns typed AST nodes. All existing tests pass and new unit tests cover the added branches."`
 - Bad: `"Done when it works"` — vague, not verifiable
 - Bad: `"Implement the feature"` — restates the title, adds no information
+- Bad: Long DoD over 500 chars — summarize and move details to `notes`
 
 **`scope` — Files Affected**
 
