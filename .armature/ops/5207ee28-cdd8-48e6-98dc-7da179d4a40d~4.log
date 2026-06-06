@@ -1,1 +1,2 @@
 ["transition","DOCS-S5-T4",1780783835,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~4",{"to":"done","outcome":"added DAG Hygiene section to all four role skills mandating clean arm validate and arm doctor at all times"}]
+["transition","DOCS-S5-T5",1780783858,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~4",{"to":"done","outcome":"added recovery step to coordinator skill for handling workers that return without running arm transition"}]
