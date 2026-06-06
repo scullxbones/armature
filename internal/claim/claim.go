@@ -41,10 +41,7 @@ func IsClaimStale(claimedAt, lastHeartbeat int64, ttlMinutes int, now int64) boo
 	if ttlMinutes <= 0 {
 		return false
 	}
-	lastActivity := claimedAt
-	if lastHeartbeat > lastActivity {
-		lastActivity = lastHeartbeat
-	}
+	lastActivity := max(claimedAt, lastHeartbeat)
 	ttlSeconds := int64(ttlMinutes) * 60
 	return now > lastActivity+ttlSeconds
 }

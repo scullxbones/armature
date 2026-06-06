@@ -52,7 +52,7 @@ func TestScopeOverlap(t *testing.T) {
 
 // genOp creates an arbitrary ops.Op with a random timestamp and workerID.
 func genOp() gopter.Gen {
-	return gen.Struct(reflect.TypeOf(ops.Op{}), map[string]gopter.Gen{
+	return gen.Struct(reflect.TypeFor[ops.Op](), map[string]gopter.Gen{
 		"Type":      gen.Const(ops.OpClaim),
 		"TargetID":  gen.Const("task-01"),
 		"Timestamp": gen.Int64Range(0, 1000),
@@ -83,7 +83,7 @@ func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 			expected := ResolveClaim(claims)
 			// Try a few different shuffles and confirm the winner never changes.
 			rng := rand.New(rand.NewSource(42)) // deterministic seed for test reproducibility
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				shuffled := shuffle(claims, rng)
 				got := ResolveClaim(shuffled)
 				if got.WorkerID != expected.WorkerID || got.Timestamp != expected.Timestamp {
@@ -147,12 +147,12 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 			return true
 		},
 		// Use SliceOfN to guarantee at least 1 element, then append arbitrary extras.
-		gen.SliceOfN(1, genOp()).FlatMap(func(v interface{}) gopter.Gen {
+		gen.SliceOfN(1, genOp()).FlatMap(func(v any) gopter.Gen {
 			base := v.([]ops.Op)
 			return gen.SliceOf(genOp()).Map(func(extra []ops.Op) []ops.Op {
 				return append(base, extra...)
 			})
-		}, reflect.TypeOf([]ops.Op{})),
+		}, reflect.TypeFor[[]ops.Op]()),
 	))
 
 	properties.TestingRun(t)
