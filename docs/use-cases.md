@@ -209,10 +209,19 @@ cd project-repo
 arm init
 ```
 
-For repositories that already have a partial or corrupted Armature state, use `--repair` to reconcile without losing existing issue data.
+If Armature state becomes corrupted or inconsistent, delete the coordination data directory and reinitialize:
 
 ```bash
-arm init --repair
+rm -rf .armature         # single-branch mode
+rm -rf .arm/.armature    # dual-branch mode
+arm init                 # reinitialize from scratch
+```
+
+Alternatively, use `arm doctor` to diagnose structural issues before repairing:
+
+```bash
+arm doctor
+# Shows diagnostics for D1–D6 checks (config, ops logs, state files, hooks, worktree)
 ```
 
 ### Configuring Defaults
@@ -221,11 +230,22 @@ Armature reads configuration from `.armature/config.json`. Edit this file to set
 
 ```json
 {
-  "ttl_seconds": 1800,
-  "stale_threshold_seconds": 900,
-  "verification_commands": [
-    "make check",
-    "go vet ./..."
+  "mode": "dual-branch",
+  "project_type": "go",
+  "default_ttl": 60,
+  "token_budget": 1600,
+  "low_stakes_push_threshold": 5,
+  "hooks": [
+    {
+      "name": "on_transition",
+      "command": ["scripts/notify-slack.sh"],
+      "required": false
+    },
+    {
+      "name": "on_stale",
+      "command": ["scripts/page-on-call.sh"],
+      "required": false
+    }
   ]
 }
 ```
@@ -234,22 +254,35 @@ Key settings:
 
 | Setting | What it controls |
 |---|---|
-| `ttl_seconds` | How long a claim is valid before it is considered stale (default 1800 s) |
-| `stale_threshold_seconds` | How long without a heartbeat before `stale-review` flags a task |
-| `verification_commands` | Commands agents must run before marking a task done |
+| `mode` | Coordination mode: `"single-branch"` (code and ops on main) or `"dual-branch"` (ops on _armature) |
+| `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
+| `default_ttl` | Claim validity window in minutes before auto-stale (default: 60) |
+| `token_budget` | Context token limit for `arm render-context` (default: 1600 ≈ 6400 chars) |
+| `low_stakes_push_threshold` | Number of ops to batch before auto-pushing (default: 5) |
+| `hooks` | Array of event hooks: name, command array, and required flag |
 
 ### Hook Configuration
 
-Armature can fire hooks on state transitions. Configure them in `.armature/config.json` under the `hooks` key.
+Armature can fire hooks on state transitions. Configure them in `.armature/config.json` under the `hooks` key as an array of objects, each with a name, command, and required flag.
 
 ```json
 {
-  "hooks": {
-    "on_transition": "scripts/notify-slack.sh",
-    "on_stale": "scripts/page-on-call.sh"
-  }
+  "hooks": [
+    {
+      "name": "notify_slack",
+      "command": ["scripts/notify-slack.sh"],
+      "required": false
+    },
+    {
+      "name": "page_oncall",
+      "command": ["scripts/page-on-call.sh"],
+      "required": false
+    }
+  ]
 }
 ```
+
+Each hook is invoked as `command[0] command[1] ... command[n]`. If `required` is true, the operation fails if the hook exits non-zero.
 
 ### Routine Operations
 
@@ -276,9 +309,9 @@ arm transition --issue TASK-055 --to ready \
 
 ### Notes for Wrangler
 
-- Run `arm init --repair` rather than deleting `.armature/` — it preserves existing task data while fixing structural problems.
-- Keep `ttl_seconds` generous enough that slow tasks do not get falsely flagged as stale.
-- The `verification_commands` list is enforced before `arm transition --to done` completes.
+- If state becomes corrupted, delete `.armature/` (single-branch) or `.arm/.armature/` (dual-branch) and run `arm init` to reinitialize. Use `arm doctor` first to diagnose issues.
+- Keep `default_ttl` generous enough that slow tasks do not get falsely flagged as stale.
+- Hooks with `required: true` will block operations if they fail; use sparingly for critical integrations.
 
 ---
 
