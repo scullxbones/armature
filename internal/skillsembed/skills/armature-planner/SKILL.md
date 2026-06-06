@@ -173,6 +173,17 @@ should name a test, a command output, or an observable behavior.
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
 
+**`notes` — Optional Free-Text Notes**
+
+JSON array of strings (`[]string`) containing optional extended notes or guidance
+for the worker. Use `notes` to provide context that does not fit in `dod` or
+`acceptance`, or to reference external docs. Initialize as `[]` (empty array)
+if not needed.
+
+- Good: `["See RFC-2019-auth for security requirements", "Coordinate with infra team on deployment"]`
+- Good: `[]` — empty array if no additional notes
+- Bad: Using `notes` to store what should be in `dod` or `acceptance`
+
 ### Complete Well-Formed Task Example
 
 ```json
