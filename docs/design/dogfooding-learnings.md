@@ -444,3 +444,87 @@ Captured while using armature to track its own E2 development.
 **Recommendation**: Two complementary mitigations: (1) At dispatch time, write a minimal `go.work` file (`use .`) into each worktree (gitignored) — this allows agents to run `gopls check ./...` for fast per-file feedback before the full make check suite. (2) The coordinator should run `gopls diagnostics` (via LSP tool) on all changed files after agents return and before merging, catching import/format issues at merge time rather than after.
 
 **File**: `docs/arm-worker-SKILL.md`, dispatcher workflow
+
+---
+
+## L36: sources add relative path warning gives no actionable guidance
+
+**Observed**: `arm sources add --url docs/superpowers/plans/...md --type filesystem` emits a warning: "relative filesystem path ... will be resolved from working directory at sync time". No guidance on whether to use an absolute path or whether this is safe to proceed with.
+
+**Impact**: Agents treating all warnings as potential blockers may halt unnecessarily. Agents that ignore it may encounter sync errors if the working directory changes.
+
+**Recommendation**: Either clarify in the warning message that relative paths are fine as long as arm sync is always run from the repo root, or resolve relative paths to absolute at registration time.
+
+**File**: `internal/sources/`
+
+---
+
+## L37: sources sync fetch errors followed by sources verify OK is misleading
+
+**Observed**: Running `arm sources sync` printed "fetch <uuid>: filesystem provider: read ... no such file or directory" for 3 sources, but `arm sources verify` immediately after showed them all as OK. The verify output gives no indication that any sync failed.
+
+**Impact**: Agents running the recommended sync→verify sequence have no reliable way to detect that some sources are using stale cached content from a previous sync. The verify OK status implies freshness that does not exist.
+
+**Recommendation**: `arm sources verify` should distinguish between "OK (freshly synced)" and "OK (cached, sync failed)" and surface the latter as WARN or STALE.
+
+**File**: `internal/sources/`, `cmd/armature/sources.go`
+
+---
+
+## L38: E9 DoD >500 char limit not mentioned in planner skill guidance
+
+**Observed**: 8 of 9 tasks in a documentation improvement plan failed validation with E9 "definition_of_done exceeds 500 chars". The armature-planner SKILL.md section on "Writing Good Plan JSON" describes DoD as needing to be "concrete and verifiable" but does not mention the 500-character limit. All examples in the skill are short, obscuring the constraint.
+
+**Impact**: Agents following the skill and writing detailed multi-step DoDs for documentation or multi-file tasks will hit E9 in validation and need to do a remediation pass of amend ops before the plan can proceed.
+
+**Recommendation**: Add the 500-character limit explicitly to the "three mandatory fields" section in armature-planner SKILL.md. Consider whether 500 chars is the right limit for doc/writing tasks where the DoD naturally needs more detail. A fix option: allow `notes` in the plan JSON to carry the extended spec while keeping DoD under the limit.
+
+**File**: `internal/skillsembed/skills/armature-planner/SKILL.md`, `internal/validate/validate.go:247`
+
+---
+
+## L39: Bundled role skills fail to load via Skill tool — directory structure incompatible
+
+**Observed**: `arm install-skills` deploys each role skill as a directory (e.g., `.claude/skills/armature-coordinator/SKILL.md`). The Claude Code Skill tool looks up skills by name (`armature-coordinator`) and expects a single file. When the name resolves to a directory, the Skill tool returns "Unknown skill" and the coordinator or worker must fall back to reading SKILL.md manually via the Read tool — wasting a turn and breaking the intended workflow.
+
+**Impact**: Every coordinator and worker session requires a manual workaround to load its own skill. The `armature-worker`, `armature-coordinator`, `armature-planner`, and `armature-auditor` skills are all affected.
+
+**Recommendation**: During `arm install-skills`, write a flat `<name>.md` file alongside each skill directory (e.g., `.claude/skills/armature-coordinator.md` containing the SKILL.md body). The directory can remain for reference files. This makes the skill loadable by the Skill tool without breaking existing reference lookups.
+
+**File**: `cmd/armature/install_skills.go`
+
+---
+
+## L40: `arm ready` has no `--parent` filter — returns all stories' tasks
+
+**Observed**: When coordinating a specific story (DOCS-S1), `arm ready` returned 25+ ready tasks spanning DOCS, ARCHIMP, and multiple other stories. There is no `--parent STORY-ID` flag to scope the output. The coordinator must mentally filter the list, introducing noise and the risk of accidentally claiming tasks from other stories.
+
+**Impact**: In repos with multiple concurrent stories, coordinators see a large undifferentiated queue. A `--parent` filter would be the natural first thing to reach for.
+
+**Recommendation**: Add `arm ready --parent STORY-ID` that returns only ready tasks whose parent chain includes STORY-ID. Without the flag, behavior is unchanged.
+
+**File**: `cmd/armature/ready.go`, `internal/ready/compute.go`
+
+---
+
+## L41: Same-worker sequential claims produce duplicate overlap dismissal notes
+
+**Observed**: A coordinator pre-claiming 4 tasks with overlapping scope in sequence (T1, T2, T3, T4) caused `arm render-context DOCS-S1-T3` to include 5 identical "Serial claim: scope overlap with DOCS-S1-T2 (same worker, dismissed)" notes. Each sequential claim fired the overlap check and appended a new note, even though the dismissal rationale was identical.
+
+**Impact**: Task context is polluted with redundant noise. Agents reading the notes layer cannot distinguish a meaningful annotation from a system-generated duplicate.
+
+**Recommendation**: When writing an overlap dismissal note, check if an identical note (same issue-pair, same rationale) already exists and deduplicate. Or suppress same-worker overlap notes entirely, since they carry no information the worker doesn't already have.
+
+**File**: `internal/claim/`
+
+---
+
+## L42: DAG hygiene mandate missing from all agent skills
+
+**Observed**: All agent skills (coordinator, worker, planner, auditor) are silent on the expectation that `arm validate` and `arm doctor` must remain clean across the entire repository at all times. Without explicit guidance, agents treat warnings from unrelated stories as "not my problem" and ignore them.
+
+**Impact**: DAG decay accumulates silently between sessions. Just as allowing failing tests to persist "out of scope" is unacceptable, allowing `arm validate` or `arm doctor` warnings to persist in unrelated stories is equally unacceptable — both signal real problems that block downstream work.
+
+**Recommendation**: Add a DAG Hygiene section to each bundled role skill, using the failing-tests analogy: `arm validate` and `arm doctor` must exit clean before any story is released or closed. If warnings from other stories appear, they must be resolved or escalated — not ignored. The `--scope` flag exists for focused review, but the full validate must also be clean.
+
+**File**: `internal/skillsembed/skills/armature-coordinator/SKILL.md`, `internal/skillsembed/skills/armature-worker/SKILL.md`, `internal/skillsembed/skills/armature-planner/SKILL.md`, `internal/skillsembed/skills/armature-auditor/SKILL.md`
