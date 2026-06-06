@@ -1,0 +1,1 @@
+["transition","DOCS-S1-T1",1780751926,"codex-worker~1",{"to":"done","outcome":"All five quickstart accuracy bugs fixed: sources add flag syntax, worker-init and install-skills steps added, decompose-context --sources changed to all, arm transition consolidated to single --to done form"}]
