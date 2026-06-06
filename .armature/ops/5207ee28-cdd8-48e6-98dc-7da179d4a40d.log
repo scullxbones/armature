@@ -91,3 +91,4 @@
 ["transition","DOCS-S4-T3",1780777731,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","DOCS-S4-T5",1780777732,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["claim","DOCS-S4-T2",1780777737,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["note","task-1780753026",1780777739,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with DOCS-S4-T2 (same worker, dismissed)"}]
