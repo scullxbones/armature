@@ -612,3 +612,4 @@
 ["note","HKREFACT-T14",1780661549,"codex-worker",{"msg":"Scope overlap with HKREFACT-T15 detected at claim time"}]
 ["claim","HKREFACT-T15",1780661549,"codex-worker",{"ttl":60}]
 ["transition","HKREFACT-T15",1780661669,"codex-worker",{"to":"done","outcome":"Added durable note-delete op plumbing with explicit note IDs and CLI delete support."}]
+["source-fingerprint","92025c1d-1e1c-4964-a212-f37ed58fbcf7",1780750400,"codex-worker",{"sha":"246b8ab465eded3780f369db396bf7b4e99d47be6e9ee1a793e46c77f5a15ada","provider":"filesystem"}]
