@@ -885,3 +885,4 @@
 ["claim","ARCHIMP-S1-T1",1780753610,"codex-worker",{"ttl":240}]
 ["transition","ARCHIMP-S1",1780753610,"codex-worker",{"to":"in-progress"}]
 ["claim","DOCS-S2-T1",1780755111,"codex-worker",{"ttl":240}]
+["transition","DOCS-S2",1780755113,"codex-worker",{"to":"in-progress"}]
