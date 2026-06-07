@@ -142,6 +142,65 @@ func TestInstallSkillsDeploysPluginGlobal(t *testing.T) {
 	require.NoError(t, statErr, "plugin.json should be deployed to ~/.claude/plugins/armature/")
 }
 
+// TestDeployFlatSkillsCreatesFlatMDFiles verifies that deployFlatSkills writes a flat
+// <name>.md file (SKILL.md body) alongside each skill directory so the Skill tool can
+// load skills by name.
+func TestDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
+	t.Parallel()
+	src := makeTestFS(t)
+	dest := t.TempDir()
+
+	// Deploy the directory structure first (required for flat files to co-exist).
+	require.NoError(t, deploySkills(src, dest))
+
+	err := deployFlatSkills(src, dest)
+	require.NoError(t, err)
+
+	// Verify the flat .md file exists alongside the directory.
+	content, readErr := os.ReadFile(filepath.Join(dest, "demo-skill.md"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "demo-skill", "flat md should contain SKILL.md body")
+}
+
+// TestDeployFlatSkillsIdempotent verifies that running deployFlatSkills twice does not
+// produce an error and that files are overwritten.
+func TestDeployFlatSkillsIdempotent(t *testing.T) {
+	t.Parallel()
+	src := makeTestFS(t)
+	dest := t.TempDir()
+
+	require.NoError(t, deploySkills(src, dest))
+	require.NoError(t, deployFlatSkills(src, dest))
+	require.NoError(t, deployFlatSkills(src, dest))
+
+	content, readErr := os.ReadFile(filepath.Join(dest, "demo-skill.md"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "demo-skill")
+}
+
+// TestInstallSkillsDeploysFlatMDLocal verifies the CLI command writes flat <name>.md
+// files to .claude/skills/ so the Skill tool can load skills by name.
+func TestInstallSkillsDeploysFlatMDLocal(t *testing.T) {
+	repo := initTempRepo(t)
+
+	_, err := runTrls(t, repo, "install-skills")
+	require.NoError(t, err)
+
+	// Verify flat .md files exist for all bundled skills.
+	skillsDir := filepath.Join(repo, ".claude", "skills")
+	entries, readErr := os.ReadDir(skillsDir)
+	require.NoError(t, readErr)
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		flatPath := filepath.Join(skillsDir, e.Name()+".md")
+		_, statErr := os.Stat(flatPath)
+		require.NoError(t, statErr, "flat md should exist for skill %s", e.Name())
+	}
+}
+
 // makeTestFSWithPlugin builds an in-memory FS that includes plugin.json
 func makeTestFSWithPlugin(t *testing.T) fs.FS {
 	t.Helper()
