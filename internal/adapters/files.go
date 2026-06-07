@@ -100,7 +100,6 @@ func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffse
 		if _, err := f.Seek(startOffset, 0); err != nil {
 			return nil, fmt.Errorf("seek in log %s: %w", logPath, err)
 		}
-		currentOffset = startOffset
 	}
 
 	var lines []LineWithOffset
@@ -108,13 +107,13 @@ func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffse
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Bytes()
+		// Update offset before processing: account for the line length + newline character
+		currentOffset += int64(len(line)) + 1 // +1 for newline
 		if len(line) == 0 {
 			continue
 		}
 		// Copy the line
 		lineCopy := append([]byte{}, line...)
-		// Update offset: account for the line length + newline character
-		currentOffset += int64(len(lineCopy)) + 1 // +1 for newline
 		lines = append(lines, LineWithOffset{
 			Line:      lineCopy,
 			EndOffset: currentOffset,

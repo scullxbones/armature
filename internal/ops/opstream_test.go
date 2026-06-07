@@ -224,3 +224,111 @@ func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
 	assert.Len(t, warnings, 0)
 	assert.Equal(t, logPath, items[0].LogFilename)
 }
+
+// ===== Tests for package-level LoadFromDirValidated and LoadFromDirWithOffsetsValidated =====
+
+func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
+	items, warnings, err := LoadFromDirValidated("/nonexistent/directory/path")
+
+	require.NoError(t, err)
+	assert.Len(t, items, 0)
+	assert.Len(t, warnings, 0)
+}
+
+func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
+	dir := t.TempDir()
+	logPath1 := filepath.Join(dir, "worker-a1.log")
+	logPath2 := filepath.Join(dir, "worker-b2.log")
+
+	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "A1 Op", NodeType: "task"}}
+	op2 := Op{Type: OpCreate, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-b2",
+		Payload: Payload{Title: "B2 Op", NodeType: "task"}}
+
+	require.NoError(t, AppendOp(logPath1, op1))
+	require.NoError(t, AppendOp(logPath2, op2))
+
+	items, warnings, err := LoadFromDirValidated(dir)
+
+	require.NoError(t, err)
+	assert.Len(t, warnings, 0)
+	assert.Len(t, items, 2)
+	// Verify worker IDs match filenames
+	assert.Equal(t, "worker-a1", items[0].Op.WorkerID)
+	assert.Equal(t, "worker-b2", items[1].Op.WorkerID)
+}
+
+func TestLoadFromDirValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "custom-id~slot-x.log")
+
+	op := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "custom-id~slot-x",
+		Payload: Payload{Title: "Test", NodeType: "task"}}
+
+	require.NoError(t, AppendOp(logPath, op))
+
+	items, warnings, err := LoadFromDirValidated(dir)
+
+	require.NoError(t, err)
+	assert.Len(t, warnings, 0)
+	assert.Len(t, items, 1)
+	assert.Equal(t, "custom-id~slot-x", items[0].Op.WorkerID)
+}
+
+func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
+	dir := t.TempDir()
+	logPath1 := filepath.Join(dir, "worker-a1.log")
+	logPath2 := filepath.Join(dir, "worker-b2.log")
+
+	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "First", NodeType: "task"}}
+	op2 := Op{Type: OpCreate, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-b2",
+		Payload: Payload{Title: "Second", NodeType: "task"}}
+
+	require.NoError(t, AppendOp(logPath1, op1))
+	require.NoError(t, AppendOp(logPath2, op2))
+
+	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+
+	require.NoError(t, err)
+	assert.Len(t, warnings, 0)
+	assert.Len(t, items, 2)
+
+	// Verify offsets map uses basenames, not full paths
+	assert.Contains(t, offsets, "worker-a1.log")
+	assert.Contains(t, offsets, "worker-b2.log")
+	assert.Greater(t, offsets["worker-a1.log"], int64(0))
+	assert.Greater(t, offsets["worker-b2.log"], int64(0))
+}
+
+func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	// Write ops with mismatched worker IDs
+	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-wrong",
+		Payload: Payload{Title: "Wrong1", NodeType: "task"}}
+	op2 := Op{Type: OpCreate, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-wrong",
+		Payload: Payload{Title: "Wrong2", NodeType: "task"}}
+
+	require.NoError(t, AppendOp(logPath, op1))
+	require.NoError(t, AppendOp(logPath, op2))
+
+	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+
+	require.NoError(t, err)
+	// All ops are rejected due to mismatch
+	assert.Len(t, items, 0)
+	assert.Len(t, warnings, 2)
+
+	// CRITICAL: Even though all ops are mismatched, the offset should still be recorded
+	// so we don't re-read the same lines forever
+	logName := "worker-a1.log"
+	assert.Contains(t, offsets, logName, "offset should be recorded even for all-mismatched files")
+	assert.Greater(t, offsets[logName], int64(0), "offset should point past all lines")
+
+	// Get file size to verify offset
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, info.Size(), offsets[logName], "offset should match file size")
+}
