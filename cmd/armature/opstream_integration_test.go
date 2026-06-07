@@ -111,7 +111,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse JSON output
-	var result map[string]interface{}
+	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(validateOut)), &result))
 
 	// Verify that validation succeeded
@@ -170,7 +170,7 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse JSON array of ready entries
-	var entries []map[string]interface{}
+	var entries []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(readyOut)), &entries))
 
 	// Extract IDs from the "Issue" field
