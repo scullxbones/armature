@@ -332,3 +332,77 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, info.Size(), offsets[logName], "offset should match file size")
 }
+
+func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	// Write one accepted op (matching worker ID)
+	acceptedOp := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "Accepted", NodeType: "task"}}
+	require.NoError(t, AppendOp(logPath, acceptedOp))
+
+	// Append trailing rejected line (mismatched worker ID)
+	rejectedOp := Op{Type: OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-wrong",
+		Payload: Payload{Msg: "This op should be rejected"}}
+	require.NoError(t, AppendOp(logPath, rejectedOp))
+
+	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+
+	require.NoError(t, err)
+	// One accepted op, one rejected
+	assert.Len(t, items, 1)
+	assert.Len(t, warnings, 1)
+
+	logName := "worker-a1.log"
+	assert.Contains(t, offsets, logName)
+
+	// CRITICAL: The offset must point to the END of the file (past the trailing rejected line),
+	// not just to the end of the last accepted op.
+	// This ensures incremental readers resuming from this checkpoint won't re-read the rejected tail forever.
+	fileInfo, err := os.Stat(logPath)
+	require.NoError(t, err)
+	fileSize := fileInfo.Size()
+
+	assert.Equal(t, fileSize, offsets[logName],
+		"offset must equal file size to avoid re-reading trailing rejected lines")
+
+	// Verify offset is past the accepted op itself
+	assert.Greater(t, offsets[logName], items[0].Offset,
+		"offset must be past the accepted op, not just at its end")
+}
+
+func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	// Write one accepted op (matching worker ID)
+	acceptedOp := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "Accepted", NodeType: "task"}}
+	require.NoError(t, AppendOp(logPath, acceptedOp))
+
+	// Append corrupt line directly
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
+	require.NoError(t, err)
+	_, err = f.WriteString("not valid json\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+
+	require.NoError(t, err)
+	// One accepted op, one corrupt line (skipped)
+	assert.Len(t, items, 1)
+	assert.Len(t, warnings, 1) // Warning about corrupt line
+
+	logName := "worker-a1.log"
+	assert.Contains(t, offsets, logName)
+
+	// CRITICAL: Even with a corrupt trailing line, the offset must point to the physical EOF
+	fileInfo, err := os.Stat(logPath)
+	require.NoError(t, err)
+	fileSize := fileInfo.Size()
+
+	assert.Equal(t, fileSize, offsets[logName],
+		"offset must equal file size even when trailing line is corrupt")
+}
