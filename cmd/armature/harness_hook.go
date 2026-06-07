@@ -23,7 +23,7 @@ func newHarnessHookCmd() *cobra.Command {
 				return fmt.Errorf("ARMATURE_TASK_ID is required")
 			}
 
-			adapter, err := hookAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
+			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
 			if err != nil {
 				return err
 			}
@@ -74,18 +74,5 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 			return nil
 		},
-	}
-}
-
-func hookAdapterForPlatform(platform string) (harnesshook.PlatformAdapter, error) {
-	switch platform {
-	case "", "claude":
-		return harnesshook.NewClaudeAdapter(), nil
-	case "codex":
-		return harnesshook.NewCodexAdapter(), nil
-	case "devin":
-		return harnesshook.NewDevinAdapter(), nil
-	default:
-		return nil, fmt.Errorf("unknown harness hook platform %q", platform)
 	}
 }

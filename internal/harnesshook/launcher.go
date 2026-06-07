@@ -26,7 +26,10 @@ func (l *Launcher) BuildEnv(base map[string]string, taskID, platform string) map
 	return env
 }
 
-func adapterForPlatform(platform string) (PlatformAdapter, error) {
+// NewAdapterForPlatform is the single registry for platform adapter selection.
+// It is used by both the launcher and the hook runner to ensure consistent
+// adapter instantiation across the harness-hook subsystem.
+func NewAdapterForPlatform(platform string) (PlatformAdapter, error) {
 	switch platform {
 	case "", "claude":
 		return NewClaudeAdapter(), nil
@@ -37,4 +40,9 @@ func adapterForPlatform(platform string) (PlatformAdapter, error) {
 	default:
 		return nil, fmt.Errorf("unknown harness hook platform %q", platform)
 	}
+}
+
+// adapterForPlatform is deprecated; use NewAdapterForPlatform instead.
+func adapterForPlatform(platform string) (PlatformAdapter, error) {
+	return NewAdapterForPlatform(platform)
 }
