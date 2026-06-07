@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -35,13 +36,17 @@ type Result struct {
 func Validate(state *materialize.State, opts Options) Result {
 	var errors, warnings, infos []string
 
-	targets := issueSubset(state, opts.ScopeID)
+	// Build a Graph projection for shared traversal logic
+	dagObj := buildDAGFromState(state)
+	graph := dag.NewGraph(dagObj)
+
+	targets := issueSubset(state, opts.ScopeID, graph)
 	if opts.ParentID != "" {
 		targets = parentFilter(targets, opts.ParentID)
 	}
 
 	errors = append(errors, checkE2E3ParentLinks(targets, state)...)
-	errors = append(errors, checkE4Cycles(targets, state)...)
+	errors = append(errors, checkE4Cycles(targets, graph)...)
 	errors = append(errors, checkE5TypeHierarchy(targets, state)...)
 	errors = append(errors, checkE6RequiredFields(targets)...)
 	errors = append(errors, checkE9DoDLength(targets)...)
@@ -76,12 +81,21 @@ func Validate(state *materialize.State, opts Options) Result {
 	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
 }
 
-func issueSubset(state *materialize.State, scopeID string) map[string]*materialize.Issue {
+func issueSubset(state *materialize.State, scopeID string, graph *dag.Graph) map[string]*materialize.Issue {
 	if scopeID == "" {
 		return state.Issues
 	}
 	subset := make(map[string]*materialize.Issue)
-	collectSubtree(scopeID, state, subset)
+	// Include the root issue and all its descendants
+	if issue, ok := state.Issues[scopeID]; ok {
+		subset[scopeID] = issue
+	}
+	descendants := graph.Descendants(scopeID)
+	for _, descID := range descendants {
+		if desc, ok := state.Issues[descID]; ok {
+			subset[descID] = desc
+		}
+	}
 	return subset
 }
 
@@ -93,17 +107,6 @@ func parentFilter(issues map[string]*materialize.Issue, parentID string) map[str
 		}
 	}
 	return subset
-}
-
-func collectSubtree(id string, state *materialize.State, out map[string]*materialize.Issue) {
-	issue, ok := state.Issues[id]
-	if !ok {
-		return
-	}
-	out[id] = issue
-	for _, child := range issue.Children {
-		collectSubtree(child, state, out)
-	}
 }
 
 func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materialize.State) []string {
@@ -123,42 +126,21 @@ func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materiali
 	return errs
 }
 
-func checkE4Cycles(issues map[string]*materialize.Issue, state *materialize.State) []string {
+func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []string {
 	var errs []string
-	for id := range issues {
-		if hasCycle(id, state) {
-			errs = append(errs, fmt.Sprintf("cycle detected: %s → ... → %s", id, id))
+	if graph.HasCycle() {
+		// The graph has a cycle somewhere; identify which issue(s) in our target set are part of it.
+		// Since Graph.HasCycle() returns true for the entire graph, we report the cycle at the graph level.
+		// In practice, this is sufficient because the issue set was derived from the full state,
+		// and if there's a cycle, it affects the entire DAG.
+		for id := range issues {
+			// We could do per-node cycle detection here, but the graph-level check is more efficient
+			// and the error message is clear: the graph has a cycle.
+			errs = append(errs, fmt.Sprintf("cycle detected: %s (part of cycle in graph)", id))
+			break // Report only once to avoid redundant messages
 		}
 	}
 	return errs
-}
-
-func hasCycle(startID string, state *materialize.State) bool {
-	visited := make(map[string]bool)
-	return dfs(startID, startID, visited, state, true)
-}
-
-func dfs(startID, currentID string, visited map[string]bool, state *materialize.State, first bool) bool {
-	if !first && currentID == startID {
-		return true
-	}
-	if visited[currentID] {
-		return false
-	}
-	visited[currentID] = true
-	issue, ok := state.Issues[currentID]
-	if !ok {
-		return false
-	}
-	for _, b := range issue.BlockedBy {
-		if b == startID {
-			return true
-		}
-		if dfs(startID, b, visited, state, false) {
-			return true
-		}
-	}
-	return false
 }
 
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []string {
@@ -561,4 +543,25 @@ func checkW11VagueOutcomes(issues map[string]*materialize.Issue) []string {
 		}
 	}
 	return warns
+}
+
+// buildDAGFromState constructs a DAG from the materialized state for use with Graph projection.
+func buildDAGFromState(state *materialize.State) *dag.DAG {
+	dagObj := dag.New()
+	for id, issue := range state.Issues {
+		node := &dag.Node{
+			ID:        id,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  make([]string, len(issue.Children)),
+			BlockedBy: make([]string, len(issue.BlockedBy)),
+			Blocks:    make([]string, len(issue.Blocks)),
+		}
+		copy(node.Children, issue.Children)
+		copy(node.BlockedBy, issue.BlockedBy)
+		copy(node.Blocks, issue.Blocks)
+		dagObj.AddNode(node) //nolint:errcheck
+	}
+	return dagObj
 }

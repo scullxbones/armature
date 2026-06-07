@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 )
 
@@ -32,6 +33,10 @@ func Assemble(issueID string, stateDir string, state *materialize.State) (*Conte
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
 	}
 
+	// Build a Graph projection for traversals
+	dagObj := buildDAGFromState(state)
+	graph := dag.NewGraph(dagObj)
+
 	var layers []Layer
 	repoRoot := inferRepoRoot(stateDir)
 
@@ -48,7 +53,7 @@ func Assemble(issueID string, stateDir string, state *materialize.State) (*Conte
 	layers = append(layers, buildBlockerOutcomes(issue, stateDir, state))
 
 	// Layer 5: parent_chain
-	layers = append(layers, buildParentChain(issue, stateDir, state))
+	layers = append(layers, buildParentChain(issue, stateDir, state, graph))
 
 	// Layer 6: decisions
 	layers = append(layers, buildDecisions(issue))
@@ -175,32 +180,34 @@ func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *mate
 	return Layer{Name: "blocker_outcomes", Priority: 4, Content: content}
 }
 
-func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
+func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State, graph *dag.Graph) Layer {
 	var lines []string
-	currentParentID := issue.Parent
-	for range 3 {
-		if currentParentID == "" {
-			break
-		}
-		parentID := currentParentID
-		var parentTitle, parentStatus, nextParentID string
+
+	// Use graph to get the full ancestry chain
+	ancestry := graph.Ancestry(issue.ID)
+	// Limit to 3 ancestors (matching original behavior)
+	if len(ancestry) > 3 {
+		ancestry = ancestry[:3]
+	}
+
+	for _, parentID := range ancestry {
+		var parentTitle, parentStatus string
 		if parent, ok := state.Issues[parentID]; ok {
 			parentTitle = parent.Title
 			parentStatus = parent.Status
-			nextParentID = parent.Parent
 		} else {
 			path := filepath.Join(stateDir, "issues", parentID+".json")
 			if p, err := materialize.LoadIssue(path); err == nil {
 				parentTitle = p.Title
 				parentStatus = p.Status
-				nextParentID = p.Parent
 			} else {
-				break
+				// Skip if unable to load
+				continue
 			}
 		}
 		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", parentID, parentTitle, parentStatus))
-		currentParentID = nextParentID
 	}
+
 	if len(lines) == 0 {
 		return Layer{Name: "parent_chain", Priority: 5, Content: ""}
 	}
@@ -290,4 +297,25 @@ func buildSiblingOutcomes(issue *materialize.Issue, stateDir string, state *mate
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
 	return Layer{Name: "sibling_outcomes", Priority: 8, Content: content}
+}
+
+// buildDAGFromState constructs a DAG from the materialized state for use with Graph projection.
+func buildDAGFromState(state *materialize.State) *dag.DAG {
+	dagObj := dag.New()
+	for id, issue := range state.Issues {
+		node := &dag.Node{
+			ID:        id,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  make([]string, len(issue.Children)),
+			BlockedBy: make([]string, len(issue.BlockedBy)),
+			Blocks:    make([]string, len(issue.Blocks)),
+		}
+		copy(node.Children, issue.Children)
+		copy(node.BlockedBy, issue.BlockedBy)
+		copy(node.Blocks, issue.Blocks)
+		dagObj.AddNode(node) //nolint:errcheck
+	}
+	return dagObj
 }
