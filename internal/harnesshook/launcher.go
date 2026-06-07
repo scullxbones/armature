@@ -1,6 +1,9 @@
 package harnesshook
 
-import "fmt"
+import (
+	"fmt"
+	"maps"
+)
 
 type Launcher struct{}
 
@@ -18,9 +21,7 @@ func (l *Launcher) Install(workdir, platform string) error {
 
 func (l *Launcher) BuildEnv(base map[string]string, taskID, platform string) map[string]string {
 	env := make(map[string]string, len(base)+2)
-	for k, v := range base {
-		env[k] = v
-	}
+	maps.Copy(env, base)
 	env["ARMATURE_TASK_ID"] = taskID
 	env["ARMATURE_HOOK_PLATFORM"] = platform
 	return env
