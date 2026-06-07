@@ -125,7 +125,7 @@ func BenchmarkCycleDetection(b *testing.B) {
 	d := New()
 
 	// Create a tree of 100 nodes
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		parent := fmt.Sprintf("node-%d", i/2)
 		if i == 0 {
 			parent = ""
@@ -142,7 +142,7 @@ func BenchmarkCycleDetection(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		d.HasCycle()
 	}
 }

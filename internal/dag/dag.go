@@ -1,6 +1,9 @@
 package dag
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Node represents a work item in the DAG.
 type Node struct {
@@ -92,14 +95,7 @@ func (d *DAG) ValidateParentChild() error {
 				return fmt.Errorf("node %s has unknown parent %s", id, node.Parent)
 			}
 			// Check that parent actually lists this as a child
-			found := false
-			for _, childID := range parent.Children {
-				if childID == id {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !slices.Contains(parent.Children, id) {
 				return fmt.Errorf("node %s lists parent %s, but parent doesn't list it as child", id, node.Parent)
 			}
 		}
