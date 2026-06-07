@@ -4,20 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/tui/app"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestTUIModel_LoadsValidOpsExcludesCrossWorker tests that the TUI model's
-// op loading correctly excludes ops with mismatched worker IDs.
-// This validates that readAllOpsFromDirWithOffsets in model.go properly
-// uses LoadFromDirWithOffsetsValidated to filter cross-worker ops.
-func TestTUIModel_LoadsValidOpsExcludesCrossWorker(t *testing.T) {
+// TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps tests that the
+// ops loading library correctly excludes ops with mismatched worker IDs
+// (i.e., ops whose WorkerID doesn't match the filename they're in).
+func TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps(t *testing.T) {
 	// Create a temp directory with mixed valid and cross-worker ops
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
@@ -55,21 +54,17 @@ func TestTUIModel_LoadsValidOpsExcludesCrossWorker(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(mismatchLogPath, mismatchOp))
 
-	// Create a model and trigger materialization
-	model := app.New(dir, stateDir, "test-worker")
-
-	// Manually call materialize (simulating what happens during app refresh)
+	// Test the ops loading library in isolation
 	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	require.NoError(t, err)
 
 	// Check that warnings are returned for the mismatch
 	assert.NotEmpty(t, warnings, "should have warning for mismatched op")
-	assert.Greater(t, len(warnings), 0, "at least one warning should be present")
 
 	// Verify warnings mention the mismatch
 	hasWorkerIDWarning := false
 	for _, w := range warnings {
-		if contains(w, "worker ID mismatch") {
+		if strings.Contains(w, "worker ID mismatch") {
 			hasWorkerIDWarning = true
 			break
 		}
@@ -95,19 +90,15 @@ func TestTUIModel_LoadsValidOpsExcludesCrossWorker(t *testing.T) {
 	// Verify materialized state only includes the valid task
 	assert.Contains(t, state.Issues, "task-valid", "materialized state should contain valid task")
 	assert.NotContains(t, state.Issues, "task-mismatch", "materialized state should not contain mismatched task")
-
-	_ = model // use model variable to avoid unused warning
 }
 
-// TestTUIModel_WarningsSurfacedDuringLoad tests that warnings from op loading
-// are properly surfaced (logged to stderr) so users see validation issues.
-func TestTUIModel_WarningsSurfacedDuringLoad(t *testing.T) {
+// TestLoadFromDirWithOffsetsValidated_ReturnsWarningsForMismatches tests that
+// the ops loading library returns warning strings for ops with mismatched worker IDs.
+func TestLoadFromDirWithOffsetsValidated_ReturnsWarningsForMismatches(t *testing.T) {
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
-	stateDir := filepath.Join(dir, "state")
 
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
-	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
 	// Create a file with multiple mismatched ops
 	logPath := filepath.Join(opsDir, "worker-x.log")
@@ -239,9 +230,4 @@ func TestTUIModel_EmptyOpsDir(t *testing.T) {
 	assert.Empty(t, items, "empty ops dir should return no items")
 	assert.Empty(t, warnings, "empty ops dir should return no warnings")
 	assert.Empty(t, offsets, "empty ops dir should return no offsets")
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || (len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr)))
 }
