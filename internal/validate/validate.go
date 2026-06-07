@@ -128,19 +128,61 @@ func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materiali
 
 func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []string {
 	var errs []string
-	if graph.HasCycle() {
-		// The graph has a cycle somewhere; identify which issue(s) in our target set are part of it.
-		// Since Graph.HasCycle() returns true for the entire graph, we report the cycle at the graph level.
-		// In practice, this is sufficient because the issue set was derived from the full state,
-		// and if there's a cycle, it affects the entire DAG.
-		for id := range issues {
-			// We could do per-node cycle detection here, but the graph-level check is more efficient
-			// and the error message is clear: the graph has a cycle.
-			errs = append(errs, fmt.Sprintf("cycle detected: %s (part of cycle in graph)", id))
+
+	// Check for cycles restricted to the scoped issue set (not the entire DAG).
+	// This prevents false positives when a cycle exists elsewhere in the graph.
+	for id := range issues {
+		if scopedHasCycle(id, graph, issues) {
+			errs = append(errs, fmt.Sprintf("cycle detected: %s", id))
 			break // Report only once to avoid redundant messages
 		}
 	}
+
 	return errs
+}
+
+// scopedHasCycle checks for cycles within a restricted set of node IDs.
+// It performs DFS starting from id, only following edges within the scope map.
+func scopedHasCycle(id string, graph *dag.Graph, scope map[string]*materialize.Issue) bool {
+	visited := map[string]bool{}
+	recStack := map[string]bool{}
+
+	var dfs func(string) bool
+	dfs = func(nodeID string) bool {
+		if recStack[nodeID] {
+			return true // cycle detected
+		}
+		if visited[nodeID] {
+			return false
+		}
+
+		visited[nodeID] = true
+		recStack[nodeID] = true
+
+		// Walk BlockedBy edges within scope
+		for _, dep := range graph.Blockers(nodeID) {
+			if _, inScope := scope[dep]; inScope {
+				if dfs(dep) {
+					return true
+				}
+			}
+		}
+
+		// Walk Children edges within scope
+		_, children := graph.Hierarchy(nodeID)
+		for _, child := range children {
+			if _, inScope := scope[child]; inScope {
+				if dfs(child) {
+					return true
+				}
+			}
+		}
+
+		recStack[nodeID] = false
+		return false
+	}
+
+	return dfs(id)
 }
 
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []string {

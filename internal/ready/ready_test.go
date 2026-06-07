@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -305,8 +306,10 @@ func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 		index[id] = materialize.IndexEntry{Parent: parent}
 	}
 
-	d := depth("issue-24", index)
-	assert.Equal(t, 21, d, "depth should cap at 21 to break cycles")
+	dagObj := buildDAGFromIndex(index)
+	graph := dag.NewGraph(dagObj)
+	d := graph.Depth("issue-24")
+	assert.Equal(t, 24, d, "depth should be 24 (distance to root)")
 }
 
 func TestComputeReady_AssignedWorkerFieldPopulated(t *testing.T) {
@@ -343,12 +346,16 @@ func TestDepth_NoParent(t *testing.T) {
 	index := materialize.Index{
 		"task-01": {Parent: ""},
 	}
-	assert.Equal(t, 0, depth("task-01", index))
+	dagObj := buildDAGFromIndex(index)
+	graph := dag.NewGraph(dagObj)
+	assert.Equal(t, 0, graph.Depth("task-01"))
 }
 
 func TestDepth_MissingFromIndex(t *testing.T) {
 	index := materialize.Index{}
-	assert.Equal(t, 0, depth("missing", index))
+	dagObj := buildDAGFromIndex(index)
+	graph := dag.NewGraph(dagObj)
+	assert.Equal(t, 0, graph.Depth("missing"))
 }
 
 func TestAssignmentTier_AssignedToMe(t *testing.T) {
