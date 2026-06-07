@@ -258,7 +258,7 @@ If a worker returned but their task remains `in-progress` or `done` without runn
 
 ```bash
 # List all tasks still in-progress or done
-arm list --parent STORY-ID | grep -E '"status":\s*"(in-progress|done)"'
+arm list --parent STORY-ID --format json | grep -E '"status":\s*"(in-progress|done)"'
 
 # For each task that should be transitioned, manually run:
 arm transition TASK-ID --to done --outcome "CONCRETE_OUTCOME_DESCRIPTION"

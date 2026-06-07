@@ -201,6 +201,30 @@ func TestInstallSkillsDeploysFlatMDLocal(t *testing.T) {
 	}
 }
 
+// TestDeployFlatSkillsRewritesReferencePaths verifies that deployFlatSkills rewrites
+// relative reference paths in skill files so they resolve correctly from the flat file location.
+func TestDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
+	t.Parallel()
+	src := fstest.MapFS{
+		"skills/demo-skill/SKILL.md": {
+			Data: []byte("# demo-skill\nSee `references/guide.md` for details.\n"),
+		},
+	}
+	dest := t.TempDir()
+
+	// Deploy the directory structure first (required for flat files to co-exist).
+	require.NoError(t, deploySkills(src, dest))
+
+	err := deployFlatSkills(src, dest)
+	require.NoError(t, err)
+
+	// Verify the flat .md file has rewritten reference paths.
+	content, readErr := os.ReadFile(filepath.Join(dest, "demo-skill.md"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "demo-skill/references/guide.md", "flat md should have rewritten reference path")
+	assert.NotContains(t, string(content), "`references/guide.md`", "flat md should not contain unrewritten reference path")
+}
+
 // makeTestFSWithPlugin builds an in-memory FS that includes plugin.json
 func makeTestFSWithPlugin(t *testing.T) fs.FS {
 	t.Helper()
