@@ -145,3 +145,4 @@
 ["transition","ARCHIMP-S3-T1",1780833067,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["claim","ARCHIMP-S3-T2",1780833067,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","ARCHIMP-S3-T2",1780834335,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","ARCHIMP-S3",1780834335,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Made DAG readiness and validation share a real seam. Built a Graph projection in internal/dag/dag.go providing unified Ancestry, Descendants, Blockers, Blocks, Hierarchy, HasCycle, and Depth interfaces over materialized state. Refactored validate (cycle detection, scope-restricted DFS), ready (depth-sort), and context (parent chain assembly) to traverse via Graph instead of ad-hoc walks. Added cycle guard in Depth/Ancestry to prevent infinite loops on corrupt state. All tests pass, mutation efficacy 100%, coverage 82.0%."}]
