@@ -132,7 +132,7 @@ func buildSnippets(issue *materialize.Issue) Layer {
 	if issue.Context == nil {
 		return Layer{Name: "snippets", Priority: 3, Content: ""}
 	}
-	var ctxMap map[string]interface{}
+	var ctxMap map[string]any
 	if err := json.Unmarshal(issue.Context, &ctxMap); err != nil {
 		return Layer{Name: "snippets", Priority: 3, Content: ""}
 	}
