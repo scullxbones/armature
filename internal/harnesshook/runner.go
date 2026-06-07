@@ -1,0 +1,89 @@
+package harnesshook
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/scullxbones/armature/internal/harnesspolicy"
+)
+
+// PolicyResolver is the interface for resolving task policies.
+type PolicyResolver interface {
+	Resolve(taskID string) (harnesspolicy.TaskPolicy, error)
+}
+
+// RunnerConfig holds the dependencies for the hook runner.
+type RunnerConfig struct {
+	Adapter   PlatformAdapter
+	Resolver  PolicyResolver
+	Evaluator Evaluator
+}
+
+// RunResult contains the output and exit code from a hook run.
+type RunResult struct {
+	Output   []byte
+	Decision Decision
+	ExitCode int
+}
+
+// Runner orchestrates the hook execution: decoding input, resolving policy,
+// evaluating the hook event, encoding output, and mapping to exit code.
+type Runner struct {
+	adapter   PlatformAdapter
+	resolver  PolicyResolver
+	evaluator Evaluator
+}
+
+// NewRunner creates a new hook runner.
+func NewRunner(cfg *RunnerConfig) *Runner {
+	return &Runner{
+		adapter:   cfg.Adapter,
+		resolver:  cfg.Resolver,
+		evaluator: cfg.Evaluator,
+	}
+}
+
+// Run executes the hook runner pipeline:
+// 1. Decodes the JSON input to an Event
+// 2. Evaluates the event against the policy
+// 3. Encodes the result
+// 4. Maps the decision to an exit code
+func (r *Runner) Run(ctx context.Context, input []byte) (RunResult, error) {
+	// Decode hook input to Event
+	event, err := r.adapter.Decode(input)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("decode hook input: %w", err)
+	}
+
+	// Evaluate the event (evaluator already has policy info via config)
+	decision, err := r.evaluator.Evaluate(ctx, event)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("evaluate hook: %w", err)
+	}
+
+	// Encode the result
+	output, _, err := r.adapter.Encode(event, decision)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("encode hook output: %w", err)
+	}
+
+	// Map decision to exit code: Block = 1, Allow/None = 0
+	exitCode := 0
+	if decision.Action == DecisionBlock {
+		exitCode = 1
+	}
+
+	return RunResult{
+		Output:   output,
+		Decision: decision,
+		ExitCode: exitCode,
+	}, nil
+}
+
+// HookEventJSON is the structure for decoding hook input JSON.
+type HookEventJSON struct {
+	HookEventName string          `json:"hook_event_name"`
+	ToolName      string          `json:"tool_name"`
+	ToolInput     json.RawMessage `json:"tool_input"`
+}
