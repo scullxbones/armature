@@ -42,7 +42,8 @@ func (d *DAG) Node(id string) *Node {
 	return d.nodes[id]
 }
 
-// HasCycle checks for cycles using DFS.
+// HasCycle checks for cycles using DFS across both the parent-child hierarchy
+// and the blocking dependency graph simultaneously.
 func (d *DAG) HasCycle() bool {
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
@@ -62,6 +63,10 @@ func (d *DAG) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bool
 	recStack[nodeID] = true
 
 	node := d.nodes[nodeID]
+	if node == nil {
+		recStack[nodeID] = false
+		return false
+	}
 	for _, childID := range node.Children {
 		if !visited[childID] {
 			if d.hasCycleDFS(childID, visited, recStack) {
@@ -112,11 +117,13 @@ type Graph struct {
 
 // NewGraph creates a new Graph projection from the given DAG.
 func NewGraph(d *DAG) *Graph {
+	if d == nil {
+		panic("NewGraph: DAG must not be nil")
+	}
 	return &Graph{dag: d}
 }
 
-// Ancestry returns all upstream ancestors of a node (all nodes that must be
-// completed before this node, following parent links).
+// Ancestry returns the chain of hierarchical parent nodes from the given node up to the root.
 func (g *Graph) Ancestry(id string) []string {
 	var ancestors []string
 	node := g.dag.nodes[id]
@@ -174,7 +181,9 @@ func (g *Graph) Blockers(id string) []string {
 	if node == nil {
 		return nil
 	}
-	return node.BlockedBy
+	result := make([]string, len(node.BlockedBy))
+	copy(result, node.BlockedBy)
+	return result
 }
 
 // Blocks returns all nodes that this node directly blocks.
@@ -183,7 +192,9 @@ func (g *Graph) Blocks(id string) []string {
 	if node == nil {
 		return nil
 	}
-	return node.Blocks
+	result := make([]string, len(node.Blocks))
+	copy(result, node.Blocks)
+	return result
 }
 
 // Hierarchy returns the parent and children of a node as (parentID, childIDs).
@@ -192,7 +203,9 @@ func (g *Graph) Hierarchy(id string) (string, []string) {
 	if node == nil {
 		return "", nil
 	}
-	return node.Parent, node.Children
+	result := make([]string, len(node.Children))
+	copy(result, node.Children)
+	return node.Parent, result
 }
 
 // HasCycle returns true if the graph contains a cycle.
