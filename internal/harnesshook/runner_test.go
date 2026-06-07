@@ -195,7 +195,7 @@ func TestRunner_EncodeOutput(t *testing.T) {
 	assert.NotEmpty(t, result.Output)
 
 	// Verify the output is valid JSON
-	var output map[string]interface{}
+	var output map[string]any
 	err = json.Unmarshal(result.Output, &output)
 	require.NoError(t, err)
 	// For Allow decision, Claude adapter returns "continue" and "suppressOutput"
