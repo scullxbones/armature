@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -33,6 +34,11 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	} else {
 		currentTime = time.Now().Unix()
 	}
+
+	// Build a Graph projection for depth calculations during sorting.
+	dagObj := buildDAGFromIndex(index)
+	graph := dag.NewGraph(dagObj)
+
 	var ready []ReadyEntry
 
 	for id, entry := range index {
@@ -80,7 +86,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		ready = append(ready, re)
 	}
 
-	sortReady(ready, index, workerID)
+	sortReady(ready, index, graph, workerID)
 	return ready
 }
 
@@ -200,7 +206,7 @@ func assignmentTier(issueID, workerID string, index materialize.Index) int {
 	return 2
 }
 
-func sortReady(entries []ReadyEntry, index materialize.Index, workerID string) {
+func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, workerID string) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		// Assignment tier first
 		ai := assignmentTier(entries[i].Issue, workerID, index)
@@ -213,8 +219,9 @@ func sortReady(entries []ReadyEntry, index materialize.Index, workerID string) {
 		if pi != pj {
 			return pi < pj
 		}
-		di := depth(entries[i].Issue, index)
-		dj := depth(entries[j].Issue, index)
+		// Use graph projection for depth calculation
+		di := graph.Depth(entries[i].Issue)
+		dj := graph.Depth(entries[j].Issue)
 		if di != dj {
 			return di > dj
 		}
@@ -225,21 +232,6 @@ func sortReady(entries []ReadyEntry, index materialize.Index, workerID string) {
 		}
 		return entries[i].Issue < entries[j].Issue
 	})
-}
-
-func depth(id string, index materialize.Index) int {
-	d := 0
-	for {
-		entry, ok := index[id]
-		if !ok || entry.Parent == "" {
-			return d
-		}
-		id = entry.Parent
-		d++
-		if d > 20 {
-			return d
-		}
-	}
 }
 
 // CollectDescendants returns the set of all descendant IDs of root (not including root itself).
@@ -261,4 +253,38 @@ func CollectDescendants(root string, index materialize.Index) map[string]bool {
 		}
 	}
 	return result
+}
+
+// buildDAGFromIndex constructs a DAG from the materialized Index for use with Graph projection.
+func buildDAGFromIndex(index materialize.Index) *dag.DAG {
+	dagObj := dag.New()
+	for id, entry := range index {
+		node := &dag.Node{
+			ID:        id,
+			Title:     entry.Title,
+			Type:      entry.Type,
+			Parent:    entry.Parent,
+			Children:  make([]string, len(entry.Children)),
+			BlockedBy: make([]string, len(entry.BlockedBy)),
+			Blocks:    make([]string, len(entry.Blocks)),
+		}
+		copy(node.Children, entry.Children)
+		copy(node.BlockedBy, entry.BlockedBy)
+		copy(node.Blocks, entry.Blocks)
+		dagObj.AddNode(node) //nolint:errcheck
+	}
+	return dagObj
+}
+
+// depth returns the hierarchical depth of a node from its root.
+// Kept for backward compatibility with existing tests; uses Graph projection internally.
+func depth(id string, index materialize.Index) int {
+	dagObj := buildDAGFromIndex(index)
+	graph := dag.NewGraph(dagObj)
+	d := graph.Depth(id)
+	// Cap at 21 to match original behavior (cycle detection safeguard)
+	if d > 20 {
+		return 21
+	}
+	return d
 }
