@@ -136,3 +136,39 @@ func TestCodexAdapterDecodesApplyPatchPath(t *testing.T) {
 	assert.Equal(t, EventPreToolUse, event.Kind)
 	assert.Equal(t, []string{"internal/harnesshook/evaluator.go"}, event.Paths)
 }
+
+func TestAdapterRegistryReturnsClaudeAdapterForEmptyPlatform(t *testing.T) {
+	adapter, err := NewAdapterForPlatform("")
+	require.NoError(t, err)
+	assert.Equal(t, "claude", adapter.Name())
+	assert.IsType(t, (*ClaudeAdapter)(nil), adapter)
+}
+
+func TestAdapterRegistryReturnsClaudeAdapterForClaudePlatform(t *testing.T) {
+	adapter, err := NewAdapterForPlatform("claude")
+	require.NoError(t, err)
+	assert.Equal(t, "claude", adapter.Name())
+	assert.IsType(t, (*ClaudeAdapter)(nil), adapter)
+}
+
+func TestAdapterRegistryReturnsCodexAdapterForCodexPlatform(t *testing.T) {
+	adapter, err := NewAdapterForPlatform("codex")
+	require.NoError(t, err)
+	assert.Equal(t, "codex", adapter.Name())
+	assert.IsType(t, (*CodexAdapter)(nil), adapter)
+}
+
+func TestAdapterRegistryReturnsDevinAdapterForDevinPlatform(t *testing.T) {
+	adapter, err := NewAdapterForPlatform("devin")
+	require.NoError(t, err)
+	assert.Equal(t, "devin", adapter.Name())
+	assert.IsType(t, (*DevinAdapter)(nil), adapter)
+}
+
+func TestAdapterRegistryErrorsOnUnknownPlatform(t *testing.T) {
+	adapter, err := NewAdapterForPlatform("unknown-platform")
+	require.Error(t, err)
+	assert.Nil(t, adapter)
+	assert.Contains(t, err.Error(), "unknown harness hook platform")
+	assert.Contains(t, err.Error(), "unknown-platform")
+}
