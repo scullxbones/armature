@@ -32,10 +32,6 @@ func newHarnessHookCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read hook input: %w", err)
 			}
-			event, err := adapter.Decode(input)
-			if err != nil {
-				return fmt.Errorf("decode hook input: %w", err)
-			}
 
 			appCtx := currentCtx(cmd)
 			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
@@ -66,20 +62,18 @@ func newHarnessHookCmd() *cobra.Command {
 				},
 			})
 
-			decision, err := evaluator.Evaluate(cmd.Context(), event)
+			runner := harnesshook.NewRunner(&harnesshook.RunnerConfig{
+				Adapter:   adapter,
+				Evaluator: evaluator,
+			})
+
+			result, err := runner.Run(cmd.Context(), input)
 			if err != nil {
 				return err
 			}
 
-			output, exitCode, err := adapter.Encode(event, decision)
-			if err != nil {
+			if _, err := cmd.OutOrStdout().Write(result.Output); err != nil {
 				return err
-			}
-			if _, err := cmd.OutOrStdout().Write(output); err != nil {
-				return err
-			}
-			if exitCode != 0 {
-				return fmt.Errorf("hook blocked: %s", decision.Message)
 			}
 			return nil
 		},
