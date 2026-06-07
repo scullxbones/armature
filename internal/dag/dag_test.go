@@ -121,6 +121,9 @@ func TestPropertyParentChildConsistency(t *testing.T) {
 }
 
 // BenchmarkCycleDetection benchmarks cycle detection on a larger DAG.
+// Note: This benchmark measures cycle detection on the BlockedBy path only;
+// nodes are added without populating Children slices, so parent-child edges
+// are not exercised in the DFS traversal.
 func BenchmarkCycleDetection(b *testing.B) {
 	d := New()
 
@@ -464,4 +467,94 @@ func TestGraphNode(t *testing.T) {
 
 	notFound := d.Node("nonexistent")
 	assert.Nil(t, notFound)
+}
+
+// TestHasCycle_DanglingChildReference tests that HasCycle does not panic
+// when a node has a child reference to a node that does not exist in the DAG.
+func TestHasCycle_DanglingChildReference(t *testing.T) {
+	d := New()
+	node := &Node{ID: "a", Title: "Node A", Type: "task", Children: []string{"nonexistent"}}
+	require.NoError(t, d.AddNode(node))
+
+	// Should not panic and should return false (no cycle)
+	assert.False(t, d.HasCycle())
+}
+
+// TestBlockersMutationSafety tests that mutating the returned slice from Blockers
+// does not affect the graph's internal state.
+func TestBlockersMutationSafety(t *testing.T) {
+	d := New()
+	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
+	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
+
+	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.AddNode(task2))
+
+	g := NewGraph(d)
+
+	// Get the blockers and capture the original list
+	original := g.Blockers("task-2")
+
+	// Mutate the returned slice by appending to it
+	mutated := append(g.Blockers("task-2"), "injected")
+
+	// Verify that the mutation did not affect the graph's internal state
+	assert.ElementsMatch(t, original, g.Blockers("task-2"))
+	assert.NotContains(t, g.Blockers("task-2"), "injected")
+	// Verify that the mutated slice is different from the graph's current state
+	assert.NotEqual(t, len(g.Blockers("task-2")), len(mutated))
+}
+
+// TestBlocksMutationSafety tests that mutating the returned slice from Blocks
+// does not affect the graph's internal state.
+func TestBlocksMutationSafety(t *testing.T) {
+	d := New()
+	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Blocks: []string{"task-2"}}
+	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
+
+	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.AddNode(task2))
+
+	g := NewGraph(d)
+
+	// Get the blocks and capture the original list
+	original := g.Blocks("task-1")
+
+	// Mutate the returned slice by appending to it
+	mutated := append(g.Blocks("task-1"), "injected")
+
+	// Verify that the mutation did not affect the graph's internal state
+	assert.ElementsMatch(t, original, g.Blocks("task-1"))
+	assert.NotContains(t, g.Blocks("task-1"), "injected")
+	// Verify that the mutated slice is different from the graph's current state
+	assert.NotEqual(t, len(g.Blocks("task-1")), len(mutated))
+}
+
+// TestHierarchyMutationSafety tests that mutating the returned children slice from Hierarchy
+// does not affect the graph's internal state.
+func TestHierarchyMutationSafety(t *testing.T) {
+	d := New()
+	parent := &Node{ID: "parent-1", Title: "Parent", Type: "story"}
+	child := &Node{ID: "child-1", Title: "Child", Type: "task", Parent: "parent-1"}
+
+	parent.Children = []string{"child-1"}
+
+	require.NoError(t, d.AddNode(parent))
+	require.NoError(t, d.AddNode(child))
+
+	g := NewGraph(d)
+
+	// Get the hierarchy and capture the original children
+	_, originalChildren := g.Hierarchy("parent-1")
+
+	// Mutate the returned children slice by appending to it
+	_, returned := g.Hierarchy("parent-1")
+	mutated := append(returned, "injected")
+
+	// Verify that the mutation did not affect the graph's internal state
+	_, currentChildren := g.Hierarchy("parent-1")
+	assert.ElementsMatch(t, originalChildren, currentChildren)
+	assert.NotContains(t, currentChildren, "injected")
+	// Verify that the mutated slice is different from the graph's current state
+	assert.NotEqual(t, len(currentChildren), len(mutated))
 }
