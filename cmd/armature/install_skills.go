@@ -101,6 +101,8 @@ func deploySkills(src fs.FS, dest string) error {
 // <name>.md or <name>/SKILL.md; when a directory is found first, the tool returns
 // "Unknown skill". Writing a flat file makes both the slash-command (directory) and
 // Skill tool (flat file) work simultaneously.
+// Reference paths in the skill (e.g., "references/guide.md") are rewritten to
+// "<skill-name>/references/guide.md" so they resolve correctly in the flat file location.
 func deployFlatSkills(src fs.FS, dest string) error {
 	const skillsRoot = "skills"
 
@@ -116,10 +118,28 @@ func deployFlatSkills(src fs.FS, dest string) error {
 		name := entry.Name()
 		skillFile := skillsRoot + "/" + name + "/SKILL.md"
 		target := filepath.Join(dest, name+".md")
-		if err := copyFile(src, skillFile, target); err != nil {
+		if err := copySkillWithRewrittenRefs(src, skillFile, name, target); err != nil {
 			return fmt.Errorf("deploy flat skill %s: %w", name, err)
 		}
 	}
+	return nil
+}
+
+// copySkillWithRewrittenRefs reads a skill's SKILL.md file from the embedded FS,
+// rewrites all occurrences of "references/" to "<skill-name>/references/" to fix
+// relative reference paths, and writes the result to destPath with mode 0644.
+func copySkillWithRewrittenRefs(src fs.FS, srcPath, skillName, destPath string) error {
+	content, err := fs.ReadFile(src, srcPath)
+	if err != nil {
+		return fmt.Errorf("read source %s: %w", srcPath, err)
+	}
+
+	rewritten := strings.ReplaceAll(string(content), "references/", skillName+"/references/")
+
+	if err := os.WriteFile(destPath, []byte(rewritten), 0644); err != nil {
+		return fmt.Errorf("write dest %s: %w", destPath, err)
+	}
+
 	return nil
 }
 
