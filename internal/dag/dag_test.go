@@ -146,3 +146,322 @@ func BenchmarkCycleDetection(b *testing.B) {
 		d.HasCycle()
 	}
 }
+
+// TestGraphAncestry tests that Graph.Ancestry returns all upstream nodes.
+func TestGraphAncestry(t *testing.T) {
+	d := New()
+	// Create a chain: epic -> story -> task1
+	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
+	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
+	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Parent: "story-1"}
+
+	require.NoError(t, d.AddNode(epic))
+	require.NoError(t, d.AddNode(story))
+	require.NoError(t, d.AddNode(task1))
+
+	epic.Children = []string{"story-1"}
+	story.Children = []string{"task-1"}
+
+	g := NewGraph(d)
+
+	// task-1 ancestors should be story-1 and epic-1
+	ancestors := g.Ancestry("task-1")
+	assert.ElementsMatch(t, []string{"story-1", "epic-1"}, ancestors)
+
+	// story-1 ancestors should be epic-1
+	ancestors = g.Ancestry("story-1")
+	assert.ElementsMatch(t, []string{"epic-1"}, ancestors)
+
+	// epic-1 has no ancestors
+	ancestors = g.Ancestry("epic-1")
+	assert.Empty(t, ancestors)
+}
+
+// TestGraphDescendants tests that Graph.Descendants returns all downstream nodes.
+func TestGraphDescendants(t *testing.T) {
+	d := New()
+	// Create a tree: epic -> story1, story2 -> task
+	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
+	story1 := &Node{ID: "story-1", Title: "Story 1", Type: "story", Parent: "epic-1"}
+	story2 := &Node{ID: "story-2", Title: "Story 2", Type: "story", Parent: "epic-1"}
+	task := &Node{ID: "task-1", Title: "Task 1", Type: "task", Parent: "story-1"}
+
+	require.NoError(t, d.AddNode(epic))
+	require.NoError(t, d.AddNode(story1))
+	require.NoError(t, d.AddNode(story2))
+	require.NoError(t, d.AddNode(task))
+
+	epic.Children = []string{"story-1", "story-2"}
+	story1.Children = []string{"task-1"}
+	story2.Children = []string{}
+
+	g := NewGraph(d)
+
+	// epic-1 descendants should be story1, story2, task
+	descendants := g.Descendants("epic-1")
+	assert.ElementsMatch(t, []string{"story-1", "story-2", "task-1"}, descendants)
+
+	// story-1 descendants should be task-1
+	descendants = g.Descendants("story-1")
+	assert.ElementsMatch(t, []string{"task-1"}, descendants)
+
+	// task-1 has no descendants
+	descendants = g.Descendants("task-1")
+	assert.Empty(t, descendants)
+}
+
+// TestGraphBlockers tests that Graph.Blockers returns direct blocked_by dependencies.
+func TestGraphBlockers(t *testing.T) {
+	d := New()
+	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
+	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
+	task3 := &Node{ID: "task-3", Title: "Task 3", Type: "task", BlockedBy: []string{"task-1", "task-2"}}
+
+	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.AddNode(task2))
+	require.NoError(t, d.AddNode(task3))
+
+	task1.Blocks = []string{"task-2", "task-3"}
+	task2.Blocks = []string{"task-3"}
+
+	g := NewGraph(d)
+
+	// task-2 blockers should be task-1
+	blockers := g.Blockers("task-2")
+	assert.ElementsMatch(t, []string{"task-1"}, blockers)
+
+	// task-3 blockers should be task-1 and task-2
+	blockers = g.Blockers("task-3")
+	assert.ElementsMatch(t, []string{"task-1", "task-2"}, blockers)
+
+	// task-1 has no blockers
+	blockers = g.Blockers("task-1")
+	assert.Empty(t, blockers)
+}
+
+// TestGraphBlocks tests that Graph.Blocks returns nodes that this node directly blocks.
+func TestGraphBlocks(t *testing.T) {
+	d := New()
+	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Blocks: []string{"task-2", "task-3"}}
+	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
+	task3 := &Node{ID: "task-3", Title: "Task 3", Type: "task", BlockedBy: []string{"task-1", "task-2"}}
+
+	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.AddNode(task2))
+	require.NoError(t, d.AddNode(task3))
+
+	task2.Blocks = []string{"task-3"}
+
+	g := NewGraph(d)
+
+	// task-1 blocks task-2 and task-3
+	blocks := g.Blocks("task-1")
+	assert.ElementsMatch(t, []string{"task-2", "task-3"}, blocks)
+
+	// task-2 blocks task-3
+	blocks = g.Blocks("task-2")
+	assert.ElementsMatch(t, []string{"task-3"}, blocks)
+
+	// task-3 blocks nothing
+	blocks = g.Blocks("task-3")
+	assert.Empty(t, blocks)
+}
+
+// TestGraphHierarchy tests that Graph.Hierarchy returns parent and children.
+func TestGraphHierarchy(t *testing.T) {
+	d := New()
+	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
+	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
+	task := &Node{ID: "task-1", Title: "Task", Type: "task", Parent: "story-1"}
+
+	require.NoError(t, d.AddNode(epic))
+	require.NoError(t, d.AddNode(story))
+	require.NoError(t, d.AddNode(task))
+
+	epic.Children = []string{"story-1"}
+	story.Children = []string{"task-1"}
+
+	g := NewGraph(d)
+
+	// story-1 parent should be epic-1, children should be task-1
+	parent, children := g.Hierarchy("story-1")
+	assert.Equal(t, "epic-1", parent)
+	assert.ElementsMatch(t, []string{"task-1"}, children)
+
+	// epic-1 has no parent, children should be story-1
+	parent, children = g.Hierarchy("epic-1")
+	assert.Equal(t, "", parent)
+	assert.ElementsMatch(t, []string{"story-1"}, children)
+
+	// task-1 has parent story-1, no children
+	parent, children = g.Hierarchy("task-1")
+	assert.Equal(t, "story-1", parent)
+	assert.Empty(t, children)
+}
+
+// TestGraphHasCycle tests that Graph.HasCycle detects cycles.
+func TestGraphHasCycle(t *testing.T) {
+	// Test acyclic DAG
+	d := New()
+	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", BlockedBy: []string{"task-2"}}
+	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task"}
+
+	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.AddNode(task2))
+	task2.Blocks = []string{"task-1"}
+
+	g := NewGraph(d)
+	assert.False(t, g.HasCycle())
+
+	// Test cyclic DAG
+	d2 := New()
+	task3 := &Node{ID: "task-3", Title: "Task 3", Type: "task", BlockedBy: []string{"task-4"}}
+	task4 := &Node{ID: "task-4", Title: "Task 4", Type: "task", BlockedBy: []string{"task-3"}}
+
+	require.NoError(t, d2.AddNode(task3))
+	require.NoError(t, d2.AddNode(task4))
+
+	task3.Blocks = []string{"task-4"}
+	task4.Blocks = []string{"task-3"}
+
+	g2 := NewGraph(d2)
+	assert.True(t, g2.HasCycle())
+}
+
+// TestGraphDepth tests that Graph.Depth returns the depth of a node from root.
+func TestGraphDepth(t *testing.T) {
+	d := New()
+	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
+	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
+	task := &Node{ID: "task-1", Title: "Task", Type: "task", Parent: "story-1"}
+
+	require.NoError(t, d.AddNode(epic))
+	require.NoError(t, d.AddNode(story))
+	require.NoError(t, d.AddNode(task))
+
+	epic.Children = []string{"story-1"}
+	story.Children = []string{"task-1"}
+
+	g := NewGraph(d)
+
+	// Depth is measured from root (no parent)
+	assert.Equal(t, 0, g.Depth("epic-1"))
+	assert.Equal(t, 1, g.Depth("story-1"))
+	assert.Equal(t, 2, g.Depth("task-1"))
+}
+
+// TestGraphDepthWithMultipleRoots tests depth calculation with multiple root nodes.
+func TestGraphDepthWithMultipleRoots(t *testing.T) {
+	d := New()
+	epic1 := &Node{ID: "epic-1", Title: "Epic 1", Type: "epic"}
+	epic2 := &Node{ID: "epic-2", Title: "Epic 2", Type: "epic"}
+	story1 := &Node{ID: "story-1", Title: "Story 1", Type: "story", Parent: "epic-1"}
+
+	require.NoError(t, d.AddNode(epic1))
+	require.NoError(t, d.AddNode(epic2))
+	require.NoError(t, d.AddNode(story1))
+
+	epic1.Children = []string{"story-1"}
+
+	g := NewGraph(d)
+
+	assert.Equal(t, 0, g.Depth("epic-1"))
+	assert.Equal(t, 0, g.Depth("epic-2"))
+	assert.Equal(t, 1, g.Depth("story-1"))
+}
+
+// TestGraphAncestryNonexistentNode tests that Ancestry handles nonexistent nodes.
+func TestGraphAncestryNonexistentNode(t *testing.T) {
+	d := New()
+	g := NewGraph(d)
+
+	ancestors := g.Ancestry("nonexistent")
+	assert.Empty(t, ancestors)
+}
+
+// TestGraphDescendantsNonexistentNode tests that Descendants handles nonexistent nodes.
+func TestGraphDescendantsNonexistentNode(t *testing.T) {
+	d := New()
+	g := NewGraph(d)
+
+	descendants := g.Descendants("nonexistent")
+	assert.Empty(t, descendants)
+}
+
+// TestGraphBlockersNonexistentNode tests that Blockers returns nil for nonexistent nodes.
+func TestGraphBlockersNonexistentNode(t *testing.T) {
+	d := New()
+	g := NewGraph(d)
+
+	blockers := g.Blockers("nonexistent")
+	assert.Nil(t, blockers)
+}
+
+// TestGraphBlocksNonexistentNode tests that Blocks returns nil for nonexistent nodes.
+func TestGraphBlocksNonexistentNode(t *testing.T) {
+	d := New()
+	g := NewGraph(d)
+
+	blocks := g.Blocks("nonexistent")
+	assert.Nil(t, blocks)
+}
+
+// TestGraphHierarchyNonexistentNode tests that Hierarchy handles nonexistent nodes.
+func TestGraphHierarchyNonexistentNode(t *testing.T) {
+	d := New()
+	g := NewGraph(d)
+
+	parent, children := g.Hierarchy("nonexistent")
+	assert.Equal(t, "", parent)
+	assert.Nil(t, children)
+}
+
+// TestGraphDepthNonexistentNode tests that Depth returns 0 for nonexistent nodes.
+func TestGraphDepthNonexistentNode(t *testing.T) {
+	d := New()
+	g := NewGraph(d)
+
+	depth := g.Depth("nonexistent")
+	assert.Equal(t, 0, depth)
+}
+
+// TestGraphBlockersEmptyNode tests that a node with no blockers returns empty slice.
+func TestGraphBlockersEmptyNode(t *testing.T) {
+	d := New()
+	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
+
+	require.NoError(t, d.AddNode(task))
+
+	g := NewGraph(d)
+
+	blockers := g.Blockers("task-1")
+	assert.Empty(t, blockers)
+}
+
+// TestGraphBlocksEmptyNode tests that a node with no blocks returns empty slice.
+func TestGraphBlocksEmptyNode(t *testing.T) {
+	d := New()
+	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
+
+	require.NoError(t, d.AddNode(task))
+
+	g := NewGraph(d)
+
+	blocks := g.Blocks("task-1")
+	assert.Empty(t, blocks)
+}
+
+// TestGraphNode uses the Node method to test node retrieval.
+func TestGraphNode(t *testing.T) {
+	d := New()
+	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
+
+	require.NoError(t, d.AddNode(task))
+
+	retrieved := d.Node("task-1")
+	assert.NotNil(t, retrieved)
+	assert.Equal(t, "task-1", retrieved.ID)
+
+	notFound := d.Node("nonexistent")
+	assert.Nil(t, notFound)
+}
