@@ -34,6 +34,8 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			appCtx := currentCtx(cmd)
+
+			// Materialize state from ops (required before resolver can work)
 			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
@@ -47,24 +49,14 @@ func newHarnessHookCmd() *cobra.Command {
 				StateDir:   appCtx.StateDir,
 				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
 			})
-			task, err := resolver.Resolve(taskID)
-			if err != nil {
-				return err
-			}
-
-			service := harnesspolicy.NewVerificationService()
-			evaluator := harnesshook.NewEvaluator(harnesshook.EvaluatorConfig{
-				ScopePolicy:         harnesspolicy.NewScopePolicy(task.Scope),
-				VerificationService: &service,
-				VerificationInput: harnesspolicy.VerificationRequest{
-					Acceptance: task.Acceptance,
-					Citations:  task.Citations,
-				},
-			})
 
 			runner := harnesshook.NewRunner(&harnesshook.RunnerConfig{
 				Adapter:   adapter,
-				Evaluator: evaluator,
+				Resolver:  resolver,
+				Evaluator: nil, // Will be created in runner based on resolved policy
+				TaskID:    taskID,
+				IssuesDir: appCtx.IssuesDir,
+				StateDir:  appCtx.StateDir,
 			})
 
 			result, err := runner.Run(cmd.Context(), input)
@@ -74,6 +66,11 @@ func newHarnessHookCmd() *cobra.Command {
 
 			if _, err := cmd.OutOrStdout().Write(result.Output); err != nil {
 				return err
+			}
+
+			// Handle exit code: if Block decision, return error that classifyError will map to exit code 1
+			if result.ExitCode != 0 {
+				return fmt.Errorf("hook blocked")
 			}
 			return nil
 		},
