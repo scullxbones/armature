@@ -146,8 +146,9 @@ func workerIdentityWithSlot(workerID string) string {
 }
 
 func baseWorkerIdentity(workerID string) string {
-	if idx := strings.Index(workerID, "~"); idx >= 0 {
-		return workerID[:idx]
+	before, _, found := strings.Cut(workerID, "~")
+	if found {
+		return before
 	}
 	return workerID
 }
@@ -367,9 +368,12 @@ func renderStringSlice(values []string) string {
 // Returns empty slice if directory doesn't exist.
 // Logs warnings for any validation failures (mismatched worker IDs, corrupt lines).
 func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	items, _, err := ops.LoadFromDirValidated(opsDir)
+	items, warnings, err := ops.LoadFromDirValidated(opsDir)
 	if err != nil {
 		return nil, err
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	return ops.ExtractOps(items), nil
 }
@@ -379,9 +383,12 @@ func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
 // Validates that each op's worker ID matches its filename's worker ID.
 // Logs warnings for any validation failures.
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	items, offsets, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return nil, nil, err
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	return ops.ExtractOps(items), offsets, nil
 }
