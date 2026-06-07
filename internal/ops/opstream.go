@@ -123,17 +123,20 @@ func LoadFromDirValidated(opsDir string) ([]OpItem, []string, error) {
 	// List all log files in the directory
 	logFiles, err := adapters.ListLogFiles(opsDir)
 	if err != nil {
-		// If directory doesn't exist, return empty
-		if logFiles == nil {
-			return []OpItem{}, []string{}, nil
-		}
-		return nil, nil, err
+		return nil, nil, err // real I/O error — propagate it
+	}
+	// logFiles == nil means dir didn't exist (ListLogFiles converts ErrNotExist to nil,nil)
+	if logFiles == nil {
+		return []OpItem{}, []string{}, nil
 	}
 
 	stream := NewValidatedOpStream()
 
 	// Register each log file with its expected worker ID from the filename
-	// Note: we use the full filename-derived worker ID (including slot suffix)
+	// Note: we use the full filename-derived worker ID (including slot suffix).
+	// ExtractWorkerIDFromFilename preserves the slot suffix (e.g., "3357fe85~a"),
+	// unlike adapters.WorkerIDFromFilename which strips it (e.g., "3357fe85").
+	// We preserve the slot here because ops include the full worker ID with slot in validation.
 	for _, logPath := range logFiles {
 		expectedWorkerID := ExtractWorkerIDFromFilename(logPath)
 		stream.AddFile(logPath, expectedWorkerID)
@@ -145,8 +148,31 @@ func LoadFromDirValidated(opsDir string) ([]OpItem, []string, error) {
 // LoadFromDirWithOffsetsValidated loads all ops from a directory of .log files,
 // validating worker IDs and returning byte offsets for checkpoint tracking.
 // Returns items, a map of log filename -> byte offset (end position), warnings, and error.
+// IMPORTANT: Offsets are tracked for ALL lines (including mismatched ones) to ensure
+// that even files with only mismatched ops advance their checkpoint and don't re-read forever.
 func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64, []string, error) {
-	items, warnings, err := LoadFromDirValidated(opsDir)
+	// List all log files in the directory
+	logFiles, err := adapters.ListLogFiles(opsDir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if logFiles == nil {
+		return []OpItem{}, make(map[string]int64), []string{}, nil
+	}
+
+	stream := NewValidatedOpStream()
+
+	// Register each log file with its expected worker ID from the filename
+	// Note: we use the full filename-derived worker ID (including slot suffix).
+	// ExtractWorkerIDFromFilename preserves the slot suffix (e.g., "3357fe85~a"),
+	// unlike adapters.WorkerIDFromFilename which strips it (e.g., "3357fe85").
+	// We preserve the slot here because ops include the full worker ID with slot in validation.
+	for _, logPath := range logFiles {
+		expectedWorkerID := ExtractWorkerIDFromFilename(logPath)
+		stream.AddFile(logPath, expectedWorkerID)
+	}
+
+	items, warnings, err := stream.Load()
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -158,6 +184,26 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 		// Store the maximum offset seen for each file
 		if item.Offset > offsets[logName] {
 			offsets[logName] = item.Offset
+		}
+	}
+
+	// CRITICAL FIX: Also track offsets for files with only mismatched ops.
+	// Read all lines from each file and record the max offset, even if all are rejected.
+	for _, logPath := range logFiles {
+		logName := filepath.Base(logPath)
+		// Skip if we already have an offset for this file (accepted ops exist)
+		if offsets[logName] > 0 {
+			continue
+		}
+		// Read all lines to find max offset
+		linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(logPath, 0)
+		if err != nil {
+			// File read error — just skip offset tracking for this file
+			continue
+		}
+		// Record the final offset (if any lines exist)
+		if len(linesWithOffsets) > 0 {
+			offsets[logName] = linesWithOffsets[len(linesWithOffsets)-1].EndOffset
 		}
 	}
 
