@@ -363,61 +363,25 @@ func renderStringSlice(values []string) string {
 	return string(rendered)
 }
 
-// readAllOpsFromDir reads all ops from a directory of .log files.
+// readAllOpsFromDir reads all ops from a directory of .log files using validated loading.
 // Returns empty slice if directory doesn't exist.
+// Logs warnings for any validation failures (mismatched worker IDs, corrupt lines).
 func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	logFiles, err := adapters.ListLogFiles(opsDir)
+	items, _, err := ops.LoadFromDirValidated(opsDir)
 	if err != nil {
-		// If directory doesn't exist, return empty slice
-		if logFiles == nil {
-			return []ops.Op{}, nil
-		}
 		return nil, err
 	}
-
-	var allOps []ops.Op
-	for _, logPath := range logFiles {
-		logOps, err := ops.ReadLog(logPath)
-		if err != nil {
-			// Skip logs that can't be read
-			continue
-		}
-		allOps = append(allOps, logOps...)
-	}
-
-	return allOps, nil
+	return ops.ExtractOps(items), nil
 }
 
 // readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
 // Returns ops slice and a map of log filename -> byte offset (end position).
+// Validates that each op's worker ID matches its filename's worker ID.
+// Logs warnings for any validation failures.
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	logFiles, err := adapters.ListLogFiles(opsDir)
+	items, offsets, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
-		// If directory doesn't exist, return empty
-		if logFiles == nil {
-			return []ops.Op{}, make(map[string]int64), nil
-		}
 		return nil, nil, err
 	}
-
-	var allOps []ops.Op
-	offsets := make(map[string]int64)
-
-	for _, logPath := range logFiles {
-		logOps, err := ops.ReadLog(logPath)
-		if err != nil {
-			// Skip logs that can't be read
-			continue
-		}
-
-		// Get file size to track byte offset
-		if info, err := os.Stat(logPath); err == nil {
-			logName := filepath.Base(logPath)
-			offsets[logName] = info.Size()
-		}
-
-		allOps = append(allOps, logOps...)
-	}
-
-	return allOps, offsets, nil
+	return ops.ExtractOps(items), offsets, nil
 }
