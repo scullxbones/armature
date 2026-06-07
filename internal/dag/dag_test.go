@@ -558,3 +558,41 @@ func TestHierarchyMutationSafety(t *testing.T) {
 	// Verify that the mutated slice is different from the graph's current state
 	assert.NotEqual(t, len(currentChildren), len(mutated))
 }
+
+// TestGraph_Depth_CycleGuard tests that Depth handles parent cycles without hanging.
+func TestGraph_Depth_CycleGuard(t *testing.T) {
+	d := New()
+	// Create a cycle: a.Parent=b, b.Parent=a
+	nodeA := &Node{ID: "a", Title: "Node A", Type: "task", Parent: "b"}
+	nodeB := &Node{ID: "b", Title: "Node B", Type: "task", Parent: "a"}
+
+	require.NoError(t, d.AddNode(nodeA))
+	require.NoError(t, d.AddNode(nodeB))
+
+	g := NewGraph(d)
+
+	// Depth should return a finite value and not hang
+	depth := g.Depth("a")
+	assert.GreaterOrEqual(t, depth, 0)
+	// a -> b (depth=1), b -> a (depth=2), then cycle guard breaks
+	assert.Equal(t, 2, depth)
+}
+
+// TestGraph_Ancestry_CycleGuard tests that Ancestry handles parent cycles without hanging.
+func TestGraph_Ancestry_CycleGuard(t *testing.T) {
+	d := New()
+	// Create a cycle: a.Parent=b, b.Parent=a
+	nodeA := &Node{ID: "a", Title: "Node A", Type: "task", Parent: "b"}
+	nodeB := &Node{ID: "b", Title: "Node B", Type: "task", Parent: "a"}
+
+	require.NoError(t, d.AddNode(nodeA))
+	require.NoError(t, d.AddNode(nodeB))
+
+	g := NewGraph(d)
+
+	// Ancestry should return a finite slice and not hang
+	ancestors := g.Ancestry("a")
+	assert.NotNil(t, ancestors)
+	// a -> b, then cycle detected, so we only get b
+	assert.ElementsMatch(t, []string{"b"}, ancestors)
+}

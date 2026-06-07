@@ -125,7 +125,8 @@ func NewGraph(d *DAG) *Graph {
 
 // Ancestry returns the chain of hierarchical parent nodes from the given node up to the root.
 func (g *Graph) Ancestry(id string) []string {
-	var ancestors []string
+	ancestors := []string{}
+	visited := map[string]bool{id: true}
 	node := g.dag.nodes[id]
 	if node == nil {
 		return ancestors
@@ -133,6 +134,10 @@ func (g *Graph) Ancestry(id string) []string {
 
 	current := node.Parent
 	for current != "" {
+		if visited[current] {
+			break // cycle guard
+		}
+		visited[current] = true
 		ancestors = append(ancestors, current)
 		parentNode := g.dag.nodes[current]
 		if parentNode == nil {
@@ -216,6 +221,7 @@ func (g *Graph) HasCycle() bool {
 // Depth returns the depth of a node from its root (node with no parent).
 // A root node has depth 0, its direct children have depth 1, etc.
 func (g *Graph) Depth(id string) int {
+	visited := map[string]bool{}
 	depth := 0
 	node := g.dag.nodes[id]
 	if node == nil {
@@ -224,6 +230,10 @@ func (g *Graph) Depth(id string) int {
 
 	current := node.Parent
 	for current != "" {
+		if visited[current] {
+			break // cycle guard
+		}
+		visited[current] = true
 		depth++
 		parentNode := g.dag.nodes[current]
 		if parentNode == nil {
