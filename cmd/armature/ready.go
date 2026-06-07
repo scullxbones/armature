@@ -36,6 +36,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
   # Show ready tasks filtered for a specific worker
   $ arm ready --worker alice-worker
 
+  # Show ready tasks scoped to a specific story subtree
+  $ arm ready --parent STORY-ID
+
   # Show ready tasks in JSON format (suitable for agents)
   $ arm ready --format json
 

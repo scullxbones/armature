@@ -10,5 +10,5 @@
   "repository": "https://github.com/scullxbones/armature",
   "license": "MIT",
   "keywords": ["armature", "task-management", "coordination", "workers", "planning"],
-  "skills": "./skills"
+  "skills": "../../skills"
 }

@@ -16,9 +16,11 @@ func newInstallSkillsCmd() *cobra.Command {
 	var global bool
 
 	cmd := &cobra.Command{
-		Use:               "install-skills",
-		Short:             "Deploy bundled skills to .claude/skills/ and .claude/plugins/armature/",
-		Long:              "Copies the embedded skills to .claude/skills/ (local) or ~/.claude/skills/ (--global), and deploys plugin.json to .claude/plugins/armature/ for Skill tool registry.",
+		Use:   "install-skills",
+		Short: "Deploy bundled skills to .claude/skills/ and .claude/plugins/armature/",
+		Long: "Copies the embedded skills to .claude/skills/ (local) or ~/.claude/skills/ (--global)." +
+			" Also writes a flat <name>.md file for each skill so the Skill tool can load them by name," +
+			" and deploys plugin.json to .claude/plugins/armature/ for the Skill tool registry.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var destBase string
@@ -42,6 +44,10 @@ func newInstallSkillsCmd() *cobra.Command {
 
 			skillsDest := filepath.Join(destBase, ".claude", "skills")
 			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
+				return err
+			}
+			// Write flat <name>.md files so the Skill tool can load skills by name.
+			if err := deployFlatSkills(skillsembed.SkillsFS, skillsDest); err != nil {
 				return err
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skills deployed to %s\n", skillsDest)
@@ -88,6 +94,33 @@ func deploySkills(src fs.FS, dest string) error {
 
 		return copyFile(src, path, target)
 	})
+}
+
+// deployFlatSkills writes a flat <name>.md file alongside each skill directory so the
+// Claude Code Skill tool can load skills by name. The Skill tool looks up skills as
+// <name>.md or <name>/SKILL.md; when a directory is found first, the tool returns
+// "Unknown skill". Writing a flat file makes both the slash-command (directory) and
+// Skill tool (flat file) work simultaneously.
+func deployFlatSkills(src fs.FS, dest string) error {
+	const skillsRoot = "skills"
+
+	entries, err := fs.ReadDir(src, skillsRoot)
+	if err != nil {
+		return fmt.Errorf("read skills root: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		skillFile := skillsRoot + "/" + name + "/SKILL.md"
+		target := filepath.Join(dest, name+".md")
+		if err := copyFile(src, skillFile, target); err != nil {
+			return fmt.Errorf("deploy flat skill %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // deployPlugin copies the plugin.json file from src to dest, creating the
