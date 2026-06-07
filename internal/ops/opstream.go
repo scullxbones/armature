@@ -55,7 +55,7 @@ func (s *ValidatedOpStream) Load() ([]OpItem, []string, error) {
 	var warnings []string
 
 	for _, entry := range s.files {
-		fileItems, fileWarnings, err := s.loadFile(entry)
+		fileItems, _, fileWarnings, err := s.loadFile(entry)
 		if err != nil {
 			return nil, nil, fmt.Errorf("load file %s: %w", entry.LogPath, err)
 		}
@@ -66,19 +66,25 @@ func (s *ValidatedOpStream) Load() ([]OpItem, []string, error) {
 	return items, warnings, nil
 }
 
-// loadFile loads ops from a single file, returning items, warnings, and error.
+// loadFile loads ops from a single file, returning items, physical EOF offset, warnings, and error.
 // It validates that each op's WorkerID matches the expected worker ID.
-func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, []string, error) {
+// The physical EOF offset is the byte offset of the last line in the file (or 0 if empty),
+// and is computed by tracking the EndOffset of every line (both accepted and rejected).
+func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []string, error) {
 	var items []OpItem
 	var warnings []string
+	var physicalEOF int64
 
 	// Read raw lines from the log file and track their byte offsets
 	linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(entry.LogPath, 0)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
 
 	for _, lineInfo := range linesWithOffsets {
+		// Track physical EOF on every line (accepted or rejected)
+		physicalEOF = lineInfo.EndOffset
+
 		// Parse the op
 		op, parseErr := ParseLine(lineInfo.Line)
 		if parseErr != nil {
@@ -111,7 +117,7 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, []string, erro
 		})
 	}
 
-	return items, warnings, nil
+	return items, physicalEOF, warnings, nil
 }
 
 // LoadFromDirValidated loads all ops from a directory of .log files, validating
@@ -148,8 +154,7 @@ func LoadFromDirValidated(opsDir string) ([]OpItem, []string, error) {
 // LoadFromDirWithOffsetsValidated loads all ops from a directory of .log files,
 // validating worker IDs and returning byte offsets for checkpoint tracking.
 // Returns items, a map of log filename -> byte offset (end position), warnings, and error.
-// IMPORTANT: Offsets are tracked for ALL lines (including mismatched ones) to ensure
-// that even files with only mismatched ops advance their checkpoint and don't re-read forever.
+// Checkpoint offset for every file must equal its physical EOF after each load.
 func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64, []string, error) {
 	// List all log files in the directory
 	logFiles, err := adapters.ListLogFiles(opsDir)
@@ -172,38 +177,27 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 		stream.AddFile(logPath, expectedWorkerID)
 	}
 
-	items, warnings, err := stream.Load()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Build offsets map from items
+	var items []OpItem
+	var warnings []string
 	offsets := make(map[string]int64)
-	for _, item := range items {
-		logName := filepath.Base(item.LogFilename)
-		// Store the maximum offset seen for each file
-		if item.Offset > offsets[logName] {
-			offsets[logName] = item.Offset
-		}
-	}
 
-	// CRITICAL FIX: Also track offsets for files with only mismatched ops.
-	// Read all lines from each file and record the max offset, even if all are rejected.
-	for _, logPath := range logFiles {
-		logName := filepath.Base(logPath)
-		// Skip if we already have an offset for this file (accepted ops exist)
-		if offsets[logName] > 0 {
-			continue
-		}
-		// Read all lines to find max offset
-		linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(logPath, 0)
+	// Load files and track offsets in a single pass per file
+	for _, entry := range stream.files {
+		fileItems, physicalEOF, fileWarnings, err := stream.loadFile(entry)
 		if err != nil {
-			// File read error — just skip offset tracking for this file
-			continue
+			return nil, nil, nil, fmt.Errorf("load file %s: %w", entry.LogPath, err)
 		}
-		// Record the final offset (if any lines exist)
-		if len(linesWithOffsets) > 0 {
-			offsets[logName] = linesWithOffsets[len(linesWithOffsets)-1].EndOffset
+		items = append(items, fileItems...)
+		warnings = append(warnings, fileWarnings...)
+
+		logName := filepath.Base(entry.LogPath)
+		// Set offset to physical EOF (end of last line, or 0 if empty)
+		offsets[logName] = physicalEOF
+		// If there are accepted ops, take the maximum
+		for _, item := range fileItems {
+			if item.Offset > offsets[logName] {
+				offsets[logName] = item.Offset
+			}
 		}
 	}
 
