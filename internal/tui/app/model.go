@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -157,9 +158,7 @@ func (m Model) NavBar() string {
 	left := strings.Join(parts, "  ")
 	right := "trls tui · " + m.workerID + " · " + indicator
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
-	}
+	gap = max(gap, 1)
 	return left + strings.Repeat(" ", gap) + right
 }
 
@@ -288,9 +287,12 @@ func (nilScreen) SetState(_ *materialize.State)            {}
 // Returns ops slice and a map of log filename -> byte offset (end position).
 // Validates that each op's worker ID matches its filename's worker ID.
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	items, offsets, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return nil, nil, err
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	return ops.ExtractOps(items), offsets, nil
 }
