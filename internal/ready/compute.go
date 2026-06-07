@@ -275,16 +275,3 @@ func buildDAGFromIndex(index materialize.Index) *dag.DAG {
 	}
 	return dagObj
 }
-
-// depth returns the hierarchical depth of a node from its root.
-// Kept for backward compatibility with existing tests; uses Graph projection internally.
-func depth(id string, index materialize.Index) int {
-	dagObj := buildDAGFromIndex(index)
-	graph := dag.NewGraph(dagObj)
-	d := graph.Depth(id)
-	// Cap at 21 to match original behavior (cycle detection safeguard)
-	if d > 20 {
-		return 21
-	}
-	return d
-}
