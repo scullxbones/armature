@@ -12,7 +12,7 @@ func NewLauncher() *Launcher {
 }
 
 func (l *Launcher) Install(workdir, platform string) error {
-	adapter, err := adapterForPlatform(platform)
+	adapter, err := NewAdapterForPlatform(platform)
 	if err != nil {
 		return err
 	}
@@ -41,9 +41,4 @@ func NewAdapterForPlatform(platform string) (PlatformAdapter, error) {
 	default:
 		return nil, fmt.Errorf("unknown harness hook platform %q", platform)
 	}
-}
-
-// adapterForPlatform is deprecated; use NewAdapterForPlatform instead.
-func adapterForPlatform(platform string) (PlatformAdapter, error) {
-	return NewAdapterForPlatform(platform)
 }
