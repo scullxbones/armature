@@ -106,3 +106,121 @@ func (d *DAG) ValidateParentChild() error {
 	}
 	return nil
 }
+
+// Graph is a read-only projection of the DAG that provides a unified interface
+// for querying ancestry, descendants, blockers, blocks, hierarchy, cycle detection,
+// and depth of nodes.
+type Graph struct {
+	dag *DAG
+}
+
+// NewGraph creates a new Graph projection from the given DAG.
+func NewGraph(d *DAG) *Graph {
+	return &Graph{dag: d}
+}
+
+// Ancestry returns all upstream ancestors of a node (all nodes that must be
+// completed before this node, following parent links).
+func (g *Graph) Ancestry(id string) []string {
+	var ancestors []string
+	node := g.dag.nodes[id]
+	if node == nil {
+		return ancestors
+	}
+
+	current := node.Parent
+	for current != "" {
+		ancestors = append(ancestors, current)
+		parentNode := g.dag.nodes[current]
+		if parentNode == nil {
+			break
+		}
+		current = parentNode.Parent
+	}
+	return ancestors
+}
+
+// Descendants returns all downstream descendants of a node (all nodes that
+// depend on this node being completed, following child links).
+func (g *Graph) Descendants(id string) []string {
+	var descendants []string
+	queue := []string{id}
+	visited := make(map[string]bool)
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if visited[current] {
+			continue
+		}
+		visited[current] = true
+
+		node := g.dag.nodes[current]
+		if node == nil {
+			continue
+		}
+
+		for _, childID := range node.Children {
+			if !visited[childID] {
+				descendants = append(descendants, childID)
+				queue = append(queue, childID)
+			}
+		}
+	}
+
+	return descendants
+}
+
+// Blockers returns all direct blocked_by dependencies of a node.
+func (g *Graph) Blockers(id string) []string {
+	node := g.dag.nodes[id]
+	if node == nil {
+		return nil
+	}
+	return node.BlockedBy
+}
+
+// Blocks returns all nodes that this node directly blocks.
+func (g *Graph) Blocks(id string) []string {
+	node := g.dag.nodes[id]
+	if node == nil {
+		return nil
+	}
+	return node.Blocks
+}
+
+// Hierarchy returns the parent and children of a node as (parentID, childIDs).
+func (g *Graph) Hierarchy(id string) (string, []string) {
+	node := g.dag.nodes[id]
+	if node == nil {
+		return "", nil
+	}
+	return node.Parent, node.Children
+}
+
+// HasCycle returns true if the graph contains a cycle.
+func (g *Graph) HasCycle() bool {
+	return g.dag.HasCycle()
+}
+
+// Depth returns the depth of a node from its root (node with no parent).
+// A root node has depth 0, its direct children have depth 1, etc.
+func (g *Graph) Depth(id string) int {
+	depth := 0
+	node := g.dag.nodes[id]
+	if node == nil {
+		return depth
+	}
+
+	current := node.Parent
+	for current != "" {
+		depth++
+		parentNode := g.dag.nodes[current]
+		if parentNode == nil {
+			break
+		}
+		current = parentNode.Parent
+	}
+	return depth
+}
