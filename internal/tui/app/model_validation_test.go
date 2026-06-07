@@ -111,7 +111,7 @@ func TestTUIModel_WarningsSurfacedDuringLoad(t *testing.T) {
 
 	// Create a file with multiple mismatched ops
 	logPath := filepath.Join(opsDir, "worker-x.log")
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		op := ops.Op{
 			Type:      ops.OpCreate,
 			TargetID:  fmt.Sprintf("task-%d", i),
