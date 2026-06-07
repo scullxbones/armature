@@ -52,6 +52,7 @@ func TestRunner_DecodeAndRun(t *testing.T) {
 		Adapter:   adapter,
 		Resolver:  resolver,
 		Evaluator: evaluator,
+		TaskID:    "task-01",
 	})
 
 	result, err := runner.Run(context.Background(), input)
@@ -74,31 +75,13 @@ func TestRunner_DecodeError(t *testing.T) {
 		Adapter:   adapter,
 		Resolver:  resolver,
 		Evaluator: evaluator,
+		TaskID:    "task-01",
 	})
 
 	_, err := runner.Run(context.Background(), input)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "decode hook input")
-}
-
-func TestRunner_InvalidInput(t *testing.T) {
-	// Test that Runner returns an error when input cannot be decoded.
-	input := []byte(`{invalid}`)
-
-	resolver := &mockResolver{}
-	evaluator := &mockEvaluator{}
-	adapter := NewClaudeAdapter()
-
-	runner := NewRunner(&RunnerConfig{
-		Adapter:   adapter,
-		Resolver:  resolver,
-		Evaluator: evaluator,
-	})
-
-	_, err := runner.Run(context.Background(), input)
-
-	require.Error(t, err)
 }
 
 func TestRunner_EvaluatorError(t *testing.T) {
@@ -123,6 +106,7 @@ func TestRunner_EvaluatorError(t *testing.T) {
 		Adapter:   adapter,
 		Resolver:  resolver,
 		Evaluator: evaluator,
+		TaskID:    "task-01",
 	})
 
 	_, err := runner.Run(context.Background(), input)
@@ -154,6 +138,7 @@ func TestRunner_BlockDecision(t *testing.T) {
 		Adapter:   adapter,
 		Resolver:  resolver,
 		Evaluator: evaluator,
+		TaskID:    "task-01",
 	})
 
 	result, err := runner.Run(context.Background(), input)
@@ -187,6 +172,7 @@ func TestRunner_EncodeOutput(t *testing.T) {
 		Adapter:   adapter,
 		Resolver:  resolver,
 		Evaluator: evaluator,
+		TaskID:    "task-01",
 	})
 
 	result, err := runner.Run(context.Background(), input)
@@ -226,11 +212,46 @@ func TestRunner_AllowDecisionZeroExitCode(t *testing.T) {
 		Adapter:   adapter,
 		Resolver:  resolver,
 		Evaluator: evaluator,
+		TaskID:    "task-01",
 	})
 
 	result, err := runner.Run(context.Background(), input)
 
 	require.NoError(t, err)
 	assert.Equal(t, DecisionAllow, result.Decision.Action)
+	assert.Equal(t, 0, result.ExitCode)
+}
+
+func TestRunner_DecisionNoneZeroExitCode(t *testing.T) {
+	// Test that None decision results in zero exit code.
+	input := []byte(`{
+		"hook_event_name":"PreToolUse",
+		"tool_name":"apply_patch",
+		"tool_input":{"changes":[{"path":"internal/harnesshook/runner.go"}]}
+	}`)
+
+	policy := harnesspolicy.TaskPolicy{
+		ID:    "task-01",
+		Title: "Test task",
+		Scope: []string{"internal/harnesshook/"},
+	}
+
+	resolver := &mockResolver{policy: policy}
+	evaluator := &mockEvaluator{
+		decision: Decision{Action: DecisionNone, Message: "event ignored"},
+	}
+
+	adapter := NewClaudeAdapter()
+	runner := NewRunner(&RunnerConfig{
+		Adapter:   adapter,
+		Resolver:  resolver,
+		Evaluator: evaluator,
+		TaskID:    "task-01",
+	})
+
+	result, err := runner.Run(context.Background(), input)
+
+	require.NoError(t, err)
+	assert.Equal(t, DecisionNone, result.Decision.Action)
 	assert.Equal(t, 0, result.ExitCode)
 }
