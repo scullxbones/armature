@@ -80,6 +80,49 @@ func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
 	return lines, scanner.Err()
 }
 
+// LineWithOffset represents a line from a log file and its ending byte offset.
+type LineWithOffset struct {
+	Line      []byte
+	EndOffset int64
+}
+
+// ReadLogLinesWithOffsets reads lines starting from a byte offset and returns each line
+// with the byte offset where it ends (for checkpoint tracking).
+func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffset, error) {
+	f, err := os.Open(logPath)
+	if err != nil {
+		return nil, fmt.Errorf("open log %s: %w", logPath, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	currentOffset := startOffset
+	if startOffset > 0 {
+		if _, err := f.Seek(startOffset, 0); err != nil {
+			return nil, fmt.Errorf("seek in log %s: %w", logPath, err)
+		}
+		currentOffset = startOffset
+	}
+
+	var lines []LineWithOffset
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		// Copy the line
+		lineCopy := append([]byte{}, line...)
+		// Update offset: account for the line length + newline character
+		currentOffset += int64(len(lineCopy)) + 1 // +1 for newline
+		lines = append(lines, LineWithOffset{
+			Line:      lineCopy,
+			EndOffset: currentOffset,
+		})
+	}
+	return lines, scanner.Err()
+}
+
 // WorkerIDFromFilename extracts the worker ID from a log filename.
 // Plain log:   "3357fe85.log"   -> "3357fe85"
 // Slotted log: "3357fe85~a.log" -> "3357fe85"  (slot suffix stripped)

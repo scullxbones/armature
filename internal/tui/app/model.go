@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/tui"
@@ -287,33 +286,11 @@ func (nilScreen) SetState(_ *materialize.State)            {}
 
 // readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
 // Returns ops slice and a map of log filename -> byte offset (end position).
+// Validates that each op's worker ID matches its filename's worker ID.
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	entries, err := adapters.ReadDir(opsDir)
+	items, offsets, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	var allOps []ops.Op
-	offsets := make(map[string]int64)
-
-	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
-			logPath := filepath.Join(opsDir, entry.Name())
-			logOps, err := ops.ReadLog(logPath)
-			if err != nil {
-				// Skip logs that can't be read
-				continue
-			}
-
-			// Get file size to track byte offset
-			if info, err := adapters.Stat(logPath); err == nil && info != nil {
-				logName := filepath.Base(logPath)
-				offsets[logName] = info.Size()
-			}
-
-			allOps = append(allOps, logOps...)
-		}
-	}
-
-	return allOps, offsets, nil
+	return ops.ExtractOps(items), offsets, nil
 }
