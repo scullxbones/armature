@@ -142,7 +142,9 @@ func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []str
 }
 
 // scopedHasCycle checks for cycles within a restricted set of node IDs.
-// It performs DFS starting from id, only following edges within the scope map.
+// It performs DFS starting from id, following all BlockedBy edges (including cross-scope ones)
+// but only reporting a cycle if the closing node (already in recStack) is in scope.
+// This prevents false positives from unrelated cycles entirely outside the scope.
 func scopedHasCycle(id string, graph *dag.Graph, scope map[string]*materialize.Issue) bool {
 	visited := map[string]bool{}
 	recStack := map[string]bool{}
@@ -150,7 +152,10 @@ func scopedHasCycle(id string, graph *dag.Graph, scope map[string]*materialize.I
 	var dfs func(string) bool
 	dfs = func(nodeID string) bool {
 		if recStack[nodeID] {
-			return true // cycle detected
+			// Cycle detected: only report true if the closing node is in scope.
+			// This prevents false positives from unrelated cycles outside the scope.
+			_, inScopeNode := scope[nodeID]
+			return inScopeNode
 		}
 		if visited[nodeID] {
 			return false
@@ -159,16 +164,17 @@ func scopedHasCycle(id string, graph *dag.Graph, scope map[string]*materialize.I
 		visited[nodeID] = true
 		recStack[nodeID] = true
 
-		// Walk BlockedBy edges within scope
+		// Walk BlockedBy edges: follow ALL blockers (including out-of-scope ones)
+		// to detect cross-scope cycles that affect scoped nodes.
 		for _, dep := range graph.Blockers(nodeID) {
-			if _, inScope := scope[dep]; inScope {
-				if dfs(dep) {
-					return true
-				}
+			if dfs(dep) {
+				return true
 			}
 		}
 
-		// Walk Children edges within scope
+		// Walk Children edges within scope only. Parent-child cycles are structurally
+		// impossible once E2/E3 parent-link checks pass, so cross-scope child traversal
+		// adds no cycle-detection value and risks false positives.
 		_, children := graph.Hierarchy(nodeID)
 		for _, child := range children {
 			if _, inScope := scope[child]; inScope {

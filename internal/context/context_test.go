@@ -631,6 +631,53 @@ func TestBuildParentChain_LoadsFromDisk(t *testing.T) {
 	assert.Contains(t, parentLayer.Content, "Parent Story")
 }
 
+func TestBuildParentChain_LoadsGrandparentFromDisk(t *testing.T) {
+	// Both parent and grandparent are NOT in state — both must load from disk
+	// This tests the fix for the bug where grandparents were silently dropped
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	// Write grandparent to disk (no further parent)
+	grandparentJSON := `{"id":"TST-GRP","type":"epic","status":"in-progress","title":"Grandparent Epic","children":["TST-PAR"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-GRP.json"), []byte(grandparentJSON), 0644))
+
+	// Write parent to disk with reference to grandparent
+	parentJSON := `{"id":"TST-PAR","type":"story","status":"in-progress","title":"Parent Story","parent":"TST-GRP","children":["TST-X"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR.json"), []byte(parentJSON), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-X"] = &materialize.Issue{
+		ID:           "TST-X",
+		Title:        "Child task",
+		Type:         "task",
+		Status:       "open",
+		Parent:       "TST-PAR",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	// TST-PAR and TST-GRP are both absent from state — must load from disk
+
+	ctx, err := Assemble("TST-X", dir, state)
+	require.NoError(t, err)
+
+	var parentLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "parent_chain" {
+			parentLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, parentLayer)
+	// Both parent and grandparent should be present
+	assert.Contains(t, parentLayer.Content, "TST-PAR")
+	assert.Contains(t, parentLayer.Content, "Parent Story")
+	assert.Contains(t, parentLayer.Content, "TST-GRP")
+	assert.Contains(t, parentLayer.Content, "Grandparent Epic")
+}
+
 func TestBuildSiblingOutcomes_LoadsSiblingFromDisk(t *testing.T) {
 	// Sibling is NOT in state — must load from disk (assemble.go:224-226)
 	dir := t.TempDir()

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
@@ -715,4 +716,79 @@ func TestParentFilter_ParentNodeNotValidated(t *testing.T) {
 	result := Validate(state, Options{ParentID: "TASK-PARENT"})
 	// TASK-CHILD has no errors; the parent's missing fields should not be reported
 	assert.True(t, result.OK)
+}
+
+// TestCheckE4Cycles_CrossScopeBlockerCycle verifies that scopedHasCycle detects
+// a cycle where the blocker is outside the scope but creates a cycle with a scoped issue.
+// Example: Task A (in scope) is blocked by Task B (out of scope). Task B is blocked by Task A.
+// This is a real cycle that prevents A from ever becoming ready, and should be detected.
+func TestCheckE4Cycles_CrossScopeBlockerCycle(t *testing.T) {
+	// Create a state with two issues: A and B, where A blocks B and B blocks A.
+	// When validating scope={A}, scopedHasCycle("A", ...) should detect the cycle.
+	state := makeState(
+		&materialize.Issue{
+			ID:        "A",
+			Type:      "task",
+			Status:    "open",
+			BlockedBy: []string{"B"}, // A is blocked by B
+		},
+		&materialize.Issue{
+			ID:        "B",
+			Type:      "task",
+			Status:    "open",
+			BlockedBy: []string{"A"}, // B is blocked by A — cycle!
+		},
+	)
+
+	// Build the graph
+	dagObj := buildDAGFromState(state)
+	graph := dag.NewGraph(dagObj)
+
+	// Define scope containing only A (B is out of scope)
+	scope := map[string]*materialize.Issue{
+		"A": state.Issues["A"],
+	}
+
+	// Call scopedHasCycle with A in scope, B out of scope
+	result := scopedHasCycle("A", graph, scope)
+
+	// Should detect the cycle even though B is out of scope
+	assert.True(t, result, "expected scopedHasCycle to detect cross-scope blocker cycle")
+}
+
+// TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive verifies that scopedHasCycle does NOT
+// report a cycle when the cycle exists entirely outside the scope.
+// Example: A (in scope) is blocked by B (out of scope). B and C form a cycle B→C→B.
+// A is not part of any cycle, so scopedHasCycle("A") must return false.
+func TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive(t *testing.T) {
+	state := makeState(
+		&materialize.Issue{
+			ID:        "A",
+			Type:      "task",
+			Status:    "open",
+			BlockedBy: []string{"B"},
+		},
+		&materialize.Issue{
+			ID:        "B",
+			Type:      "task",
+			Status:    "open",
+			BlockedBy: []string{"C"}, // B→C→B cycle, entirely out of scope
+		},
+		&materialize.Issue{
+			ID:        "C",
+			Type:      "task",
+			Status:    "open",
+			BlockedBy: []string{"B"},
+		},
+	)
+
+	dagObj := buildDAGFromState(state)
+	graph := dag.NewGraph(dagObj)
+
+	scope := map[string]*materialize.Issue{
+		"A": state.Issues["A"],
+	}
+
+	result := scopedHasCycle("A", graph, scope)
+	assert.False(t, result, "out-of-scope cycle B→C→B must not be reported as a cycle for scoped node A")
 }
