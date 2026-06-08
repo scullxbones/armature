@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -270,6 +271,12 @@ func newRootCmd() *cobra.Command {
 func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
+		// Check if this is an adapter exit error (platform-specific exit code)
+		var ace adapterExitError
+		if errors.As(err, &ace) {
+			os.Exit(ace.code)
+		}
+
 		code := classifyError(err)
 		format, _ := root.PersistentFlags().GetString("format")
 		if format == "json" || format == "agent" {

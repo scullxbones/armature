@@ -18,6 +18,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// adapterExitError represents a hook exit code from the platform adapter.
+// Exit-status-based blocking platforms return non-zero codes to signal blocking
+// to the platform's process exit mechanism.
+type adapterExitError struct {
+	code int
+}
+
+func (e adapterExitError) Error() string {
+	return fmt.Sprintf("hook blocked with exit code %d", e.code)
+}
+
 // jsonErrorPayload is the structured JSON error format emitted to stderr when
 // --format=json or --format=agent is active.
 type jsonErrorPayload struct {

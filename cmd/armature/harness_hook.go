@@ -12,11 +12,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// applyRunResult writes the output to the provided writer and returns an adapterExitError
+// if the result's ExitCode is non-zero.
+func applyRunResult(out io.Writer, result harnesshook.RunResult) error {
+	_, _ = out.Write(result.Output)
+	if result.ExitCode != 0 {
+		return adapterExitError{code: result.ExitCode}
+	}
+	return nil
+}
+
 func newHarnessHookCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:    "harness-hook",
-		Short:  "Internal harness hook entrypoint",
-		Hidden: true,
+		Use:           "harness-hook",
+		Short:         "Internal harness hook entrypoint",
+		Hidden:        true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			taskID := os.Getenv("ARMATURE_TASK_ID")
 			if taskID == "" {
@@ -64,8 +75,11 @@ func newHarnessHookCmd() *cobra.Command {
 				return err
 			}
 
-			_, err = cmd.OutOrStdout().Write(result.Output)
-			return err
+			// If the adapter returned a non-zero exit code, propagate it to the process exit.
+			// Exit-status-based blocking platforms (e.g., exit-status-signal) use this to
+			// communicate blocking decisions to the platform's process exit mechanism.
+			// Output is written before the error is returned.
+			return applyRunResult(cmd.OutOrStdout(), result)
 		},
 	}
 }
