@@ -64,15 +64,8 @@ func newHarnessHookCmd() *cobra.Command {
 				return err
 			}
 
-			if _, err := cmd.OutOrStdout().Write(result.Output); err != nil {
-				return err
-			}
-
-			// Handle exit code: if Block decision, return error that classifyError will map to exit code 1
-			if result.ExitCode != 0 {
-				return fmt.Errorf("hook blocked")
-			}
-			return nil
+			_, err = cmd.OutOrStdout().Write(result.Output)
+			return err
 		},
 	}
 }

@@ -50,7 +50,8 @@ func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
 
 	err = cmd.Execute()
 
-	require.Error(t, err, "Block decision should exit with error")
+	// Block decisions exit 0 with structured JSON; the platform reads the JSON decision.
+	require.NoError(t, err)
 	assert.Contains(t, out.String(), `"decision":"block"`)
 	assert.Contains(t, out.String(), "outside task scope")
 }
@@ -93,7 +94,8 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 
 	err = cmd.Execute()
 
-	require.Error(t, err, "Block decision should exit with error")
+	// Block decisions exit 0 with structured JSON; the platform reads the JSON decision.
+	require.NoError(t, err)
 	assert.Contains(t, out.String(), `"decision":"block"`)
 	assert.Contains(t, out.String(), "unverifiable")
 }
