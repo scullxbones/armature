@@ -99,15 +99,9 @@ func (r *Runner) Run(ctx context.Context, input []byte) (RunResult, error) {
 	}
 
 	// Encode the result
-	output, _, err := r.adapter.Encode(event, decision)
+	output, exitCode, err := r.adapter.Encode(event, decision)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("encode hook output: %w", err)
-	}
-
-	// Map decision to exit code: Block = 1, Allow/None = 0
-	exitCode := 0
-	if decision.Action == DecisionBlock {
-		exitCode = 1
 	}
 
 	return RunResult{

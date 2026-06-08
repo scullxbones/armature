@@ -39,6 +39,7 @@ func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 		return data, 0, err
 	}
 	data, err := json.Marshal(map[string]any{"decision": "block", "reason": decision.Message})
+	// Codex processes the JSON response on exit 0, so exit code is always 0.
 	return data, 0, err
 }
 

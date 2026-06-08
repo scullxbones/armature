@@ -28,6 +28,31 @@ func (m *mockEvaluator) Evaluate(ctx context.Context, event Event) (Decision, er
 	return m.decision, m.err
 }
 
+type mockAdapter struct {
+	encodeExitCode int
+}
+
+func (m *mockAdapter) Name() string {
+	return "mock"
+}
+
+func (m *mockAdapter) Capabilities() PlatformCapabilities {
+	return PlatformCapabilities{}
+}
+
+func (m *mockAdapter) WriteConfig(workdir string) error {
+	return nil
+}
+
+func (m *mockAdapter) Decode(input []byte) (Event, error) {
+	return decodeStructuredHookEvent(input)
+}
+
+func (m *mockAdapter) Encode(event Event, decision Decision) ([]byte, int, error) {
+	data, err := json.Marshal(map[string]any{"decision": "allow"})
+	return data, m.encodeExitCode, err
+}
+
 func TestRunner_DecodeAndRun(t *testing.T) {
 	// Test that Runner successfully decodes JSON input and runs evaluation.
 	input := []byte(`{
@@ -114,8 +139,9 @@ func TestRunner_EvaluatorError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRunner_BlockDecision(t *testing.T) {
-	// Test that Block decision results in non-zero exit code.
+func TestRunner_BlockDecision_PropagatesAdapterExitCode(t *testing.T) {
+	// Test that the runner passes through the exit code returned by the adapter.
+	// Using a mockAdapter with encodeExitCode=2 to prove it's not hardcoded.
 	input := []byte(`{
 		"hook_event_name":"PreToolUse",
 		"tool_name":"apply_patch",
@@ -133,7 +159,7 @@ func TestRunner_BlockDecision(t *testing.T) {
 		decision: Decision{Action: DecisionBlock, Message: "outside task scope"},
 	}
 
-	adapter := NewClaudeAdapter()
+	adapter := &mockAdapter{encodeExitCode: 2}
 	runner := NewRunner(&RunnerConfig{
 		Adapter:   adapter,
 		Resolver:  resolver,
@@ -145,7 +171,7 @@ func TestRunner_BlockDecision(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, DecisionBlock, result.Decision.Action)
-	assert.Equal(t, 1, result.ExitCode)
+	assert.Equal(t, 2, result.ExitCode)
 }
 
 func TestRunner_EncodeOutput(t *testing.T) {
@@ -254,4 +280,80 @@ func TestRunner_DecisionNoneZeroExitCode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, DecisionNone, result.Decision.Action)
 	assert.Equal(t, 0, result.ExitCode)
+}
+
+func TestRunner_BlockDecision_UsesAdapterExitCode(t *testing.T) {
+	// Test that the runner uses the exit code returned by the adapter,
+	// not a hardcoded mapping. ClaudeAdapter returns 0 for block decisions
+	// (structured JSON output requires exit 0 for Claude to process it).
+	input := []byte(`{
+		"hook_event_name":"PreToolUse",
+		"tool_name":"apply_patch",
+		"tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}
+	}`)
+
+	policy := harnesspolicy.TaskPolicy{
+		ID:    "task-01",
+		Title: "Test task",
+		Scope: []string{"internal/harnesshook/"},
+	}
+
+	resolver := &mockResolver{policy: policy}
+	evaluator := &mockEvaluator{
+		decision: Decision{Action: DecisionBlock, Message: "access denied"},
+	}
+
+	adapter := NewClaudeAdapter()
+	runner := NewRunner(&RunnerConfig{
+		Adapter:   adapter,
+		Resolver:  resolver,
+		Evaluator: evaluator,
+		TaskID:    "task-01",
+	})
+
+	result, err := runner.Run(context.Background(), input)
+
+	require.NoError(t, err)
+	assert.Equal(t, DecisionBlock, result.Decision.Action)
+	// ClaudeAdapter.Encode returns 0 for block decisions (structured JSON)
+	assert.Equal(t, 0, result.ExitCode)
+}
+
+func TestRunner_StopBlockDecision(t *testing.T) {
+	// Test that Stop event + Block decision works correctly.
+	// ClaudeAdapter has a special branch for Stop+Block that produces {"decision":"block","reason":"..."}.
+	input := []byte(`{
+		"hook_event_name":"Stop"
+	}`)
+
+	policy := harnesspolicy.TaskPolicy{
+		ID:    "task-01",
+		Title: "Test task",
+		Scope: []string{"internal/harnesshook/"},
+	}
+
+	resolver := &mockResolver{policy: policy}
+	evaluator := &mockEvaluator{
+		decision: Decision{Action: DecisionBlock, Message: "task complete"},
+	}
+
+	adapter := NewClaudeAdapter()
+	runner := NewRunner(&RunnerConfig{
+		Adapter:   adapter,
+		Resolver:  resolver,
+		Evaluator: evaluator,
+		TaskID:    "task-01",
+	})
+
+	result, err := runner.Run(context.Background(), input)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Equal(t, DecisionBlock, result.Decision.Action)
+
+	// Verify the output is valid JSON and contains the expected structure
+	var output map[string]any
+	err = json.Unmarshal(result.Output, &output)
+	require.NoError(t, err)
+	assert.Equal(t, "block", output["decision"])
 }

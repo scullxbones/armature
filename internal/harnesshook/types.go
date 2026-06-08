@@ -45,6 +45,7 @@ type PlatformAdapter interface {
 	Capabilities() PlatformCapabilities
 	WriteConfig(workdir string) error
 	Decode(input []byte) (Event, error)
+	// Encode returns the encoded response, the exit code the platform expects (0 for structured JSON output, non-zero only when exit status signals blocking), and any error.
 	Encode(event Event, decision Decision) ([]byte, int, error)
 }
 
