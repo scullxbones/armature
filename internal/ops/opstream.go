@@ -68,12 +68,19 @@ func (s *ValidatedOpStream) Load() ([]OpItem, []string, error) {
 
 // loadFile loads ops from a single file, returning items, physical EOF offset, warnings, and error.
 // It validates that each op's WorkerID matches the expected worker ID.
+// For slotted filenames (with ~ suffix), it also accepts the legacy base worker ID (part before ~).
 // The physical EOF offset is the byte offset of the last line in the file (or 0 if empty),
 // and is computed by tracking the EndOffset of every line (both accepted and rejected).
 func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []string, error) {
 	var items []OpItem
 	var warnings []string
 	var physicalEOF int64
+
+	// Derive legacy worker ID by stripping slot suffix if present
+	legacyWorkerID := entry.ExpectedWorkerID
+	if i := strings.Index(entry.ExpectedWorkerID, "~"); i >= 0 {
+		legacyWorkerID = entry.ExpectedWorkerID[:i]
+	}
 
 	// Read raw lines from the log file and track their byte offsets
 	linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(entry.LogPath, 0)
@@ -96,8 +103,8 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 			continue
 		}
 
-		// Check worker ID match
-		if op.WorkerID != entry.ExpectedWorkerID {
+		// Check worker ID match (accept both expected and legacy base ID)
+		if op.WorkerID != entry.ExpectedWorkerID && op.WorkerID != legacyWorkerID {
 			warnings = append(warnings, fmt.Sprintf(
 				"worker ID mismatch in %s: expected %s, got %s (target: %s)",
 				filepath.Base(entry.LogPath),

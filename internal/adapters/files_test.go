@@ -249,3 +249,85 @@ func TestReadCoverageFile_Missing(t *testing.T) {
 		t.Fatal("expected nil for missing coverage file")
 	}
 }
+
+func TestReadLogLinesWithOffsets_UnterminatedLastLine(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	// Create a file with a normal line and an unterminated final line
+	content := []byte("{\"a\":1}\n{\"b\":2}")
+	if err := os.WriteFile(logPath, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	lines, err := ReadLogLinesWithOffsets(logPath, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify we got both lines
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+
+	// Get actual file size
+	info, err := os.Stat(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualFileSize := info.Size()
+
+	// The last line's EndOffset should equal the actual file size
+	lastLineEndOffset := lines[1].EndOffset
+	if lastLineEndOffset != actualFileSize {
+		t.Errorf("expected last line EndOffset to be %d (file size), got %d", actualFileSize, lastLineEndOffset)
+	}
+
+	// Verify line contents
+	if string(lines[0].Line) != "{\"a\":1}" {
+		t.Errorf("expected first line to be {\"a\":1}, got %s", lines[0].Line)
+	}
+	if string(lines[1].Line) != "{\"b\":2}" {
+		t.Errorf("expected second line to be {\"b\":2}, got %s", lines[1].Line)
+	}
+}
+
+func TestReadLogLinesWithOffsets_StartOffsetPositive(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	// Create a file: {"a":1}\n{"b":2}\n{"c":3}
+	// First line: 8 bytes, second line: 8 bytes, third line: 7 bytes. Total: 23 bytes.
+	// The last line has NO trailing newline.
+	content := []byte("{\"a\":1}\n{\"b\":2}\n{\"c\":3}")
+	if err := os.WriteFile(logPath, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read starting from offset 8 (after first line)
+	lines, err := ReadLogLinesWithOffsets(logPath, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should get 2 lines
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d", len(lines))
+	}
+
+	// Verify first line (lines[0])
+	if string(lines[0].Line) != "{\"b\":2}" {
+		t.Errorf("expected lines[0].Line to be {\"b\":2}, got %s", lines[0].Line)
+	}
+	if lines[0].EndOffset != 16 {
+		t.Errorf("expected lines[0].EndOffset to be 16, got %d", lines[0].EndOffset)
+	}
+
+	// Verify second line (lines[1])
+	if string(lines[1].Line) != "{\"c\":3}" {
+		t.Errorf("expected lines[1].Line to be {\"c\":3}, got %s", lines[1].Line)
+	}
+	if lines[1].EndOffset != 23 {
+		t.Errorf("expected lines[1].EndOffset to be 23, got %d", lines[1].EndOffset)
+	}
+}

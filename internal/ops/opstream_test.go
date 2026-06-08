@@ -225,6 +225,27 @@ func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
 	assert.Equal(t, logPath, items[0].LogFilename)
 }
 
+func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-alpha~slot-a.log")
+
+	// Legacy op with base worker ID (no slot suffix), stored in slotted log file
+	op := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-alpha",
+		Payload: Payload{Title: "Legacy Op", NodeType: "task"}}
+
+	require.NoError(t, AppendOp(logPath, op))
+
+	stream := NewValidatedOpStream()
+	stream.AddFile(logPath, "worker-alpha~slot-a")
+	items, warnings, err := stream.Load()
+
+	require.NoError(t, err)
+	assert.Len(t, items, 1, "should accept legacy base worker ID in slotted log")
+	assert.Len(t, warnings, 0, "should not generate warnings for valid legacy ops")
+	assert.Equal(t, "worker-alpha", items[0].Op.WorkerID)
+	assert.Equal(t, logPath, items[0].LogFilename)
+}
+
 // ===== Tests for package-level LoadFromDirValidated and LoadFromDirWithOffsetsValidated =====
 
 func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
