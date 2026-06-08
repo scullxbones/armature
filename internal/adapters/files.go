@@ -4,9 +4,11 @@ package adapters
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,23 +105,28 @@ func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffse
 	}
 
 	var lines []LineWithOffset
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		// Update offset before processing: account for the line length + newline character
-		currentOffset += int64(len(line)) + 1 // +1 for newline
-		if len(line) == 0 {
-			continue
+	reader := bufio.NewReaderSize(f, 1<<20)
+	for {
+		rawLine, err := reader.ReadBytes('\n')
+		if len(rawLine) > 0 {
+			currentOffset += int64(len(rawLine))
+			line := bytes.TrimRight(rawLine, "\r\n")
+			if len(line) > 0 {
+				lineCopy := append([]byte{}, line...)
+				lines = append(lines, LineWithOffset{
+					Line:      lineCopy,
+					EndOffset: currentOffset,
+				})
+			}
 		}
-		// Copy the line
-		lineCopy := append([]byte{}, line...)
-		lines = append(lines, LineWithOffset{
-			Line:      lineCopy,
-			EndOffset: currentOffset,
-		})
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
-	return lines, scanner.Err()
+	return lines, nil
 }
 
 // WorkerIDFromFilename extracts the worker ID from a log filename.
