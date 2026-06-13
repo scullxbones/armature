@@ -596,3 +596,161 @@ func TestGraph_Ancestry_CycleGuard(t *testing.T) {
 	// a -> b, then cycle detected, so we only get b
 	assert.ElementsMatch(t, []string{"b"}, ancestors)
 }
+
+// TestFromIndexBasic tests that FromIndex constructs a Graph with Ancestry and Descendants working correctly.
+func TestFromIndexBasic(t *testing.T) {
+	index := map[string]*Node{
+		"epic-1": {
+			ID:       "epic-1",
+			Title:    "Epic",
+			Type:     "epic",
+			Parent:   "",
+			Children: []string{"story-1"},
+		},
+		"story-1": {
+			ID:       "story-1",
+			Title:    "Story",
+			Type:     "story",
+			Parent:   "epic-1",
+			Children: []string{"task-1"},
+		},
+		"task-1": {
+			ID:       "task-1",
+			Title:    "Task",
+			Type:     "task",
+			Parent:   "story-1",
+			Children: []string{},
+		},
+	}
+
+	g := FromIndex(index)
+	require.NotNil(t, g)
+
+	// Test Ancestry: task-1 should have story-1 and epic-1 as ancestors
+	ancestors := g.Ancestry("task-1")
+	assert.ElementsMatch(t, []string{"story-1", "epic-1"}, ancestors)
+
+	// Test Descendants: epic-1 should have story-1 and task-1 as descendants
+	descendants := g.Descendants("epic-1")
+	assert.ElementsMatch(t, []string{"story-1", "task-1"}, descendants)
+}
+
+// TestFromIndexEmpty tests that FromIndex handles an empty index.
+func TestFromIndexEmpty(t *testing.T) {
+	index := make(map[string]*Node)
+
+	g := FromIndex(index)
+	require.NotNil(t, g)
+
+	// Empty index should return empty results
+	ancestors := g.Ancestry("nonexistent")
+	assert.Empty(t, ancestors)
+
+	descendants := g.Descendants("nonexistent")
+	assert.Empty(t, descendants)
+}
+
+// TestIsLegalHierarchyTable tests IsLegalHierarchy with various cases.
+func TestIsLegalHierarchyTable(t *testing.T) {
+	tests := []struct {
+		name     string
+		index    map[string]*Node
+		expected bool
+		desc     string
+	}{
+		{
+			name:     "valid_single_root",
+			expected: true,
+			desc:     "single root node with no parent",
+			index: map[string]*Node{
+				"epic-1": {
+					ID:       "epic-1",
+					Title:    "Epic",
+					Type:     "epic",
+					Parent:   "",
+					Children: []string{},
+				},
+			},
+		},
+		{
+			name:     "valid_parent_child_chain",
+			expected: true,
+			desc:     "consistent parent-child relationships",
+			index: map[string]*Node{
+				"epic-1": {
+					ID:       "epic-1",
+					Title:    "Epic",
+					Type:     "epic",
+					Parent:   "",
+					Children: []string{"story-1"},
+				},
+				"story-1": {
+					ID:       "story-1",
+					Title:    "Story",
+					Type:     "story",
+					Parent:   "epic-1",
+					Children: []string{"task-1"},
+				},
+				"task-1": {
+					ID:       "task-1",
+					Title:    "Task",
+					Type:     "task",
+					Parent:   "story-1",
+					Children: []string{},
+				},
+			},
+		},
+		{
+			name:     "invalid_unknown_parent",
+			expected: false,
+			desc:     "child references unknown parent",
+			index: map[string]*Node{
+				"task-1": {
+					ID:       "task-1",
+					Title:    "Task",
+					Type:     "task",
+					Parent:   "nonexistent",
+					Children: []string{},
+				},
+			},
+		},
+		{
+			name:     "invalid_parent_missing_child",
+			expected: false,
+			desc:     "parent does not list child in Children",
+			index: map[string]*Node{
+				"epic-1": {
+					ID:       "epic-1",
+					Title:    "Epic",
+					Type:     "epic",
+					Parent:   "",
+					Children: []string{},
+				},
+				"story-1": {
+					ID:       "story-1",
+					Title:    "Story",
+					Type:     "story",
+					Parent:   "epic-1",
+					Children: []string{},
+				},
+			},
+		},
+		{
+			name:     "empty_index",
+			expected: true,
+			desc:     "empty index is valid",
+			index:    make(map[string]*Node),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsLegalHierarchy(tt.index)
+			if tt.expected {
+				assert.True(t, result, tt.desc)
+			} else {
+				assert.False(t, result, tt.desc)
+			}
+		})
+	}
+}

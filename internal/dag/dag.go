@@ -243,3 +243,41 @@ func (g *Graph) Depth(id string) int {
 	}
 	return depth
 }
+
+// FromIndex constructs a Graph from a map of node IDs to Node pointers.
+// It creates a new DAG with all nodes from the index and returns a Graph projection.
+func FromIndex(index map[string]*Node) *Graph {
+	d := New()
+	for _, node := range index {
+		// We don't check for errors here since we own the nodes from the index
+		_ = d.AddNode(node)
+	}
+	return NewGraph(d)
+}
+
+// IsLegalHierarchy validates that a node index has consistent parent-child relationships.
+// It returns true if every node's parent reference is satisfied and every parent's
+// Children list contains consistent entries. An empty index is considered valid.
+func IsLegalHierarchy(index map[string]*Node) bool {
+	// Empty index is valid
+	if len(index) == 0 {
+		return true
+	}
+
+	// Check parent-child consistency
+	for id, node := range index {
+		// Check that if a node has a parent, the parent exists
+		if node.Parent != "" {
+			parent, exists := index[node.Parent]
+			if !exists {
+				return false
+			}
+			// Check that the parent actually lists this node as a child
+			if !slices.Contains(parent.Children, id) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
