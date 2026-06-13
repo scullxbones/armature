@@ -7,12 +7,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const stateDir = "/tmp/fake"
+
+// buildGraphFromState constructs a dag.Graph from a materialize.State for testing.
+func buildGraphFromState(state *materialize.State) *dag.Graph {
+	nodeIndex := make(map[string]*dag.Node)
+	for id, issue := range state.Issues {
+		nodeIndex[id] = &dag.Node{
+			ID:        issue.ID,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  issue.Children,
+			BlockedBy: issue.BlockedBy,
+			Blocks:    issue.Blocks,
+		}
+	}
+	return dag.FromIndex(nodeIndex)
+}
 
 func TestAssembleContext_CoreSpec(t *testing.T) {
 	state := materialize.NewState()
@@ -29,8 +47,9 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 		Blocks:           []string{},
 		DecisionRefs:     []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 	require.NotEmpty(t, ctx.Layers)
 
@@ -67,8 +86,9 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 		Children:     []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-A", stateDir, state)
+	ctx, err := Assemble("TST-A", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -105,8 +125,9 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 		Children:     []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-A", stateDir, state)
+	ctx, err := Assemble("TST-A", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -145,8 +166,9 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 		Children:     []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-A", stateDir, state)
+	ctx, err := Assemble("TST-A", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -187,8 +209,9 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-C", stateDir, state)
+	ctx, err := Assemble("TST-C", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -228,7 +251,8 @@ func TestAssembleContext_Truncation(t *testing.T) {
 
 func TestAssembleContext_UnknownIssue(t *testing.T) {
 	state := materialize.NewState()
-	_, err := Assemble("MISSING-001", stateDir, state)
+	graph := buildGraphFromState(state)
+	_, err := Assemble("MISSING-001", stateDir, state, graph)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "MISSING-001")
 }
@@ -246,8 +270,9 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var snippetsLayer *Layer
@@ -280,8 +305,9 @@ func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", dir, state)
+	ctx, err := Assemble("TST-001", dir, state, graph)
 	require.NoError(t, err)
 
 	var contextFilesLayer *Layer
@@ -314,8 +340,9 @@ func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", dir, state)
+	ctx, err := Assemble("TST-001", dir, state, graph)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -339,8 +366,9 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -365,8 +393,9 @@ func TestBuildDecisions(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var decLayer *Layer
@@ -398,8 +427,9 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -431,8 +461,9 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -465,8 +496,9 @@ func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -516,8 +548,9 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-B", stateDir, state)
+	ctx, err := Assemble("TST-B", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -545,8 +578,9 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state)
+	ctx, err := Assemble("TST-001", stateDir, state, graph)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -556,16 +590,20 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 	}
 }
 
-func TestBuildBlockerOutcomes_LoadsFromDisk(t *testing.T) {
-	// Blocker is NOT in the in-memory state — it must be loaded from disk (assemble.go:119-123)
-	dir := t.TempDir()
-	issuesDir := filepath.Join(dir, "issues")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-
-	blockerJSON := `{"id":"TST-BLK","type":"task","status":"done","title":"Blocker","outcome":"unblocked successfully","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-BLK.json"), []byte(blockerJSON), 0644))
-
+func TestBuildBlockerOutcomes_FromState(t *testing.T) {
+	// Blocker must be in state (no more disk fallback)
 	state := materialize.NewState()
+	state.Issues["TST-BLK"] = &materialize.Issue{
+		ID:           "TST-BLK",
+		Type:         "task",
+		Status:       "done",
+		Title:        "Blocker",
+		Outcome:      "unblocked successfully",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{"TST-X"},
+		DecisionRefs: []string{},
+	}
 	state.Issues["TST-X"] = &materialize.Issue{
 		ID:           "TST-X",
 		Title:        "Needs blocker",
@@ -576,9 +614,9 @@ func TestBuildBlockerOutcomes_LoadsFromDisk(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	// TST-BLK is intentionally absent from state — must load from disk
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", dir, state)
+	ctx, err := Assemble("TST-X", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -593,16 +631,19 @@ func TestBuildBlockerOutcomes_LoadsFromDisk(t *testing.T) {
 	assert.Contains(t, blockerLayer.Content, "unblocked successfully")
 }
 
-func TestBuildParentChain_LoadsFromDisk(t *testing.T) {
-	// Parent is NOT in the in-memory state — must be loaded from disk (assemble.go:151-155)
-	dir := t.TempDir()
-	issuesDir := filepath.Join(dir, "issues")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-
-	parentJSON := `{"id":"TST-PAR","type":"story","status":"in-progress","title":"Parent Story","children":["TST-X"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR.json"), []byte(parentJSON), 0644))
-
+func TestBuildParentChain_FromState(t *testing.T) {
+	// Parent must be in state (no more disk fallback)
 	state := materialize.NewState()
+	state.Issues["TST-PAR"] = &materialize.Issue{
+		ID:           "TST-PAR",
+		Type:         "story",
+		Status:       "in-progress",
+		Title:        "Parent Story",
+		Children:     []string{"TST-X"},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
 	state.Issues["TST-X"] = &materialize.Issue{
 		ID:           "TST-X",
 		Title:        "Child task",
@@ -614,9 +655,9 @@ func TestBuildParentChain_LoadsFromDisk(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	// TST-PAR absent from state — must load from disk
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", dir, state)
+	ctx, err := Assemble("TST-X", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -631,22 +672,31 @@ func TestBuildParentChain_LoadsFromDisk(t *testing.T) {
 	assert.Contains(t, parentLayer.Content, "Parent Story")
 }
 
-func TestBuildParentChain_LoadsGrandparentFromDisk(t *testing.T) {
-	// Both parent and grandparent are NOT in state — both must load from disk
+func TestBuildParentChain_WithGrandparent(t *testing.T) {
+	// Parent and grandparent are both in state
 	// This tests the fix for the bug where grandparents were silently dropped
-	dir := t.TempDir()
-	issuesDir := filepath.Join(dir, "issues")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-
-	// Write grandparent to disk (no further parent)
-	grandparentJSON := `{"id":"TST-GRP","type":"epic","status":"in-progress","title":"Grandparent Epic","children":["TST-PAR"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-GRP.json"), []byte(grandparentJSON), 0644))
-
-	// Write parent to disk with reference to grandparent
-	parentJSON := `{"id":"TST-PAR","type":"story","status":"in-progress","title":"Parent Story","parent":"TST-GRP","children":["TST-X"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR.json"), []byte(parentJSON), 0644))
-
 	state := materialize.NewState()
+	state.Issues["TST-GRP"] = &materialize.Issue{
+		ID:           "TST-GRP",
+		Type:         "epic",
+		Status:       "in-progress",
+		Title:        "Grandparent Epic",
+		Children:     []string{"TST-PAR"},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	state.Issues["TST-PAR"] = &materialize.Issue{
+		ID:           "TST-PAR",
+		Type:         "story",
+		Status:       "in-progress",
+		Title:        "Parent Story",
+		Parent:       "TST-GRP",
+		Children:     []string{"TST-X"},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
 	state.Issues["TST-X"] = &materialize.Issue{
 		ID:           "TST-X",
 		Title:        "Child task",
@@ -658,9 +708,9 @@ func TestBuildParentChain_LoadsGrandparentFromDisk(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	// TST-PAR and TST-GRP are both absent from state — must load from disk
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", dir, state)
+	ctx, err := Assemble("TST-X", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -678,16 +728,8 @@ func TestBuildParentChain_LoadsGrandparentFromDisk(t *testing.T) {
 	assert.Contains(t, parentLayer.Content, "Grandparent Epic")
 }
 
-func TestBuildSiblingOutcomes_LoadsSiblingFromDisk(t *testing.T) {
-	// Sibling is NOT in state — must load from disk (assemble.go:224-226)
-	dir := t.TempDir()
-	issuesDir := filepath.Join(dir, "issues")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-
-	// Parent is in state but sibling is on disk
-	siblingJSON := `{"id":"TST-SIB","type":"task","status":"done","title":"Sibling","outcome":"sibling outcome from disk","parent":"TST-PAR","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-SIB.json"), []byte(siblingJSON), 0644))
-
+func TestBuildSiblingOutcomes_FromState(t *testing.T) {
+	// Sibling must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-PAR"] = &materialize.Issue{
 		ID:           "TST-PAR",
@@ -710,9 +752,21 @@ func TestBuildSiblingOutcomes_LoadsSiblingFromDisk(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	// TST-SIB is absent from state — must load from disk
+	state.Issues["TST-SIB"] = &materialize.Issue{
+		ID:           "TST-SIB",
+		Type:         "task",
+		Status:       "done",
+		Title:        "Sibling",
+		Outcome:      "sibling outcome from state",
+		Parent:       "TST-PAR",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", dir, state)
+	ctx, err := Assemble("TST-X", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -724,21 +778,22 @@ func TestBuildSiblingOutcomes_LoadsSiblingFromDisk(t *testing.T) {
 	}
 	require.NotNil(t, sibLayer)
 	assert.Contains(t, sibLayer.Content, "TST-SIB")
-	assert.Contains(t, sibLayer.Content, "sibling outcome from disk")
+	assert.Contains(t, sibLayer.Content, "sibling outcome from state")
 }
 
-func TestBuildSiblingOutcomes_ParentLoadedFromDisk(t *testing.T) {
-	// Parent is NOT in state — load parent from disk, then load siblings from disk (assemble.go:208-210)
-	dir := t.TempDir()
-	issuesDir := filepath.Join(dir, "issues")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-
-	parentJSON := `{"id":"TST-PAR2","type":"story","status":"in-progress","title":"Parent2","children":["TST-X2","TST-SIB2"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR2.json"), []byte(parentJSON), 0644))
-	siblingJSON := `{"id":"TST-SIB2","type":"task","status":"done","title":"Sibling2","outcome":"disk sibling outcome","parent":"TST-PAR2","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-SIB2.json"), []byte(siblingJSON), 0644))
-
+func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
+	// Parent and siblings are all in state
 	state := materialize.NewState()
+	state.Issues["TST-PAR2"] = &materialize.Issue{
+		ID:           "TST-PAR2",
+		Type:         "story",
+		Status:       "in-progress",
+		Title:        "Parent2",
+		Children:     []string{"TST-X2", "TST-SIB2"},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
 	state.Issues["TST-X2"] = &materialize.Issue{
 		ID:           "TST-X2",
 		Title:        "Current task",
@@ -750,9 +805,21 @@ func TestBuildSiblingOutcomes_ParentLoadedFromDisk(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	// Both TST-PAR2 and TST-SIB2 absent from state — loaded from disk
+	state.Issues["TST-SIB2"] = &materialize.Issue{
+		ID:           "TST-SIB2",
+		Type:         "task",
+		Status:       "done",
+		Title:        "Sibling2",
+		Outcome:      "state sibling outcome",
+		Parent:       "TST-PAR2",
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X2", dir, state)
+	ctx, err := Assemble("TST-X2", stateDir, state, graph)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -764,7 +831,7 @@ func TestBuildSiblingOutcomes_ParentLoadedFromDisk(t *testing.T) {
 	}
 	require.NotNil(t, sibLayer)
 	assert.Contains(t, sibLayer.Content, "TST-SIB2")
-	assert.Contains(t, sibLayer.Content, "disk sibling outcome")
+	assert.Contains(t, sibLayer.Content, "state sibling outcome")
 }
 
 // TC-004: Tests for RenderAgent and RenderHuman

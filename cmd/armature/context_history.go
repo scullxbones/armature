@@ -6,6 +6,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
@@ -60,7 +61,22 @@ func newContextHistoryCmd() *cobra.Command {
 					continue
 				}
 
-				ctx, err := context.Assemble(chIssue, appCtx.IssuesDir, state)
+				// Construct graph from state.Issues
+				nodeIndex := make(map[string]*dag.Node)
+				for id, issue := range state.Issues {
+					nodeIndex[id] = &dag.Node{
+						ID:        issue.ID,
+						Title:     issue.Title,
+						Type:      issue.Type,
+						Parent:    issue.Parent,
+						Children:  issue.Children,
+						BlockedBy: issue.BlockedBy,
+						Blocks:    issue.Blocks,
+					}
+				}
+				graph := dag.FromIndex(nodeIndex)
+
+				ctx, err := context.Assemble(chIssue, appCtx.IssuesDir, state, graph)
 				if err != nil {
 					// Issue doesn't exist at this commit — skip
 					continue

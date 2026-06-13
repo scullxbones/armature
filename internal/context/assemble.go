@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 )
 
@@ -26,7 +27,7 @@ type Context struct {
 }
 
 // Assemble builds a layered context for the given issue from state.
-func Assemble(issueID string, stateDir string, state *materialize.State) (*Context, error) {
+func Assemble(issueID string, stateDir string, state *materialize.State, graph *dag.Graph) (*Context, error) {
 	issue, ok := state.Issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
@@ -45,10 +46,10 @@ func Assemble(issueID string, stateDir string, state *materialize.State) (*Conte
 	layers = append(layers, buildSnippets(issue))
 
 	// Layer 4: blocker_outcomes
-	layers = append(layers, buildBlockerOutcomes(issue, stateDir, state))
+	layers = append(layers, buildBlockerOutcomes(issue, state))
 
 	// Layer 5: parent_chain
-	layers = append(layers, buildParentChain(issue, stateDir, state))
+	layers = append(layers, buildParentChain(issue, graph, state))
 
 	// Layer 6: decisions
 	layers = append(layers, buildDecisions(issue))
@@ -57,7 +58,7 @@ func Assemble(issueID string, stateDir string, state *materialize.State) (*Conte
 	layers = append(layers, buildNotes(issue))
 
 	// Layer 8: sibling_outcomes
-	layers = append(layers, buildSiblingOutcomes(issue, stateDir, state))
+	layers = append(layers, buildSiblingOutcomes(issue, graph, state))
 
 	sort.Slice(layers, func(i, j int) bool {
 		return layers[i].Priority < layers[j].Priority
@@ -142,7 +143,7 @@ func buildSnippets(issue *materialize.Issue) Layer {
 	return Layer{Name: "snippets", Priority: 3, Content: strings.Join(lines, "\n")}
 }
 
-func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
+func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) Layer {
 	if len(issue.BlockedBy) == 0 {
 		return Layer{Name: "blocker_outcomes", Priority: 3, Content: ""}
 	}
@@ -155,15 +156,6 @@ func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *mate
 			if blocker.Outcome != "" {
 				outcome = blocker.Outcome
 			}
-		} else {
-			// Try loading from disk
-			path := filepath.Join(stateDir, "issues", blockerID+".json")
-			if b, err := materialize.LoadIssue(path); err == nil {
-				status = b.Status
-				if b.Outcome != "" {
-					outcome = b.Outcome
-				}
-			}
 		}
 		// Include status alongside outcome for unambiguous signal
 		if outcome == "outcome unknown" && status != "" {
@@ -175,41 +167,23 @@ func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *mate
 	return Layer{Name: "blocker_outcomes", Priority: 4, Content: content}
 }
 
-func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
+func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
 	var lines []string
-	seen := map[string]bool{issue.ID: true}
 
-	// Walk the parent chain manually up to 3 levels, loading from disk as needed
-	// Start with the direct parent
-	currentID := issue.Parent
-	for i := 0; i < 3 && currentID != ""; i++ {
-		if seen[currentID] {
-			break // cycle guard
+	// Get all ancestors up the hierarchy
+	ancestors := graph.Ancestry(issue.ID)
+	for _, parentID := range ancestors {
+		// Ancestors come from graph.Ancestry, which only includes parents
+		// We need to cap at 3 levels for display
+		if len(lines) >= 3 {
+			break
 		}
-		seen[currentID] = true
-		var parentTitle, parentStatus string
-		var nextParentID string
-
-		// Check if parent is in state
-		if parent, ok := state.Issues[currentID]; ok {
-			parentTitle = parent.Title
-			parentStatus = parent.Status
-			nextParentID = parent.Parent
-		} else {
-			// Load from disk
-			path := filepath.Join(stateDir, "issues", currentID+".json")
-			if p, err := materialize.LoadIssue(path); err == nil {
-				parentTitle = p.Title
-				parentStatus = p.Status
-				nextParentID = p.Parent
-			} else {
-				// Unable to load this parent, stop here
-				break
-			}
+		parentIssue, ok := state.Issues[parentID]
+		if !ok {
+			// Parent not in state; this shouldn't happen with a valid graph
+			continue
 		}
-
-		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", currentID, parentTitle, parentStatus))
-		currentID = nextParentID
+		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", parentID, parentIssue.Title, parentIssue.Status))
 	}
 
 	if len(lines) == 0 {
@@ -258,38 +232,27 @@ func buildNotes(issue *materialize.Issue) Layer {
 	return Layer{Name: "notes", Priority: 7, Content: content}
 }
 
-func buildSiblingOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
+func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
+	// Get the parent ID from the current issue
 	if issue.Parent == "" {
 		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
 	}
-	var children []string
-	if parent, ok := state.Issues[issue.Parent]; ok {
-		children = parent.Children
-	} else {
-		path := filepath.Join(stateDir, "issues", issue.Parent+".json")
-		if p, err := materialize.LoadIssue(path); err == nil {
-			children = p.Children
-		}
-	}
+
+	// Use graph.Hierarchy to get the parent's children
+	_, children := graph.Hierarchy(issue.Parent)
 
 	var lines []string
 	for _, sibID := range children {
 		if sibID == issue.ID {
 			continue
 		}
-		var sibStatus, sibOutcome string
-		if sib, ok := state.Issues[sibID]; ok {
-			sibStatus = sib.Status
-			sibOutcome = sib.Outcome
-		} else {
-			path := filepath.Join(stateDir, "issues", sibID+".json")
-			if s, err := materialize.LoadIssue(path); err == nil {
-				sibStatus = s.Status
-				sibOutcome = s.Outcome
-			}
+		sib, ok := state.Issues[sibID]
+		if !ok {
+			// Sibling not in state; this shouldn't happen with a valid graph
+			continue
 		}
-		if sibStatus == "done" || sibStatus == "merged" {
-			outcome := sibOutcome
+		if sib.Status == "done" || sib.Status == "merged" {
+			outcome := sib.Outcome
 			if outcome == "" {
 				outcome = "(none)"
 			}

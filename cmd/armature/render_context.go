@@ -7,6 +7,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
@@ -59,7 +60,22 @@ func newRenderContextCmd() *cobra.Command {
 				state = snap.State
 			}
 
-			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state)
+			// Construct graph from state.Issues
+			nodeIndex := make(map[string]*dag.Node)
+			for id, issue := range state.Issues {
+				nodeIndex[id] = &dag.Node{
+					ID:        issue.ID,
+					Title:     issue.Title,
+					Type:      issue.Type,
+					Parent:    issue.Parent,
+					Children:  issue.Children,
+					BlockedBy: issue.BlockedBy,
+					Blocks:    issue.Blocks,
+				}
+			}
+			graph := dag.FromIndex(nodeIndex)
+
+			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state, graph)
 			if err != nil {
 				return fmt.Errorf("assemble context: %w", err)
 			}
