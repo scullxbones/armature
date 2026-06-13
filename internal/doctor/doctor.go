@@ -433,4 +433,3 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 	}
 	return f
 }
-

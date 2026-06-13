@@ -199,7 +199,7 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 		Type:      ops.OpNote,
 		TargetID:  "mismatched-issue-01",
 		Timestamp: time.Now().Unix(),
-		WorkerID:  "worker-other",  // Mismatch! Filename says worker-mismatched
+		WorkerID:  "worker-other", // Mismatch! Filename says worker-mismatched
 		Payload:   ops.Payload{Msg: "This op has a worker ID mismatch"},
 	}
 	require.NoError(t, ops.AppendOp(mismatchWorkerLog, mismatchOp))
