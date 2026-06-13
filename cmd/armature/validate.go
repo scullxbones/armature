@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
@@ -50,14 +50,14 @@ COVERAGE and OK lines.`,
   # Suppress INFO lines (e.g. phantom-scope notices)
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, true)
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
-			if err != nil {
-				return err
+			for _, w := range snap.Warnings {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
+			state := snap.State
 
 			// Read manifest data
 			manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))
