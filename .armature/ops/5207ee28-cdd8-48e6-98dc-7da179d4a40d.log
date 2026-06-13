@@ -439,3 +439,4 @@
 ["note","S6",1781377160,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S6-T4 detected at claim time"}]
 ["claim","S6-T4",1781377160,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":180}]
 ["transition","S6-T4",1781377576,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Migrated checkD5DependencyCycles in internal/doctor/doctor.go to use dag.NewGraph(dag.FromIndex(index)).HasCycle() as the fast cycle gate; kept a simplified blocked_by-only DFS for cycle-edge diagnostics when cycles are detected; added indexToDagNodes helper for type conversion; all 11 doctor tests pass."}]
+["transition","S6-T2",1781377688,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
