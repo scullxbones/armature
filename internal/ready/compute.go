@@ -36,8 +36,8 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	}
 
 	// Build a Graph projection for depth calculations during sorting.
-	dagObj := buildDAGFromIndex(index)
-	graph := dag.NewGraph(dagObj)
+	nodeIndex := materializeIndexToNodeIndex(index)
+	graph := dag.FromIndex(nodeIndex)
 
 	var ready []ReadyEntry
 
@@ -236,28 +236,20 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 
 // CollectDescendants returns the set of all descendant IDs of root (not including root itself).
 func CollectDescendants(root string, index materialize.Index) map[string]bool {
+	nodeIndex := materializeIndexToNodeIndex(index)
+	graph := dag.FromIndex(nodeIndex)
+	descendants := graph.Descendants(root)
+
 	result := make(map[string]bool)
-	queue := []string{root}
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		entry, ok := index[current]
-		if !ok {
-			continue
-		}
-		for _, child := range entry.Children {
-			if !result[child] {
-				result[child] = true
-				queue = append(queue, child)
-			}
-		}
+	for _, id := range descendants {
+		result[id] = true
 	}
 	return result
 }
 
-// buildDAGFromIndex constructs a DAG from the materialized Index for use with Graph projection.
-func buildDAGFromIndex(index materialize.Index) *dag.DAG {
-	dagObj := dag.New()
+// materializeIndexToNodeIndex converts a materialize.Index to a map suitable for dag.FromIndex.
+func materializeIndexToNodeIndex(index materialize.Index) map[string]*dag.Node {
+	nodeIndex := make(map[string]*dag.Node)
 	for id, entry := range index {
 		node := &dag.Node{
 			ID:        id,
@@ -271,7 +263,7 @@ func buildDAGFromIndex(index materialize.Index) *dag.DAG {
 		copy(node.Children, entry.Children)
 		copy(node.BlockedBy, entry.BlockedBy)
 		copy(node.Blocks, entry.Blocks)
-		dagObj.AddNode(node) //nolint:errcheck
+		nodeIndex[id] = node
 	}
-	return dagObj
+	return nodeIndex
 }
