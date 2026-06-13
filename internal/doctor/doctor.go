@@ -226,23 +226,17 @@ type opLocation struct {
 }
 
 // buildLocationMapFromOpItems builds a location map from OpItem metadata.
-// Each OpItem contains the log filename and its byte offset.
-// We convert this to file + line-number-in-file for D3 verbose output.
+// Each OpItem contains the physical line number in its source log file.
+// We use this directly for D3 verbose output.
 func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 	result := make(map[string][]opLocation)
-
-	// Track line number per file to get per-file line positions
-	fileLineCounter := make(map[string]int)
 
 	// Group by target ID
 	targetToLocs := make(map[string][]opLocation)
 	for _, item := range items {
 		targetID := item.Op.TargetID
 		logName := filepath.Base(item.LogFilename)
-		// Increment per-file counter to get 1-indexed line number in that file
-		fileLineCounter[logName]++
-		lineNo := fileLineCounter[logName]
-		loc := opLocation{file: logName, line: lineNo}
+		loc := opLocation{file: logName, line: item.LineNumber}
 		targetToLocs[targetID] = append(targetToLocs[targetID], loc)
 	}
 

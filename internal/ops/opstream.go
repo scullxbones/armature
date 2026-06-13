@@ -14,6 +14,7 @@ type OpItem struct {
 	LogFilename string     // Full path to the log file
 	Source      *FileEntry // Reference to the FileEntry that produced this op
 	Offset      int64      // Byte offset where this op ends in the log file
+	LineNumber  int        // Physical line number in the source log file (1-indexed)
 }
 
 // FileEntry represents a log file to be loaded with expected worker ID validation.
@@ -88,7 +89,7 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 		return nil, 0, nil, err
 	}
 
-	for _, lineInfo := range linesWithOffsets {
+	for i, lineInfo := range linesWithOffsets {
 		// Track physical EOF on every line (accepted or rejected)
 		physicalEOF = lineInfo.EndOffset
 
@@ -121,6 +122,7 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 			LogFilename: entry.LogPath,
 			Source:      entry,
 			Offset:      lineInfo.EndOffset,
+			LineNumber:  i + 1,
 		})
 	}
 

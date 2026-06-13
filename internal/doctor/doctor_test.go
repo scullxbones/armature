@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -389,4 +390,71 @@ func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 	report := doctor.RunChecks(index, nil, nil, repoDir)
 	d1 := findCheck(t, report, "D1")
 	assert.Equal(t, doctor.SeverityOK, d1.Severity, "D1 should be OK when commit references done issue")
+}
+
+func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	logPath := filepath.Join(issuesDir, "ops", "worker-physical.log")
+
+	// Write three lines:
+	// Line 1: accepted op (orphaned - note op without create)
+	acceptedOp1 := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "orphan-1",
+		Timestamp: 100,
+		WorkerID:  "worker-physical",
+		Payload:   ops.Payload{Msg: "First"},
+	}
+	require.NoError(t, ops.AppendOp(logPath, acceptedOp1))
+
+	// Line 2: mismatched op (rejected, not in items)
+	mismatchOp := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "orphan-2",
+		Timestamp: 101,
+		WorkerID:  "worker-wrong",
+		Payload:   ops.Payload{Msg: "Mismatch"},
+	}
+	require.NoError(t, ops.AppendOp(logPath, mismatchOp))
+
+	// Line 3: accepted op (orphaned, needs D3 verbose output)
+	acceptedOp3 := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "orphan-3",
+		Timestamp: 102,
+		WorkerID:  "worker-physical",
+		Payload:   ops.Payload{Msg: "Third"},
+	}
+	require.NoError(t, ops.AppendOp(logPath, acceptedOp3))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", true)
+	require.NoError(t, err)
+
+	d3 := findCheck(t, report, "D3")
+	assert.Equal(t, doctor.SeverityError, d3.Severity, "should have orphaned ops")
+	assert.Contains(t, d3.Items, "orphan-1", "orphan-1 should be in items")
+	assert.Contains(t, d3.Items, "orphan-3", "orphan-3 should be in items")
+
+	// Check verbose items use physical line numbers, not ordinal position
+	require.NotEmpty(t, d3.VerboseItems, "verbose items should be present")
+
+	// Find the verbose items for orphan-1 and orphan-3
+	verbose1Found := false
+	verbose3Found := false
+	for _, vi := range d3.VerboseItems {
+		if strings.Contains(vi, "orphan-1") {
+			verbose1Found = true
+			// orphan-1 should be at physical line 1
+			assert.Contains(t, vi, "worker-physical.log:1", "orphan-1 should be reported at physical line 1")
+		}
+		if strings.Contains(vi, "orphan-3") {
+			verbose3Found = true
+			// orphan-3 should be at physical line 3 (not line 2, which was the mismatch)
+			assert.Contains(t, vi, "worker-physical.log:3", "orphan-3 should be reported at physical line 3")
+		}
+	}
+	assert.True(t, verbose1Found, "verbose item for orphan-1 should be present")
+	assert.True(t, verbose3Found, "verbose item for orphan-3 should be present")
 }
