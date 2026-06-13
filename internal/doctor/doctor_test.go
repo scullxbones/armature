@@ -228,6 +228,22 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	assert.Len(t, d7.Items, 1, "should report one mismatch warning")
 }
 
+func TestRun_CorruptLineDoesNotTriggerD7(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	// Write a log file with a corrupt (non-JSON) line — no worker-ID mismatch.
+	logPath := filepath.Join(issuesDir, "ops", "worker-clean.log")
+	require.NoError(t, os.WriteFile(logPath, []byte("this is not valid json\n"), 0o644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false)
+	require.NoError(t, err)
+
+	d7 := findCheck(t, report, "D7")
+	assert.Equal(t, doctor.SeverityOK, d7.Severity,
+		"corrupt-line warnings must not cause D7 to fire as a worker-ID mismatch")
+}
+
 func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)

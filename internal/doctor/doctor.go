@@ -135,7 +135,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
-	checks = append(checks, checkD7WorkerIDMismatches(warnings))
+	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
 
 	return Report{Checks: checks}, nil
 }
@@ -406,6 +406,16 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 		f.Items = uncited
 	}
 	return f
+}
+
+func filterMismatchWarnings(warnings []string) []string {
+	var out []string
+	for _, w := range warnings {
+		if strings.HasPrefix(w, "worker ID mismatch") {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // D7: worker-ID mismatches — ops that were excluded from the validated stream due to worker-ID mismatches.
