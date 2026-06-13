@@ -152,3 +152,4 @@
 ["claim","ARCHIMP-S4-T2",1780835414,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","ARCHIMP-S4-T2",1780835823,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","ARCHIMP-S4",1780835830,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Deepened the harness-hook command into a hook runner module. Extracted stdin decoding, evaluation, structured result, and exit-code mapping into internal/harnesshook/runner.go with full test coverage. Consolidated platform adapter selection into one NewAdapterForPlatform() registry used by both Launcher and hook runner, eliminating duplicate selection logic. All adapters (Claude, Codex, Devin) preserved and covered by tests. All tests pass, mutation efficacy 100%, coverage 81.9%."}]
+["transition","E6",1781366208,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","outcome":"All stories implemented"}]
