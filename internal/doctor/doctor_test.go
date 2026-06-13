@@ -177,6 +177,52 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	assert.Contains(t, d3.Items, "ghost-issue-01")
 }
 
+func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	// Create a valid issue first (no mismatch)
+	validWorkerLog := filepath.Join(issuesDir, "ops", "worker-valid.log")
+	createOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "valid-issue-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-valid",
+		Payload:   ops.Payload{Title: "Valid issue", NodeType: "task"},
+	}
+	require.NoError(t, ops.AppendOp(validWorkerLog, createOp))
+
+	// Create a log file with a mismatched worker ID op (GHOST-99).
+	// The op claims to be from "worker-other" but the filename says "worker-mismatched".
+	mismatchWorkerLog := filepath.Join(issuesDir, "ops", "worker-mismatched.log")
+	mismatchOp := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "mismatched-issue-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-other",  // Mismatch! Filename says worker-mismatched
+		Payload:   ops.Payload{Msg: "This op has a worker ID mismatch"},
+	}
+	require.NoError(t, ops.AppendOp(mismatchWorkerLog, mismatchOp))
+
+	// Run doctor
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false)
+	require.NoError(t, err)
+
+	// D3 should report mismatched-issue-01 as orphaned (it has no create op)
+	// BUT the key point is that mismatched-issue-01 should appear in D3
+	// because the mismatch should cause it to be excluded from the ops list.
+	// However, let's verify the logic more carefully: if the op is excluded due to
+	// mismatch, it won't be in the opsTargetIDs, so the D3 check should pass.
+	// Therefore, D3 should be OK (no orphaned ops).
+	d3 := findCheck(t, report, "D3")
+	assert.Equal(t, doctor.SeverityOK, d3.Severity,
+		"D3 should be OK because mismatched ops are excluded from D3 check")
+	assert.NotContains(t, d3.Items, "mismatched-issue-01",
+		"Worker-ID mismatched ops should not appear in D3 orphaned list")
+	// valid-issue-01 should have a create op, so it's not orphaned
+	assert.NotContains(t, d3.Items, "valid-issue-01")
+}
+
 func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)

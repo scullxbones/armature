@@ -6,7 +6,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	armcontext "github.com/scullxbones/armature/internal/context"
-	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
 )
 
@@ -20,18 +20,11 @@ func buildHarnessStructuredContext(appCtx *config.Context, issueID string) (stri
 		stateDir = stateDirFor(appCtx, workerID)
 	}
 
-	allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+	snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), stateDir, appCtx.Mode == "single-branch")
 	if err != nil {
-		return "", fmt.Errorf("read ops: %w", err)
+		return "", fmt.Errorf("load snapshot: %w", err)
 	}
-	if _, err := materialize.Materialize(stateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
-		return "", fmt.Errorf("materialize: %w", err)
-	}
-	state, err := loadStateFromStateDir(stateDir)
-	if err != nil {
-		return "", fmt.Errorf("load state: %w", err)
-	}
-	assembled, err := armcontext.Assemble(issueID, stateDir, state)
+	assembled, err := armcontext.Assemble(issueID, stateDir, snap.State)
 	if err != nil {
 		return "", fmt.Errorf("assemble context: %w", err)
 	}

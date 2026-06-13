@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -49,18 +49,14 @@ func newRenderContextCmd() *cobra.Command {
 					return fmt.Errorf("materialize at %s: %w", rcAt, err)
 				}
 			} else {
-				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
-				if err != nil {
-					return fmt.Errorf("read ops: %w", err)
+				snap, snapErr := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+				if snapErr != nil {
+					return fmt.Errorf("load snapshot: %w", snapErr)
 				}
-				_, err = materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets)
-				if err != nil {
-					return fmt.Errorf("materialize: %w", err)
+				for _, w := range snap.Warnings {
+					_, _ = fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 				}
-				state, err = loadStateFromStateDir(appCtx.StateDir)
-				if err != nil {
-					return fmt.Errorf("load state: %w", err)
-				}
+				state = snap.State
 			}
 
 			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state)
@@ -92,33 +88,4 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
 	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
 	return cmd
-}
-
-// loadStateFromStateDir reads all materialized issue JSON files and builds a State.
-func loadStateFromStateDir(stateDir string) (*materialize.State, error) {
-	stateIssuesDir := filepath.Join(stateDir, "issues")
-	state := materialize.NewState()
-
-	entries, err := os.ReadDir(stateIssuesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return state, nil
-		}
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(stateIssuesDir, entry.Name())
-		issue, err := materialize.LoadIssue(path)
-		if err != nil {
-			continue
-		}
-		issueCopy := issue
-		state.Issues[issue.ID] = &issueCopy
-	}
-
-	return state, nil
 }

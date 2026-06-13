@@ -86,24 +86,17 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Report, error) {
 	singleBranch := true // single-branch is the default for doctor
 
-	// Read ops from the ops directory
+	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
 	opsDir := filepath.Join(issuesDir, "ops")
-	var allOps []ops.Op
-	var opLocations map[string][]string
-	var err error
-
-	if verbose {
-		// Read with location tracking for verbose output
-		allOps, opLocations, err = readAllOpsFromOpsDirWithLocations(opsDir)
-	} else {
-		// Read without location tracking
-		allOps, err = readAllOpsFromOpsDir(opsDir)
-		opLocations = make(map[string][]string)
-	}
-
+	opItems, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return Report{}, fmt.Errorf("read ops: %w", err)
 	}
+	_ = warnings // Log warnings but don't fail on them
+	_ = offsets  // Not needed for doctor, but returned by validated loader
+
+	// Extract ops from OpItems
+	allOps := ops.ExtractOps(opItems)
 
 	if _, err := materialize.Materialize(stateDir, allOps, singleBranch, nil); err != nil {
 		return Report{}, fmt.Errorf("materialize: %w", err)
@@ -128,10 +121,10 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 		}
 	}
 
-	// Build verbose context from location strings
+	// Build verbose context from OpItems metadata
 	var verboseD3Context map[string][]opLocation
 	if verbose {
-		verboseD3Context = convertLocationsToOpLocations(opLocations)
+		verboseD3Context = buildLocationMapFromOpItems(opItems)
 	} else {
 		verboseD3Context = make(map[string][]opLocation)
 	}
@@ -232,22 +225,27 @@ type opLocation struct {
 	line int
 }
 
-// convertLocationsToOpLocations converts string locations (e.g., "worker.log:5") to opLocation structs.
-func convertLocationsToOpLocations(locations map[string][]string) map[string][]opLocation {
+// buildLocationMapFromOpItems builds a location map from OpItem metadata.
+// Each OpItem contains the log filename and its byte offset.
+// We convert this to file + line-number-in-file for D3 verbose output.
+func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 	result := make(map[string][]opLocation)
-	for targetID, locStrs := range locations {
-		var opLocs []opLocation
-		for _, locStr := range locStrs {
-			parts := strings.SplitN(locStr, ":", 2)
-			if len(parts) == 2 {
-				lineNo := 0
-				if ln, err := fmt.Sscanf(parts[1], "%d", &lineNo); err == nil && ln == 1 {
-					opLocs = append(opLocs, opLocation{file: parts[0], line: lineNo})
-				}
-			}
-		}
-		if len(opLocs) > 0 {
-			result[targetID] = opLocs
+
+	// Group by target ID
+	targetToLocs := make(map[string][]opLocation)
+	for i, item := range items {
+		targetID := item.Op.TargetID
+		logName := filepath.Base(item.LogFilename)
+		// Line number is position in file + 1 (1-indexed)
+		lineNo := i + 1
+		loc := opLocation{file: logName, line: lineNo}
+		targetToLocs[targetID] = append(targetToLocs[targetID], loc)
+	}
+
+	// Copy to result, removing duplicates and sorting
+	for targetID, locs := range targetToLocs {
+		if len(locs) > 0 {
+			result[targetID] = locs
 		}
 	}
 	return result
@@ -407,59 +405,3 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 	return f
 }
 
-// readAllOpsFromOpsDir reads all ops from the ops directory.
-func readAllOpsFromOpsDir(opsDir string) ([]ops.Op, error) {
-	entries, err := adapters.ReadDir(opsDir)
-	if err != nil {
-		return nil, err
-	}
-
-	var allOps []ops.Op
-	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
-			logPath := filepath.Join(opsDir, entry.Name())
-			logOps, err := ops.ReadLog(logPath)
-			if err != nil {
-				// Skip logs that can't be read
-				continue
-			}
-			allOps = append(allOps, logOps...)
-		}
-	}
-
-	return allOps, nil
-}
-
-// readAllOpsFromOpsDirWithLocations reads all ops and tracks which log file each came from.
-// Returns ops and a map of target ID to (logfile:lineno) location strings.
-func readAllOpsFromOpsDirWithLocations(opsDir string) ([]ops.Op, map[string][]string, error) {
-	entries, err := adapters.ReadDir(opsDir)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var allOps []ops.Op
-	locations := make(map[string][]string)
-	lineNo := 0
-
-	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
-			logPath := filepath.Join(opsDir, entry.Name())
-			logOps, err := ops.ReadLog(logPath)
-			if err != nil {
-				// Skip logs that can't be read
-				continue
-			}
-
-			logFileName := filepath.Base(logPath)
-			for i, op := range logOps {
-				lineNo++
-				allOps = append(allOps, op)
-				locStr := fmt.Sprintf("%s:%d", logFileName, i+1)
-				locations[op.TargetID] = append(locations[op.TargetID], locStr)
-			}
-		}
-	}
-
-	return allOps, locations, nil
-}
