@@ -327,3 +327,4 @@
 ["transition","T2",1781374526,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Migrated ready.go, show.go, validate.go, harness_context.go to snapshot.Load; direct materialize.LoadIssue calls removed; warnings emitted to stderr; make test passes."}]
 ["claim","T3",1781374530,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":30}]
 ["transition","T3",1781374537,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Migrated render_context.go (removed loadStateFromStateDir helper) and internal/tui/app/model.go (removed readAllOpsFromDirWithOffsets helper) to snapshot.Load; go build ./... succeeds; make test passes."}]
+["transition","T1",1781374547,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
