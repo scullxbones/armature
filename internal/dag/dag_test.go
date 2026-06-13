@@ -650,7 +650,7 @@ func TestFromIndexEmpty(t *testing.T) {
 	assert.Empty(t, descendants)
 }
 
-// TestIsLegalHierarchyTable tests IsLegalHierarchy with various cases.
+// TestIsLegalHierarchyTable tests isLegalHierarchy with various cases.
 func TestIsLegalHierarchyTable(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -745,7 +745,7 @@ func TestIsLegalHierarchyTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsLegalHierarchy(tt.index)
+			result := isLegalHierarchy(tt.index)
 			if tt.expected {
 				assert.True(t, result, tt.desc)
 			} else {
@@ -753,4 +753,73 @@ func TestIsLegalHierarchyTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGraphFromState tests that GraphFromState constructs a Graph from a node index
+// and defensively copies all slices.
+func TestGraphFromState(t *testing.T) {
+	index := map[string]*Node{
+		"epic-1": {
+			ID:        "epic-1",
+			Title:     "Epic",
+			Type:      "epic",
+			Parent:    "",
+			Children:  []string{"story-1"},
+			BlockedBy: []string{},
+			Blocks:    []string{},
+		},
+		"story-1": {
+			ID:        "story-1",
+			Title:     "Story",
+			Type:      "story",
+			Parent:    "epic-1",
+			Children:  []string{"task-1"},
+			BlockedBy: []string{},
+			Blocks:    []string{},
+		},
+		"task-1": {
+			ID:        "task-1",
+			Title:     "Task",
+			Type:      "task",
+			Parent:    "story-1",
+			Children:  []string{},
+			BlockedBy: []string{"blocker-1"},
+			Blocks:    []string{},
+		},
+		"blocker-1": {
+			ID:        "blocker-1",
+			Title:     "Blocker",
+			Type:      "task",
+			Parent:    "",
+			Children:  []string{},
+			BlockedBy: []string{},
+			Blocks:    []string{"task-1"},
+		},
+	}
+
+	g := GraphFromState(index)
+	require.NotNil(t, g)
+
+	// Test basic graph operations
+	ancestors := g.Ancestry("task-1")
+	assert.ElementsMatch(t, []string{"story-1", "epic-1"}, ancestors)
+
+	blockers := g.Blockers("task-1")
+	assert.ElementsMatch(t, []string{"blocker-1"}, blockers)
+
+	// Verify defensive copying: mutating the original index should not affect the graph
+	index["task-1"].Children = append(index["task-1"].Children, "injected")
+	children := g.Blockers("task-1")
+	assert.NotContains(t, children, "injected")
+}
+
+// TestGraphFromStateEmpty tests that GraphFromState handles an empty index.
+func TestGraphFromStateEmpty(t *testing.T) {
+	index := make(map[string]*Node)
+	g := GraphFromState(index)
+	require.NotNil(t, g)
+
+	// Empty graph should return empty results
+	ancestors := g.Ancestry("nonexistent")
+	assert.Empty(t, ancestors)
 }

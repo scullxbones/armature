@@ -74,7 +74,7 @@ func newContextHistoryCmd() *cobra.Command {
 						Blocks:    issue.Blocks,
 					}
 				}
-				graph := dag.FromIndex(nodeIndex)
+				graph := dag.GraphFromState(nodeIndex)
 
 				ctx, err := context.Assemble(chIssue, appCtx.IssuesDir, state, graph)
 				if err != nil {

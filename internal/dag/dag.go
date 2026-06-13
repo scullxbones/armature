@@ -255,10 +255,34 @@ func FromIndex(index map[string]*Node) *Graph {
 	return NewGraph(d)
 }
 
-// IsLegalHierarchy validates that a node index has consistent parent-child relationships.
+// GraphFromState constructs a Graph from a materialize.State-like node index.
+// This is a convenience helper that converts the Issues map into a Graph suitable
+// for context assembly and ready-queue computation.
+// All slices are defensively copied.
+func GraphFromState(index map[string]*Node) *Graph {
+	nodeIndex := make(map[string]*Node)
+	for id, node := range index {
+		copiedNode := &Node{
+			ID:        node.ID,
+			Title:     node.Title,
+			Type:      node.Type,
+			Parent:    node.Parent,
+			Children:  make([]string, len(node.Children)),
+			BlockedBy: make([]string, len(node.BlockedBy)),
+			Blocks:    make([]string, len(node.Blocks)),
+		}
+		copy(copiedNode.Children, node.Children)
+		copy(copiedNode.BlockedBy, node.BlockedBy)
+		copy(copiedNode.Blocks, node.Blocks)
+		nodeIndex[id] = copiedNode
+	}
+	return FromIndex(nodeIndex)
+}
+
+// isLegalHierarchy validates that a node index has consistent parent-child relationships.
 // It returns true if every node's parent reference is satisfied and every parent's
 // Children list contains consistent entries. An empty index is considered valid.
-func IsLegalHierarchy(index map[string]*Node) bool {
+func isLegalHierarchy(index map[string]*Node) bool {
 	// Empty index is valid
 	if len(index) == 0 {
 		return true

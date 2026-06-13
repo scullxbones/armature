@@ -38,7 +38,7 @@ func buildHarnessStructuredContext(appCtx *config.Context, issueID string) (stri
 			Blocks:    issue.Blocks,
 		}
 	}
-	graph := dag.FromIndex(nodeIndex)
+	graph := dag.GraphFromState(nodeIndex)
 	assembled, err := armcontext.Assemble(issueID, stateDir, snap.State, graph)
 	if err != nil {
 		return "", fmt.Errorf("assemble context: %w", err)

@@ -335,16 +335,20 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 
 // indexToDagNodes converts a materialize.Index to a map of dag.Node pointers.
 // Only blocked_by edges are converted; parent-child hierarchy is preserved.
+// Children is set to nil to ensure HasCycle() only traverses blocked_by edges.
 func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
 	nodes := make(map[string]*dag.Node)
 	for id, entry := range index {
+		// Defensive copy of BlockedBy slice
+		blockedBy := make([]string, len(entry.BlockedBy))
+		copy(blockedBy, entry.BlockedBy)
 		nodes[id] = &dag.Node{
 			ID:        id,
 			Title:     entry.Title,
 			Type:      entry.Type,
 			Parent:    entry.Parent,
-			Children:  entry.Children,
-			BlockedBy: entry.BlockedBy,
+			Children:  nil,
+			BlockedBy: blockedBy,
 			Blocks:    entry.Blocks,
 		}
 	}
