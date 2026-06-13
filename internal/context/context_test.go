@@ -29,7 +29,7 @@ func buildGraphFromState(state *materialize.State) *dag.Graph {
 			Blocks:    issue.Blocks,
 		}
 	}
-	return dag.FromIndex(nodeIndex)
+	return dag.GraphFromState(nodeIndex)
 }
 
 func TestAssembleContext_CoreSpec(t *testing.T) {

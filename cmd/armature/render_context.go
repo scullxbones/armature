@@ -73,7 +73,7 @@ func newRenderContextCmd() *cobra.Command {
 					Blocks:    issue.Blocks,
 				}
 			}
-			graph := dag.FromIndex(nodeIndex)
+			graph := dag.GraphFromState(nodeIndex)
 
 			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state, graph)
 			if err != nil {
