@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/detail"
 )
@@ -243,17 +242,11 @@ func (m Model) doRefresh() tea.Cmd {
 	issuesDir := m.issuesDir
 	stateDir := m.stateDir
 	return func() tea.Msg {
-		// Read ops from disk and materialize
-		opsDir := filepath.Join(issuesDir, "ops")
-		allOps, offsets, err := readAllOpsFromDirWithOffsets(opsDir)
-		if err != nil {
+		snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), stateDir, true)
+		if err != nil || snap.State == nil {
 			return nil
 		}
-		state, _, err := materialize.MaterializeAndReturn(stateDir, allOps, true, offsets)
-		if err != nil || state == nil {
-			return nil
-		}
-		return stateUpdatedMsg{state: state}
+		return stateUpdatedMsg{state: snap.State}
 	}
 }
 
@@ -282,17 +275,3 @@ func (nilScreen) View() string                             { return "" }
 func (nilScreen) HelpBar() string                          { return "" }
 func (nilScreen) SetSize(_, _ int)                         {}
 func (nilScreen) SetState(_ *materialize.State)            {}
-
-// readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
-// Returns ops slice and a map of log filename -> byte offset (end position).
-// Validates that each op's worker ID matches its filename's worker ID.
-func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-	return ops.ExtractOps(items), offsets, nil
-}
