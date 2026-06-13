@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
@@ -332,17 +333,41 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 	return f
 }
 
+// indexToDagNodes converts a materialize.Index to a map of dag.Node pointers.
+// Only blocked_by edges are converted; parent-child hierarchy is preserved.
+func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
+	nodes := make(map[string]*dag.Node)
+	for id, entry := range index {
+		nodes[id] = &dag.Node{
+			ID:        id,
+			Title:     entry.Title,
+			Type:      entry.Type,
+			Parent:    entry.Parent,
+			Children:  entry.Children,
+			BlockedBy: entry.BlockedBy,
+			Blocks:    entry.Blocks,
+		}
+	}
+	return nodes
+}
+
 // D5: dependency cycles — blocked_by chains that form a cycle.
 func checkD5DependencyCycles(index materialize.Index) Finding {
 	f := Finding{Check: "D5", Severity: SeverityOK, Message: "No dependency cycles"}
 
-	// Build adjacency list from blocked_by.
+	// Use dag.Graph.HasCycle() for fast cycle detection.
+	dagNodes := indexToDagNodes(index)
+	graphIndex := dag.FromIndex(dagNodes)
+	if !graphIndex.HasCycle() {
+		return f
+	}
+
+	// Cycle detected. Collect cycle edges using simplified blocked_by-only DFS.
 	adj := make(map[string][]string)
 	for id, entry := range index {
 		adj[id] = entry.BlockedBy
 	}
 
-	// DFS cycle detection.
 	const (
 		colorWhite = 0
 		colorGray  = 1
