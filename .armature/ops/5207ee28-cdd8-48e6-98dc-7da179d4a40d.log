@@ -306,3 +306,4 @@
 ["create","S7-T2",1781369976,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"title":"Integration verification: all commands consistent after architecture deepening","parent":"S7","type":"task","acceptance":["make check green (lint + test + coverage ≥80% + mutate + validate-skills + build)","arm validate --ci exits 0","arm doctor exits 0","arm ready --format json exits 0"],"definition_of_done":"arm validate --ci, arm doctor, arm ready --format json, arm render-context (if issues exist), and make check all exit 0. No regressions. All three seams (snapshot, graph facts, validated ops) share one canonical path through the codebase.","priority":"medium","confidence":"draft"}]
 ["link","S7-T2",1781369976,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"S7-T1","rel":"blocked_by"}]
 ["link","S6",1781370000,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"ARCHIMP-S5","rel":"blocked_by"}]
+["link","S7",1781370000,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"S6","rel":"blocked_by"}]
