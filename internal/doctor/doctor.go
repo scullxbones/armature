@@ -88,12 +88,10 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 
 	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
 	opsDir := filepath.Join(issuesDir, "ops")
-	opItems, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	opItems, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return Report{}, fmt.Errorf("read ops: %w", err)
 	}
-	_ = warnings // Log warnings but don't fail on them
-	_ = offsets  // Not needed for doctor, but returned by validated loader
 
 	// Extract ops from OpItems
 	allOps := ops.ExtractOps(opItems)
@@ -137,6 +135,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
+	checks = append(checks, checkD7WorkerIDMismatches(warnings))
 
 	return Report{Checks: checks}, nil
 }
@@ -231,13 +230,17 @@ type opLocation struct {
 func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 	result := make(map[string][]opLocation)
 
+	// Track line number per file to get per-file line positions
+	fileLineCounter := make(map[string]int)
+
 	// Group by target ID
 	targetToLocs := make(map[string][]opLocation)
-	for i, item := range items {
+	for _, item := range items {
 		targetID := item.Op.TargetID
 		logName := filepath.Base(item.LogFilename)
-		// Line number is position in file + 1 (1-indexed)
-		lineNo := i + 1
+		// Increment per-file counter to get 1-indexed line number in that file
+		fileLineCounter[logName]++
+		lineNo := fileLineCounter[logName]
 		loc := opLocation{file: logName, line: lineNo}
 		targetToLocs[targetID] = append(targetToLocs[targetID], loc)
 	}
@@ -401,6 +404,19 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 		f.Severity = SeverityWarning
 		f.Message = "Issues without source-link or accept-citation"
 		f.Items = uncited
+	}
+	return f
+}
+
+// D7: worker-ID mismatches — ops that were excluded from the validated stream due to worker-ID mismatches.
+func checkD7WorkerIDMismatches(warnings []string) Finding {
+	f := Finding{Check: "D7", Severity: SeverityOK, Message: "No worker-ID mismatches detected"}
+
+	if len(warnings) > 0 {
+		sort.Strings(warnings)
+		f.Severity = SeverityWarning
+		f.Message = "Worker-ID mismatched ops detected"
+		f.Items = warnings
 	}
 	return f
 }

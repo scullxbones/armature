@@ -221,6 +221,11 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 		"Worker-ID mismatched ops should not appear in D3 orphaned list")
 	// valid-issue-01 should have a create op, so it's not orphaned
 	assert.NotContains(t, d3.Items, "valid-issue-01")
+
+	// D7 should report the worker-ID mismatch warning
+	d7 := findCheck(t, report, "D7")
+	assert.Equal(t, doctor.SeverityWarning, d7.Severity, "D7 should warn about worker-ID mismatches")
+	assert.Len(t, d7.Items, 1, "should report one mismatch warning")
 }
 
 func TestRun_Integration_D2_StaleClaims(t *testing.T) {
