@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -32,12 +33,12 @@ func newShowCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
 
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return err
+			for _, w := range snap.Warnings {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -62,11 +63,11 @@ func newShowCmd() *cobra.Command {
 				}
 				results := make([]showJSON, 0, len(ids))
 				for _, id := range ids {
-					issuePath := filepath.Join(appCtx.StateDir, "issues", id+".json")
-					issue, err := materialize.LoadIssue(issuePath)
-					if err != nil {
+					issuePtr, ok := snap.Issues[id]
+					if !ok || issuePtr == nil {
 						return fmt.Errorf("issue %q not found", id)
 					}
+					issue := *issuePtr
 					noteTexts := make([]string, 0, len(issue.Notes))
 					for _, n := range issue.Notes {
 						if n.Deleted {
@@ -98,11 +99,11 @@ func newShowCmd() *cobra.Command {
 
 			// Single or multi-issue non-JSON: iterate and print each, separated by "---"
 			for i, id := range ids {
-				issuePath := filepath.Join(appCtx.StateDir, "issues", id+".json")
-				issue, err := materialize.LoadIssue(issuePath)
-				if err != nil {
+				issuePtr, ok := snap.Issues[id]
+				if !ok || issuePtr == nil {
 					return fmt.Errorf("issue %q not found", id)
 				}
+				issue := *issuePtr
 
 				if i > 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "---")

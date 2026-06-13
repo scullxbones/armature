@@ -8,9 +8,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
 	readytui "github.com/scullxbones/armature/internal/tui/ready"
 	"github.com/spf13/cobra"
@@ -47,26 +47,15 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
-				return fmt.Errorf("materialize: %w", err)
+			for _, w := range snap.Warnings {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
-
-			index, err := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
-			if err != nil {
-				return err
-			}
-
-			issues := make(map[string]*materialize.Issue)
-			for id := range index {
-				issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", id+".json"))
-				if err == nil {
-					issues[id] = &issue
-				}
-			}
+			index := snap.Index
+			issues := snap.Issues
 
 			// --explain: print why each open unclaimed task is not ready, then return.
 			if explain {
