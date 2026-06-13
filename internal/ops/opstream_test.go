@@ -246,6 +246,38 @@ func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
 	assert.Equal(t, logPath, items[0].LogFilename)
 }
 
+func TestLoadFile_LineNumberPopulated(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-w1.log")
+
+	// Line 1: valid op
+	op1 := Op{Type: OpCreate, TargetID: "issue-1", Timestamp: 100, WorkerID: "worker-w1",
+		Payload: Payload{Title: "First", NodeType: "task"}}
+	require.NoError(t, AppendOp(logPath, op1))
+
+	// Line 2: mismatch op (will be rejected)
+	mismatchOp := Op{Type: OpNote, TargetID: "issue-2", Timestamp: 101, WorkerID: "worker-wrong",
+		Payload: Payload{Msg: "Mismatch"}}
+	require.NoError(t, AppendOp(logPath, mismatchOp))
+
+	// Line 3: valid op
+	op3 := Op{Type: OpNote, TargetID: "issue-3", Timestamp: 102, WorkerID: "worker-w1",
+		Payload: Payload{Msg: "Third"}}
+	require.NoError(t, AppendOp(logPath, op3))
+
+	stream := NewValidatedOpStream()
+	stream.AddFile(logPath, "worker-w1")
+	items, warnings, err := stream.Load()
+
+	require.NoError(t, err)
+	assert.Len(t, items, 2, "should accept 2 ops (line 1 and 3) and reject 1 (line 2)")
+	assert.Len(t, warnings, 1, "should have 1 warning for the mismatch")
+
+	// Verify physical line numbers are set correctly
+	assert.Equal(t, 1, items[0].LineNumber, "first accepted op should be from physical line 1")
+	assert.Equal(t, 3, items[1].LineNumber, "second accepted op should be from physical line 3")
+}
+
 // ===== Tests for package-level LoadFromDirValidated and LoadFromDirWithOffsetsValidated =====
 
 func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
