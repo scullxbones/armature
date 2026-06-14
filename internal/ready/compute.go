@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -31,8 +30,6 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	var currentTime int64
 	if len(now) > 0 {
 		currentTime = now[0]
-	} else {
-		currentTime = time.Now().Unix()
 	}
 
 	// Build a Graph projection for depth calculations during sorting.
@@ -98,8 +95,6 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 	var currentTime int64
 	if len(now) > 0 {
 		currentTime = now[0]
-	} else {
-		currentTime = time.Now().Unix()
 	}
 
 	result := make(map[string]string)
