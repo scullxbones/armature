@@ -9,14 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeMergeChecker struct {
-	merged map[string]bool
-}
-
-func (f *fakeMergeChecker) BranchMergedInto(branch, target string) (bool, error) {
-	return f.merged[branch], nil
-}
-
 func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 	// done + merged branch
 	issue1 := materialize.Issue{
@@ -34,9 +26,9 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
 
-	mc := &fakeMergeChecker{merged: map[string]bool{
+	mc := NewFakeMergeChecker(map[string]bool{
 		"feature/merged-work": true,
-	}}
+	})
 
 	ids, err := armsync.DetectMerges([]materialize.Issue{issue1, issue2, issue3}, "main", mc)
 	require.NoError(t, err)
@@ -49,7 +41,7 @@ func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
 
-	mc := &fakeMergeChecker{merged: map[string]bool{}}
+	mc := NewFakeMergeChecker(map[string]bool{})
 
 	ids, err := armsync.DetectMerges([]materialize.Issue{issue}, "main", mc)
 	require.NoError(t, err)
@@ -58,7 +50,7 @@ func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 
 func TestDetectMerges_EmptyDir(t *testing.T) {
 	// No issues provided
-	mc := &fakeMergeChecker{merged: map[string]bool{}}
+	mc := NewFakeMergeChecker(map[string]bool{})
 	ids, err := armsync.DetectMerges([]materialize.Issue{}, "main", mc)
 	assert.NoError(t, err)
 	assert.Empty(t, ids)
@@ -70,7 +62,7 @@ func TestSyncDetectMergesChecksAllIssues(t *testing.T) {
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
 
-	mc := &fakeMergeChecker{merged: map[string]bool{"feature/merged": true}}
+	mc := NewFakeMergeChecker(map[string]bool{"feature/merged": true})
 
 	// DetectMerges should check all provided issues
 	ids, err := armsync.DetectMerges([]materialize.Issue{issue}, "main", mc)

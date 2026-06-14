@@ -56,7 +56,7 @@ func TestAppendCommitAndPush_DualBranch_PushesAndResetsTracker(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
 
 	fp := &fakePusher{}
-	fc := &fakeCommitter{}
+	fc := &FakeCommitter{}
 	pusher := &ops.AppendCommitAndPush{
 		Pusher:  fp,
 		Branch:  "_armature",
@@ -81,7 +81,7 @@ func TestAppendCommitAndPush_AllAttemptsFail_ReturnsError(t *testing.T) {
 		pushErr:      errors.New("rejected"),
 		pushErrAfter: 10, // always fail
 	}
-	fc := &fakeCommitter{}
+	fc := &FakeCommitter{}
 	pusher := &ops.AppendCommitAndPush{
 		Pusher:  fp,
 		Branch:  "_armature",
