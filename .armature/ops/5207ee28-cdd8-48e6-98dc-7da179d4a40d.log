@@ -553,3 +553,4 @@
 ["claim","QLTYCNTRL-S3-T1",1781407750,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","QLTYCNTRL-S3",1781407751,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["claim","QLTYCNTRL-S4-T1",1781407751,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["transition","QLTYCNTRL-S4",1781407753,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
