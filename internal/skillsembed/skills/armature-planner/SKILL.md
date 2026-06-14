@@ -185,7 +185,14 @@ that do not yet exist. Use precise paths, not vague descriptions.
 JSON array of specific criteria the worker can verify mechanically. Each entry
 should name a test, a command output, or an observable behavior.
 
-- Good: `["TestParseTokenTypes passes", "make check green", "arm validate exits 0"]`
+**Spec traceability:** Name new tests using `Test<Description>_REQ_<RequirementID>`,
+where `RequirementID` is the story or task ID (e.g. `STORY-T1`). This makes the
+test visible to `make trace-report` and ties it back to the requirement that
+motivated it. Use this pattern for every acceptance criterion that corresponds to
+a new test function.
+
+- Good: `["TestParseTokenTypes_REQ_STORY_T1 passes", "make check green", "arm validate exits 0"]`
+- Bad: `["TestParseTokenTypes passes"]` — test name won't appear in `make trace-report`
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
 
@@ -213,8 +220,8 @@ if not needed.
   "dod": "Parser handles all five token types from spec §3.2. Returns typed AST nodes. All existing tests pass; new tests cover added branches.",
   "scope": "cmd/parse/main.go, internal/ast/node.go (new), internal/ast/node_test.go (new)",
   "acceptance": [
-    "TestParseTokenTypes passes",
-    "TestParseEdgeCases passes",
+    "TestParseTokenTypes_REQ_STORY_T1 passes",
+    "TestParseEdgeCases_REQ_STORY_T1 passes",
     "make check green",
     "no new lint errors"
   ]
@@ -230,6 +237,7 @@ if not needed.
 | `"acceptance": []` | No pass/fail signal | Name at least one test or command |
 | `"scope": "internal/"` | Too broad, causes overlaps | Name the specific files |
 | Missing `acceptance` field entirely | `arm validate` ERRORs | Add the field, even if `--example` omits it |
+| `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
 
 > **Note:** `arm decompose-apply --example` omits `acceptance` in its output.
 > Always add it manually to every task in your plan JSON.
@@ -312,7 +320,15 @@ Run this checklist before handing work off to the Coordinator.
 6. **Priorities set** — review `arm list --group` to confirm priorities reflect
    intended execution order
 
-Do not release until all six checks pass.
+7. **Spec traceability check** — confirm acceptance criteria use `_REQ_` naming
+   ```bash
+   make trace-report   # lists which requirements have tagged tests; gaps mean missing _REQ_ names
+   ```
+   If a task's acceptance criterion names a test function, that function should
+   appear in the `make trace-report` output once the worker delivers it. If it
+   does not, the acceptance criterion name is missing the `_REQ_` suffix.
+
+Do not release until all seven checks pass.
 
 ---
 
