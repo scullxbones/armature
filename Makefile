@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint clean mutate check help skill dist-skills install build validate-skills deploy-skills
+.PHONY: test coverage coverage-check lint clean mutate check help skill dist-skills install build validate-skills deploy-skills trace-report
 
 # Variables
 GO ?= go
@@ -19,6 +19,7 @@ help:
 	@echo "  make lint       - Run golangci-lint"
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make validate-skills - Validate embedded skill source"
+	@echo "  make trace-report - Scan test files for spec traceability patterns"
 	@echo "  make clean      - Remove build artifacts and test outputs"
 	@echo "  make build      - Build CLI binary to ./bin/arm"
 	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
@@ -26,6 +27,9 @@ help:
 	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
 check: lint test coverage-check mutate validate-skills build
+
+trace-report:
+	@$(PYTHON) scripts/trace_report.py .
 
 test:
 	@tmp=$$(mktemp); \
