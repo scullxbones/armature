@@ -9,29 +9,25 @@ linters:
     - staticcheck
     - misspell
     - unconvert
-    # - depguard  # TODO(QLTYCNTRL-S1-T1): Enable once golangci-lint 2.11.4 depguard Main rule issue is resolved
+    - depguard
+  settings:
+    depguard:
+      rules:
+        domain-no-adapters:
+          list-mode: lax
+          files:
+            - "internal/materialize/**/*.go"
+            - "internal/dag/**/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal/platform"
+              desc: "domain packages must not import adapter packages"
+            - pkg: "github.com/scullxbones/armature/internal/sources"
+              desc: "domain packages must not import adapter packages"
 
 linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
-  depguard:
-    rules:
-      Main:
-        allow-list:
-          - "builtin"
-          - "$stdlib"
-          - "github.com"
-      domain-no-adapters:
-        list-mode: lax
-        files:
-          - "internal/materialize/**/*.go"
-          - "internal/dag/**/*.go"
-        deny:
-          - pkg: "github.com/scullxbones/armature/internal/platform"
-            desc: "domain packages must not import adapter packages"
-          - pkg: "github.com/scullxbones/armature/internal/sources"
-            desc: "domain packages must not import adapter packages"
 
 issues:
   exclude-use-default-excludes: false
