@@ -93,7 +93,15 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 // ExplainNotReady returns a map of issue ID to exclusion reason for every open
 // unclaimed task that is NOT in the ready queue. Keys are sorted deterministically.
 // The reason string identifies which gate excluded the issue.
-func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue) map[string]string {
+// Pass variadic now parameter to inject deterministic time (for testing).
+func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue, now ...int64) map[string]string {
+	var currentTime int64
+	if len(now) > 0 {
+		currentTime = now[0]
+	} else {
+		currentTime = time.Now().Unix()
+	}
+
 	result := make(map[string]string)
 	for id, entry := range index {
 		if entry.Type != "task" && entry.Type != "feature" && entry.Type != "story" {
@@ -110,7 +118,7 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 		}
 		// Skip issues that are actively claimed (not stale).
 		if issue != nil && issue.ClaimedBy != "" {
-			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, time.Now().Unix()) {
+			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, currentTime) {
 				continue
 			}
 		}

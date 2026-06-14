@@ -600,3 +600,52 @@ func TestCollectDescendants_MissingRoot(t *testing.T) {
 	descendants := CollectDescendants("missing-root", index)
 	assert.Len(t, descendants, 0, "missing root should return empty set")
 }
+
+func TestExplainNotReady_WithInjectedTime_StaleClaimExcluded(t *testing.T) {
+	// Test that ExplainNotReady accepts injected time and correctly identifies stale claims.
+	// Claim was at time 0, TTL is 60 seconds, so at time 61 it should be stale and excluded.
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {
+			ID:            "task-01",
+			Status:        "open",
+			Type:          "task",
+			ClaimedBy:     "some-worker",
+			ClaimedAt:     0,
+			LastHeartbeat: 0,
+			ClaimTTL:      1, // 1 minute TTL
+		},
+	}
+	// Call with injected time past the TTL (61 seconds past claim at 0)
+	result := ExplainNotReady(index, issues, 61)
+	// Task should NOT be in the explanation map because the claim is stale
+	// (stale claims are excluded from the explanation)
+	_, ok := result["task-01"]
+	assert.False(t, ok, "stale claimed task should not appear in ExplainNotReady output")
+}
+
+func TestExplainNotReady_WithInjectedTime_FreshClaimIncluded(t *testing.T) {
+	// Test that ExplainNotReady excludes fresh (non-stale) claims.
+	// Claim was at time 0, TTL is 60 seconds, at time 30 it's still fresh.
+	index := materialize.Index{
+		"task-01": {Status: "open", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {
+			ID:            "task-01",
+			Status:        "open",
+			Type:          "task",
+			ClaimedBy:     "some-worker",
+			ClaimedAt:     0,
+			LastHeartbeat: 0,
+			ClaimTTL:      1, // 1 minute TTL
+		},
+	}
+	// Call with injected time before the TTL expires (30 seconds)
+	result := ExplainNotReady(index, issues, 30)
+	// Task should NOT be in the explanation map because the claim is still fresh
+	_, ok := result["task-01"]
+	assert.False(t, ok, "fresh claimed task should not appear in ExplainNotReady output")
+}
