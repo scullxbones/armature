@@ -10,24 +10,18 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-// mockTransport is shared across test files in this package.
-type mockTransport struct {
-	fn func(*http.Request) (*http.Response, error)
+type fakeHTTPClient struct {
+	do func(*http.Request) (*http.Response, error)
 }
 
-func (m *mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	return m.fn(r)
+func (c fakeHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	return c.do(req)
 }
 
-func mockClient(fn func(*http.Request) (*http.Response, error)) *http.Client {
-	return &http.Client{Transport: &mockTransport{fn: fn}}
-}
-
-func mockResp(status int, body string) *http.Response {
+func testResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader(body)),
-		Header:     make(http.Header),
 	}
 }
 
@@ -35,12 +29,12 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 	const wantBody = `{"data":"hello"}`
 	const token = "my-bearer-token"
 
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		if r.Header.Get("Authorization") != "Bearer "+token {
-			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("Authorization") != "Bearer "+token {
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		return mockResp(http.StatusOK, wantBody), nil
-	})
+		return testResponse(http.StatusOK, wantBody), nil
+	}}
 
 	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "", "", token)
 	if err != nil {
@@ -54,13 +48,13 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 func TestFetchHTTP_BasicAuth(t *testing.T) {
 	const wantBody = `{"result":"ok"}`
 
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		user, pass, ok := r.BasicAuth()
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		user, pass, ok := req.BasicAuth()
 		if !ok || user != "alice" || pass != "secret" {
-			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		return mockResp(http.StatusOK, wantBody), nil
-	})
+		return testResponse(http.StatusOK, wantBody), nil
+	}}
 
 	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "alice", "secret", "")
 	if err != nil {
@@ -72,9 +66,9 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_ErrorStatus(t *testing.T) {
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		return mockResp(http.StatusNotFound, "not found"), nil
-	})
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusNotFound, "not found"), nil
+	}}
 
 	_, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/missing", "", "", "")
 	if err == nil {
@@ -85,9 +79,9 @@ func TestFetchHTTP_ErrorStatus(t *testing.T) {
 func TestFetchHTTP_NoAuth(t *testing.T) {
 	const wantBody = `{"public":"data"}`
 
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		return mockResp(http.StatusOK, wantBody), nil
-	})
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusOK, wantBody), nil
+	}}
 
 	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "", "", "")
 	if err != nil {

@@ -8,23 +8,18 @@ import (
 	"testing"
 )
 
-type mockTransport struct {
-	fn func(*http.Request) (*http.Response, error)
+type fakeHTTPClient struct {
+	do func(*http.Request) (*http.Response, error)
 }
 
-func (m *mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	return m.fn(r)
+func (c fakeHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	return c.do(req)
 }
 
-func mockClient(fn func(*http.Request) (*http.Response, error)) *http.Client {
-	return &http.Client{Transport: &mockTransport{fn: fn}}
-}
-
-func mockResp(status int, body string) *http.Response {
+func testResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader(body)),
-		Header:     make(http.Header),
 	}
 }
 
@@ -36,12 +31,12 @@ func TestNewHTTPClient(t *testing.T) {
 }
 
 func TestFetchHTTP_BearerAuth(t *testing.T) {
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		if r.Header.Get("Authorization") != "Bearer mytoken" {
-			return mockResp(http.StatusUnauthorized, ""), nil
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("Authorization") != "Bearer mytoken" {
+			return testResponse(http.StatusUnauthorized, ""), nil
 		}
-		return mockResp(http.StatusOK, `{"ok":true}`), nil
-	})
+		return testResponse(http.StatusOK, `{"ok":true}`), nil
+	}}
 
 	body, err := FetchHTTP(context.Background(), client, "https://example.test/resource", "", "", "mytoken")
 	if err != nil {
@@ -53,13 +48,13 @@ func TestFetchHTTP_BearerAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_BasicAuth(t *testing.T) {
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		u, p, ok := r.BasicAuth()
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		u, p, ok := req.BasicAuth()
 		if !ok || u != "user" || p != "pass" {
-			return mockResp(http.StatusUnauthorized, ""), nil
+			return testResponse(http.StatusUnauthorized, ""), nil
 		}
-		return mockResp(http.StatusOK, "data"), nil
-	})
+		return testResponse(http.StatusOK, "data"), nil
+	}}
 
 	body, err := FetchHTTP(context.Background(), client, "https://example.test/resource", "user", "pass", "")
 	if err != nil {
@@ -71,9 +66,9 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_Non2xx(t *testing.T) {
-	client := mockClient(func(r *http.Request) (*http.Response, error) {
-		return mockResp(http.StatusNotFound, ""), nil
-	})
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusNotFound, ""), nil
+	}}
 
 	_, err := FetchHTTP(context.Background(), client, "https://example.test/missing", "", "", "")
 	if err == nil {

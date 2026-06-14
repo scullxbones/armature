@@ -8,35 +8,33 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-func newConfluenceWithMock(fn func(*http.Request) (*http.Response, error), baseURL string, creds Credentials) *ConfluenceProvider {
-	return &ConfluenceProvider{baseURL: baseURL, creds: creds, client: mockClient(fn)}
-}
-
-func newSharePointWithMock(fn func(*http.Request) (*http.Response, error), baseURL string, creds Credentials) *SharePointProvider {
-	return &SharePointProvider{baseURL: baseURL, creds: creds, client: mockClient(fn)}
-}
-
 func TestConfluenceProviderFetch(t *testing.T) {
 	const expectedBody = `{"title":"Test Page","body":"hello confluence"}`
 	const token = "test-confluence-token"
 
-	provider := newConfluenceWithMock(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/wiki/pages/42" {
-			return mockResp(http.StatusNotFound, "not found"), nil
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/wiki/pages/42" {
+			return testResponse(http.StatusNotFound, "not found"), nil
 		}
-		if r.Header.Get("Authorization") != "Bearer "+token {
-			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
+		auth := req.Header.Get("Authorization")
+		if auth != "Bearer "+token {
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		resp := mockResp(http.StatusOK, expectedBody)
-		resp.Header.Set("Content-Type", "application/json")
-		return resp, nil
-	}, "https://example.test", Credentials{Token: token})
+		return testResponse(http.StatusOK, expectedBody), nil
+	}}
+
+	creds := Credentials{Token: token}
+	provider := NewConfluenceProvider("https://example.test", creds)
+	provider.client = client
 
 	if provider.Type() != "confluence" {
 		t.Fatalf("expected Type() == %q, got %q", "confluence", provider.Type())
 	}
 
-	entry := SourceEntry{ID: "page-42", URL: "/wiki/pages/42"}
+	entry := SourceEntry{
+		ID:  "page-42",
+		URL: "/wiki/pages/42",
+	}
 
 	got, err := provider.Fetch(context.Background(), entry)
 	if err != nil {
@@ -50,13 +48,17 @@ func TestConfluenceProviderFetch(t *testing.T) {
 func TestConfluenceProviderFetchBasicAuth(t *testing.T) {
 	const expectedBody = `{"result":"ok"}`
 
-	provider := newConfluenceWithMock(func(r *http.Request) (*http.Response, error) {
-		u, p, ok := r.BasicAuth()
-		if !ok || u != "admin" || p != "secret" {
-			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		user, pass, ok := req.BasicAuth()
+		if !ok || user != "admin" || pass != "secret" {
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		return mockResp(http.StatusOK, expectedBody), nil
-	}, "https://example.test", Credentials{Username: "admin", Password: "secret"})
+		return testResponse(http.StatusOK, expectedBody), nil
+	}}
+
+	creds := Credentials{Username: "admin", Password: "secret"}
+	provider := NewConfluenceProvider("https://example.test", creds)
+	provider.client = client
 
 	entry := SourceEntry{ID: "doc-1", URL: "/"}
 
@@ -73,23 +75,29 @@ func TestSharePointProviderFetch(t *testing.T) {
 	const expectedBody = `{"value":"SharePoint document content"}`
 	const token = "test-sharepoint-token"
 
-	provider := newSharePointWithMock(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path != "/sites/docs/item/99" {
-			return mockResp(http.StatusNotFound, "not found"), nil
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/sites/docs/item/99" {
+			return testResponse(http.StatusNotFound, "not found"), nil
 		}
-		if r.Header.Get("Authorization") != "Bearer "+token {
-			return mockResp(http.StatusUnauthorized, "unauthorized"), nil
+		auth := req.Header.Get("Authorization")
+		if auth != "Bearer "+token {
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		resp := mockResp(http.StatusOK, expectedBody)
-		resp.Header.Set("Content-Type", "application/json")
-		return resp, nil
-	}, "https://example.test", Credentials{Token: token})
+		return testResponse(http.StatusOK, expectedBody), nil
+	}}
+
+	creds := Credentials{Token: token}
+	provider := NewSharePointProvider("https://example.test", creds)
+	provider.client = client
 
 	if provider.Type() != "sharepoint" {
 		t.Fatalf("expected Type() == %q, got %q", "sharepoint", provider.Type())
 	}
 
-	entry := SourceEntry{ID: "item-99", URL: "/sites/docs/item/99"}
+	entry := SourceEntry{
+		ID:  "item-99",
+		URL: "/sites/docs/item/99",
+	}
 
 	got, err := provider.Fetch(context.Background(), entry)
 	if err != nil {
@@ -101,9 +109,12 @@ func TestSharePointProviderFetch(t *testing.T) {
 }
 
 func TestSharePointProviderFetchErrorStatus(t *testing.T) {
-	provider := newSharePointWithMock(func(r *http.Request) (*http.Response, error) {
-		return mockResp(http.StatusNotFound, "not found"), nil
-	}, "https://example.test", Credentials{Token: "tok"})
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusNotFound, "not found"), nil
+	}}
+
+	provider := NewSharePointProvider("https://example.test", Credentials{Token: "tok"})
+	provider.client = client
 
 	entry := SourceEntry{ID: "x", URL: "/missing"}
 
