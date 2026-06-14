@@ -52,6 +52,9 @@ func (f *FakeMergeChecker) BranchMergedInto(branch, target string) (bool, error)
 	if f.err != nil {
 		return false, f.err
 	}
+	if branch == target {
+		return true, nil
+	}
 	return f.merged[branch], nil
 }
 
