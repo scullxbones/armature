@@ -59,7 +59,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 			// --explain: print why each open unclaimed task is not ready, then return.
 			if explain {
-				notReady := ready.ExplainNotReady(index, issues)
+				notReady := ready.ExplainNotReady(index, issues, nowEpoch())
 				format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
 					data, _ := json.MarshalIndent(notReady, "", "  ")    //nolint:errcheck // slice of serializable structs
@@ -77,7 +77,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				return nil
 			}
 
-			entries := ready.ComputeReady(index, issues, workerID)
+			entries := ready.ComputeReady(index, issues, workerID, nowEpoch())
 
 			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
