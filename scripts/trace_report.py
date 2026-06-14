@@ -34,13 +34,21 @@ def scan_test_files(root_dir):
                     with open(filepath, "r", encoding="utf-8") as f:
                         content = f.read()
 
+                    # Strip Go comments to avoid matching commented-out function declarations.
+                    # NOTE: // inside string literals is also stripped, but no plausible string
+                    # content can form the func Test*_REQ_*(*testing.T) pattern we look for.
+                    stripped = re.sub(r'//[^\n]*', '', content)
+                    # strip /* ... */ block comments
+                    stripped = re.sub(r'/\*.*?\*/', '', stripped, flags=re.DOTALL)
+
                     # Pattern: TestSomething_REQ_SOMETHING_ID
                     # Go test naming: TestXxx where Xxx doesn't start with lowercase.
                     # Test[A-Z_0-9]\w* covers TestFoo, TestABC; the group is optional to
                     # also cover Test_REQ_X where _REQ_ follows immediately after Test.
                     # Testfoo_REQ_X is excluded because f is not in [A-Z_0-9].
-                    pattern = r"func\s+(Test(?:[A-Z_0-9]\w*)?_REQ_\w+)\s*\("
-                    matches = re.findall(pattern, content)
+                    # Also require *testing.T parameter to match only actual runnable tests.
+                    pattern = r"func\s+(Test(?:[A-Z_0-9]\w*)?_REQ_\w+)\s*\(\s*\w+\s+\*testing\.T"
+                    matches = re.findall(pattern, stripped)
 
                     for test_name in matches:
                         # Extract the requirement ID (everything after _REQ_)
