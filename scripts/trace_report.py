@@ -35,8 +35,11 @@ def scan_test_files(root_dir):
                         content = f.read()
 
                     # Pattern: TestSomething_REQ_SOMETHING_ID
-                    # Matches "func Test" followed by text, underscore, "REQ", underscore, and text
-                    pattern = r"func\s+(Test\w*_REQ_\w+)\s*\("
+                    # Go test naming: TestXxx where Xxx doesn't start with lowercase.
+                    # Test[A-Z_0-9]\w* covers TestFoo, TestABC; the group is optional to
+                    # also cover Test_REQ_X where _REQ_ follows immediately after Test.
+                    # Testfoo_REQ_X is excluded because f is not in [A-Z_0-9].
+                    pattern = r"func\s+(Test(?:[A-Z_0-9]\w*)?_REQ_\w+)\s*\("
                     matches = re.findall(pattern, content)
 
                     for test_name in matches:
