@@ -51,7 +51,7 @@ func TestCheckWorkerID(t *testing.T) {
 	ok, _ := CheckWorkerID(repo)
 	assert.False(t, ok)
 
-	_, _ = InitWorker(repo)
+	_, _ = InitWorker(repo) //nolint:errcheck // testing idempotency; both return values intentionally discarded
 
 	ok, id := CheckWorkerID(repo)
 	assert.True(t, ok)

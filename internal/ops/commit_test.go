@@ -33,7 +33,8 @@ func TestAppendAndCommit_SingleBranch_NoCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// File should contain the op
-	data, _ := os.ReadFile(logPath)
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
 	assert.Contains(t, string(data), "note")
 
 	// No commit was called (worktreePath is "")
@@ -71,6 +72,8 @@ func TestAppendAndCommit_ShortWorkerID(t *testing.T) {
 		Payload: ops.Payload{Msg: "hi"}}
 
 	assert.NotPanics(t, func() {
-		_ = ops.AppendAndCommit(logPath, worktreePath, op, fc)
+		if err := ops.AppendAndCommit(logPath, worktreePath, op, fc); err != nil {
+			t.Fatal(err)
+		}
 	})
 }

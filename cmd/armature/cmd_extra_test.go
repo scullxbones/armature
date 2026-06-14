@@ -459,7 +459,7 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
 	require.NoError(t, err)
 
-	out, _ := runTrls(t, repo, "validate")
+	out, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
 	assert.Contains(t, out, "INFO: phantom scope", "phantom scope should appear as INFO")
 	assert.NotContains(t, out, "WARNING: phantom scope", "phantom scope should not appear as WARNING")
 }
@@ -531,7 +531,7 @@ func TestAmendCmd_PatchesAcceptance(t *testing.T) {
 	// Re-materialize and check validate no longer reports missing acceptance
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, _ := runTrls(t, repo, "validate")
+	validateOut, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
 	// After amendment the task should not report missing acceptance
 	assert.NotContains(t, validateOut, "missing required field: acceptance on task task-01")
 }

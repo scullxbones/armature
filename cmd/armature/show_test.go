@@ -27,7 +27,7 @@ func TestShowOmitsTombstonedNotes(t *testing.T) {
 	require.NoError(t, err)
 	var noteResult map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out2)), &noteResult))
-	deletedID, _ := noteResult["note_id"].(string)
+	deletedID, _ := noteResult["note_id"].(string) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	require.NotEmpty(t, deletedID)
 
 	_, err = runTrls(t, repo, "note", "delete", "--issue", "note-task", "--note-id", deletedID)
@@ -37,7 +37,7 @@ func TestShowOmitsTombstonedNotes(t *testing.T) {
 	require.NoError(t, err)
 	var showResult map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &showResult))
-	notes, _ := showResult["notes"].([]any)
+	notes, _ := showResult["notes"].([]any) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	assert.Len(t, notes, 1, "deleted note should be hidden from show output")
 	if len(notes) > 0 {
 		assert.Equal(t, "visible note", notes[0])

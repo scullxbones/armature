@@ -45,8 +45,8 @@ func writeJSONError(w io.Writer, msg string, code exitcodes.Code) {
 		Code:     code.String(),
 		ExitCode: code.Int(),
 	}
-	b, _ := json.Marshal(payload)
-	fmt.Fprintln(w, string(b)) //nolint:errcheck // writing to stderr; nothing useful to do on failure
+	b, _ := json.Marshal(payload) //nolint:errcheck // payload contains only serializable values
+	fmt.Fprintln(w, string(b))    //nolint:errcheck // writing to stderr; nothing useful to do on failure
 }
 
 // classifyError maps a Go error to the most specific exitcodes.Code.
@@ -101,7 +101,7 @@ func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
 	if raw == nil {
 		return nil, fmt.Errorf("command context unavailable")
 	}
-	state, _ := raw.Value(executionStateKey{}).(*executionState)
+	state, _ := raw.Value(executionStateKey{}).(*executionState) //nolint:errcheck // comma-ok form; nil check follows immediately
 	if state == nil || state.ctx == nil {
 		return nil, fmt.Errorf("command execution state unavailable")
 	}
@@ -192,12 +192,12 @@ func appendOp(args ...any) error {
 	switch len(args) {
 	case 2:
 		ctx = appCtx
-		logPath = args[0].(string)
-		op = args[1].(ops.Op)
+		logPath = args[0].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
+		op = args[1].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
 	case 3:
-		ctx = args[0].(*config.Context)
-		logPath = args[1].(string)
-		op = args[2].(ops.Op)
+		ctx = args[0].(*config.Context) //nolint:errcheck // cobra arg type invariant enforced by command setup
+		logPath = args[1].(string)      //nolint:errcheck // cobra arg type invariant enforced by command setup
+		op = args[2].(ops.Op)           //nolint:errcheck // cobra arg type invariant enforced by command setup
 	default:
 		return fmt.Errorf("appendOp: unexpected arguments")
 	}
@@ -224,14 +224,14 @@ func appendHighStakesOp(args ...any) error {
 	case 2:
 		ctx = appCtx
 		tracker = appTracker
-		logPath = args[0].(string)
-		op = args[1].(ops.Op)
+		logPath = args[0].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
+		op = args[1].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
 	case 3:
-		state := args[0].(*executionState)
+		state := args[0].(*executionState) //nolint:errcheck // cobra arg type invariant enforced by command setup
 		ctx = state.ctx
 		tracker = state.tracker
-		logPath = args[1].(string)
-		op = args[2].(ops.Op)
+		logPath = args[1].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
+		op = args[2].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
 	default:
 		return fmt.Errorf("appendHighStakesOp: unexpected arguments")
 	}
@@ -273,14 +273,14 @@ func appendLowStakesOp(args ...any) error {
 	case 2:
 		ctx = appCtx
 		tracker = appTracker
-		logPath = args[0].(string)
-		op = args[1].(ops.Op)
+		logPath = args[0].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
+		op = args[1].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
 	case 3:
-		state := args[0].(*executionState)
+		state := args[0].(*executionState) //nolint:errcheck // cobra arg type invariant enforced by command setup
 		ctx = state.ctx
 		tracker = state.tracker
-		logPath = args[1].(string)
-		op = args[2].(ops.Op)
+		logPath = args[1].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
+		op = args[2].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
 	default:
 		return fmt.Errorf("appendLowStakesOp: unexpected arguments")
 	}

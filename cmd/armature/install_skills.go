@@ -31,7 +31,7 @@ func newInstallSkillsCmd() *cobra.Command {
 				}
 				destBase = home
 			} else {
-				repoPath, _ := cmd.Flags().GetString("repo")
+				repoPath, _ := cmd.Flags().GetString("repo") //nolint:errcheck // fails only if flag absent (programming error)
 				if repoPath == "" {
 					repoPath = "."
 				}

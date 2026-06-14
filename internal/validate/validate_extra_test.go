@@ -7,6 +7,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIssueSubset_WithScopeID(t *testing.T) {
@@ -58,7 +59,8 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 			"src-1": {"id": "src-1"},
 		},
 	}
-	manifestData, _ := json.Marshal(manifest)
+	manifestData, err := json.Marshal(manifest)
+	require.NoError(t, err)
 
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
@@ -103,7 +105,8 @@ func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
 			"src-1": {"id": "src-1"},
 		},
 	}
-	manifestData, _ := json.Marshal(manifest)
+	manifestData, err := json.Marshal(manifest)
+	require.NoError(t, err)
 
 	state := makeState(
 		&materialize.Issue{
@@ -140,7 +143,8 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 			"src-1": {"id": "src-1"},
 		},
 	}
-	manifestData, _ := json.Marshal(manifest)
+	manifestData, err := json.Marshal(manifest)
+	require.NoError(t, err)
 
 	state := makeState(
 		&materialize.Issue{

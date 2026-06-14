@@ -25,7 +25,7 @@ func TestConfirmAdvancesCursor(t *testing.T) {
 	}
 	m := dagsum.New(issues)
 	m2, _ := m.Update(dagsum.ConfirmMsg{})
-	updated := m2.(dagsum.Model)
+	updated := m2.(dagsum.Model) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	assert.Equal(t, 1, updated.Confirmed())
 	assert.Equal(t, 1, updated.Cursor())
 }
@@ -45,6 +45,6 @@ func TestSkipDoesNotConfirm(t *testing.T) {
 	}
 	m := dagsum.New(issues)
 	m2, _ := m.Update(dagsum.SkipMsg{})
-	updated := m2.(dagsum.Model)
+	updated := m2.(dagsum.Model) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	assert.Equal(t, 0, updated.Confirmed())
 }

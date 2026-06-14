@@ -77,7 +77,8 @@ func TestFilePushTracker_DefaultThreshold(t *testing.T) {
 
 	threshold := 5
 	for i := 0; i < threshold-1; i++ {
-		n, _ := tr.Increment()
+		n, err := tr.Increment()
+		require.NoError(t, err)
 		assert.Less(t, n, threshold)
 	}
 	// 5th increment reaches threshold

@@ -57,7 +57,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			}
 
 			tracePath := filepath.Join(appCtx.StateDir, "traceability.json")
-			cov, _ := traceability.Read(tracePath)
+			cov, _ := traceability.Read(tracePath) //nolint:errcheck // best-effort read of derived traceability state
 
 			// Build a set of uncited IDs for fast lookup.
 			uncitedSet := make(map[string]struct{}, len(cov.Uncited))
@@ -81,21 +81,21 @@ mode (agents) to auto-approve all pending draft items.`,
 			})
 
 			if len(draftIssues) == 0 {
-				format, _ := cmd.Flags().GetString("format")
+				format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
-					data, _ := json.MarshalIndent(map[string]interface{}{
+					data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
 						"approve_all":              approveAll,
 					}, "", "  ")
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
 				} else {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.")
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.") //nolint:errcheck // stdout write not actionable in CLI
 				}
 				return nil
 			}
 
-			format, _ := cmd.Flags().GetString("format")
+			format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 			if format == "json" || format == "agent" || tui.IsNonInteractive() {
 				// In non-interactive mode, --approve-all emits ops for all draft items.
 				if approveAll && len(draftIssues) > 0 {
@@ -115,11 +115,11 @@ mode (agents) to auto-approve all pending draft items.`,
 							},
 						}
 						if err := appendLowStakesOp(logPath, o); err != nil {
-							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err) //nolint:errcheck // stderr write not actionable in CLI
 						}
 					}
 					if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err) //nolint:errcheck // stderr write not actionable in CLI
 					}
 				}
 
@@ -136,33 +136,33 @@ mode (agents) to auto-approve all pending draft items.`,
 						Status:  issue.Status,
 					})
 				}
-				data, _ := json.MarshalIndent(map[string]interface{}{
+				data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
 					"pending_dag_confirmation": pending,
 					"count":                    len(pending),
 					"approve_all":              approveAll,
 				}, "", "  ")
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
 				return nil
 			}
 
 			if !tui.IsTerminal() {
 				// Human-readable summary for non-TTY (format == "human")
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), //nolint:errcheck // stdout write not actionable in CLI
 					"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 					cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pending DAG Confirmation:")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pending DAG Confirmation:") //nolint:errcheck // stdout write not actionable in CLI
 				for _, issue := range draftIssues {
 					_, isUncited := uncitedSet[issue.ID]
 					cited := "cited"
 					if isUncited {
 						cited = "uncited"
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s (%s)\n", issue.ID, issue.Title, cited)
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s (%s)\n", issue.ID, issue.Title, cited) //nolint:errcheck // stdout write not actionable in CLI
 				}
 				return nil
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), //nolint:errcheck // stdout write not actionable in CLI
 
 				"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 				cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
@@ -185,7 +185,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			if err != nil {
 				return fmt.Errorf("dag-summary TUI: %w", err)
 			}
-			final := finalModel.(dagsummary.Model)
+			final := finalModel.(dagsummary.Model) //nolint:errcheck // type invariant: dagsummary always returns its own Model
 
 			// Only emit ops if sign-off was confirmed.
 			if !final.Done() {
@@ -205,12 +205,12 @@ mode (agents) to auto-approve all pending draft items.`,
 					},
 				}
 				if err := appendLowStakesOp(logPath, o); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err) //nolint:errcheck // stderr write not actionable in CLI
 				}
 			}
 
 			if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err) //nolint:errcheck // stderr write not actionable in CLI
 			}
 
 			return nil

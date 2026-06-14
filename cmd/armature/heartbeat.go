@@ -32,10 +32,10 @@ func newHeartbeatCmd() *cobra.Command {
 			if err := appendLowStakesOp(logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "heartbeat": "sent"}
-				data, _ := json.Marshal(result)
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Heartbeat recorded for %s\n", issueID)

@@ -28,7 +28,7 @@ var runTrlsMu sync.Mutex
 // it lives inside .armature/state/.
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
-	workerID, _ := worker.GetWorkerID(repo)
+	workerID, _ := worker.GetWorkerID(repo) //nolint:errcheck // best-effort in test setup
 	if workerID == "" {
 		workerID = "default"
 	}
@@ -137,7 +137,7 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"worker-init", "--repo", repo})
-	_ = cmd1.Execute()
+	require.NoError(t, cmd1.Execute())
 
 	// Then check
 	buf := new(bytes.Buffer)
@@ -717,7 +717,8 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
-	statBefore, _ := os.Stat(logPath)
+	statBefore, err := os.Stat(logPath)
+	require.NoError(t, err)
 
 	// Run sync --dry-run: should print plan and exit 0
 	out, err := runTrls(t, repo, "sync", "--dry-run")
@@ -733,7 +734,8 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	assert.Equal(t, "done", index["T-001"].Status)
 
 	// Verify ops log was not grown (no ops written)
-	statAfter, _ := os.Stat(logPath)
+	statAfter, err := os.Stat(logPath)
+	require.NoError(t, err)
 	if statBefore != nil && statAfter != nil {
 		assert.Equal(t, statBefore.Size(), statAfter.Size(), "ops log should not grow with --dry-run")
 	}
@@ -1770,7 +1772,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(repo))
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) }) //nolint:errcheck // cleanup chdir error not actionable
 
 	// Re-init using "." as repo path — simulates running trls init --dual-branch in the repo root
 	dotCmd.SetArgs([]string{"init", "--dual-branch", "--repo", "."})
@@ -2065,7 +2067,8 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	assert.Contains(t, string(slottedContent), "slotted note")
 
 	if plainFile != "" {
-		plainContent, _ := os.ReadFile(plainFile)
+		plainContent, err := os.ReadFile(plainFile)
+		require.NoError(t, err)
 		assert.NotContains(t, string(plainContent), "slotted note",
 			"plain log must not contain the slotted note")
 	}
@@ -3099,7 +3102,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	var results []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &results))
 	require.Len(t, results, 2)
-	ids := []string{results[0]["id"].(string), results[1]["id"].(string)}
+	ids := []string{results[0]["id"].(string), results[1]["id"].(string)} //nolint:errcheck // test helper; error checked via output assertions
 	assert.Contains(t, ids, "show-j1")
 	assert.Contains(t, ids, "show-j2")
 }

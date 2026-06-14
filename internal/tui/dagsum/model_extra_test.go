@@ -20,7 +20,7 @@ func TestDone_TrueAfterAllConfirmed(t *testing.T) {
 	issues := []*materialize.Issue{{ID: "TSK-1", Title: "Task"}}
 	m := dagsum.New(issues)
 	m2, _ := m.Update(dagsum.ConfirmMsg{})
-	assert.True(t, m2.(dagsum.Model).Done())
+	assert.True(t, m2.(dagsum.Model).Done()) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 }
 
 func TestConfirmedIDs_Empty(t *testing.T) {
@@ -36,7 +36,7 @@ func TestConfirmedIDs_AfterConfirm(t *testing.T) {
 	}
 	m := dagsum.New(issues)
 	m2, _ := m.Update(dagsum.ConfirmMsg{})
-	ids := m2.(dagsum.Model).ConfirmedIDs()
+	ids := m2.(dagsum.Model).ConfirmedIDs() //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	assert.Equal(t, []string{"TSK-1"}, ids)
 }
 
@@ -73,7 +73,7 @@ func TestUpdate_NavigationDown(t *testing.T) {
 	m := dagsum.New(issues)
 	// skip first, then navigate down
 	m2, _ := m.Update(dagsum.SkipMsg{})
-	updated := m2.(dagsum.Model)
+	updated := m2.(dagsum.Model) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	assert.Equal(t, 1, updated.Cursor())
 }
 
@@ -81,6 +81,6 @@ func TestUpdate_UnknownMsg_Ignored(t *testing.T) {
 	issues := []*materialize.Issue{{ID: "TSK-1"}}
 	m := dagsum.New(issues)
 	m2, cmd := m.Update("unknown message")
-	assert.Equal(t, m, m2.(dagsum.Model))
+	assert.Equal(t, m, m2.(dagsum.Model)) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 	assert.Nil(t, cmd)
 }

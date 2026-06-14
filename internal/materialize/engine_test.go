@@ -211,10 +211,10 @@ func TestPropRandomOpsNeverCrash(t *testing.T) {
 			state := NewState()
 			state.SingleBranchMode = true
 
-			_ = state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: targetID, Timestamp: ts,
+			_ = state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: targetID, Timestamp: ts, //nolint:errcheck // property test checks for panic, not error correctness
 				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
 
-			_ = state.ApplyOp(ops.Op{Type: opType, TargetID: targetID, Timestamp: ts + 1,
+			_ = state.ApplyOp(ops.Op{Type: opType, TargetID: targetID, Timestamp: ts + 1, //nolint:errcheck // property test checks for panic, not error correctness
 				WorkerID: "w1", Payload: ops.Payload{TTL: 60, To: "done", Msg: "test",
 					Dep: "other", Rel: "blocked_by", Topic: "t", Choice: "c"}})
 
@@ -243,8 +243,8 @@ func TestPropCreateIdempotent(t *testing.T) {
 			op := ops.Op{Type: ops.OpCreate, TargetID: id, Timestamp: 100,
 				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}
 
-			_ = state.ApplyOp(op)
-			_ = state.ApplyOp(op)
+			_ = state.ApplyOp(op) //nolint:errcheck // property test checks for panic, not error correctness
+			_ = state.ApplyOp(op) //nolint:errcheck // property test checks for panic, not error correctness
 
 			return len(state.Issues) == 1 && state.Issues[id].Title == "T"
 		},

@@ -137,7 +137,8 @@ func TestReadLogFromOffset(t *testing.T) {
 	require.NoError(t, AppendOp(logPath, op1))
 
 	// Get current offset
-	info, _ := os.Stat(logPath)
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
 	offset := info.Size()
 
 	op2 := Op{Type: OpNote, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a1",

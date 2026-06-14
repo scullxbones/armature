@@ -105,7 +105,7 @@ func newScopeRenameCmd() *cobra.Command {
 					"affected_count": len(affected),
 					"affected":       affected,
 				}
-				data, _ := json.Marshal(result)
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed scope %q -> %q in %d issue(s): %s\n",

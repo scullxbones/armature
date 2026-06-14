@@ -127,7 +127,7 @@ func TestHookSubcommandHelp(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"hook", "--help"})
-	_ = cmd.Execute()
+	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "hook")
 }
 

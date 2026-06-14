@@ -83,7 +83,7 @@ with an explicit error message.`,
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "new_parent": newParent, "status": "reparented"}
-				data, _ := json.Marshal(result)
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				if newParent == "" {
@@ -98,8 +98,8 @@ with an explicit error message.`,
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to reparent")
 	cmd.Flags().StringVar(&newParent, "parent", "", "new parent issue ID (empty string makes issue top-level)")
-	_ = cmd.MarkFlagRequired("issue")
-	_ = cmd.MarkFlagRequired("parent")
+	_ = cmd.MarkFlagRequired("issue")  //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("parent") //nolint:errcheck // fails only if flag absent (programming error)
 
 	return cmd
 }

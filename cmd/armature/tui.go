@@ -24,7 +24,7 @@ func newTUICmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			stateDir := filepath.Join(appCtx.IssuesDir, "state", ".tui")
 
-			workerID, _ := worker.GetWorkerID(appCtx.RepoPath)
+			workerID, _ := worker.GetWorkerID(appCtx.RepoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
 			if workerID == "" {
 				workerID = "default"
 			}

@@ -26,7 +26,7 @@ func newMaterializeCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Diagnostic replay excluding worker %s: %d issues from %d ops\n", excludeWorker, result.IssueCount, result.OpsProcessed)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Diagnostic replay excluding worker %s: %d issues from %d ops\n", excludeWorker, result.IssueCount, result.OpsProcessed) //nolint:errcheck // stdout write not actionable in CLI
 				return nil
 			}
 
@@ -35,9 +35,9 @@ func newMaterializeCmd() *cobra.Command {
 				return err
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Materialized %d issues from %d ops", result.IssueCount, result.OpsProcessed)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Materialized %d issues from %d ops", result.IssueCount, result.OpsProcessed) //nolint:errcheck // stdout write not actionable in CLI
 			if result.FullReplay {
-				_, _ = fmt.Fprint(cmd.OutOrStdout(), " (full replay)")
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), " (full replay)") //nolint:errcheck // stdout write not actionable in CLI
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			return nil

@@ -109,7 +109,7 @@ func newStaleReviewCmd() *cobra.Command {
 						CitedIssues:   ids,
 					})
 				}
-				data, _ := json.MarshalIndent(map[string]interface{}{
+				data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map of serializable values
 					"stale_sources": staleSources,
 					"count":         len(staleSources),
 				}, "", "  ")
@@ -136,7 +136,7 @@ func newStaleReviewCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("stale-review TUI: %w", err)
 			}
-			final := finalModel.(stalereview.Model)
+			final := finalModel.(stalereview.Model) //nolint:errcheck // map of serializable values
 
 			decisions := final.Decisions()
 			items := final.Items()

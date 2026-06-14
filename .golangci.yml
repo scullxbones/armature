@@ -23,11 +23,19 @@ linters:
               desc: "domain packages must not import adapter packages"
             - pkg: "github.com/scullxbones/armature/internal/sources"
               desc: "domain packages must not import adapter packages"
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*github.com/spf13/pflag.FlagSet).GetBool
+        - (*github.com/spf13/pflag.FlagSet).GetInt
+        - (*github.com/spf13/pflag.FlagSet).GetString
+        - (*github.com/spf13/pflag.FlagSet).GetStringSlice
+        - (*github.com/spf13/pflag.FlagSet).Set
+        - (*github.com/spf13/cobra.Command).MarkFlagRequired
 
 issues:
   exclude-use-default-excludes: false
