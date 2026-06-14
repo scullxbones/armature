@@ -69,11 +69,12 @@ var issueIDPattern = regexp.MustCompile(`\b([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+
 // or git (D1). It accepts pre-loaded data, making it testable without I/O.
 // Pass nil for allIssues and opsLog to skip those checks.
 // repoPath is used for D1; pass "" to skip D1.
-func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string) Report {
+// now is used for D2 stale claim detection.
+func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string, now time.Time) Report {
 	var checks []Finding
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
-	checks = append(checks, checkD2StaleClaims(allIssues))
+	checks = append(checks, checkD2StaleClaims(allIssues, now))
 	checks = append(checks, checkD3OrphanedOpsFromList(index, opsTargetIDs))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
@@ -84,7 +85,8 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 
 // Run executes all health checks and returns a Report.
 // verbose=true adds file path and line context to D3 violations via VerboseItems.
-func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Report, error) {
+// now is used for D2 stale claim detection.
+func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now time.Time) (Report, error) {
 	singleBranch := true // single-branch is the default for doctor
 
 	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
@@ -131,7 +133,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Repo
 	var checks []Finding
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
-	checks = append(checks, checkD2StaleClaims(allIssues))
+	checks = append(checks, checkD2StaleClaims(allIssues, now))
 	checks = append(checks, checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, verboseD3Context))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
@@ -207,10 +209,10 @@ func EvaluateD1GitDivergence(commitSubjects []string, statuses map[string]string
 }
 
 // D2: stale claims — issues in claimed state with expired TTL.
-func checkD2StaleClaims(allIssues map[string]*materialize.Issue) Finding {
+func checkD2StaleClaims(allIssues map[string]*materialize.Issue, now time.Time) Finding {
 	f := Finding{Check: "D2", Severity: SeverityOK, Message: "No stale claims"}
 
-	stale := ready.StaleClaims(allIssues, time.Now())
+	stale := ready.StaleClaims(allIssues, now)
 	if len(stale) > 0 {
 		f.Severity = SeverityWarning
 		f.Message = "Claimed issues with expired TTL"
