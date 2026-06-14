@@ -10,6 +10,7 @@ linters:
     - misspell
     - unconvert
     - depguard
+    - forbidigo
   settings:
     depguard:
       rules:
@@ -36,9 +37,24 @@ linters:
         - (*github.com/spf13/pflag.FlagSet).GetStringSlice
         - (*github.com/spf13/pflag.FlagSet).Set
         - (*github.com/spf13/cobra.Command).MarkFlagRequired
-
-issues:
-  exclude-use-default-excludes: false
+    forbidigo:
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: 'use injected clock parameters instead of time.Now()'
+  exclusions:
+    rules:
+      - linters:
+          - forbidigo
+        path: 'cmd/'
+      - linters:
+          - forbidigo
+        path: '_test\.go$'
+      - linters:
+          - forbidigo
+        path: 'internal/clock/'
+      - linters:
+          - forbidigo
+        path: 'internal/tui/'
 
 formatters:
   enable:
