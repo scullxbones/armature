@@ -80,6 +80,28 @@ class TestScanTestFiles(unittest.TestCase):
             self.assertIn("INT001", reqs)
             self.assertEqual(count, 2)
 
+    def test_ignores_lowercase_test_functions(self):
+        """Go only runs TestXxx where Xxx doesn't start lowercase; verify we match that."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_test_file(
+                os.path.join(tmp, "pkg", "foo_test.go"),
+                "Testlowercase_REQ_SHOULDNOTCOUNT",
+            )
+            reqs, count = scan_test_files(tmp)
+            self.assertEqual(reqs, {})
+            self.assertEqual(count, 1)
+
+    def test_finds_underscore_prefixed_test_functions(self):
+        """Test_REQ_X is a valid Go test name (underscore is not lowercase)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_test_file(
+                os.path.join(tmp, "pkg", "foo_test.go"),
+                "Test_REQ_UNDERSCORECASE",
+            )
+            reqs, count = scan_test_files(tmp)
+            self.assertIn("UNDERSCORECASE", reqs)
+            self.assertEqual(count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
