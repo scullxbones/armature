@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worker"
@@ -224,7 +225,7 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.ApplyPlanWithOptions(plan, opsDir, workerID, state, applyOpts)
+			count, err := decompose.ApplyPlanWithOptions(plan, opsDir, workerID, state, applyOpts, clock.System)
 			if err != nil {
 				return err
 			}

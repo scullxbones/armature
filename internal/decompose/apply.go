@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -128,11 +128,11 @@ func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts Apply
 // Skips issues that already exist in state (by ID).
 // Returns count of issues created.
 func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State) (int, error) {
-	return ApplyPlanWithOptions(plan, issuesDir, workerID, state, ApplyOptions{})
+	return ApplyPlanWithOptions(plan, issuesDir, workerID, state, ApplyOptions{}, clock.System)
 }
 
-// ApplyPlanWithOptions is like ApplyPlan but respects ApplyOptions.
-func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions) (int, error) {
+// ApplyPlanWithOptions is like ApplyPlan but respects ApplyOptions and accepts a clock.Clock parameter.
+func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) (int, error) {
 	warnings := ValidatePlan(plan)
 
 	if opts.Strict && len(warnings) > 0 {
@@ -157,7 +157,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 		op := ops.Op{
 			Type:      ops.OpCreate,
 			TargetID:  issue.ID,
-			Timestamp: time.Now().Unix(),
+			Timestamp: clk(),
 			WorkerID:  workerID,
 			Payload: ops.Payload{
 				Title:            issue.Title,
@@ -182,7 +182,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 			linkOp := ops.Op{
 				Type:      ops.OpLink,
 				TargetID:  issue.ID,
-				Timestamp: time.Now().Unix(),
+				Timestamp: clk(),
 				WorkerID:  workerID,
 				Payload: ops.Payload{
 					Dep: dep,
