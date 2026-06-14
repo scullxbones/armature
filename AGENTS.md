@@ -1,18 +1,57 @@
 # Armature — Agent Setup
 
-## Setup
+This file is the shallow entrypoint for agents working in this repository.
+Canonical workflow and command truth live in the embedded skills under
+`internal/skillsembed/skills/` and the docs under `docs/`.
 
-1. **Install `arm`** — build and install the CLI from the repo root:
-   ```
+## Bootstrap
+
+1. **Install `arm`** from the repo root:
+   ```bash
    make install
    ```
 
-2. **Deploy bundled skills** — run once per clone to install skills to `.claude/skills/`:
-   ```
+2. **Deploy bundled skills** for local agent use:
+   ```bash
    arm install-skills
    ```
+   This deploys the bundled skills to local harness directories such as
+   `.claude/skills/`, `.gemini/skills/`, and `.codex/skills/`.
 
-3. **Register your worker identity** — run before your first task in any clone:
+3. **Register a worker identity once per clone**:
+   ```bash
+   arm worker-init --check || arm worker-init
    ```
-   arm worker-init
-   ```
+   Do not re-run `arm worker-init` without `--check` unless you intentionally
+   want a new worker UUID.
+
+## Current Operating Model
+
+- Armature coordinates work; it does **not** execute or supervise external
+  harnesses.
+- The normal loop is: `arm ready` -> `arm claim` -> `arm render-context` ->
+  launch the worker outside Armature -> `arm transition`.
+- `arm harness-hook` is an integration surface for harness-native guardrails,
+  not a queue runner.
+- Before closing out work, run:
+  ```bash
+  arm validate --ci
+  arm doctor
+  ```
+
+## Use The Repo-Local Skills
+
+Invoke the bundled skill that matches your role:
+
+- `armature` — quick command reference
+- `armature-worker` — execute a claimed task
+- `armature-coordinator` — dispatch and integrate task waves
+- `armature-planner` — decompose source-backed work into issues
+- `armature-auditor` — verify completed work before sign-off
+
+## Canonical References
+
+- `docs/commands.md` — current CLI command surface
+- `docs/harness-hook.md` — hook integration details
+- `docs/design/architecture.md` — system architecture
+- `CONTEXT.md` - domain glossary

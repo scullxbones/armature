@@ -47,56 +47,49 @@ go test -v ./internal/materialize/...
 
 Dependencies: `golangci-lint` and `gremlins` must be on PATH (`go install ...@latest`).
 
-## Architecture
+## Working Model
 
-Armature is a git-native work orchestration system. The single binary (`arm`) coordinates human and AI workers through append-only ops logs stored on a dedicated `_armature` orphan git branch, with no external database or server.
+Armature is a git-native work orchestration system. It stores coordination state
+as append-only ops and materialized task state under `.armature/`, with no
+external database or server.
 
-### Dual-branch model
+Current operational boundary:
 
-- **`main`** — code, feature branches, PRs (protected)
-- **`_armature`** — `.armature/` coordination data, direct push by all workers (unprotected orphan)
+- Armature coordinates work; it does **not** execute or supervise external
+  harnesses.
+- Do not introduce, restore, or document `arm orchestrate` or `arm worker run`
+  as active commands.
+- The primary workflow is `arm ready` -> `arm claim` -> `arm render-context` ->
+  external worker execution -> `arm transition`.
+- `arm harness-hook` is the retained integration surface for harness-native
+  policy enforcement.
 
-Workers operate in a secondary git worktree (`.arm/`) pointed at `_armature` with sparse checkout limited to `.armature/ops/` and `.armature/state/`. All op writes go to the ops worktree; code writes go to the main worktree. These are never mixed within a single phase.
+Important invariants:
 
-Single-branch fallback: if `main` is directly pushable, all state lives on `main`.
+- Ops are append-only JSONL entries in `.armature/ops/<worker-id>.log`.
+- Each worker writes only to its own log file.
+- Materialized state is derived from ops, not source of truth.
+- `done` means worker-complete; `merged` means confirmed on the main branch.
 
-### Op log and materialization
+## Canonical References
 
-All state changes are **append-only JSONL ops** in `.armature/ops/<worker-id>.log`. Each worker writes exclusively to its own log file — this is the MRDT invariant that makes merge conflicts architecturally impossible.
+Prefer linking to the canonical docs instead of re-explaining them here:
 
-`state/` files (`index.json`, `ready.json`, `issues/<uuid>.json`, etc.) are **materialized locally by each worker** and never committed to the ops branch. They are derived caches, not source of truth.
+- `docs/design/architecture.md` — architecture and repo model
+- `docs/commands.md` — current CLI surface
+- `docs/harness-hook.md` — harness-native integration
+- `internal/skillsembed/skills/` — accompanying skill source code
+- `CONTEXT.md` - domain glossary
 
-The incremental materializer (`internal/materialize`) replays only new ops since `checkpoint.json`, making each invocation O(new ops) rather than O(all ops).
+## Skills
 
-### Key internal packages
+Bundled skills are deployed via `arm install-skills` or `make skill` to local
+agent directories. The current bundled set is:
 
-| Package | Responsibility |
-|---|---|
-| `internal/ops` | Op log parsing, appending, push/retry loop, rate limiting |
-| `internal/materialize` | Incremental materialization: ops → state files |
-| `internal/claim` | Claim race resolution (timestamp + worker-ID tiebreak) |
-| `internal/ready` | Ready-task computation and queue |
-| `internal/context` | 7-layer context assembly algorithm (`arm render-context`) |
-| `internal/dag` | DAG structure, cycle detection, bottom-up rollup |
-| `internal/decompose` | `decompose-context` / `decompose-apply` workflow |
-| `internal/sources` | Source document registration, MCP fetch, cache management |
-| `internal/validate` | Semantic validation (E1–E12 errors, W1–W11 warnings) |
-| `internal/doctor` | Structural pre-work gate (D1–D6 checks) |
-| `internal/adapters` | Git and shell adapters; all `os/exec` calls live here |
-| `internal/tui` | Bubble Tea TUI components (dag-summary, stale-review, ready) |
-| `internal/skillsembed` | Embedded skill files (SKILL.md per role) deployed via `arm install-skills` |
-| `cmd/armature` | Cobra command wiring; one file per subcommand |
+- `armature`
+- `armature-coordinator`
+- `armature-worker`
+- `armature-planner`
+- `armature-auditor`
 
-### Context assembly (`internal/context`)
-
-`arm render-context` assembles a 7-layer context slice for a task within a token budget (default 1600, proxy: `chars/4`). Fixed layers (core spec, snippets) are never truncated. Truncatable layers (blocker outcomes, parent chain, decisions, notes, sibling outcomes) are dropped lowest-priority-first when over budget.
-
-### Two-phase task completion
-
-`done` = worker believes work is complete (self-reported).  
-`merged` = code confirmed on main (auto-detected during materialization via commit-message scan, branch-name check, scope-file heuristic, or `arm merged` manual command).  
-Downstream tasks require `merged`, not `done`, to unblock.
-
-### Skills
-
-Bundled skills (`internal/skillsembed/skills/`) are deployed to `.claude/skills/`, `.gemini/skills/`, and `.codex/skills/` via `make skill`. Skills cover four roles: `armature` (quick reference), `armature-coordinator`, `armature-worker`, `armature-planner`, `armature-auditor`. The `validate-skills` make target enforces that skill bodies do not reference `make install`.
+`make validate-skills` enforces that skill bodies do not reference `make install`.
