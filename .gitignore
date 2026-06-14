@@ -44,3 +44,7 @@ gha-creds-*.json
 # Harness runtime state generated during orchestrate dogfooding
 .codex-sqlite/
 .devin/
+
+# Python bytecode
+__pycache__/
+*.pyc
