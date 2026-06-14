@@ -16,8 +16,8 @@ linters:
         domain-no-adapters:
           list-mode: lax
           files:
-            - "internal/materialize/**/*.go"
-            - "internal/dag/**/*.go"
+            - "**/internal/materialize/*.go"
+            - "**/internal/dag/*.go"
           deny:
             - pkg: "github.com/scullxbones/armature/internal/platform"
               desc: "domain packages must not import adapter packages"
