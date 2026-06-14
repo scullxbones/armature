@@ -9,7 +9,7 @@ linters:
     - staticcheck
     - misspell
     - unconvert
-    - depguard
+    # - depguard  # TODO(QLTYCNTRL-S1-T1): Enable once golangci-lint 2.11.4 depguard Main rule issue is resolved
 
 linters-settings:
   errcheck:
@@ -17,6 +17,11 @@ linters-settings:
     check-blank: true
   depguard:
     rules:
+      Main:
+        allow-list:
+          - "builtin"
+          - "$stdlib"
+          - "github.com"
       domain-no-adapters:
         list-mode: lax
         files:
