@@ -2,14 +2,14 @@ package clock
 
 import "time"
 
-// Clock is a function type that returns the current time as a Unix timestamp in milliseconds.
+// Clock is a function type that returns the current time as a Unix timestamp in seconds.
 // This type enables dependency injection of time sources into domain packages,
 // supporting both real wall-clock time and deterministic fixed time for testing.
 type Clock func() int64
 
-// System is a Clock that returns the current wall-clock time as a Unix timestamp in milliseconds.
+// System is a Clock that returns the current wall-clock time as a Unix timestamp in seconds.
 var System Clock = func() int64 {
-	return time.Now().UnixMilli()
+	return time.Now().Unix()
 }
 
 // Fixed returns a Clock that always returns the same timestamp.
