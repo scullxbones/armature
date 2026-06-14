@@ -250,7 +250,7 @@ func FromIndex(index map[string]*Node) *Graph {
 	d := New()
 	for _, node := range index {
 		// We don't check for errors here since we own the nodes from the index
-		_ = d.AddNode(node)
+		_ = d.AddNode(node) //nolint:errcheck // AddNode only errors on duplicate IDs; ID uniqueness is enforced by caller
 	}
 	return NewGraph(d)
 }

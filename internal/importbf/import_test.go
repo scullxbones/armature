@@ -36,7 +36,8 @@ func TestParseJSON(t *testing.T) {
 }
 
 func TestImportedItemsHaveCorrectProvenance(t *testing.T) {
-	items, _ := importbf.ParseCSV([]byte(sampleCSV))
+	items, err := importbf.ParseCSV([]byte(sampleCSV))
+	require.NoError(t, err)
 	for _, item := range items {
 		assert.Equal(t, "imported", item.Provenance.Method)
 		assert.Equal(t, "inferred", item.Provenance.Confidence)

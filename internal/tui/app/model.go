@@ -118,7 +118,7 @@ func (m Model) startWatcher() tea.Cmd {
 		}
 		opsDir := filepath.Join(m.issuesDir, "ops")
 		if err := w.Add(opsDir); err != nil {
-			_ = w.Close()
+			_ = w.Close() //nolint:errcheck // close during error-path cleanup not actionable
 			return pollTickMsg(time.Now())
 		}
 		return WatcherReadyMsg{Watcher: w}

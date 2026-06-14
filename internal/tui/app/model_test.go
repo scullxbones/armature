@@ -27,7 +27,7 @@ func TestScreenSwitchByNumber(t *testing.T) {
 		"4": app.ScreenSources,
 	} {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-		got := updated.(app.Model).CurrentScreen()
+		got := updated.(app.Model).CurrentScreen() //nolint:errcheck // panic on failed type assertion is acceptable in tests
 		if got != want {
 			t.Errorf("key %q: screen = %v, want %v", key, got, want)
 		}
@@ -111,11 +111,11 @@ func TestLiveModeRefreshMsgRestartsListener(t *testing.T) {
 	if err != nil {
 		t.Skip("fsnotify not available:", err)
 	}
-	defer func() { _ = w.Close() }()
+	defer func() { _ = w.Close() }() //nolint:errcheck // close error in test defer not actionable
 
 	// Put model in live mode by sending WatcherReadyMsg
 	updated, _ := m.Update(app.WatcherReadyMsg{Watcher: w})
-	m = updated.(app.Model)
+	m = updated.(app.Model) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 
 	// RefreshMsg in live mode must return a batch: doRefresh + restarted listener
 	_, cmd := m.Update(app.RefreshMsg{})

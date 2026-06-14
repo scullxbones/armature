@@ -58,7 +58,7 @@ func newSourceLinkCmd() *cobra.Command {
 				}
 
 				result := map[string]string{"issue": issueID, "source_id": sourceID, "source_url": entry.URL}
-				data, _ := json.Marshal(result)
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			}
 			return nil
@@ -67,6 +67,6 @@ func newSourceLinkCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&issueIDs, "issue", nil, "issue ID to link (repeatable)")
 	cmd.Flags().StringVar(&sourceID, "source-id", "", "UUID of the source entry in the manifest")
-	_ = cmd.MarkFlagRequired("source-id")
+	_ = cmd.MarkFlagRequired("source-id") //nolint:errcheck // fails only if flag absent (programming error)
 	return cmd
 }

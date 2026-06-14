@@ -42,7 +42,7 @@ func AppendRawLines(logPath string, buf []byte) error {
 	if err != nil {
 		return fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	if _, err := f.Write(buf); err != nil {
 		return fmt.Errorf("write to log %s: %w", logPath, err)
@@ -61,7 +61,7 @@ func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, 0); err != nil {
@@ -95,7 +95,7 @@ func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffse
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	currentOffset := startOffset
 	if startOffset > 0 {

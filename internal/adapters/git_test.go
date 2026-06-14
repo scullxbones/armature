@@ -381,7 +381,7 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		time.Sleep(120 * time.Millisecond)
-		_ = os.Remove(lockPath)
+		_ = os.Remove(lockPath) //nolint:errcheck // os.Remove in goroutine; t.Fatal not callable from goroutine
 	}()
 
 	wc := adapters.New(worktreePath)

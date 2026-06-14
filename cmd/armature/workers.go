@@ -54,7 +54,7 @@ func newWorkersCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if jsonOut || format == "json" || format == "agent" {
 				for _, s := range statuses {
-					data, _ := json.Marshal(s)
+					data, _ := json.Marshal(s) //nolint:errcheck // result struct contains only serializable values
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				}
 				return nil

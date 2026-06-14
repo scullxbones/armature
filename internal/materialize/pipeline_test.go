@@ -20,7 +20,11 @@ func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
 	// Make the stateDir's parent read-only so os.MkdirAll cannot create subdirs
 	readOnlyDir := filepath.Join(dir, "readonly")
 	require.NoError(t, os.Mkdir(readOnlyDir, 0555))
-	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0755) })
+	t.Cleanup(func() {
+		if err := os.Chmod(readOnlyDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	issuesDir := filepath.Join(dir, "issues")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
@@ -42,7 +46,11 @@ func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
 	dir := t.TempDir()
 	readOnlyDir := filepath.Join(dir, "readonly")
 	require.NoError(t, os.Mkdir(readOnlyDir, 0555))
-	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0755) })
+	t.Cleanup(func() {
+		if err := os.Chmod(readOnlyDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	issuesDir := filepath.Join(dir, "issues")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))

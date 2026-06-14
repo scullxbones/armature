@@ -79,8 +79,8 @@ func newSourcesAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&url, "url", "", "URL or path of the source")
 	cmd.Flags().StringVar(&providerType, "type", "", "provider type: filesystem, confluence, sharepoint")
 	cmd.Flags().StringVar(&title, "title", "", "optional title for the source")
-	_ = cmd.MarkFlagRequired("url")
-	_ = cmd.MarkFlagRequired("type")
+	_ = cmd.MarkFlagRequired("url")  //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("type") //nolint:errcheck // fails only if flag absent (programming error)
 
 	return cmd
 }

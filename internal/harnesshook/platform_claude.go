@@ -32,7 +32,7 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	settingsPath := filepath.Join(dir, "settings.json")
 	cfg := map[string]any{}
 	if existing, err := os.ReadFile(settingsPath); err == nil {
-		_ = json.Unmarshal(existing, &cfg)
+		_ = json.Unmarshal(existing, &cfg) //nolint:errcheck // corrupt settings treated as empty and overwritten below
 	}
 
 	cfg["hooks"] = map[string]any{

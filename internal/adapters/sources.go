@@ -37,7 +37,7 @@ func FetchHTTP(ctx context.Context, client HTTPClient, url string, username, pas
 	if err != nil {
 		return nil, fmt.Errorf("fetch %q: %w", url, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("fetch %q: unexpected status %d", url, resp.StatusCode)

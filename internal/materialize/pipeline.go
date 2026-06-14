@@ -88,7 +88,7 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 	}
 
 	readyPath := filepath.Join(stateDir, "ready.json")
-	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644)
+	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
 
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.
@@ -102,7 +102,7 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 	}
 
 	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
-	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov)
+	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
 
 	return Result{
 		IssueCount:   len(state.Issues),
@@ -167,7 +167,7 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	}
 
 	readyPath := filepath.Join(stateDir, "ready.json")
-	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644)
+	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
 
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.
@@ -181,7 +181,7 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	}
 
 	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
-	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov)
+	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
 
 	result := Result{
 		IssueCount:   len(state.Issues),

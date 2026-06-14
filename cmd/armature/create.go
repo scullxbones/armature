@@ -153,13 +153,13 @@ func newCreateCmd() *cobra.Command {
 				}
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 			if format == "json" || format == "agent" {
 				result := map[string]string{"id": id, "status": "created"}
-				data, _ := json.Marshal(result)
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", id)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", id) //nolint:errcheck // stdout write not actionable in CLI
 			}
 			return nil
 		},
@@ -176,7 +176,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&confidence, "confidence", "", "confidence level: draft or verified (default verified)")
 	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
 	cmd.Flags().StringVar(&sourceRef, "source", "", "source ID (UUID) or URL/path to source-link at creation time")
-	_ = cmd.MarkFlagRequired("title")
+	_ = cmd.MarkFlagRequired("title") //nolint:errcheck // fails only if flag absent (programming error)
 
 	return cmd
 }

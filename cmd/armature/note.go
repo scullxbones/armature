@@ -66,7 +66,7 @@ func runNoteAdd(cmd *cobra.Command, issueID, msg string) error {
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
 		result := map[string]string{"issue": issueID, "note": "added", "note_id": id}
-		data, _ := json.Marshal(result)
+		data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 	} else {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note %s added to %s\n", id, issueID)
@@ -94,7 +94,7 @@ func runNoteDelete(cmd *cobra.Command, issueID, noteID string) error {
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
 		result := map[string]string{"issue": issueID, "note": "deleted", "note_id": noteID}
-		data, _ := json.Marshal(result)
+		data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 	} else {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note %s deleted from %s\n", noteID, issueID)

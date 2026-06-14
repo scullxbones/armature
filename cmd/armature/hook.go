@@ -262,7 +262,7 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 								NewPath: newPath,
 							},
 						}
-						_ = appendLowStakesOp(mustState(cmd), logPath, op)
+						_ = appendLowStakesOp(mustState(cmd), logPath, op) //nolint:errcheck // low-stakes op; failure is non-critical
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-rename: %s %s -> %s\n", issueID, oldPath, newPath)
 						break
 					}
@@ -283,7 +283,7 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 								DeletedPath: deletedPath,
 							},
 						}
-						_ = appendLowStakesOp(mustState(cmd), logPath, op)
+						_ = appendLowStakesOp(mustState(cmd), logPath, op) //nolint:errcheck // low-stakes op; failure is non-critical
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-delete: %s %s\n", issueID, deletedPath)
 						break
 					}

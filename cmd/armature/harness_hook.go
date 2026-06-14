@@ -15,7 +15,7 @@ import (
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
 // if the result's ExitCode is non-zero.
 func applyRunResult(out io.Writer, result harnesshook.RunResult) error {
-	_, _ = out.Write(result.Output)
+	_, _ = out.Write(result.Output) //nolint:errcheck // stdout write not actionable in CLI
 	if result.ExitCode != 0 {
 		return adapterExitError{code: result.ExitCode}
 	}

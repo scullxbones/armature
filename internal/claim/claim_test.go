@@ -148,7 +148,7 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 		},
 		// Use SliceOfN to guarantee at least 1 element, then append arbitrary extras.
 		gen.SliceOfN(1, genOp()).FlatMap(func(v any) gopter.Gen {
-			base := v.([]ops.Op)
+			base := v.([]ops.Op) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 			return gen.SliceOf(genOp()).Map(func(extra []ops.Op) []ops.Op {
 				return append(base, extra...)
 			})

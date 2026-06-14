@@ -70,7 +70,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.viewport.LineUp(1)
 		case "c":
 			if m.issue != nil {
-				_ = clipboard.WriteAll(m.issue.ID)
+				_ = clipboard.WriteAll(m.issue.ID) //nolint:errcheck // clipboard write is best-effort UI action
 			}
 		}
 	}

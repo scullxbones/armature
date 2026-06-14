@@ -25,7 +25,9 @@ func TestAppendRawLines_and_ReadLog(t *testing.T) {
 func TestReadLogFromOffset(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
-	_ = os.WriteFile(logPath, []byte("{\"a\":1}\n{\"b\":2}\n"), 0644)
+	if err := os.WriteFile(logPath, []byte("{\"a\":1}\n{\"b\":2}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	lines, err := ReadLogFromOffset(logPath, 8) // skip first line
 	if err != nil {
@@ -81,9 +83,15 @@ func TestLoadIssueJSON_Missing(t *testing.T) {
 
 func TestReadIssuesDir(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "A.json"), []byte("{}"), 0644)
-	_ = os.WriteFile(filepath.Join(dir, "B.json"), []byte("{}"), 0644)
-	_ = os.WriteFile(filepath.Join(dir, "skip.txt"), []byte("x"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "A.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "B.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skip.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	ids, err := ReadIssuesDir(dir)
 	if err != nil {
@@ -198,7 +206,9 @@ func TestStatFile(t *testing.T) {
 	if StatFile(p) {
 		t.Fatal("expected false for missing file")
 	}
-	_ = os.WriteFile(p, []byte("x"), 0644)
+	if err := os.WriteFile(p, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if !StatFile(p) {
 		t.Fatal("expected true for existing file")
 	}
@@ -207,7 +217,9 @@ func TestStatFile(t *testing.T) {
 func TestReadPlanFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "plan.json")
-	_ = os.WriteFile(p, []byte(`{"tasks":[]}`), 0644)
+	if err := os.WriteFile(p, []byte(`{"tasks":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 	data, err := ReadPlanFile(p)
 	if err != nil {
 		t.Fatal(err)

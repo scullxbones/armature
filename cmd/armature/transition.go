@@ -89,7 +89,7 @@ This enforces branch + PR discipline.`,
 			cfg := appCtx.Config
 
 			// Get current issue status from materialized index and load index entries for all issues
-			index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json"))
+			index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json")) //nolint:errcheck // missing index treated as empty; access uses ok-check
 			currentStatus := ""
 			var currentEntry *materialize.IndexEntry
 			if entry, ok := index[issueID]; ok {
@@ -142,7 +142,7 @@ This enforces branch + PR discipline.`,
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "status": to}
-				data, _ := json.Marshal(result)
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s → %s\n", issueID, to)

@@ -92,7 +92,7 @@ func newShowCmd() *cobra.Command {
 						Blocks:     issue.Blocks,
 					})
 				}
-				data, _ := json.MarshalIndent(results, "", "  ")
+				data, _ := json.MarshalIndent(results, "", "  ") //nolint:errcheck // slice of serializable structs
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
@@ -158,7 +158,7 @@ func newShowCmd() *cobra.Command {
 						BlockedBy:  issue.BlockedBy,
 						Blocks:     issue.Blocks,
 					}
-					data, _ := json.MarshalIndent(out, "", "  ")
+					data, _ := json.MarshalIndent(out, "", "  ") //nolint:errcheck // map of serializable values
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 					continue
 				}

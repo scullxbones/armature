@@ -41,7 +41,8 @@ func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	// Verify that valid-01 was not created in worker-a.log (it should be in a UUID-named file)
 	if _, err := os.Stat(workerALogPath); err == nil {
 		// If worker-a.log exists, verify it doesn't contain valid-01
-		data, _ := os.ReadFile(workerALogPath)
+		data, err := os.ReadFile(workerALogPath)
+		require.NoError(t, err)
 		assert.NotContains(t, string(data), "valid-01", "valid-01 should not be in worker-a.log (should be in a UUID-named file)")
 	}
 

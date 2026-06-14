@@ -43,13 +43,13 @@ func newImportCmd() *cobra.Command {
 			}
 
 			if dryRun {
-				format, _ := cmd.Flags().GetString("format")
+				format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 				if format == "json" {
 					ids := make([]string, len(items))
 					for i, item := range items {
 						ids[i] = item.ID
 					}
-					out, _ := json.Marshal(map[string]interface{}{
+					out, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck // map contains only serializable values
 						"created":   len(items),
 						"issue_ids": ids,
 						"dry_run":   true,
@@ -101,9 +101,9 @@ func newImportCmd() *cobra.Command {
 				}
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 			if format == "json" {
-				out, _ := json.Marshal(map[string]interface{}{
+				out, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck // map contains only serializable values
 					"created":   len(createdIDs),
 					"issue_ids": createdIDs,
 				})

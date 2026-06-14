@@ -45,7 +45,8 @@ func TestNoPusher_SingleBranch_SkipsPush(t *testing.T) {
 	err := pusher.Push(logPath, "", op, nil)
 	require.NoError(t, err)
 
-	data, _ := os.ReadFile(logPath)
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
 	assert.Contains(t, string(data), "note")
 }
 

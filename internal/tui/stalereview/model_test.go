@@ -24,6 +24,6 @@ func TestConfirmRecordsDecision(t *testing.T) {
 	}
 	m := stalereview.New(items, "worker-1")
 	m2, _ := m.Update(stalereview.ConfirmMsg{})
-	updated := m2.(stalereview.Model)
+	updated := m2.(stalereview.Model) //nolint:errcheck // panic on failed type assertion is an acceptable test outcome
 	assert.Equal(t, 1, updated.ConfirmedCount())
 }

@@ -52,7 +52,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				return fmt.Errorf("load snapshot: %w", err)
 			}
 			for _, w := range snap.Warnings {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w) //nolint:errcheck // stderr write not actionable in CLI
 			}
 			index := snap.Index
 			issues := snap.Issues
@@ -60,10 +60,10 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			// --explain: print why each open unclaimed task is not ready, then return.
 			if explain {
 				notReady := ready.ExplainNotReady(index, issues)
-				format, _ := cmd.Flags().GetString("format")
+				format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
-					data, _ := json.MarshalIndent(notReady, "", "  ")
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					data, _ := json.MarshalIndent(notReady, "", "  ")    //nolint:errcheck // slice of serializable structs
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
 				} else {
 					ids := make([]string, 0, len(notReady))
 					for id := range notReady {
@@ -71,7 +71,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					}
 					sort.Strings(ids)
 					for _, id := range ids {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", id, notReady[id])
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", id, notReady[id]) //nolint:errcheck // stdout write not actionable in CLI
 					}
 				}
 				return nil
@@ -94,10 +94,10 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				entries = filtered
 			}
 
-			format, _ := cmd.Flags().GetString("format")
+			format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
 			if format == "json" || format == "agent" || tui.IsNonInteractive() {
-				data, _ := json.MarshalIndent(entries, "", "  ")
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				data, _ := json.MarshalIndent(entries, "", "  ")     //nolint:errcheck // slice of serializable structs
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
 			} else if tui.IsInteractive() {
 				m := readytui.New(entries)
 				p := tea.NewProgram(m)

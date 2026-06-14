@@ -100,7 +100,7 @@ func newContextHistoryCmd() *cobra.Command {
 			// Output newest-first
 			for i := len(changes) - 1; i >= 0; i-- {
 				c := changes[i]
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", c.sha, c.date, c.subject)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", c.sha, c.date, c.subject) //nolint:errcheck // stdout write not actionable in CLI
 			}
 
 			return nil
@@ -109,7 +109,7 @@ func newContextHistoryCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&chIssue, "issue", "", "Issue ID (required)")
 	cmd.Flags().IntVar(&chLimit, "limit", 100, "Maximum number of commits to scan")
-	_ = cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("issue") //nolint:errcheck // fails only if flag absent (programming error)
 
 	return cmd
 }
