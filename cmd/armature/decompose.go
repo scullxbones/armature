@@ -287,7 +287,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.RevertPlan(plan, opsDir, workerID, state)
+			count, err := decompose.RevertPlanWithOptions(plan, opsDir, workerID, state, clock.System)
 			if err != nil {
 				return err
 			}
