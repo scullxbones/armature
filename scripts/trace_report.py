@@ -24,6 +24,7 @@ def scan_test_files(root_dir):
 
     # Find all *_test.go files
     for root, dirs, files in os.walk(root_dir):
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('vendor', 'testdata')]
         for filename in files:
             if filename.endswith("_test.go"):
                 test_file_count += 1
