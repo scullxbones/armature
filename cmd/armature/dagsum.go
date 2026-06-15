@@ -40,9 +40,11 @@ mode (agents) to auto-approve all pending draft items.`,
   # Auto-approve all draft items in agent mode
   $ arm dag-summary --approve-all --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			execState := mustState(cmd)
+			appCtx := execState.ctx
 			issuesDir := appCtx.IssuesDir
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -114,7 +116,7 @@ mode (agents) to auto-approve all pending draft items.`,
 								To:      "verified",
 							},
 						}
-						if err := appendLowStakesOp(logPath, o); err != nil {
+						if err := appendLowStakesOp(execState, logPath, o); err != nil {
 							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
 						}
 					}
@@ -204,7 +206,7 @@ mode (agents) to auto-approve all pending draft items.`,
 						To:      "verified",
 					},
 				}
-				if err := appendLowStakesOp(logPath, o); err != nil {
+				if err := appendLowStakesOp(execState, logPath, o); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
 				}
 			}

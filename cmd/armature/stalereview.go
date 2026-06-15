@@ -21,9 +21,11 @@ func newStaleReviewCmd() *cobra.Command {
 		Use:   "stale-review",
 		Short: "Review sources whose cached content has changed since last sync",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			execState := mustState(cmd)
+			appCtx := execState.ctx
 			issuesDir := appCtx.IssuesDir
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -159,7 +161,7 @@ func newStaleReviewCmd() *cobra.Command {
 						WorkerID:  workerID,
 						Payload:   ops.Payload{Msg: noteMsg},
 					}
-					if err := appendLowStakesOp(logPath, o); err != nil {
+					if err := appendLowStakesOp(execState, logPath, o); err != nil {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 							"warning: emit note for %s: %v\n", issue.ID, err)
 					}

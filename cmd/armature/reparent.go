@@ -59,7 +59,9 @@ with an explicit error message.`,
 				}
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -74,7 +76,7 @@ with an explicit error message.`,
 				},
 			}
 
-			if err := appendOp(logPath, op); err != nil {
+			if err := appendOp(ctx, logPath, op); err != nil {
 				return err
 			}
 

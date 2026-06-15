@@ -43,7 +43,9 @@ func newMergedCmd() *cobra.Command {
 				return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -55,7 +57,7 @@ func newMergedCmd() *cobra.Command {
 				WorkerID:  workerID,
 				Payload:   ops.Payload{To: ops.StatusMerged, PR: pr},
 			}
-			if err := appendOp(logPath, op); err != nil {
+			if err := appendOp(ctx, logPath, op); err != nil {
 				return err
 			}
 

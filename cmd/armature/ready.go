@@ -111,7 +111,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					return fmt.Errorf("unexpected model type from TUI")
 				}
 				if final.Selected() != "" {
-					workerID, logPath, err := resolveWorkerAndLog()
+					state := mustState(cmd)
+					ctx := state.ctx
+					workerID, logPath, err := resolveWorkerAndLog(ctx)
 					if err != nil {
 						return err
 					}
@@ -122,7 +124,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 						WorkerID:  workerID,
 						Payload:   ops.Payload{TTL: 60},
 					}
-					if err := appendHighStakesOp(logPath, op); err != nil {
+					if err := appendHighStakesOp(state, logPath, op); err != nil {
 						return err
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed: %s\n", final.Selected())

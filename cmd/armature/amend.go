@@ -26,7 +26,9 @@ func newAmendCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -67,7 +69,7 @@ func newAmendCmd() *cobra.Command {
 				WorkerID:  workerID,
 				Payload:   payload,
 			}
-			if err := appendLowStakesOp(logPath, op); err != nil {
+			if err := appendLowStakesOp(state, logPath, op); err != nil {
 				return err
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")

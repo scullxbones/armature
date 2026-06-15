@@ -33,7 +33,9 @@ func newScopeDeleteCmd() *cobra.Command {
 				return fmt.Errorf("path must not be empty")
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			appCtx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
@@ -87,7 +89,7 @@ func newScopeDeleteCmd() *cobra.Command {
 						DeletedPath: deletedPath,
 					},
 				}
-				if err := appendLowStakesOp(logPath, op); err != nil {
+				if err := appendLowStakesOp(state, logPath, op); err != nil {
 					return fmt.Errorf("append op for %s: %w", id, err)
 				}
 			}

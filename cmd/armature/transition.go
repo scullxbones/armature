@@ -80,7 +80,9 @@ This enforces branch + PR discipline.`,
 				}
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			appCtx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
@@ -112,7 +114,7 @@ This enforces branch + PR discipline.`,
 				WorkerID: workerID,
 				Payload:  ops.Payload{To: to, Outcome: outcome, Branch: branch, PR: pr},
 			}
-			if err := appendHighStakesOp(logPath, op); err != nil {
+			if err := appendHighStakesOp(state, logPath, op); err != nil {
 				return err
 			}
 

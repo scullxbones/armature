@@ -69,7 +69,9 @@ func newCreateCmd() *cobra.Command {
 				}
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -105,7 +107,7 @@ func newCreateCmd() *cobra.Command {
 				Payload:   payload,
 			}
 
-			if err := appendOp(logPath, op); err != nil {
+			if err := appendOp(ctx, logPath, op); err != nil {
 				return err
 			}
 
@@ -148,7 +150,7 @@ func newCreateCmd() *cobra.Command {
 						SourceURL: entry.URL,
 					},
 				}
-				if err := appendLowStakesOp(logPath, slOp); err != nil {
+				if err := appendLowStakesOp(state, logPath, slOp); err != nil {
 					return err
 				}
 			}

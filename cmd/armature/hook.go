@@ -19,9 +19,8 @@ import (
 
 func newHookCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "hook",
-		Short:             "Git hook management",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		Use:   "hook",
+		Short: "Git hook management",
 	}
 
 	cmd.AddCommand(newHookRunCmd())
