@@ -749,3 +749,4 @@
 ["note","S9",1781485044,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S10-T2 detected at claim time"}]
 ["claim","S10-T2",1781485044,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["transition","S8-T2",1781485656,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Migrated list, sync, claim, create, reparent, harness-hook to snapshot.Load; single-call state loading replaces mixed materialize-plus-reload choreography; warning output preserved; all 100+ cmd/armature tests pass."}]
+["transition","S9-T2",1781485661,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Migrated render_context, context_history, harness_context to shared buildGraphFromState helper; context assembly and context callers no longer rebuild node indexes locally; all focused context and command tests pass."}]
