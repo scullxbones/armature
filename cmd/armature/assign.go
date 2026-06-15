@@ -18,7 +18,7 @@ func newAssignCmd() *cobra.Command {
 		Short: "Assign an issue to a worker",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
+			ctx := currentCtx(cmd)
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -26,7 +26,7 @@ func newAssignCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			myWorkerID, logPath, err := resolveWorkerAndLog(appCtx)
+			myWorkerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -70,7 +70,7 @@ If the issue was claimed, it will automatically transition back to open status.
 This allows the issue to be claimed again by another worker.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
+			ctx := currentCtx(cmd)
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -78,21 +78,21 @@ This allows the issue to be claimed again by another worker.`,
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
 
 			// Check current status before unassigning so we can release claimed → open.
-			issuesDir := appCtx.IssuesDir
+			issuesDir := ctx.IssuesDir
 			allOps, offsets, matErr := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 			if matErr != nil {
 				return fmt.Errorf("read ops: %w", matErr)
 			}
-			if _, matErr := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); matErr != nil {
+			if _, matErr := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); matErr != nil {
 				return matErr
 			}
-			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
+			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			currentStatus := ""
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status
@@ -118,7 +118,7 @@ This allows the issue to be claimed again by another worker.`,
 					WorkerID:  workerID,
 					Payload:   ops.Payload{To: ops.StatusOpen},
 				}
-				appendOp(appCtx, logPath, transitionOp) //nolint:errcheck,gosec
+				appendOp(ctx, logPath, transitionOp) //nolint:errcheck,gosec
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")

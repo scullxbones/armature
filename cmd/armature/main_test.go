@@ -33,6 +33,8 @@ func getTestStateDir(t *testing.T, repo string) string {
 	if workerID == "" {
 		workerID = "default"
 	}
+	// Apply the slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
+	workerID = workerIdentityWithSlot(workerID)
 	if _, err := os.Stat(filepath.Join(repo, ".arm", ".armature", "config.json")); err == nil {
 		return filepath.Join(repo, ".arm", "state", workerID)
 	}

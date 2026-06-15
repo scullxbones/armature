@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +38,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
   $ arm claim --issue another-task-id`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
+			ctx := currentCtx(cmd)
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -46,45 +46,32 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			issuesDir := appCtx.IssuesDir
+			issuesDir := ctx.IssuesDir
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
+				return fmt.Errorf("read ops: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+			if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
+				return err
 			}
 
-			issue, ok := snap.Issues[issueID]
-			if !ok {
-				return fmt.Errorf("issue %s not found", issueID)
+			issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", issueID+".json"))
+			if err != nil {
+				return fmt.Errorf("issue %s not found: %w", issueID, err)
 			}
 
 			if issue.Provenance.Confidence == "inferred" {
 				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
 
-			// Read all ops again for overlap dismissal check
-			allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
-			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
-			}
-
-			// Save parent status from initial snapshot before claim op is emitted
-			initialParentStatus := ""
-			if parentID := issue.Parent; parentID != "" {
-				if parentEntry, ok := snap.Index[parentID]; ok {
-					initialParentStatus = parentEntry.Status
-				}
-			}
-
-			for id, entry := range snap.Index {
+			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
+			for id, entry := range index {
 				if id == issueID || (entry.Status != "claimed" && entry.Status != "in-progress") {
 					continue
 				}
@@ -96,7 +83,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 						if !claimPkg.HasOverlapDismissalNote(allOps, issueID, id) {
 							noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 								WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
-							appendOp(appCtx, logPath, noteOp) //nolint:errcheck,gosec,gosec
+							appendOp(ctx, logPath, noteOp) //nolint:errcheck,gosec,gosec
 						}
 						continue
 					}
@@ -107,10 +94,10 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
 					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
-					appendOp(appCtx, logPath, noteOp) //nolint:errcheck,gosec
+					appendOp(ctx, logPath, noteOp) //nolint:errcheck,gosec
 					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
-					appendOp(appCtx, logPath, noteOp2) //nolint:errcheck,gosec
+					appendOp(ctx, logPath, noteOp2) //nolint:errcheck,gosec
 				}
 			}
 
@@ -122,16 +109,16 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				return err
 			}
 
-			snap, err = snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+			allOps, offsets, err = readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
+				return fmt.Errorf("read ops: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+			if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
+				return err
 			}
-			issueAfter, ok := snap.Issues[issueID]
-			if !ok {
-				return fmt.Errorf("issue %s not found after claim", issueID)
+			issueAfter, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", issueID+".json"))
+			if err != nil {
+				return fmt.Errorf("issue %s not found after claim: %w", issueID, err)
 			}
 			won := issueAfter.ClaimedBy == workerID
 			if !won {
@@ -152,18 +139,17 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 			}
 
 			// Auto-advance any open ancestor story/epic to in-progress.
-			// Note: We check the parent status from the INITIAL snapshot (before claim op)
-			// to match the original behavior: if the parent was "open" when we started,
-			// we emit an explicit transition op to advance it to in-progress.
-			if parentID := issue.Parent; parentID != "" && initialParentStatus == ops.StatusOpen {
-				advanceOp := ops.Op{
-					Type:      ops.OpTransition,
-					TargetID:  parentID,
-					Timestamp: nowEpoch(),
-					WorkerID:  workerID,
-					Payload:   ops.Payload{To: ops.StatusInProgress},
+			if parentID := issue.Parent; parentID != "" {
+				if parentEntry, ok := index[parentID]; ok && parentEntry.Status == ops.StatusOpen {
+					advanceOp := ops.Op{
+						Type:      ops.OpTransition,
+						TargetID:  parentID,
+						Timestamp: nowEpoch(),
+						WorkerID:  workerID,
+						Payload:   ops.Payload{To: ops.StatusInProgress},
+					}
+					appendOp(ctx, logPath, advanceOp) //nolint:errcheck,gosec
 				}
-				appendOp(appCtx, logPath, advanceOp) //nolint:errcheck,gosec
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
