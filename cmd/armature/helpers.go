@@ -111,9 +111,6 @@ func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
 func mustState(cmd *cobra.Command) *executionState {
 	state, err := stateFromCmd(cmd)
 	if err != nil {
-		if appCtx != nil {
-			return &executionState{ctx: appCtx, pusher: appPusher, tracker: appTracker}
-		}
 		panic(err)
 	}
 	return state
@@ -132,11 +129,7 @@ func stateDirFor(ctx *config.Context, workerID string) string {
 	return filepath.Join(ctx.IssuesDir, "state", workerID)
 }
 
-func resolveWorkerAndLog(args ...*config.Context) (string, string, error) {
-	ctx := appCtx
-	if len(args) > 0 && args[0] != nil {
-		ctx = args[0]
-	}
+func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 	if ctx == nil {
 		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
 	}
@@ -184,23 +177,7 @@ func initPushDeps(ctx *config.Context) (ops.Pusher, ops.PendingPushTracker) {
 }
 
 // appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.
-func appendOp(args ...any) error {
-	var ctx *config.Context
-	var logPath string
-	var op ops.Op
-
-	switch len(args) {
-	case 2:
-		ctx = appCtx
-		logPath = args[0].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		op = args[1].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
-	case 3:
-		ctx = args[0].(*config.Context) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		logPath = args[1].(string)      //nolint:errcheck // cobra arg type invariant enforced by command setup
-		op = args[2].(ops.Op)           //nolint:errcheck // cobra arg type invariant enforced by command setup
-	default:
-		return fmt.Errorf("appendOp: unexpected arguments")
-	}
+func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	if ctx == nil {
 		return fmt.Errorf("appendOp: command context unavailable")
 	}
@@ -214,30 +191,12 @@ func appendOp(args ...any) error {
 // appendHighStakesOp appends an op, commits it (dual-branch), and attempts to push.
 // Push errors are best-effort — the op is still committed locally.
 // Used for claim, transition, assign, unassign — ops that must not be delayed.
-func appendHighStakesOp(args ...any) error {
-	var ctx *config.Context
-	var tracker ops.PendingPushTracker
-	var logPath string
-	var op ops.Op
-
-	switch len(args) {
-	case 2:
-		ctx = appCtx
-		tracker = appTracker
-		logPath = args[0].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		op = args[1].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
-	case 3:
-		state := args[0].(*executionState) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		ctx = state.ctx
-		tracker = state.tracker
-		logPath = args[1].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		op = args[2].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
-	default:
-		return fmt.Errorf("appendHighStakesOp: unexpected arguments")
-	}
-	if ctx == nil {
+func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
+	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
+	ctx := state.ctx
+	tracker := state.tracker
 	var gc ops.GitCommitter
 	if ctx.WorktreePath != "" {
 		gc = adapters.New(ctx.WorktreePath)
@@ -263,30 +222,12 @@ func appendHighStakesOp(args ...any) error {
 
 // appendLowStakesOp appends an op, increments the pending counter, and only
 // pushes when the threshold is reached.
-func appendLowStakesOp(args ...any) error {
-	var ctx *config.Context
-	var tracker ops.PendingPushTracker
-	var logPath string
-	var op ops.Op
-
-	switch len(args) {
-	case 2:
-		ctx = appCtx
-		tracker = appTracker
-		logPath = args[0].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		op = args[1].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
-	case 3:
-		state := args[0].(*executionState) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		ctx = state.ctx
-		tracker = state.tracker
-		logPath = args[1].(string) //nolint:errcheck // cobra arg type invariant enforced by command setup
-		op = args[2].(ops.Op)      //nolint:errcheck // cobra arg type invariant enforced by command setup
-	default:
-		return fmt.Errorf("appendLowStakesOp: unexpected arguments")
-	}
-	if ctx == nil {
+func appendLowStakesOp(state *executionState, logPath string, op ops.Op) error {
+	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendLowStakesOp: command context unavailable")
 	}
+	ctx := state.ctx
+	tracker := state.tracker
 	var gc ops.GitCommitter
 	if ctx.WorktreePath != "" {
 		gc = adapters.New(ctx.WorktreePath)

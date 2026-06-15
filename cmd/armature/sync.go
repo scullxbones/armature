@@ -80,7 +80,9 @@ preview changes without committing them.`,
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -96,7 +98,7 @@ preview changes without committing them.`,
 						Outcome: "auto-detected merge into " + targetBranch,
 					},
 				}
-				if err := appendOp(logPath, op); err != nil {
+				if err := appendOp(ctx, logPath, op); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
 					continue
 				}

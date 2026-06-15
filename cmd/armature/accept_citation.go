@@ -45,7 +45,9 @@ func newAcceptCitationCmd() *cobra.Command {
 				}
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -62,7 +64,7 @@ func newAcceptCitationCmd() *cobra.Command {
 						ConfirmedNoninteractively: skipPrompt,
 					},
 				}
-				if err := appendLowStakesOp(logPath, op); err != nil {
+				if err := appendLowStakesOp(state, logPath, op); err != nil {
 					return err
 				}
 

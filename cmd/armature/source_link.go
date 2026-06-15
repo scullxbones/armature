@@ -37,7 +37,9 @@ func newSourceLinkCmd() *cobra.Command {
 				return fmt.Errorf("source-id %q not found in manifest", sourceID)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -53,7 +55,7 @@ func newSourceLinkCmd() *cobra.Command {
 						SourceURL: entry.URL,
 					},
 				}
-				if err := appendLowStakesOp(logPath, op); err != nil {
+				if err := appendLowStakesOp(state, logPath, op); err != nil {
 					return err
 				}
 

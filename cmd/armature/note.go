@@ -53,14 +53,16 @@ func runNoteAdd(cmd *cobra.Command, issueID, msg string) error {
 		return fmt.Errorf("message is required (via --msg flag or positional argument)")
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog()
+	state := mustState(cmd)
+	ctx := state.ctx
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	if err != nil {
 		return err
 	}
 	id := fmt.Sprintf("note-%d", time.Now().UnixNano())
 	op := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 		WorkerID: workerID, Payload: ops.Payload{Msg: msg, NoteID: id}}
-	if err := appendLowStakesOp(logPath, op); err != nil {
+	if err := appendLowStakesOp(state, logPath, op); err != nil {
 		return err
 	}
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -82,13 +84,15 @@ func runNoteDelete(cmd *cobra.Command, issueID, noteID string) error {
 		return fmt.Errorf("note ID is required (via --note-id flag or positional argument)")
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog()
+	state := mustState(cmd)
+	ctx := state.ctx
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	if err != nil {
 		return err
 	}
 	op := ops.Op{Type: ops.OpNoteDelete, TargetID: issueID, Timestamp: nowEpoch(),
 		WorkerID: workerID, Payload: ops.Payload{NoteID: noteID}}
-	if err := appendLowStakesOp(logPath, op); err != nil {
+	if err := appendLowStakesOp(state, logPath, op); err != nil {
 		return err
 	}
 	format, _ := cmd.Root().PersistentFlags().GetString("format")

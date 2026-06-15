@@ -23,13 +23,15 @@ func newHeartbeatCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
 			op := ops.Op{Type: ops.OpHeartbeat, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID}
-			if err := appendLowStakesOp(logPath, op); err != nil {
+			if err := appendLowStakesOp(state, logPath, op); err != nil {
 				return err
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")

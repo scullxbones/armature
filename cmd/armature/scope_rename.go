@@ -28,7 +28,9 @@ func newScopeRenameCmd() *cobra.Command {
 				return fmt.Errorf("old-path and new-path are identical: %q", oldPath)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			appCtx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
 			}
@@ -83,7 +85,7 @@ func newScopeRenameCmd() *cobra.Command {
 						NewPath: newPath,
 					},
 				}
-				if err := appendLowStakesOp(logPath, op); err != nil {
+				if err := appendLowStakesOp(state, logPath, op); err != nil {
 					return fmt.Errorf("append op for %s: %w", id, err)
 				}
 			}

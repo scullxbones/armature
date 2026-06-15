@@ -61,7 +61,9 @@ func newImportCmd() *cobra.Command {
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -80,7 +82,7 @@ func newImportCmd() *cobra.Command {
 						Scope:    item.Scope,
 					},
 				}
-				if err := appendLowStakesOp(logPath, createOp); err != nil {
+				if err := appendLowStakesOp(state, logPath, createOp); err != nil {
 					return fmt.Errorf("emit create op for %s: %w", item.ID, err)
 				}
 				createdIDs = append(createdIDs, item.ID)
@@ -95,7 +97,7 @@ func newImportCmd() *cobra.Command {
 							SourceID: source,
 						},
 					}
-					if err := appendLowStakesOp(logPath, sourceLinkOp); err != nil {
+					if err := appendLowStakesOp(state, logPath, sourceLinkOp); err != nil {
 						return fmt.Errorf("emit source-link op for %s: %w", item.ID, err)
 					}
 				}
