@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 )
@@ -51,17 +51,17 @@ func newCreateCmd() *cobra.Command {
 
 			// Validate parent/type combination when a parent is specified.
 			if parent != "" {
-				appCtx := currentCtx(cmd)
-				snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+				ctx := currentCtx(cmd)
+				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(ctx.IssuesDir, "ops"))
 				if err != nil {
 					return fmt.Errorf("load snapshot: %w", err)
 				}
-				for _, w := range snap.Warnings {
-					fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+				if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
+					return err
 				}
-				parentIssue, ok := snap.Issues[parent]
-				if !ok {
-					return fmt.Errorf("parent %s not found", parent)
+				parentIssue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", parent+".json"))
+				if err != nil {
+					return fmt.Errorf("parent %s not found: %w", parent, err)
 				}
 				allowed, ok := validParentChildTypes[parentIssue.Type]
 				if !ok || !allowed[nodeType] {

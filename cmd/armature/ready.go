@@ -45,9 +45,10 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
   # Diagnose why open tasks are not in the ready queue
   $ arm ready --explain`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issuesDir := appCtx.IssuesDir
+			ctx := currentCtx(cmd)
+			issuesDir := ctx.IssuesDir
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, ctx.Mode == "single-branch")
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

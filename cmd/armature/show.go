@@ -30,10 +30,11 @@ func newShowCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			issuesDir := appCtx.IssuesDir
-			singleBranch := appCtx.Mode == "single-branch"
+			ctx := currentCtx(cmd)
+			issuesDir := ctx.IssuesDir
+			singleBranch := ctx.Mode == "single-branch"
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, singleBranch)
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

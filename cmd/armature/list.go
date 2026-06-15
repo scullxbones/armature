@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -50,17 +50,21 @@ func newListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List issues with optional --type, --parent, and --status filters",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issuesDir := appCtx.IssuesDir
-			singleBranch := appCtx.Mode == "single-branch"
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
+			ctx := currentCtx(cmd)
+			issuesDir := ctx.IssuesDir
+			singleBranch := ctx.Mode == "single-branch"
+			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+			if _, err := materialize.Materialize(ctx.StateDir, allOps, singleBranch, offsets); err != nil {
+				return err
 			}
 
-			index := snap.Index
+			index, err := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json"))
+			if err != nil {
+				return err
+			}
 
 			var ids []string
 			for id, entry := range index {
@@ -93,7 +97,8 @@ func newListCmd() *cobra.Command {
 						Title:   e.Title,
 						Outcome: e.Outcome,
 					}
-					if issue, ok := snap.Issues[id]; ok {
+					issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", id+".json"))
+					if err == nil {
 						le.ClaimedBy = issue.ClaimedBy
 					}
 					entries = append(entries, le)
@@ -126,7 +131,7 @@ func newListCmd() *cobra.Command {
 				})
 				for _, status := range statuses {
 					label := status
-					if status == ops.StatusDone && appCtx.Mode != "single-branch" {
+					if status == ops.StatusDone && ctx.Mode != "single-branch" {
 						label = "done (awaiting merge)"
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
@@ -134,7 +139,7 @@ func newListCmd() *cobra.Command {
 					for _, id := range groups[status] {
 						e := index[id]
 						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
-						if status == ops.StatusDone && appCtx.Mode != "single-branch" && e.Branch != "" {
+						if status == ops.StatusDone && ctx.Mode != "single-branch" && e.Branch != "" {
 							line += fmt.Sprintf("  [branch: %s", e.Branch)
 							if e.PR != "" {
 								line += fmt.Sprintf(", PR: #%s", e.PR)
@@ -156,7 +161,8 @@ func newListCmd() *cobra.Command {
 				for _, id := range ids {
 					e := index[id]
 					claimed := ""
-					if issue, ok := snap.Issues[id]; ok {
+					issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", id+".json"))
+					if err == nil {
 						claimed = issue.ClaimedBy
 					}
 					outcome := e.Outcome
