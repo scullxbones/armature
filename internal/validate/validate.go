@@ -37,7 +37,7 @@ func Validate(state *materialize.State, opts Options) Result {
 	var errors, warnings, infos []string
 
 	// Build a Graph projection for shared traversal logic
-	graph := dag.GraphFromMaterializeState(state)
+	graph := graphFromState(state)
 
 	targets := issueSubset(state, opts.ScopeID, graph)
 	if opts.ParentID != "" {
@@ -78,6 +78,22 @@ func Validate(state *materialize.State, opts Options) Result {
 	}
 
 	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
+}
+
+func graphFromState(state *materialize.State) *dag.Graph {
+	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
+	for id, issue := range state.Issues {
+		nodeIndex[id] = &dag.Node{
+			ID:        id,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  append([]string(nil), issue.Children...),
+			BlockedBy: append([]string(nil), issue.BlockedBy...),
+			Blocks:    append([]string(nil), issue.Blocks...),
+		}
+	}
+	return dag.GraphFromState(nodeIndex)
 }
 
 func issueSubset(state *materialize.State, scopeID string, graph *dag.Graph) map[string]*materialize.Issue {

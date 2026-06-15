@@ -3,8 +3,6 @@ package dag
 import (
 	"fmt"
 	"slices"
-
-	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // Node represents a work item in the DAG.
@@ -326,29 +324,6 @@ func GraphFromState(index map[string]*Node) *Graph {
 		copy(copiedNode.BlockedBy, node.BlockedBy)
 		copy(copiedNode.Blocks, node.Blocks)
 		nodeIndex[id] = copiedNode
-	}
-	return FromIndex(nodeIndex)
-}
-
-// GraphFromMaterializeState constructs a Graph from a materialize.State.
-// This converts the state's Issues map into a Graph suitable for validation and traversal.
-// All slices are defensively copied to ensure graph immutability.
-func GraphFromMaterializeState(state *materialize.State) *Graph {
-	nodeIndex := make(map[string]*Node)
-	for id, issue := range state.Issues {
-		node := &Node{
-			ID:        id,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  make([]string, len(issue.Children)),
-			BlockedBy: make([]string, len(issue.BlockedBy)),
-			Blocks:    make([]string, len(issue.Blocks)),
-		}
-		copy(node.Children, issue.Children)
-		copy(node.BlockedBy, issue.BlockedBy)
-		copy(node.Blocks, issue.Blocks)
-		nodeIndex[id] = node
 	}
 	return FromIndex(nodeIndex)
 }

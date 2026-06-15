@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
@@ -790,7 +789,7 @@ func TestCheckE4Cycles_CrossScopeBlockerCycle(t *testing.T) {
 	)
 
 	// Build the graph
-	graph := dag.GraphFromMaterializeState(state)
+	graph := graphFromState(state)
 
 	// Define scope containing only A (B is out of scope)
 	scope := map[string]bool{
@@ -831,7 +830,7 @@ func TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive(t *testing.T) {
 		},
 	)
 
-	graph := dag.GraphFromMaterializeState(state)
+	graph := graphFromState(state)
 
 	scope := map[string]bool{
 		"A": true,
