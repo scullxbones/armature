@@ -746,3 +746,4 @@
 ["note","S10-T2",1781485044,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with S8-T2 (same worker, dismissed)"}]
 ["note","S10-T2",1781485044,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with S9-T2 (same worker, dismissed)"}]
 ["note","S10-T2",1781485044,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S9 detected at claim time"}]
+["note","S9",1781485044,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S10-T2 detected at claim time"}]
