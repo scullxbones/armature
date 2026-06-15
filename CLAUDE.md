@@ -71,6 +71,18 @@ Important invariants:
 - Materialized state is derived from ops, not source of truth.
 - `done` means worker-complete; `merged` means confirmed on the main branch.
 
+## Dogfood Findings
+
+When Armature product friction appears while working, use the user-home
+`capturing-dogfood-findings` skill. Capture from the agent-user perspective,
+write one raw finding under `docs/dogfood/findings/raw/`, and continue the
+current task unless the finding affects correctness.
+
+Use Armature's single-writer identity when available: `arm worker-init --check`
+for the worker ID, plus `ARM_LOG_SLOT` when set. Preferred local areas are
+`bootstrap`, `hooks`, `skills`, `commands`, `workflow`, `validation`,
+`coordination`, `tooling`, `documentation`, and `other`.
+
 ## Canonical References
 
 Prefer linking to the canonical docs instead of re-explaining them here:

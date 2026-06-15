@@ -101,6 +101,14 @@ _Avoid_: Verified, done
 An actor identity that reads, claims, and updates issues in Armature. A worker is the system's unit of authorship and coordination.
 _Avoid_: Agent session, assignee
 
+**Bootstrap**:
+The first-time preparation that makes a repository clone ready for Armature workflow. Bootstrap establishes local participation in the workflow; it is not issue decomposition or work execution.
+_Avoid_: Installation, dispatch
+
+**Dogfood Finding**:
+A concise observation captured while Armature is used on Armature itself. A dogfood finding is a repository-maintenance artifact for later triage; it is not an Armature product feature or automatically a planned issue.
+_Avoid_: Issue, note, retrospective
+
 **Assignment**:
 The routing of an issue toward an intended worker. Assignment expresses intended ownership before or apart from an active claim.
 _Avoid_: Claim, reservation

@@ -39,6 +39,18 @@ Canonical workflow and command truth live in the embedded skills under
   arm doctor
   ```
 
+## Capture Dogfood Findings
+
+When Armature product friction appears while working, use the user-home
+`capturing-dogfood-findings` skill. Capture from the agent-user perspective,
+write one raw finding under `docs/dogfood/findings/raw/`, and continue the
+current task unless the finding affects correctness.
+
+Use Armature's single-writer identity when available: `arm worker-init --check`
+for the worker ID, plus `ARM_LOG_SLOT` when set. Preferred local areas are
+`bootstrap`, `hooks`, `skills`, `commands`, `workflow`, `validation`,
+`coordination`, `tooling`, `documentation`, and `other`.
+
 ## Use The Repo-Local Skills
 
 Invoke the bundled skill that matches your role:
