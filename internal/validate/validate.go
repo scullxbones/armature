@@ -37,8 +37,7 @@ func Validate(state *materialize.State, opts Options) Result {
 	var errors, warnings, infos []string
 
 	// Build a Graph projection for shared traversal logic
-	dagObj := buildDAGFromState(state)
-	graph := dag.NewGraph(dagObj)
+	graph := dag.GraphFromMaterializeState(state)
 
 	targets := issueSubset(state, opts.ScopeID, graph)
 	if opts.ParentID != "" {
@@ -129,66 +128,22 @@ func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materiali
 func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []string {
 	var errs []string
 
+	// Convert issues map to scope map for graph.ScopedHasCycle
+	scope := make(map[string]bool)
+	for id := range issues {
+		scope[id] = true
+	}
+
 	// Check for cycles restricted to the scoped issue set (not the entire DAG).
 	// This prevents false positives when a cycle exists elsewhere in the graph.
 	for id := range issues {
-		if scopedHasCycle(id, graph, issues) {
+		if graph.ScopedHasCycle(id, scope) {
 			errs = append(errs, fmt.Sprintf("cycle detected: %s", id))
 			break // Report only once to avoid redundant messages
 		}
 	}
 
 	return errs
-}
-
-// scopedHasCycle checks for cycles within a restricted set of node IDs.
-// It performs DFS starting from id, following all BlockedBy edges (including cross-scope ones)
-// but only reporting a cycle if the closing node (already in recStack) is in scope.
-// This prevents false positives from unrelated cycles entirely outside the scope.
-func scopedHasCycle(id string, graph *dag.Graph, scope map[string]*materialize.Issue) bool {
-	visited := map[string]bool{}
-	recStack := map[string]bool{}
-
-	var dfs func(string) bool
-	dfs = func(nodeID string) bool {
-		if recStack[nodeID] {
-			// Cycle detected: only report true if the closing node is in scope.
-			// This prevents false positives from unrelated cycles outside the scope.
-			_, inScopeNode := scope[nodeID]
-			return inScopeNode
-		}
-		if visited[nodeID] {
-			return false
-		}
-
-		visited[nodeID] = true
-		recStack[nodeID] = true
-
-		// Walk BlockedBy edges: follow ALL blockers (including out-of-scope ones)
-		// to detect cross-scope cycles that affect scoped nodes.
-		for _, dep := range graph.Blockers(nodeID) {
-			if dfs(dep) {
-				return true
-			}
-		}
-
-		// Walk Children edges within scope only. Parent-child cycles are structurally
-		// impossible once E2/E3 parent-link checks pass, so cross-scope child traversal
-		// adds no cycle-detection value and risks false positives.
-		_, children := graph.Hierarchy(nodeID)
-		for _, child := range children {
-			if _, inScope := scope[child]; inScope {
-				if dfs(child) {
-					return true
-				}
-			}
-		}
-
-		recStack[nodeID] = false
-		return false
-	}
-
-	return dfs(id)
 }
 
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []string {
@@ -593,25 +548,4 @@ func checkW11VagueOutcomes(issues map[string]*materialize.Issue) []string {
 		}
 	}
 	return warns
-}
-
-// buildDAGFromState constructs a DAG from the materialized state for use with Graph projection.
-func buildDAGFromState(state *materialize.State) *dag.DAG {
-	dagObj := dag.New()
-	for id, issue := range state.Issues {
-		node := &dag.Node{
-			ID:        id,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  make([]string, len(issue.Children)),
-			BlockedBy: make([]string, len(issue.BlockedBy)),
-			Blocks:    make([]string, len(issue.Blocks)),
-		}
-		copy(node.Children, issue.Children)
-		copy(node.BlockedBy, issue.BlockedBy)
-		copy(node.Blocks, issue.Blocks)
-		dagObj.AddNode(node) //nolint:errcheck,gosec
-	}
-	return dagObj
 }

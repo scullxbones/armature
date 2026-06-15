@@ -857,3 +857,98 @@ func TestGraphFromStateEmpty(t *testing.T) {
 	ancestors := g.Ancestry("nonexistent")
 	assert.Empty(t, ancestors)
 }
+
+// TestScopedHasCycleCrossScope tests that ScopedHasCycle detects cycles that close within scope,
+// even if the cycle path traverses nodes outside the scope.
+func TestScopedHasCycleCrossScope(t *testing.T) {
+	t.Parallel()
+	d := New()
+	// Create a cycle: A -> B -> C -> A, where only A is in scope
+	nodeA := &Node{ID: "A", Title: "A", Type: "task", BlockedBy: []string{"C"}}
+	nodeB := &Node{ID: "B", Title: "B", Type: "task", BlockedBy: []string{"A"}}
+	nodeC := &Node{ID: "C", Title: "C", Type: "task", BlockedBy: []string{"B"}}
+
+	require.NoError(t, d.AddNode(nodeA))
+	require.NoError(t, d.AddNode(nodeB))
+	require.NoError(t, d.AddNode(nodeC))
+
+	nodeA.Blocks = []string{"B"}
+	nodeB.Blocks = []string{"C"}
+	nodeC.Blocks = []string{"A"}
+
+	g := NewGraph(d)
+
+	// Scope contains only A; the cycle A->B->C->A closes within scope (at A)
+	scope := map[string]bool{"A": true}
+	hasCycle := g.ScopedHasCycle("A", scope)
+	assert.True(t, hasCycle, "expected ScopedHasCycle to detect cycle closing within scope")
+}
+
+// TestScopedHasCycleOutOfScope tests that ScopedHasCycle ignores cycles entirely outside the scope.
+func TestScopedHasCycleOutOfScope(t *testing.T) {
+	t.Parallel()
+	d := New()
+	// Create cycle B -> C -> B, with A not in the cycle
+	nodeA := &Node{ID: "A", Title: "A", Type: "task"}
+	nodeB := &Node{ID: "B", Title: "B", Type: "task", BlockedBy: []string{"C"}}
+	nodeC := &Node{ID: "C", Title: "C", Type: "task", BlockedBy: []string{"B"}}
+
+	require.NoError(t, d.AddNode(nodeA))
+	require.NoError(t, d.AddNode(nodeB))
+	require.NoError(t, d.AddNode(nodeC))
+
+	nodeB.Blocks = []string{"C"}
+	nodeC.Blocks = []string{"B"}
+
+	g := NewGraph(d)
+
+	// Scope contains only A; the cycle B->C->B is entirely outside scope
+	scope := map[string]bool{"A": true}
+	hasCycle := g.ScopedHasCycle("A", scope)
+	assert.False(t, hasCycle, "expected ScopedHasCycle to return false for out-of-scope cycles")
+}
+
+// TestScopedHasCycleWithChildrenEdges tests that ScopedHasCycle respects scope boundaries on Children edges.
+func TestScopedHasCycleWithChildrenEdges(t *testing.T) {
+	t.Parallel()
+	d := New()
+	// Create hierarchy: A -> B -> C, all in scope
+	// Also B -> D (out of scope), C -> A (closing parent-child cycle within scope)
+	nodeA := &Node{ID: "A", Title: "A", Type: "epic", Children: []string{"B"}}
+	nodeB := &Node{ID: "B", Title: "B", Type: "story", Parent: "A", Children: []string{"C", "D"}}
+	nodeC := &Node{ID: "C", Title: "C", Type: "task", Parent: "B", BlockedBy: []string{"A"}}
+	nodeD := &Node{ID: "D", Title: "D", Type: "task", Parent: "B"}
+
+	require.NoError(t, d.AddNode(nodeA))
+	require.NoError(t, d.AddNode(nodeB))
+	require.NoError(t, d.AddNode(nodeC))
+	require.NoError(t, d.AddNode(nodeD))
+
+	nodeC.Blocks = []string{"A"}
+
+	g := NewGraph(d)
+
+	// Scope contains A, B, C (not D)
+	scope := map[string]bool{"A": true, "B": true, "C": true}
+	hasCycle := g.ScopedHasCycle("A", scope)
+	assert.True(t, hasCycle, "expected ScopedHasCycle to detect cycle in parent-child + blocker edges within scope")
+}
+
+// TestScopedHasCycleNoCycle tests that ScopedHasCycle returns false when there's no cycle.
+func TestScopedHasCycleNoCycle(t *testing.T) {
+	t.Parallel()
+	d := New()
+	nodeA := &Node{ID: "A", Title: "A", Type: "task", BlockedBy: []string{"B"}}
+	nodeB := &Node{ID: "B", Title: "B", Type: "task"}
+
+	require.NoError(t, d.AddNode(nodeA))
+	require.NoError(t, d.AddNode(nodeB))
+
+	nodeB.Blocks = []string{"A"}
+
+	g := NewGraph(d)
+
+	scope := map[string]bool{"A": true, "B": true}
+	hasCycle := g.ScopedHasCycle("A", scope)
+	assert.False(t, hasCycle, "expected ScopedHasCycle to return false for acyclic graph")
+}

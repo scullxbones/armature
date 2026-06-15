@@ -3,6 +3,8 @@ package dag
 import (
 	"fmt"
 	"slices"
+
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // Node represents a work item in the DAG.
@@ -218,6 +220,55 @@ func (g *Graph) HasCycle() bool {
 	return g.dag.HasCycle()
 }
 
+// ScopedHasCycle checks for cycles within a restricted set of node IDs.
+// It performs DFS starting from id, following all BlockedBy edges (including cross-scope ones)
+// but only reporting a cycle if the closing node (already in recStack) is in scope.
+// This prevents false positives from unrelated cycles entirely outside the scope.
+func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
+	visited := map[string]bool{}
+	recStack := map[string]bool{}
+
+	var dfs func(string) bool
+	dfs = func(nodeID string) bool {
+		if recStack[nodeID] {
+			// Cycle detected: only report true if the closing node is in scope.
+			// This prevents false positives from unrelated cycles outside the scope.
+			return scope[nodeID]
+		}
+		if visited[nodeID] {
+			return false
+		}
+
+		visited[nodeID] = true
+		recStack[nodeID] = true
+
+		// Walk BlockedBy edges: follow ALL blockers (including out-of-scope ones)
+		// to detect cross-scope cycles that affect scoped nodes.
+		for _, dep := range g.Blockers(nodeID) {
+			if dfs(dep) {
+				return true
+			}
+		}
+
+		// Walk Children edges within scope only. Parent-child cycles are structurally
+		// impossible once parent-link validation passes, so cross-scope child traversal
+		// adds no cycle-detection value and risks false positives.
+		_, children := g.Hierarchy(nodeID)
+		for _, child := range children {
+			if scope[child] {
+				if dfs(child) {
+					return true
+				}
+			}
+		}
+
+		recStack[nodeID] = false
+		return false
+	}
+
+	return dfs(id)
+}
+
 // Depth returns the depth of a node from its root (node with no parent).
 // A root node has depth 0, its direct children have depth 1, etc.
 func (g *Graph) Depth(id string) int {
@@ -275,6 +326,29 @@ func GraphFromState(index map[string]*Node) *Graph {
 		copy(copiedNode.BlockedBy, node.BlockedBy)
 		copy(copiedNode.Blocks, node.Blocks)
 		nodeIndex[id] = copiedNode
+	}
+	return FromIndex(nodeIndex)
+}
+
+// GraphFromMaterializeState constructs a Graph from a materialize.State.
+// This converts the state's Issues map into a Graph suitable for validation and traversal.
+// All slices are defensively copied to ensure graph immutability.
+func GraphFromMaterializeState(state *materialize.State) *Graph {
+	nodeIndex := make(map[string]*Node)
+	for id, issue := range state.Issues {
+		node := &Node{
+			ID:        id,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  make([]string, len(issue.Children)),
+			BlockedBy: make([]string, len(issue.BlockedBy)),
+			Blocks:    make([]string, len(issue.Blocks)),
+		}
+		copy(node.Children, issue.Children)
+		copy(node.BlockedBy, issue.BlockedBy)
+		copy(node.Blocks, issue.Blocks)
+		nodeIndex[id] = node
 	}
 	return FromIndex(nodeIndex)
 }
