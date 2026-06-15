@@ -60,20 +60,8 @@ func newRenderContextCmd() *cobra.Command {
 				state = snap.State
 			}
 
-			// Construct graph from state.Issues
-			nodeIndex := make(map[string]*dag.Node)
-			for id, issue := range state.Issues {
-				nodeIndex[id] = &dag.Node{
-					ID:        issue.ID,
-					Title:     issue.Title,
-					Type:      issue.Type,
-					Parent:    issue.Parent,
-					Children:  issue.Children,
-					BlockedBy: issue.BlockedBy,
-					Blocks:    issue.Blocks,
-				}
-			}
-			graph := dag.GraphFromState(nodeIndex)
+			// Build graph from state using the helper function
+			graph := buildGraphFromState(state)
 
 			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state, graph)
 			if err != nil {
@@ -104,4 +92,23 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
 	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
 	return cmd
+}
+
+// buildGraphFromState constructs a dag.Graph from a materialize.State.
+// This is the canonical way to build a graph for context assembly and other operations
+// that need to traverse the issue hierarchy and dependencies.
+func buildGraphFromState(state *materialize.State) *dag.Graph {
+	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
+	for id, issue := range state.Issues {
+		nodeIndex[id] = &dag.Node{
+			ID:        issue.ID,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  append([]string(nil), issue.Children...),
+			BlockedBy: append([]string(nil), issue.BlockedBy...),
+			Blocks:    append([]string(nil), issue.Blocks...),
+		}
+	}
+	return dag.GraphFromState(nodeIndex)
 }
