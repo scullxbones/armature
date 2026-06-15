@@ -129,6 +129,85 @@ func TestLoad_StateAndIssuesAgreement(t *testing.T) {
 	assert.Equal(t, parent.Title, stateParent.Title)
 }
 
+// Test 5: index populated → Snapshot.Index contains entries for all issues
+func TestLoad_IndexPopulated(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	workerID := "worker1"
+	logPath := filepath.Join(opsDir, workerID+".log")
+
+	op1 := `["create","task-1",1000,"worker1",{"title":"Task 1","type":"task","scope":[],"context_files":[]}]`
+	op2 := `["create","task-2",1001,"worker1",{"title":"Task 2","type":"task","scope":[],"context_files":[]}]`
+	content := op1 + "\n" + op2 + "\n"
+	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
+
+	snap, err := Load(opsDir, stateDir, false)
+	require.NoError(t, err)
+
+	assert.NotNil(t, snap.Index)
+	assert.Equal(t, 2, len(snap.Index))
+	assert.NotNil(t, snap.Index["task-1"])
+	assert.NotNil(t, snap.Index["task-2"])
+	assert.Equal(t, "Task 1", snap.Index["task-1"].Title)
+	assert.Equal(t, "Task 2", snap.Index["task-2"].Title)
+}
+
+// Test 6: state and index consistency → Snapshot.State.Issues and Snapshot.Index are consistent
+func TestLoad_StateIndexConsistency(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	workerID := "worker1"
+	logPath := filepath.Join(opsDir, workerID+".log")
+
+	op := `["create","issue-1",1000,"worker1",{"title":"Test Issue","type":"task","scope":["file1.txt"],"context_files":["file2.txt"]}]`
+	require.NoError(t, adapters.WriteFile(logPath, []byte(op+"\n"), 0644))
+
+	snap, err := Load(opsDir, stateDir, false)
+	require.NoError(t, err)
+
+	stateIssue := snap.State.Issues["issue-1"]
+	indexEntry := snap.Index["issue-1"]
+
+	assert.NotNil(t, stateIssue)
+	assert.NotNil(t, indexEntry)
+	assert.Equal(t, stateIssue.ID, "issue-1")
+	assert.Equal(t, indexEntry.Title, "Test Issue")
+	assert.Equal(t, stateIssue.Type, indexEntry.Type)
+	assert.Equal(t, stateIssue.Status, indexEntry.Status)
+}
+
+// Test 7: all snapshot fields populated → Snapshot has non-nil State, Index, Issues, and Warnings (even if empty)
+func TestLoad_AllFieldsPopulated(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	snap, err := Load(opsDir, stateDir, false)
+	require.NoError(t, err)
+
+	assert.NotNil(t, snap, "Snapshot should not be nil")
+	assert.NotNil(t, snap.State, "State should not be nil")
+	assert.NotNil(t, snap.Index, "Index should not be nil")
+	assert.NotNil(t, snap.Issues, "Issues should not be nil")
+	assert.NotNil(t, snap.Warnings, "Warnings should not be nil")
+}
+
 func containsAny(s string, substrs ...string) bool {
 	for _, sub := range substrs {
 		if len(s) >= len(sub) {
