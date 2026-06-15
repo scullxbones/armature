@@ -33,6 +33,7 @@ func buildGraphFromState(state *materialize.State) *dag.Graph {
 }
 
 func TestAssembleContext_CoreSpec(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:               "TST-001",
@@ -64,6 +65,7 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 }
 
 func TestAssembleContext_BlockerOutcomes(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-B"] = &materialize.Issue{
 		ID:           "TST-B",
@@ -103,6 +105,7 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 }
 
 func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-B"] = &materialize.Issue{
 		ID:           "TST-B",
@@ -144,6 +147,7 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 }
 
 func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-B"] = &materialize.Issue{
 		ID:           "TST-B",
@@ -187,6 +191,7 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 }
 
 func TestAssembleContext_ParentChain(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-P"] = &materialize.Issue{
 		ID:           "TST-P",
@@ -226,6 +231,7 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 }
 
 func TestAssembleContext_Truncation(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -250,6 +256,7 @@ func TestAssembleContext_Truncation(t *testing.T) {
 // TC-003: Tests for buildSnippets, buildDecisions, buildNotes, buildSiblingOutcomes
 
 func TestAssembleContext_UnknownIssue(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	graph := buildGraphFromState(state)
 	_, err := Assemble("MISSING-001", stateDir, state, graph)
@@ -258,6 +265,7 @@ func TestAssembleContext_UnknownIssue(t *testing.T) {
 }
 
 func TestBuildSnippets_WithContext(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:           "TST-001",
@@ -288,6 +296,7 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 }
 
 func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte("# Guide\nuse this"), 0644))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "docs"), 0755))
@@ -327,6 +336,7 @@ func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
 }
 
 func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
@@ -354,6 +364,7 @@ func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
 }
 
 func TestBuildSnippets_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:           "TST-001",
@@ -379,6 +390,7 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 }
 
 func TestBuildDecisions(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:     "TST-001",
@@ -412,6 +424,7 @@ func TestBuildDecisions(t *testing.T) {
 }
 
 func TestBuildNotes_WithNotes(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:     "TST-001",
@@ -445,6 +458,7 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 }
 
 func TestBuildNotes_TruncatesAtFive(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	notes := make([]materialize.Note, 7)
 	for i := range notes {
@@ -481,6 +495,7 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 }
 
 func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:     "TST-001",
@@ -514,6 +529,7 @@ func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
 }
 
 func TestBuildSiblingOutcomes(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-P"] = &materialize.Issue{
 		ID:           "TST-P",
@@ -567,6 +583,7 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 }
 
 func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:           "TST-001",
@@ -591,6 +608,7 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 }
 
 func TestBuildBlockerOutcomes_FromState(t *testing.T) {
+	t.Parallel()
 	// Blocker must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-BLK"] = &materialize.Issue{
@@ -632,6 +650,7 @@ func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 }
 
 func TestBuildParentChain_FromState(t *testing.T) {
+	t.Parallel()
 	// Parent must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-PAR"] = &materialize.Issue{
@@ -673,6 +692,7 @@ func TestBuildParentChain_FromState(t *testing.T) {
 }
 
 func TestBuildParentChain_WithGrandparent(t *testing.T) {
+	t.Parallel()
 	// Parent and grandparent are both in state
 	// This tests the fix for the bug where grandparents were silently dropped
 	state := materialize.NewState()
@@ -729,6 +749,7 @@ func TestBuildParentChain_WithGrandparent(t *testing.T) {
 }
 
 func TestBuildSiblingOutcomes_FromState(t *testing.T) {
+	t.Parallel()
 	// Sibling must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-PAR"] = &materialize.Issue{
@@ -782,6 +803,7 @@ func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 }
 
 func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
+	t.Parallel()
 	// Parent and siblings are all in state
 	state := materialize.NewState()
 	state.Issues["TST-PAR2"] = &materialize.Issue{
@@ -837,6 +859,7 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 // TC-004: Tests for RenderAgent and RenderHuman
 
 func TestRenderAgent(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -853,6 +876,7 @@ func TestRenderAgent(t *testing.T) {
 }
 
 func TestRenderHuman(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -871,6 +895,7 @@ func TestRenderHuman(t *testing.T) {
 // TC-005: Truncate boundary condition tests
 
 func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -884,6 +909,7 @@ func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
 }
 
 func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -897,6 +923,7 @@ func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
 }
 
 func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -910,6 +937,7 @@ func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
 }
 
 func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
+	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{

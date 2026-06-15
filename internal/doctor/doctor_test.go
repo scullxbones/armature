@@ -1,6 +1,7 @@
 package doctor_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,7 @@ func TestRun_CleanRepo(t *testing.T) {
 	// Run creates a temp issues dir so we need a helper.
 	// We test the internal checks directly.
 	t.Run("D4_NoBrokenParents", func(t *testing.T) {
+		t.Parallel()
 		index := materialize.Index{
 			"task-01":  {Status: "open", Type: "task", Parent: "story-01"},
 			"story-01": {Status: "open", Type: "story"},
@@ -30,6 +32,7 @@ func TestRun_CleanRepo(t *testing.T) {
 	})
 
 	t.Run("D4_BrokenParent", func(t *testing.T) {
+		t.Parallel()
 		index := materialize.Index{
 			"task-01": {Status: "open", Type: "task", Parent: "nonexistent"},
 		}
@@ -40,6 +43,7 @@ func TestRun_CleanRepo(t *testing.T) {
 	})
 
 	t.Run("D5_NoCycle", func(t *testing.T) {
+		t.Parallel()
 		index := materialize.Index{
 			"task-01": {Status: "open", BlockedBy: []string{"task-02"}},
 			"task-02": {Status: "open"},
@@ -50,6 +54,7 @@ func TestRun_CleanRepo(t *testing.T) {
 	})
 
 	t.Run("D5_Cycle", func(t *testing.T) {
+		t.Parallel()
 		index := materialize.Index{
 			"task-01": {Status: "open", BlockedBy: []string{"task-02"}},
 			"task-02": {Status: "open", BlockedBy: []string{"task-01"}},
@@ -60,6 +65,7 @@ func TestRun_CleanRepo(t *testing.T) {
 	})
 
 	t.Run("D6_UncitedIssues", func(t *testing.T) {
+		t.Parallel()
 		index := materialize.Index{
 			"task-01": {Status: "open"},
 		}
@@ -73,6 +79,7 @@ func TestRun_CleanRepo(t *testing.T) {
 	})
 
 	t.Run("D6_CitedIssue_SourceLink", func(t *testing.T) {
+		t.Parallel()
 		index := materialize.Index{
 			"task-01": {Status: "open"},
 		}
@@ -375,7 +382,7 @@ func TestRunChecks_D1_GitDivergence(t *testing.T) {
 	repoDir := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
+		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
 		cmd.Dir = repoDir
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "command %v failed: %s", args, out)
@@ -401,7 +408,7 @@ func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 	repoDir := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
+		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
 		cmd.Dir = repoDir
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "command %v failed: %s", args, out)

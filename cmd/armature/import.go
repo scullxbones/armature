@@ -23,7 +23,7 @@ func newImportCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filePath := args[0]
 
-			data, err := os.ReadFile(filePath)
+			data, err := os.ReadFile(filePath) //nolint:gosec // G304: filePath is a user-supplied import file argument
 			if err != nil {
 				return fmt.Errorf("read file: %w", err)
 			}
@@ -43,7 +43,7 @@ func newImportCmd() *cobra.Command {
 			}
 
 			if dryRun {
-				format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+				format, _ := cmd.Flags().GetString("format")
 				if format == "json" {
 					ids := make([]string, len(items))
 					for i, item := range items {
@@ -101,7 +101,7 @@ func newImportCmd() *cobra.Command {
 				}
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
 				out, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck // map contains only serializable values
 					"created":   len(createdIDs),

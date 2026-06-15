@@ -17,4 +17,4 @@ unleash:
   # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
   threshold:
     mutant-coverage: 90
-    efficacy: 75
+    efficacy: 100

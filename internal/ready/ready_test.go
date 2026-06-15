@@ -11,6 +11,7 @@ import (
 )
 
 func TestReadyTask_AllRulesMet(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story", Children: []string{"task-01"}},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
@@ -24,6 +25,7 @@ func TestReadyTask_AllRulesMet(t *testing.T) {
 }
 
 func TestReadyTask_BlockerNotMerged(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story"},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
@@ -37,6 +39,7 @@ func TestReadyTask_BlockerNotMerged(t *testing.T) {
 }
 
 func TestReadyTask_BlockerMerged(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story"},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
@@ -50,6 +53,7 @@ func TestReadyTask_BlockerMerged(t *testing.T) {
 }
 
 func TestReadyTask_ParentClaimed_AppearsInQueue(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "claimed", Type: "story", Children: []string{"task-01"}},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
@@ -63,6 +67,7 @@ func TestReadyTask_ParentClaimed_AppearsInQueue(t *testing.T) {
 }
 
 func TestReadyTask_ParentNotInProgress(t *testing.T) {
+	t.Parallel()
 	// After the bootstrap-deadlock fix, open parent IS allowed — task should be ready.
 	index := materialize.Index{
 		"story-01": {Status: "open", Type: "story"},
@@ -82,6 +87,7 @@ func TestReadyTask_ParentNotInProgress(t *testing.T) {
 }
 
 func TestComputeReady_SurfacesTaskWithOpenParent(t *testing.T) {
+	t.Parallel()
 	// Regression test: tasks whose story parent is "open" must appear in the ready queue.
 	// Previously they were gated out, causing a bootstrap deadlock in fresh sessions.
 	index := materialize.Index{
@@ -102,6 +108,7 @@ func TestComputeReady_SurfacesTaskWithOpenParent(t *testing.T) {
 }
 
 func TestReadyTask_NoParent(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "open", Type: "task"},
 	}
@@ -113,6 +120,7 @@ func TestReadyTask_NoParent(t *testing.T) {
 }
 
 func TestReadyTask_InferredRequiresConfirmation(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "open", Type: "task"},
 	}
@@ -126,6 +134,7 @@ func TestReadyTask_InferredRequiresConfirmation(t *testing.T) {
 }
 
 func TestReadyStory_NoParent_AppearsInQueue(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "open", Type: "story"},
 	}
@@ -138,6 +147,7 @@ func TestReadyStory_NoParent_AppearsInQueue(t *testing.T) {
 }
 
 func TestReadyStory_ParentInProgress_AppearsInQueue(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"epic-01":  {Status: "in-progress", Type: "feature"},
 		"story-01": {Status: "open", Type: "story", Parent: "epic-01"},
@@ -151,6 +161,7 @@ func TestReadyStory_ParentInProgress_AppearsInQueue(t *testing.T) {
 }
 
 func TestReadyTask_PrioritySort(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-a": {Status: "open", Type: "task"},
 		"task-b": {Status: "open", Type: "task"},
@@ -165,6 +176,7 @@ func TestReadyTask_PrioritySort(t *testing.T) {
 }
 
 func TestReadyTask_AssignedToMeFirst(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-a": {Status: "open", Type: "task", AssignedWorker: "other-worker"},
 		"task-b": {Status: "open", Type: "task", AssignedWorker: ""},
@@ -186,6 +198,7 @@ func TestReadyTask_AssignedToMeFirst(t *testing.T) {
 }
 
 func TestReadyTask_NoWorkerID_NoAssignmentOrdering(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-a": {Status: "open", Type: "task", AssignedWorker: "some-worker"},
 		"task-b": {Status: "open", Type: "task", AssignedWorker: ""},
@@ -203,20 +216,24 @@ func TestReadyTask_NoWorkerID_NoAssignmentOrdering(t *testing.T) {
 }
 
 func TestIsClaimStale_ExactBoundary_NotStale(t *testing.T) {
+	t.Parallel()
 	// claimedAt=0, ttl=1min, now=60 — exactly at boundary, should NOT be stale
 	assert.False(t, isClaimStale(0, 0, 1, 60), "at exact TTL boundary should not be stale")
 }
 
 func TestIsClaimStale_OnePastBoundary_IsStale(t *testing.T) {
+	t.Parallel()
 	// now=61 (1 second past 1-minute TTL)
 	assert.True(t, isClaimStale(0, 0, 1, 61))
 }
 
 func TestIsClaimStale_ZeroTTL_NeverStale(t *testing.T) {
+	t.Parallel()
 	assert.False(t, isClaimStale(0, 0, 0, 99999))
 }
 
 func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
+	t.Parallel()
 	// Claimed at 0, heartbeat at 100, TTL=1min
 	// Without heartbeat: stale at now=61
 	// With heartbeat: not stale until now=160
@@ -225,6 +242,7 @@ func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
 }
 
 func TestReadyTask_DraftConfidence_ExcludedFromReady(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "open", Type: "task"},
 	}
@@ -237,6 +255,7 @@ func TestReadyTask_DraftConfidence_ExcludedFromReady(t *testing.T) {
 }
 
 func TestReadyTask_VerifiedConfidence_IncludedInReady(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "open", Type: "task"},
 	}
@@ -250,6 +269,7 @@ func TestReadyTask_VerifiedConfidence_IncludedInReady(t *testing.T) {
 }
 
 func TestReadyTask_NoConfidenceField_DefaultsToVerified(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "open", Type: "task"},
 	}
@@ -264,6 +284,7 @@ func TestReadyTask_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 }
 
 func TestFilterByAssignedTo_ReturnsMatchingEntries(t *testing.T) {
+	t.Parallel()
 	entries := []ReadyEntry{
 		{Issue: "task-a", AssignedWorker: "worker-x"},
 		{Issue: "task-b", AssignedWorker: "worker-y"},
@@ -278,6 +299,7 @@ func TestFilterByAssignedTo_ReturnsMatchingEntries(t *testing.T) {
 }
 
 func TestFilterByAssignedTo_EmptyWorkerID_ReturnsAll(t *testing.T) {
+	t.Parallel()
 	entries := []ReadyEntry{
 		{Issue: "task-a", AssignedWorker: "worker-x"},
 		{Issue: "task-b", AssignedWorker: ""},
@@ -287,6 +309,7 @@ func TestFilterByAssignedTo_EmptyWorkerID_ReturnsAll(t *testing.T) {
 }
 
 func TestFilterByAssignedTo_NoMatches_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	entries := []ReadyEntry{
 		{Issue: "task-a", AssignedWorker: "worker-x"},
 	}
@@ -295,6 +318,7 @@ func TestFilterByAssignedTo_NoMatches_ReturnsEmpty(t *testing.T) {
 }
 
 func TestDepth_DeepChain_CapsAt20(t *testing.T) {
+	t.Parallel()
 	index := make(materialize.Index)
 	// Build a chain deeper than 20
 	for i := range 25 {
@@ -313,6 +337,7 @@ func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 }
 
 func TestComputeReady_AssignedWorkerFieldPopulated(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "open", Type: "task", AssignedWorker: "worker-x"},
 		"task-02": {Status: "open", Type: "task", AssignedWorker: ""},
@@ -331,6 +356,7 @@ func TestComputeReady_AssignedWorkerFieldPopulated(t *testing.T) {
 }
 
 func TestComputeReady_AssignedWorkerFromIndex_EvenWithNoIssueEntry(t *testing.T) {
+	t.Parallel()
 	// AssignedWorker comes from the index entry (authoritative), not the issues map.
 	// Even when issues map has no entry, the index assignment is preserved.
 	index := materialize.Index{
@@ -343,6 +369,7 @@ func TestComputeReady_AssignedWorkerFromIndex_EvenWithNoIssueEntry(t *testing.T)
 }
 
 func TestDepth_NoParent(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Parent: ""},
 	}
@@ -352,6 +379,7 @@ func TestDepth_NoParent(t *testing.T) {
 }
 
 func TestDepth_MissingFromIndex(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{}
 	nodeIndex := materializeIndexToNodeIndex(index)
 	graph := dag.FromIndex(nodeIndex)
@@ -359,6 +387,7 @@ func TestDepth_MissingFromIndex(t *testing.T) {
 }
 
 func TestAssignmentTier_AssignedToMe(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"T-001": {AssignedWorker: "worker-x"},
 	}
@@ -366,6 +395,7 @@ func TestAssignmentTier_AssignedToMe(t *testing.T) {
 }
 
 func TestAssignmentTier_Unassigned(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"T-001": {AssignedWorker: ""},
 	}
@@ -373,6 +403,7 @@ func TestAssignmentTier_Unassigned(t *testing.T) {
 }
 
 func TestAssignmentTier_AssignedToOther(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"T-001": {AssignedWorker: "worker-other"},
 	}
@@ -380,6 +411,7 @@ func TestAssignmentTier_AssignedToOther(t *testing.T) {
 }
 
 func TestAssignmentTier_NoWorkerContext(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"T-001": {AssignedWorker: "worker-x"},
 	}
@@ -388,6 +420,7 @@ func TestAssignmentTier_NoWorkerContext(t *testing.T) {
 }
 
 func TestReadyTask_SortByBlocksCount(t *testing.T) {
+	t.Parallel()
 	// Two tasks at the same depth and priority — the one that blocks more should sort first (compute.go:167)
 	index := materialize.Index{
 		"task-a": {Status: "open", Type: "task", Blocks: []string{"task-c", "task-d"}},
@@ -404,6 +437,7 @@ func TestReadyTask_SortByBlocksCount(t *testing.T) {
 }
 
 func TestExplainNotReady_BlockerNotMerged(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story"},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
@@ -419,6 +453,7 @@ func TestExplainNotReady_BlockerNotMerged(t *testing.T) {
 }
 
 func TestExplainNotReady_ParentNotActive(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"story-01": {Status: "done", Type: "story"},
 		"task-01":  {Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{}},
@@ -433,6 +468,7 @@ func TestExplainNotReady_ParentNotActive(t *testing.T) {
 }
 
 func TestExplainNotReady_BlockerDone_AppendsHint(t *testing.T) {
+	t.Parallel()
 	// When a blocker is in status 'done' (not merged, not missing, not cancelled),
 	// the reason string should append ' — run: arm merged --issue <BLOCKER-ID>'.
 	index := materialize.Index{
@@ -451,6 +487,7 @@ func TestExplainNotReady_BlockerDone_AppendsHint(t *testing.T) {
 }
 
 func TestExplainNotReady_BlockerMissing_NoHint(t *testing.T) {
+	t.Parallel()
 	// When a blocker is missing from the index, no merged hint should be appended.
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story"},
@@ -467,6 +504,7 @@ func TestExplainNotReady_BlockerMissing_NoHint(t *testing.T) {
 }
 
 func TestExplainNotReady_BlockerCancelled_NoHint(t *testing.T) {
+	t.Parallel()
 	// When a blocker is in 'cancelled' status, no merged hint should be appended.
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story"},
@@ -484,6 +522,7 @@ func TestExplainNotReady_BlockerCancelled_NoHint(t *testing.T) {
 }
 
 func TestExplainNotReady_MultipleDoneBlockers_HintForEach(t *testing.T) {
+	t.Parallel()
 	// When multiple blockers are in 'done' status, the hint appears for each one.
 	index := materialize.Index{
 		"story-01": {Status: "in-progress", Type: "story"},
@@ -502,6 +541,7 @@ func TestExplainNotReady_MultipleDoneBlockers_HintForEach(t *testing.T) {
 }
 
 func TestExplainNotReady_MixedBlockers_HintOnlyForDone(t *testing.T) {
+	t.Parallel()
 	// Mixed blockers: one done (hint), one missing (no hint), one cancelled (no hint).
 	index := materialize.Index{
 		"story-01":       {Status: "in-progress", Type: "story"},
@@ -522,6 +562,7 @@ func TestExplainNotReady_MixedBlockers_HintOnlyForDone(t *testing.T) {
 }
 
 func TestFilterByParent_IncludesDescendantsOnly(t *testing.T) {
+	t.Parallel()
 	// Create a hierarchy: story-01 > task-a, task-b > subtask-a1
 	//                     story-02 > task-c
 	// Mark story-01 as claimed so it doesn't appear in ready queue (only its descendants)
@@ -564,6 +605,7 @@ func TestFilterByParent_IncludesDescendantsOnly(t *testing.T) {
 }
 
 func TestCollectDescendants_IncludesNestedChildren(t *testing.T) {
+	t.Parallel()
 	// Build a hierarchy with nested descendants
 	index := materialize.Index{
 		"root":         {Status: "open", Type: "story", Children: []string{"child1", "child2"}},
@@ -584,6 +626,7 @@ func TestCollectDescendants_IncludesNestedChildren(t *testing.T) {
 }
 
 func TestCollectDescendants_EmptyForLeaf(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"leaf": {Status: "open", Type: "task", Children: []string{}},
 	}
@@ -593,6 +636,7 @@ func TestCollectDescendants_EmptyForLeaf(t *testing.T) {
 }
 
 func TestCollectDescendants_MissingRoot(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"child": {Status: "open", Type: "task", Parent: "missing-root"},
 	}
@@ -602,6 +646,7 @@ func TestCollectDescendants_MissingRoot(t *testing.T) {
 }
 
 func TestExplainNotReady_WithInjectedTime_StaleClaimExcluded(t *testing.T) {
+	t.Parallel()
 	// Test that ExplainNotReady accepts injected time and correctly identifies stale claims.
 	// Claim was at time 0, TTL is 60 seconds, so at time 61 it should be stale and excluded.
 	index := materialize.Index{
@@ -627,6 +672,7 @@ func TestExplainNotReady_WithInjectedTime_StaleClaimExcluded(t *testing.T) {
 }
 
 func TestExplainNotReady_WithInjectedTime_FreshClaimIncluded(t *testing.T) {
+	t.Parallel()
 	// Test that ExplainNotReady excludes fresh (non-stale) claims.
 	// Claim was at time 0, TTL is 60 seconds, at time 30 it's still fresh.
 	index := materialize.Index{

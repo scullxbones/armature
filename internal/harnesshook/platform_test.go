@@ -11,6 +11,7 @@ import (
 )
 
 func TestClaudeAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	adapter := NewClaudeAdapter()
 
@@ -24,6 +25,7 @@ func TestClaudeAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 }
 
 func TestCodexAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	adapter := NewCodexAdapter()
 
@@ -37,6 +39,7 @@ func TestCodexAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 }
 
 func TestDevinAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	adapter := NewDevinAdapter()
 
@@ -50,6 +53,7 @@ func TestDevinAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 }
 
 func TestClaudeAdapterEncodesPreToolUseBlockWithPermissionDenial(t *testing.T) {
+	t.Parallel()
 	adapter := NewClaudeAdapter()
 	event := Event{Kind: EventPreToolUse}
 
@@ -66,6 +70,7 @@ func TestClaudeAdapterEncodesPreToolUseBlockWithPermissionDenial(t *testing.T) {
 }
 
 func TestClaudeAdapterEncodesStopBlockWithDecisionBlock(t *testing.T) {
+	t.Parallel()
 	adapter := NewClaudeAdapter()
 	event := Event{Kind: EventStop}
 
@@ -81,6 +86,7 @@ func TestClaudeAdapterEncodesStopBlockWithDecisionBlock(t *testing.T) {
 }
 
 func TestCodexAdapterEncodesBlockDecisionWithBlockNotDeny(t *testing.T) {
+	t.Parallel()
 	adapter := NewCodexAdapter()
 	event := Event{Kind: EventPreToolUse}
 
@@ -93,6 +99,7 @@ func TestCodexAdapterEncodesBlockDecisionWithBlockNotDeny(t *testing.T) {
 }
 
 func TestClaudeAdapterWriteConfigPreservesExistingSettings(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	claudeDir := filepath.Join(dir, ".claude")
 	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
@@ -109,6 +116,7 @@ func TestClaudeAdapterWriteConfigPreservesExistingSettings(t *testing.T) {
 }
 
 func TestAdaptersExposeCapabilities(t *testing.T) {
+	t.Parallel()
 	adapters := []PlatformAdapter{NewClaudeAdapter(), NewCodexAdapter(), NewDevinAdapter()}
 	for _, adapter := range adapters {
 		caps := adapter.Capabilities()
@@ -119,6 +127,7 @@ func TestAdaptersExposeCapabilities(t *testing.T) {
 }
 
 func TestCodexAdapterDecodesApplyPatchPath(t *testing.T) {
+	t.Parallel()
 	adapter := NewCodexAdapter()
 	input := map[string]any{
 		"hook_event_name": "PreToolUse",
@@ -138,6 +147,7 @@ func TestCodexAdapterDecodesApplyPatchPath(t *testing.T) {
 }
 
 func TestAdapterRegistryReturnsClaudeAdapterForEmptyPlatform(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewAdapterForPlatform("")
 	require.NoError(t, err)
 	assert.Equal(t, "claude", adapter.Name())
@@ -145,6 +155,7 @@ func TestAdapterRegistryReturnsClaudeAdapterForEmptyPlatform(t *testing.T) {
 }
 
 func TestAdapterRegistryReturnsClaudeAdapterForClaudePlatform(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewAdapterForPlatform("claude")
 	require.NoError(t, err)
 	assert.Equal(t, "claude", adapter.Name())
@@ -152,6 +163,7 @@ func TestAdapterRegistryReturnsClaudeAdapterForClaudePlatform(t *testing.T) {
 }
 
 func TestAdapterRegistryReturnsCodexAdapterForCodexPlatform(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewAdapterForPlatform("codex")
 	require.NoError(t, err)
 	assert.Equal(t, "codex", adapter.Name())
@@ -159,6 +171,7 @@ func TestAdapterRegistryReturnsCodexAdapterForCodexPlatform(t *testing.T) {
 }
 
 func TestAdapterRegistryReturnsDevinAdapterForDevinPlatform(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewAdapterForPlatform("devin")
 	require.NoError(t, err)
 	assert.Equal(t, "devin", adapter.Name())
@@ -166,6 +179,7 @@ func TestAdapterRegistryReturnsDevinAdapterForDevinPlatform(t *testing.T) {
 }
 
 func TestAdapterRegistryErrorsOnUnknownPlatform(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewAdapterForPlatform("unknown-platform")
 	require.Error(t, err)
 	assert.Nil(t, adapter)

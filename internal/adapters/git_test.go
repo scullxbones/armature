@@ -1,6 +1,7 @@
 package adapters_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,7 @@ func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", args...)
+		cmd := exec.CommandContext(context.Background(), "git", args...)
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
@@ -40,13 +41,13 @@ func TestCreateOrphanBranch(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify branch exists
-	cmd := exec.Command("git", "-C", repo, "branch", "--list", "_armature")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "branch", "--list", "_armature")
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "_armature")
 
 	// Verify we are still on the original branch (not _armature)
-	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	assert.NotEqual(t, "_armature\n", string(branchOut))
@@ -63,7 +64,7 @@ func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Still on original branch
-	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	assert.NotEqual(t, "_armature\n", string(branchOut))
@@ -130,7 +131,7 @@ func TestCommitWorktreeOp(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify commit exists in the worktree branch
-	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-1")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "log", "--oneline", "-1")
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "ops: append")
@@ -164,14 +165,14 @@ func TestBranchMergedInto_Merged(t *testing.T) {
 	c := adapters.New(repo)
 
 	// Detect what branch we're on
-	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(branchOut))
 
 	// Create and merge a feature branch
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -190,13 +191,13 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(branchOut))
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -226,7 +227,7 @@ func TestListFilesAtCommit(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -238,7 +239,7 @@ func TestListFilesAtCommit(t *testing.T) {
 	gitRun("commit", "-m", "add files")
 
 	// Get the HEAD SHA
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	sha := strings.TrimSpace(string(shaOut))
@@ -264,7 +265,7 @@ func TestShowFileAtCommit(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -274,7 +275,7 @@ func TestShowFileAtCommit(t *testing.T) {
 	gitRun("add", "hello.txt")
 	gitRun("commit", "-m", "add hello")
 
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	sha := strings.TrimSpace(string(shaOut))
@@ -289,7 +290,7 @@ func TestShowFileAtCommit_MissingFile(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	sha := strings.TrimSpace(string(shaOut))
@@ -304,7 +305,7 @@ func TestLogBranch(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -318,7 +319,7 @@ func TestLogBranch(t *testing.T) {
 	gitRun("add", "f2.txt")
 	gitRun("commit", "-m", "third commit")
 
-	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	branch := strings.TrimSpace(string(branchOut))
@@ -357,6 +358,7 @@ func TestIsGitContentionError(t *testing.T) {
 }
 
 func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
@@ -369,7 +371,7 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	logFile := filepath.Join(opsDir, "worker-abc.log")
 	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
 
-	gitDirCmd := exec.Command("git", "-C", worktreePath, "rev-parse", "--git-dir")
+	gitDirCmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--git-dir")
 	gitDirOut, err := gitDirCmd.Output()
 	require.NoError(t, err)
 	gitDir := strings.TrimSpace(string(gitDirOut))
@@ -414,7 +416,7 @@ func TestCommitMessage(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	sha := strings.TrimSpace(string(shaOut))
@@ -438,7 +440,7 @@ func TestPush_ErrorOnNoRemote(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	branchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	branch := strings.TrimSpace(string(branchOut))
@@ -485,7 +487,7 @@ func TestDiffFrom(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -496,7 +498,7 @@ func TestDiffFrom(t *testing.T) {
 	gitRun("commit", "-m", "add file")
 
 	// Get that SHA as the base
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(shaOut))
@@ -527,7 +529,7 @@ func TestDiffNameOnly(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -538,7 +540,7 @@ func TestDiffNameOnly(t *testing.T) {
 	gitRun("add", "alpha.txt", "beta.txt")
 	gitRun("commit", "-m", "add files")
 
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(shaOut))
@@ -569,7 +571,7 @@ func TestResetHard(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -580,7 +582,7 @@ func TestResetHard(t *testing.T) {
 	gitRun("commit", "-m", "base commit")
 
 	// Get base SHA
-	shaCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(shaOut))
@@ -595,7 +597,7 @@ func TestResetHard(t *testing.T) {
 	require.NoError(t, err)
 
 	// extra.txt should no longer be tracked
-	headCmd := exec.Command("git", "-C", repo, "rev-parse", "HEAD")
+	headCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, strings.TrimSpace(string(headOut)))
@@ -616,7 +618,7 @@ func TestApplyPatch(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -666,7 +668,7 @@ func TestAddAll(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the file is staged
-	statusCmd := exec.Command("git", "-C", repo, "diff", "--cached", "--name-only")
+	statusCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "diff", "--cached", "--name-only")
 	out, err := statusCmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "new_file.txt")
@@ -683,7 +685,7 @@ func TestAddPathsStagesOnlySelectedPaths(t *testing.T) {
 	err := c.AddPaths([]string{"selected.txt"})
 	require.NoError(t, err)
 
-	statusCmd := exec.Command("git", "-C", repo, "diff", "--cached", "--name-only")
+	statusCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "diff", "--cached", "--name-only")
 	out, err := statusCmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "selected.txt")
@@ -696,7 +698,7 @@ func TestCommitWithMessage(t *testing.T) {
 	c := adapters.New(repo)
 
 	gitRun := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -709,7 +711,7 @@ func TestCommitWithMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the commit message
-	logCmd := exec.Command("git", "-C", repo, "log", "-1", "--pretty=%s")
+	logCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "log", "-1", "--pretty=%s")
 	logOut, err := logCmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(logOut), "my commit message")

@@ -92,7 +92,7 @@ func buildContextFiles(issue *materialize.Issue, repoRoot string) Layer {
 	var sections []string
 	for _, relPath := range issue.ContextFiles {
 		fullPath := filepath.Join(repoRoot, relPath)
-		data, err := os.ReadFile(fullPath)
+		data, err := os.ReadFile(fullPath) //nolint:gosec // G304: path joined from repo root and issue-defined relative path
 		if err != nil {
 			sections = append(sections, fmt.Sprintf("### %s\n(missing: %v)", relPath, err))
 			continue

@@ -35,7 +35,7 @@ func newAcceptCitationCmd() *cobra.Command {
 			skipPrompt := ci || force || nonInteractive
 
 			if !skipPrompt {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), //nolint:errcheck // stdout write errors not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 					"Accept citation for %d issue(s) with rationale: %q\nConfirm? [y/N]: ", len(issueIDs), rationale)
 				scanner := bufio.NewScanner(cmd.InOrStdin())
 				scanner.Scan()
@@ -71,8 +71,8 @@ func newAcceptCitationCmd() *cobra.Command {
 					"rationale":                  rationale,
 					"confirmed_noninteractively": skipPrompt,
 				}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write errors not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			}
 			return nil
 		},
@@ -83,6 +83,6 @@ func newAcceptCitationCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&ci, "ci", false, "bypass interactive prompt (non-interactive/CI mode)")
 	cmd.Flags().BoolVar(&force, "force", false, "skip confirmation prompt and proceed (alias for --ci)")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "skip confirmation prompt and proceed (alias for --ci)")
-	_ = cmd.MarkFlagRequired("rationale") //nolint:errcheck // fails only if flag is absent (programming error)
+	_ = cmd.MarkFlagRequired("rationale")
 	return cmd
 }

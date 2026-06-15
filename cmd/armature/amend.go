@@ -70,13 +70,13 @@ func newAmendCmd() *cobra.Command {
 			if err := appendLowStakesOp(logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "status": "amended"}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write errors not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Amended %s\n", issueID) //nolint:errcheck // stdout write errors not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Amended %s\n", issueID)
 			}
 			return nil
 		},

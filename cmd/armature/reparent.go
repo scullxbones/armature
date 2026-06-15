@@ -98,8 +98,8 @@ with an explicit error message.`,
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to reparent")
 	cmd.Flags().StringVar(&newParent, "parent", "", "new parent issue ID (empty string makes issue top-level)")
-	_ = cmd.MarkFlagRequired("issue")  //nolint:errcheck // fails only if flag absent (programming error)
-	_ = cmd.MarkFlagRequired("parent") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("issue")
+	_ = cmd.MarkFlagRequired("parent")
 
 	return cmd
 }

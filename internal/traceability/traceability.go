@@ -1,3 +1,4 @@
+// Package traceability validates that DAG issues are properly cited in git history.
 package traceability
 
 import (

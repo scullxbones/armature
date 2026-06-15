@@ -17,6 +17,7 @@ import (
 // ops loading library correctly excludes ops with mismatched worker IDs
 // (i.e., ops whose WorkerID doesn't match the filename they're in).
 func TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	// Create a temp directory with mixed valid and cross-worker ops
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
@@ -95,6 +96,7 @@ func TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps(t *testing.T) {
 // TestLoadFromDirWithOffsetsValidated_ReturnsWarningsForMismatches tests that
 // the ops loading library returns warning strings for ops with mismatched worker IDs.
 func TestLoadFromDirWithOffsetsValidated_ReturnsWarningsForMismatches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 
@@ -136,6 +138,7 @@ func TestLoadFromDirWithOffsetsValidated_ReturnsWarningsForMismatches(t *testing
 // invalid ops is handled correctly: valid ones are kept, invalid ones are excluded,
 // and appropriate warnings are generated.
 func TestTUIModel_MixedValidityLoadingCorrectly(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")
@@ -217,6 +220,7 @@ func TestTUIModel_MixedValidityLoadingCorrectly(t *testing.T) {
 
 // TestTUIModel_EmptyOpsDir tests that an empty ops directory is handled gracefully
 func TestTUIModel_EmptyOpsDir(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")

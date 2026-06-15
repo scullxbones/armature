@@ -25,11 +25,11 @@ func newDoctorCmd() *cobra.Command {
 				return err
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if format == "json" {
-				data, _ := json.MarshalIndent(report, "", "  ")      //nolint:errcheck // report struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+				data, _ := json.MarshalIndent(report, "", "  ") //nolint:errcheck // report struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				for _, f := range report.Checks {
 					icon := "✓"

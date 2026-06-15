@@ -9,6 +9,7 @@ import (
 )
 
 func TestConfluenceProviderFetch(t *testing.T) {
+	t.Parallel()
 	const expectedBody = `{"title":"Test Page","body":"hello confluence"}`
 	const token = "test-confluence-token"
 
@@ -46,6 +47,7 @@ func TestConfluenceProviderFetch(t *testing.T) {
 }
 
 func TestConfluenceProviderFetchBasicAuth(t *testing.T) {
+	t.Parallel()
 	const expectedBody = `{"result":"ok"}`
 
 	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
@@ -72,6 +74,7 @@ func TestConfluenceProviderFetchBasicAuth(t *testing.T) {
 }
 
 func TestSharePointProviderFetch(t *testing.T) {
+	t.Parallel()
 	const expectedBody = `{"value":"SharePoint document content"}`
 	const token = "test-sharepoint-token"
 
@@ -109,7 +112,8 @@ func TestSharePointProviderFetch(t *testing.T) {
 }
 
 func TestSharePointProviderFetchErrorStatus(t *testing.T) {
-	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+	t.Parallel()
+	client := fakeHTTPClient{do: func(_ *http.Request) (*http.Response, error) {
 		return testResponse(http.StatusNotFound, "not found"), nil
 	}}
 

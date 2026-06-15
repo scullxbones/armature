@@ -46,7 +46,7 @@ func writeJSONError(w io.Writer, msg string, code exitcodes.Code) {
 		ExitCode: code.Int(),
 	}
 	b, _ := json.Marshal(payload) //nolint:errcheck // payload contains only serializable values
-	fmt.Fprintln(w, string(b))    //nolint:errcheck // writing to stderr; nothing useful to do on failure
+	fmt.Fprintln(w, string(b))
 }
 
 // classifyError maps a Go error to the most specific exitcodes.Code.
@@ -253,10 +253,10 @@ func appendHighStakesOp(args ...any) error {
 		if err := gc2.Push("_armature"); err != nil {
 			// Best-effort: attempt fetch+rebase and retry once
 			if rbErr := gc2.FetchAndRebase("_armature"); rbErr == nil {
-				gc2.Push("_armature") //nolint:errcheck
+				gc2.Push("_armature") //nolint:errcheck,gosec
 			}
 		}
-		tracker.Reset() //nolint:errcheck
+		tracker.Reset() //nolint:errcheck,gosec
 	}
 	return nil
 }
@@ -311,7 +311,7 @@ func appendLowStakesOp(args ...any) error {
 			pushGC := adapters.New(ctx.WorktreePath)
 			_ = pushGC // push happens via AppendCommitAndPush on next high-stakes op
 		}
-		tracker.Reset() //nolint:errcheck
+		tracker.Reset() //nolint:errcheck,gosec
 	}
 	return nil
 }

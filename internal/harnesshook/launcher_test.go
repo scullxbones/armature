@@ -10,6 +10,7 @@ import (
 )
 
 func TestLauncherInstallWritesClaudeConfig(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	launcher := NewLauncher()
 
@@ -22,6 +23,7 @@ func TestLauncherInstallWritesClaudeConfig(t *testing.T) {
 }
 
 func TestLauncherInstallWritesCodexConfig(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	launcher := NewLauncher()
 
@@ -34,6 +36,7 @@ func TestLauncherInstallWritesCodexConfig(t *testing.T) {
 }
 
 func TestLauncherInstallWritesDevinConfig(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	launcher := NewLauncher()
 
@@ -46,6 +49,7 @@ func TestLauncherInstallWritesDevinConfig(t *testing.T) {
 }
 
 func TestLauncherBuildEnvIncludesTaskIDAndPlatform(t *testing.T) {
+	t.Parallel()
 	launcher := NewLauncher()
 
 	env := launcher.BuildEnv(map[string]string{"PATH": "/usr/bin"}, "TASK-1", "codex")

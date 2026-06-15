@@ -1,3 +1,4 @@
+// Package app provides the top-level bubbletea TUI model that manages screen routing.
 package app
 
 import (
@@ -18,11 +19,12 @@ import (
 // ScreenID identifies one of the four main screens.
 type ScreenID int
 
+// Screen identifiers for the four main views.
 const (
-	ScreenDAGTree  ScreenID = iota // 1
-	ScreenWorkers                  // 2
-	ScreenValidate                 // 3
-	ScreenSources                  // 4
+	ScreenDAGTree ScreenID = iota
+	ScreenWorkers
+	ScreenValidate
+	ScreenSources
 )
 
 // RefreshMsg triggers a re-materialisation.
@@ -126,7 +128,7 @@ func (m Model) startWatcher() tea.Cmd {
 }
 
 func (m Model) scheduleFetch() tea.Cmd {
-	return tea.Tick(30*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(30*time.Second, func(_ time.Time) tea.Msg {
 		return fetchMsg{}
 	})
 }

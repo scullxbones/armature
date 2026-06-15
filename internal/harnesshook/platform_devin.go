@@ -6,12 +6,16 @@ import (
 	"path/filepath"
 )
 
+// DevinAdapter implements PlatformAdapter for the Devin harness.
 type DevinAdapter struct{}
 
+// NewDevinAdapter constructs a DevinAdapter.
 func NewDevinAdapter() *DevinAdapter { return &DevinAdapter{} }
 
+// Name returns the platform identifier.
 func (a *DevinAdapter) Name() string { return "devin" }
 
+// Capabilities returns the hook event support matrix for Devin.
 func (a *DevinAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
@@ -23,9 +27,10 @@ func (a *DevinAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
+// WriteConfig writes the Devin hook configuration into workdir/.devin/hooks.json.
 func (a *DevinAdapter) WriteConfig(workdir string) error {
 	dir := filepath.Join(workdir, ".devin")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 
@@ -44,13 +49,15 @@ func (a *DevinAdapter) WriteConfig(workdir string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "hooks.json"), data, 0o644)
+	return os.WriteFile(filepath.Join(dir, "hooks.json"), data, 0o600)
 }
 
+// Decode parses a Devin hook payload into a normalised Event.
 func (a *DevinAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
+// Encode serialises the Decision into the JSON payload Devin expects on stdout.
 func (a *DevinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{"decision": "approve"})

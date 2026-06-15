@@ -13,6 +13,7 @@ import (
 
 // TestAddNodeDuplicate tests that adding a duplicate node fails.
 func TestAddNodeDuplicate(t *testing.T) {
+	t.Parallel()
 	d := New()
 	node := &Node{ID: "task-1", Title: "Test", Type: "task"}
 
@@ -26,6 +27,7 @@ func TestAddNodeDuplicate(t *testing.T) {
 
 // TestNoCycleInAcyclicDAG tests that acyclic DAGs are detected correctly.
 func TestNoCycleInAcyclicDAG(t *testing.T) {
+	t.Parallel()
 	d := New()
 	// Create a simple tree: epic -> story -> task
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
@@ -45,6 +47,7 @@ func TestNoCycleInAcyclicDAG(t *testing.T) {
 
 // TestCycleDetection tests that cycles are detected.
 func TestCycleDetection(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", BlockedBy: []string{"task-2"}}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
@@ -57,6 +60,7 @@ func TestCycleDetection(t *testing.T) {
 
 // TestPropertyNoSelfCycles: Generate arbitrary nodes and verify no node blocks itself.
 func TestPropertyNoSelfCycles(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 
@@ -86,6 +90,7 @@ func TestPropertyNoSelfCycles(t *testing.T) {
 // TestPropertyParentChildConsistency: Verify that if A lists parent B,
 // then B must list A as a child.
 func TestPropertyParentChildConsistency(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 50
 
@@ -152,6 +157,7 @@ func BenchmarkCycleDetection(b *testing.B) {
 
 // TestGraphAncestry tests that Graph.Ancestry returns all upstream nodes.
 func TestGraphAncestry(t *testing.T) {
+	t.Parallel()
 	d := New()
 	// Create a chain: epic -> story -> task1
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
@@ -182,6 +188,7 @@ func TestGraphAncestry(t *testing.T) {
 
 // TestGraphDescendants tests that Graph.Descendants returns all downstream nodes.
 func TestGraphDescendants(t *testing.T) {
+	t.Parallel()
 	d := New()
 	// Create a tree: epic -> story1, story2 -> task
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
@@ -215,6 +222,7 @@ func TestGraphDescendants(t *testing.T) {
 
 // TestGraphBlockers tests that Graph.Blockers returns direct blocked_by dependencies.
 func TestGraphBlockers(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
@@ -244,6 +252,7 @@ func TestGraphBlockers(t *testing.T) {
 
 // TestGraphBlocks tests that Graph.Blocks returns nodes that this node directly blocks.
 func TestGraphBlocks(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Blocks: []string{"task-2", "task-3"}}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
@@ -272,6 +281,7 @@ func TestGraphBlocks(t *testing.T) {
 
 // TestGraphHierarchy tests that Graph.Hierarchy returns parent and children.
 func TestGraphHierarchy(t *testing.T) {
+	t.Parallel()
 	d := New()
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
@@ -304,6 +314,7 @@ func TestGraphHierarchy(t *testing.T) {
 
 // TestGraphHasCycle tests that Graph.HasCycle detects cycles.
 func TestGraphHasCycle(t *testing.T) {
+	t.Parallel()
 	// Test acyclic DAG
 	d := New()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", BlockedBy: []string{"task-2"}}
@@ -333,6 +344,7 @@ func TestGraphHasCycle(t *testing.T) {
 
 // TestGraphDepth tests that Graph.Depth returns the depth of a node from root.
 func TestGraphDepth(t *testing.T) {
+	t.Parallel()
 	d := New()
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
@@ -355,6 +367,7 @@ func TestGraphDepth(t *testing.T) {
 
 // TestGraphDepthWithMultipleRoots tests depth calculation with multiple root nodes.
 func TestGraphDepthWithMultipleRoots(t *testing.T) {
+	t.Parallel()
 	d := New()
 	epic1 := &Node{ID: "epic-1", Title: "Epic 1", Type: "epic"}
 	epic2 := &Node{ID: "epic-2", Title: "Epic 2", Type: "epic"}
@@ -375,6 +388,7 @@ func TestGraphDepthWithMultipleRoots(t *testing.T) {
 
 // TestGraphAncestryNonexistentNode tests that Ancestry handles nonexistent nodes.
 func TestGraphAncestryNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	g := NewGraph(d)
 
@@ -384,6 +398,7 @@ func TestGraphAncestryNonexistentNode(t *testing.T) {
 
 // TestGraphDescendantsNonexistentNode tests that Descendants handles nonexistent nodes.
 func TestGraphDescendantsNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	g := NewGraph(d)
 
@@ -393,6 +408,7 @@ func TestGraphDescendantsNonexistentNode(t *testing.T) {
 
 // TestGraphBlockersNonexistentNode tests that Blockers returns nil for nonexistent nodes.
 func TestGraphBlockersNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	g := NewGraph(d)
 
@@ -402,6 +418,7 @@ func TestGraphBlockersNonexistentNode(t *testing.T) {
 
 // TestGraphBlocksNonexistentNode tests that Blocks returns nil for nonexistent nodes.
 func TestGraphBlocksNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	g := NewGraph(d)
 
@@ -411,6 +428,7 @@ func TestGraphBlocksNonexistentNode(t *testing.T) {
 
 // TestGraphHierarchyNonexistentNode tests that Hierarchy handles nonexistent nodes.
 func TestGraphHierarchyNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	g := NewGraph(d)
 
@@ -421,6 +439,7 @@ func TestGraphHierarchyNonexistentNode(t *testing.T) {
 
 // TestGraphDepthNonexistentNode tests that Depth returns 0 for nonexistent nodes.
 func TestGraphDepthNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	g := NewGraph(d)
 
@@ -430,6 +449,7 @@ func TestGraphDepthNonexistentNode(t *testing.T) {
 
 // TestGraphBlockersEmptyNode tests that a node with no blockers returns empty slice.
 func TestGraphBlockersEmptyNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 
@@ -443,6 +463,7 @@ func TestGraphBlockersEmptyNode(t *testing.T) {
 
 // TestGraphBlocksEmptyNode tests that a node with no blocks returns empty slice.
 func TestGraphBlocksEmptyNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 
@@ -456,6 +477,7 @@ func TestGraphBlocksEmptyNode(t *testing.T) {
 
 // TestGraphNode uses the Node method to test node retrieval.
 func TestGraphNode(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 
@@ -472,6 +494,7 @@ func TestGraphNode(t *testing.T) {
 // TestHasCycle_DanglingChildReference tests that HasCycle does not panic
 // when a node has a child reference to a node that does not exist in the DAG.
 func TestHasCycle_DanglingChildReference(t *testing.T) {
+	t.Parallel()
 	d := New()
 	node := &Node{ID: "a", Title: "Node A", Type: "task", Children: []string{"nonexistent"}}
 	require.NoError(t, d.AddNode(node))
@@ -483,6 +506,7 @@ func TestHasCycle_DanglingChildReference(t *testing.T) {
 // TestBlockersMutationSafety tests that mutating the returned slice from Blockers
 // does not affect the graph's internal state.
 func TestBlockersMutationSafety(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
@@ -508,6 +532,7 @@ func TestBlockersMutationSafety(t *testing.T) {
 // TestBlocksMutationSafety tests that mutating the returned slice from Blocks
 // does not affect the graph's internal state.
 func TestBlocksMutationSafety(t *testing.T) {
+	t.Parallel()
 	d := New()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Blocks: []string{"task-2"}}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
@@ -533,6 +558,7 @@ func TestBlocksMutationSafety(t *testing.T) {
 // TestHierarchyMutationSafety tests that mutating the returned children slice from Hierarchy
 // does not affect the graph's internal state.
 func TestHierarchyMutationSafety(t *testing.T) {
+	t.Parallel()
 	d := New()
 	parent := &Node{ID: "parent-1", Title: "Parent", Type: "story"}
 	child := &Node{ID: "child-1", Title: "Child", Type: "task", Parent: "parent-1"}
@@ -549,7 +575,7 @@ func TestHierarchyMutationSafety(t *testing.T) {
 
 	// Mutate the returned children slice by appending to it
 	_, returned := g.Hierarchy("parent-1")
-	mutated := append(returned, "injected")
+	mutated := append(returned, "injected") //nolint:gocritic // intentional separate slice to test immutability
 
 	// Verify that the mutation did not affect the graph's internal state
 	_, currentChildren := g.Hierarchy("parent-1")
@@ -561,6 +587,7 @@ func TestHierarchyMutationSafety(t *testing.T) {
 
 // TestGraph_Depth_CycleGuard tests that Depth handles parent cycles without hanging.
 func TestGraph_Depth_CycleGuard(t *testing.T) {
+	t.Parallel()
 	d := New()
 	// Create a cycle: a.Parent=b, b.Parent=a
 	nodeA := &Node{ID: "a", Title: "Node A", Type: "task", Parent: "b"}
@@ -580,6 +607,7 @@ func TestGraph_Depth_CycleGuard(t *testing.T) {
 
 // TestGraph_Ancestry_CycleGuard tests that Ancestry handles parent cycles without hanging.
 func TestGraph_Ancestry_CycleGuard(t *testing.T) {
+	t.Parallel()
 	d := New()
 	// Create a cycle: a.Parent=b, b.Parent=a
 	nodeA := &Node{ID: "a", Title: "Node A", Type: "task", Parent: "b"}
@@ -599,6 +627,7 @@ func TestGraph_Ancestry_CycleGuard(t *testing.T) {
 
 // TestFromIndexBasic tests that FromIndex constructs a Graph with Ancestry and Descendants working correctly.
 func TestFromIndexBasic(t *testing.T) {
+	t.Parallel()
 	index := map[string]*Node{
 		"epic-1": {
 			ID:       "epic-1",
@@ -637,6 +666,7 @@ func TestFromIndexBasic(t *testing.T) {
 
 // TestFromIndexEmpty tests that FromIndex handles an empty index.
 func TestFromIndexEmpty(t *testing.T) {
+	t.Parallel()
 	index := make(map[string]*Node)
 
 	g := FromIndex(index)
@@ -652,6 +682,7 @@ func TestFromIndexEmpty(t *testing.T) {
 
 // TestIsLegalHierarchyTable tests isLegalHierarchy with various cases.
 func TestIsLegalHierarchyTable(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		index    map[string]*Node
@@ -745,6 +776,7 @@ func TestIsLegalHierarchyTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isLegalHierarchy(tt.index)
 			if tt.expected {
 				assert.True(t, result, tt.desc)
@@ -758,6 +790,7 @@ func TestIsLegalHierarchyTable(t *testing.T) {
 // TestGraphFromState tests that GraphFromState constructs a Graph from a node index
 // and defensively copies all slices.
 func TestGraphFromState(t *testing.T) {
+	t.Parallel()
 	index := map[string]*Node{
 		"epic-1": {
 			ID:        "epic-1",
@@ -815,6 +848,7 @@ func TestGraphFromState(t *testing.T) {
 
 // TestGraphFromStateEmpty tests that GraphFromState handles an empty index.
 func TestGraphFromStateEmpty(t *testing.T) {
+	t.Parallel()
 	index := make(map[string]*Node)
 	g := GraphFromState(index)
 	require.NotNil(t, g)

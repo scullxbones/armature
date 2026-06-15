@@ -14,6 +14,7 @@ import (
 // --- SFT-S1-T13: multi-file scope splitting ---
 
 func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -45,6 +46,7 @@ func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 }
 
 func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -78,6 +80,7 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 // --- QLTYCNTRL-S2-T2: Clock injection ---
 
 func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 	fixedTimestamp := int64(1234567890)

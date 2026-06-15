@@ -13,6 +13,7 @@ import (
 // This is a shared contract test that any MergeChecker impl must satisfy.
 func RunMergeCheckerContract(t *testing.T, mc armsync.MergeChecker) {
 	t.Run("BranchMergedInto_MergedBranch_ReturnsTrue", func(t *testing.T) {
+		t.Parallel()
 		// Set up expectation: branch "feature/done" is merged into "main"
 		result, err := mc.BranchMergedInto("feature/done", "main")
 		require.NoError(t, err)
@@ -20,6 +21,7 @@ func RunMergeCheckerContract(t *testing.T, mc armsync.MergeChecker) {
 	})
 
 	t.Run("BranchMergedInto_UnmergedBranch_ReturnsFalse", func(t *testing.T) {
+		t.Parallel()
 		// Set up expectation: branch "feature/wip" is not merged into "main"
 		result, err := mc.BranchMergedInto("feature/wip", "main")
 		require.NoError(t, err)
@@ -27,6 +29,7 @@ func RunMergeCheckerContract(t *testing.T, mc armsync.MergeChecker) {
 	})
 
 	t.Run("BranchMergedInto_SameBranch_ReturnsTrue", func(t *testing.T) {
+		t.Parallel()
 		// A branch is always "merged" into itself
 		result, err := mc.BranchMergedInto("main", "main")
 		require.NoError(t, err)
@@ -60,6 +63,7 @@ func (f *FakeMergeChecker) BranchMergedInto(branch, target string) (bool, error)
 
 // TestFakeMergeChecker_SatisfiesContract verifies that FakeMergeChecker satisfies the MergeChecker contract.
 func TestFakeMergeChecker_SatisfiesContract(t *testing.T) {
+	t.Parallel()
 	// Set up a fake that knows about specific merged/unmerged branches
 	mc := NewFakeMergeChecker(map[string]bool{
 		"feature/done": true,  // merged

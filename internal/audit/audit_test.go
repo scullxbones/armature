@@ -45,6 +45,7 @@ func readLogContents(t *testing.T, opsDir string) []string {
 }
 
 func TestLoad_AllOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -69,6 +70,7 @@ func TestLoad_AllOps(t *testing.T) {
 }
 
 func TestLoad_SortsTiesByWorkerID(t *testing.T) {
+	t.Parallel()
 	// Two ops with identical timestamps — must be sorted by WorkerID for determinism (audit.go:50)
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
@@ -91,6 +93,7 @@ func TestLoad_SortsTiesByWorkerID(t *testing.T) {
 }
 
 func TestLoad_FilterByIssue(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -112,6 +115,7 @@ func TestLoad_FilterByIssue(t *testing.T) {
 }
 
 func TestLoad_FilterByWorker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -131,6 +135,7 @@ func TestLoad_FilterByWorker(t *testing.T) {
 }
 
 func TestLoad_FilterBySince(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -152,6 +157,7 @@ func TestLoad_FilterBySince(t *testing.T) {
 }
 
 func TestLoad_LostRace(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 
@@ -184,12 +190,14 @@ func TestLoad_LostRace(t *testing.T) {
 }
 
 func TestLoad_EmptyDir(t *testing.T) {
+	t.Parallel()
 	entries, err := audit.Load([]string{}, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 0)
 }
 
 func TestLoad_NonExistentDir(t *testing.T) {
+	t.Parallel()
 	entries, err := audit.Load([]string{}, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 0)

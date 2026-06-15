@@ -135,7 +135,7 @@ plan, or --schema to view the JSON schema.`,
 				if err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out)) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 				return nil
 			}
 
@@ -177,7 +177,7 @@ plan, or --schema to view the JSON schema.`,
 				if err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out)) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 				return nil
 			}
 
@@ -299,7 +299,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&planPath, "plan", "", "path to plan JSON file")
 	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "print which nodes would be removed without writing ops")
-	_ = cmd.MarkFlagRequired("plan") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("plan")
 	return cmd
 }
 
@@ -361,9 +361,9 @@ func newDecomposeContextCmd() *cobra.Command {
 			}
 
 			if outputFlag != "" {
-				return os.WriteFile(outputFlag, out, 0o644)
+				return os.WriteFile(outputFlag, out, 0o600)
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out)) //nolint:errcheck // stdout write not actionable in CLI
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 			return nil
 		},
 	}

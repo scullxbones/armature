@@ -74,6 +74,6 @@ func newMergedCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number or URL")
-	_ = cmd.MarkFlagRequired("issue") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

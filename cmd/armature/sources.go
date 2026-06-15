@@ -62,7 +62,8 @@ func newSourcesAddCmd() *cobra.Command {
 			// Warn if filesystem path is relative.
 			if providerType == "filesystem" && !filepath.IsAbs(url) {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"warning: relative filesystem path %q will be resolved from working directory at sync time; safe when arm sync is always run from the repo root; use an absolute path to avoid this dependency\n", url)
+					"warning: relative filesystem path %q will be resolved from working directory at sync time; "+
+						"safe when arm sync is always run from the repo root; use an absolute path to avoid this dependency\n", url)
 			}
 
 			manifest.Upsert(entry)
@@ -79,8 +80,8 @@ func newSourcesAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&url, "url", "", "URL or path of the source")
 	cmd.Flags().StringVar(&providerType, "type", "", "provider type: filesystem, confluence, sharepoint")
 	cmd.Flags().StringVar(&title, "title", "", "optional title for the source")
-	_ = cmd.MarkFlagRequired("url")  //nolint:errcheck // fails only if flag absent (programming error)
-	_ = cmd.MarkFlagRequired("type") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("url")
+	_ = cmd.MarkFlagRequired("type")
 
 	return cmd
 }

@@ -41,14 +41,14 @@ func newDAGTransitionCmd() *cobra.Command {
 			}
 
 			result := map[string]string{"issue": issueID, "promoted_to": targetConfidence}
-			data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+			data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "root issue ID of the subtree to promote")
 	cmd.Flags().StringVar(&to, "to", "", "target confidence level (default: verified)")
-	_ = cmd.MarkFlagRequired("issue") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

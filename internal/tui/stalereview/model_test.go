@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewModelHasItems(t *testing.T) {
+	t.Parallel()
 	items := []stalereview.ReviewItem{
 		{SourceID: "prd", ChangeSummary: "Section 3 updated",
 			CitedIssues: []*materialize.Issue{{ID: "TSK-1", Title: "Task 1"}}},
@@ -18,6 +19,7 @@ func TestNewModelHasItems(t *testing.T) {
 }
 
 func TestConfirmRecordsDecision(t *testing.T) {
+	t.Parallel()
 	items := []stalereview.ReviewItem{
 		{SourceID: "prd", ChangeSummary: "Updated",
 			CitedIssues: []*materialize.Issue{{ID: "TSK-1"}}},

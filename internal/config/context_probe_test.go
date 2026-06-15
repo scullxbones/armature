@@ -21,6 +21,7 @@ func (f fakeRepoProbe) Probe(repoPath string) (RepoProbeResult, error) {
 }
 
 func TestResolveContextSeparatesRepoProbeFromContextDerivation(t *testing.T) {
+	t.Parallel()
 	probe := fakeRepoProbe{
 		mode:         "dual-branch",
 		worktreePath: "/repo/.arm",

@@ -48,17 +48,14 @@ func ValidatePlan(plan *Plan) []string {
 	return warnings
 }
 
-// preparePlan applies the ApplyOptions transformations to a copy of the plan,
-// returning the transformed plan and the ID mapping (old → new) when GenerateIDs
-// is set.
-func preparePlan(plan *Plan, opts ApplyOptions) (*Plan, map[string]string) {
+// preparePlan applies the ApplyOptions transformations to a copy of the plan.
+func preparePlan(plan *Plan, opts ApplyOptions) *Plan {
 	// Deep-copy issues to avoid mutating the caller's plan.
 	issues := make([]PlanIssue, len(plan.Issues))
 	copy(issues, plan.Issues)
 
-	idMap := make(map[string]string)
-
 	if opts.GenerateIDs {
+		idMap := make(map[string]string)
 		// First pass: assign new UUIDs.
 		for i, issue := range issues {
 			newID := uuid.New().String()
@@ -91,12 +88,11 @@ func preparePlan(plan *Plan, opts ApplyOptions) (*Plan, map[string]string) {
 		}
 	}
 
-	transformed := &Plan{
+	return &Plan{
 		Version: plan.Version,
 		Title:   plan.Title,
 		Issues:  issues,
 	}
-	return transformed, idMap
 }
 
 // DryRunApplyPlan validates the plan and returns what would be created, without writing any ops.
@@ -112,7 +108,7 @@ func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts Apply
 		return nil, fmt.Errorf("plan has %d advisory warning(s) (--strict mode): %s", len(warnings), warnings[0])
 	}
 
-	transformed, _ := preparePlan(plan, opts)
+	transformed := preparePlan(plan, opts)
 
 	result := &DryRunResult{Warnings: warnings}
 	for _, issue := range transformed.Issues {
@@ -139,7 +135,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 		return 0, fmt.Errorf("plan has %d advisory warning(s) (--strict mode): %s", len(warnings), warnings[0])
 	}
 
-	transformed, _ := preparePlan(plan, opts)
+	transformed := preparePlan(plan, opts)
 
 	logPath := filepath.Join(issuesDir, workerID+".log")
 	count := 0

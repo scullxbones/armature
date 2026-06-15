@@ -12,17 +12,18 @@ type fakeGitConfigPort struct {
 	setCalls int
 }
 
-func (f *fakeGitConfigPort) Set(key, value string) error {
+func (f *fakeGitConfigPort) Set(_, value string) error {
 	f.value = value
 	f.setCalls++
 	return nil
 }
 
-func (f *fakeGitConfigPort) Get(key string) (string, error) {
+func (f *fakeGitConfigPort) Get(_ string) (string, error) {
 	return f.value, nil
 }
 
 func TestWorkerIdentityUsesGitConfigPort(t *testing.T) {
+	t.Parallel()
 	port := &fakeGitConfigPort{}
 
 	id, err := InitWorkerWithPort(port)

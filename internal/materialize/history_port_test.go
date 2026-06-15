@@ -22,6 +22,7 @@ func (f fakeHistory) ShowFileAtCommit(_ string, path string) ([]byte, error) {
 }
 
 func TestMaterializeAtSHAUsesHistoryPortInsteadOfConcreteAdapter(t *testing.T) {
+	t.Parallel()
 	line, err := ops.MarshalOp(ops.Op{
 		Type:      ops.OpCreate,
 		TargetID:  "TASK-001",

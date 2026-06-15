@@ -8,6 +8,7 @@ import (
 )
 
 func TestScopePolicyAllowsExactFile(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"cmd/armature/main.go"})
 
 	result := policy.CheckPaths([]string{"cmd/armature/main.go"})
@@ -17,6 +18,7 @@ func TestScopePolicyAllowsExactFile(t *testing.T) {
 }
 
 func TestScopePolicyAllowsDirectoryScope(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"internal/orchestrate/"})
 
 	result := policy.CheckPaths([]string{"internal/orchestrate/engine.go"})
@@ -25,6 +27,7 @@ func TestScopePolicyAllowsDirectoryScope(t *testing.T) {
 }
 
 func TestScopePolicyAllowsGlobScope(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"internal/orchestrate/*.go"})
 
 	result := policy.CheckPaths([]string{"internal/orchestrate/engine.go"})
@@ -33,6 +36,7 @@ func TestScopePolicyAllowsGlobScope(t *testing.T) {
 }
 
 func TestScopePolicyRejectsOutOfScopePath(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"internal/orchestrate/"})
 
 	result := policy.CheckPaths([]string{"cmd/armature/main.go"})
@@ -46,6 +50,7 @@ func TestScopePolicyRejectsOutOfScopePath(t *testing.T) {
 }
 
 func TestScopePolicyCleansTraversal(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"internal/orchestrate/"})
 
 	result := policy.CheckPaths([]string{"internal/orchestrate/../config/config.go"})
@@ -55,6 +60,7 @@ func TestScopePolicyCleansTraversal(t *testing.T) {
 }
 
 func TestScopePolicyRejectsEmptyScope(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy(nil)
 
 	result := policy.CheckPaths([]string{"internal/orchestrate/engine.go"})
@@ -65,6 +71,7 @@ func TestScopePolicyRejectsEmptyScope(t *testing.T) {
 }
 
 func TestScopePolicyAllowsAbsolutePathWithinScope(t *testing.T) {
+	t.Parallel()
 	policy := newScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
 
 	result := policy.CheckPaths([]string{"/workspace/armature/internal/harnesshook/evaluator.go"})
@@ -74,6 +81,7 @@ func TestScopePolicyAllowsAbsolutePathWithinScope(t *testing.T) {
 }
 
 func TestScopePolicyRejectsAbsolutePathOutsideScope(t *testing.T) {
+	t.Parallel()
 	policy := newScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
 
 	result := policy.CheckPaths([]string{"/workspace/armature/cmd/armature/main.go"})
@@ -84,6 +92,7 @@ func TestScopePolicyRejectsAbsolutePathOutsideScope(t *testing.T) {
 }
 
 func TestScopePolicyAllowsDoubleStarGlobForNestedPaths(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"src/**"})
 
 	result := policy.CheckPaths([]string{"src/auth/login.go"})
@@ -92,6 +101,7 @@ func TestScopePolicyAllowsDoubleStarGlobForNestedPaths(t *testing.T) {
 }
 
 func TestScopePolicyRejectsPathOutsideDoubleStarScope(t *testing.T) {
+	t.Parallel()
 	policy := NewScopePolicy([]string{"src/**"})
 
 	result := policy.CheckPaths([]string{"cmd/main.go"})

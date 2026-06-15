@@ -24,6 +24,7 @@ func keyMsg(k string) tea.KeyMsg {
 // --- Basic construction ---
 
 func TestNewModel_HasItems(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1", "TSK-2")
 	m := dagsummary.New(items, "root-1")
 	assert.Equal(t, 2, m.Total())
@@ -33,6 +34,7 @@ func TestNewModel_HasItems(t *testing.T) {
 }
 
 func TestNewModel_Empty(t *testing.T) {
+	t.Parallel()
 	m := dagsummary.New(nil, "root-1")
 	assert.Equal(t, 0, m.Total())
 }
@@ -40,6 +42,7 @@ func TestNewModel_Empty(t *testing.T) {
 // --- Per-item actions ---
 
 func TestApproveItem_MarksYes(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1", "TSK-2")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("y"))
@@ -49,6 +52,7 @@ func TestApproveItem_MarksYes(t *testing.T) {
 }
 
 func TestRejectItem_MarksNo(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1", "TSK-2")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("n"))
@@ -58,6 +62,7 @@ func TestRejectItem_MarksNo(t *testing.T) {
 }
 
 func TestSkipItem_MarksSkip(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1", "TSK-2")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("s"))
@@ -69,6 +74,7 @@ func TestSkipItem_MarksSkip(t *testing.T) {
 // --- Sign-off unlock ---
 
 func TestSignOffUnlocks_WhenAllActioned(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	// Approve TSK-1 → should enter sign-off state
@@ -79,6 +85,7 @@ func TestSignOffUnlocks_WhenAllActioned(t *testing.T) {
 }
 
 func TestSignOffNotUnlocked_BeforeAllActioned(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1", "TSK-2")
 	m := dagsummary.New(items, "root-1")
 	// Approve only TSK-1
@@ -88,6 +95,7 @@ func TestSignOffNotUnlocked_BeforeAllActioned(t *testing.T) {
 }
 
 func TestSignOff_YConfirms(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("y"))                       // approve TSK-1 → enters sign-off
@@ -99,6 +107,7 @@ func TestSignOff_YConfirms(t *testing.T) {
 }
 
 func TestSignOff_NGoesBackToReview(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("y"))                     // approve → sign-off
@@ -111,6 +120,7 @@ func TestSignOff_NGoesBackToReview(t *testing.T) {
 // --- Quit without sign-off ---
 
 func TestQuit_BeforeSignOff_NoOps(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	m2, cmd := m.Update(keyMsg("q"))
@@ -121,6 +131,7 @@ func TestQuit_BeforeSignOff_NoOps(t *testing.T) {
 }
 
 func TestQuit_DuringSignOff_NoOps(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("y"))                       // approve → sign-off
@@ -134,6 +145,7 @@ func TestQuit_DuringSignOff_NoOps(t *testing.T) {
 // --- ApprovedIDs ---
 
 func TestApprovedIDs_OnlyYes(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1", "TSK-2", "TSK-3")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("y"))                     // approve TSK-1
@@ -144,6 +156,7 @@ func TestApprovedIDs_OnlyYes(t *testing.T) {
 }
 
 func TestApprovedIDs_Empty_WhenNoneApproved(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("n"))             // reject
@@ -154,6 +167,7 @@ func TestApprovedIDs_Empty_WhenNoneApproved(t *testing.T) {
 // --- Uncited node acknowledgment ---
 
 func TestUncitedNode_RequiresAckBeforeAction(t *testing.T) {
+	t.Parallel()
 	items := []dagsummary.Item{
 		{ID: "TSK-1", Title: "Uncited task", IsCited: false},
 	}
@@ -166,6 +180,7 @@ func TestUncitedNode_RequiresAckBeforeAction(t *testing.T) {
 }
 
 func TestUncitedNode_AcceptsActionAfterAck(t *testing.T) {
+	t.Parallel()
 	items := []dagsummary.Item{
 		{ID: "TSK-1", Title: "Uncited task", IsCited: false},
 	}
@@ -183,6 +198,7 @@ func TestUncitedNode_AcceptsActionAfterAck(t *testing.T) {
 }
 
 func TestUncitedNode_PartialAck_NotSufficient(t *testing.T) {
+	t.Parallel()
 	items := []dagsummary.Item{
 		{ID: "TSK-12", Title: "Uncited", IsCited: false},
 	}
@@ -198,6 +214,7 @@ func TestUncitedNode_PartialAck_NotSufficient(t *testing.T) {
 // --- View ---
 
 func TestView_ContainsCurrentItemID(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-42")
 	m := dagsummary.New(items, "root-1")
 	view := m.View()
@@ -205,6 +222,7 @@ func TestView_ContainsCurrentItemID(t *testing.T) {
 }
 
 func TestView_SignOff_ShowsPrompt(t *testing.T) {
+	t.Parallel()
 	items := makeItems("TSK-1")
 	m := dagsummary.New(items, "root-1")
 	m2, _ := m.Update(keyMsg("y"))
@@ -213,6 +231,7 @@ func TestView_SignOff_ShowsPrompt(t *testing.T) {
 }
 
 func TestView_UncitedNode_ShowsWarning(t *testing.T) {
+	t.Parallel()
 	items := []dagsummary.Item{
 		{ID: "TSK-1", Title: "Uncited", IsCited: false},
 	}
@@ -222,6 +241,7 @@ func TestView_UncitedNode_ShowsWarning(t *testing.T) {
 }
 
 func TestInit_ReturnsNil(t *testing.T) {
+	t.Parallel()
 	m := dagsummary.New(makeItems("TSK-1"), "root-1")
 	assert.Nil(t, m.Init())
 }

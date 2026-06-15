@@ -10,6 +10,7 @@ import (
 )
 
 func TestNoTracker_AlwaysReturnsZero(t *testing.T) {
+	t.Parallel()
 	tr := ops.NoTracker{}
 	n, err := tr.Increment()
 	require.NoError(t, err)
@@ -23,6 +24,7 @@ func TestNoTracker_AlwaysReturnsZero(t *testing.T) {
 }
 
 func TestFilePushTracker_IncrementAndReset(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tr := ops.NewFilePushTracker(dir)
 
@@ -57,6 +59,7 @@ func TestFilePushTracker_IncrementAndReset(t *testing.T) {
 }
 
 func TestFilePushTracker_PersistenceAcrossInstances(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tr1 := ops.NewFilePushTracker(dir)
 	tr1.Increment() //nolint:errcheck
@@ -71,6 +74,7 @@ func TestFilePushTracker_PersistenceAcrossInstances(t *testing.T) {
 }
 
 func TestFilePushTracker_DefaultThreshold(t *testing.T) {
+	t.Parallel()
 	// DefaultConfig has LowStakesPushThreshold=5; verify FilePushTracker hits at 5
 	dir := t.TempDir()
 	tr := ops.NewFilePushTracker(dir)
@@ -88,6 +92,7 @@ func TestFilePushTracker_DefaultThreshold(t *testing.T) {
 }
 
 func TestTrackerUsesStateDir(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tr := ops.NewFilePushTracker(dir)
 	assert.Equal(t, filepath.Join(dir, "pending-push-count"), tr.Path)

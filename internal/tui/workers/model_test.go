@@ -10,6 +10,7 @@ import (
 )
 
 func TestWorkersInit(t *testing.T) {
+	t.Parallel()
 	m := New()
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init should return nil")
@@ -17,11 +18,13 @@ func TestWorkersInit(t *testing.T) {
 }
 
 func TestWorkersSetSize(t *testing.T) {
+	t.Parallel()
 	m := New()
 	m.SetSize(80, 24) // must not panic
 }
 
 func TestWorkersNilStateView(t *testing.T) {
+	t.Parallel()
 	m := New()
 	v := m.View()
 	if v != "No state available." {
@@ -30,6 +33,7 @@ func TestWorkersNilStateView(t *testing.T) {
 }
 
 func TestWorkersNoWorkersView(t *testing.T) {
+	t.Parallel()
 	m := New()
 	m.SetState(&materialize.State{Issues: map[string]*materialize.Issue{}})
 	v := m.View()
@@ -39,11 +43,13 @@ func TestWorkersNoWorkersView(t *testing.T) {
 }
 
 func TestWorkersSetStateNil(t *testing.T) {
+	t.Parallel()
 	m := New()
 	m.SetState(nil) // must not panic
 }
 
 func TestWorkersCursorMovement(t *testing.T) {
+	t.Parallel()
 	m := New()
 	m.SetState(&materialize.State{Issues: map[string]*materialize.Issue{
 		"T1": {ID: "T1", ClaimedBy: "worker-a"},
@@ -62,6 +68,7 @@ func TestWorkersCursorMovement(t *testing.T) {
 }
 
 func TestWorkersViewContainsWorkerID(t *testing.T) {
+	t.Parallel()
 	m := New()
 	state := &materialize.State{
 		Issues: map[string]*materialize.Issue{
@@ -84,6 +91,7 @@ func TestWorkersViewContainsWorkerID(t *testing.T) {
 }
 
 func TestWorkersHelpBar(t *testing.T) {
+	t.Parallel()
 	m := New()
 	help := m.HelpBar()
 	if !strings.Contains(help, "j/k move") {
@@ -101,6 +109,7 @@ func makeWorkersState(workerIDs ...string) *materialize.State {
 }
 
 func TestWorkersViewClipsToHeight(t *testing.T) {
+	t.Parallel()
 	m := New()
 	m.SetSize(120, 2)
 	// Each worker renders at least 2 lines (worker row + issue row), 4 workers → 8+ lines
@@ -113,6 +122,7 @@ func TestWorkersViewClipsToHeight(t *testing.T) {
 }
 
 func TestWorkersViewScrollsToKeepCursorVisible(t *testing.T) {
+	t.Parallel()
 	m := New()
 	m.SetSize(120, 3)
 	// Create 5 workers, each with one issue: each worker row = 1 line (worker) + 1 line (issue) + 1 blank = 3 lines

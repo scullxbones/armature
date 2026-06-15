@@ -90,9 +90,9 @@ func newRenderContextCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), out) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), out)
 			} else {
-				_, _ = fmt.Fprint(cmd.OutOrStdout(), context.RenderHuman(ctx)) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), context.RenderHuman(ctx))
 			}
 
 			return nil

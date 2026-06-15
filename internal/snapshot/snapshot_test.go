@@ -12,6 +12,7 @@ import (
 
 // Test 1: empty dir → returns zero-value Snapshot (no error)
 func TestLoad_EmptyDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	opsDir := filepath.Join(tmpDir, "ops")
 	stateDir := filepath.Join(tmpDir, "state")
@@ -32,6 +33,7 @@ func TestLoad_EmptyDir(t *testing.T) {
 
 // Test 2: single issue → Snapshot has 1 issue, State populated
 func TestLoad_SingleIssue(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	opsDir := filepath.Join(tmpDir, "ops")
 	stateDir := filepath.Join(tmpDir, "state")
@@ -58,6 +60,7 @@ func TestLoad_SingleIssue(t *testing.T) {
 
 // Test 3: worker-ID mismatch warning → Warnings slice contains warning about mismatched worker IDs
 func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	opsDir := filepath.Join(tmpDir, "ops")
 	stateDir := filepath.Join(tmpDir, "state")
@@ -89,6 +92,7 @@ func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
 
 // Test 4: state+issues agreement → Snapshot.State and Snapshot.Issues are consistent
 func TestLoad_StateAndIssuesAgreement(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	opsDir := filepath.Join(tmpDir, "ops")
 	stateDir := filepath.Join(tmpDir, "state")

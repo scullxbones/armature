@@ -40,13 +40,13 @@ func newAssignCmd() *cobra.Command {
 			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "assigned_to": workerID}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write errors not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned %s to %s\n", issueID, workerID) //nolint:errcheck // stdout write errors not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assigned %s to %s\n", issueID, workerID)
 			}
 			return nil
 		},
@@ -54,7 +54,7 @@ func newAssignCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to assign")
 	cmd.Flags().StringVar(&workerID, "worker", "", "worker ID to assign to")
-	_ = cmd.MarkFlagRequired("worker") //nolint:errcheck // fails only if flag is absent (programming error)
+	_ = cmd.MarkFlagRequired("worker")
 	return cmd
 }
 
@@ -92,7 +92,7 @@ This allows the issue to be claimed again by another worker.`,
 			if _, matErr := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); matErr != nil {
 				return matErr
 			}
-			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty; map access with ok-check is safe
+			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			currentStatus := ""
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status
@@ -118,16 +118,16 @@ This allows the issue to be claimed again by another worker.`,
 					WorkerID:  workerID,
 					Payload:   ops.Payload{To: ops.StatusOpen},
 				}
-				appendOp(appCtx, logPath, transitionOp) //nolint:errcheck
+				appendOp(appCtx, logPath, transitionOp) //nolint:errcheck,gosec
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "assigned_to": ""}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write errors not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned %s\n", issueID) //nolint:errcheck // stdout write errors not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unassigned %s\n", issueID)
 			}
 			return nil
 		},

@@ -10,6 +10,7 @@ import (
 )
 
 func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -36,6 +37,7 @@ func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
 }
 
 func TestValidatedOpStream_MultipleFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
 	logPath2 := filepath.Join(dir, "worker-b2.log")
@@ -63,6 +65,7 @@ func TestValidatedOpStream_MultipleFiles(t *testing.T) {
 }
 
 func TestValidatedOpStream_RejectsWorkerIDMismatch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -84,6 +87,7 @@ func TestValidatedOpStream_RejectsWorkerIDMismatch(t *testing.T) {
 }
 
 func TestValidatedOpStream_ReturnsOffsets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -111,6 +115,7 @@ func TestValidatedOpStream_ReturnsOffsets(t *testing.T) {
 }
 
 func TestValidatedOpStream_PreservesLogFilename(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "custom-worker-id~slot.log")
 
@@ -129,6 +134,7 @@ func TestValidatedOpStream_PreservesLogFilename(t *testing.T) {
 }
 
 func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -160,6 +166,7 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 }
 
 func TestValidatedOpStream_FileNotFound(t *testing.T) {
+	t.Parallel()
 	stream := NewValidatedOpStream()
 	stream.AddFile("/nonexistent/path/worker.log", "worker-a1")
 	items, warnings, err := stream.Load()
@@ -171,6 +178,7 @@ func TestValidatedOpStream_FileNotFound(t *testing.T) {
 }
 
 func TestValidatedOpStream_Empty(t *testing.T) {
+	t.Parallel()
 	stream := NewValidatedOpStream()
 	items, warnings, err := stream.Load()
 
@@ -180,6 +188,7 @@ func TestValidatedOpStream_Empty(t *testing.T) {
 }
 
 func TestValidatedOpStream_MultipleFiles_MixedValidity(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
 	logPath2 := filepath.Join(dir, "worker-b2.log")
@@ -207,6 +216,7 @@ func TestValidatedOpStream_MultipleFiles_MixedValidity(t *testing.T) {
 }
 
 func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "3357fe85~a.log")
 
@@ -226,6 +236,7 @@ func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
 }
 
 func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-alpha~slot-a.log")
 
@@ -247,6 +258,7 @@ func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
 }
 
 func TestLoadFile_LineNumberPopulated(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-w1.log")
 
@@ -281,6 +293,7 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 // ===== Tests for package-level LoadFromDirValidated and LoadFromDirWithOffsetsValidated =====
 
 func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
+	t.Parallel()
 	items, warnings, err := LoadFromDirValidated("/nonexistent/directory/path")
 
 	require.NoError(t, err)
@@ -289,6 +302,7 @@ func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
 }
 
 func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
 	logPath2 := filepath.Join(dir, "worker-b2.log")
@@ -312,6 +326,7 @@ func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
 }
 
 func TestLoadFromDirValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "custom-id~slot-x.log")
 
@@ -329,6 +344,7 @@ func TestLoadFromDirValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
 }
 
 func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
 	logPath2 := filepath.Join(dir, "worker-b2.log")
@@ -355,6 +371,7 @@ func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
 }
 
 func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -387,6 +404,7 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 }
 
 func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -426,6 +444,7 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t
 }
 
 func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 

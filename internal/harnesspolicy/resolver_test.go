@@ -15,6 +15,7 @@ import (
 )
 
 func TestResolverLoadsTaskPolicyFromMaterializedState(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
 	sourcesDir := filepath.Join(repo, ".armature", "sources")
@@ -68,6 +69,7 @@ func TestResolverLoadsTaskPolicyFromMaterializedState(t *testing.T) {
 }
 
 func TestResolverMarksUnacceptedSourceLinks(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
 	sourcesDir := filepath.Join(repo, ".armature", "sources")
@@ -111,6 +113,7 @@ func TestResolverMarksUnacceptedSourceLinks(t *testing.T) {
 }
 
 func TestResolverTreatsGlobalAcceptanceAsCitingAllSources(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
 	sourcesDir := filepath.Join(repo, ".armature", "sources")
@@ -153,6 +156,7 @@ func TestResolverTreatsGlobalAcceptanceAsCitingAllSources(t *testing.T) {
 }
 
 func TestResolverRejectsUnknownTask(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0o755))

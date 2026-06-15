@@ -70,7 +70,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 				return err
 			}
 
-			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty; map access with ok-check is safe
+			index, _ := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			for id, entry := range index {
 				if id == issueID || (entry.Status != "claimed" && entry.Status != "in-progress") {
 					continue
@@ -83,21 +83,21 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 						if !claimPkg.HasOverlapDismissalNote(allOps, issueID, id) {
 							noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 								WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
-							appendOp(appCtx, logPath, noteOp) //nolint:errcheck
+							appendOp(appCtx, logPath, noteOp) //nolint:errcheck,gosec,gosec
 						}
 						continue
 					}
 					if !force {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s\n", msg) //nolint:errcheck // stderr write not actionable in CLI
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s\n", msg)
 						return fmt.Errorf("cannot claim %s: %s — use --force to override", issueID, msg)
 					}
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg) //nolint:errcheck // stderr write not actionable in CLI
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
 					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
-					appendOp(appCtx, logPath, noteOp) //nolint:errcheck
+					appendOp(appCtx, logPath, noteOp) //nolint:errcheck,gosec
 					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
-					appendOp(appCtx, logPath, noteOp2) //nolint:errcheck
+					appendOp(appCtx, logPath, noteOp2) //nolint:errcheck,gosec
 				}
 			}
 
@@ -122,7 +122,7 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 			}
 			won := issueAfter.ClaimedBy == workerID
 			if !won {
-				format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+				format, _ := cmd.Root().PersistentFlags().GetString("format")
 				if format == "json" || format == "agent" {
 					result := map[string]any{
 						"issue":      issueID,
@@ -130,10 +130,10 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 						"claimed_by": issueAfter.ClaimedBy,
 						"reason":     "lost_claim_race",
 					}
-					data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+					data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				} else {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claim lost for %s (claimed by %s)\n", issueID, issueAfter.ClaimedBy) //nolint:errcheck // stdout write not actionable in CLI
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claim lost for %s (claimed by %s)\n", issueID, issueAfter.ClaimedBy)
 				}
 				return nil
 			}
@@ -148,17 +148,17 @@ When you claim a task, its parent story (if open) is automatically advanced to i
 						WorkerID:  workerID,
 						Payload:   ops.Payload{To: ops.StatusInProgress},
 					}
-					appendOp(appCtx, logPath, advanceOp) //nolint:errcheck
+					appendOp(appCtx, logPath, advanceOp) //nolint:errcheck,gosec
 				}
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]any{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed %s\n", issueID) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed %s\n", issueID)
 			}
 			return nil
 		},

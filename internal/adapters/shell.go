@@ -72,7 +72,7 @@ func LookPath(file string) (string, error) {
 // RunCommand executes a shell command with args and returns combined output.
 // Returns error if exit code is non-zero.
 func RunCommand(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204: callers are internal; name is never raw user input
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run %q: %s: %w", name, out, err)
@@ -83,7 +83,7 @@ func RunCommand(name string, args ...string) (string, error) {
 // RunCommandOutput executes a shell command with args and returns stdout output.
 // Returns error if exit code is non-zero.
 func RunCommandOutput(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204: callers are internal; name is never raw user input
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to run %q: %w", name, err)
@@ -96,7 +96,7 @@ func RunCommandOutput(name string, args ...string) (string, error) {
 // stdin provides input to the script's stdin.
 // Returns error if the command fails or output cannot be parsed as JSON.
 func RunShellScript(scriptCmd string, stdin []byte) ([]byte, error) {
-	cmd := exec.Command("sh", "-c", scriptCmd)
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", scriptCmd) //nolint:gosec // G204: script is caller-controlled hook command, not user input
 	cmd.Stdin = bytes.NewReader(stdin)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -140,7 +140,7 @@ func GitConfigMode(repoPath string) (string, error) {
 // fullArgs should be the complete argument list (including subcommand, options, and values).
 func NonInteractiveGitCommand(repoPath string, args ...string) *exec.Cmd {
 	fullArgs := append([]string{"-C", repoPath}, args...)
-	cmd := exec.Command("git", fullArgs...)
+	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: "git" is constant; args are internal
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
 	return cmd
 }
@@ -148,7 +148,7 @@ func NonInteractiveGitCommand(repoPath string, args ...string) *exec.Cmd {
 // GitLog runs git log with the given arguments and returns the output.
 func GitLog(repoPath string, args ...string) (string, error) {
 	fullArgs := append([]string{"-C", repoPath, "log"}, args...)
-	cmd := exec.Command("git", fullArgs...)
+	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: "git" is constant; args are internal
 	out, err := cmd.Output()
 	if err != nil {
 		// Not a git repo or no commits — return empty string
@@ -185,7 +185,7 @@ func ExecuteHook(hookName string, hookCommand []string, input HookInput) error {
 		return fmt.Errorf("marshal hook input: %w", err)
 	}
 
-	cmd := exec.Command(hookCommand[0], hookCommand[1:]...) //nolint:gosec
+	cmd := exec.CommandContext(context.Background(), hookCommand[0], hookCommand[1:]...) //nolint:gosec
 	cmd.Stdin = bytes.NewReader(inputJSON)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

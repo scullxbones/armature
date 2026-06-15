@@ -34,13 +34,13 @@ func newDecisionCmd() *cobra.Command {
 			if err := appendLowStakesOp(logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "topic": topic, "choice": choice}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Decision recorded on %s: %s → %s\n", issueID, topic, choice) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Decision recorded on %s: %s → %s\n", issueID, topic, choice)
 			}
 			return nil
 		},
@@ -51,7 +51,7 @@ func newDecisionCmd() *cobra.Command {
 	cmd.Flags().StringVar(&choice, "choice", "", "chosen option")
 	cmd.Flags().StringVar(&rationale, "rationale", "", "why this choice")
 	cmd.Flags().StringSliceVar(&affects, "affects", nil, "affected scope globs")
-	_ = cmd.MarkFlagRequired("topic")  //nolint:errcheck // fails only if flag absent (programming error)
-	_ = cmd.MarkFlagRequired("choice") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("topic")
+	_ = cmd.MarkFlagRequired("choice")
 	return cmd
 }

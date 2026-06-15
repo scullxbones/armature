@@ -5,12 +5,14 @@ import (
 )
 
 func TestIsTerminalReturnsFalseInTests(t *testing.T) {
+	t.Parallel()
 	if IsTerminal() {
 		t.Error("expected IsTerminal() to return false in test runner (no TTY attached)")
 	}
 }
 
 func TestSetNonInteractive(t *testing.T) {
+	t.Parallel()
 	SetNonInteractive(true)
 	t.Cleanup(func() { SetNonInteractive(false) })
 	if !IsNonInteractive() {
@@ -19,6 +21,7 @@ func TestSetNonInteractive(t *testing.T) {
 }
 
 func TestIsNonInteractive_DefaultFalse(t *testing.T) {
+	t.Parallel()
 	SetNonInteractive(false)
 	t.Cleanup(func() { SetNonInteractive(false) })
 	if IsNonInteractive() {
@@ -27,6 +30,7 @@ func TestIsNonInteractive_DefaultFalse(t *testing.T) {
 }
 
 func TestIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
+	t.Parallel()
 	SetNonInteractive(true)
 	t.Cleanup(func() { SetNonInteractive(false) })
 	if IsInteractive() {
@@ -35,6 +39,7 @@ func TestIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
 }
 
 func TestIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
+	t.Parallel()
 	SetFormat("json")
 	t.Cleanup(func() { SetFormat("") })
 	if IsInteractive() {
@@ -43,6 +48,7 @@ func TestIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
 }
 
 func TestIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
+	t.Parallel()
 	SetFormat("agent")
 	t.Cleanup(func() { SetFormat("") })
 	if IsInteractive() {
@@ -51,6 +57,7 @@ func TestIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
 }
 
 func TestIsInteractiveReturnsFalseWhenNotTTY(t *testing.T) {
+	t.Parallel()
 	// In the test runner stdout is never a TTY, so IsInteractive must be false
 	// regardless of format.
 	SetFormat("human")

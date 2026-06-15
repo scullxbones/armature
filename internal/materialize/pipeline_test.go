@@ -13,6 +13,7 @@ import (
 // TestMaterialize_MkdirAllErrorPropagated verifies that when os.MkdirAll fails
 // (because the state directory cannot be created), Materialize returns an error.
 func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skip("running as root; permission restrictions do not apply")
 	}
@@ -40,6 +41,7 @@ func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
 // TestMaterializeAndReturn_MkdirAllErrorPropagated verifies that MaterializeAndReturn
 // also propagates the MkdirAll error.
 func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skip("running as root; permission restrictions do not apply")
 	}
@@ -66,6 +68,7 @@ func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
 // TestMaterialize_SlottedLogsIncluded verifies that ops in <worker>~slot.log files
 // are included in a normal Materialize call.
 func TestMaterialize_SlottedLogsIncluded(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "state", "issues"), 0755))
@@ -107,6 +110,7 @@ func TestMaterialize_SlottedLogsIncluded(t *testing.T) {
 // TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs verifies that excluding
 // worker-x also skips worker-x~slot-a.log.
 func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
@@ -158,6 +162,7 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 // 3. Runs an incremental replay using the checkpoint
 // 4. Asserts both final states are identical
 func TestIncremental_MatchesFullReplay(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")

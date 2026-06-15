@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -39,7 +40,6 @@ func getTestStateDir(t *testing.T, repo string) string {
 }
 
 func TestStateDirFor(t *testing.T) {
-	t.Parallel()
 	ctx := &config.Context{IssuesDir: "/repo/.armature", WorktreePath: ""}
 	assert.Equal(t, "/repo/.armature/state/w1", stateDirFor(ctx, "w1"))
 
@@ -63,7 +63,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 }
 
 // runTrlsWithStderr invokes the armature cobra command tree and returns stdout, stderr, and error.
-func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) {
+func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) { //nolint:unparam // first return unused today
 	t.Helper()
 	runTrlsMu.Lock()
 	defer runTrlsMu.Unlock()
@@ -98,9 +98,9 @@ func initTempRepo(t *testing.T) string {
 	return dir
 }
 
-func run(t *testing.T, dir string, name string, args ...string) {
+func run(t *testing.T, dir string, name string, args ...string) { //nolint:unparam // name is "git" in all current callers but helper is intentionally general
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v failed: %s", name, args, out)
@@ -420,7 +420,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	// Commit ops so SHA1 captures state after create (issue exists, no notes)
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "add create op")
-	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
@@ -430,7 +430,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	// Commit so HEAD captures the note
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "add note op")
-	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -527,13 +527,13 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	assert.Contains(t, string(data), "dual-branch")
 
 	// Git config should have mode set
-	modeCmd := exec.Command("git", "-C", repo, "config", "armature.mode")
+	modeCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode")
 	modeOut, err := modeCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, "dual-branch\n", string(modeOut))
 
 	// Git config should have worktree path set
-	wtCmd := exec.Command("git", "-C", repo, "config", "armature.ops-worktree-path")
+	wtCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(wtOut), ".arm")
@@ -596,13 +596,13 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 
 	// Verify the commit appeared on _armature branch (inside the worktree)
 	worktreePath := filepath.Join(repo, ".arm")
-	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-3")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "log", "--oneline", "-3")
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "ops: note")
 
 	// Verify the main repo's log does NOT contain the ops commit
-	mainCmd := exec.Command("git", "-C", repo, "log", "--oneline", "-5")
+	mainCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "log", "--oneline", "-5")
 	mainOut, err := mainCmd.Output()
 	require.NoError(t, err)
 	assert.NotContains(t, string(mainOut), "ops: note")
@@ -653,7 +653,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and merge the feature branch in the git repo
-	currentBranchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(currentBranchOut))
@@ -702,7 +702,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and merge the feature branch
-	currentBranchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(currentBranchOut))
@@ -1709,7 +1709,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	// Commit ops so SHA1 captures creation
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: create TST-HIST")
-	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
@@ -1719,7 +1719,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	// Commit ops so SHA2 captures note
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: note TST-HIST")
-	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -1779,7 +1779,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	err = dotCmd.Execute()
 	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")
 
-	wtCmd := exec.Command("git", "-C", repo, "config", "armature.ops-worktree-path")
+	wtCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
 	storedPath := strings.TrimSpace(string(wtOut))
@@ -2827,7 +2827,10 @@ func TestCommandGroups(t *testing.T) {
 	workflowExpected := []string{"ready", "claim", "transition", "unassign", "reopen", "heartbeat", "note", "decision", "amend", "confirm", "assign"}
 	dagExpected := []string{"dag-summary", "dag-transition", "link"}
 	syncExpected := []string{"sync", "merged", "materialize", "import", "stale-review"}
-	adminExpected := []string{"worker-init", "workers", "init", "create", "validate", "doctor", "version", "show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history"}
+	adminExpected := []string{
+		"worker-init", "workers", "init", "create", "validate", "doctor", "version",
+		"show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history",
+	}
 
 	for groupID, expectedCmds := range map[string][]string{
 		"workflow": workflowExpected,
@@ -2851,7 +2854,7 @@ func TestCommandGroups(t *testing.T) {
 func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	defaultBranchOut, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	require.NoError(t, err)
 	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
@@ -2882,7 +2885,7 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	defaultBranchOut, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	require.NoError(t, err)
 	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
@@ -3581,7 +3584,6 @@ func TestReparentCommand_IssueNotFound(t *testing.T) {
 // TestManagedExecutionCommandsAreNotRegistered verifies that arm orchestrate and
 // arm worker run return unknown-command errors, and that worker-init --check still works.
 func TestManagedExecutionCommandsAreNotRegistered(t *testing.T) {
-	t.Parallel()
 	repo := t.TempDir()
 
 	_, err := runTrls(t, repo, "orchestrate")

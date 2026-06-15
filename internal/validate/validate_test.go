@@ -23,6 +23,7 @@ func makeState(issues ...*materialize.Issue) *materialize.State {
 }
 
 func TestValidate_Clean(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "A", BlockedBy: []string{}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{}, Children: []string{}},
@@ -33,6 +34,7 @@ func TestValidate_Clean(t *testing.T) {
 }
 
 func TestValidate_OrphanedChild(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "A", Parent: "nonexistent", BlockedBy: []string{}, Children: []string{}},
 	)
@@ -43,6 +45,7 @@ func TestValidate_OrphanedChild(t *testing.T) {
 }
 
 func TestValidate_CircularDep(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "A", BlockedBy: []string{"B"}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{"A"}, Children: []string{}},
@@ -61,6 +64,7 @@ func TestValidate_CircularDep(t *testing.T) {
 }
 
 func TestValidate_UnknownBlocker(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "A", BlockedBy: []string{"ghost"}, Children: []string{}},
 	)
@@ -89,6 +93,7 @@ func containsError(r Result, substr string) bool {
 }
 
 func TestW1ScopeOverlap(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
@@ -98,6 +103,7 @@ func TestW1ScopeOverlap(t *testing.T) {
 }
 
 func TestW1ScopeOverlap_SuppressedByBlockedBy(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-B"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-A"}},
@@ -107,6 +113,7 @@ func TestW1ScopeOverlap_SuppressedByBlockedBy(t *testing.T) {
 }
 
 func TestW1ScopeOverlap_SkipsTerminalTasks(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "done"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "merged"},
@@ -116,6 +123,7 @@ func TestW1ScopeOverlap_SkipsTerminalTasks(t *testing.T) {
 }
 
 func TestW1ScopeOverlap_SkipsNonTaskIssues(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-A", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "STORY-B", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
@@ -125,6 +133,7 @@ func TestW1ScopeOverlap_SkipsNonTaskIssues(t *testing.T) {
 }
 
 func TestW2NoTestCriteria(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID: "TSK-1", Type: "task",
@@ -136,6 +145,7 @@ func TestW2NoTestCriteria(t *testing.T) {
 }
 
 func TestW2NoTestCriteria_ManualReviewSatisfies(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID: "TSK-1", Type: "task",
@@ -147,6 +157,7 @@ func TestW2NoTestCriteria_ManualReviewSatisfies(t *testing.T) {
 }
 
 func TestW7VagueDoD(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", DefinitionOfDone: "Make it work properly and correctly"},
 	)
@@ -155,6 +166,7 @@ func TestW7VagueDoD(t *testing.T) {
 }
 
 func TestW8ConflictingDecisions(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID: "TSK-1", Type: "task",
@@ -169,6 +181,7 @@ func TestW8ConflictingDecisions(t *testing.T) {
 }
 
 func TestW8ConflictingDecisions_IgnoresDuplicateChoices(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID: "TSK-1", Type: "task",
@@ -184,6 +197,7 @@ func TestW8ConflictingDecisions_IgnoresDuplicateChoices(t *testing.T) {
 }
 
 func TestW11VagueOutcome(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
@@ -192,6 +206,7 @@ func TestW11VagueOutcome(t *testing.T) {
 }
 
 func TestE5TypeHierarchy(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"TASK-2"}},
 		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
@@ -201,6 +216,7 @@ func TestE5TypeHierarchy(t *testing.T) {
 }
 
 func TestE6RequiredFields(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"}, // missing scope, acceptance, dod
 	)
@@ -210,6 +226,7 @@ func TestE6RequiredFields(t *testing.T) {
 }
 
 func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "merged"}, // merged — required fields not enforced
 	)
@@ -219,6 +236,7 @@ func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
 }
 
 func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done"}, // done — required fields not enforced
 	)
@@ -228,6 +246,7 @@ func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
 }
 
 func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "cancelled"}, // cancelled — required fields not enforced
 	)
@@ -237,6 +256,7 @@ func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
 }
 
 func TestE5TypeHierarchy_EpicWithTaskIsValid(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"TASK-2"}},
 		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "EPIC-1"},
@@ -246,6 +266,7 @@ func TestE5TypeHierarchy_EpicWithTaskIsValid(t *testing.T) {
 }
 
 func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
+	t.Parallel()
 	// B.Blocks contains A (B was created first and blocks A) — should suppress overlap warning
 	state := makeState(
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-B"}},
@@ -256,6 +277,7 @@ func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
 }
 
 func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
+	t.Parallel()
 	// Context field pushes estimated token count over the 4000-token budget
 	largeContext := make([]byte, 20000) // 20k bytes / 4 = 5000 est tokens
 	for i := range largeContext {
@@ -270,6 +292,7 @@ func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
 }
 
 func TestW6ComplexityMismatch_SmallWith6Files(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID: "TSK-1", Type: "task",
@@ -282,6 +305,7 @@ func TestW6ComplexityMismatch_SmallWith6Files(t *testing.T) {
 }
 
 func TestW6ComplexityMismatch_LargeWith1File(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID: "TSK-1", Type: "task",
@@ -294,6 +318,7 @@ func TestW6ComplexityMismatch_LargeWith1File(t *testing.T) {
 }
 
 func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
+	t.Parallel()
 	// Outcome is exactly one of the vague words (exact match check at validate.go:491)
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
@@ -303,10 +328,12 @@ func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 }
 
 func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
+	t.Parallel()
 	// Merged/done/cancelled issues should not trigger the missing context_files warning —
 	// the work is complete and the guidance is no longer actionable.
 	for _, status := range []string{"merged", "done", "cancelled"} {
 		t.Run(status, func(t *testing.T) {
+			t.Parallel()
 			state := makeState(&materialize.Issue{
 				ID:     "ISSUE-1",
 				Type:   "task",
@@ -326,6 +353,7 @@ func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
 }
 
 func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
+	t.Parallel()
 	state := makeState(&materialize.Issue{
 		ID:     "ISSUE-1",
 		Type:   "task",
@@ -348,6 +376,7 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 }
 
 func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
+	t.Parallel()
 	// Issues with merged, done, or cancelled status should not trigger phantom scope warnings
 	// even if their scope globs match no files.
 	for _, status := range []string{"merged", "done", "cancelled"} {
@@ -367,6 +396,7 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 }
 
 func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
+	t.Parallel()
 	// Blocked issues are not terminal — their scope should still be validated.
 	state := makeState(
 		&materialize.Issue{
@@ -386,6 +416,7 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 }
 
 func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) {
+	t.Parallel()
 	// Terminal status applies across all issue types, not just tasks.
 	for _, issueType := range []string{"epic", "story"} {
 		state := makeState(
@@ -404,6 +435,7 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 }
 
 func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
+	t.Parallel()
 	// Scope entries ending with " (new)" mark files not yet created; they should not
 	// trigger phantom scope warnings because the file is intentionally planned, not missing.
 	state := makeState(
@@ -424,6 +456,7 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 }
 
 func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
+	t.Parallel()
 	// When a scope has both (new) and regular entries, only the regular nonexistent one triggers.
 	dir := t.TempDir()
 	// Create one real file
@@ -459,6 +492,7 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 }
 
 func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
+	t.Parallel()
 	// Legacy ops store scope as a single comma-joined string. The W10 check must split
 	// and evaluate each path individually, skipping "(new)" entries within the list.
 	dir := t.TempDir()
@@ -492,6 +526,7 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 }
 
 func TestValidateUsesCoverage(t *testing.T) {
+	t.Parallel()
 	// Pass coverage data directly
 	coverage := &traceability.Coverage{
 		CitedNodes:  1,
@@ -508,8 +543,10 @@ func TestValidateUsesCoverage(t *testing.T) {
 // TestE5TypeHierarchy_SkipsTerminalStatus verifies that cancelled, done, and merged
 // issues are not flagged for hierarchy violations — they have already been delivered.
 func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
+	t.Parallel()
 	for _, status := range []string{"cancelled", "done", "merged"} {
 		t.Run("status="+status, func(t *testing.T) {
+			t.Parallel()
 			// task parenting another task is normally invalid, but terminal tasks are exempt
 			state := makeState(
 				&materialize.Issue{ID: "TASK-1", Type: "task", Status: status, Children: []string{"TASK-2"}},
@@ -526,8 +563,10 @@ func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 // children are not flagged for hierarchy violations even if the parent/child combo would
 // otherwise be invalid (e.g. bug under task).
 func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
+	t.Parallel()
 	for _, status := range []string{"cancelled", "done", "merged"} {
 		t.Run("status="+status, func(t *testing.T) {
+			t.Parallel()
 			// bug under task is normally invalid, but terminal children are exempt
 			state := makeState(
 				&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
@@ -542,6 +581,7 @@ func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
 
 // TestE5TypeHierarchy_BugUnderStoryIsValid verifies that bug is a valid child of story.
 func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "STORY-1"},
@@ -552,6 +592,7 @@ func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
 
 // TestE5TypeHierarchy_BugUnderEpicIsValid verifies that bug is a valid child of epic.
 func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "EPIC-1"},
@@ -562,6 +603,7 @@ func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
 
 // TestE5TypeHierarchy_BugUnderTaskIsInvalid verifies that bug cannot be parented under a task.
 func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1"},
@@ -572,6 +614,7 @@ func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
 
 // TestParentFilterAllIssues validates that with empty ParentID, all issues are validated.
 func TestParentFilter_NoFilterReturnsAllIssues(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A", "TASK-B"}, BlockedBy: []string{}},
 		&materialize.Issue{
@@ -600,6 +643,7 @@ func TestParentFilter_NoFilterReturnsAllIssues(t *testing.T) {
 
 // TestParentFilterDirectChildrenOnly validates that --parent restricts to direct children.
 func TestParentFilter_RestrictsToDirectChildren(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"STORY-1"}, BlockedBy: []string{}},
 		&materialize.Issue{ID: "STORY-1", Type: "story", Parent: "EPIC-1", Children: []string{"TASK-A", "TASK-B"}, BlockedBy: []string{}},
@@ -631,6 +675,7 @@ func TestParentFilter_RestrictsToDirectChildren(t *testing.T) {
 
 // TestParentFilterExcludesNonChildren validates that non-child issues are excluded.
 func TestParentFilter_ExcludesNonChildren(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A"}, BlockedBy: []string{}},
 		&materialize.Issue{ID: "STORY-2", Type: "story", Children: []string{"TASK-B"}, BlockedBy: []string{}},
@@ -660,6 +705,7 @@ func TestParentFilter_ExcludesNonChildren(t *testing.T) {
 
 // TestParentFilterValidatesChildrenOnly validates that validation only applies to children.
 func TestParentFilter_ValidatesChildrenWithErrors(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A", "TASK-B"}},
 		&materialize.Issue{
@@ -679,6 +725,7 @@ func TestParentFilter_ValidatesChildrenWithErrors(t *testing.T) {
 
 // TestParentFilterEmptyParentScope validates parent filter with non-existent parent ID.
 func TestParentFilter_NonexistentParentID(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A"}},
 		&materialize.Issue{ID: "TASK-A", Type: "task", Parent: "STORY-1"},
@@ -691,6 +738,7 @@ func TestParentFilter_NonexistentParentID(t *testing.T) {
 
 // TestParentFilterParentNotValidated validates that the parent node itself is not validated.
 func TestParentFilter_ParentNodeNotValidated(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID:        "TASK-PARENT",
@@ -723,6 +771,7 @@ func TestParentFilter_ParentNodeNotValidated(t *testing.T) {
 // Example: Task A (in scope) is blocked by Task B (out of scope). Task B is blocked by Task A.
 // This is a real cycle that prevents A from ever becoming ready, and should be detected.
 func TestCheckE4Cycles_CrossScopeBlockerCycle(t *testing.T) {
+	t.Parallel()
 	// Create a state with two issues: A and B, where A blocks B and B blocks A.
 	// When validating scope={A}, scopedHasCycle("A", ...) should detect the cycle.
 	state := makeState(
@@ -761,6 +810,7 @@ func TestCheckE4Cycles_CrossScopeBlockerCycle(t *testing.T) {
 // Example: A (in scope) is blocked by B (out of scope). B and C form a cycle B→C→B.
 // A is not part of any cycle, so scopedHasCycle("A") must return false.
 func TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
 			ID:        "A",

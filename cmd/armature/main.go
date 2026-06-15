@@ -22,18 +22,18 @@ func newRootCmd() *cobra.Command {
 		Short:        "Armature — git-native work orchestration",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Flags().GetString("format")
 			if !cmd.Flags().Changed("format") && format == "human" && (os.Getenv("GEMINI_CLI") != "" || os.Getenv("TERM") == "dumb" || !tui.IsTerminal()) {
 				format = "agent"
-				_ = cmd.Flags().Set("format", "agent") //nolint:errcheck // fails only if flag absent (programming error)
+				_ = cmd.Flags().Set("format", "agent")
 			}
 			tui.SetFormat(format)
 
 			// Auto-set --non-interactive when --format=agent or non-TTY.
-			nonInteractive, _ := cmd.Flags().GetBool("non-interactive") //nolint:errcheck // fails only if flag absent (programming error)
+			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
 			if !nonInteractive && (format == "agent" || !tui.IsTerminal()) {
 				nonInteractive = true
-				_ = cmd.Flags().Set("non-interactive", "true") //nolint:errcheck // fails only if flag absent (programming error)
+				_ = cmd.Flags().Set("non-interactive", "true")
 			}
 			tui.SetNonInteractive(nonInteractive)
 
@@ -284,7 +284,7 @@ func main() {
 		} else {
 			fmt.Fprintln(os.Stderr, err)
 		}
-		if debug, _ := root.PersistentFlags().GetBool("debug"); debug { //nolint:errcheck // fails only if flag absent (programming error)
+		if debug, _ := root.PersistentFlags().GetBool("debug"); debug {
 			fmt.Fprintf(os.Stderr, "DEBUG: %+v\n", err)
 		}
 		os.Exit(code.Int())

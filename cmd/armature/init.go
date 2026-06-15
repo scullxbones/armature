@@ -129,7 +129,7 @@ func installHooks(repoPath string, issuesDir string) error {
 	gitHooksDir := filepath.Join(repoPath, ".git", "hooks")
 
 	// Create .git/hooks directory if it doesn't exist
-	if err := os.MkdirAll(gitHooksDir, 0755); err != nil {
+	if err := os.MkdirAll(gitHooksDir, 0o750); err != nil {
 		return fmt.Errorf("create .git/hooks directory: %w", err)
 	}
 
@@ -141,7 +141,7 @@ func installHooks(repoPath string, issuesDir string) error {
 		hookPath := filepath.Join(gitHooksDir, hook)
 
 		// Read template content
-		content, err := os.ReadFile(templatePath)
+		content, err := os.ReadFile(templatePath) //nolint:gosec // G304: path constructed from internal hooks dir
 		if err != nil {
 			// If template doesn't exist, skip (it might not be needed for this mode)
 			if os.IsNotExist(err) {
@@ -151,7 +151,7 @@ func installHooks(repoPath string, issuesDir string) error {
 		}
 
 		// Write hook to .git/hooks/ with executable permissions
-		if err := os.WriteFile(hookPath, content, 0755); err != nil {
+		if err := os.WriteFile(hookPath, content, 0o755); err != nil { //nolint:gosec // git hooks require executable bit
 			return fmt.Errorf("install hook %s: %w", hook, err)
 		}
 	}
@@ -205,20 +205,20 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 		filepath.Join(issuesDir, "review"),
 	}
 	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0755); err != nil {
+		if err := os.MkdirAll(d, 0o750); err != nil {
 			return fmt.Errorf("create directory %s: %w", d, err)
 		}
 	}
 
 	// Write .gitignore to prevent state/ from being committed
 	gitignorePath := filepath.Join(issuesDir, ".gitignore")
-	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0644); err != nil {
+	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0o600); err != nil {
 		return fmt.Errorf("write .armature/.gitignore: %w", err)
 	}
 
 	// Write SCHEMA file
 	schemaPath := filepath.Join(issuesDir, "ops", "SCHEMA")
-	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0644); err != nil {
+	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0o600); err != nil {
 		return fmt.Errorf("write SCHEMA: %w", err)
 	}
 
@@ -232,7 +232,7 @@ func runInit(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 
 	for hookName, hookContent := range hookTemplates {
 		hookTemplatePath := filepath.Join(issuesDir, "hooks", hookName)
-		if err := os.WriteFile(hookTemplatePath, []byte(hookContent), 0644); err != nil {
+		if err := os.WriteFile(hookTemplatePath, []byte(hookContent), 0o600); err != nil {
 			return fmt.Errorf("write hook template %s: %w", hookName, err)
 		}
 	}

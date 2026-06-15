@@ -9,6 +9,7 @@ import (
 )
 
 func TestRunCommand_Success(t *testing.T) {
+	t.Parallel()
 	out, err := RunCommand("echo", "hello")
 	if err != nil {
 		t.Fatal(err)
@@ -19,6 +20,7 @@ func TestRunCommand_Success(t *testing.T) {
 }
 
 func TestRunCommand_Error(t *testing.T) {
+	t.Parallel()
 	_, err := RunCommand("false")
 	if err == nil {
 		t.Fatal("expected error from false")
@@ -26,6 +28,7 @@ func TestRunCommand_Error(t *testing.T) {
 }
 
 func TestRunCommandOutput_Success(t *testing.T) {
+	t.Parallel()
 	out, err := RunCommandOutput("echo", "world")
 	if err != nil {
 		t.Fatal(err)
@@ -36,6 +39,7 @@ func TestRunCommandOutput_Success(t *testing.T) {
 }
 
 func TestRunCommandOutput_Error(t *testing.T) {
+	t.Parallel()
 	_, err := RunCommandOutput("false")
 	if err == nil {
 		t.Fatal("expected error from false")
@@ -43,6 +47,7 @@ func TestRunCommandOutput_Error(t *testing.T) {
 }
 
 func TestRunShellScript_Success(t *testing.T) {
+	t.Parallel()
 	out, err := RunShellScript("cat", []byte("test input"))
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +58,7 @@ func TestRunShellScript_Success(t *testing.T) {
 }
 
 func TestRunShellScript_Error(t *testing.T) {
+	t.Parallel()
 	_, err := RunShellScript("exit 1", nil)
 	if err == nil {
 		t.Fatal("expected error from failing script")
@@ -60,6 +66,7 @@ func TestRunShellScript_Error(t *testing.T) {
 }
 
 func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
+	t.Parallel()
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -83,6 +90,7 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 }
 
 func TestNonInteractiveGitCommand(t *testing.T) {
+	t.Parallel()
 	cmd := NonInteractiveGitCommand("/tmp", "version")
 	found := false
 	for _, e := range cmd.Env {
@@ -97,6 +105,7 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 }
 
 func TestGitLog_InvalidRepo(t *testing.T) {
+	t.Parallel()
 	out, err := GitLog("/nonexistent/path")
 	if err != nil {
 		t.Fatal("expected nil error for git log on invalid repo, got", err)
@@ -107,6 +116,7 @@ func TestGitLog_InvalidRepo(t *testing.T) {
 }
 
 func TestExecuteHook_Allow(t *testing.T) {
+	t.Parallel()
 	cmd := []string{"echo", `{"allowed":true,"message":""}`}
 	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
 	if err := ExecuteHook("test-hook", cmd, input); err != nil {
@@ -115,6 +125,7 @@ func TestExecuteHook_Allow(t *testing.T) {
 }
 
 func TestExecuteHook_Reject(t *testing.T) {
+	t.Parallel()
 	cmd := []string{"echo", `{"allowed":false,"message":"blocked"}`}
 	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
 	err := ExecuteHook("test-hook", cmd, input)
@@ -127,6 +138,7 @@ func TestExecuteHook_Reject(t *testing.T) {
 }
 
 func TestExecuteHook_BadOutput(t *testing.T) {
+	t.Parallel()
 	cmd := []string{"echo", "not-json"}
 	input := HookInput{}
 	err := ExecuteHook("test-hook", cmd, input)
@@ -136,9 +148,10 @@ func TestExecuteHook_BadOutput(t *testing.T) {
 }
 
 func TestGitConfig_Unset(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// init a real git repo
-	cmd := exec.Command("git", "init", dir)
+	cmd := exec.CommandContext(context.Background(), "git", "init", dir)
 	if err := cmd.Run(); err != nil {
 		t.Skip("git not available")
 	}
@@ -149,8 +162,9 @@ func TestGitConfig_Unset(t *testing.T) {
 }
 
 func TestGitConfigMode_Default(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	cmd := exec.Command("git", "init", dir)
+	cmd := exec.CommandContext(context.Background(), "git", "init", dir)
 	if err := cmd.Run(); err != nil {
 		t.Skip("git not available")
 	}
@@ -164,6 +178,7 @@ func TestGitConfigMode_Default(t *testing.T) {
 }
 
 func TestHookInput_MarshalRoundtrip(t *testing.T) {
+	t.Parallel()
 	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w"}
 	data, err := json.Marshal(input)
 	if err != nil {

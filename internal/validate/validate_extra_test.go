@@ -11,6 +11,7 @@ import (
 )
 
 func TestIssueSubset_WithScopeID(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Children: []string{"TASK-1"}, Type: "story"},
 		&materialize.Issue{ID: "TASK-1", Parent: "STORY-1", Type: "task"},
@@ -23,6 +24,7 @@ func TestIssueSubset_WithScopeID(t *testing.T) {
 }
 
 func TestIssueSubset_MissingScopeID_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TASK-1", Type: "task"},
 	)
@@ -31,6 +33,7 @@ func TestIssueSubset_MissingScopeID_ReturnsEmpty(t *testing.T) {
 }
 
 func TestValidate_StrictMode_PromotesWarnings(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
@@ -40,6 +43,7 @@ func TestValidate_StrictMode_PromotesWarnings(t *testing.T) {
 }
 
 func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
@@ -54,6 +58,7 @@ func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
 }
 
 func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"entries": map[string]map[string]string{
 			"src-1": {"id": "src-1"},
@@ -77,7 +82,7 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 	assert.True(t, found, "expected uncited node error, got: %v", result.Errors)
 }
 
-func containsInfo(r Result, substr string) bool {
+func containsInfo(r Result, substr string) bool { //nolint:unparam // substr is "phantom scope" in all current callers but helper is intentionally general
 	for _, i := range r.Infos {
 		if strings.Contains(strings.ToLower(i), strings.ToLower(substr)) {
 			return true
@@ -87,6 +92,7 @@ func containsInfo(r Result, substr string) bool {
 }
 
 func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"nonexistent/**/*.go"}},
 	)
@@ -100,6 +106,7 @@ func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
 }
 
 func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"entries": map[string]map[string]string{
 			"src-1": {"id": "src-1"},
@@ -122,6 +129,7 @@ func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
 }
 
 func TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped(t *testing.T) {
+	t.Parallel()
 	// No manifest data — citation check should be skipped entirely.
 	state := makeState(
 		&materialize.Issue{
@@ -138,6 +146,7 @@ func TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped(t *testing.T)
 }
 
 func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
+	t.Parallel()
 	manifest := map[string]interface{}{
 		"entries": map[string]map[string]string{
 			"src-1": {"id": "src-1"},
@@ -160,6 +169,7 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 }
 
 func TestValidate_ParentFilter_RestrictsToDirectChildren(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-1", "TASK-2"}},
 		&materialize.Issue{ID: "TASK-1", Parent: "STORY-1", Type: "task"},
@@ -173,6 +183,7 @@ func TestValidate_ParentFilter_RestrictsToDirectChildren(t *testing.T) {
 }
 
 func TestValidate_ParentFilter_EmptyWhenNoMatch(t *testing.T) {
+	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TASK-1", Parent: "STORY-A", Type: "task"},
 	)
@@ -181,6 +192,7 @@ func TestValidate_ParentFilter_EmptyWhenNoMatch(t *testing.T) {
 }
 
 func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
+	t.Parallel()
 	// When PreExpandedScopes is provided with matches, no phantom scope errors
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"*.go"}},

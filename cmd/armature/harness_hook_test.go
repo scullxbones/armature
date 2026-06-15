@@ -68,7 +68,7 @@ func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
 
 	var out bytes.Buffer
 	cmd := newRootCmd()
-	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`))
+	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
 	cmd.SetArgs([]string{"harness-hook", "--repo", repo})

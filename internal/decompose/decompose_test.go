@@ -17,6 +17,7 @@ import (
 // --- Task 26: ApplyPlan tests ---
 
 func TestApplyPlan_CreatesOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -42,6 +43,7 @@ func TestApplyPlan_CreatesOps(t *testing.T) {
 }
 
 func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -66,6 +68,7 @@ func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
 }
 
 func TestApplyPlan_PreservesContextFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -90,6 +93,7 @@ func TestApplyPlan_PreservesContextFiles(t *testing.T) {
 }
 
 func TestApplyPlan_SkipsExisting(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -113,6 +117,7 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 // --- Task 27: RevertPlan tests ---
 
 func TestRevertPlan_CancelsOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -135,6 +140,7 @@ func TestRevertPlan_CancelsOpen(t *testing.T) {
 }
 
 func TestRevertPlan_SkipsNonOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -159,6 +165,7 @@ func TestRevertPlan_SkipsNonOpen(t *testing.T) {
 // --- QLTYCNTRL-S2-T3: Clock injection for RevertPlan ---
 
 func TestRevertPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 	fixedTimestamp := int64(1234567890)
@@ -190,6 +197,7 @@ func TestRevertPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 // --- E6-S3-T3: DryRunRevertPlan tests ---
 
 func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
@@ -212,6 +220,7 @@ func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
 }
 
 func TestDryRunRevertPlan_SkipsNonOpen(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
@@ -232,6 +241,7 @@ func TestDryRunRevertPlan_SkipsNonOpen(t *testing.T) {
 }
 
 func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	plan := &Plan{
@@ -255,6 +265,7 @@ func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
 // --- Task 27: PlanContext tests ---
 
 func TestPlanContext(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{
 		Version: 1,
 		Title:   "My Plan",
@@ -271,6 +282,7 @@ func TestPlanContext(t *testing.T) {
 }
 
 func TestDecomposeContextNoSources(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{Title: "Plan", Issues: []PlanIssue{}}
 	ctx, err := BuildContext(ContextParams{Plan: plan})
 	require.NoError(t, err)
@@ -279,6 +291,7 @@ func TestDecomposeContextNoSources(t *testing.T) {
 }
 
 func TestDecomposeContextWithSources(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sourcesDir := filepath.Join(dir, "sources")
 	content := []byte("# PRD\n\nProduct requirements.")
@@ -303,6 +316,7 @@ func TestDecomposeContextWithSources(t *testing.T) {
 // --- E6-S6-T1: acceptance field tests ---
 
 func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -334,6 +348,7 @@ func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
 }
 
 func TestApplyPlan_HandlesEmptyAcceptance(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 

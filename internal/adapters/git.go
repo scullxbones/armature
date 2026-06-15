@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,7 +29,7 @@ func New(repoPath string) *Client {
 // GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
 func (c *Client) cmd(args ...string) *exec.Cmd {
 	fullArgs := append([]string{"-C", c.repoPath}, args...)
-	cmd := exec.Command("git", fullArgs...)
+	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: internal args, not user input
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
 	return cmd
 }
@@ -91,7 +92,7 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	}
 	// Clear the index; ignore exit code 1 (nothing to remove on an empty repo)
 	rmCmd := c.cmd("rm", "-rf", "--quiet", ".")
-	rmCmd.Run() //nolint:errcheck
+	rmCmd.Run() //nolint:errcheck,gosec // exit code 1 is expected on empty repo
 	commitCmd := c.cmd("commit", "--allow-empty", "-m", "chore: init armature issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit on orphan branch: %w\n%s", err, out)
@@ -178,7 +179,9 @@ func (c *Client) runMutatingWithRetry(label string, args ...string) ([]byte, err
 		time.Sleep(gitContentionBackoff)
 	}
 	if isGitContentionError(string(lastOut)) {
-		return lastOut, fmt.Errorf("%s failed after %d contention retries: %w\nAction: another process updated git state concurrently; retry the arm command or run lanes with distinct slots", label, gitContentionMaxAttempts, lastErr)
+		return lastOut, fmt.Errorf("%s failed after %d contention retries: %w\n"+
+			"Action: another process updated git state concurrently; retry the arm command or run lanes with distinct slots",
+			label, gitContentionMaxAttempts, lastErr)
 	}
 	return lastOut, lastErr
 }

@@ -38,13 +38,13 @@ the DAG structure and help identify blocking dependencies.`,
 			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"source": sourceID, "dep": dep, "rel": rel}
-				data, _ := json.Marshal(result)                      //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Linked %s → %s (%s)\n", sourceID, dep, rel) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Linked %s → %s (%s)\n", sourceID, dep, rel)
 			}
 			return nil
 		},
@@ -53,7 +53,7 @@ the DAG structure and help identify blocking dependencies.`,
 	cmd.Flags().StringVar(&sourceID, "source", "", "source issue ID")
 	cmd.Flags().StringVar(&dep, "dep", "", "dependency issue ID")
 	cmd.Flags().StringVar(&rel, "rel", "blocked_by", "relationship type")
-	_ = cmd.MarkFlagRequired("source") //nolint:errcheck // fails only if flag absent (programming error)
-	_ = cmd.MarkFlagRequired("dep")    //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("source")
+	_ = cmd.MarkFlagRequired("dep")
 	return cmd
 }

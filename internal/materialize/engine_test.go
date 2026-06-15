@@ -15,6 +15,7 @@ import (
 )
 
 func TestApplyCreateOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	op := ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -30,6 +31,7 @@ func TestApplyCreateOp(t *testing.T) {
 }
 
 func TestApplyClaimOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -42,6 +44,7 @@ func TestApplyClaimOp(t *testing.T) {
 }
 
 func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -56,6 +59,7 @@ func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T
 }
 
 func TestApplyUnknownOpType_ReturnsError(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	err := state.ApplyOp(ops.Op{
 		Type:      "worker-runtime-decision",
@@ -69,6 +73,7 @@ func TestApplyUnknownOpType_ReturnsError(t *testing.T) {
 }
 
 func TestApplyTransitionOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -82,6 +87,7 @@ func TestApplyTransitionOp(t *testing.T) {
 }
 
 func TestApplyNoteOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -92,6 +98,7 @@ func TestApplyNoteOp(t *testing.T) {
 }
 
 func TestApplyNoteDeleteOp_TombstonesExistingNote(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -107,6 +114,7 @@ func TestApplyNoteDeleteOp_TombstonesExistingNote(t *testing.T) {
 }
 
 func TestNoteDeleteAtSameTimestampAsAdd_TombstonesViaSort(t *testing.T) {
+	t.Parallel()
 	// Simulates two workers at the same Unix second: one adds, one deletes.
 	// After sortOpsByTimestamp the note-add must precede note-delete so the
 	// tombstone is not silently dropped.
@@ -130,6 +138,7 @@ func TestNoteDeleteAtSameTimestampAsAdd_TombstonesViaSort(t *testing.T) {
 }
 
 func TestApplyLinkOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "A", NodeType: "task"}}))
@@ -142,6 +151,7 @@ func TestApplyLinkOp(t *testing.T) {
 }
 
 func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -155,6 +165,7 @@ func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 }
 
 func TestSingleBranchAutoMerge(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	state.SingleBranchMode = true
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
@@ -167,6 +178,7 @@ func TestSingleBranchAutoMerge(t *testing.T) {
 }
 
 func TestMaterializePipeline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")
@@ -195,6 +207,7 @@ func TestMaterializePipeline(t *testing.T) {
 }
 
 func TestPropRandomOpsNeverCrash(t *testing.T) {
+	t.Parallel()
 	params := gopter.DefaultTestParameters()
 	params.MinSuccessfulTests = 500
 
@@ -229,6 +242,7 @@ func TestPropRandomOpsNeverCrash(t *testing.T) {
 }
 
 func TestPropCreateIdempotent(t *testing.T) {
+	t.Parallel()
 	params := gopter.DefaultTestParameters()
 	params.MinSuccessfulTests = 100
 
@@ -255,6 +269,7 @@ func TestPropCreateIdempotent(t *testing.T) {
 }
 
 func TestApplyCreateOp_DraftConfidence_Propagated(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	op := ops.Op{
 		Type: ops.OpCreate, TargetID: "task-draft", Timestamp: 100, WorkerID: "w1",
@@ -265,6 +280,7 @@ func TestApplyCreateOp_DraftConfidence_Propagated(t *testing.T) {
 }
 
 func TestApplyCreateOp_NoConfidence_DefaultsToVerified(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	op := ops.Op{
 		Type: ops.OpCreate, TargetID: "task-legacy", Timestamp: 100, WorkerID: "w1",
@@ -275,6 +291,7 @@ func TestApplyCreateOp_NoConfidence_DefaultsToVerified(t *testing.T) {
 }
 
 func TestApplyCreateOp_VerifiedConfidence_Propagated(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	op := ops.Op{
 		Type: ops.OpCreate, TargetID: "task-verified", Timestamp: 100, WorkerID: "w1",
@@ -285,6 +302,7 @@ func TestApplyCreateOp_VerifiedConfidence_Propagated(t *testing.T) {
 }
 
 func TestApplyDagTransitionOp_PromotesDraftSubtreeToVerified(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	// Create a root epic with two draft children; one is outside the subtree
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100,
@@ -311,6 +329,7 @@ func TestApplyDagTransitionOp_PromotesDraftSubtreeToVerified(t *testing.T) {
 }
 
 func TestApplyDagTransitionOp_CustomTargetConfidence(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task", Confidence: "draft"}}))
@@ -324,6 +343,7 @@ func TestApplyDagTransitionOp_CustomTargetConfidence(t *testing.T) {
 }
 
 func TestApplyDagTransitionOp_NodesOutsideSubtreeUnaffected(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-A", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "Epic A", NodeType: "epic", Confidence: "draft"}}))
@@ -347,6 +367,7 @@ func TestApplyDagTransitionOp_NodesOutsideSubtreeUnaffected(t *testing.T) {
 }
 
 func TestApplyDagTransitionOp_BackwardCompatExistingConfirmedBehavior(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -359,6 +380,7 @@ func TestApplyDagTransitionOp_BackwardCompatExistingConfirmedBehavior(t *testing
 }
 
 func TestApplySourceLinkOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -372,6 +394,7 @@ func TestApplySourceLinkOp(t *testing.T) {
 }
 
 func TestApplyDAGTransitionOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -382,6 +405,7 @@ func TestApplyDAGTransitionOp(t *testing.T) {
 }
 
 func TestApplyAssignOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -391,6 +415,7 @@ func TestApplyAssignOp(t *testing.T) {
 }
 
 func TestApplyUnassignOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -402,6 +427,7 @@ func TestApplyUnassignOp(t *testing.T) {
 }
 
 func TestApplyAssignOp_ToleratesUnknownIssue(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	// No create op — assign should not error
 	err := state.ApplyOp(ops.Op{Type: ops.OpAssign, TargetID: "unknown-01", Timestamp: 200,
@@ -410,6 +436,7 @@ func TestApplyAssignOp_ToleratesUnknownIssue(t *testing.T) {
 }
 
 func TestBuildIndex_IncludesAssignedWorker(t *testing.T) {
+	t.Parallel()
 	s := NewState()
 	s.Issues["T-001"] = &Issue{
 		ID: "T-001", Type: "task", Status: "open", Title: "task",
@@ -422,6 +449,7 @@ func TestBuildIndex_IncludesAssignedWorker(t *testing.T) {
 }
 
 func TestBuildIndex_IncludesBranchAndPR(t *testing.T) {
+	t.Parallel()
 	s := NewState()
 	s.Issues["T-001"] = &Issue{
 		ID: "T-001", Type: "task", Status: "done",
@@ -437,6 +465,7 @@ func TestBuildIndex_IncludesBranchAndPR(t *testing.T) {
 }
 
 func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	stateDir := filepath.Join(dir, "state")
@@ -460,6 +489,7 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 }
 
 func TestMaterializeAndReturn_EmptyDir(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// No ops dir — should return empty state
 	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), []ops.Op{}, false, nil)
@@ -470,12 +500,14 @@ func TestMaterializeAndReturn_EmptyDir(t *testing.T) {
 }
 
 func TestAppendUnique_AddsNew(t *testing.T) {
+	t.Parallel()
 	slice := []string{"a", "b"}
 	result := appendUnique(slice, "c")
 	assert.Equal(t, []string{"a", "b", "c"}, result)
 }
 
 func TestAppendUnique_SkipsDuplicate(t *testing.T) {
+	t.Parallel()
 	slice := []string{"a", "b", "c"}
 	result := appendUnique(slice, "b")
 	assert.Equal(t, []string{"a", "b", "c"}, result)
@@ -483,6 +515,7 @@ func TestAppendUnique_SkipsDuplicate(t *testing.T) {
 }
 
 func TestRunRollup_PromotesStoryWhenAllChildrenMerged(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
@@ -501,6 +534,7 @@ func TestRunRollup_PromotesStoryWhenAllChildrenMerged(t *testing.T) {
 }
 
 func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
@@ -520,6 +554,7 @@ func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
 }
 
 func TestRunRollup_CascadesToEpic(t *testing.T) {
+	t.Parallel()
 	// epic-01 → story-01 → task-01; when task-01 is merged, both story and epic should cascade-merge.
 	// This exercises the parent-decrement path at engine.go:371-380.
 	state := NewState()
@@ -539,6 +574,7 @@ func TestRunRollup_CascadesToEpic(t *testing.T) {
 }
 
 func TestApplyUnlinkOp_BlockedByRel(t *testing.T) {
+	t.Parallel()
 	// Create two linked tasks then unlink them — exercises applyUnlink (engine.go:184, 445)
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
@@ -557,6 +593,7 @@ func TestApplyUnlinkOp_BlockedByRel(t *testing.T) {
 }
 
 func TestApplyUnlinkOp_NonBlockedByRel_NoOp(t *testing.T) {
+	t.Parallel()
 	// Unlink with a rel other than "blocked_by" should be a no-op (engine.go:184 negation path)
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
@@ -573,6 +610,7 @@ func TestApplyUnlinkOp_NonBlockedByRel_NoOp(t *testing.T) {
 }
 
 func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
@@ -590,6 +628,7 @@ func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
 }
 
 func TestPromoteParentToInProgress_SkipsAlreadyInProgress(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
 		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
@@ -606,6 +645,7 @@ func TestPromoteParentToInProgress_SkipsAlreadyInProgress(t *testing.T) {
 }
 
 func TestSortOpsByTimestamp(t *testing.T) {
+	t.Parallel()
 	allOps := []ops.Op{
 		{Timestamp: 300, WorkerID: "w1"},
 		{Timestamp: 100, WorkerID: "w1"},
@@ -618,6 +658,7 @@ func TestSortOpsByTimestamp(t *testing.T) {
 }
 
 func TestSortOpsByTimestamp_StableOnEqualTimestamp(t *testing.T) {
+	t.Parallel()
 	allOps := []ops.Op{
 		{Timestamp: 100, WorkerID: "w2", Type: "first"},
 		{Timestamp: 100, WorkerID: "w1", Type: "second"},
@@ -628,6 +669,7 @@ func TestSortOpsByTimestamp_StableOnEqualTimestamp(t *testing.T) {
 }
 
 func TestApplyAmendOp_PatchesType(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "S1", Timestamp: 100, WorkerID: "w1",
@@ -641,6 +683,7 @@ func TestApplyAmendOp_PatchesType(t *testing.T) {
 }
 
 func TestApplyAmendOp_PatchesAcceptance(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
@@ -656,6 +699,7 @@ func TestApplyAmendOp_PatchesAcceptance(t *testing.T) {
 }
 
 func TestApplyAmendOp_PatchesScope(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
@@ -669,6 +713,7 @@ func TestApplyAmendOp_PatchesScope(t *testing.T) {
 }
 
 func TestApplyCreateOp_SetsContextFiles(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
@@ -682,6 +727,7 @@ func TestApplyCreateOp_SetsContextFiles(t *testing.T) {
 }
 
 func TestApplyAmendOp_ReplacesAndClearsContextFiles(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
@@ -705,6 +751,7 @@ func TestApplyAmendOp_ReplacesAndClearsContextFiles(t *testing.T) {
 }
 
 func TestApplyCreateOp_NormalizesCommaSeparatedScope(t *testing.T) {
+	t.Parallel()
 	// Legacy ops stored scope as a single comma-joined string; materializer must split them.
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -719,6 +766,7 @@ func TestApplyCreateOp_NormalizesCommaSeparatedScope(t *testing.T) {
 }
 
 func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
+	t.Parallel()
 	// Same normalization must apply when scope is set via amend.
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -733,6 +781,7 @@ func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
 }
 
 func TestApplyAmendOp_NormalizesCommaSeparatedContextFiles(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
@@ -746,6 +795,7 @@ func TestApplyAmendOp_NormalizesCommaSeparatedContextFiles(t *testing.T) {
 }
 
 func TestMaterializedStateCollapsesHistoricalClaims(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -769,6 +819,7 @@ func TestMaterializedStateCollapsesHistoricalClaims(t *testing.T) {
 }
 
 func TestMaterializedState_AllowsClaimTakeoverWhenPriorClaimIsStale(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -792,6 +843,7 @@ func TestMaterializedState_AllowsClaimTakeoverWhenPriorClaimIsStale(t *testing.T
 }
 
 func TestApplyAmendOp_UnknownIssue_NoError(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	err := state.ApplyOp(ops.Op{
 		Type: ops.OpAmend, TargetID: "NONEXISTENT", Timestamp: 100,
@@ -801,6 +853,7 @@ func TestApplyAmendOp_UnknownIssue_NoError(t *testing.T) {
 }
 
 func TestApplyCitationAccepted(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -819,6 +872,7 @@ func TestApplyCitationAccepted(t *testing.T) {
 }
 
 func TestApplyCitationAccepted_UnknownIssue_NoError(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	err := state.ApplyOp(ops.Op{
 		Type: ops.OpCitationAccepted, TargetID: "NONEXISTENT", Timestamp: 100, WorkerID: "w1",
@@ -828,6 +882,7 @@ func TestApplyCitationAccepted_UnknownIssue_NoError(t *testing.T) {
 }
 
 func TestApplyCitationAccepted_SourceEntryID_Populated(t *testing.T) {
+	t.Parallel()
 	// CitationAcceptance.SourceEntryID must be populated from op.Payload.SourceEntryID.
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -844,6 +899,7 @@ func TestApplyCitationAccepted_SourceEntryID_Populated(t *testing.T) {
 }
 
 func TestApplyCitationAccepted_SourceEntryID_EmptyWhenAbsent(t *testing.T) {
+	t.Parallel()
 	// CitationAcceptance.SourceEntryID must be empty string when not set in payload.
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -860,6 +916,7 @@ func TestApplyCitationAccepted_SourceEntryID_EmptyWhenAbsent(t *testing.T) {
 }
 
 func TestCitationAcceptance_SourceEntryID_RoundTripsJSON(t *testing.T) {
+	t.Parallel()
 	// CitationAcceptance.SourceEntryID must survive WriteIssue/LoadIssue JSON round-trip.
 	dir := t.TempDir()
 	issuesDir := filepath.Join(dir, "issues")
@@ -888,6 +945,7 @@ func TestCitationAcceptance_SourceEntryID_RoundTripsJSON(t *testing.T) {
 }
 
 func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
+	t.Parallel()
 	issues := map[string]*Issue{
 		"task-01": {
 			ID: "task-01",
@@ -923,6 +981,7 @@ func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 }
 
 func TestApplyScopeRenameOp_ExactPath(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -939,6 +998,7 @@ func TestApplyScopeRenameOp_ExactPath(t *testing.T) {
 }
 
 func TestApplyScopeRenameOp_GlobPattern(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -955,6 +1015,7 @@ func TestApplyScopeRenameOp_GlobPattern(t *testing.T) {
 }
 
 func TestApplyScopeRenameOp_NoMatch_NoOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -970,6 +1031,7 @@ func TestApplyScopeRenameOp_NoMatch_NoOp(t *testing.T) {
 }
 
 func TestApplyScopeRenameOp_Idempotent(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -986,6 +1048,7 @@ func TestApplyScopeRenameOp_Idempotent(t *testing.T) {
 }
 
 func TestApplyScopeRenameOp_UnknownIssue_Tolerated(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	err := state.ApplyOp(ops.Op{
 		Type: ops.OpScopeRename, TargetID: "nonexistent-01", Timestamp: 200, WorkerID: "w1",
@@ -995,6 +1058,7 @@ func TestApplyScopeRenameOp_UnknownIssue_Tolerated(t *testing.T) {
 }
 
 func TestApplyScopeDeleteOp_ExactMatch(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -1010,6 +1074,7 @@ func TestApplyScopeDeleteOp_ExactMatch(t *testing.T) {
 }
 
 func TestApplyScopeDeleteOp_GlobNotRemoved(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -1025,6 +1090,7 @@ func TestApplyScopeDeleteOp_GlobNotRemoved(t *testing.T) {
 }
 
 func TestApplyScopeDeleteOp_NoMatch_NoOp(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
@@ -1041,6 +1107,7 @@ func TestApplyScopeDeleteOp_NoMatch_NoOp(t *testing.T) {
 }
 
 func TestApplyScopeDeleteOp_UnknownIssue_Tolerated(t *testing.T) {
+	t.Parallel()
 	state := NewState()
 	err := state.ApplyOp(ops.Op{
 		Type: ops.OpScopeDelete, TargetID: "nonexistent-01", Timestamp: 200, WorkerID: "w1",
@@ -1050,6 +1117,7 @@ func TestApplyScopeDeleteOp_UnknownIssue_Tolerated(t *testing.T) {
 }
 
 func TestApplyCreateOp_PreferredModel_Propagated(t *testing.T) {
+	t.Parallel()
 	// Issue.PreferredModel must be populated from Payload.PreferredModel on create.
 	state := NewState()
 	op := ops.Op{
@@ -1061,6 +1129,7 @@ func TestApplyCreateOp_PreferredModel_Propagated(t *testing.T) {
 }
 
 func TestApplyCreateOp_PreferredModel_EmptyWhenAbsent(t *testing.T) {
+	t.Parallel()
 	// Issue.PreferredModel must be empty when not set in the create payload.
 	state := NewState()
 	op := ops.Op{
@@ -1072,6 +1141,7 @@ func TestApplyCreateOp_PreferredModel_EmptyWhenAbsent(t *testing.T) {
 }
 
 func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
+	t.Parallel()
 	// Issue.PreferredModel must survive WriteIssue/LoadIssue JSON round-trip.
 	dir := t.TempDir()
 	issuesDir := filepath.Join(dir, "issues")
@@ -1097,6 +1167,7 @@ func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
 }
 
 func TestApplyOp_ManagedExecutionOps_ReturnUnknownError(t *testing.T) {
+	t.Parallel()
 	// Materializer must return unknown-op-type errors for managed-execution op types.
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{

@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewModelHasAllItems(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{
 		{ID: "TSK-1", Title: "First task", Type: "task"},
 		{ID: "TSK-2", Title: "Second task", Type: "task"},
@@ -19,6 +20,7 @@ func TestNewModelHasAllItems(t *testing.T) {
 }
 
 func TestConfirmAdvancesCursor(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{
 		{ID: "TSK-1", Title: "Task 1", Type: "task"},
 		{ID: "TSK-2", Title: "Task 2", Type: "task"},
@@ -31,6 +33,7 @@ func TestConfirmAdvancesCursor(t *testing.T) {
 }
 
 func TestAllConfirmedQuitsProgram(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{
 		{ID: "TSK-1", Title: "Task", Type: "task"},
 	}
@@ -40,6 +43,7 @@ func TestAllConfirmedQuitsProgram(t *testing.T) {
 }
 
 func TestSkipDoesNotConfirm(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{
 		{ID: "TSK-1", Title: "Task", Type: "task"},
 	}

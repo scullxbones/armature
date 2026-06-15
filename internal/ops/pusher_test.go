@@ -33,6 +33,7 @@ func (f *fakePusher) FetchAndRebase(branch string) error {
 }
 
 func TestNoPusher_SingleBranch_SkipsPush(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
@@ -51,6 +52,7 @@ func TestNoPusher_SingleBranch_SkipsPush(t *testing.T) {
 }
 
 func TestAppendCommitAndPush_DualBranch_PushesAndResetsTracker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	worktreePath := dir
 	logPath := filepath.Join(worktreePath, "worker.log")
@@ -73,6 +75,7 @@ func TestAppendCommitAndPush_DualBranch_PushesAndResetsTracker(t *testing.T) {
 }
 
 func TestAppendCommitAndPush_AllAttemptsFail_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	worktreePath := dir
 	logPath := filepath.Join(worktreePath, "worker.log")

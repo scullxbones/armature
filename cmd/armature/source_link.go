@@ -67,6 +67,6 @@ func newSourceLinkCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&issueIDs, "issue", nil, "issue ID to link (repeatable)")
 	cmd.Flags().StringVar(&sourceID, "source-id", "", "UUID of the source entry in the manifest")
-	_ = cmd.MarkFlagRequired("source-id") //nolint:errcheck // fails only if flag absent (programming error)
+	_ = cmd.MarkFlagRequired("source-id")
 	return cmd
 }

@@ -26,6 +26,7 @@ func testResponse(status int, body string) *http.Response {
 }
 
 func TestFetchHTTP_BearerToken(t *testing.T) {
+	t.Parallel()
 	const wantBody = `{"data":"hello"}`
 	const token = "my-bearer-token"
 
@@ -46,6 +47,7 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 }
 
 func TestFetchHTTP_BasicAuth(t *testing.T) {
+	t.Parallel()
 	const wantBody = `{"result":"ok"}`
 
 	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
@@ -66,7 +68,8 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_ErrorStatus(t *testing.T) {
-	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+	t.Parallel()
+	client := fakeHTTPClient{do: func(_ *http.Request) (*http.Response, error) {
 		return testResponse(http.StatusNotFound, "not found"), nil
 	}}
 
@@ -77,9 +80,10 @@ func TestFetchHTTP_ErrorStatus(t *testing.T) {
 }
 
 func TestFetchHTTP_NoAuth(t *testing.T) {
+	t.Parallel()
 	const wantBody = `{"public":"data"}`
 
-	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+	client := fakeHTTPClient{do: func(_ *http.Request) (*http.Response, error) {
 		return testResponse(http.StatusOK, wantBody), nil
 	}}
 

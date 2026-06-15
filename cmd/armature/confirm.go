@@ -42,7 +42,7 @@ func newConfirmCmd() *cobra.Command {
 			if err := appendLowStakesOp(mustState(cmd), logPath, o); err != nil {
 				return fmt.Errorf("emit dag-transition op: %w", err)
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "confirmed %s (inferred → verified)\n", nodeID) //nolint:errcheck // stdout write not actionable in CLI
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "confirmed %s (inferred → verified)\n", nodeID)
 			return nil
 		},
 	}

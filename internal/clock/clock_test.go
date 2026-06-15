@@ -6,6 +6,7 @@ import (
 )
 
 func TestSystemReturnsWallTime(t *testing.T) {
+	t.Parallel()
 	before := time.Now().Unix()
 	ts := System()
 	after := time.Now().Unix()
@@ -16,6 +17,7 @@ func TestSystemReturnsWallTime(t *testing.T) {
 }
 
 func TestFixedIsIdempotent(t *testing.T) {
+	t.Parallel()
 	fixedTime := int64(1609459200) // 2021-01-01 00:00:00 UTC in seconds
 	clock := Fixed(fixedTime)
 

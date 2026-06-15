@@ -31,7 +31,7 @@ func newInstallSkillsCmd() *cobra.Command {
 				}
 				destBase = home
 			} else {
-				repoPath, _ := cmd.Flags().GetString("repo") //nolint:errcheck // fails only if flag absent (programming error)
+				repoPath, _ := cmd.Flags().GetString("repo")
 				if repoPath == "" {
 					repoPath = "."
 				}
@@ -85,10 +85,10 @@ func deploySkills(src fs.FS, dest string) error {
 		target := filepath.Join(dest, rel)
 
 		if d.IsDir() {
-			return os.MkdirAll(target, 0755)
+			return os.MkdirAll(target, 0o750)
 		}
 
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return fmt.Errorf("create parent directory for %s: %w", target, err)
 		}
 
@@ -136,7 +136,7 @@ func copySkillWithRewrittenRefs(src fs.FS, srcPath, skillName, destPath string) 
 
 	rewritten := strings.ReplaceAll(string(content), "references/", skillName+"/references/")
 
-	if err := os.WriteFile(destPath, []byte(rewritten), 0644); err != nil {
+	if err := os.WriteFile(destPath, []byte(rewritten), 0o600); err != nil {
 		return fmt.Errorf("write dest %s: %w", destPath, err)
 	}
 
@@ -146,7 +146,7 @@ func copySkillWithRewrittenRefs(src fs.FS, srcPath, skillName, destPath string) 
 // deployPlugin copies the plugin.json file from src to dest, creating the
 // destination directory as needed. It is idempotent — existing files are overwritten.
 func deployPlugin(src fs.FS, dest string) error {
-	if err := os.MkdirAll(dest, 0755); err != nil {
+	if err := os.MkdirAll(dest, 0o750); err != nil {
 		return fmt.Errorf("create plugin directory %s: %w", dest, err)
 	}
 
@@ -161,7 +161,7 @@ func copyFile(src fs.FS, srcPath, destPath string) error {
 	}
 	defer in.Close() //nolint:errcheck
 
-	out, err := os.Create(destPath)
+	out, err := os.Create(destPath) //nolint:gosec // G304: destPath is constructed from internal skills dir
 	if err != nil {
 		return fmt.Errorf("create dest %s: %w", destPath, err)
 	}

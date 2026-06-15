@@ -15,7 +15,7 @@ type mockResolver struct {
 	err    error
 }
 
-func (m *mockResolver) Resolve(taskID string) (harnesspolicy.TaskPolicy, error) {
+func (m *mockResolver) Resolve(_ string) (harnesspolicy.TaskPolicy, error) {
 	return m.policy, m.err
 }
 
@@ -24,7 +24,7 @@ type mockEvaluator struct {
 	err      error
 }
 
-func (m *mockEvaluator) Evaluate(ctx context.Context, event Event) (Decision, error) {
+func (m *mockEvaluator) Evaluate(_ context.Context, event Event) (Decision, error) {
 	return m.decision, m.err
 }
 
@@ -40,7 +40,7 @@ func (m *mockAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{}
 }
 
-func (m *mockAdapter) WriteConfig(workdir string) error {
+func (m *mockAdapter) WriteConfig(_ string) error {
 	return nil
 }
 
@@ -48,12 +48,13 @@ func (m *mockAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-func (m *mockAdapter) Encode(event Event, decision Decision) ([]byte, int, error) {
+func (m *mockAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	data, err := json.Marshal(map[string]any{"decision": "allow"})
 	return data, m.encodeExitCode, err
 }
 
 func TestRunner_DecodeAndRun(t *testing.T) {
+	t.Parallel()
 	// Test that Runner successfully decodes JSON input and runs evaluation.
 	input := []byte(`{
 		"hook_event_name":"PreToolUse",
@@ -89,6 +90,7 @@ func TestRunner_DecodeAndRun(t *testing.T) {
 }
 
 func TestRunner_DecodeError(t *testing.T) {
+	t.Parallel()
 	// Test that Runner returns an error when JSON is invalid.
 	input := []byte(`invalid json`)
 
@@ -110,6 +112,7 @@ func TestRunner_DecodeError(t *testing.T) {
 }
 
 func TestRunner_EvaluatorError(t *testing.T) {
+	t.Parallel()
 	// Test that Runner returns an error when evaluation fails.
 	input := []byte(`{
 		"hook_event_name":"PreToolUse",
@@ -140,6 +143,7 @@ func TestRunner_EvaluatorError(t *testing.T) {
 }
 
 func TestRunner_BlockDecision_PropagatesAdapterExitCode(t *testing.T) {
+	t.Parallel()
 	// Test that the runner passes through the exit code returned by the adapter.
 	// Using a mockAdapter with encodeExitCode=2 to prove it's not hardcoded.
 	input := []byte(`{
@@ -175,6 +179,7 @@ func TestRunner_BlockDecision_PropagatesAdapterExitCode(t *testing.T) {
 }
 
 func TestRunner_EncodeOutput(t *testing.T) {
+	t.Parallel()
 	// Test that Runner successfully encodes the output from the adapter.
 	input := []byte(`{
 		"hook_event_name":"PreToolUse",
@@ -215,6 +220,7 @@ func TestRunner_EncodeOutput(t *testing.T) {
 }
 
 func TestRunner_AllowDecisionZeroExitCode(t *testing.T) {
+	t.Parallel()
 	// Test that Allow decision results in zero exit code.
 	input := []byte(`{
 		"hook_event_name":"PreToolUse",
@@ -249,6 +255,7 @@ func TestRunner_AllowDecisionZeroExitCode(t *testing.T) {
 }
 
 func TestRunner_DecisionNoneZeroExitCode(t *testing.T) {
+	t.Parallel()
 	// Test that None decision results in zero exit code.
 	input := []byte(`{
 		"hook_event_name":"PreToolUse",
@@ -283,6 +290,7 @@ func TestRunner_DecisionNoneZeroExitCode(t *testing.T) {
 }
 
 func TestRunner_BlockDecision_UsesAdapterExitCode(t *testing.T) {
+	t.Parallel()
 	// Test that the runner uses the exit code returned by the adapter,
 	// not a hardcoded mapping. ClaudeAdapter returns 0 for block decisions
 	// (structured JSON output requires exit 0 for Claude to process it).
@@ -320,6 +328,7 @@ func TestRunner_BlockDecision_UsesAdapterExitCode(t *testing.T) {
 }
 
 func TestRunner_StopBlockDecision(t *testing.T) {
+	t.Parallel()
 	// Test that Stop event + Block decision works correctly.
 	// ClaudeAdapter has a special branch for Stop+Block that produces {"decision":"block","reason":"..."}.
 	input := []byte(`{

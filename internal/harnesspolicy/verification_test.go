@@ -8,6 +8,7 @@ import (
 )
 
 func TestVerificationServiceCheckAcceptanceCriteriaRejectsAllUnverifiable(t *testing.T) {
+	t.Parallel()
 	service := NewVerificationService()
 	acceptance := json.RawMessage(`[
 		"The UI looks good",
@@ -22,6 +23,7 @@ func TestVerificationServiceCheckAcceptanceCriteriaRejectsAllUnverifiable(t *tes
 }
 
 func TestVerificationServiceCheckAcceptanceCriteriaAcceptsMachineVerifiableItem(t *testing.T) {
+	t.Parallel()
 	service := NewVerificationService()
 	acceptance := json.RawMessage(`["The UI looks good", "go test ./... passes"]`)
 
@@ -32,6 +34,7 @@ func TestVerificationServiceCheckAcceptanceCriteriaAcceptsMachineVerifiableItem(
 }
 
 func TestVerificationServiceCheckAcceptanceCriteriaRejectsMissingArray(t *testing.T) {
+	t.Parallel()
 	service := NewVerificationService()
 
 	result := service.CheckAcceptanceCriteria(nil)
@@ -41,6 +44,7 @@ func TestVerificationServiceCheckAcceptanceCriteriaRejectsMissingArray(t *testin
 }
 
 func TestVerificationServiceCheckCitationsRejectsUncitedSource(t *testing.T) {
+	t.Parallel()
 	service := NewVerificationService()
 	checks := []CitationCheck{
 		{SourceEntryID: "src-1", Accepted: true},
@@ -55,6 +59,7 @@ func TestVerificationServiceCheckCitationsRejectsUncitedSource(t *testing.T) {
 }
 
 func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
+	t.Parallel()
 	service := NewVerificationService()
 
 	result := service.CheckCitations(nil)
@@ -64,6 +69,7 @@ func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
 }
 
 func TestVerificationServiceRunReturnsAcceptanceAndCitationResults(t *testing.T) {
+	t.Parallel()
 	service := NewVerificationService()
 	request := VerificationRequest{
 		Acceptance: json.RawMessage(`["go test ./... passes"]`),

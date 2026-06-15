@@ -24,6 +24,7 @@ func testResponse(status int, body string) *http.Response {
 }
 
 func TestNewHTTPClient(t *testing.T) {
+	t.Parallel()
 	c := NewHTTPClient()
 	if c == nil {
 		t.Fatal("expected non-nil http client")
@@ -31,6 +32,7 @@ func TestNewHTTPClient(t *testing.T) {
 }
 
 func TestFetchHTTP_BearerAuth(t *testing.T) {
+	t.Parallel()
 	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
 		if req.Header.Get("Authorization") != "Bearer mytoken" {
 			return testResponse(http.StatusUnauthorized, ""), nil
@@ -48,6 +50,7 @@ func TestFetchHTTP_BearerAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_BasicAuth(t *testing.T) {
+	t.Parallel()
 	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
 		u, p, ok := req.BasicAuth()
 		if !ok || u != "user" || p != "pass" {
@@ -66,7 +69,8 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_Non2xx(t *testing.T) {
-	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+	t.Parallel()
+	client := fakeHTTPClient{do: func(_ *http.Request) (*http.Response, error) {
 		return testResponse(http.StatusNotFound, ""), nil
 	}}
 
@@ -77,6 +81,7 @@ func TestFetchHTTP_Non2xx(t *testing.T) {
 }
 
 func TestFetchHTTP_InvalidURL(t *testing.T) {
+	t.Parallel()
 	_, err := FetchHTTP(context.Background(), &http.Client{}, "://bad-url", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for invalid URL")

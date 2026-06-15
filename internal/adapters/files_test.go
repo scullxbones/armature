@@ -7,6 +7,7 @@ import (
 )
 
 func TestAppendRawLines_and_ReadLog(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 
@@ -23,6 +24,7 @@ func TestAppendRawLines_and_ReadLog(t *testing.T) {
 }
 
 func TestReadLogFromOffset(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 	if err := os.WriteFile(logPath, []byte("{\"a\":1}\n{\"b\":2}\n"), 0644); err != nil {
@@ -39,6 +41,7 @@ func TestReadLogFromOffset(t *testing.T) {
 }
 
 func TestReadLog_MissingFile(t *testing.T) {
+	t.Parallel()
 	_, err := ReadLog("/nonexistent/path/x.log")
 	if err == nil {
 		t.Fatal("expected error for missing file")
@@ -46,6 +49,7 @@ func TestReadLog_MissingFile(t *testing.T) {
 }
 
 func TestWorkerIDFromFilename(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ input, want string }{
 		{"3357fe85.log", "3357fe85"},
 		{"3357fe85~a.log", "3357fe85"},
@@ -59,6 +63,7 @@ func TestWorkerIDFromFilename(t *testing.T) {
 }
 
 func TestWriteAndLoadIssueJSON(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	type payload struct{ X int }
 	if err := WriteIssueJSON(dir, "T1", payload{X: 42}); err != nil {
@@ -74,6 +79,7 @@ func TestWriteAndLoadIssueJSON(t *testing.T) {
 }
 
 func TestLoadIssueJSON_Missing(t *testing.T) {
+	t.Parallel()
 	var v struct{}
 	err := LoadIssueJSON("/nonexistent/file.json", &v)
 	if err == nil {
@@ -82,6 +88,7 @@ func TestLoadIssueJSON_Missing(t *testing.T) {
 }
 
 func TestReadIssuesDir(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "A.json"), []byte("{}"), 0644); err != nil {
 		t.Fatal(err)
@@ -103,6 +110,7 @@ func TestReadIssuesDir(t *testing.T) {
 }
 
 func TestReadIssuesDir_Missing(t *testing.T) {
+	t.Parallel()
 	ids, err := ReadIssuesDir("/nonexistent/dir")
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +121,7 @@ func TestReadIssuesDir_Missing(t *testing.T) {
 }
 
 func TestWriteAndLoadCheckpointJSON(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ckpt.json")
 	type ckpt struct{ N int }
@@ -129,6 +138,7 @@ func TestWriteAndLoadCheckpointJSON(t *testing.T) {
 }
 
 func TestLoadCheckpointJSON_Missing(t *testing.T) {
+	t.Parallel()
 	var v struct{}
 	if err := LoadCheckpointJSON("/nonexistent/ckpt.json", &v); err != nil {
 		t.Fatal("expected nil for missing checkpoint, got", err)
@@ -136,6 +146,7 @@ func TestLoadCheckpointJSON_Missing(t *testing.T) {
 }
 
 func TestReadWriteManifestFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	data := []byte(`{"sources":[]}`)
 	if err := WriteManifestFile(dir, data); err != nil {
@@ -151,6 +162,7 @@ func TestReadWriteManifestFile(t *testing.T) {
 }
 
 func TestReadManifestFile_Missing(t *testing.T) {
+	t.Parallel()
 	got, err := ReadManifestFile("/nonexistent/dir")
 	if err != nil {
 		t.Fatal(err)
@@ -161,6 +173,7 @@ func TestReadManifestFile_Missing(t *testing.T) {
 }
 
 func TestWriteAndReadCacheFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := WriteCacheFile(dir, "abc", []byte("cached")); err != nil {
 		t.Fatal(err)
@@ -175,6 +188,7 @@ func TestWriteAndReadCacheFile(t *testing.T) {
 }
 
 func TestReadCacheFile_Missing(t *testing.T) {
+	t.Parallel()
 	got, err := ReadCacheFile(t.TempDir(), "nope")
 	if err != nil {
 		t.Fatal(err)
@@ -185,6 +199,7 @@ func TestReadCacheFile_Missing(t *testing.T) {
 }
 
 func TestWriteAndLoadConfigFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cfg.json")
 	type cfg struct{ Mode string }
@@ -201,6 +216,7 @@ func TestWriteAndLoadConfigFile(t *testing.T) {
 }
 
 func TestStatFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "f.txt")
 	if StatFile(p) {
@@ -215,6 +231,7 @@ func TestStatFile(t *testing.T) {
 }
 
 func TestReadPlanFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "plan.json")
 	if err := os.WriteFile(p, []byte(`{"tasks":[]}`), 0644); err != nil {
@@ -230,6 +247,7 @@ func TestReadPlanFile(t *testing.T) {
 }
 
 func TestReadPlanFile_Missing(t *testing.T) {
+	t.Parallel()
 	_, err := ReadPlanFile("/nonexistent/plan.json")
 	if err == nil {
 		t.Fatal("expected error for missing plan file")
@@ -237,6 +255,7 @@ func TestReadPlanFile_Missing(t *testing.T) {
 }
 
 func TestWriteAndReadCoverageFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "coverage.json")
 	type cov struct{ Total int }
@@ -253,6 +272,7 @@ func TestWriteAndReadCoverageFile(t *testing.T) {
 }
 
 func TestReadCoverageFile_Missing(t *testing.T) {
+	t.Parallel()
 	data, err := ReadCoverageFile("/nonexistent/coverage.json")
 	if err != nil {
 		t.Fatal(err)
@@ -263,6 +283,7 @@ func TestReadCoverageFile_Missing(t *testing.T) {
 }
 
 func TestReadLogLinesWithOffsets_UnterminatedLastLine(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 
@@ -305,6 +326,7 @@ func TestReadLogLinesWithOffsets_UnterminatedLastLine(t *testing.T) {
 }
 
 func TestReadLogLinesWithOffsets_StartOffsetPositive(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 

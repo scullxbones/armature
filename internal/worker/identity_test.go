@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"os/exec"
 	"testing"
 
@@ -19,13 +20,14 @@ func initTempRepo(t *testing.T) string {
 
 func run(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v failed: %s", name, args, out)
 }
 
 func TestGenerateAndStoreWorkerID(t *testing.T) {
+	t.Parallel()
 	repo := initTempRepo(t)
 
 	id, err := InitWorker(repo)
@@ -39,6 +41,7 @@ func TestGenerateAndStoreWorkerID(t *testing.T) {
 }
 
 func TestGetWorkerID_NotSet(t *testing.T) {
+	t.Parallel()
 	repo := initTempRepo(t)
 
 	_, err := GetWorkerID(repo)
@@ -46,6 +49,7 @@ func TestGetWorkerID_NotSet(t *testing.T) {
 }
 
 func TestCheckWorkerID(t *testing.T) {
+	t.Parallel()
 	repo := initTempRepo(t)
 
 	ok, _ := CheckWorkerID(repo)

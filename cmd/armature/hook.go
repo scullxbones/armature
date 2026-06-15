@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -155,8 +154,7 @@ func runPreCommitHook(cmd *cobra.Command) error {
 	}
 
 	// Check for staged .armature/ops/ additions/modifications
-	gitCmd := exec.Command("git", "-C", appCtx.RepoPath,
-		"diff", "--cached", "--name-only", "--diff-filter=AM")
+	gitCmd := adapters.NonInteractiveGitCommand(appCtx.RepoPath, "diff", "--cached", "--name-only", "--diff-filter=AM")
 	out, err := gitCmd.Output()
 	if err != nil {
 		// If git fails (e.g., no commits yet), allow the commit
@@ -218,8 +216,7 @@ func runPostCommitHook(cmd *cobra.Command) error {
 func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	appCtx := currentCtx(cmd)
 	// --name-status with diff-filter covers renames (R*) and deletions (D).
-	gitCmd := exec.Command("git", "-C", appCtx.RepoPath,
-		"diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
+	gitCmd := adapters.NonInteractiveGitCommand(appCtx.RepoPath, "diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
 	out, err := gitCmd.Output()
 	if err != nil {
 		// HEAD~1 absent on initial commit, or any other git error — skip silently.
@@ -386,13 +383,13 @@ func runPrepareCommitMsgHook(cmd *cobra.Command, args []string) error {
 	}
 
 	msgFile := args[0]
-	original, err := os.ReadFile(msgFile)
+	original, err := os.ReadFile(msgFile) //nolint:gosec // G304: msgFile is the git-supplied commit message path from hook args
 	if err != nil {
 		return fmt.Errorf("read commit message file %q: %w", msgFile, err)
 	}
 
 	updated := claimID + ": " + string(original)
-	if err := os.WriteFile(msgFile, []byte(updated), 0644); err != nil {
+	if err := os.WriteFile(msgFile, []byte(updated), 0o600); err != nil { //nolint:gosec // msgFile is git's COMMIT_EDITMSG path, not user-controlled
 		return fmt.Errorf("write commit message file %q: %w", msgFile, err)
 	}
 

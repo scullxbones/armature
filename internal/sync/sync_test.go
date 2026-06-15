@@ -10,6 +10,7 @@ import (
 )
 
 func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
+	t.Parallel()
 	// done + merged branch
 	issue1 := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "feature/merged-work", Type: "task",
@@ -36,6 +37,7 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 }
 
 func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
+	t.Parallel()
 	issue := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
@@ -49,6 +51,7 @@ func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 }
 
 func TestDetectMerges_EmptyDir(t *testing.T) {
+	t.Parallel()
 	// No issues provided
 	mc := NewFakeMergeChecker(map[string]bool{})
 	ids, err := armsync.DetectMerges([]materialize.Issue{}, "main", mc)
@@ -57,6 +60,7 @@ func TestDetectMerges_EmptyDir(t *testing.T) {
 }
 
 func TestSyncDetectMergesChecksAllIssues(t *testing.T) {
+	t.Parallel()
 	issue := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "feature/merged", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},

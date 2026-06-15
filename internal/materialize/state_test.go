@@ -10,6 +10,7 @@ import (
 )
 
 func TestIssueStateRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	issuesDir := filepath.Join(dir, "issues")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
@@ -32,6 +33,7 @@ func TestIssueStateRoundTrip(t *testing.T) {
 }
 
 func TestIndexRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	indexPath := filepath.Join(dir, "index.json")
 

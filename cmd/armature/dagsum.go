@@ -81,21 +81,21 @@ mode (agents) to auto-approve all pending draft items.`,
 			})
 
 			if len(draftIssues) == 0 {
-				format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+				format, _ := cmd.Flags().GetString("format")
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
 					data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
 						"approve_all":              approveAll,
 					}, "", "  ")
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				} else {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.") //nolint:errcheck // stdout write not actionable in CLI
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.")
 				}
 				return nil
 			}
 
-			format, _ := cmd.Flags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Flags().GetString("format")
 			if format == "json" || format == "agent" || tui.IsNonInteractive() {
 				// In non-interactive mode, --approve-all emits ops for all draft items.
 				if approveAll && len(draftIssues) > 0 {
@@ -115,11 +115,11 @@ mode (agents) to auto-approve all pending draft items.`,
 							},
 						}
 						if err := appendLowStakesOp(logPath, o); err != nil {
-							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err) //nolint:errcheck // stderr write not actionable in CLI
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
 						}
 					}
 					if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err) //nolint:errcheck // stderr write not actionable in CLI
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
 					}
 				}
 
@@ -141,28 +141,28 @@ mode (agents) to auto-approve all pending draft items.`,
 					"count":                    len(pending),
 					"approve_all":              approveAll,
 				}, "", "  ")
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
 
 			if !tui.IsTerminal() {
 				// Human-readable summary for non-TTY (format == "human")
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 					"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 					cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pending DAG Confirmation:") //nolint:errcheck // stdout write not actionable in CLI
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pending DAG Confirmation:")
 				for _, issue := range draftIssues {
 					_, isUncited := uncitedSet[issue.ID]
 					cited := "cited"
 					if isUncited {
 						cited = "uncited"
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s (%s)\n", issue.ID, issue.Title, cited) //nolint:errcheck // stdout write not actionable in CLI
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s (%s)\n", issue.ID, issue.Title, cited)
 				}
 				return nil
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), //nolint:errcheck // stdout write not actionable in CLI
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 
 				"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 				cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
@@ -205,12 +205,12 @@ mode (agents) to auto-approve all pending draft items.`,
 					},
 				}
 				if err := appendLowStakesOp(logPath, o); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err) //nolint:errcheck // stderr write not actionable in CLI
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
 				}
 			}
 
 			if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err) //nolint:errcheck // stderr write not actionable in CLI
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
 			}
 
 			return nil
@@ -271,8 +271,8 @@ func writeDAGSummaryArtifact(stateDir string, reviewed []*materialize.Issue,
 	}
 
 	path := filepath.Join(stateDir, "dag-summary.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(sb.String()), 0644)
+	return os.WriteFile(path, []byte(sb.String()), 0o600)
 }

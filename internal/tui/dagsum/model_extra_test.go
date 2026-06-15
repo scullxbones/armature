@@ -11,12 +11,14 @@ import (
 )
 
 func TestDone_FalseInitially(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{{ID: "TSK-1", Title: "Task"}}
 	m := dagsum.New(issues)
 	assert.False(t, m.Done())
 }
 
 func TestDone_TrueAfterAllConfirmed(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{{ID: "TSK-1", Title: "Task"}}
 	m := dagsum.New(issues)
 	m2, _ := m.Update(dagsum.ConfirmMsg{})
@@ -24,12 +26,14 @@ func TestDone_TrueAfterAllConfirmed(t *testing.T) {
 }
 
 func TestConfirmedIDs_Empty(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{{ID: "TSK-1"}, {ID: "TSK-2"}}
 	m := dagsum.New(issues)
 	assert.Empty(t, m.ConfirmedIDs())
 }
 
 func TestConfirmedIDs_AfterConfirm(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{
 		{ID: "TSK-1"},
 		{ID: "TSK-2"},
@@ -41,11 +45,13 @@ func TestConfirmedIDs_AfterConfirm(t *testing.T) {
 }
 
 func TestInit_ReturnsNil(t *testing.T) {
+	t.Parallel()
 	m := dagsum.New([]*materialize.Issue{{ID: "TSK-1"}})
 	assert.Nil(t, m.Init())
 }
 
 func TestView_ContainsIssueID(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{{ID: "TSK-42", Title: "My Task", Type: "task"}}
 	m := dagsum.New(issues)
 	view := m.View()
@@ -53,12 +59,14 @@ func TestView_ContainsIssueID(t *testing.T) {
 }
 
 func TestView_EmptyIssues(t *testing.T) {
+	t.Parallel()
 	m := dagsum.New([]*materialize.Issue{})
 	view := m.View()
 	assert.True(t, strings.Contains(view, "No items") || len(view) > 0)
 }
 
 func TestUpdate_QuitKey(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{{ID: "TSK-1"}}
 	m := dagsum.New(issues)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -66,6 +74,7 @@ func TestUpdate_QuitKey(t *testing.T) {
 }
 
 func TestUpdate_NavigationDown(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{
 		{ID: "TSK-1"},
 		{ID: "TSK-2"},
@@ -78,6 +87,7 @@ func TestUpdate_NavigationDown(t *testing.T) {
 }
 
 func TestUpdate_UnknownMsg_Ignored(t *testing.T) {
+	t.Parallel()
 	issues := []*materialize.Issue{{ID: "TSK-1"}}
 	m := dagsum.New(issues)
 	m2, cmd := m.Update("unknown message")

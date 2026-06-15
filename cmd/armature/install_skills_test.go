@@ -28,7 +28,6 @@ func makeTestFS(t *testing.T) fs.FS {
 // TestInstallSkillsDeploysFiles verifies that deploySkills copies every skill
 // entry from the provided FS into the target directory.
 func TestInstallSkillsDeploysFiles(t *testing.T) {
-	t.Parallel()
 	src := makeTestFS(t)
 	dest := t.TempDir()
 
@@ -43,7 +42,6 @@ func TestInstallSkillsDeploysFiles(t *testing.T) {
 // TestInstallSkillsCreatesDestDir verifies that deploySkills creates the
 // destination directory when it does not exist.
 func TestInstallSkillsCreatesDestDir(t *testing.T) {
-	t.Parallel()
 	src := makeTestFS(t)
 	dest := filepath.Join(t.TempDir(), "nonexistent", "skills")
 
@@ -58,7 +56,6 @@ func TestInstallSkillsCreatesDestDir(t *testing.T) {
 // TestInstallSkillsIdempotent verifies that running deploySkills twice does not
 // produce an error and that files are updated on the second run.
 func TestInstallSkillsIdempotent(t *testing.T) {
-	t.Parallel()
 	src := makeTestFS(t)
 	dest := t.TempDir()
 
@@ -73,7 +70,6 @@ func TestInstallSkillsIdempotent(t *testing.T) {
 // TestInstallSkillsCommandLocal verifies the CLI command deploys skills to the
 // local .claude/skills/ directory when --global is not set.
 func TestInstallSkillsCommandLocal(t *testing.T) {
-	t.Parallel()
 	repo := initTempRepo(t)
 
 	out, err := runTrls(t, repo, "install-skills")
@@ -98,7 +94,6 @@ func TestInstallSkillsCommandGlobal(t *testing.T) {
 // TestDeployPluginCreatesPluginJSON verifies that deployPlugin creates the
 // plugin directory and copies plugin.json.
 func TestDeployPluginCreatesPluginJSON(t *testing.T) {
-	t.Parallel()
 	src := makeTestFSWithPlugin(t)
 	dest := t.TempDir()
 
@@ -146,7 +141,6 @@ func TestInstallSkillsDeploysPluginGlobal(t *testing.T) {
 // <name>.md file (SKILL.md body) alongside each skill directory so the Skill tool can
 // load skills by name.
 func TestDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
-	t.Parallel()
 	src := makeTestFS(t)
 	dest := t.TempDir()
 
@@ -165,7 +159,6 @@ func TestDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
 // TestDeployFlatSkillsIdempotent verifies that running deployFlatSkills twice does not
 // produce an error and that files are overwritten.
 func TestDeployFlatSkillsIdempotent(t *testing.T) {
-	t.Parallel()
 	src := makeTestFS(t)
 	dest := t.TempDir()
 
@@ -204,7 +197,6 @@ func TestInstallSkillsDeploysFlatMDLocal(t *testing.T) {
 // TestDeployFlatSkillsRewritesReferencePaths verifies that deployFlatSkills rewrites
 // relative reference paths in skill files so they resolve correctly from the flat file location.
 func TestDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
-	t.Parallel()
 	src := fstest.MapFS{
 		"skills/demo-skill/SKILL.md": {
 			Data: []byte("# demo-skill\nSee `references/guide.md` for details.\n"),

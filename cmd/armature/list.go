@@ -83,7 +83,7 @@ func newListCmd() *cobra.Command {
 			}
 			sort.Strings(ids)
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format") //nolint:errcheck // fails only if flag absent (programming error)
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				entries := make([]listEntry, 0, len(ids))
 				for _, id := range ids {
@@ -102,8 +102,8 @@ func newListCmd() *cobra.Command {
 					}
 					entries = append(entries, le)
 				}
-				data, _ := json.MarshalIndent(entries, "", "  ")     //nolint:errcheck // slice of serializable structs
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck // stdout write not actionable in CLI
+				data, _ := json.MarshalIndent(entries, "", "  ") //nolint:errcheck // slice of serializable structs
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
 

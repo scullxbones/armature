@@ -10,6 +10,7 @@ import (
 )
 
 func TestStaleClaims_EmptyWhenNoClaims(t *testing.T) {
+	t.Parallel()
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: ops.StatusOpen},
 		"task-02": {ID: "task-02", Status: ops.StatusInProgress},
@@ -20,6 +21,7 @@ func TestStaleClaims_EmptyWhenNoClaims(t *testing.T) {
 }
 
 func TestStaleClaims_ReturnsStaleClaimed(t *testing.T) {
+	t.Parallel()
 	// claimed at t=0, TTL=1min (60s), now=t+200 → stale
 	issues := map[string]*materialize.Issue{
 		"task-01": {
@@ -36,6 +38,7 @@ func TestStaleClaims_ReturnsStaleClaimed(t *testing.T) {
 }
 
 func TestStaleClaims_DoesNotReturnFreshClaim(t *testing.T) {
+	t.Parallel()
 	// claimed at t=0, TTL=5min (300s), now=t+100 → fresh
 	issues := map[string]*materialize.Issue{
 		"task-01": {
@@ -52,6 +55,7 @@ func TestStaleClaims_DoesNotReturnFreshClaim(t *testing.T) {
 }
 
 func TestStaleClaims_DoesNotReturnNonClaimedStatus(t *testing.T) {
+	t.Parallel()
 	issues := map[string]*materialize.Issue{
 		"task-01": {
 			ID:        "task-01",
@@ -67,6 +71,7 @@ func TestStaleClaims_DoesNotReturnNonClaimedStatus(t *testing.T) {
 }
 
 func TestStaleClaims_HeartbeatExtendsTTL(t *testing.T) {
+	t.Parallel()
 	// claimed at 0, heartbeat at 500, TTL=1min (60s)
 	// without heartbeat: stale at now>60
 	// with heartbeat: not stale until now>560
@@ -87,6 +92,7 @@ func TestStaleClaims_HeartbeatExtendsTTL(t *testing.T) {
 }
 
 func TestStaleClaims_MultipleIssues_ReturnOnlyStale(t *testing.T) {
+	t.Parallel()
 	issues := map[string]*materialize.Issue{
 		"task-stale": {
 			ID:        "task-stale",

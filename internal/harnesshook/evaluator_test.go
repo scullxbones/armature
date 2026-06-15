@@ -11,6 +11,7 @@ import (
 )
 
 func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
+	t.Parallel()
 	service := harnesspolicy.NewVerificationService()
 	evaluator := NewEvaluator(EvaluatorConfig{
 		ScopePolicy:         harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
@@ -29,6 +30,7 @@ func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
 }
 
 func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
+	t.Parallel()
 	evaluator := NewEvaluator(EvaluatorConfig{
 		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 	})
@@ -44,6 +46,7 @@ func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
 }
 
 func TestEvaluatorBlocksGitCommit(t *testing.T) {
+	t.Parallel()
 	evaluator := NewEvaluator(EvaluatorConfig{
 		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 	})
@@ -60,6 +63,7 @@ func TestEvaluatorBlocksGitCommit(t *testing.T) {
 }
 
 func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
+	t.Parallel()
 	evaluator := NewEvaluator(EvaluatorConfig{
 		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 	})
@@ -70,6 +74,7 @@ func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 		"git --no-pager commit -m 'msg'",
 	} {
 		t.Run(cmd, func(t *testing.T) {
+			t.Parallel()
 			decision, err := evaluator.Evaluate(context.Background(), Event{
 				Kind:    EventPreToolUse,
 				Tool:    "Bash",
@@ -83,6 +88,7 @@ func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 }
 
 func TestEvaluatorRunsStopVerification(t *testing.T) {
+	t.Parallel()
 	service := harnesspolicy.NewVerificationService()
 	evaluator := NewEvaluator(EvaluatorConfig{
 		ScopePolicy:         harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
@@ -103,6 +109,7 @@ func TestEvaluatorRunsStopVerification(t *testing.T) {
 }
 
 func TestEvaluatorBlocksStopWhenVerificationFails(t *testing.T) {
+	t.Parallel()
 	service := harnesspolicy.NewVerificationService()
 	evaluator := NewEvaluator(EvaluatorConfig{
 		VerificationService: &service,

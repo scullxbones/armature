@@ -7,12 +7,16 @@ import (
 	"path/filepath"
 )
 
+// CodexAdapter implements PlatformAdapter for the OpenAI Codex harness.
 type CodexAdapter struct{}
 
+// NewCodexAdapter constructs a CodexAdapter.
 func NewCodexAdapter() *CodexAdapter { return &CodexAdapter{} }
 
+// Name returns the platform identifier.
 func (a *CodexAdapter) Name() string { return "codex" }
 
+// Capabilities returns the hook event support matrix for Codex.
 func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
@@ -24,15 +28,18 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
+// WriteConfig writes the Codex hook configuration into workdir/codex.toml.
 func (a *CodexAdapter) WriteConfig(workdir string) error {
 	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
-	return os.WriteFile(filepath.Join(workdir, "codex.toml"), []byte(content), 0o644)
+	return os.WriteFile(filepath.Join(workdir, "codex.toml"), []byte(content), 0o600)
 }
 
+// Decode parses a Codex hook payload into a normalised Event.
 func (a *CodexAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
+// Encode serialises the Decision into the JSON payload Codex expects on stdout.
 func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{"decision": "approve"})

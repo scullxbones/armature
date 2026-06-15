@@ -38,7 +38,7 @@ func ListLogFiles(opsDir string) ([]string, error) {
 
 // AppendRawLines appends raw bytes to a log file (for pre-formatted JSONL lines).
 func AppendRawLines(logPath string, buf []byte) error {
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return fmt.Errorf("open log %s: %w", logPath, err)
 	}
@@ -57,7 +57,7 @@ func ReadLog(logPath string) ([][]byte, error) {
 
 // ReadLogFromOffset reads lines starting from a byte offset.
 func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
-	f, err := os.Open(logPath)
+	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
@@ -91,7 +91,7 @@ type LineWithOffset struct {
 // ReadLogLinesWithOffsets reads lines starting from a byte offset and returns each line
 // with the byte offset where it ends (for checkpoint tracking).
 func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffset, error) {
-	f, err := os.Open(logPath)
+	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
@@ -150,12 +150,12 @@ func WriteIssueJSON(issuesDir string, issueID string, data any) error {
 		return fmt.Errorf("marshal issue: %w", err)
 	}
 	path := filepath.Join(issuesDir, issueID+".json")
-	return os.WriteFile(path, jsonData, 0644)
+	return os.WriteFile(path, jsonData, 0o600)
 }
 
 // LoadIssueJSON reads a JSON file and unmarshals it into the provided struct.
 func LoadIssueJSON(path string, v any) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return err
 	}
@@ -194,12 +194,12 @@ func WriteCheckpointJSON(path string, data any) error {
 	if err != nil {
 		return fmt.Errorf("marshal checkpoint: %w", err)
 	}
-	return os.WriteFile(path, jsonData, 0644)
+	return os.WriteFile(path, jsonData, 0o600)
 }
 
 // LoadCheckpointJSON reads and unmarshals a checkpoint file.
 func LoadCheckpointJSON(path string, v any) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil // Return nil for missing checkpoint
@@ -218,7 +218,7 @@ func LoadCheckpointJSON(path string, v any) error {
 // If the file does not exist, it returns nil, nil.
 func ReadManifestFile(path string) ([]byte, error) {
 	filePath := filepath.Join(path, "manifest.json")
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec // G304: internal state path
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -230,7 +230,7 @@ func ReadManifestFile(path string) ([]byte, error) {
 
 // WriteManifestFile writes data atomically to manifest.json in the given directory.
 func WriteManifestFile(path string, data []byte) error {
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("creating manifest directory: %w", err)
 	}
 
@@ -242,18 +242,18 @@ func WriteManifestFile(path string, data []byte) error {
 	tmpPath := tmpFile.Name()
 
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()    //nolint:errcheck
-		os.Remove(tmpPath) //nolint:errcheck
+		tmpFile.Close()    //nolint:errcheck,gosec // cleanup on error path
+		os.Remove(tmpPath) //nolint:errcheck,gosec // cleanup on error path
 		return fmt.Errorf("writing manifest temp file: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath) //nolint:errcheck
+		os.Remove(tmpPath) //nolint:errcheck,gosec // cleanup on error path
 		return fmt.Errorf("closing manifest temp file: %w", err)
 	}
 
 	dest := filepath.Join(path, "manifest.json")
 	if err := os.Rename(tmpPath, dest); err != nil {
-		os.Remove(tmpPath) //nolint:errcheck
+		os.Remove(tmpPath) //nolint:errcheck,gosec // cleanup on error path
 		return fmt.Errorf("renaming manifest temp file: %w", err)
 	}
 
@@ -262,12 +262,12 @@ func WriteManifestFile(path string, data []byte) error {
 
 // WriteCacheFile writes raw bytes to a cache file named <id>.cache in path.
 func WriteCacheFile(path string, id string, data []byte) error {
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("creating cache directory: %w", err)
 	}
 
 	cacheFile := filepath.Join(path, id+".cache")
-	if err := os.WriteFile(cacheFile, data, 0o644); err != nil {
+	if err := os.WriteFile(cacheFile, data, 0o600); err != nil {
 		return fmt.Errorf("writing cache file: %w", err)
 	}
 	return nil
@@ -277,7 +277,7 @@ func WriteCacheFile(path string, id string, data []byte) error {
 // If the file does not exist, it returns nil, nil.
 func ReadCacheFile(path string, id string) ([]byte, error) {
 	cacheFile := filepath.Join(path, id+".cache")
-	data, err := os.ReadFile(cacheFile)
+	data, err := os.ReadFile(cacheFile) //nolint:gosec // G304: internal state path
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -295,12 +295,12 @@ func WriteConfigFile(path string, data any) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	return os.WriteFile(path, jsonData, 0644)
+	return os.WriteFile(path, jsonData, 0o600)
 }
 
 // LoadConfigFile reads and unmarshals a config file.
 func LoadConfigFile(path string, v any) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
@@ -320,7 +320,7 @@ func StatFile(path string) bool {
 
 // ReadPlanFile reads a plan JSON file from the given path.
 func ReadPlanFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return nil, fmt.Errorf("read plan file %s: %w", path, err)
 	}
@@ -337,7 +337,7 @@ func WriteCoverageFile(path string, data any) error {
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, jsonData, 0644); err != nil {
+	if err := os.WriteFile(tmp, jsonData, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -346,7 +346,7 @@ func WriteCoverageFile(path string, data any) error {
 // ReadCoverageFile reads coverage data from a file.
 // If the file does not exist, it returns nil, nil.
 func ReadCoverageFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -419,7 +419,7 @@ func Stat(path string) (os.FileInfo, error) {
 
 // ReadFile reads the entire contents of a file.
 func ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	return os.ReadFile(path) //nolint:gosec // G304: internal state path
 }
 
 // WriteFile writes data to a file, creating it if it does not exist.

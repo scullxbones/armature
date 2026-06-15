@@ -7,6 +7,7 @@ import (
 )
 
 func TestEvaluateD1GitDivergenceConsumesCollectedSignals(t *testing.T) {
+	t.Parallel()
 	finding := EvaluateD1GitDivergence([]string{
 		"feat(TASK-001): commit",
 	}, map[string]string{
