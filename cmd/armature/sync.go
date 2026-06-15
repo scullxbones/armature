@@ -7,6 +7,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -36,13 +37,13 @@ preview changes without committing them.`,
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
 
-			// Materialize to ensure state files are up to date
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			// Load snapshot to ensure state is up to date
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return fmt.Errorf("materialize: %w", err)
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			if targetBranch == "" {
@@ -54,11 +55,10 @@ preview changes without committing them.`,
 				targetBranch = branch
 			}
 
-			// Load materialized issues
-			stateIssuesDir := filepath.Join(appCtx.StateDir, "issues")
-			issues, err := loadIssuesFromDir(stateIssuesDir)
-			if err != nil {
-				return fmt.Errorf("load issues: %w", err)
+			// Convert snapshot issues to slice for DetectMerges
+			issues := make([]materialize.Issue, 0, len(snap.Issues))
+			for _, issue := range snap.Issues {
+				issues = append(issues, *issue)
 			}
 
 			gc := adapters.New(appCtx.RepoPath)
@@ -103,13 +103,13 @@ preview changes without committing them.`,
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 			}
 
-			// Re-materialize so state files reflect the new merged status
-			allOps, err = readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
+			// Re-load snapshot so state files reflect the new merged status
+			snap, err = snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return fmt.Errorf("re-materialize: %w", err)
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			return nil
@@ -123,6 +123,7 @@ preview changes without committing them.`,
 
 // loadIssuesFromDir loads all materialized issues from a directory.
 // Returns a slice of Issue structs.
+// Note: This is kept for backward compatibility with other commands that may still use it.
 func loadIssuesFromDir(issuesDir string) ([]materialize.Issue, error) {
 	var issues []materialize.Issue
 

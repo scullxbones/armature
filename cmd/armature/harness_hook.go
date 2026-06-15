@@ -8,7 +8,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
-	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -46,13 +46,13 @@ func newHarnessHookCmd() *cobra.Command {
 
 			appCtx := currentCtx(cmd)
 
-			// Materialize state from ops (required before resolver can work)
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			// Load snapshot to ensure state is up to date (required before resolver can work)
+			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
-				return fmt.Errorf("materialize: %w", err)
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			resolver := harnesspolicy.NewTaskPolicyResolver(harnesspolicy.ResolverConfig{

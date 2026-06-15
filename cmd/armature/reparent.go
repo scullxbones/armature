@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -32,25 +32,25 @@ with an explicit error message.`,
 			}
 
 			appCtx := currentCtx(cmd)
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets); err != nil {
-				return err
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			// Look up the issue being reparented.
-			issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", issueID+".json"))
-			if err != nil {
-				return fmt.Errorf("issue %s not found: %w", issueID, err)
+			issue, ok := snap.Issues[issueID]
+			if !ok {
+				return fmt.Errorf("issue %s not found", issueID)
 			}
 
 			if newParent != "" {
 				// Look up the new parent and validate the hierarchy.
-				parentIssue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", newParent+".json"))
-				if err != nil {
-					return fmt.Errorf("parent %s not found: %w", newParent, err)
+				parentIssue, ok := snap.Issues[newParent]
+				if !ok {
+					return fmt.Errorf("parent %s not found", newParent)
 				}
 
 				allowed, ok := validParentChildTypes[parentIssue.Type]
@@ -58,8 +58,6 @@ with an explicit error message.`,
 					return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", newParent, parentIssue.Type, issue.Type)
 				}
 			}
-			// Suppress unused variable warning: issue is used above for hierarchy check.
-			_ = issue
 
 			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
