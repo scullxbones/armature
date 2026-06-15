@@ -6,7 +6,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	armcontext "github.com/scullxbones/armature/internal/context"
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
 )
@@ -25,20 +24,8 @@ func buildHarnessStructuredContext(appCtx *config.Context, issueID string) (stri
 	if err != nil {
 		return "", fmt.Errorf("load snapshot: %w", err)
 	}
-	// Construct graph from state.Issues
-	nodeIndex := make(map[string]*dag.Node)
-	for id, issue := range snap.State.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        issue.ID,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  issue.Children,
-			BlockedBy: issue.BlockedBy,
-			Blocks:    issue.Blocks,
-		}
-	}
-	graph := dag.GraphFromState(nodeIndex)
+	// Build graph from state using the helper function
+	graph := buildGraphFromState(snap.State)
 	assembled, err := armcontext.Assemble(issueID, stateDir, snap.State, graph)
 	if err != nil {
 		return "", fmt.Errorf("assemble context: %w", err)
