@@ -12,11 +12,11 @@ The coordinator loop is the standard execution path: find ready tasks with `arm 
 
 ### Setup
 
-Initialize Armature. Because `main` is not protected, `arm init` picks up single-branch (solo) mode automatically.
+Initialize Armature. Because `main` is not protected, `arm bootstrap` picks up single-branch (solo) mode automatically.
 
 ```bash
 cd my-project
-arm init
+arm bootstrap
 # Armature detects: no branch protection → solo mode
 # Creates .armature/ on main branch
 ```
@@ -75,7 +75,7 @@ Initialize Armature. Branch protection is detected and dual-branch mode is activ
 
 ```bash
 cd my-project
-arm init
+arm bootstrap
 # Armature detects: main is protected → dual-branch mode
 # Creates orphan branch _armature for coordination data
 # Creates worktree at .arm/ for simultaneous access
@@ -123,7 +123,7 @@ Initialize in dual-branch mode (typical for team repos with protected `main`).
 
 ```bash
 cd team-project
-arm init
+arm bootstrap
 ```
 
 Register all relevant source documents — PRD, architecture docs, API specs.
@@ -206,7 +206,7 @@ Initialize a fresh Armature installation in a repository.
 
 ```bash
 cd project-repo
-arm init
+arm bootstrap
 ```
 
 If Armature state becomes corrupted or inconsistent, run `arm doctor` first to diagnose structural issues before taking any destructive action:
@@ -220,7 +220,7 @@ In **dual-branch mode**, the ops logs (source of truth for the issue DAG) live o
 
 ```bash
 rm -rf .arm/.armature    # dual-branch mode only — ops are on _armature branch
-arm init
+arm bootstrap
 ```
 
 In **single-branch mode**, `.armature/ops/` contains the append-only ops logs that are the source of truth. Deleting this directory permanently destroys all issue history. Do not delete it without first backing up the ops logs:
@@ -228,7 +228,7 @@ In **single-branch mode**, `.armature/ops/` contains the append-only ops logs th
 ```bash
 cp -r .armature/ops /tmp/armature-ops-backup
 rm -rf .armature
-arm init
+arm bootstrap
 ```
 
 Alternatively, use `arm doctor` to diagnose structural issues before repairing:
@@ -268,7 +268,7 @@ Key settings:
 
 | Setting | What it controls |
 |---|---|
-| `mode` | Informational label only — does not switch coordination mode at runtime. Active mode is set by `arm init` via git config (`armature.mode`). |
+| `mode` | Informational label only — does not switch coordination mode at runtime. Active mode is set by `arm bootstrap` via git config (`armature.mode`). |
 | `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
 | `default_ttl` | TTL written to claim ops by some coordinator paths (minutes). Note: `arm claim --ttl` defaults to 60 min independently; this setting does not override that CLI default. |
 | `token_budget` | Context token budget used by the harness context path. Note: standalone `arm render-context` uses its own `--budget` flag (default: 4000) and does not read this config value. |
@@ -323,7 +323,7 @@ arm transition --issue TASK-055 --to ready \
 
 ### Notes for Wrangler
 
-- If state becomes corrupted, delete `.armature/` (single-branch) or `.arm/.armature/` (dual-branch) and run `arm init` to reinitialize. Use `arm doctor` first to diagnose issues.
+- If state becomes corrupted, delete `.armature/` (single-branch) or `.arm/.armature/` (dual-branch) and run `arm bootstrap` to reinitialize. Use `arm doctor` first to diagnose issues.
 - Keep `default_ttl` generous enough that slow tasks do not get falsely flagged as stale.
 - Hooks with `required: true` will block operations if they fail; use sparingly for critical integrations.
 
@@ -416,8 +416,8 @@ Armature uses a Merge-CRDT (MRDT) approach where each agent appends to its own l
 
 | Persona | Key Commands |
 |---|---|
-| P1 Lone Wolf | `arm init`, `arm ready`, `arm claim`, `arm render-context`, `arm transition` |
+| P1 Lone Wolf | `arm bootstrap`, `arm ready`, `arm claim`, `arm render-context`, `arm transition` |
 | P2 Gatekeeper | same as P1, plus dual-branch PR detection for `merged` promotion |
 | P3 Conductor | `arm sources add/sync`, `arm decompose-context`, `arm decompose-apply`, `arm dag-summary`, `arm validate`, `arm stale-review` |
-| P4 Wrangler | `arm init`, `arm init --repair`, config editing, `arm validate`, `arm stale-review` |
+| P4 Wrangler | `arm bootstrap`, config editing, `arm validate`, `arm stale-review` |
 | P5 Agent Fleet | `arm ready`, `arm claim`, `arm render-context`, `arm merged`, `arm list --group` |
