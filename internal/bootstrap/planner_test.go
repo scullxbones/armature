@@ -86,7 +86,7 @@ func TestBuildPlanCodexRow(t *testing.T) {
 	row := plan.Rows[0]
 	assert.Equal(t, bootstrap.ActionUnsupported, row.Skills)
 	assert.Equal(t, bootstrap.ActionUnsupported, row.PluginMetadata)
-	assert.Equal(t, bootstrap.ActionInstall, row.HarnessHookConfig)
+	assert.Equal(t, bootstrap.ActionUnsupported, row.HarnessHookConfig)
 }
 
 func TestBuildPlanWithoutHooks(t *testing.T) {

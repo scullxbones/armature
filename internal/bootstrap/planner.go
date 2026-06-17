@@ -88,8 +88,6 @@ var verifiedPluginMetadata = map[Platform]bool{
 // implemented and tested in harnesshook.
 var verifiedHarnessHookConfig = map[Platform]bool{
 	PlatformClaude: true,
-	PlatformCodex:  true,
-	PlatformDevin:  true,
 }
 
 // DefaultPlatforms returns the verified default platform set.
