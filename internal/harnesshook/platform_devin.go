@@ -27,6 +27,27 @@ func (a *DevinAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
+// OwnsConfig returns whether this Devin workdir is owned by Armature.
+// Checks for the presence of "_armature:managed" key set to true in hooks.json.
+func (a *DevinAdapter) OwnsConfig(workdir string) (bool, error) {
+	path := filepath.Join(workdir, ".devin", "hooks.json")
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return false, err
+	}
+
+	managed, ok := parsed["_armature:managed"].(bool)
+	return ok && managed, nil
+}
+
 // WriteConfig writes the Devin hook configuration into workdir/.devin/hooks.json.
 func (a *DevinAdapter) WriteConfig(workdir string) error {
 	dir := filepath.Join(workdir, ".devin")
@@ -35,6 +56,7 @@ func (a *DevinAdapter) WriteConfig(workdir string) error {
 	}
 
 	cfg := map[string]any{
+		"_armature:managed": true,
 		"hooks": map[string]any{
 			"PreToolUse": []any{map[string]any{
 				"matcher": "edit|exec",

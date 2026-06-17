@@ -71,6 +71,12 @@ func (a *ClaudeAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
+// OwnsConfig returns whether Claude owns the config in workdir.
+// Claude's settings.json is always managed by Armature via JSON merge approach.
+func (a *ClaudeAdapter) OwnsConfig(workdir string) (bool, error) {
+	return true, nil
+}
+
 // WriteConfig writes the Claude Code settings.json hook configuration into workdir/.claude/.
 // It merges Armature hooks with existing user-managed hooks rather than replacing them.
 func (a *ClaudeAdapter) WriteConfig(workdir string) error {

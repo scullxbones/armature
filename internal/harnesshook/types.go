@@ -53,6 +53,7 @@ type PlatformAdapter interface {
 	Name() string
 	Capabilities() PlatformCapabilities
 	WriteConfig(workdir string) error
+	OwnsConfig(workdir string) (bool, error)
 	Decode(input []byte) (Event, error)
 	// Encode returns (payload, exitCode, err). exitCode is non-zero only when the platform uses exit status to signal blocking.
 	Encode(event Event, decision Decision) ([]byte, int, error)
