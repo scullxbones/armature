@@ -22,7 +22,7 @@ func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Create one task via normal flow
@@ -88,7 +88,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -140,7 +140,7 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -195,7 +195,7 @@ func TestMaterializeCommand_WarningsVisible(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -260,7 +260,7 @@ func TestMaterializeOffsetTracking(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
