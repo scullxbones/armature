@@ -343,3 +343,14 @@ func TestRunRepoSetupDualBranchCreatesWorktree(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), `"mode": "dual-branch"`)
 }
+
+// TestBootstrapDeployPluginUsesPluginName verifies that deployPlugin uses the plugin's
+// name from plugin.json (e.g., "armature") for the directory path, not the platform name.
+// This ensures that metadata is installed at .claude/plugins/armature/ not .claude/plugins/claude/.
+func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
+	src := makeBootstrapTestFSWithPlugin(t)
+
+	pluginName, err := getPluginNameFromFS(src)
+	require.NoError(t, err)
+	assert.Equal(t, "armature", pluginName, "plugin name should be extracted from plugin.json")
+}
