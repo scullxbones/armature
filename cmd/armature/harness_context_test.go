@@ -12,7 +12,7 @@ func TestBuildHarnessStructuredContext_IncludesIssueIDAndCoreLayer(t *testing.T)
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create",
 		"--id", "TASK-CTX",

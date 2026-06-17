@@ -188,3 +188,158 @@ func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
 	// Verify .armature was initialized (part of init)
 	assert.DirExists(t, filepath.Join(repo, ".armature"))
 }
+
+// TestRunRepoSetupCreatesStructure verifies that runRepoSetup creates the directory
+// structure (.armature/ops, .armature/state, etc.) needed for Armature.
+func TestRunRepoSetupCreatesStructure(t *testing.T) {
+	repo := initTempRepo(t)
+	// Create an initial commit so git is fully initialized
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	// Verify directory structure
+	assert.DirExists(t, filepath.Join(repo, ".armature"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "state"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "state", "issues"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "hooks"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "templates"))
+	assert.DirExists(t, filepath.Join(repo, ".armature", "review"))
+}
+
+// TestRunRepoSetupWritesGitignore verifies that runRepoSetup writes .armature/.gitignore
+// to prevent state/ from being committed.
+func TestRunRepoSetupWritesGitignore(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
+	content, readErr := os.ReadFile(gitignorePath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "state/")
+}
+
+// TestRunRepoSetupWritesSchemaFile verifies that runRepoSetup writes the SCHEMA file.
+func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	schemaPath := filepath.Join(repo, ".armature", "ops", "SCHEMA")
+	_, statErr := os.Stat(schemaPath)
+	require.NoError(t, statErr)
+}
+
+// TestRunRepoSetupInstallsHooks verifies that runRepoSetup installs hooks to .git/hooks/.
+func TestRunRepoSetupInstallsHooks(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	// Verify hooks are installed
+	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	_, statErr := os.Stat(hookPath)
+	require.NoError(t, statErr, "pre-commit hook should be installed")
+}
+
+// TestRunRepoSetupIdempotent verifies that running runRepoSetup twice is safe.
+func TestRunRepoSetupIdempotent(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err1 := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err1)
+
+	err2 := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err2, "second run should not fail")
+}
+
+// TestRunRepoSetupWritesConfig verifies that runRepoSetup writes config.json.
+func TestRunRepoSetupWritesConfig(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	configPath := filepath.Join(repo, ".armature", "config.json")
+	_, statErr := os.Stat(configPath)
+	require.NoError(t, statErr, "config.json should be created")
+}
+
+// TestInstallHooksExecutable verifies that installHooks makes hook files executable.
+func TestInstallHooksExecutable(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	// Verify at least one hook is executable
+	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	stat, statErr := os.Stat(hookPath)
+	require.NoError(t, statErr)
+	assert.NotZero(t, stat.Mode()&0o111, "hook should be executable")
+}
+
+// TestRunRepoSetupDualBranchCreatesWorktree verifies that runRepoSetup creates a .arm worktree in dual-branch mode.
+func TestRunRepoSetupDualBranchCreatesWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	err := runRepoSetup(cmd, repo, true)
+	require.NoError(t, err)
+
+	// Verify worktree exists at .arm/
+	assert.DirExists(t, filepath.Join(repo, ".arm"))
+
+	// Verify .armature/ is inside the worktree
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"))
+
+	// Verify config is in dual-branch mode
+	configPath := filepath.Join(repo, ".arm", ".armature", "config.json")
+	content, readErr := os.ReadFile(configPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), `"mode": "dual-branch"`)
+}

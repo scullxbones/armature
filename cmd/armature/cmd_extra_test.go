@@ -175,7 +175,7 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -722,7 +722,7 @@ func setupRepoWithTwoTasks(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
 	require.NoError(t, err)
@@ -775,7 +775,7 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -874,7 +874,7 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -978,7 +978,7 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -997,7 +997,7 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	// With --strict, the same plan applied to a fresh repo should fail.
 	repo2 := initTempRepo(t)
 	run(t, repo2, "git", "commit", "--allow-empty", "-m", "init")
-	_, err = runTrls(t, repo2, "init")
+	_, err = runTrls(t, repo2, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo2, "worker-init")
 	require.NoError(t, err)
@@ -1012,7 +1012,7 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1050,7 +1050,7 @@ func TestDecomposeApplyRoot(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1182,7 +1182,7 @@ func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1293,7 +1293,7 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")

@@ -14,7 +14,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// 1. Initialize armature and worker
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)

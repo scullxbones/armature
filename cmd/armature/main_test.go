@@ -164,7 +164,7 @@ func TestInitCommand_SingleBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -184,7 +184,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
@@ -202,7 +202,7 @@ func TestInitCommand_Idempotent(t *testing.T) {
 	for range 2 {
 		cmd := newRootCmd()
 		cmd.SetOut(new(bytes.Buffer))
-		cmd.SetArgs([]string{"init", "--repo", repo})
+		cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 		assert.NoError(t, cmd.Execute())
 	}
 }
@@ -213,7 +213,7 @@ func TestMaterializeCommand(t *testing.T) {
 
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
-	cmd1.SetArgs([]string{"init", "--repo", repo})
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	buf := new(bytes.Buffer)
@@ -231,7 +231,7 @@ func TestReadyCommand_EmptyRepo(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	buf := new(bytes.Buffer)
@@ -249,7 +249,7 @@ func TestCreateCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	buf := new(bytes.Buffer)
@@ -270,7 +270,7 @@ func setupRepoWithTask(t *testing.T) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -386,7 +386,7 @@ func TestRenderContextCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -410,7 +410,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -453,7 +453,7 @@ func TestValidateCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -481,7 +481,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Init worker so decompose-apply can get a worker ID
@@ -513,7 +513,7 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--dual-branch", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -548,7 +548,7 @@ func TestMaterialize_SingleBranchMode_AfterModeRefactor(t *testing.T) {
 	// Init repo
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
-	cmd1.SetArgs([]string{"init", "--repo", repo})
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	// Materialize should still work
@@ -579,7 +579,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -615,7 +615,7 @@ func TestNote_SingleBranch_ViaAppendOp(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Init and set up a task
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -634,7 +634,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -683,7 +683,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -752,7 +752,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -808,7 +808,7 @@ func TestStatus_ShowsInProgressIssue(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -836,7 +836,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Use dual-branch mode so done != merged
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -868,7 +868,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	hookPath := filepath.Join(repo, ".armature", "hooks", "post-merge.sh.template")
@@ -881,7 +881,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	hookPath := filepath.Join(repo, ".armature", "hooks", "post-commit.sh.template")
@@ -896,7 +896,7 @@ func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	hookPath := filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template")
@@ -911,7 +911,7 @@ func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Check that all three hook templates are installed to .git/hooks/
@@ -941,7 +941,7 @@ func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 
 	// Check that hooks are installed to .git/hooks/
@@ -960,7 +960,7 @@ func TestInit_HooksAreBranchAware(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Check that post-commit hook contains branch awareness logic
@@ -982,7 +982,7 @@ func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1001,7 +1001,7 @@ func TestMerged_AcceptsDoneIssue_SingleBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1020,7 +1020,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1052,7 +1052,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1106,7 +1106,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Init armature (which also inits worker ID)
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Case 1: No worker ID set (manually unset it)
@@ -1242,7 +1242,7 @@ func TestWorkersCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
@@ -1349,7 +1349,7 @@ func TestDecisionCommand(t *testing.T) {
 func TestLinkCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1382,7 +1382,7 @@ func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1402,7 +1402,7 @@ func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1422,7 +1422,7 @@ func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1442,7 +1442,7 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1477,7 +1477,7 @@ func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1490,7 +1490,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	// Setup: repo with two issues and a worker
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1583,7 +1583,7 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1640,7 +1640,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1699,7 +1699,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -1737,7 +1737,7 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -1756,11 +1756,11 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// First init --dual-branch should succeed
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err, "first dual-branch init should succeed")
 
 	// Second init --dual-branch should also succeed (idempotent)
-	_, err = runTrls(t, repo, "init", "--dual-branch")
+	_, err = runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err, "second dual-branch init should succeed (idempotent)")
 
 	// The stored worktree path should be absolute (not relative).
@@ -1777,7 +1777,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) }) //nolint:errcheck // cleanup chdir error not actionable
 
 	// Re-init using "." as repo path — simulates running trls init --dual-branch in the repo root
-	dotCmd.SetArgs([]string{"init", "--dual-branch", "--repo", "."})
+	dotCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", "."})
 	err = dotCmd.Execute()
 	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")
 
@@ -1828,7 +1828,7 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1854,7 +1854,7 @@ func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2029,10 +2029,10 @@ func TestInitCommand_AlreadyInitialized(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "init")
+	out, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	assert.Contains(t, out, "already")
 }
@@ -2130,7 +2130,7 @@ func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2174,7 +2174,7 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 func TestCreateCommand_HumanOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "create", "--format", "human", "--type", "task", "--title", "Human task", "--id", "human-01")
@@ -2187,7 +2187,7 @@ func TestCreateCommand_HumanOutput(t *testing.T) {
 func TestCreateCommand_JSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "create", "--format", "json", "--type", "task", "--title", "JSON task", "--id", "json-01")
@@ -2261,7 +2261,7 @@ func TestDecisionCommand_JSONOutput(t *testing.T) {
 func TestLinkCommand_HumanOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2280,7 +2280,7 @@ func TestLinkCommand_HumanOutput(t *testing.T) {
 func TestLinkCommand_JSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2301,7 +2301,7 @@ func TestLinkCommand_JSONOutput(t *testing.T) {
 func TestUnlinkCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2333,7 +2333,7 @@ func TestUnlinkCommand(t *testing.T) {
 func TestUnlinkCommand_JSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2490,7 +2490,7 @@ func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
 func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2528,7 +2528,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	// Initialize armature
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Initialize our worker (worker-A).
@@ -2573,7 +2573,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	// Initialize armature
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Initialize worker
@@ -2606,7 +2606,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -2643,7 +2643,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -2708,7 +2708,7 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -2740,7 +2740,7 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -2830,7 +2830,7 @@ func TestCommandGroups(t *testing.T) {
 	dagExpected := []string{"dag-summary", "dag-transition", "link"}
 	syncExpected := []string{"sync", "merged", "materialize", "import", "stale-review"}
 	adminExpected := []string{
-		"worker-init", "workers", "init", "create", "validate", "doctor", "version",
+		"worker-init", "workers", "bootstrap", "create", "validate", "doctor", "version",
 		"show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history",
 	}
 
@@ -2860,7 +2860,7 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	require.NoError(t, err)
 	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
-	_, err = runTrls(t, repo, "init")
+	_, err = runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2891,7 +2891,7 @@ func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	require.NoError(t, err)
 	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
-	_, err = runTrls(t, repo, "init")
+	_, err = runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2917,7 +2917,7 @@ func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2943,7 +2943,7 @@ func SKIP_TestTransitionToDone_ParentStoryWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2988,7 +2988,7 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -3068,7 +3068,7 @@ func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
 func TestShowCommand_MultipleIDs(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Create two tasks
@@ -3093,7 +3093,7 @@ func TestShowCommand_MultipleIDs(t *testing.T) {
 func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "create", "--id", "show-j1", "--title", "JSON Task 1", "--type", "task")
@@ -3117,7 +3117,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	acceptanceJSON := `[{"type":"test_passes","description":"all tests green"}]`
@@ -3149,7 +3149,7 @@ func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "create",
@@ -3172,7 +3172,7 @@ func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
 func TestAmendCommand_ReplacesAndClearsContextFiles(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "create",
@@ -3228,7 +3228,7 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 func TestCreateCommand_WithSourceFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3305,7 +3305,7 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3332,7 +3332,7 @@ func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3357,7 +3357,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3386,7 +3386,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3431,7 +3431,7 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3499,7 +3499,7 @@ func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
 func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Create a story first
@@ -3520,7 +3520,7 @@ func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
 func TestReparentCommand_HappyPath(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Create two stories and a task under story-01

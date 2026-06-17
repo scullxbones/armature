@@ -86,10 +86,6 @@ func newRootCmd() *cobra.Command {
 	workerInitCmd.GroupID = "admin"
 	root.AddCommand(workerInitCmd)
 
-	initCmd := newInitCmd()
-	initCmd.GroupID = "admin"
-	root.AddCommand(initCmd)
-
 	bootstrapCmd := newBootstrapCmd()
 	bootstrapCmd.GroupID = "admin"
 	root.AddCommand(bootstrapCmd)
@@ -244,10 +240,6 @@ func newRootCmd() *cobra.Command {
 	doctorCmd := newDoctorCmd()
 	doctorCmd.GroupID = "admin"
 	root.AddCommand(doctorCmd)
-
-	installSkillsCmd := newInstallSkillsCmd()
-	installSkillsCmd.GroupID = "admin"
-	root.AddCommand(installSkillsCmd)
 
 	completionCmd := newCompletionCmd()
 	completionCmd.GroupID = "admin"

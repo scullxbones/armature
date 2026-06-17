@@ -20,7 +20,7 @@ func setupRepoWithScopedTasks(t *testing.T) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
