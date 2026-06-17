@@ -49,6 +49,15 @@ type Plan struct {
 	Rows   []PlatformRow
 }
 
+// HarnessArtifactResult captures the outcome of deploying a single artifact.
+type HarnessArtifactResult struct {
+	Platform string `json:"platform"`        // e.g., "claude", "codex"
+	Artifact string `json:"artifact"`        // e.g., "skills", "plugin_metadata", "harness_hook_config"
+	Status   string `json:"status"`          // e.g., "deployed", "skipped", "unsupported"
+	Note     string `json:"note,omitempty"`  // human-readable details
+	Error    string `json:"error,omitempty"` // error message if Status is "error"
+}
+
 // PlanRequest holds the inputs to BuildPlan.
 type PlanRequest struct {
 	Platforms []Platform // empty = DefaultPlatforms()
