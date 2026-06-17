@@ -1,10 +1,12 @@
 package harnesshook
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // CodexAdapter implements PlatformAdapter for the OpenAI Codex harness.
@@ -28,9 +30,35 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
+// OwnsConfig returns whether this Codex workdir is owned by Armature.
+// Checks for the presence of "# armature:managed" marker in codex.toml.
+func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
+	path := filepath.Join(workdir, "codex.toml")
+	file, err := os.Open(path) //nolint:gosec // G304: internal config path
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		firstLine := scanner.Text()
+		if strings.TrimSpace(firstLine) == "# armature:managed" {
+			return true, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 // WriteConfig writes the Codex hook configuration into workdir/codex.toml.
 func (a *CodexAdapter) WriteConfig(workdir string) error {
-	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
+	content := "# armature:managed\n[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	return os.WriteFile(filepath.Join(workdir, "codex.toml"), []byte(content), 0o600)
 }
 

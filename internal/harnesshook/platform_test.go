@@ -474,3 +474,120 @@ func TestClaudeAdapterWriteConfigDeduplicatesWithUserHooks(t *testing.T) {
 	assert.Equal(t, 1, armHarnessHookCountPreToolUse, "should have exactly 1 arm harness-hook in PreToolUse after second call, not duplicates")
 	assert.Equal(t, 1, armHarnessHookCountStop, "should have exactly 1 arm harness-hook in Stop after second call, not duplicates")
 }
+
+func TestClaudeAdapterOwnsConfigAlwaysTrue(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewClaudeAdapter()
+
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.True(t, owns, "Claude should always own config")
+}
+
+func TestCodexAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	content := "# armature:managed\n[hooks]\npre_tool_use = \"arm harness-hook\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
+
+	adapter := NewCodexAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.True(t, owns, "Codex should own config when marker is present")
+}
+
+func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
+
+	adapter := NewCodexAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Codex should not own config when marker is absent")
+}
+
+func TestCodexAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewCodexAdapter()
+
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Codex should not own config when file does not exist")
+}
+
+func TestDevinAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	devinDir := filepath.Join(dir, ".devin")
+	require.NoError(t, os.MkdirAll(devinDir, 0o750))
+	content := `{"_armature:managed": true, "hooks": {}}`
+	require.NoError(t, os.WriteFile(filepath.Join(devinDir, "hooks.json"), []byte(content), 0o600))
+
+	adapter := NewDevinAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.True(t, owns, "Devin should own config when marker is present")
+}
+
+func TestDevinAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	devinDir := filepath.Join(dir, ".devin")
+	require.NoError(t, os.MkdirAll(devinDir, 0o750))
+	content := `{"hooks": {}}`
+	require.NoError(t, os.WriteFile(filepath.Join(devinDir, "hooks.json"), []byte(content), 0o600))
+
+	adapter := NewDevinAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Devin should not own config when marker is absent")
+}
+
+func TestDevinAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewDevinAdapter()
+
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Devin should not own config when file does not exist")
+}
+
+func TestCodexAdapterWriteConfigIncludesMarker(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewCodexAdapter()
+
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, "codex.toml"))
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "# armature:managed", "WriteConfig should include marker")
+	assert.True(t, len(content) > 0 && content[0] == '#', "marker should be first line")
+}
+
+func TestDevinAdapterWriteConfigIncludesMarker(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewDevinAdapter()
+
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".devin", "hooks.json"))
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	assert.True(t, parsed["_armature:managed"].(bool), "WriteConfig should include managed marker")
+}

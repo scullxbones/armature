@@ -44,6 +44,10 @@ func (m *mockAdapter) WriteConfig(_ string) error {
 	return nil
 }
 
+func (m *mockAdapter) OwnsConfig(_ string) (bool, error) {
+	return true, nil
+}
+
 func (m *mockAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
