@@ -12,19 +12,38 @@ type ClaudeAdapter struct{}
 // NewClaudeAdapter constructs a ClaudeAdapter.
 func NewClaudeAdapter() *ClaudeAdapter { return &ClaudeAdapter{} }
 
-// containsArmatureHook checks if a hooks array already contains an "arm harness-hook" entry.
-// It iterates through the hooks array and checks each hook entry's nested "hooks" array
-// for a command matching "arm harness-hook".
-func containsArmatureHook(hooksArray []any) bool {
+// containsArmatureHookWithMatcherCheck checks if a hooks array already contains an "arm harness-hook" entry
+// with a matcher that covers the provided required matcher.
+// If requiredMatcher is empty, only checks for the command without matcher validation (used for Stop hooks).
+func containsArmatureHookWithMatcherCheck(hooksArray []any, requiredMatcher string) bool {
 	for _, hookEntry := range hooksArray {
 		hookMap, ok := hookEntry.(map[string]any)
 		if !ok {
 			continue
 		}
+
+		// For matchers (PreToolUse): validate that the existing matcher covers the required one
+		if requiredMatcher != "" {
+			matcher, ok := hookMap["matcher"].(string)
+			if !ok {
+				// If no matcher, this entry doesn't apply to our specific tools
+				continue
+			}
+
+			// Check if the existing matcher covers the required matcher
+			if !matcherCovers(matcher, requiredMatcher) {
+				continue
+			}
+		}
+		// For Stop hooks (empty requiredMatcher), we skip matcher checking
+		// and just look for the command
+
+		// Check if this hook entry contains an "arm harness-hook" command
 		hooksList, ok := hookMap["hooks"].([]any)
 		if !ok {
 			continue
 		}
+
 		for _, hook := range hooksList {
 			h, ok := hook.(map[string]any)
 			if !ok {
@@ -35,6 +54,23 @@ func containsArmatureHook(hooksArray []any) bool {
 			}
 		}
 	}
+	return false
+}
+
+// matcherCovers checks if existingMatcher covers all the tools in requiredMatcher.
+// For now, only exact matches are considered as covering the required matcher.
+// This is conservative: if someone has "Bash" only, we'll add our broader "Edit|Write|MultiEdit|Bash" matcher.
+func matcherCovers(existingMatcher, requiredMatcher string) bool {
+	// Exact match always covers
+	if existingMatcher == requiredMatcher {
+		return true
+	}
+
+	// If matchers differ, they may not cover the same set of tools.
+	// To be safe, we don't consider a narrower matcher (like "Bash" alone)
+	// as sufficient coverage for the Armature managed matcher
+	// (like "Edit|Write|MultiEdit|Bash").
+	// This means we'll add another hook entry, which is acceptable.
 	return false
 }
 
@@ -94,7 +130,7 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	if existing, ok := hooks["PreToolUse"].([]any); ok {
 		preToolUseHooks = append(preToolUseHooks, existing...)
 	}
-	if !containsArmatureHook(preToolUseHooks) {
+	if !containsArmatureHookWithMatcherCheck(preToolUseHooks, "Edit|Write|MultiEdit|Bash") {
 		preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
 	}
 	hooks["PreToolUse"] = preToolUseHooks
@@ -104,7 +140,7 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	if existing, ok := hooks["Stop"].([]any); ok {
 		stopHooks = append(stopHooks, existing...)
 	}
-	if !containsArmatureHook(stopHooks) {
+	if !containsArmatureHookWithMatcherCheck(stopHooks, "") {
 		stopHooks = append(stopHooks, armatureStop)
 	}
 	hooks["Stop"] = stopHooks

@@ -328,18 +328,6 @@ Import issues from a CSV or JSON file.
 
 ---
 
-## init
-
-Initialize Armature in the current repository.
-
-**Synopsis:**
-`arm init [flags]`
-
-**Flags:**
-- `--dual-branch`: Initialize in dual-branch mode (issues stored on separate `_armature` branch).
-
----
-
 ## link
 
 Add a dependency link between issues.

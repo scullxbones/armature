@@ -1,6 +1,6 @@
 # Armature Configuration Reference
 
-The `.armature/config.json` file stores Armature's configuration for your repository. This file is created by `arm init` and controls core behaviors like task TTL, token budgets, and lifecycle hooks.
+The `.armature/config.json` file stores Armature's configuration for your repository. This file is created by `arm bootstrap` and controls core behaviors like task TTL, token budgets, and lifecycle hooks.
 
 ## Configuration File Location
 
@@ -11,7 +11,7 @@ The `.armature/config.json` file stores Armature's configuration for your reposi
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `mode` | string | `single-branch` | Deployment mode: `single-branch` (all data on `main`) or `dual-branch` (coordination on `_armature` via `.arm/` worktree). Set by `arm init` and `arm init --dual-branch`. |
+| `mode` | string | `single-branch` | Deployment mode: `single-branch` (all data on `main`) or `dual-branch` (coordination on `_armature` via `.arm/` worktree). Set by `arm bootstrap` and `arm bootstrap --dual-branch`. |
 | `project_type` | string | auto-detected | Project type, auto-detected from repo markers. Possible values: `go`, `node`, `python`, `rust`, `make`, `unknown`. |
 | `default_ttl` | integer | `60` | Default task time-to-live in minutes. Tasks without an explicit `ttl` use this value. After TTL expires, task status is flagged as stale. |
 | `token_budget` | integer | `1600` | Token budget for context assembly. `arm render-context` respects this budget (approximately `chars / 4`) when truncating large context layers. |
@@ -20,7 +20,7 @@ The `.armature/config.json` file stores Armature's configuration for your reposi
 
 ### Project Type Detection
 
-`arm init` auto-detects `project_type` by looking for marker files in order:
+`arm bootstrap` auto-detects `project_type` by looking for marker files in order:
 
 1. `go.mod` → `go`
 2. `package.json` → `node`
@@ -103,7 +103,7 @@ Edit `.armature/config.json` directly with a text editor. Changes take effect im
 To migrate from single-branch to dual-branch mode:
 
 ```bash
-arm init --dual-branch
+arm bootstrap --dual-branch
 ```
 
 This creates the `_armature` branch, sets up the `.arm/` worktree, and updates the config. Existing ops are preserved.
