@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,32 +31,23 @@ type BootstrapResult struct {
 	HarnessSetup []bootstrap.HarnessArtifactResult `json:"harness_setup"`
 }
 
-// discardWriter is an io.Writer that discards all writes (like /dev/null).
-type discardWriter struct{}
-
-func (w *discardWriter) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
-
-// runRepoSetupWithFormat calls runRepoSetup with a silent output writer if format is JSON.
+// runRepoSetupWithFormat calls runRepoSetup, silencing human output when format is "json".
 func runRepoSetupWithFormat(cmd *cobra.Command, repoPath string, dualBranch bool, format string) (RepoSetupResult, error) {
 	if format == "json" {
-		// Create a temporary command with a silent writer
 		silentCmd := &cobra.Command{}
-		silentCmd.SetOut(&discardWriter{})
+		silentCmd.SetOut(io.Discard)
 		return runRepoSetup(silentCmd, repoPath, dualBranch)
 	}
 	return runRepoSetup(cmd, repoPath, dualBranch)
 }
 
-// executeHarnessSetupWithFormat calls executeHarnessSetup with a silent output writer if format is JSON.
+// executeHarnessSetupWithFormat calls executeHarnessSetup, silencing human output when format is "json".
 func executeHarnessSetupWithFormat(
 	cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool, format string,
 ) ([]bootstrap.HarnessArtifactResult, error) {
 	if format == "json" {
-		// Create a temporary command with a silent writer
 		silentCmd := &cobra.Command{}
-		silentCmd.SetOut(&discardWriter{})
+		silentCmd.SetOut(io.Discard)
 		return executeHarnessSetup(silentCmd, plan, repoPath, global)
 	}
 	return executeHarnessSetup(cmd, plan, repoPath, global)
@@ -279,20 +271,18 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 				return nil, fmt.Errorf("create adapter for %s: %w", platformName, err)
 			}
 
-			// Check if this adapter owns the config before writing
-			owns, err := adapter.OwnsConfig(destBase)
+			owned, err := adapter.OwnsConfig(destBase)
 			if err != nil {
 				return nil, fmt.Errorf("check config ownership for %s: %w", platformName, err)
 			}
-
-			if !owns {
+			if !owned {
 				results = append(results, bootstrap.HarnessArtifactResult{
 					Platform: platformName,
 					Artifact: "harness_hook_config",
 					Status:   "skipped",
-					Note:     "config not owned by armature",
+					Note:     "existing config not managed by Armature",
 				})
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped harness hook config for %s (not owned)\n", platformName)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped harness hook config for %s (not managed by Armature)\n", platformName)
 			} else {
 				if err := adapter.WriteConfig(destBase); err != nil {
 					results = append(results, bootstrap.HarnessArtifactResult{
@@ -325,6 +315,7 @@ state/
 `
 
 const postMergeHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
 # Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
@@ -339,6 +330,7 @@ arm sync
 `
 
 const postCommitHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature post-commit hook: emit heartbeat and push ops in dual-branch mode.
 # Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
@@ -359,6 +351,7 @@ fi
 `
 
 const prepareCommitMsgHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature prepare-commit-msg hook: prepend active claim ID to commit message.
 # Branch-aware: skips on _armature since ops logs use automated messages.
 # To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
@@ -381,6 +374,7 @@ fi
 `
 
 const preCommitHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature pre-commit hook: block ops log commits on code branches in dual-branch mode.
 # In dual-branch mode, ops live on _armature — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
@@ -408,64 +402,45 @@ if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; t
 fi
 `
 
-// isArmatureManagedGitHook checks if an existing git hook file is managed by Armature
-// by looking for "# Armature" near the top of the file. If the file doesn't exist,
-// returns true (safe to write). If it exists but can't be read, returns false to be safe.
-func isArmatureManagedGitHook(hookPath string) bool {
-	data, err := os.ReadFile(hookPath) //nolint:gosec // path constructed from internal .git/hooks dir
-	if err != nil {
-		// File doesn't exist or can't be read
-		if os.IsNotExist(err) {
-			return true // Safe to write (file doesn't exist)
-		}
-		return false // Can't read — be conservative, don't overwrite
-	}
-
-	// Check if the file contains "# Armature" marker
-	return strings.Contains(string(data), "# Armature")
-}
-
 // installHooks copies hook templates from .armature/hooks/ to .git/hooks/ and makes them executable.
+// Existing hooks that do not contain the "# armature:managed" marker are skipped to avoid
+// overwriting user-managed hooks. Returns a list of skipped hook names.
 // In dual-branch mode, the templates are in the worktree's .armature/hooks/.
-// If a hook file exists and is not Armature-managed, it is skipped to preserve user customizations.
-// Returns a list of hook names that were skipped (because they exist and are not Armature-managed).
 func installHooks(repoPath string, issuesDir string) ([]string, error) {
 	hooksDir := filepath.Join(issuesDir, "hooks")
 	gitHooksDir := filepath.Join(repoPath, ".git", "hooks")
 
-	// Create .git/hooks directory if it doesn't exist
 	if err := os.MkdirAll(gitHooksDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create .git/hooks directory: %w", err)
 	}
 
-	// List of hooks to install
 	hooks := []string{"pre-commit", "post-commit", "post-merge", "prepare-commit-msg"}
-
 	var skipped []string
 
 	for _, hook := range hooks {
 		templatePath := filepath.Join(hooksDir, hook+".sh.template")
 		hookPath := filepath.Join(gitHooksDir, hook)
 
-		// Read template content
 		content, err := os.ReadFile(templatePath) //nolint:gosec // G304: path constructed from internal hooks dir
 		if err != nil {
-			// If template doesn't exist, skip (it might not be needed for this mode)
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, fmt.Errorf("read hook template %s: %w", hook, err)
+			return skipped, fmt.Errorf("read hook template %s: %w", hook, err)
 		}
 
-		// Check if the existing hook is Armature-managed; if not, skip it
-		if !isArmatureManagedGitHook(hookPath) {
-			skipped = append(skipped, hook)
-			continue
+		// Skip hooks that exist but were not written by Armature.
+		if existing, readErr := os.ReadFile(hookPath); readErr == nil { //nolint:gosec // G304: internal hooks path
+			if !strings.Contains(string(existing), "# armature:managed") {
+				skipped = append(skipped, hook)
+				continue
+			}
+		} else if !os.IsNotExist(readErr) {
+			return skipped, fmt.Errorf("check hook %s: %w", hook, readErr)
 		}
 
-		// Write hook to .git/hooks/ with executable permissions
 		if err := os.WriteFile(hookPath, content, 0o755); err != nil { //nolint:gosec // git hooks require executable bit
-			return nil, fmt.Errorf("install hook %s: %w", hook, err)
+			return skipped, fmt.Errorf("install hook %s: %w", hook, err)
 		}
 	}
 
@@ -569,14 +544,14 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) (RepoSet
 		}
 	}
 
-	// Install hooks from templates to .git/hooks/ and capture skipped hooks
-	skipped, err := installHooks(repoPath, issuesDir)
+	// Install hooks from templates to .git/hooks/
+	skippedHooks, err := installHooks(repoPath, issuesDir)
 	if err != nil {
 		return RepoSetupResult{}, fmt.Errorf("install hooks: %w", err)
 	}
 
 	// Print warnings for skipped hooks to stderr
-	for _, hookName := range skipped {
+	for _, hookName := range skippedHooks {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping git hook %s (not Armature-managed)\n", hookName)
 	}
 
@@ -616,7 +591,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) (RepoSet
 
 	result := RepoSetupResult{
 		Status:       status,
-		SkippedHooks: skipped,
+		SkippedHooks: skippedHooks,
 	}
 	return result, nil
 }

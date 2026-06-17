@@ -520,7 +520,7 @@ func TestCodexAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
-	assert.False(t, owns, "Codex should not own config when file does not exist")
+	assert.True(t, owns, "Codex may create config when file does not exist")
 }
 
 func TestDevinAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
@@ -561,7 +561,7 @@ func TestDevinAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
-	assert.False(t, owns, "Devin should not own config when file does not exist")
+	assert.True(t, owns, "Devin may create config when file does not exist")
 }
 
 func TestCodexAdapterWriteConfigIncludesMarker(t *testing.T) {
