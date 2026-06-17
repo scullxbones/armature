@@ -90,6 +90,10 @@ func newRootCmd() *cobra.Command {
 	initCmd.GroupID = "admin"
 	root.AddCommand(initCmd)
 
+	bootstrapCmd := newBootstrapCmd()
+	bootstrapCmd.GroupID = "admin"
+	root.AddCommand(bootstrapCmd)
+
 	readyCmd := newReadyCmd()
 	readyCmd.GroupID = "workflow"
 	root.AddCommand(readyCmd)
