@@ -499,3 +499,72 @@ func TestBootstrapExplicitlyRequestedUnsupportedPlatformWithHooksFailsBeforeRepo
 	_, statErr := os.Stat(armatureDir)
 	assert.True(t, os.IsNotExist(statErr), ".armature should NOT be created when platform validation fails")
 }
+
+// TestInstallHooksPreservesExistingUnmanagedHook verifies that installHooks does not overwrite
+// existing user-managed git hooks. It should only overwrite hooks that are Armature-owned
+// (marked with "# Armature" near the top).
+func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Create a user-managed hook before bootstrap
+	gitHooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(gitHooksDir, 0o750))
+
+	userHookContent := "#!/bin/sh\n# User-managed pre-commit hook\necho 'User hook running'\n"
+	userHookPath := filepath.Join(gitHooksDir, "pre-commit")
+	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
+
+	// Run bootstrap (which calls installHooks)
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	// Verify the user hook is still there unchanged
+	hookData, readErr := os.ReadFile(userHookPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, userHookContent, string(hookData), "user-managed hook should not be overwritten")
+}
+
+// TestRunRepoSetupDetectsExistingDualBranchMode verifies that when re-running bootstrap with
+// dualBranch=false on a repo that was originally initialized with dualBranch=true,
+// the second run detects the existing dual-branch mode from git config and uses
+// the existing .arm worktree instead of creating .armature/ in the code repo.
+func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	// First run: initialize with dual-branch mode
+	err := runRepoSetup(cmd, repo, true)
+	require.NoError(t, err)
+
+	// Verify dual-branch mode was set
+	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist after first run")
+
+	// Second run: call with dualBranch=false (simulating `arm bootstrap` without --dual-branch flag)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(strings.Builder))
+	err = runRepoSetup(cmd2, repo, false)
+	require.NoError(t, err)
+
+	// Verify the second run still uses .arm worktree (detected from git config)
+	// not .armature/ in the code repo
+	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should still exist")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"), ".armature should be in worktree")
+
+	// The code repo should NOT have .armature/ directory
+	assert.False(t, pathExists(filepath.Join(repo, ".armature")),
+		"code repo should not have .armature/ when re-running with existing dual-branch mode")
+}
+
+// pathExists is a helper to check if a path exists without error
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}

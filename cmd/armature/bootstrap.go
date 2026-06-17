@@ -378,8 +378,26 @@ if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; t
 fi
 `
 
+// isArmatureManagedGitHook checks if an existing git hook file is managed by Armature
+// by looking for "# Armature" near the top of the file. If the file doesn't exist,
+// returns true (safe to write). If it exists but can't be read, returns false to be safe.
+func isArmatureManagedGitHook(hookPath string) bool {
+	data, err := os.ReadFile(hookPath) //nolint:gosec // path constructed from internal .git/hooks dir
+	if err != nil {
+		// File doesn't exist or can't be read
+		if os.IsNotExist(err) {
+			return true // Safe to write (file doesn't exist)
+		}
+		return false // Can't read — be conservative, don't overwrite
+	}
+
+	// Check if the file contains "# Armature" marker
+	return strings.Contains(string(data), "# Armature")
+}
+
 // installHooks copies hook templates from .armature/hooks/ to .git/hooks/ and makes them executable.
 // In dual-branch mode, the templates are in the worktree's .armature/hooks/.
+// If a hook file exists and is not Armature-managed, it is skipped to preserve user customizations.
 func installHooks(repoPath string, issuesDir string) error {
 	hooksDir := filepath.Join(issuesDir, "hooks")
 	gitHooksDir := filepath.Join(repoPath, ".git", "hooks")
@@ -406,6 +424,11 @@ func installHooks(repoPath string, issuesDir string) error {
 			return fmt.Errorf("read hook template %s: %w", hook, err)
 		}
 
+		// Check if the existing hook is Armature-managed; if not, skip it
+		if !isArmatureManagedGitHook(hookPath) {
+			continue
+		}
+
 		// Write hook to .git/hooks/ with executable permissions
 		if err := os.WriteFile(hookPath, content, 0o755); err != nil { //nolint:gosec // git hooks require executable bit
 			return fmt.Errorf("install hook %s: %w", hook, err)
@@ -425,6 +448,16 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	repoPath = absRepoPath
 
 	gitClient := adapters.New(repoPath)
+
+	// Detect existing dual-branch mode from git config.
+	// If the repo was already initialized with dual-branch mode, re-running bootstrap
+	// (even without --dual-branch) should preserve the existing mode.
+	if !dualBranch {
+		existingMode, err := gitClient.ReadGitConfig("armature.mode")
+		if err == nil && existingMode == "dual-branch" {
+			dualBranch = true
+		}
+	}
 
 	var issuesDir string
 	if dualBranch {
