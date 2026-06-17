@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/bootstrap"
@@ -72,6 +74,15 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("build harness setup plan: %w", err)
 			}
 
+			// Check if any explicitly-requested platform has all unsupported actions.
+			// This prevents silent failures where the user requested a specific platform
+			// but it's not actually supported (especially with --with-hooks).
+			if len(platforms) > 0 {
+				if err := checkForUnsupportedPlatforms(plan, withHooks); err != nil {
+					return err
+				}
+			}
+
 			if err := runRepoSetup(cmd, repoPath, dualBranch); err != nil {
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
@@ -91,6 +102,100 @@ The command is idempotent: running it multiple times has the same effect as runn
 	cmd.Flags().BoolVar(&withHooks, "with-hooks", false, "also write harness hook configuration")
 	cmd.Flags().StringSliceVar(&platforms, "platform", nil, "restrict to specific platform(s) (can be repeated)")
 	return cmd
+}
+
+// getHookConfigPath returns the path to the hook config file for a given platform.
+// This allows bootstrap to check if the file exists and is Armature-managed before writing.
+func getHookConfigPath(destBase, platformName string) string {
+	switch platformName {
+	case "devin":
+		return filepath.Join(destBase, ".devin", "hooks.json")
+	case "codex":
+		return filepath.Join(destBase, "codex.toml")
+	case "claude", "":
+		// Claude uses .claude/settings.json which is handled with merging in the adapter,
+		// but we return it for consistency
+		return filepath.Join(destBase, ".claude", "settings.json")
+	default:
+		return ""
+	}
+}
+
+// isArmatureManagedHookConfig checks if an existing hook config file is managed by Armature
+// by looking for the "arm harness-hook" command marker. If the file doesn't exist or can't be read,
+// it returns false (treat as not managed, so bootstrap is safe to skip).
+func isArmatureManagedHookConfig(configPath string) bool {
+	data, err := os.ReadFile(configPath) //nolint:gosec // path comes from getHookConfigPath which validates platform
+	if err != nil {
+		// File doesn't exist or can't be read - not Armature-managed
+		return false
+	}
+
+	// For .devin/hooks.json, check if it contains "arm harness-hook"
+	if strings.HasSuffix(configPath, "hooks.json") {
+		var cfg map[string]any
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return false
+		}
+		// Check if "arm harness-hook" command is present in the config
+		if hooks, ok := cfg["hooks"].(map[string]any); ok {
+			for _, hookList := range hooks {
+				if arr, ok := hookList.([]any); ok {
+					for _, hook := range arr {
+						if hookMap, ok := hook.(map[string]any); ok {
+							if cmd, ok := hookMap["command"].(string); ok && cmd == "arm harness-hook" {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+		return false
+	}
+
+	// For codex.toml, check if it contains "arm harness-hook"
+	if strings.HasSuffix(configPath, "codex.toml") {
+		configStr := string(data)
+		return strings.Contains(configStr, "arm harness-hook")
+	}
+
+	// For other files (like .claude/settings.json), they are handled with merging in the adapter
+	// so we always allow writing for those
+	return true
+}
+
+// checkForUnsupportedPlatforms verifies that no explicitly-requested platform is completely
+// unsupported. If a platform was explicitly requested via --platform but has all unsupported
+// actions, it means the user's explicit request cannot be fulfilled and we should fail.
+// This is especially important when --with-hooks is used, as the user expects hooks to be
+// installed but they won't be if the platform is unsupported.
+func checkForUnsupportedPlatforms(plan bootstrap.Plan, withHooks bool) error {
+	for _, row := range plan.Rows {
+		platformName := string(row.Platform)
+
+		// Determine if this platform is completely unsupported.
+		// A platform is unsupported if all requested artifacts are unsupported.
+		skillsUnsupported := row.Skills == bootstrap.ActionUnsupported
+		pluginUnsupported := row.PluginMetadata == bootstrap.ActionUnsupported
+
+		// HarnessHookConfig is only unsupported if --with-hooks was requested and it's unsupported
+		hooksRequestedButUnsupported := withHooks && row.HarnessHookConfig == bootstrap.ActionUnsupported
+
+		// Check if the platform is completely unsupported for what was requested
+		if withHooks {
+			// When --with-hooks is used, all three artifacts are expected to be available
+			if skillsUnsupported && pluginUnsupported && hooksRequestedButUnsupported {
+				return fmt.Errorf("platform %s is unsupported: all requested artifacts (skills, plugin_metadata, harness_hook_config) are not available", platformName)
+			}
+		} else {
+			// Without --with-hooks, just skills and plugin_metadata
+			if skillsUnsupported && pluginUnsupported {
+				return fmt.Errorf("platform %s is unsupported: requested artifacts (skills, plugin_metadata) are not available", platformName)
+			}
+		}
+	}
+	return nil
 }
 
 // executeHarnessSetup executes the harness setup plan: deploys skills, plugin metadata, and hook configs.
@@ -153,6 +258,22 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			adapter, err := harnesshook.NewAdapterForPlatform(platformName)
 			if err != nil {
 				return fmt.Errorf("create adapter for %s: %w", platformName, err)
+			}
+
+			// Before writing, check if the config file exists and if so, verify Armature ownership.
+			// If the file is unmanaged (user-created), skip writing to preserve bootstrap idempotency.
+			configPath := getHookConfigPath(destBase, platformName)
+			if configPath != "" {
+				if _, statErr := os.Stat(configPath); statErr == nil {
+					// File exists; check if it's Armature-managed
+					if !isArmatureManagedHookConfig(configPath) {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+							"Warning: existing hook config at %s is not Armature-managed; skipping write to preserve your configuration\n",
+							configPath)
+						continue
+					}
+				}
+				// File doesn't exist or is Armature-managed, safe to write
 			}
 
 			if err := adapter.WriteConfig(destBase); err != nil {
