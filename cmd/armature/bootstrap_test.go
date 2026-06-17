@@ -555,6 +555,41 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "hooks"), ".armature/hooks should exist")
 }
 
+// TestBootstrapJSONSkippedHooksReported verifies that skipped_hooks appears in JSON output
+// when a pre-existing unmanaged hook prevents installation.
+func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// First bootstrap to create the .armature/ structure.
+	buf1 := new(strings.Builder)
+	cmd1 := newRootCmd()
+	cmd1.SetOut(buf1)
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
+	require.NoError(t, cmd1.Execute())
+
+	// Replace post-commit with a user-managed hook (no armature marker).
+	hookPath := filepath.Join(repo, ".git", "hooks", "post-commit")
+	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\necho mine\n"), 0o755))
+
+	// Second bootstrap: post-commit should be skipped and reported.
+	buf2 := new(strings.Builder)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf2)
+	cmd2.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
+	require.NoError(t, cmd2.Execute())
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(buf2.String()), &result))
+
+	repoSetup, ok := result["repo_setup"].(map[string]interface{})
+	require.True(t, ok)
+	skipped, ok := repoSetup["skipped_hooks"].([]interface{})
+	require.True(t, ok, "skipped_hooks should be present when hooks are skipped")
+	assert.Len(t, skipped, 1, "one hook should be skipped")
+	assert.Equal(t, "post-commit", skipped[0])
+}
+
 // TestBootstrapJSONOutput verifies that arm bootstrap --format json emits valid JSON
 // with the expected schema: repo_setup and harness_setup fields.
 func TestBootstrapJSONOutput(t *testing.T) {
@@ -673,7 +708,7 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 		if result.Artifact == "harness_hook_config" && result.Status == "skipped" {
 			foundSkipped = true
 			assert.Equal(t, "codex", result.Platform)
-			assert.Equal(t, "config not owned by armature", result.Note)
+			assert.Equal(t, "existing config not managed by Armature", result.Note)
 			break
 		}
 	}

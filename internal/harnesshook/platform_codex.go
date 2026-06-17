@@ -30,14 +30,15 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
-// OwnsConfig returns whether this Codex workdir is owned by Armature.
-// Checks for the presence of "# armature:managed" marker in codex.toml.
+// OwnsConfig reports whether Armature may write codex.toml in workdir.
+// Returns true when the file is absent (safe to create) or when the first line
+// is the "# armature:managed" marker written by WriteConfig.
 func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, "codex.toml")
 	file, err := os.Open(path) //nolint:gosec // G304: internal config path
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			return true, nil
 		}
 		return false, err
 	}

@@ -27,14 +27,15 @@ func (a *DevinAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
-// OwnsConfig returns whether this Devin workdir is owned by Armature.
-// Checks for the presence of "_armature:managed" key set to true in hooks.json.
+// OwnsConfig reports whether Armature may write .devin/hooks.json in workdir.
+// Returns true when the file is absent (safe to create) or when it contains the
+// "_armature:managed" key written by WriteConfig.
 func (a *DevinAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, ".devin", "hooks.json")
 	data, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			return true, nil
 		}
 		return false, err
 	}
