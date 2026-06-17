@@ -867,3 +867,4 @@
 ["transition","ARMBTSTRP-S2",1781698564,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["transition","ARMBTSTRP-S2-T3",1781698818,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Moved deploySkills, deployFlatSkills, copySkillWithRewrittenRefs, deployPlugin, copyFile from install_skills.go to new bootstrap_deploy.go; install_skills.go retains only newInstallSkillsCmd; 7 new TestBootstrapDeploy* tests in bootstrap_test.go pass; build clean, make check green"}]
 ["transition","ARMBTSTRP-S2-T3",1781698822,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","ARMBTSTRP-S2-T4",1781698826,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARMBTSTRP-S2 detected at claim time"}]
