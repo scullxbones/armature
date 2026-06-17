@@ -41,7 +41,7 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 		}
 		return false, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	scanner := bufio.NewScanner(file)
 	if scanner.Scan() {

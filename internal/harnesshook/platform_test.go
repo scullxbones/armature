@@ -589,5 +589,6 @@ func TestDevinAdapterWriteConfigIncludesMarker(t *testing.T) {
 	require.NoError(t, err)
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(data, &parsed))
-	assert.True(t, parsed["_armature:managed"].(bool), "WriteConfig should include managed marker")
+	v, ok := parsed["_armature:managed"].(bool)
+	assert.True(t, ok && v, "WriteConfig should include managed marker")
 }
