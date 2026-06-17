@@ -885,3 +885,4 @@
 ["transition","ARMBTSTRP-S4-T6",1781701388,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","ARMBTSTRP-S3-T5c",1781701393,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARMBTSTRP-S3 detected at claim time"}]
 ["note","ARMBTSTRP-S3",1781701393,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARMBTSTRP-S3-T5c detected at claim time"}]
+["claim","ARMBTSTRP-S3-T5c",1781701393,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":180}]
