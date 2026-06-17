@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -115,4 +116,25 @@ func copyFile(src fs.FS, srcPath, destPath string) error {
 		return fmt.Errorf("copy %s: %w", srcPath, err)
 	}
 	return nil
+}
+
+// getPluginNameFromFS reads plugin.json from the embedded FS and extracts the "name" field.
+// This is used to determine the correct plugin directory name (e.g., "armature" instead of "claude").
+func getPluginNameFromFS(src fs.FS) (string, error) {
+	pluginBytes, err := fs.ReadFile(src, "plugin.json")
+	if err != nil {
+		return "", fmt.Errorf("read plugin.json: %w", err)
+	}
+
+	var pluginJSON map[string]any
+	if err := json.Unmarshal(pluginBytes, &pluginJSON); err != nil {
+		return "", fmt.Errorf("unmarshal plugin.json: %w", err)
+	}
+
+	name, ok := pluginJSON["name"].(string)
+	if !ok || name == "" {
+		return "", fmt.Errorf("plugin.json missing or invalid 'name' field")
+	}
+
+	return name, nil
 }

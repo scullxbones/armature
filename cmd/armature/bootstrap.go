@@ -128,7 +128,12 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 
 		// Deploy plugin metadata if requested
 		if row.PluginMetadata == bootstrap.ActionInstall {
-			pluginsDest := filepath.Join(destBase, ".claude", "plugins", platformName)
+			pluginName, err := getPluginNameFromFS(skillsembed.SkillsFS)
+			if err != nil {
+				return fmt.Errorf("extract plugin name: %w", err)
+			}
+
+			pluginsDest := filepath.Join(destBase, ".claude", "plugins", pluginName)
 			if err := deployPlugin(skillsembed.SkillsFS, pluginsDest); err != nil {
 				return fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
 			}

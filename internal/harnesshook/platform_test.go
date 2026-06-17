@@ -186,3 +186,103 @@ func TestAdapterRegistryErrorsOnUnknownPlatform(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown harness hook platform")
 	assert.Contains(t, err.Error(), "unknown-platform")
 }
+
+// TestClaudeAdapterWriteConfigPreservesUserManagedHooks verifies that user-managed hooks
+// in PreToolUse and Stop are preserved when WriteConfig is called.
+// This test verifies that Armature hooks are merged with user hooks, not replacing them.
+func TestClaudeAdapterWriteConfigPreservesUserManagedHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	claudeDir := filepath.Join(dir, ".claude")
+	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
+
+	// Create settings with existing user hooks in the PreToolUse array
+	existing := map[string]any{
+		"permissions": map[string]any{
+			"allow": []string{"Bash(git status)"},
+		},
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "UserTool",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "user-custom-hook",
+						},
+					},
+				},
+			},
+			"Stop": []any{
+				map[string]any{
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "user-stop-hook",
+						},
+					},
+				},
+			},
+		},
+	}
+	existingBytes, err := json.Marshal(existing)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), existingBytes, 0o644))
+
+	adapter := NewClaudeAdapter()
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	// The new Armature hooks should be there
+	assert.Contains(t, string(data), "arm harness-hook")
+
+	// User-managed hooks should also be preserved
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+	hooks := hooksRaw
+
+	preToolUseRaw, ok := hooks["PreToolUse"].([]any)
+	require.True(t, ok, "PreToolUse should be an array")
+	preToolUseHooks := preToolUseRaw
+
+	stopRaw, ok := hooks["Stop"].([]any)
+	require.True(t, ok, "Stop should be an array")
+	stopHooks := stopRaw
+
+	// We should have BOTH the user hook (UserTool) and the Armature hook (Edit|Write|MultiEdit|Bash)
+	assert.GreaterOrEqual(t, len(preToolUseHooks), 2, "user-managed PreToolUse hook should be preserved along with Armature hook")
+	assert.GreaterOrEqual(t, len(stopHooks), 2, "user-managed Stop hook should be preserved along with Armature hook")
+
+	// Check that user's custom hook is still there
+	foundUserToolHook := false
+	for _, h := range preToolUseHooks {
+		if matcher, ok := h.(map[string]any)["matcher"].(string); ok {
+			if matcher == "UserTool" {
+				foundUserToolHook = true
+				break
+			}
+		}
+	}
+	assert.True(t, foundUserToolHook, "user's UserTool hook should be preserved")
+
+	// Check that user's stop hook is still there
+	foundUserStopHook := false
+	for _, h := range stopHooks {
+		if hooks, ok := h.(map[string]any)["hooks"].([]any); ok {
+			for _, hook := range hooks {
+				if cmd, ok := hook.(map[string]any)["command"].(string); ok {
+					if cmd == "user-stop-hook" {
+						foundUserStopHook = true
+						break
+					}
+				}
+			}
+		}
+	}
+	assert.True(t, foundUserStopHook, "user's Stop hook should be preserved")
+}

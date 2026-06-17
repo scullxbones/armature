@@ -28,6 +28,7 @@ func (a *ClaudeAdapter) Capabilities() PlatformCapabilities {
 }
 
 // WriteConfig writes the Claude Code settings.json hook configuration into workdir/.claude/.
+// It merges Armature hooks with existing user-managed hooks rather than replacing them.
 func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	dir := filepath.Join(workdir, ".claude")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -40,21 +41,46 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 		_ = json.Unmarshal(existing, &cfg) //nolint:errcheck // corrupt settings treated as empty and overwritten below
 	}
 
-	cfg["hooks"] = map[string]any{
-		"PreToolUse": []any{map[string]any{
-			"matcher": "Edit|Write|MultiEdit|Bash",
-			"hooks": []any{map[string]any{
-				"type":    "command",
-				"command": "arm harness-hook",
-			}},
-		}},
-		"Stop": []any{map[string]any{
-			"hooks": []any{map[string]any{
-				"type":    "command",
-				"command": "arm harness-hook",
-			}},
+	// Merge hooks instead of replacing them
+	hooks := map[string]any{}
+	if existing, ok := cfg["hooks"].(map[string]any); ok {
+		hooks = existing
+	}
+
+	// Armature hooks to add
+	armaturePreToolUse := map[string]any{
+		"matcher": "Edit|Write|MultiEdit|Bash",
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": "arm harness-hook",
 		}},
 	}
+
+	armatureStop := map[string]any{
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": "arm harness-hook",
+		}},
+	}
+
+	// Merge PreToolUse hooks: append Armature hook to existing user hooks
+	preToolUseHooks := []any{}
+	if existing, ok := hooks["PreToolUse"].([]any); ok {
+		preToolUseHooks = append(preToolUseHooks, existing...)
+	}
+	preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
+	hooks["PreToolUse"] = preToolUseHooks
+
+	// Merge Stop hooks: append Armature hook to existing user hooks
+	stopHooks := []any{}
+	if existing, ok := hooks["Stop"].([]any); ok {
+		stopHooks = append(stopHooks, existing...)
+	}
+	stopHooks = append(stopHooks, armatureStop)
+	hooks["Stop"] = stopHooks
+
+	cfg["hooks"] = hooks
+
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
