@@ -383,7 +383,7 @@ func TestExecuteHarnessSetupWarnsOnUnsupportedHarnessHookConfig(t *testing.T) {
 	cmd.SetErr(errBuf)
 
 	// Execute the harness setup
-	err := executeHarnessSetup(cmd, plan, repoPath, false)
+	_, err := executeHarnessSetup(cmd, plan, repoPath, false)
 	require.NoError(t, err, "executeHarnessSetup should not error on unsupported actions")
 
 	// Check that a warning was written to stderr about unsupported harness hook config
@@ -414,7 +414,7 @@ func TestExecuteHarnessSetupWarnsOnUnsupportedSkills(t *testing.T) {
 	errBuf := &bytes.Buffer{}
 	cmd.SetErr(errBuf)
 
-	err := executeHarnessSetup(cmd, plan, repoPath, false)
+	_, err := executeHarnessSetup(cmd, plan, repoPath, false)
 	require.NoError(t, err)
 
 	errOutput := errBuf.String()
@@ -443,7 +443,7 @@ func TestExecuteHarnessSetupWarnsOnUnsupportedPluginMetadata(t *testing.T) {
 	errBuf := &bytes.Buffer{}
 	cmd.SetErr(errBuf)
 
-	err := executeHarnessSetup(cmd, plan, repoPath, false)
+	_, err := executeHarnessSetup(cmd, plan, repoPath, false)
 	require.NoError(t, err)
 
 	errOutput := errBuf.String()
@@ -735,4 +735,111 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "ops"), ".armature/ops should exist")
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "state"), ".armature/state should exist")
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "hooks"), ".armature/hooks should exist")
+}
+
+// TestExecuteHarnessSetupSkipsUnownedConfig verifies that executeHarnessSetup checks OwnsConfig
+// and skips WriteConfig if the config is not owned by armature, recording a skipped status.
+func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Initialize the repo structure
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	require.NoError(t, runRepoSetup(cmd, repo, false))
+
+	// Create a codex.toml file WITHOUT the armature:managed marker to simulate
+	// a config not owned by armature (the Codex adapter checks for this marker)
+	codexPath := filepath.Join(repo, "codex.toml")
+	require.NoError(t, os.WriteFile(codexPath, []byte("# Some other config\nkey = \"value\"\n"), 0o600))
+
+	// Build a plan that includes harness hook config for Codex
+	req := bootstrap.PlanRequest{
+		Platforms: []bootstrap.Platform{bootstrap.PlatformCodex},
+		Target:    "local",
+		WithHooks: true,
+	}
+	plan, err := bootstrap.BuildPlan(req)
+	require.NoError(t, err)
+
+	// Execute harness setup
+	results, err := executeHarnessSetup(cmd, plan, repo, false)
+	require.NoError(t, err)
+
+	// Verify that a result with Status=skipped was recorded
+	var foundSkipped bool
+	for _, result := range results {
+		if result.Artifact == "harness_hook_config" && result.Status == "skipped" {
+			foundSkipped = true
+			assert.Equal(t, "codex", result.Platform)
+			assert.Equal(t, "config not owned by armature", result.Note)
+			break
+		}
+	}
+	assert.True(t, foundSkipped, "expected to find a skipped harness_hook_config result")
+}
+
+// TestInstallHooksSkipsUnmanagedHook verifies that installHooks does not overwrite
+// an existing hook file that does not contain the # armature:managed marker.
+func TestInstallHooksSkipsUnmanagedHook(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up the repo structure
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	require.NoError(t, runRepoSetup(cmd, repo, false))
+
+	// Create an existing hook without the armature:managed marker
+	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	existingContent := `#!/bin/sh
+# Some other pre-commit hook that's not managed by armature
+echo "Running external pre-commit hook"
+`
+	require.NoError(t, os.WriteFile(hookPath, []byte(existingContent), 0o755))
+
+	// Call installHooks again
+	issuesDir := filepath.Join(repo, ".armature")
+	_, err := installHooks(repo, issuesDir)
+	require.NoError(t, err)
+
+	// Verify that the hook was NOT overwritten (still has the old content)
+	content, err := os.ReadFile(hookPath)
+	require.NoError(t, err)
+	assert.Equal(t, existingContent, string(content), "hook should not have been overwritten")
+}
+
+// TestInstallHooksOverwritesManagedHook verifies that installHooks DOES overwrite
+// an existing hook file that contains the # armature:managed marker.
+func TestInstallHooksOverwritesManagedHook(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up the repo structure
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	require.NoError(t, runRepoSetup(cmd, repo, false))
+
+	// Create an existing hook WITH the armature:managed marker
+	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	oldContent := `#!/bin/sh
+# armature:managed
+# Old version of armature hook
+echo "old"
+`
+	require.NoError(t, os.WriteFile(hookPath, []byte(oldContent), 0o755))
+
+	// Call installHooks again
+	issuesDir := filepath.Join(repo, ".armature")
+	_, err := installHooks(repo, issuesDir)
+	require.NoError(t, err)
+
+	// Verify that the hook WAS overwritten (contains the new content)
+	content, err := os.ReadFile(hookPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "# armature:managed", "hook should have been overwritten")
+	assert.NotContains(t, string(content), "echo \"old\"", "old content should be gone")
 }

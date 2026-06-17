@@ -18,6 +18,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// HarnessArtifactResult records the outcome of deploying a harness artifact.
+type HarnessArtifactResult struct {
+	Platform string // e.g., "claude", "codex", "devin"
+	Artifact string // "skills", "plugin_metadata", "harness_hook_config"
+	Status   string // "installed", "skipped", "unsupported", "error"
+	Note     string // human-readable reason when skipped or error
+}
+
 func newBootstrapCmd() *cobra.Command {
 	var global bool
 	var withHooks bool
@@ -103,7 +111,8 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
-			if err := executeHarnessSetup(cmd, plan, repoPath, global); err != nil {
+			_, err = executeHarnessSetup(cmd, plan, repoPath, global)
+			if err != nil {
 				// Restore output for error reporting
 				if jsonMode {
 					cmd.SetOut(origOut)
@@ -232,18 +241,21 @@ func checkForUnsupportedPlatforms(plan bootstrap.Plan, withHooks bool) error {
 }
 
 // executeHarnessSetup executes the harness setup plan: deploys skills, plugin metadata, and hook configs.
-func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool) error {
+// Returns a slice of HarnessArtifactResult documenting what was deployed.
+func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool) ([]HarnessArtifactResult, error) {
 	// Determine deployment target base
 	var destBase string
 	if global {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("resolve home directory: %w", err)
+			return nil, fmt.Errorf("resolve home directory: %w", err)
 		}
 		destBase = home
 	} else {
 		destBase = repoPath
 	}
+
+	var results []HarnessArtifactResult
 
 	// Process each platform row in the plan
 	for _, row := range plan.Rows {
@@ -254,14 +266,20 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		case bootstrap.ActionInstall:
 			skillsDest := filepath.Join(destBase, ".claude", "skills")
 			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
-				return fmt.Errorf("deploy skills for %s: %w", platformName, err)
+				return nil, fmt.Errorf("deploy skills for %s: %w", platformName, err)
 			}
 
 			// Deploy flat skill files
 			if err := deployFlatSkills(skillsembed.SkillsFS, skillsDest); err != nil {
-				return fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
+				return nil, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
 			}
 
+			results = append(results, HarnessArtifactResult{
+				Platform: platformName,
+				Artifact: "skills",
+				Status:   "installed",
+				Note:     "",
+			})
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed skills to %s for %s\n", skillsDest, platformName)
 		case bootstrap.ActionUnsupported:
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skills not supported for %s, skipping\n", platformName)
@@ -272,14 +290,20 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		case bootstrap.ActionInstall:
 			pluginName, err := getPluginNameFromFS(skillsembed.SkillsFS)
 			if err != nil {
-				return fmt.Errorf("extract plugin name: %w", err)
+				return nil, fmt.Errorf("extract plugin name: %w", err)
 			}
 
 			pluginsDest := filepath.Join(destBase, ".claude", "plugins", pluginName)
 			if err := deployPlugin(skillsembed.SkillsFS, pluginsDest); err != nil {
-				return fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
+				return nil, fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
 			}
 
+			results = append(results, HarnessArtifactResult{
+				Platform: platformName,
+				Artifact: "plugin_metadata",
+				Status:   "installed",
+				Note:     "",
+			})
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed plugin configuration to %s for %s\n", pluginsDest, platformName)
 		case bootstrap.ActionUnsupported:
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: plugin metadata not supported for %s, skipping\n", platformName)
@@ -290,36 +314,42 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		case bootstrap.ActionInstall:
 			adapter, err := harnesshook.NewAdapterForPlatform(platformName)
 			if err != nil {
-				return fmt.Errorf("create adapter for %s: %w", platformName, err)
+				return nil, fmt.Errorf("create adapter for %s: %w", platformName, err)
 			}
 
-			// Before writing, check if the config file exists and if so, verify Armature ownership.
-			// If the file is unmanaged (user-created), skip writing to preserve bootstrap idempotency.
-			configPath := getHookConfigPath(destBase, platformName)
-			if configPath != "" {
-				if _, statErr := os.Stat(configPath); statErr == nil {
-					// File exists; check if it's Armature-managed
-					if !isArmatureManagedHookConfig(configPath) {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-							"Warning: existing hook config at %s is not Armature-managed; skipping write to preserve your configuration\n",
-							configPath)
-						continue
-					}
+			// Check if this adapter owns the config before writing
+			owns, err := adapter.OwnsConfig(destBase)
+			if err != nil {
+				return nil, fmt.Errorf("check config ownership for %s: %w", platformName, err)
+			}
+
+			if !owns {
+				results = append(results, HarnessArtifactResult{
+					Platform: platformName,
+					Artifact: "harness_hook_config",
+					Status:   "skipped",
+					Note:     "config not owned by armature",
+				})
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped harness hook config for %s (not owned)\n", platformName)
+			} else {
+				if err := adapter.WriteConfig(destBase); err != nil {
+					return nil, fmt.Errorf("write harness hook config for %s: %w", platformName, err)
 				}
-				// File doesn't exist or is Armature-managed, safe to write
-			}
 
-			if err := adapter.WriteConfig(destBase); err != nil {
-				return fmt.Errorf("write harness hook config for %s: %w", platformName, err)
+				results = append(results, HarnessArtifactResult{
+					Platform: platformName,
+					Artifact: "harness_hook_config",
+					Status:   "installed",
+					Note:     "",
+				})
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
 			}
-
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
 		case bootstrap.ActionUnsupported:
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: harness hook config not supported for %s, skipping\n", platformName)
 		}
 	}
 
-	return nil
+	return results, nil
 }
 
 const issuesGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
@@ -328,6 +358,7 @@ state/
 `
 
 const postMergeHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
 # Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
@@ -342,6 +373,7 @@ arm sync
 `
 
 const postCommitHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature post-commit hook: emit heartbeat and push ops in dual-branch mode.
 # Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
@@ -362,6 +394,7 @@ fi
 `
 
 const prepareCommitMsgHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature prepare-commit-msg hook: prepend active claim ID to commit message.
 # Branch-aware: skips on _armature since ops logs use automated messages.
 # To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
@@ -384,6 +417,7 @@ fi
 `
 
 const preCommitHookTemplate = `#!/bin/sh
+# armature:managed
 # Armature pre-commit hook: block ops log commits on code branches in dual-branch mode.
 # In dual-branch mode, ops live on _armature — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
@@ -466,6 +500,19 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 			continue
 		}
 
+		// Check if hook file already exists
+		existingContent, err := os.ReadFile(hookPath) //nolint:gosec // G304: path constructed from .git/hooks/
+		if err == nil {
+			// File exists; check if it contains the # armature:managed marker
+			if !containsArmatureMarker(string(existingContent)) {
+				// Existing hook does not have the marker; skip overwriting
+				continue
+			}
+		} else if !os.IsNotExist(err) {
+			// Error reading existing file (not "file doesn't exist")
+			return nil, fmt.Errorf("read existing hook %s: %w", hook, err)
+		}
+
 		// Write hook to .git/hooks/ with executable permissions
 		if err := os.WriteFile(hookPath, content, 0o755); err != nil { //nolint:gosec // git hooks require executable bit
 			return nil, fmt.Errorf("install hook %s: %w", hook, err)
@@ -473,6 +520,22 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 	}
 
 	return skipped, nil
+}
+
+// containsArmatureMarker checks if content contains the # armature:managed marker.
+func containsArmatureMarker(content string) bool {
+	lines := strings.Split(content, "\n")
+	// The marker should be on the second line (after the shebang)
+	if len(lines) >= 2 && strings.TrimSpace(lines[1]) == "# armature:managed" {
+		return true
+	}
+	// Also check elsewhere in case it's been moved
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "# armature:managed" {
+			return true
+		}
+	}
+	return false
 }
 
 // runRepoSetup initializes the repository structure for Armature.
