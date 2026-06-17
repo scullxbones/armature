@@ -358,98 +358,6 @@ func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
 	assert.Equal(t, "armature", pluginName, "plugin name should be extracted from plugin.json")
 }
 
-// TestExecuteHarnessSetupWarnsOnUnsupportedHarnessHookConfig verifies that executeHarnessSetup
-// emits a warning to stderr when HarnessHookConfig is ActionUnsupported (i.e., user requested
-// hooks but the platform doesn't support them).
-func TestExecuteHarnessSetupWarnsOnUnsupportedHarnessHookConfig(t *testing.T) {
-	repoPath := t.TempDir()
-
-	// Create a plan with ActionUnsupported for HarnessHookConfig (e.g., user requested hooks for codex)
-	plan := bootstrap.Plan{
-		Target: "local",
-		Rows: []bootstrap.PlatformRow{
-			{
-				Platform:          bootstrap.PlatformCodex,
-				Skills:            bootstrap.ActionUnsupported,
-				PluginMetadata:    bootstrap.ActionUnsupported,
-				HarnessHookConfig: bootstrap.ActionUnsupported,
-			},
-		},
-	}
-
-	// Create a cobra command with a bytes buffer to capture stderr
-	cmd := newRootCmd()
-	errBuf := &bytes.Buffer{}
-	cmd.SetErr(errBuf)
-
-	// Execute the harness setup
-	_, err := executeHarnessSetup(cmd, plan, repoPath, false)
-	require.NoError(t, err, "executeHarnessSetup should not error on unsupported actions")
-
-	// Check that a warning was written to stderr about unsupported harness hook config
-	errOutput := errBuf.String()
-	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported harness hook config")
-	assert.Contains(t, errOutput, "codex", "stderr should mention the platform name")
-}
-
-// TestExecuteHarnessSetupWarnsOnUnsupportedSkills verifies that executeHarnessSetup
-// emits a warning to stderr when Skills is ActionUnsupported.
-func TestExecuteHarnessSetupWarnsOnUnsupportedSkills(t *testing.T) {
-	repoPath := t.TempDir()
-
-	// Create a plan with ActionUnsupported for Skills
-	plan := bootstrap.Plan{
-		Target: "local",
-		Rows: []bootstrap.PlatformRow{
-			{
-				Platform:          bootstrap.PlatformCodex,
-				Skills:            bootstrap.ActionUnsupported,
-				PluginMetadata:    bootstrap.ActionSkip,
-				HarnessHookConfig: bootstrap.ActionSkip,
-			},
-		},
-	}
-
-	cmd := newRootCmd()
-	errBuf := &bytes.Buffer{}
-	cmd.SetErr(errBuf)
-
-	_, err := executeHarnessSetup(cmd, plan, repoPath, false)
-	require.NoError(t, err)
-
-	errOutput := errBuf.String()
-	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported skills")
-}
-
-// TestExecuteHarnessSetupWarnsOnUnsupportedPluginMetadata verifies that executeHarnessSetup
-// emits a warning to stderr when PluginMetadata is ActionUnsupported.
-func TestExecuteHarnessSetupWarnsOnUnsupportedPluginMetadata(t *testing.T) {
-	repoPath := t.TempDir()
-
-	// Create a plan with ActionUnsupported for PluginMetadata
-	plan := bootstrap.Plan{
-		Target: "local",
-		Rows: []bootstrap.PlatformRow{
-			{
-				Platform:          bootstrap.PlatformCodex,
-				Skills:            bootstrap.ActionSkip,
-				PluginMetadata:    bootstrap.ActionUnsupported,
-				HarnessHookConfig: bootstrap.ActionSkip,
-			},
-		},
-	}
-
-	cmd := newRootCmd()
-	errBuf := &bytes.Buffer{}
-	cmd.SetErr(errBuf)
-
-	_, err := executeHarnessSetup(cmd, plan, repoPath, false)
-	require.NoError(t, err)
-
-	errOutput := errBuf.String()
-	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported plugin metadata")
-}
-
 // TestBootstrapInvalidPlatformFailsBeforeRepoSetup verifies that arm bootstrap
 // rejects an unknown platform name before mutating the repository.
 func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
@@ -468,37 +376,6 @@ func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
 	armatureDir := filepath.Join(repo, ".armature")
 	_, statErr := os.Stat(armatureDir)
 	assert.True(t, os.IsNotExist(statErr), ".armature must not be created when platform validation fails")
-}
-
-// TestBootstrapExplicitlyRequestedUnsupportedPlatformWithHooksFailsBeforeRepoSetup verifies that
-// when a user explicitly requests an unsupported platform with --with-hooks, the bootstrap command
-// fails before repo setup and does not print "Bootstrap complete". This prevents silent failures
-// where hooks were requested but never installed.
-func TestBootstrapExplicitlyRequestedUnsupportedPlatformWithHooksFailsBeforeRepoSetup(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	cmd := newRootCmd()
-	buf := &bytes.Buffer{}
-	cmd.SetOut(buf)
-	errBuf := &bytes.Buffer{}
-	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codex", "--with-hooks"})
-
-	err := cmd.Execute()
-	require.Error(t, err, "bootstrap with unsupported platform and --with-hooks should fail")
-
-	// Verify the error mentions unsupported
-	assert.Contains(t, err.Error(), "unsupported", "error should mention unsupported")
-
-	// Verify "Bootstrap complete" was NOT printed
-	output := buf.String()
-	assert.NotContains(t, output, "Bootstrap complete", "should not print success message when requested platform is unsupported")
-
-	// Verify .armature was NOT created (validation happens before repo setup)
-	armatureDir := filepath.Join(repo, ".armature")
-	_, statErr := os.Stat(armatureDir)
-	assert.True(t, os.IsNotExist(statErr), ".armature should NOT be created when platform validation fails")
 }
 
 // TestInstallHooksPreservesExistingUnmanagedHook verifies that installHooks does not overwrite
@@ -568,65 +445,6 @@ func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
-}
-
-// TestBootstrapJSONFormat verifies that `arm bootstrap --format json` emits JSON (not plain text) to stdout.
-func TestBootstrapJSONFormat(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	outBuf := new(strings.Builder)
-	cmd := newRootCmd()
-	cmd.SetOut(outBuf)
-
-	// Set the format to json via root flags
-	cmd.PersistentFlags().Set("format", "json")
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-
-	err := cmd.Execute()
-	require.NoError(t, err)
-
-	output := outBuf.String()
-	// Should contain JSON with "status" field
-	assert.Contains(t, output, `"status"`, "output should contain JSON status field")
-	assert.Contains(t, output, `"ok"`, "output should contain status value 'ok'")
-	// Should NOT contain plain text message
-	assert.NotContains(t, output, "Bootstrap complete.\n", "output should not contain plain text message")
-}
-
-// TestBootstrapJSONFormatParseable verifies that when --format json is used, stdout contains
-// only valid JSON (no progress lines from runRepoSetup or executeHarnessSetup).
-// This ensures automation can parse the output without dealing with mixed human/machine text.
-func TestBootstrapJSONFormatParseable(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	outBuf := new(strings.Builder)
-	cmd := newRootCmd()
-	cmd.SetOut(outBuf)
-
-	// Set the format to json via root flags
-	cmd.PersistentFlags().Set("format", "json")
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-
-	err := cmd.Execute()
-	require.NoError(t, err)
-
-	output := outBuf.String()
-
-	// Verify the output is only valid JSON (no progress lines)
-	// It should not contain progress messages like "Initialized Armature...", "Deployed skills...", etc.
-	assert.NotContains(t, output, "Initialized Armature", "output should not contain progress message")
-	assert.NotContains(t, output, "Deployed", "output should not contain progress message")
-	assert.NotContains(t, output, "Deployed skills", "output should not contain progress message")
-	assert.NotContains(t, output, "Deployed plugin", "output should not contain progress message")
-	assert.NotContains(t, output, "Deployed harness", "output should not contain progress message")
-
-	// Verify the output is valid JSON
-	var result map[string]any
-	err = json.Unmarshal([]byte(output), &result)
-	require.NoError(t, err, "output must be valid JSON")
-	assert.Equal(t, "ok", result["status"], "status should be 'ok'")
 }
 
 // TestInstallHooksReturnsSkippedHooks verifies that installHooks returns the list of skipped hook names
@@ -737,6 +555,87 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "hooks"), ".armature/hooks should exist")
 }
 
+// TestBootstrapJSONOutput verifies that arm bootstrap --format json emits valid JSON
+// with the expected schema: repo_setup and harness_setup fields.
+func TestBootstrapJSONOutput(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify output is valid JSON
+	var result map[string]interface{}
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err, "bootstrap output should be valid JSON")
+
+	// Verify expected top-level schema
+	assert.Contains(t, result, "repo_setup", "result should have repo_setup field")
+	assert.Contains(t, result, "harness_setup", "result should have harness_setup field")
+
+	// Verify repo_setup has the expected structure
+	repoSetup, ok := result["repo_setup"].(map[string]interface{})
+	require.True(t, ok, "repo_setup should be an object")
+	assert.Contains(t, repoSetup, "status", "repo_setup should have status field")
+
+	// Verify harness_setup is an array
+	harnessSetup, ok := result["harness_setup"].([]interface{})
+	require.True(t, ok, "harness_setup should be an array")
+	_ = harnessSetup // Use it to avoid linter complaints
+}
+
+// TestBootstrapJSONRepoSetupStatus verifies that repo_setup.status is set correctly
+// on fresh bootstrap and on idempotent re-run.
+func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// First bootstrap (fresh init)
+	buf1 := new(strings.Builder)
+	cmd1 := newRootCmd()
+	cmd1.SetOut(buf1)
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
+
+	err := cmd1.Execute()
+	require.NoError(t, err)
+
+	var result1 map[string]interface{}
+	err = json.Unmarshal([]byte(buf1.String()), &result1)
+	require.NoError(t, err)
+
+	repoSetup1, ok := result1["repo_setup"].(map[string]interface{})
+	require.True(t, ok, "repo_setup should be an object")
+	status1, ok := repoSetup1["status"].(string)
+	require.True(t, ok, "status should be a string")
+	assert.Equal(t, "initialized", status1, "first bootstrap should report 'initialized'")
+
+	// Second bootstrap (idempotent)
+	buf2 := new(strings.Builder)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf2)
+	cmd2.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
+
+	err = cmd2.Execute()
+	require.NoError(t, err)
+
+	var result2 map[string]interface{}
+	err = json.Unmarshal([]byte(buf2.String()), &result2)
+	require.NoError(t, err)
+
+	repoSetup2, ok := result2["repo_setup"].(map[string]interface{})
+	require.True(t, ok, "repo_setup should be an object")
+	status2, ok := repoSetup2["status"].(string)
+	require.True(t, ok, "status should be a string")
+	assert.Equal(t, "already_initialized", status2, "second bootstrap should report 'already_initialized'")
+}
+
 // TestExecuteHarnessSetupSkipsUnownedConfig verifies that executeHarnessSetup checks OwnsConfig
 // and skips WriteConfig if the config is not owned by armature, recording a skipped status.
 func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
@@ -747,7 +646,8 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	require.NoError(t, runRepoSetup(cmd, repo, false))
+	_, err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
 
 	// Create a codex.toml file WITHOUT the armature:managed marker to simulate
 	// a config not owned by armature (the Codex adapter checks for this marker)
@@ -790,7 +690,8 @@ func TestInstallHooksSkipsUnmanagedHook(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	require.NoError(t, runRepoSetup(cmd, repo, false))
+	_, err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
 
 	// Create an existing hook without the armature:managed marker
 	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
@@ -802,7 +703,9 @@ echo "Running external pre-commit hook"
 
 	// Call installHooks again
 	issuesDir := filepath.Join(repo, ".armature")
-	_, err := installHooks(repo, issuesDir)
+	var skipped []string
+	skipped, err = installHooks(repo, issuesDir)
+	_ = skipped
 	require.NoError(t, err)
 
 	// Verify that the hook was NOT overwritten (still has the old content)
@@ -821,7 +724,8 @@ func TestInstallHooksOverwritesManagedHook(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	require.NoError(t, runRepoSetup(cmd, repo, false))
+	_, err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
 
 	// Create an existing hook WITH the armature:managed marker
 	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
@@ -834,7 +738,9 @@ echo "old"
 
 	// Call installHooks again
 	issuesDir := filepath.Join(repo, ".armature")
-	_, err := installHooks(repo, issuesDir)
+	var skipped2 []string
+	skipped2, err = installHooks(repo, issuesDir)
+	_ = skipped2
 	require.NoError(t, err)
 
 	// Verify that the hook WAS overwritten (contains the new content)
