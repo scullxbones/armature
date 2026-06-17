@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -593,6 +594,41 @@ func TestBootstrapJSONFormat(t *testing.T) {
 	assert.NotContains(t, output, "Bootstrap complete.\n", "output should not contain plain text message")
 }
 
+// TestBootstrapJSONFormatParseable verifies that when --format json is used, stdout contains
+// only valid JSON (no progress lines from runRepoSetup or executeHarnessSetup).
+// This ensures automation can parse the output without dealing with mixed human/machine text.
+func TestBootstrapJSONFormatParseable(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	outBuf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(outBuf)
+
+	// Set the format to json via root flags
+	cmd.PersistentFlags().Set("format", "json")
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := outBuf.String()
+
+	// Verify the output is only valid JSON (no progress lines)
+	// It should not contain progress messages like "Initialized Armature...", "Deployed skills...", etc.
+	assert.NotContains(t, output, "Initialized Armature", "output should not contain progress message")
+	assert.NotContains(t, output, "Deployed", "output should not contain progress message")
+	assert.NotContains(t, output, "Deployed skills", "output should not contain progress message")
+	assert.NotContains(t, output, "Deployed plugin", "output should not contain progress message")
+	assert.NotContains(t, output, "Deployed harness", "output should not contain progress message")
+
+	// Verify the output is valid JSON
+	var result map[string]any
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err, "output must be valid JSON")
+	assert.Equal(t, "ok", result["status"], "status should be 'ok'")
+}
+
 // TestInstallHooksReturnsSkippedHooks verifies that installHooks returns the list of skipped hook names
 // when existing hooks are not Armature-managed.
 func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
@@ -666,4 +702,37 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 	assert.Contains(t, errOutput, "Warning:", "stderr should contain warning prefix")
 	assert.Contains(t, errOutput, "pre-commit", "stderr should mention the skipped hook name")
 	assert.Contains(t, errOutput, "not Armature-managed", "stderr should explain why it was skipped")
+}
+
+// TestBootstrapRespectsPersistentRepoFlag verifies that when the root persistent --repo flag is set
+// (without passing --repo directly to bootstrap), the bootstrap command uses the persistent flag value.
+// This tests the fix for the flag shadowing bug where the local --repo flag would shadow the root's.
+// Before the fix, the local repoPath variable would default to "." instead of reading from the
+// persistent flag, causing bootstrap to operate on the wrong directory.
+func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
+	repoPath := initTempRepo(t)
+	run(t, repoPath, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Clean up any previously initialized .armature to test fresh initialization
+	armaturePath := filepath.Join(repoPath, ".armature")
+	if err := os.RemoveAll(armaturePath); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("Failed to clean up %s: %v", armaturePath, err)
+	}
+
+	outBuf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(outBuf)
+
+	// Set args with persistent --repo flag BEFORE subcommand name, without passing --repo to bootstrap itself.
+	// This simulates: arm --repo /path bootstrap (not arm bootstrap --repo /path)
+	cmd.SetArgs([]string{"--repo", repoPath, "bootstrap"})
+
+	err := cmd.Execute()
+	require.NoError(t, err, "bootstrap with persistent --repo flag should succeed")
+
+	// Verify .armature was initialized at the correct path specified by the persistent flag
+	assert.DirExists(t, filepath.Join(repoPath, ".armature"), ".armature should be initialized in the repo specified by persistent --repo flag")
+	assert.DirExists(t, filepath.Join(repoPath, ".armature", "ops"), ".armature/ops should exist")
+	assert.DirExists(t, filepath.Join(repoPath, ".armature", "state"), ".armature/state should exist")
+	assert.DirExists(t, filepath.Join(repoPath, ".armature", "hooks"), ".armature/hooks should exist")
 }

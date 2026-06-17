@@ -268,8 +268,7 @@ func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
 		// Check if this is an adapter exit error (platform-specific exit code)
-		var ace adapterExitError
-		if errors.As(err, &ace) {
+		if ace, ok := errors.AsType[adapterExitError](err); ok {
 			os.Exit(ace.code)
 		}
 
