@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/scullxbones/armature/internal/bootstrap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -353,4 +355,96 @@ func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
 	pluginName, err := getPluginNameFromFS(src)
 	require.NoError(t, err)
 	assert.Equal(t, "armature", pluginName, "plugin name should be extracted from plugin.json")
+}
+
+// TestExecuteHarnessSetupWarnsOnUnsupportedHarnessHookConfig verifies that executeHarnessSetup
+// emits a warning to stderr when HarnessHookConfig is ActionUnsupported (i.e., user requested
+// hooks but the platform doesn't support them).
+func TestExecuteHarnessSetupWarnsOnUnsupportedHarnessHookConfig(t *testing.T) {
+	repoPath := t.TempDir()
+
+	// Create a plan with ActionUnsupported for HarnessHookConfig (e.g., user requested hooks for codex)
+	plan := bootstrap.Plan{
+		Target: "local",
+		Rows: []bootstrap.PlatformRow{
+			{
+				Platform:          bootstrap.PlatformCodex,
+				Skills:            bootstrap.ActionUnsupported,
+				PluginMetadata:    bootstrap.ActionUnsupported,
+				HarnessHookConfig: bootstrap.ActionUnsupported,
+			},
+		},
+	}
+
+	// Create a cobra command with a bytes buffer to capture stderr
+	cmd := newRootCmd()
+	errBuf := &bytes.Buffer{}
+	cmd.SetErr(errBuf)
+
+	// Execute the harness setup
+	err := executeHarnessSetup(cmd, plan, repoPath, false)
+	require.NoError(t, err, "executeHarnessSetup should not error on unsupported actions")
+
+	// Check that a warning was written to stderr about unsupported harness hook config
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported harness hook config")
+	assert.Contains(t, errOutput, "codex", "stderr should mention the platform name")
+}
+
+// TestExecuteHarnessSetupWarnsOnUnsupportedSkills verifies that executeHarnessSetup
+// emits a warning to stderr when Skills is ActionUnsupported.
+func TestExecuteHarnessSetupWarnsOnUnsupportedSkills(t *testing.T) {
+	repoPath := t.TempDir()
+
+	// Create a plan with ActionUnsupported for Skills
+	plan := bootstrap.Plan{
+		Target: "local",
+		Rows: []bootstrap.PlatformRow{
+			{
+				Platform:          bootstrap.PlatformCodex,
+				Skills:            bootstrap.ActionUnsupported,
+				PluginMetadata:    bootstrap.ActionSkip,
+				HarnessHookConfig: bootstrap.ActionSkip,
+			},
+		},
+	}
+
+	cmd := newRootCmd()
+	errBuf := &bytes.Buffer{}
+	cmd.SetErr(errBuf)
+
+	err := executeHarnessSetup(cmd, plan, repoPath, false)
+	require.NoError(t, err)
+
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported skills")
+}
+
+// TestExecuteHarnessSetupWarnsOnUnsupportedPluginMetadata verifies that executeHarnessSetup
+// emits a warning to stderr when PluginMetadata is ActionUnsupported.
+func TestExecuteHarnessSetupWarnsOnUnsupportedPluginMetadata(t *testing.T) {
+	repoPath := t.TempDir()
+
+	// Create a plan with ActionUnsupported for PluginMetadata
+	plan := bootstrap.Plan{
+		Target: "local",
+		Rows: []bootstrap.PlatformRow{
+			{
+				Platform:          bootstrap.PlatformCodex,
+				Skills:            bootstrap.ActionSkip,
+				PluginMetadata:    bootstrap.ActionUnsupported,
+				HarnessHookConfig: bootstrap.ActionSkip,
+			},
+		},
+	}
+
+	cmd := newRootCmd()
+	errBuf := &bytes.Buffer{}
+	cmd.SetErr(errBuf)
+
+	err := executeHarnessSetup(cmd, plan, repoPath, false)
+	require.NoError(t, err)
+
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported plugin metadata")
 }

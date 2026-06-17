@@ -12,8 +12,8 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ## Setup
 
 ```
+arm bootstrap                                           # initialize repo and deploy bundled skills
 arm worker-init --check || arm worker-init              # register once per clone
-arm install-skills                                      # deploy bundled skills to .claude/skills/
 ```
 
 ## Finding and Starting Work

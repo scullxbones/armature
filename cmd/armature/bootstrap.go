@@ -112,7 +112,8 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		platformName := string(row.Platform)
 
 		// Deploy skills if requested
-		if row.Skills == bootstrap.ActionInstall {
+		switch row.Skills {
+		case bootstrap.ActionInstall:
 			skillsDest := filepath.Join(destBase, ".claude", "skills")
 			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
 				return fmt.Errorf("deploy skills for %s: %w", platformName, err)
@@ -124,10 +125,13 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed skills to %s for %s\n", skillsDest, platformName)
+		case bootstrap.ActionUnsupported:
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skills not supported for %s, skipping\n", platformName)
 		}
 
 		// Deploy plugin metadata if requested
-		if row.PluginMetadata == bootstrap.ActionInstall {
+		switch row.PluginMetadata {
+		case bootstrap.ActionInstall:
 			pluginName, err := getPluginNameFromFS(skillsembed.SkillsFS)
 			if err != nil {
 				return fmt.Errorf("extract plugin name: %w", err)
@@ -139,10 +143,13 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed plugin configuration to %s for %s\n", pluginsDest, platformName)
+		case bootstrap.ActionUnsupported:
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: plugin metadata not supported for %s, skipping\n", platformName)
 		}
 
 		// Deploy harness hook config if requested
-		if row.HarnessHookConfig == bootstrap.ActionInstall {
+		switch row.HarnessHookConfig {
+		case bootstrap.ActionInstall:
 			adapter, err := harnesshook.NewAdapterForPlatform(platformName)
 			if err != nil {
 				return fmt.Errorf("create adapter for %s: %w", platformName, err)
@@ -153,6 +160,8 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
+		case bootstrap.ActionUnsupported:
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: harness hook config not supported for %s, skipping\n", platformName)
 		}
 	}
 

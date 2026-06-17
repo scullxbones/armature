@@ -12,6 +12,32 @@ type ClaudeAdapter struct{}
 // NewClaudeAdapter constructs a ClaudeAdapter.
 func NewClaudeAdapter() *ClaudeAdapter { return &ClaudeAdapter{} }
 
+// containsArmatureHook checks if a hooks array already contains an "arm harness-hook" entry.
+// It iterates through the hooks array and checks each hook entry's nested "hooks" array
+// for a command matching "arm harness-hook".
+func containsArmatureHook(hooksArray []any) bool {
+	for _, hookEntry := range hooksArray {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Name returns the platform identifier.
 func (a *ClaudeAdapter) Name() string { return "claude" }
 
@@ -63,20 +89,24 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 		}},
 	}
 
-	// Merge PreToolUse hooks: append Armature hook to existing user hooks
+	// Merge PreToolUse hooks: append Armature hook to existing user hooks if not already present
 	preToolUseHooks := []any{}
 	if existing, ok := hooks["PreToolUse"].([]any); ok {
 		preToolUseHooks = append(preToolUseHooks, existing...)
 	}
-	preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
+	if !containsArmatureHook(preToolUseHooks) {
+		preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
+	}
 	hooks["PreToolUse"] = preToolUseHooks
 
-	// Merge Stop hooks: append Armature hook to existing user hooks
+	// Merge Stop hooks: append Armature hook to existing user hooks if not already present
 	stopHooks := []any{}
 	if existing, ok := hooks["Stop"].([]any); ok {
 		stopHooks = append(stopHooks, existing...)
 	}
-	stopHooks = append(stopHooks, armatureStop)
+	if !containsArmatureHook(stopHooks) {
+		stopHooks = append(stopHooks, armatureStop)
+	}
 	hooks["Stop"] = stopHooks
 
 	cfg["hooks"] = hooks

@@ -82,7 +82,7 @@ This will build the `arm` binary and install it to `~/.local/bin/arm`. Ensure `~
 From your project root, run:
 
 ```bash
-arm init
+arm bootstrap
 ```
 
 Armature will detect if your repository has branch protection and set up either a dual-branch (`_armature` orphan branch) or single-branch mode accordingly.
@@ -102,8 +102,10 @@ This registers your worker identity and sets up log coordination.
 Deploy workflow skills for all agent roles:
 
 ```bash
-arm install-skills
+arm bootstrap
 ```
+
+(This step is already included in step 1 if you ran `arm bootstrap` — the bootstrap command both initializes the repository and deploys skills.)
 
 ### 4. Add Requirements
 
