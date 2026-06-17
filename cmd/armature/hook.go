@@ -164,7 +164,7 @@ func runPreCommitHook(cmd *cobra.Command) error {
 		if strings.Contains(line, ".armature/ops/") {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .armature/ops/ changes on a code branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _armature branch.")
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: arm init --dual-branch")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: arm bootstrap --dual-branch")
 			return fmt.Errorf("refusing to commit .armature/ops/ on branch %q in dual-branch mode", branch)
 		}
 	}

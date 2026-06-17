@@ -48,12 +48,10 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 			repoPath = absRepoPath
 
-			// Step 1: Run repo setup
 			if err := runRepoSetup(cmd, repoPath, dualBranch); err != nil {
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
-			// Step 2: Build the plan
 			platformList := bootstrap.DefaultPlatforms()
 			if len(platforms) > 0 {
 				platformList = nil
@@ -78,8 +76,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("build harness setup plan: %w", err)
 			}
 
-			// Step 3: Execute the plan
-			if err := executeHarnessSetup(cmd, plan, repoPath, global, withHooks); err != nil {
+			if err := executeHarnessSetup(cmd, plan, repoPath, global); err != nil {
 				return fmt.Errorf("harness setup failed: %w", err)
 			}
 
@@ -97,7 +94,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 }
 
 // executeHarnessSetup executes the harness setup plan: deploys skills, plugin metadata, and hook configs.
-func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool, withHooks bool) error {
+func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool) error {
 	// Determine deployment target base
 	var destBase string
 	if global {
@@ -140,7 +137,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		}
 
 		// Deploy harness hook config if requested
-		if row.HarnessHookConfig == bootstrap.ActionInstall && withHooks {
+		if row.HarnessHookConfig == bootstrap.ActionInstall {
 			adapter, err := harnesshook.NewAdapterForPlatform(platformName)
 			if err != nil {
 				return fmt.Errorf("create adapter for %s: %w", platformName, err)
@@ -157,7 +154,6 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 	return nil
 }
 
-// Hook templates (moved from init.go)
 const issuesGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
 # Never commit. See architecture.md §2 (Directory Structure).
 state/
@@ -242,7 +238,7 @@ fi
 if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; then
   echo "ERROR: Refusing to commit .armature/ops/ changes on a code branch."
   echo "In dual-branch mode, ops are written directly to the _armature branch."
-  echo "If you are migrating to dual-branch mode, run: arm init --dual-branch"
+  echo "If you are migrating to dual-branch mode, run: arm bootstrap --dual-branch"
   exit 1
 fi
 `
@@ -285,7 +281,6 @@ func installHooks(repoPath string, issuesDir string) error {
 }
 
 // runRepoSetup initializes the repository structure for Armature.
-// This is the repo setup logic moved from init.go, renamed to runRepoSetup.
 func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	// Resolve repoPath to an absolute path so stored paths are never relative.
 	absRepoPath, err := filepath.Abs(repoPath)
@@ -322,9 +317,16 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 		issuesDir = filepath.Join(repoPath, ".armature")
 	}
 
+	// Detect whether this is a fresh init or an idempotent re-run before writing anything.
+	opsDir := filepath.Join(issuesDir, "ops")
+	freshInit := true
+	if entries, err := os.ReadDir(opsDir); err == nil && len(entries) > 0 {
+		freshInit = false
+	}
+
 	// Create directory structure
 	dirs := []string{
-		filepath.Join(issuesDir, "ops"),
+		opsDir,
 		filepath.Join(issuesDir, "state"),
 		filepath.Join(issuesDir, "state", "issues"),
 		filepath.Join(issuesDir, "templates"),
@@ -394,13 +396,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 		mode = "dual-branch"
 	}
 
-	// Detect whether this was a fresh init or an idempotent re-run by checking
-	// if the ops directory already existed before we ran MkdirAll.
-	opsDir := filepath.Join(issuesDir, "ops")
-	if entries, err := os.ReadDir(opsDir); err == nil && len(entries) > 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in %s mode at %s\n", mode, issuesDir)
-	} else {
+	if freshInit {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in %s mode at %s\n", mode, issuesDir)
+	} else {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in %s mode at %s\n", mode, issuesDir)
 	}
 	return nil
 }
