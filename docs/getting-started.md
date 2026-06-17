@@ -21,10 +21,10 @@ The binary will be installed to `~/.local/bin/arm`. Ensure this directory is in 
 
 ## 2. Initialize Armature
 
-Run `arm init` in your project root to set up Armature.
+Run `arm bootstrap` in your project root to set up Armature.
 
 ```bash
-arm init
+arm bootstrap
 ```
 
 ### Solo vs Dual-Branch Modes
@@ -45,10 +45,10 @@ This command registers a unique worker UUID in your git config. It only needs to
 
 ### Deploy Bundled Skills
 
-Deploy the bundled Armature skills to your agent platform directories.
+The bundled Armature skills are deployed as part of the bootstrap process in step 2 above. If you need to re-deploy skills after bootstrap, run:
 
 ```bash
-arm install-skills
+arm bootstrap
 ```
 
 This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `.claude/skills/` in the repository root (or `~/.claude/skills/` with `--global`), making them available to Claude Code agents. For other agent platforms, copy the skill files manually to the appropriate skills directory.
@@ -117,7 +117,7 @@ arm ready   # check for the next wave of unblocked tasks
 ## Summary of Commands
 | Command | Purpose |
 | --- | --- |
-| `arm init` | Initialize Armature in a repo |
+| `arm bootstrap` | Initialize Armature and deploy skills |
 | `arm sources add` | Register a source document |
 | `arm ready` | List tasks ready for work |
 | `arm claim` | Claim a task |

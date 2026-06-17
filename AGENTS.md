@@ -11,12 +11,12 @@ Canonical workflow and command truth live in the embedded skills under
    make install
    ```
 
-2. **Deploy bundled skills** for local agent use:
+2. **Bootstrap the repository and deploy bundled skills**:
    ```bash
-   arm install-skills
+   arm bootstrap
    ```
-   This deploys the bundled skills to local harness directories such as
-   `.claude/skills/`, `.gemini/skills/`, and `.codex/skills/`.
+   This initializes Armature and deploys the bundled skills to local harness directories
+   such as `.claude/skills/`, `.gemini/skills/`, and `.codex/skills/`.
 
 3. **Register a worker identity once per clone**:
    ```bash

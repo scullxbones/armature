@@ -286,3 +286,79 @@ func TestClaudeAdapterWriteConfigPreservesUserManagedHooks(t *testing.T) {
 	}
 	assert.True(t, foundUserStopHook, "user's Stop hook should be preserved")
 }
+
+// TestClaudeAdapterWriteConfigDeduplicates verifies that calling WriteConfig twice
+// does not result in duplicate arm harness-hook entries.
+func TestClaudeAdapterWriteConfigDeduplicates(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewClaudeAdapter()
+
+	// First call to WriteConfig
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	// Second call to WriteConfig (simulating bootstrap being run twice)
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+
+	preToolUseRaw, ok := hooksRaw["PreToolUse"].([]any)
+	require.True(t, ok, "PreToolUse should be an array")
+
+	stopRaw, ok := hooksRaw["Stop"].([]any)
+	require.True(t, ok, "Stop should be an array")
+
+	// Count arm harness-hook entries in PreToolUse
+	armHarnessHookCountPreToolUse := 0
+	for _, hookEntry := range preToolUseRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				armHarnessHookCountPreToolUse++
+			}
+		}
+	}
+
+	// Count arm harness-hook entries in Stop
+	armHarnessHookCountStop := 0
+	for _, hookEntry := range stopRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				armHarnessHookCountStop++
+			}
+		}
+	}
+
+	assert.Equal(t, 1, armHarnessHookCountPreToolUse, "should have exactly 1 arm harness-hook in PreToolUse, not duplicates")
+	assert.Equal(t, 1, armHarnessHookCountStop, "should have exactly 1 arm harness-hook in Stop, not duplicates")
+}
