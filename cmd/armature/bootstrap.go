@@ -83,7 +83,8 @@ The command is idempotent: running it multiple times has the same effect as runn
 				}
 			}
 
-			if err := runRepoSetup(cmd, repoPath, dualBranch); err != nil {
+			skipped, err := runRepoSetup(cmd, repoPath, dualBranch)
+			if err != nil {
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
@@ -91,7 +92,18 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("harness setup failed: %w", err)
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bootstrap complete.\n")
+			// Check if JSON format is requested
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			if format == "json" || format == "agent" {
+				result := map[string]interface{}{
+					"status":        "ok",
+					"skipped_hooks": skipped,
+				}
+				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bootstrap complete.\n")
+			}
 			return nil
 		},
 	}
@@ -398,17 +410,20 @@ func isArmatureManagedGitHook(hookPath string) bool {
 // installHooks copies hook templates from .armature/hooks/ to .git/hooks/ and makes them executable.
 // In dual-branch mode, the templates are in the worktree's .armature/hooks/.
 // If a hook file exists and is not Armature-managed, it is skipped to preserve user customizations.
-func installHooks(repoPath string, issuesDir string) error {
+// Returns a list of hook names that were skipped (because they exist and are not Armature-managed).
+func installHooks(repoPath string, issuesDir string) ([]string, error) {
 	hooksDir := filepath.Join(issuesDir, "hooks")
 	gitHooksDir := filepath.Join(repoPath, ".git", "hooks")
 
 	// Create .git/hooks directory if it doesn't exist
 	if err := os.MkdirAll(gitHooksDir, 0o750); err != nil {
-		return fmt.Errorf("create .git/hooks directory: %w", err)
+		return nil, fmt.Errorf("create .git/hooks directory: %w", err)
 	}
 
 	// List of hooks to install
 	hooks := []string{"pre-commit", "post-commit", "post-merge", "prepare-commit-msg"}
+
+	var skipped []string
 
 	for _, hook := range hooks {
 		templatePath := filepath.Join(hooksDir, hook+".sh.template")
@@ -421,29 +436,31 @@ func installHooks(repoPath string, issuesDir string) error {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return fmt.Errorf("read hook template %s: %w", hook, err)
+			return nil, fmt.Errorf("read hook template %s: %w", hook, err)
 		}
 
 		// Check if the existing hook is Armature-managed; if not, skip it
 		if !isArmatureManagedGitHook(hookPath) {
+			skipped = append(skipped, hook)
 			continue
 		}
 
 		// Write hook to .git/hooks/ with executable permissions
 		if err := os.WriteFile(hookPath, content, 0o755); err != nil { //nolint:gosec // git hooks require executable bit
-			return fmt.Errorf("install hook %s: %w", hook, err)
+			return nil, fmt.Errorf("install hook %s: %w", hook, err)
 		}
 	}
 
-	return nil
+	return skipped, nil
 }
 
 // runRepoSetup initializes the repository structure for Armature.
-func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
+// Returns the list of skipped hook names (from installHooks) so the caller can report them.
+func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) ([]string, error) {
 	// Resolve repoPath to an absolute path so stored paths are never relative.
 	absRepoPath, err := filepath.Abs(repoPath)
 	if err != nil {
-		return fmt.Errorf("resolve repo path: %w", err)
+		return nil, fmt.Errorf("resolve repo path: %w", err)
 	}
 	repoPath = absRepoPath
 
@@ -463,21 +480,21 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	if dualBranch {
 		// Create orphan branch _armature (idempotent)
 		if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
-			return fmt.Errorf("create _armature branch: %w", err)
+			return nil, fmt.Errorf("create _armature branch: %w", err)
 		}
 
 		// Create .arm/ worktree (idempotent)
 		worktreePath := filepath.Join(repoPath, ".arm")
 		if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
-			return fmt.Errorf("add .arm worktree: %w", err)
+			return nil, fmt.Errorf("add .arm worktree: %w", err)
 		}
 
 		// Set git config keys
 		if err := gitClient.SetGitConfig("armature.mode", "dual-branch"); err != nil {
-			return fmt.Errorf("set armature.mode: %w", err)
+			return nil, fmt.Errorf("set armature.mode: %w", err)
 		}
 		if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
-			return fmt.Errorf("set armature.ops-worktree-path: %w", err)
+			return nil, fmt.Errorf("set armature.ops-worktree-path: %w", err)
 		}
 
 		issuesDir = filepath.Join(worktreePath, ".armature")
@@ -503,20 +520,20 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o750); err != nil {
-			return fmt.Errorf("create directory %s: %w", d, err)
+			return nil, fmt.Errorf("create directory %s: %w", d, err)
 		}
 	}
 
 	// Write .gitignore to prevent state/ from being committed
 	gitignorePath := filepath.Join(issuesDir, ".gitignore")
 	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0o600); err != nil {
-		return fmt.Errorf("write .armature/.gitignore: %w", err)
+		return nil, fmt.Errorf("write .armature/.gitignore: %w", err)
 	}
 
 	// Write SCHEMA file
 	schemaPath := filepath.Join(issuesDir, "ops", "SCHEMA")
 	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0o600); err != nil {
-		return fmt.Errorf("write SCHEMA: %w", err)
+		return nil, fmt.Errorf("write SCHEMA: %w", err)
 	}
 
 	// Write hook templates to .armature/hooks/
@@ -530,13 +547,19 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	for hookName, hookContent := range hookTemplates {
 		hookTemplatePath := filepath.Join(issuesDir, "hooks", hookName)
 		if err := os.WriteFile(hookTemplatePath, []byte(hookContent), 0o600); err != nil {
-			return fmt.Errorf("write hook template %s: %w", hookName, err)
+			return nil, fmt.Errorf("write hook template %s: %w", hookName, err)
 		}
 	}
 
-	// Install hooks from templates to .git/hooks/
-	if err := installHooks(repoPath, issuesDir); err != nil {
-		return fmt.Errorf("install hooks: %w", err)
+	// Install hooks from templates to .git/hooks/ and capture skipped hooks
+	skipped, err := installHooks(repoPath, issuesDir)
+	if err != nil {
+		return nil, fmt.Errorf("install hooks: %w", err)
+	}
+
+	// Print warnings for skipped hooks to stderr
+	for _, hookName := range skipped {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping git hook %s (not Armature-managed)\n", hookName)
 	}
 
 	// Detect project type and write config
@@ -548,14 +571,14 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 			cfg.Mode = "dual-branch"
 		}
 		if err := config.WriteConfig(configPath, cfg); err != nil {
-			return fmt.Errorf("write config: %w", err)
+			return nil, fmt.Errorf("write config: %w", err)
 		}
 	}
 
 	// Init worker if not already configured
 	if ok, _ := worker.CheckWorkerID(repoPath); !ok {
 		if _, err := worker.InitWorker(repoPath); err != nil {
-			return fmt.Errorf("init worker: %w", err)
+			return nil, fmt.Errorf("init worker: %w", err)
 		}
 	}
 
@@ -569,5 +592,5 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) error {
 	} else {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in %s mode at %s\n", mode, issuesDir)
 	}
-	return nil
+	return skipped, nil
 }

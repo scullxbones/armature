@@ -202,7 +202,7 @@ func TestRunRepoSetupCreatesStructure(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	// Verify directory structure
@@ -225,7 +225,7 @@ func TestRunRepoSetupWritesGitignore(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
@@ -243,7 +243,7 @@ func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	schemaPath := filepath.Join(repo, ".armature", "ops", "SCHEMA")
@@ -260,7 +260,7 @@ func TestRunRepoSetupInstallsHooks(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	// Verify hooks are installed
@@ -278,10 +278,10 @@ func TestRunRepoSetupIdempotent(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err1 := runRepoSetup(cmd, repo, false)
+	_, err1 := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err1)
 
-	err2 := runRepoSetup(cmd, repo, false)
+	_, err2 := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err2, "second run should not fail")
 }
 
@@ -294,7 +294,7 @@ func TestRunRepoSetupWritesConfig(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	configPath := filepath.Join(repo, ".armature", "config.json")
@@ -311,7 +311,7 @@ func TestInstallHooksExecutable(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	// Verify at least one hook is executable
@@ -330,7 +330,7 @@ func TestRunRepoSetupDualBranchCreatesWorktree(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	err := runRepoSetup(cmd, repo, true)
+	_, err := runRepoSetup(cmd, repo, true)
 	require.NoError(t, err)
 
 	// Verify worktree exists at .arm/
@@ -519,7 +519,7 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
 	// Verify the user hook is still there unchanged
@@ -541,7 +541,7 @@ func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
 	cmd.SetOut(buf)
 
 	// First run: initialize with dual-branch mode
-	err := runRepoSetup(cmd, repo, true)
+	_, err := runRepoSetup(cmd, repo, true)
 	require.NoError(t, err)
 
 	// Verify dual-branch mode was set
@@ -550,7 +550,7 @@ func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
 	// Second run: call with dualBranch=false (simulating `arm bootstrap` without --dual-branch flag)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(strings.Builder))
-	err = runRepoSetup(cmd2, repo, false)
+	_, err = runRepoSetup(cmd2, repo, false)
 	require.NoError(t, err)
 
 	// Verify the second run still uses .arm worktree (detected from git config)
@@ -567,4 +567,103 @@ func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// TestBootstrapJSONFormat verifies that `arm bootstrap --format json` emits JSON (not plain text) to stdout.
+func TestBootstrapJSONFormat(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	outBuf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(outBuf)
+
+	// Set the format to json via root flags
+	cmd.PersistentFlags().Set("format", "json")
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := outBuf.String()
+	// Should contain JSON with "status" field
+	assert.Contains(t, output, `"status"`, "output should contain JSON status field")
+	assert.Contains(t, output, `"ok"`, "output should contain status value 'ok'")
+	// Should NOT contain plain text message
+	assert.NotContains(t, output, "Bootstrap complete.\n", "output should not contain plain text message")
+}
+
+// TestInstallHooksReturnsSkippedHooks verifies that installHooks returns the list of skipped hook names
+// when existing hooks are not Armature-managed.
+func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Create user-managed hooks before calling installHooks
+	gitHooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(gitHooksDir, 0o750))
+
+	userPreCommitHook := "#!/bin/sh\n# User-managed hook\necho 'User hook'\n"
+	require.NoError(t, os.WriteFile(
+		filepath.Join(gitHooksDir, "pre-commit"),
+		[]byte(userPreCommitHook),
+		0o755,
+	))
+
+	userPostCommitHook := "#!/bin/sh\n# Another user hook\necho 'Another hook'\n"
+	require.NoError(t, os.WriteFile(
+		filepath.Join(gitHooksDir, "post-commit"),
+		[]byte(userPostCommitHook),
+		0o755,
+	))
+
+	// Set up .armature/hooks/ with templates
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	_, err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+
+	// Now test that installHooks returns the skipped hooks
+	skipped, err := installHooks(repo, issuesDir)
+	require.NoError(t, err)
+
+	// Should have skipped at least the pre-commit and post-commit hooks
+	assert.NotEmpty(t, skipped, "skipped hooks list should not be empty")
+	assert.Contains(t, skipped, "pre-commit", "should report pre-commit as skipped")
+	assert.Contains(t, skipped, "post-commit", "should report post-commit as skipped")
+}
+
+// TestRunRepoSetupWarnsAboutSkippedHooks verifies that when installHooks reports skipped hooks,
+// runRepoSetup prints warnings to stderr for each skipped hook.
+func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Create a user-managed hook before bootstrap
+	gitHooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(gitHooksDir, 0o750))
+
+	userHookContent := "#!/bin/sh\n# User-managed pre-commit hook\necho 'User hook running'\n"
+	userHookPath := filepath.Join(gitHooksDir, "pre-commit")
+	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
+
+	// Run runRepoSetup with stderr capture
+	outBuf := new(strings.Builder)
+	errBuf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(outBuf)
+	cmd.SetErr(errBuf)
+
+	_, err := runRepoSetup(cmd, repo, false)
+	require.NoError(t, err)
+
+	errOutput := errBuf.String()
+	// Should have a warning about skipping the pre-commit hook
+	assert.Contains(t, errOutput, "Warning:", "stderr should contain warning prefix")
+	assert.Contains(t, errOutput, "pre-commit", "stderr should mention the skipped hook name")
+	assert.Contains(t, errOutput, "not Armature-managed", "stderr should explain why it was skipped")
 }
