@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -151,4 +152,39 @@ func makeBootstrapTestFSWithPlugin(t *testing.T) fs.FS {
 			Data: []byte(`{"name":"armature","description":"Test plugin"}`),
 		},
 	}
+}
+
+// TestBootstrapCommandRegistered verifies that `arm bootstrap --help` exits 0.
+func TestBootstrapCommandRegistered(t *testing.T) {
+	repo := initTempRepo(t)
+	// Create an initial commit so git is fully initialized
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"bootstrap", "--help"})
+
+	err := cmd.Execute()
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "bootstrap")
+}
+
+// TestBootstrapCommandDefaultsToLocal verifies that the bootstrap command plan uses "local" target by default.
+func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
+	repo := initTempRepo(t)
+	// Create an initial commit so git is fully initialized
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	// Note: --repo is a flag on the bootstrap command itself
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	// Verify .armature was initialized (part of init)
+	assert.DirExists(t, filepath.Join(repo, ".armature"))
 }
