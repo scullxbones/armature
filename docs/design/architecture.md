@@ -79,16 +79,16 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 
 ### Single-Branch Fallback
 
-If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Detection is automatic at `arm init` time. This preserves viability for solo developers and non-enterprise setups.
+If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Detection is automatic at `arm bootstrap` time. This preserves viability for solo developers and non-enterprise setups.
 
 ### Worktree Lifecycle
 
 | Event | Action |
 |---|---|
-| `arm init` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| `arm init --repair` | Re-creates worktree if stale or missing, re-installs hooks |
+| `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
+| `arm bootstrap --repair` | Re-creates worktree if stale or missing, re-installs hooks (if `--with-hooks` is specified) |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
-| Worktree corruption | `arm init --repair` deletes and recreates the worktree from remote |
+| Worktree corruption | `arm bootstrap` deletes and recreates the worktree from remote |
 
 ### Directory Structure (within `.arm/` worktree)
 
@@ -1179,7 +1179,7 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 ### Hook Catalog
 
-`arm init` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
+`arm bootstrap` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
 
 **Important distinction:** Git hooks (this section) are convenience automation for heartbeats, commit-message stamping, and merge promotion. Pre-transition verification hooks (section 12) configured as `required: true` in `.armature/config.json` are **enforcement** — the CLI refuses to emit a `done` transition if a required verification hook fails, regardless of whether git hooks are installed. These are separate mechanisms with different trust models.
 
@@ -1193,9 +1193,9 @@ The `post-commit` hook is the highest-leverage automation: every code commit bec
 
 ### Installation and Bypass
 
-- `arm init` installs hooks from version-controlled templates in `.armature/hooks/`
-- `arm init --no-hooks` skips hook installation
-- `arm init --repair` re-installs if hooks were removed or corrupted
+- `arm bootstrap` installs hooks from version-controlled templates in `.armature/hooks/`
+- `arm bootstrap --repo <path>` specifies a repository path
+- `arm bootstrap --with-hooks` ensures hooks are installed (default behavior)
 - Standard `--no-verify` on git commands bypasses hooks
 - Hooks fail silently (stderr redirected) — system is correct without them
 
@@ -1240,7 +1240,7 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
 
 ### Auto-Detection at Init Time
 
-`arm init` checks for well-known files and proposes defaults:
+`arm bootstrap` checks for well-known files and proposes defaults:
 
 | Detected File | Proposed test_cmd | Proposed lint_cmd |
 |---|---|---|
@@ -1330,41 +1330,39 @@ Output:
 
 Exit codes:
   0  success (or already current)
-  1  ops branch not found (run arm init)
+  1  ops branch not found (run arm bootstrap)
   2  network error (offline — local state is stale)
 ```
 
 Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting, and batch operations.
 
-#### `arm init`
+#### `arm bootstrap`
 
 ```
-arm init [flags]
+arm bootstrap [flags] [<repo-path>]
 
 Behavior:
   1. Detect branch protection (can push to main directly?)
   2. If protected: create _armature orphan branch (if needed), set up ops worktree
   3. If not protected: use single-branch mode
-  4. Auto-detect project type, propose verification hooks
+  4. Auto-detect project type
   5. Write .armature/config.json
-  6. Install git hooks (unless --no-hooks)
-  7. Run worker-init (generate UUID, store in git config)
+  6. Install git hooks from templates
+  7. Deploy bundled skills to .claude/skills/ (or ~/.claude/skills/ with --global)
+  8. Optionally deploy harness hook config (with --with-hooks)
 
 Flags:
-  --no-hooks       Skip hook installation
-  --repair         Re-create worktree, re-install hooks
-  --single-branch  Force single-branch mode regardless of protection
+  --dual-branch    Force dual-branch mode (create _armature branch)
+  --global         Deploy skills to ~/.claude/skills/ instead of .claude/
+  --platform       Restrict to specific platform(s) (repeatable)
+  --repo           Repository path (default: current directory)
+  --with-hooks     Write harness hook configuration
 
 Output:
-  Detected: package.json (Node.js)
-  Proposed test command: npm test
-  Proposed lint command: npx eslint {scope}
-  Accept? [Y/n/edit]
-
-  ✓ Config written to .armature/config.json
-  ✓ Hooks installed to .git/hooks/
-  ✓ Worker ID: a1b2c3d4
-  ✓ Ops worktree created at .arm/
+  Initialized Armature in dual-branch mode at .armature
+  Deployed skills to ./.claude/skills/ for claude
+  Deployed harness hook config for claude
+  Bootstrap complete.
 ```
 
 #### `arm merged`
@@ -1409,7 +1407,7 @@ Exit codes:
 
 ### Worker-Init
 
-`arm worker-init` (also run as part of `arm init`) generates a UUID and writes it to repo-local git config:
+`arm worker-init` (also run as part of `arm bootstrap`) generates a UUID and writes it to repo-local git config:
 
 ```
 git config --local armature.worker-id <uuid>
@@ -1607,9 +1605,9 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 
 | Error | Cause | Hint |
 |---|---|---|
-| `ops branch not found` | `_armature` branch missing | `run arm init` |
-| `ops worktree desync` | Local ops worktree is behind or corrupted | `run arm sync` or `arm init --repair` |
-| `stale worktree` | Worktree path exists but points to wrong branch | `run arm init --repair` |
+| `ops branch not found` | `_armature` branch missing | `run arm bootstrap` |
+| `ops worktree desync` | Local ops worktree is behind or corrupted | `run arm sync` or `arm bootstrap` |
+| `stale worktree` | Worktree path exists but points to wrong branch | `run arm bootstrap` |
 | `materialization failed` | Corrupt log line or unexpected state | Skip unparseable lines + warn; `--debug` shows details |
 
 ---
@@ -1778,11 +1776,11 @@ auth_method = "device_flow"
 
 ### Multi-Repo Strategy
 
-**v1: Separate instances per repo (Option A).** Each repo has its own `arm init`, its own ops branch, its own DAG. Cross-repo dependencies are tracked manually (notes on tasks). The CLI has no awareness of other repos.
+**v1: Separate instances per repo (Option A).** Each repo has its own `arm bootstrap`, its own ops branch, its own DAG. Cross-repo dependencies are tracked manually (notes on tasks). The CLI has no awareness of other repos.
 
 **Future: Hub-repo topology (Option B, designed-for but not implemented).** A dedicated coordination repository (e.g., `acme/armature-ops`) contains all armature ops for the project. Individual code repos reference this hub. Workers in any code repo push ops to the hub.
 
-Implementation path: `arm init --ops-repo=acme/armature-ops` configures the ops worktree to point at the external hub repo. All CLI commands operate against the hub. The code worktree is the current repo.
+Implementation path: `arm bootstrap --ops-repo=acme/armature-ops` configures the ops worktree to point at the external hub repo. All CLI commands operate against the hub. The code worktree is the current repo.
 
 **Design-for signals in v1:**
 
