@@ -33,3 +33,4 @@
 ["transition","ARMBTSTRP-S1-T2",1781698098,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{"to":"done","outcome":"BuildPlan validates request, defaults target to local and platforms to DefaultPlatforms(). Rows reflect verified* maps: install when verified, unsupported otherwise. WithHooks=false sets HarnessHookConfig=skip. All tests pass and make check passes with 82.6% coverage."}]
 ["heartbeat","ARMBTSTRP-S2-T5",1781699753,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{}]
 ["heartbeat","ARMBTSTRP-S2-T5",1781700331,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{}]
+["transition","ARMBTSTRP-S2-T5",1781700353,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{"to":"done","outcome":"Removed init and install-skills commands. Inlined repo setup logic (runRepoSetup, installHooks, hook templates) into bootstrap.go. Added --dual-branch flag support to bootstrap. Updated all 70+ test references to call bootstrap instead of init. All tests pass; make check green at 82.5%."}]
