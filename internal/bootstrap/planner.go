@@ -2,6 +2,8 @@
 // The planner is a pure functional module with no I/O.
 package bootstrap
 
+import "fmt"
+
 // Platform identifies a supported AI harness.
 type Platform string
 
@@ -97,4 +99,76 @@ func DefaultPlatforms() []Platform {
 		}
 	}
 	return result
+}
+
+// BuildPlan validates the request and generates a declarative harness setup plan.
+// It validates each platform against allKnownPlatforms, defaults target to "local"
+// and platforms to DefaultPlatforms() if empty. For each platform, it builds a
+// PlatformRow using the verified* maps. If WithHooks=false, HarnessHookConfig
+// is set to ActionSkip.
+func BuildPlan(req PlanRequest) (Plan, error) {
+	// Default target to "local" if empty
+	target := req.Target
+	if target == "" {
+		target = "local"
+	}
+
+	// Default platforms to DefaultPlatforms() if empty
+	platforms := req.Platforms
+	if len(platforms) == 0 {
+		platforms = DefaultPlatforms()
+	}
+
+	// Validate all platforms against known platforms
+	for _, p := range platforms {
+		isValid := false
+		for _, known := range allKnownPlatforms {
+			if p == known {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			return Plan{}, fmt.Errorf("unknown platform: %s", p)
+		}
+	}
+
+	// Build rows for each platform
+	var rows []PlatformRow
+	for _, p := range platforms {
+		row := PlatformRow{
+			Platform: p,
+		}
+
+		// Determine Skills action
+		if verifiedSkills[p] {
+			row.Skills = ActionInstall
+		} else {
+			row.Skills = ActionUnsupported
+		}
+
+		// Determine PluginMetadata action
+		if verifiedPluginMetadata[p] {
+			row.PluginMetadata = ActionInstall
+		} else {
+			row.PluginMetadata = ActionUnsupported
+		}
+
+		// Determine HarnessHookConfig action
+		switch {
+		case !req.WithHooks:
+			row.HarnessHookConfig = ActionSkip
+		case verifiedHarnessHookConfig[p]:
+			row.HarnessHookConfig = ActionInstall
+		default:
+			row.HarnessHookConfig = ActionUnsupported
+		}
+
+		rows = append(rows, row)
+	}
+
+	return Plan{
+		Target: target,
+		Rows:   rows,
+	}, nil
 }
