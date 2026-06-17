@@ -19,19 +19,22 @@ func TestDefaultPlatformsDoesNotIncludeUnverified(t *testing.T) {
 	assert.NotContains(t, platforms, bootstrap.PlatformAntigravity)
 }
 
+// TestDefaultPlatformsExcludesHooksOnlyPlatform pins that a platform with
+// verified hook config but no verified skills or plugin_metadata is excluded
+// from the default set (Codex is the current example).
+func TestDefaultPlatformsExcludesHooksOnlyPlatform(t *testing.T) {
+	t.Parallel()
+	platforms := bootstrap.DefaultPlatforms()
+	assert.NotContains(t, platforms, bootstrap.PlatformCodex)
+}
+
 func TestBuildPlanDefaults(t *testing.T) {
 	t.Parallel()
-	req := bootstrap.PlanRequest{
-		Platforms: nil, // empty
-		Target:    "",  // empty
-		WithHooks: false,
-	}
+	req := bootstrap.PlanRequest{}
 	plan, err := bootstrap.BuildPlan(req)
 	assert.NoError(t, err)
 	assert.Equal(t, "local", plan.Target)
-	assert.NotNil(t, plan.Rows)
 	assert.Greater(t, len(plan.Rows), 0)
-	// Verify all default platforms are present
 	defaultPlatforms := bootstrap.DefaultPlatforms()
 	assert.Equal(t, len(defaultPlatforms), len(plan.Rows))
 	for _, row := range plan.Rows {
@@ -63,9 +66,26 @@ func TestBuildPlanWithHooks(t *testing.T) {
 	assert.Equal(t, 1, len(plan.Rows))
 	row := plan.Rows[0]
 	assert.Equal(t, bootstrap.PlatformClaude, row.Platform)
-	// Claude has verified skills, plugin metadata, and hook config
 	assert.Equal(t, bootstrap.ActionInstall, row.Skills)
 	assert.Equal(t, bootstrap.ActionInstall, row.PluginMetadata)
+	assert.Equal(t, bootstrap.ActionInstall, row.HarnessHookConfig)
+}
+
+// TestBuildPlanCodexRow exercises a platform that has verified hook config but
+// no verified skills or plugin_metadata. Codex is the canonical example.
+func TestBuildPlanCodexRow(t *testing.T) {
+	t.Parallel()
+	req := bootstrap.PlanRequest{
+		Platforms: []bootstrap.Platform{bootstrap.PlatformCodex},
+		Target:    "local",
+		WithHooks: true,
+	}
+	plan, err := bootstrap.BuildPlan(req)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(plan.Rows))
+	row := plan.Rows[0]
+	assert.Equal(t, bootstrap.ActionUnsupported, row.Skills)
+	assert.Equal(t, bootstrap.ActionUnsupported, row.PluginMetadata)
 	assert.Equal(t, bootstrap.ActionInstall, row.HarnessHookConfig)
 }
 
@@ -82,9 +102,7 @@ func TestBuildPlanWithoutHooks(t *testing.T) {
 	assert.Equal(t, 1, len(plan.Rows))
 	row := plan.Rows[0]
 	assert.Equal(t, bootstrap.PlatformClaude, row.Platform)
-	// Skills and plugin metadata should still be install if verified
 	assert.Equal(t, bootstrap.ActionInstall, row.Skills)
 	assert.Equal(t, bootstrap.ActionInstall, row.PluginMetadata)
-	// HarnessHookConfig should be skip when WithHooks=false
 	assert.Equal(t, bootstrap.ActionSkip, row.HarnessHookConfig)
 }
