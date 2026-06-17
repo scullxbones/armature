@@ -328,6 +328,56 @@ Import issues from a CSV or JSON file.
 
 ---
 
+## bootstrap
+
+Bootstrap Armature: initialize repository and deploy harness artifacts.
+
+**Synopsis:**
+`arm bootstrap [flags] [<repo-path>]`
+
+**Description:**
+Initializes a repository for Armature coordination and optionally deploys harness artifacts
+(skills, plugin metadata, harness hook configs).
+
+By default, artifacts deploy to `.claude/` (local). Use `--global` to deploy to `~/.claude/` instead.
+Use `--dual-branch` to initialize in dual-branch mode (issues stored on separate `_armature` branch).
+Use `--with-hooks` to also write harness hook configuration (both require `--platform` support).
+Use `--platform` to restrict bootstrap to specific platforms (can be repeated); default is all verified platforms.
+
+The command is idempotent: running it multiple times has the same effect as running it once.
+
+**Flags:**
+- `--dual-branch`: Initialize in dual-branch mode (issues stored on separate `_armature` branch).
+- `--global`: Deploy to `~/.claude/` instead of `.claude/` (local).
+- `--platform string`: Restrict to specific platform(s) (can be repeated; default: all verified platforms).
+- `--with-hooks`: Also write harness hook configuration.
+- `--repo string`: Repository path (default: current directory).
+
+**Default Behavior:**
+When run without flags, `arm bootstrap` performs repo setup (`.armature/` directory structure, ops logs,
+git hooks, worker identity) and deploys bundled skills to `.claude/skills/` locally.
+
+**Examples:**
+```bash
+# Basic setup in single-branch mode
+arm bootstrap
+
+# Initialize in dual-branch mode
+arm bootstrap --dual-branch
+
+# Deploy skills globally
+arm bootstrap --global
+
+# Deploy only Claude Code platform harness config with hooks
+arm bootstrap --platform claude --with-hooks
+
+# Specify repo path explicitly
+arm bootstrap --repo /path/to/project
+```
+
+---
+
+
 ## link
 
 Add a dependency link between issues.

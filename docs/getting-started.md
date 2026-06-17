@@ -45,13 +45,13 @@ This command registers a unique worker UUID in your git config. It only needs to
 
 ### Deploy Bundled Skills
 
-The bundled Armature skills are deployed as part of the bootstrap process in step 2 above. If you need to re-deploy skills after bootstrap, run:
+The `arm bootstrap` command already deploys bundled skills to `.claude/skills/` by default. If you need to re-deploy skills or deploy to other agent platforms:
 
 ```bash
-arm bootstrap
+arm bootstrap --global
 ```
 
-This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `.claude/skills/` in the repository root (or `~/.claude/skills/` with `--global`), making them available to Claude Code agents. For other agent platforms, copy the skill files manually to the appropriate skills directory.
+This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `~/.claude/skills/`, making them available to Claude Code agents globally. For other agent platforms, copy the skill files manually to the appropriate skills directory.
 
 ## 3. Register Knowledge Sources
 
@@ -117,7 +117,7 @@ arm ready   # check for the next wave of unblocked tasks
 ## Summary of Commands
 | Command | Purpose |
 | --- | --- |
-| `arm bootstrap` | Initialize Armature and deploy skills |
+| `arm bootstrap` | Initialize Armature and deploy skills in a repo |
 | `arm sources add` | Register a source document |
 | `arm ready` | List tasks ready for work |
 | `arm claim` | Claim a task |

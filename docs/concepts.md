@@ -321,6 +321,11 @@ Deploy skills with:
 arm bootstrap
 ```
 
+or to deploy globally:
+```bash
+arm bootstrap --global
+```
+
 Agents retrieve these skills automatically when working with Armature tasks.
 
 ---
