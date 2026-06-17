@@ -48,10 +48,6 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 			repoPath = absRepoPath
 
-			if err := runRepoSetup(cmd, repoPath, dualBranch); err != nil {
-				return fmt.Errorf("repo setup failed: %w", err)
-			}
-
 			platformList := bootstrap.DefaultPlatforms()
 			if len(platforms) > 0 {
 				platformList = nil
@@ -74,6 +70,10 @@ The command is idempotent: running it multiple times has the same effect as runn
 			plan, err := bootstrap.BuildPlan(req)
 			if err != nil {
 				return fmt.Errorf("build harness setup plan: %w", err)
+			}
+
+			if err := runRepoSetup(cmd, repoPath, dualBranch); err != nil {
+				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
 			if err := executeHarnessSetup(cmd, plan, repoPath, global); err != nil {

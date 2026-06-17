@@ -448,3 +448,23 @@ func TestExecuteHarnessSetupWarnsOnUnsupportedPluginMetadata(t *testing.T) {
 	errOutput := errBuf.String()
 	assert.Contains(t, errOutput, "not supported", "stderr should contain warning about unsupported plugin metadata")
 }
+
+// TestBootstrapInvalidPlatformFailsBeforeRepoSetup verifies that arm bootstrap
+// rejects an unknown platform name before mutating the repository.
+func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codxe"})
+
+	err := cmd.Execute()
+	require.Error(t, err, "bootstrap with unknown platform should fail")
+
+	// The repository must NOT have been mutated before validation failure
+	armatureDir := filepath.Join(repo, ".armature")
+	_, statErr := os.Stat(armatureDir)
+	assert.True(t, os.IsNotExist(statErr), ".armature must not be created when platform validation fails")
+}
