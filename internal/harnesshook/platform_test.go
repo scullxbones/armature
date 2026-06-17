@@ -362,3 +362,115 @@ func TestClaudeAdapterWriteConfigDeduplicates(t *testing.T) {
 	assert.Equal(t, 1, armHarnessHookCountPreToolUse, "should have exactly 1 arm harness-hook in PreToolUse, not duplicates")
 	assert.Equal(t, 1, armHarnessHookCountStop, "should have exactly 1 arm harness-hook in Stop, not duplicates")
 }
+
+// TestClaudeAdapterWriteConfigDeduplicatesWithUserHooks verifies that calling WriteConfig twice
+// with existing user-managed hooks does not result in duplicate arm harness-hook entries.
+func TestClaudeAdapterWriteConfigDeduplicatesWithUserHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	claudeDir := filepath.Join(dir, ".claude")
+	require.NoError(t, os.MkdirAll(claudeDir, 0o755))
+
+	// Create settings with existing user hooks
+	existing := map[string]any{
+		"permissions": map[string]any{
+			"allow": []string{"Bash(git status)"},
+		},
+		"hooks": map[string]any{
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "UserTool",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "user-custom-hook",
+						},
+					},
+				},
+			},
+			"Stop": []any{
+				map[string]any{
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "user-stop-hook",
+						},
+					},
+				},
+			},
+		},
+	}
+	existingBytes, err := json.Marshal(existing)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), existingBytes, 0o644))
+
+	adapter := NewClaudeAdapter()
+
+	// First call to WriteConfig
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	// Second call to WriteConfig (simulating bootstrap being run twice)
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+
+	preToolUseRaw, ok := hooksRaw["PreToolUse"].([]any)
+	require.True(t, ok, "PreToolUse should be an array")
+
+	stopRaw, ok := hooksRaw["Stop"].([]any)
+	require.True(t, ok, "Stop should be an array")
+
+	// Count arm harness-hook entries in PreToolUse
+	armHarnessHookCountPreToolUse := 0
+	for _, hookEntry := range preToolUseRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				armHarnessHookCountPreToolUse++
+			}
+		}
+	}
+
+	// Count arm harness-hook entries in Stop
+	armHarnessHookCountStop := 0
+	for _, hookEntry := range stopRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				armHarnessHookCountStop++
+			}
+		}
+	}
+
+	assert.Equal(t, 1, armHarnessHookCountPreToolUse, "should have exactly 1 arm harness-hook in PreToolUse after second call, not duplicates")
+	assert.Equal(t, 1, armHarnessHookCountStop, "should have exactly 1 arm harness-hook in Stop after second call, not duplicates")
+}

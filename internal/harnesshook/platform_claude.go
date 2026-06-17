@@ -12,66 +12,48 @@ type ClaudeAdapter struct{}
 // NewClaudeAdapter constructs a ClaudeAdapter.
 func NewClaudeAdapter() *ClaudeAdapter { return &ClaudeAdapter{} }
 
-// containsArmatureHookWithMatcherCheck checks if a hooks array already contains an "arm harness-hook" entry
-// with a matcher that covers the provided required matcher.
-// If requiredMatcher is empty, only checks for the command without matcher validation (used for Stop hooks).
-func containsArmatureHookWithMatcherCheck(hooksArray []any, requiredMatcher string) bool {
+// removeArmatureHooks removes all Armature-managed hook entries (identified by the "arm harness-hook" command)
+// and returns a new array containing only user-managed hooks.
+// This ensures idempotency: subsequent calls to WriteConfig won't accumulate duplicate Armature hooks.
+func removeArmatureHooks(hooksArray []any) []any {
+	var filtered []any
 	for _, hookEntry := range hooksArray {
 		hookMap, ok := hookEntry.(map[string]any)
 		if !ok {
+			filtered = append(filtered, hookEntry)
 			continue
 		}
 
-		// For matchers (PreToolUse): validate that the existing matcher covers the required one
-		if requiredMatcher != "" {
-			matcher, ok := hookMap["matcher"].(string)
-			if !ok {
-				// If no matcher, this entry doesn't apply to our specific tools
-				continue
-			}
-
-			// Check if the existing matcher covers the required matcher
-			if !matcherCovers(matcher, requiredMatcher) {
-				continue
-			}
-		}
-		// For Stop hooks (empty requiredMatcher), we skip matcher checking
-		// and just look for the command
-
-		// Check if this hook entry contains an "arm harness-hook" command
+		// Check if this hook entry contains hooks
 		hooksList, ok := hookMap["hooks"].([]any)
 		if !ok {
+			filtered = append(filtered, hookEntry)
 			continue
 		}
 
+		// Filter out "arm harness-hook" commands while preserving any other hooks in this entry
+		var userHooks []any
 		for _, hook := range hooksList {
 			h, ok := hook.(map[string]any)
 			if !ok {
+				userHooks = append(userHooks, hook)
 				continue
 			}
 			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
-				return true
+				// Skip the Armature-managed hook
+				continue
 			}
+			userHooks = append(userHooks, hook)
 		}
-	}
-	return false
-}
 
-// matcherCovers checks if existingMatcher covers all the tools in requiredMatcher.
-// For now, only exact matches are considered as covering the required matcher.
-// This is conservative: if someone has "Bash" only, we'll add our broader "Edit|Write|MultiEdit|Bash" matcher.
-func matcherCovers(existingMatcher, requiredMatcher string) bool {
-	// Exact match always covers
-	if existingMatcher == requiredMatcher {
-		return true
+		// Only keep the entry if there are user-managed hooks remaining
+		if len(userHooks) > 0 {
+			hookMap["hooks"] = userHooks
+			filtered = append(filtered, hookMap)
+		}
+		// If no user hooks remain, the entire entry is dropped (it was purely Armature-managed)
 	}
-
-	// If matchers differ, they may not cover the same set of tools.
-	// To be safe, we don't consider a narrower matcher (like "Bash" alone)
-	// as sufficient coverage for the Armature managed matcher
-	// (like "Edit|Write|MultiEdit|Bash").
-	// This means we'll add another hook entry, which is acceptable.
-	return false
+	return filtered
 }
 
 // Name returns the platform identifier.
@@ -125,24 +107,20 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 		}},
 	}
 
-	// Merge PreToolUse hooks: append Armature hook to existing user hooks if not already present
+	// Merge PreToolUse hooks: remove any existing Armature-managed entries, then add the current version
 	preToolUseHooks := []any{}
 	if existing, ok := hooks["PreToolUse"].([]any); ok {
-		preToolUseHooks = append(preToolUseHooks, existing...)
+		preToolUseHooks = removeArmatureHooks(existing)
 	}
-	if !containsArmatureHookWithMatcherCheck(preToolUseHooks, "Edit|Write|MultiEdit|Bash") {
-		preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
-	}
+	preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
 	hooks["PreToolUse"] = preToolUseHooks
 
-	// Merge Stop hooks: append Armature hook to existing user hooks if not already present
+	// Merge Stop hooks: remove any existing Armature-managed entries, then add the current version
 	stopHooks := []any{}
 	if existing, ok := hooks["Stop"].([]any); ok {
-		stopHooks = append(stopHooks, existing...)
+		stopHooks = removeArmatureHooks(existing)
 	}
-	if !containsArmatureHookWithMatcherCheck(stopHooks, "") {
-		stopHooks = append(stopHooks, armatureStop)
-	}
+	stopHooks = append(stopHooks, armatureStop)
 	hooks["Stop"] = stopHooks
 
 	cfg["hooks"] = hooks

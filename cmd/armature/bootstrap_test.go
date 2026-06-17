@@ -468,3 +468,34 @@ func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
 	_, statErr := os.Stat(armatureDir)
 	assert.True(t, os.IsNotExist(statErr), ".armature must not be created when platform validation fails")
 }
+
+// TestBootstrapExplicitlyRequestedUnsupportedPlatformWithHooksFailsBeforeRepoSetup verifies that
+// when a user explicitly requests an unsupported platform with --with-hooks, the bootstrap command
+// fails before repo setup and does not print "Bootstrap complete". This prevents silent failures
+// where hooks were requested but never installed.
+func TestBootstrapExplicitlyRequestedUnsupportedPlatformWithHooksFailsBeforeRepoSetup(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	errBuf := &bytes.Buffer{}
+	cmd.SetErr(errBuf)
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codex", "--with-hooks"})
+
+	err := cmd.Execute()
+	require.Error(t, err, "bootstrap with unsupported platform and --with-hooks should fail")
+
+	// Verify the error mentions unsupported
+	assert.Contains(t, err.Error(), "unsupported", "error should mention unsupported")
+
+	// Verify "Bootstrap complete" was NOT printed
+	output := buf.String()
+	assert.NotContains(t, output, "Bootstrap complete", "should not print success message when requested platform is unsupported")
+
+	// Verify .armature was NOT created (validation happens before repo setup)
+	armatureDir := filepath.Join(repo, ".armature")
+	_, statErr := os.Stat(armatureDir)
+	assert.True(t, os.IsNotExist(statErr), ".armature should NOT be created when platform validation fails")
+}
