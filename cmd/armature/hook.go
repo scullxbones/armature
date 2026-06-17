@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -268,21 +269,18 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 			// Deletion: fields = [D, deleted_path]
 			deletedPath := fields[1]
 			for issueID, entry := range index {
-				for _, s := range entry.Scope {
-					if s == deletedPath {
-						op := ops.Op{
-							Type:      ops.OpScopeDelete,
-							TargetID:  issueID,
-							Timestamp: ts,
-							WorkerID:  workerID,
-							Payload: ops.Payload{
-								DeletedPath: deletedPath,
-							},
-						}
-						_ = appendLowStakesOp(mustState(cmd), logPath, op) //nolint:errcheck // low-stakes op; failure is non-critical
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-delete: %s %s\n", issueID, deletedPath)
-						break
+				if slices.Contains(entry.Scope, deletedPath) {
+					op := ops.Op{
+						Type:      ops.OpScopeDelete,
+						TargetID:  issueID,
+						Timestamp: ts,
+						WorkerID:  workerID,
+						Payload: ops.Payload{
+							DeletedPath: deletedPath,
+						},
 					}
+					_ = appendLowStakesOp(mustState(cmd), logPath, op) //nolint:errcheck // low-stakes op; failure is non-critical
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-delete: %s %s\n", issueID, deletedPath)
 				}
 			}
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,6 @@ func newBootstrapCmd() *cobra.Command {
 	var withHooks bool
 	var dualBranch bool
 	var platforms []string
-	var repoPath string
 
 	cmd := &cobra.Command{
 		Use:   "bootstrap [--global] [--with-hooks] [--dual-branch] [--platform <name>]",
@@ -38,7 +38,8 @@ Use --platform to restrict bootstrap to specific platforms (can be repeated); de
 The command is idempotent: running it multiple times has the same effect as running it once.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Parse repo path from flag or default to current directory
+			// Read repo path from the root persistent flag
+			repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
 			if repoPath == "" {
 				repoPath = "."
 			}
@@ -83,19 +84,40 @@ The command is idempotent: running it multiple times has the same effect as runn
 				}
 			}
 
+			// Determine format early
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			jsonMode := format == "json" || format == "agent"
+
+			// In JSON mode, suppress progress output so stdout stays parseable
+			origOut := cmd.OutOrStdout()
+			if jsonMode {
+				cmd.SetOut(io.Discard)
+			}
+
 			skipped, err := runRepoSetup(cmd, repoPath, dualBranch)
 			if err != nil {
+				// Restore output for error reporting
+				if jsonMode {
+					cmd.SetOut(origOut)
+				}
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
 			if err := executeHarnessSetup(cmd, plan, repoPath, global); err != nil {
+				// Restore output for error reporting
+				if jsonMode {
+					cmd.SetOut(origOut)
+				}
 				return fmt.Errorf("harness setup failed: %w", err)
 			}
 
-			// Check if JSON format is requested
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]interface{}{
+			// Restore output for final message
+			if jsonMode {
+				cmd.SetOut(origOut)
+			}
+
+			if jsonMode {
+				result := map[string]any{
 					"status":        "ok",
 					"skipped_hooks": skipped,
 				}
@@ -108,7 +130,6 @@ The command is idempotent: running it multiple times has the same effect as runn
 		},
 	}
 
-	cmd.Flags().StringVar(&repoPath, "repo", "", "repository path (default: current directory)")
 	cmd.Flags().BoolVar(&global, "global", false, "deploy to ~/.claude/ instead of .claude/")
 	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _armature branch)")
 	cmd.Flags().BoolVar(&withHooks, "with-hooks", false, "also write harness hook configuration")
