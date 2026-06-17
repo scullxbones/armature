@@ -95,7 +95,7 @@ Prefer linking to the canonical docs instead of re-explaining them here:
 
 ## Skills
 
-Bundled skills are deployed via `arm install-skills` or `make skill` to local
+Bundled skills are deployed via `arm bootstrap` or `make skill` to local
 agent directories. The current bundled set is:
 
 - `armature`
