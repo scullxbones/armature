@@ -86,7 +86,7 @@ If `_armature` does not exist and `main` is directly pushable (no branch protect
 | Event | Action |
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| `arm bootstrap --repair` | Re-creates worktree if stale or missing, re-installs hooks (if `--with-hooks` is specified) |
+| Re-initialization (worktree repair) | Run `arm bootstrap` again with `--repo` to target the repo; it deletes and recreates stale worktree and re-installs hooks if `--with-hooks` is used |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
 | Worktree corruption | `arm bootstrap` deletes and recreates the worktree from remote |
 
