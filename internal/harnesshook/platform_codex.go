@@ -1,7 +1,6 @@
 package harnesshook
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,12 +8,17 @@ import (
 	"strings"
 )
 
-// legacyCodexConfig is the exact body written by WriteConfig before the
-// "# armature:managed" marker was introduced. OwnsConfig matches against this
-// string (after trimming whitespace) so that only the known legacy config is
-// silently migrated, and user-authored files that merely mention "arm harness-hook"
-// are left untouched.
+// legacyCodexConfig is the exact pre-marker body written by WriteConfig at the root
+// codex.toml before the new .codex/config.toml location was introduced. OwnsConfig
+// matches against this string (after trimming whitespace) so that only the known
+// legacy config is silently migrated, and user-authored files that merely mention
+// "arm harness-hook" are left untouched. Root codex.toml files that carry the
+// "# armature:managed" first-line marker are handled separately via the first-line
+// check in OwnsConfig, not by this constant.
 const legacyCodexConfig = "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
+
+// legacyCodexConfigPath is the old location where codex.toml was written at the root
+const legacyCodexConfigPath = "codex.toml"
 
 // CodexAdapter implements PlatformAdapter for the OpenAI Codex harness.
 type CodexAdapter struct{}
@@ -37,19 +41,43 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
-// OwnsConfig reports whether Armature may write codex.toml in workdir.
+// OwnsConfig reports whether Armature may write .codex/config.toml in workdir.
 // Returns true when the file is absent (safe to create), when the first line
 // is the "# armature:managed" marker written by WriteConfig, or when the file
 // is exactly the legacy config body (an exact match against legacyCodexConfig,
 // trimming surrounding whitespace) written before the marker was introduced.
 // An exact match is used instead of substring search so that user-authored
 // files that merely mention "arm harness-hook" are never silently overwritten.
+// Also recognizes the old legacy config at the root codex.toml for migration.
 func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
-	path := filepath.Join(workdir, "codex.toml")
+	path := filepath.Join(workdir, ".codex", "config.toml")
 	content, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
 	if err != nil {
 		if os.IsNotExist(err) {
-			return true, nil
+			// Check for old legacy config at root codex.toml for migration support
+			legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
+			legacyContent, legacyErr := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
+			if legacyErr != nil {
+				if os.IsNotExist(legacyErr) {
+					return true, nil
+				}
+				return false, legacyErr
+			}
+
+			// Check if the legacy file is the old format owned by armature.
+			// Two cases: pre-marker exact body, or marker-bearing file (earlier
+			// commits wrote "# armature:managed" to root codex.toml directly).
+			legacyContentStr := string(legacyContent)
+			if strings.TrimSpace(legacyContentStr) == strings.TrimSpace(legacyCodexConfig) {
+				return true, nil
+			}
+			firstLine := strings.SplitN(legacyContentStr, "\n", 2)[0]
+			if strings.TrimSpace(firstLine) == "# armature:managed" {
+				return true, nil
+			}
+
+			// Legacy file exists but is user-managed
+			return false, nil
 		}
 		return false, err
 	}
@@ -57,15 +85,9 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	contentStr := string(content)
 
 	// Check for the marker at the beginning of the file
-	scanner := bufio.NewScanner(strings.NewReader(contentStr))
-	if scanner.Scan() {
-		firstLine := scanner.Text()
-		if strings.TrimSpace(firstLine) == "# armature:managed" {
-			return true, nil
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return false, err
+	firstLine := strings.SplitN(contentStr, "\n", 2)[0]
+	if strings.TrimSpace(firstLine) == "# armature:managed" {
+		return true, nil
 	}
 
 	// Check for legacy configs written by the previous version that exactly
@@ -77,10 +99,45 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	return false, nil
 }
 
-// WriteConfig writes the Codex hook configuration into workdir/codex.toml.
+// WriteConfig writes the Codex hook configuration into workdir/.codex/config.toml.
 func (a *CodexAdapter) WriteConfig(workdir string) error {
-	content := "# armature:managed\n[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
-	return os.WriteFile(filepath.Join(workdir, "codex.toml"), []byte(content), 0o600)
+	codexDir := filepath.Join(workdir, ".codex")
+	if err := os.MkdirAll(codexDir, 0o750); err != nil {
+		return err
+	}
+
+	content := `# armature:managed
+[[hooks.PreToolUse]]
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "arm harness-hook"
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "arm harness-hook"
+`
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600); err != nil {
+		return err
+	}
+
+	// Remove any stale root codex.toml that was written by an earlier version of
+	// WriteConfig (before the .codex/ subdirectory location was adopted). We only
+	// remove it when it is armature-owned: either the pre-marker exact body or a
+	// file whose first line is "# armature:managed".
+	legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
+	legacyBytes, err := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
+	if err == nil {
+		legacyStr := string(legacyBytes)
+		firstLine := strings.SplitN(legacyStr, "\n", 2)[0]
+		owned := strings.TrimSpace(legacyStr) == strings.TrimSpace(legacyCodexConfig) ||
+			strings.TrimSpace(firstLine) == "# armature:managed"
+		if owned {
+			os.Remove(legacyPath) //nolint:errcheck,gosec // G104: best-effort cleanup; failure leaves a stale but harmless file
+		}
+	}
+
+	return nil
 }
 
 // Decode parses a Codex hook payload into a normalised Event.
