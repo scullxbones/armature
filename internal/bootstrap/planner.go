@@ -51,11 +51,12 @@ type Plan struct {
 
 // HarnessArtifactResult captures the outcome of deploying a single artifact.
 type HarnessArtifactResult struct {
-	Platform string `json:"platform"`        // e.g., "claude", "codex"
-	Artifact string `json:"artifact"`        // e.g., "skills", "plugin_metadata", "harness_hook_config"
-	Status   string `json:"status"`          // e.g., "deployed", "skipped", "unsupported"
-	Note     string `json:"note,omitempty"`  // human-readable details
-	Error    string `json:"error,omitempty"` // error message if Status is "error"
+	Platform string `json:"platform"`         // e.g., "claude", "codex"
+	Artifact string `json:"artifact"`         // e.g., "skills", "plugin_metadata", "harness_hook_config"
+	Status   string `json:"status"`           // e.g., "deployed", "skipped", "unsupported"
+	Action   string `json:"action,omitempty"` // e.g., "install", "skip", "unsupported" — the planned action from the cell
+	Note     string `json:"note,omitempty"`   // human-readable details
+	Error    string `json:"error,omitempty"`  // error message if Status is "error"
 }
 
 // PlanRequest holds the inputs to BuildPlan.

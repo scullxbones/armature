@@ -846,6 +846,47 @@ func TestBootstrapNonTTYDefaultsToJSON(t *testing.T) {
 	assert.NotContains(t, output, "Bootstrap complete.", "should not emit human text in non-TTY")
 }
 
+// TestBootstrapEmitsJSONOnRepoSetupError verifies that when runRepoSetup fails and --format json
+// is set, the command emits JSON with repo_setup.status="error" and repo_setup.error set before
+// returning the error. This allows callers to see the failure reason in JSON format.
+func TestBootstrapEmitsJSONOnRepoSetupError(t *testing.T) {
+	// Create a path that doesn't exist (will fail when trying to initialize)
+	nonexistentPath := filepath.Join(t.TempDir(), "no-git-here", ".armature")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	// Try to bootstrap a path that has no git repo (will fail in runRepoSetup)
+	cmd.SetArgs([]string{"bootstrap", "--repo", filepath.Dir(filepath.Dir(nonexistentPath)), "--format", "json"})
+
+	err := cmd.Execute()
+	require.Error(t, err, "bootstrap should fail when repo setup fails")
+
+	output := buf.String()
+
+	// Verify that JSON was emitted before the error
+	var result map[string]interface{}
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err, "output should be valid JSON even on repo setup failure")
+
+	// Verify repo_setup contains error status
+	repoSetup, ok := result["repo_setup"].(map[string]interface{})
+	require.True(t, ok, "repo_setup should be an object")
+
+	status, ok := repoSetup["status"].(string)
+	require.True(t, ok, "repo_setup.status should be a string")
+	assert.Equal(t, "error", status, "repo_setup.status should be 'error' when repo setup fails")
+
+	errMsg, ok := repoSetup["error"].(string)
+	require.True(t, ok, "repo_setup.error should be a string")
+	assert.NotEmpty(t, errMsg, "repo_setup.error should contain the error message")
+
+	// Verify harness_setup is an empty array
+	harnessSetup, ok := result["harness_setup"].([]interface{})
+	require.True(t, ok, "harness_setup should be an array")
+	assert.Empty(t, harnessSetup, "harness_setup should be empty when repo setup fails")
+}
+
 // TestBootstrapEmitsPartialJSONOnHarnessSetupError verifies that when executeHarnessSetup
 // returns an error along with partial results, the command emits the partial results as JSON
 // before returning the error. This allows callers to see which artifacts succeeded before
