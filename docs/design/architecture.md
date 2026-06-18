@@ -79,7 +79,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 
 ### Single-Branch Fallback
 
-If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Detection is automatic at `arm bootstrap` time. This preserves viability for solo developers and non-enterprise setups.
+If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Single-branch mode is the default when `--dual-branch` is not passed. This preserves viability for solo developers and non-enterprise setups.
 
 ### Worktree Lifecycle
 
@@ -1213,25 +1213,20 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
 
 ```json
 {
-  "pre_transition_hooks": [
+  "hooks": [
     {
-      "cmd": "npm test -- --testPathPattern={scope}",
-      "label": "tests",
-      "required": true,
-      "exit_codes": {
-        "0": "pass",
-        "1": "test_failure",
-        "*": "environment_error"
-      }
-    },
-    {
-      "cmd": "npx tsc --noEmit",
-      "label": "typecheck",
+      "name": "tests",
+      "command": ["npm", "test", "--", "--testPathPattern={scope}"],
       "required": true
     },
     {
-      "cmd": "npx eslint {scope}",
-      "label": "lint",
+      "name": "typecheck",
+      "command": ["npx", "tsc", "--noEmit"],
+      "required": true
+    },
+    {
+      "name": "lint",
+      "command": ["npx", "eslint", "{scope}"],
       "required": false
     }
   ]
@@ -1251,7 +1246,7 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
 | `Makefile` | `make` |
 | (none found) | `unknown` |
 
-The detected project type is recorded in `.armature/config.json` as `project_type`. However, **no pre-transition hooks are auto-configured** — bootstrap creates an empty `hooks` array. If you want to add pre-transition verification (tests, linting, typechecking), manually edit `.armature/config.json` and add hook entries to the `pre_transition_hooks` field. See the "Hook Configuration" section above for the JSON structure and examples.
+The detected project type is recorded in `.armature/config.json` as `project_type`. However, **no pre-transition hooks are auto-configured** — bootstrap creates an empty `hooks` array. If you want to add pre-transition verification (tests, linting, typechecking), manually edit `.armature/config.json` and add hook entries to the `hooks` field. See the "Hook Configuration" section above for the JSON structure and examples.
 
 ### `{scope}` Interpolation
 
@@ -1340,7 +1335,7 @@ Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting,
 #### `arm bootstrap`
 
 ```
-arm bootstrap [flags] [<repo-path>]
+arm bootstrap [flags]
 
 Behavior:
   1. Detect branch protection (can push to main directly?)
@@ -1629,7 +1624,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Transition-code desync (done before code reviewed) | Downstream premature start | Two-phase done/merged model; downstream requires `merged` |
 | Ops branch force-push or deletion | Loss of coordination state | Configure force-push protection separately from PR requirements; local worktrees retain full history for recovery |
 | Squash-merge breaks commit ancestry checks | Merge detection miss | Commit-message scan (not ancestry) as primary detection; branch-name and explicit fallbacks |
-| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; `--repair` flag for stale state |
+| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .arm --force` then re-run `arm bootstrap --dual-branch` |
 | Verify phase reads code worktree, record phase writes ops worktree | Cross-worktree corruption | Strict phase separation: verify(code) then record(ops); no cross-worktree operations within a phase |
 | Task stuck at done if PR abandoned | Downstream permanently blocked | Staleness check (no merge within N days of done); surfaced via `arm status` |
 | Manual commits to ops branch | Unexpected state | CLI ignores non-.armature/ files; contributing guide documents convention |
