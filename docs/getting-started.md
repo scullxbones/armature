@@ -45,13 +45,19 @@ This command registers a unique worker UUID in your git config. It only needs to
 
 ### Deploy Bundled Skills
 
-The `arm bootstrap` command already deploys bundled skills to `.claude/skills/` by default. If you need to re-deploy skills or deploy to other agent platforms:
+The `arm bootstrap` command deploys bundled skills to `.claude/skills/` by default. To refresh skills in your project:
+
+```bash
+arm bootstrap
+```
+
+To make bundled skills available globally to Claude Code agents, use `--global`:
 
 ```bash
 arm bootstrap --global
 ```
 
-This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `~/.claude/skills/`, making them available to Claude Code agents globally. For other agent platforms, copy the skill files manually to the appropriate skills directory.
+This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `~/.claude/skills/`. For other agent platforms, copy the skill files manually to the appropriate skills directory.
 
 ## 3. Register Knowledge Sources
 
