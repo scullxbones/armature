@@ -93,6 +93,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 			// Detect non-TTY and auto-set format to JSON when --format is not explicitly set
 			if !cmd.Root().PersistentFlags().Changed("format") && format == "human" && !tui.IsTerminal() {
 				format = "json"
+				_ = cmd.Root().PersistentFlags().Set("format", "json")
 			}
 
 			platformList := bootstrap.DefaultPlatforms()
@@ -141,6 +142,16 @@ The command is idempotent: running it multiple times has the same effect as runn
 			// Execute harness setup and collect results (pass format flag for silent mode in JSON)
 			harnessResults, err := executeHarnessSetupWithFormat(cmd, plan, repoPath, global, format)
 			if err != nil {
+				// Emit partial JSON results before returning error (for json/agent format)
+				if (format == "json" || format == "agent") && len(harnessResults) > 0 {
+					result := BootstrapResult{
+						RepoSetup:    repoSetupResult,
+						HarnessSetup: harnessResults,
+					}
+					if data, merr := json.MarshalIndent(result, "", "  "); merr == nil {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					}
+				}
 				return fmt.Errorf("harness setup failed: %w", err)
 			}
 
@@ -156,7 +167,16 @@ The command is idempotent: running it multiple times has the same effect as runn
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
-				// Text output
+				// Text output - report skipped/unsupported artifacts
+				for _, r := range harnessResults {
+					if r.Status == "unsupported" || r.Status == "skipped" {
+						msg := r.Status
+						if r.Note != "" {
+							msg = r.Note
+						}
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s): %s\n", r.Artifact, r.Platform, msg)
+					}
+				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bootstrap complete.\n")
 			}
 
