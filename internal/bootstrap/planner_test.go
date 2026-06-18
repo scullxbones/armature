@@ -114,7 +114,7 @@ func TestHarnessArtifactResultIncludesAction(t *testing.T) {
 	result := bootstrap.HarnessArtifactResult{
 		Platform: "claude",
 		Artifact: "skills",
-		Status:   "deployed",
+		Status:   "ok",
 		Action:   "install",
 	}
 	assert.Equal(t, "install", result.Action)

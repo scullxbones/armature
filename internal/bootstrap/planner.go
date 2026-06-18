@@ -53,7 +53,7 @@ type Plan struct {
 type HarnessArtifactResult struct {
 	Platform string `json:"platform"`         // e.g., "claude", "codex"
 	Artifact string `json:"artifact"`         // e.g., "skills", "plugin_metadata", "harness_hook_config"
-	Status   string `json:"status"`           // e.g., "deployed", "skipped", "unsupported"
+	Status   string `json:"status"`           // e.g., "ok", "skipped", "unsupported"
 	Action   string `json:"action,omitempty"` // e.g., "install", "skip", "unsupported" — the planned action from the cell
 	Note     string `json:"note,omitempty"`   // human-readable details
 	Error    string `json:"error,omitempty"`  // error message if Status is "error"

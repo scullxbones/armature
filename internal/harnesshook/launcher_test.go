@@ -29,7 +29,7 @@ func TestLauncherInstallWritesCodexConfig(t *testing.T) {
 
 	require.NoError(t, launcher.Install(dir, "codex"))
 
-	data, err := os.ReadFile(filepath.Join(dir, "codex.toml"))
+	data, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "arm")
 	assert.Contains(t, string(data), "harness-hook")
