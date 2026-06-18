@@ -164,7 +164,7 @@ func TestInitCommand_SingleBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "human"})
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -513,7 +513,7 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo, "--format", "human"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/skillsembed"
+	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -89,6 +90,11 @@ The command is idempotent: running it multiple times has the same effect as runn
 			// Read format from the root persistent flag
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
+			// Detect non-TTY and auto-set format to JSON when --format is not explicitly set
+			if !cmd.Root().PersistentFlags().Changed("format") && format == "human" && !tui.IsTerminal() {
+				format = "json"
+			}
+
 			platformList := bootstrap.DefaultPlatforms()
 			if len(platforms) > 0 {
 				platformList = nil
@@ -119,7 +125,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 				for _, row := range plan.Rows {
 					allUnsupported := row.Skills == bootstrap.ActionUnsupported &&
 						row.PluginMetadata == bootstrap.ActionUnsupported &&
-						row.HarnessHookConfig == bootstrap.ActionUnsupported
+						(!withHooks || row.HarnessHookConfig == bootstrap.ActionUnsupported)
 					if allUnsupported {
 						return fmt.Errorf("platform %s has no supported requested artifacts", string(row.Platform))
 					}

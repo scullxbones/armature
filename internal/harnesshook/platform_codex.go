@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+// legacyCodexConfig is the exact body written by WriteConfig before the
+// "# armature:managed" marker was introduced. OwnsConfig matches against this
+// string (after trimming whitespace) so that only the known legacy config is
+// silently migrated, and user-authored files that merely mention "arm harness-hook"
+// are left untouched.
+const legacyCodexConfig = "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
+
 // CodexAdapter implements PlatformAdapter for the OpenAI Codex harness.
 type CodexAdapter struct{}
 
@@ -33,7 +40,10 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 // OwnsConfig reports whether Armature may write codex.toml in workdir.
 // Returns true when the file is absent (safe to create), when the first line
 // is the "# armature:managed" marker written by WriteConfig, or when the file
-// contains "arm harness-hook" (legacy config written before the marker was introduced).
+// is exactly the legacy config body (an exact match against legacyCodexConfig,
+// trimming surrounding whitespace) written before the marker was introduced.
+// An exact match is used instead of substring search so that user-authored
+// files that merely mention "arm harness-hook" are never silently overwritten.
 func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, "codex.toml")
 	content, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
@@ -58,9 +68,9 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 		return false, err
 	}
 
-	// Check for legacy configs written by the previous version that contain
-	// "arm harness-hook" in the command but lack the marker
-	if strings.Contains(contentStr, "arm harness-hook") {
+	// Check for legacy configs written by the previous version that exactly
+	// match the known legacy body but lack the marker.
+	if strings.TrimSpace(contentStr) == strings.TrimSpace(legacyCodexConfig) {
 		return true, nil
 	}
 
