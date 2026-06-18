@@ -71,8 +71,8 @@ func TestBuildPlanWithHooks(t *testing.T) {
 	assert.Equal(t, bootstrap.ActionInstall, row.HarnessHookConfig)
 }
 
-// TestBuildPlanCodexRow exercises a platform that has verified hook config but
-// no verified skills or plugin_metadata. Codex is the canonical example.
+// TestBuildPlanCodexRow exercises Codex, which has verified harness hook config
+// but no verified skills or plugin_metadata.
 func TestBuildPlanCodexRow(t *testing.T) {
 	t.Parallel()
 	req := bootstrap.PlanRequest{
@@ -86,7 +86,7 @@ func TestBuildPlanCodexRow(t *testing.T) {
 	row := plan.Rows[0]
 	assert.Equal(t, bootstrap.ActionUnsupported, row.Skills)
 	assert.Equal(t, bootstrap.ActionUnsupported, row.PluginMetadata)
-	assert.Equal(t, bootstrap.ActionUnsupported, row.HarnessHookConfig)
+	assert.Equal(t, bootstrap.ActionInstall, row.HarnessHookConfig)
 }
 
 func TestBuildPlanWithoutHooks(t *testing.T) {
