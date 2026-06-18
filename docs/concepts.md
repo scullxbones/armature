@@ -201,7 +201,7 @@ arm show TASK-001 | jq '.provenance.confidence'
 
 **Concept:** Armature adapts to your repository's branch protection policy. Unprotected repos use single-branch mode (all state on `main`). Protected repos use dual-branch mode (code on `main`, coordination on `_armature`).
 
-**Pattern:** `arm bootstrap` auto-detects the mode. Code changes and coordination changes never mix within a single phase.
+**Pattern:** Use `--dual-branch` flag with `arm bootstrap` for protected-main repos. Without it, single-branch mode is used. Code changes and coordination changes never mix within a single phase.
 
 **How it works:**
 

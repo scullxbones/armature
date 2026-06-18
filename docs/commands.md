@@ -333,7 +333,7 @@ Import issues from a CSV or JSON file.
 Bootstrap Armature: initialize repository and deploy harness artifacts.
 
 **Synopsis:**
-`arm bootstrap [flags] [<repo-path>]`
+`arm bootstrap [flags]`
 
 **Description:**
 Initializes a repository for Armature coordination and optionally deploys harness artifacts
