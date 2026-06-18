@@ -136,6 +136,18 @@ The command is idempotent: running it multiple times has the same effect as runn
 			// Run repo setup and collect results (pass format flag for silent mode in JSON)
 			repoSetupResult, err := runRepoSetupWithFormat(cmd, repoPath, dualBranch, format)
 			if err != nil {
+				// Emit error in JSON format before returning (for json/agent format)
+				if format == "json" || format == "agent" {
+					repoSetupResult.Status = "error"
+					repoSetupResult.Error = err.Error()
+					result := BootstrapResult{
+						RepoSetup:    repoSetupResult,
+						HarnessSetup: []bootstrap.HarnessArtifactResult{},
+					}
+					if data, merr := json.MarshalIndent(result, "", "  "); merr == nil {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					}
+				}
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
@@ -202,12 +214,14 @@ func recordArtifactAction(results *[]bootstrap.HarnessArtifactResult, platformNa
 			Platform: platformName,
 			Artifact: artifactName,
 			Status:   "unsupported",
+			Action:   string(action),
 		})
 	case bootstrap.ActionSkip:
 		*results = append(*results, bootstrap.HarnessArtifactResult{
 			Platform: platformName,
 			Artifact: artifactName,
 			Status:   "skipped",
+			Action:   string(action),
 		})
 	}
 }
@@ -243,6 +257,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Platform: platformName,
 					Artifact: "skills",
 					Status:   "error",
+					Action:   string(bootstrap.ActionInstall),
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("deploy skills for %s: %w", platformName, err)
@@ -254,6 +269,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Platform: platformName,
 					Artifact: "skills",
 					Status:   "error",
+					Action:   string(bootstrap.ActionInstall),
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
@@ -263,6 +279,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 				Platform: platformName,
 				Artifact: "skills",
 				Status:   "deployed",
+				Action:   string(bootstrap.ActionInstall),
 				Note:     fmt.Sprintf("Deployed to %s", skillsDest),
 			})
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed skills to %s for %s\n", skillsDest, platformName)
@@ -283,6 +300,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Platform: platformName,
 					Artifact: "plugin_metadata",
 					Status:   "error",
+					Action:   string(bootstrap.ActionInstall),
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
@@ -292,6 +310,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 				Platform: platformName,
 				Artifact: "plugin_metadata",
 				Status:   "deployed",
+				Action:   string(bootstrap.ActionInstall),
 				Note:     fmt.Sprintf("Deployed to %s", pluginsDest),
 			})
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed plugin configuration to %s for %s\n", pluginsDest, platformName)
@@ -307,6 +326,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Platform: platformName,
 					Artifact: "harness_hook_config",
 					Status:   "error",
+					Action:   string(bootstrap.ActionInstall),
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("create adapter for %s: %w", platformName, err)
@@ -321,6 +341,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Platform: platformName,
 					Artifact: "harness_hook_config",
 					Status:   "skipped",
+					Action:   string(bootstrap.ActionInstall),
 					Note:     "existing config not managed by Armature",
 				})
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped harness hook config for %s (not managed by Armature)\n", platformName)
@@ -330,6 +351,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 						Platform: platformName,
 						Artifact: "harness_hook_config",
 						Status:   "error",
+						Action:   string(bootstrap.ActionInstall),
 						Error:    err.Error(),
 					})
 					return results, fmt.Errorf("write harness hook config for %s: %w", platformName, err)
@@ -339,6 +361,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Platform: platformName,
 					Artifact: "harness_hook_config",
 					Status:   "deployed",
+					Action:   string(bootstrap.ActionInstall),
 				})
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
 			}

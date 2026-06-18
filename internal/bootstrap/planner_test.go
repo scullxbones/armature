@@ -106,3 +106,42 @@ func TestBuildPlanWithoutHooks(t *testing.T) {
 	assert.Equal(t, bootstrap.ActionInstall, row.PluginMetadata)
 	assert.Equal(t, bootstrap.ActionSkip, row.HarnessHookConfig)
 }
+
+// TestHarnessArtifactResultIncludesAction verifies that HarnessArtifactResult
+// includes the Action field populated with the appropriate action value.
+func TestHarnessArtifactResultIncludesAction(t *testing.T) {
+	t.Parallel()
+	result := bootstrap.HarnessArtifactResult{
+		Platform: "claude",
+		Artifact: "skills",
+		Status:   "deployed",
+		Action:   "install",
+	}
+	assert.Equal(t, "install", result.Action)
+}
+
+// TestHarnessArtifactResultActionSkipped verifies the Action field is populated
+// for skipped artifacts.
+func TestHarnessArtifactResultActionSkipped(t *testing.T) {
+	t.Parallel()
+	result := bootstrap.HarnessArtifactResult{
+		Platform: "claude",
+		Artifact: "harness_hook_config",
+		Status:   "skipped",
+		Action:   "install",
+	}
+	assert.Equal(t, "install", result.Action)
+}
+
+// TestHarnessArtifactResultActionUnsupported verifies the Action field is populated
+// for unsupported artifacts.
+func TestHarnessArtifactResultActionUnsupported(t *testing.T) {
+	t.Parallel()
+	result := bootstrap.HarnessArtifactResult{
+		Platform: "devin",
+		Artifact: "skills",
+		Status:   "unsupported",
+		Action:   "unsupported",
+	}
+	assert.Equal(t, "unsupported", result.Action)
+}
