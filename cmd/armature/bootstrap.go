@@ -58,7 +58,6 @@ func newBootstrapCmd() *cobra.Command {
 	var withHooks bool
 	var dualBranch bool
 	var platforms []string
-	var format string
 
 	cmd := &cobra.Command{
 		Use:   "bootstrap [--global] [--with-hooks] [--dual-branch] [--platform <name>]",
@@ -86,6 +85,9 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("resolve repo path: %w", err)
 			}
 			repoPath = absRepoPath
+
+			// Read format from the root persistent flag
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			platformList := bootstrap.DefaultPlatforms()
 			if len(platforms) > 0 {
@@ -147,7 +149,6 @@ The command is idempotent: running it multiple times has the same effect as runn
 	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _armature branch)")
 	cmd.Flags().BoolVar(&withHooks, "with-hooks", false, "also write harness hook configuration")
 	cmd.Flags().StringSliceVar(&platforms, "platform", nil, "restrict to specific platform(s) (can be repeated)")
-	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 	return cmd
 }
 
@@ -171,7 +172,6 @@ func recordArtifactAction(results *[]bootstrap.HarnessArtifactResult, platformNa
 		})
 	}
 }
-
 
 // executeHarnessSetup executes the harness setup plan: deploys skills, plugin metadata, and hook configs.
 // Returns a slice of HarnessArtifactResult for each artifact processed.
@@ -403,8 +403,9 @@ fi
 `
 
 // installHooks copies hook templates from .armature/hooks/ to .git/hooks/ and makes them executable.
-// Existing hooks that do not contain the "# armature:managed" marker are skipped to avoid
-// overwriting user-managed hooks. Returns a list of skipped hook names.
+// Existing hooks are skipped (and returned as skipped) only if they lack both the "# armature:managed"
+// marker and the legacy Armature signature (#!/bin/sh shebang + "# Armature " header); legacy hooks
+// are migrated/overwritten. Returns a list of skipped hook names.
 // In dual-branch mode, the templates are in the worktree's .armature/hooks/.
 func installHooks(repoPath string, issuesDir string) ([]string, error) {
 	hooksDir := filepath.Join(issuesDir, "hooks")
@@ -431,7 +432,10 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 
 		// Skip hooks that exist but were not written by Armature.
 		if existing, readErr := os.ReadFile(hookPath); readErr == nil { //nolint:gosec // G304: internal hooks path
-			if !strings.Contains(string(existing), "# armature:managed") {
+			isArmatureManaged := strings.Contains(string(existing), "# armature:managed")
+			isLegacyArmatureHook := strings.HasPrefix(strings.TrimSpace(string(existing)), "#!/bin/sh") &&
+				strings.Contains(string(existing), "\n# Armature ")
+			if !isArmatureManaged && !isLegacyArmatureHook {
 				skipped = append(skipped, hook)
 				continue
 			}
