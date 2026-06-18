@@ -784,3 +784,64 @@ echo "old"
 	assert.Contains(t, string(content), "# armature:managed", "hook should have been overwritten")
 	assert.NotContains(t, string(content), "echo \"old\"", "old content should be gone")
 }
+
+// TestBootstrapRejectsUnsupportedPlatformWithoutHooks verifies that arm bootstrap --platform codex
+// (without --with-hooks) returns an error when both skills and plugin_metadata are unsupported
+// for that platform. The check should not count HarnessHookConfig=ActionSkip as "supported" when
+// hooks weren't requested.
+func TestBootstrapRejectsUnsupportedPlatformWithoutHooks(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	buf := &bytes.Buffer{}
+	cmd.SetOut(buf)
+	// Try to bootstrap with --platform codex but WITHOUT --with-hooks.
+	// Codex has no verified skills or plugin_metadata, so it should fail.
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codex"})
+
+	err := cmd.Execute()
+	require.Error(t, err, "bootstrap --platform codex without --with-hooks should fail")
+	assert.Contains(t, err.Error(), "no supported requested artifacts", "error should mention unsupported artifacts")
+
+	// The repository must NOT have been mutated before validation failure
+	armatureDir := filepath.Join(repo, ".armature")
+	_, statErr := os.Stat(armatureDir)
+	assert.True(t, os.IsNotExist(statErr), ".armature must not be created when platform validation fails")
+}
+
+// TestBootstrapNonTTYDefaultsToJSON verifies that when stdout is not a terminal
+// and --format is not explicitly set, bootstrap outputs JSON instead of "Bootstrap complete.".
+// This tests the fix for the PersistentPreRunE replacement bug where the bootstrap command's
+// no-op PersistentPreRunE prevented the root's TTY-detection hook from running.
+func TestBootstrapNonTTYDefaultsToJSON(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Create a root command and bootstrap subcommand
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	// Simulate non-TTY by NOT setting --format explicitly.
+	// In tests, tui.IsTerminal() returns false, so the detection logic should kick in
+	// and set format to "json" (not "agent" because this is bootstrap, not the agent context).
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify output is valid JSON (not "Bootstrap complete.")
+	var result map[string]interface{}
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err, "bootstrap output should be valid JSON when stdout is not a terminal")
+
+	// Verify the JSON structure
+	assert.Contains(t, result, "repo_setup", "result should have repo_setup field")
+	assert.Contains(t, result, "harness_setup", "result should have harness_setup field")
+
+	// Verify we do NOT get the human text
+	assert.NotContains(t, output, "Bootstrap complete.", "should not emit human text in non-TTY")
+}

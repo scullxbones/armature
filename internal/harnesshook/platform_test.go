@@ -502,8 +502,8 @@ func TestCodexAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
 func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	// A config with arm harness-hook but no marker is a legacy config from before the marker was introduced
-	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\n"
+	// A config that is exactly the legacy body (pre_tool_use + stop, no marker) must be recognised as owned
+	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
 
 	adapter := NewCodexAdapter()
@@ -511,6 +511,22 @@ func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, owns, "Codex should own legacy config with arm harness-hook for migration")
+}
+
+func TestCodexAdapterDoesNotOwnUserConfigMentioningArmHarnessHook(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// A user-authored file that merely mentions "arm harness-hook" (e.g. in a comment) but
+	// is NOT the exact legacy config body must NOT be treated as owned — otherwise WriteConfig
+	// would silently truncate a user-managed file.
+	content := "# my notes about arm harness-hook\n[hooks]\npre_tool_use = \"my-own-tool\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
+
+	adapter := NewCodexAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Codex must not own a user file that merely mentions arm harness-hook")
 }
 
 func TestCodexAdapterOwnsConfigWhenUserManaged(t *testing.T) {
