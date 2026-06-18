@@ -86,9 +86,9 @@ If `_armature` does not exist and `main` is directly pushable (no branch protect
 | Event | Action |
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| Re-initialization (worktree repair) | Run `arm bootstrap` again with `--repo` to target the repo; it deletes and recreates stale worktree and re-installs hooks if `--with-hooks` is used |
+| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .arm --force`, then re-run `arm bootstrap --dual-branch` |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
-| Worktree corruption | `arm bootstrap` deletes and recreates the worktree from remote |
+| Worktree corruption | Manually remove the stale worktree (`git worktree remove .arm --force`), then re-run `arm bootstrap --dual-branch` to recreate it from remote |
 
 ### Directory Structure (within `.arm/` worktree)
 
@@ -1193,9 +1193,9 @@ The `post-commit` hook is the highest-leverage automation: every code commit bec
 
 ### Installation and Bypass
 
-- `arm bootstrap` installs hooks from version-controlled templates in `.armature/hooks/`
+- `arm bootstrap` installs git hooks from version-controlled templates in `.armature/hooks/` (always, by default)
 - `arm bootstrap --repo <path>` specifies a repository path
-- `arm bootstrap --with-hooks` ensures hooks are installed (default behavior)
+- `arm bootstrap --with-hooks` installs harness hook configuration in `.claude/settings.json` (disabled by default; enable only when harness integration is desired)
 - Standard `--no-verify` on git commands bypasses hooks
 - Hooks fail silently (stderr redirected) — system is correct without them
 
@@ -1238,19 +1238,20 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
 }
 ```
 
-### Auto-Detection at Init Time
+### Project Type Detection
 
-`arm bootstrap` checks for well-known files and proposes defaults:
+`arm bootstrap` automatically detects the project type by checking for well-known marker files:
 
-| Detected File | Proposed test_cmd | Proposed lint_cmd |
-|---|---|---|
-| `package.json` | `npm test` | `npx eslint {scope}` |
-| `go.mod` | `go test ./...` | `golangci-lint run {scope}` |
-| `pyproject.toml` | `pytest` | `ruff check {scope}` |
-| `Cargo.toml` | `cargo test` | `cargo clippy -- {scope}` |
-| `Makefile` (with test target) | `make test` | (none) |
+| Marker File | Detected Type |
+|---|---|
+| `package.json` | `node` |
+| `go.mod` | `go` |
+| `pyproject.toml` | `python` |
+| `Cargo.toml` | `rust` |
+| `Makefile` | `make` |
+| (none found) | `unknown` |
 
-The developer confirms or overrides. If nothing is detected, the CLI prompts for manual entry.
+The detected project type is recorded in `.armature/config.json` as `project_type`. However, **no pre-transition hooks are auto-configured** — bootstrap creates an empty `hooks` array. If you want to add pre-transition verification (tests, linting, typechecking), manually edit `.armature/config.json` and add hook entries to the `pre_transition_hooks` field. See the "Hook Configuration" section above for the JSON structure and examples.
 
 ### `{scope}` Interpolation
 
