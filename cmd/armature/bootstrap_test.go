@@ -684,9 +684,11 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo, false)
 	require.NoError(t, err)
 
-	// Create a codex.toml file WITHOUT the armature:managed marker to simulate
+	// Create a .codex/config.toml file WITHOUT the armature:managed marker to simulate
 	// a config not owned by armature (the Codex adapter checks for this marker)
-	codexPath := filepath.Join(repo, "codex.toml")
+	codexDir := filepath.Join(repo, ".codex")
+	require.NoError(t, os.MkdirAll(codexDir, 0o755))
+	codexPath := filepath.Join(codexDir, "config.toml")
 	require.NoError(t, os.WriteFile(codexPath, []byte("# Some other config\nkey = \"value\"\n"), 0o600))
 
 	// Build a plan that includes harness hook config for Codex

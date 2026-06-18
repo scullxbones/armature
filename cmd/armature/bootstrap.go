@@ -278,7 +278,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			results = append(results, bootstrap.HarnessArtifactResult{
 				Platform: platformName,
 				Artifact: "skills",
-				Status:   "deployed",
+				Status:   "ok",
 				Action:   string(bootstrap.ActionInstall),
 				Note:     fmt.Sprintf("Deployed to %s", skillsDest),
 			})
@@ -309,7 +309,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			results = append(results, bootstrap.HarnessArtifactResult{
 				Platform: platformName,
 				Artifact: "plugin_metadata",
-				Status:   "deployed",
+				Status:   "ok",
 				Action:   string(bootstrap.ActionInstall),
 				Note:     fmt.Sprintf("Deployed to %s", pluginsDest),
 			})
@@ -360,7 +360,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 				results = append(results, bootstrap.HarnessArtifactResult{
 					Platform: platformName,
 					Artifact: "harness_hook_config",
-					Status:   "deployed",
+					Status:   "ok",
 					Action:   string(bootstrap.ActionInstall),
 				})
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
