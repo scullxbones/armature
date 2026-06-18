@@ -502,6 +502,7 @@ func TestCodexAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
 func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	// A config with arm harness-hook but no marker is a legacy config from before the marker was introduced
 	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
 
@@ -509,7 +510,21 @@ func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
-	assert.False(t, owns, "Codex should not own config when marker is absent")
+	assert.True(t, owns, "Codex should own legacy config with arm harness-hook for migration")
+}
+
+func TestCodexAdapterOwnsConfigWhenUserManaged(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// A config without the marker and without "arm harness-hook" is user-managed
+	content := "[hooks]\npre_tool_use = \"some-other-hook\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
+
+	adapter := NewCodexAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Codex should not own user-managed config without arm harness-hook")
 }
 
 func TestCodexAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
@@ -551,6 +566,22 @@ func TestDevinAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, owns, "Devin should not own config when marker is absent")
+}
+
+func TestDevinAdapterOwnsConfigMigratesLegacyConfig(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	devinDir := filepath.Join(dir, ".devin")
+	require.NoError(t, os.MkdirAll(devinDir, 0o750))
+	// Legacy config written before the _armature:managed marker was introduced.
+	content := `{"hooks": {"PreToolUse": [{"matcher": "edit|exec", "command": "arm harness-hook"}]}}`
+	require.NoError(t, os.WriteFile(filepath.Join(devinDir, "hooks.json"), []byte(content), 0o600))
+
+	adapter := NewDevinAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.True(t, owns, "Devin should own legacy config containing arm harness-hook for migration")
 }
 
 func TestDevinAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {

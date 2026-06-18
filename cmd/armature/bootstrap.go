@@ -33,7 +33,7 @@ type BootstrapResult struct {
 
 // runRepoSetupWithFormat calls runRepoSetup, silencing human output when format is "json".
 func runRepoSetupWithFormat(cmd *cobra.Command, repoPath string, dualBranch bool, format string) (RepoSetupResult, error) {
-	if format == "json" {
+	if format == "json" || format == "agent" {
 		silentCmd := &cobra.Command{}
 		silentCmd.SetOut(io.Discard)
 		return runRepoSetup(silentCmd, repoPath, dualBranch)
@@ -41,11 +41,11 @@ func runRepoSetupWithFormat(cmd *cobra.Command, repoPath string, dualBranch bool
 	return runRepoSetup(cmd, repoPath, dualBranch)
 }
 
-// executeHarnessSetupWithFormat calls executeHarnessSetup, silencing human output when format is "json".
+// executeHarnessSetupWithFormat calls executeHarnessSetup, silencing human output when format is "json" or "agent".
 func executeHarnessSetupWithFormat(
 	cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool, format string,
 ) ([]bootstrap.HarnessArtifactResult, error) {
-	if format == "json" {
+	if format == "json" || format == "agent" {
 		silentCmd := &cobra.Command{}
 		silentCmd.SetOut(io.Discard)
 		return executeHarnessSetup(silentCmd, plan, repoPath, global)
@@ -113,6 +113,19 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("build harness setup plan: %w", err)
 			}
 
+			// If a platform was explicitly requested, verify it has at least one actionable artifact.
+			// Do not error for auto-detected platforms (when user didn't specify --platform).
+			if len(platforms) > 0 {
+				for _, row := range plan.Rows {
+					allUnsupported := row.Skills == bootstrap.ActionUnsupported &&
+						row.PluginMetadata == bootstrap.ActionUnsupported &&
+						row.HarnessHookConfig == bootstrap.ActionUnsupported
+					if allUnsupported {
+						return fmt.Errorf("platform %s has no supported requested artifacts", string(row.Platform))
+					}
+				}
+			}
+
 			// Run repo setup and collect results (pass format flag for silent mode in JSON)
 			repoSetupResult, err := runRepoSetupWithFormat(cmd, repoPath, dualBranch, format)
 			if err != nil {
@@ -126,7 +139,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 
 			// Determine output format
-			if format == "json" {
+			if format == "json" || format == "agent" {
 				result := BootstrapResult{
 					RepoSetup:    repoSetupResult,
 					HarnessSetup: harnessResults,
@@ -175,6 +188,8 @@ func recordArtifactAction(results *[]bootstrap.HarnessArtifactResult, platformNa
 
 // executeHarnessSetup executes the harness setup plan: deploys skills, plugin metadata, and hook configs.
 // Returns a slice of HarnessArtifactResult for each artifact processed.
+// On error, returns the results collected so far along with the error, allowing structured output
+// to report partial results.
 func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool) ([]bootstrap.HarnessArtifactResult, error) {
 	var results []bootstrap.HarnessArtifactResult
 
@@ -183,7 +198,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 	if global {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("resolve home directory: %w", err)
+			return results, fmt.Errorf("resolve home directory: %w", err)
 		}
 		destBase = home
 	} else {
@@ -204,7 +219,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Status:   "error",
 					Error:    err.Error(),
 				})
-				return nil, fmt.Errorf("deploy skills for %s: %w", platformName, err)
+				return results, fmt.Errorf("deploy skills for %s: %w", platformName, err)
 			}
 
 			// Deploy flat skill files
@@ -215,7 +230,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Status:   "error",
 					Error:    err.Error(),
 				})
-				return nil, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
+				return results, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
 			}
 
 			results = append(results, bootstrap.HarnessArtifactResult{
@@ -233,7 +248,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		if row.PluginMetadata == bootstrap.ActionInstall {
 			pluginName, err := getPluginNameFromFS(skillsembed.SkillsFS)
 			if err != nil {
-				return nil, fmt.Errorf("extract plugin name: %w", err)
+				return results, fmt.Errorf("extract plugin name: %w", err)
 			}
 
 			pluginsDest := filepath.Join(destBase, ".claude", "plugins", pluginName)
@@ -244,7 +259,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Status:   "error",
 					Error:    err.Error(),
 				})
-				return nil, fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
+				return results, fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
 			}
 
 			results = append(results, bootstrap.HarnessArtifactResult{
@@ -268,12 +283,12 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 					Status:   "error",
 					Error:    err.Error(),
 				})
-				return nil, fmt.Errorf("create adapter for %s: %w", platformName, err)
+				return results, fmt.Errorf("create adapter for %s: %w", platformName, err)
 			}
 
 			owned, err := adapter.OwnsConfig(destBase)
 			if err != nil {
-				return nil, fmt.Errorf("check config ownership for %s: %w", platformName, err)
+				return results, fmt.Errorf("check config ownership for %s: %w", platformName, err)
 			}
 			if !owned {
 				results = append(results, bootstrap.HarnessArtifactResult{
@@ -291,7 +306,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 						Status:   "error",
 						Error:    err.Error(),
 					})
-					return nil, fmt.Errorf("write harness hook config for %s: %w", platformName, err)
+					return results, fmt.Errorf("write harness hook config for %s: %w", platformName, err)
 				}
 
 				results = append(results, bootstrap.HarnessArtifactResult{

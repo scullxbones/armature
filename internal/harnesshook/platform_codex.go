@@ -31,20 +31,23 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 }
 
 // OwnsConfig reports whether Armature may write codex.toml in workdir.
-// Returns true when the file is absent (safe to create) or when the first line
-// is the "# armature:managed" marker written by WriteConfig.
+// Returns true when the file is absent (safe to create), when the first line
+// is the "# armature:managed" marker written by WriteConfig, or when the file
+// contains "arm harness-hook" (legacy config written before the marker was introduced).
 func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, "codex.toml")
-	file, err := os.Open(path) //nolint:gosec // G304: internal config path
+	content, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
 	if err != nil {
 		if os.IsNotExist(err) {
 			return true, nil
 		}
 		return false, err
 	}
-	defer func() { _ = file.Close() }() //nolint:errcheck // close error in defer not actionable
 
-	scanner := bufio.NewScanner(file)
+	contentStr := string(content)
+
+	// Check for the marker at the beginning of the file
+	scanner := bufio.NewScanner(strings.NewReader(contentStr))
 	if scanner.Scan() {
 		firstLine := scanner.Text()
 		if strings.TrimSpace(firstLine) == "# armature:managed" {
@@ -54,6 +57,13 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	if err := scanner.Err(); err != nil {
 		return false, err
 	}
+
+	// Check for legacy configs written by the previous version that contain
+	// "arm harness-hook" in the command but lack the marker
+	if strings.Contains(contentStr, "arm harness-hook") {
+		return true, nil
+	}
+
 	return false, nil
 }
 
