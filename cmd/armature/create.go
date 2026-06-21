@@ -7,32 +7,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 )
-
-// validNodeTypes is the complete set of accepted node types for arm create.
-var validNodeTypes = map[string]bool{
-	"epic":    true,
-	"story":   true,
-	"feature": true,
-	"task":    true,
-	"bug":     true,
-}
-
-// validNodeTypesList is the sorted list of valid types for error messages.
-var validNodeTypesList = []string{"epic", "story", "feature", "task", "bug"}
-
-// validParentChildTypes defines which parent types may contain which child types.
-var validParentChildTypes = map[string]map[string]bool{
-	"epic":    {"story": true, "feature": true, "task": true, "bug": true},
-	"story":   {"task": true, "bug": true},
-	"feature": {"task": true, "bug": true},
-	"task":    {},
-	"bug":     {},
-}
 
 func newCreateCmd() *cobra.Command {
 	var title, nodeType, parent, id, priority, dod, confidence, acceptanceJSON, sourceRef string
@@ -44,9 +24,9 @@ func newCreateCmd() *cobra.Command {
 		Short: "Create a new work item",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validate node type before doing anything else.
-			if !validNodeTypes[nodeType] {
+			if !issuetype.IsValid(nodeType) {
 				return fmt.Errorf("invalid type %q: valid types are %s",
-					nodeType, strings.Join(validNodeTypesList, ", "))
+					nodeType, strings.Join(issuetype.All(), ", "))
 			}
 
 			// Validate parent/type combination when a parent is specified.
@@ -63,8 +43,7 @@ func newCreateCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("parent %s not found: %w", parent, err)
 				}
-				allowed, ok := validParentChildTypes[parentIssue.Type]
-				if !ok || !allowed[nodeType] {
+				if !issuetype.IsLegalHierarchy(parentIssue.Type, nodeType) {
 					return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", parent, parentIssue.Type, nodeType)
 				}
 			}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
@@ -53,8 +54,7 @@ with an explicit error message.`,
 					return fmt.Errorf("parent %s not found", newParent)
 				}
 
-				allowed, ok := validParentChildTypes[parentIssue.Type]
-				if !ok || !allowed[issue.Type] {
+				if !issuetype.IsLegalHierarchy(parentIssue.Type, issue.Type) {
 					return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", newParent, parentIssue.Type, issue.Type)
 				}
 			}

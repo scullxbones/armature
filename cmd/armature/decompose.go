@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/decompose"
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
@@ -82,7 +83,7 @@ plan, or --schema to view the JSON schema.`,
 									},
 									"type": map[string]any{
 										"type":        "string",
-										"enum":        []string{"epic", "story", "task"},
+										"enum":        issuetype.All(),
 										"description": "Issue type",
 									},
 									"parent": map[string]any{

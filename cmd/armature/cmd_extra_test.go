@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
@@ -1445,19 +1446,19 @@ func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
 
 // Fix 1: TestValidParentChildTypes_EpicCanContainFeature verifies hierarchy rules for feature type.
 func TestValidParentChildTypes_EpicCanContainFeature(t *testing.T) {
-	assert.True(t, validParentChildTypes["epic"]["feature"],
+	assert.True(t, issuetype.IsLegalHierarchy("epic", "feature"),
 		"epic should be able to contain feature")
 }
 
 // Fix 1: TestValidParentChildTypes_FeatureCanContainTask verifies feature can contain task.
 func TestValidParentChildTypes_FeatureCanContainTask(t *testing.T) {
-	assert.True(t, validParentChildTypes["feature"]["task"],
+	assert.True(t, issuetype.IsLegalHierarchy("feature", "task"),
 		"feature should be able to contain task")
 }
 
 // Fix 1: TestValidParentChildTypes_FeatureCanContainBug verifies feature can contain bug.
 func TestValidParentChildTypes_FeatureCanContainBug(t *testing.T) {
-	assert.True(t, validParentChildTypes["feature"]["bug"],
+	assert.True(t, issuetype.IsLegalHierarchy("feature", "bug"),
 		"feature should be able to contain bug")
 }
 
