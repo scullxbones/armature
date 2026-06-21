@@ -112,9 +112,9 @@ func containsError(r Result, substr string) bool {
 	return false
 }
 
-func containsInfo(r Result, substr string) bool {
+func containsPhantomScopeInfo(r Result) bool {
 	for _, i := range r.Infos {
-		if strings.Contains(strings.ToLower(i), strings.ToLower(substr)) {
+		if strings.Contains(strings.ToLower(i), "phantom scope") {
 			return true
 		}
 	}
@@ -396,7 +396,7 @@ func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
 				// no ContextFiles — spans 3 dirs, would trigger W5 for active issues
 			})
 			graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+			result := Validate(state, graph, Options{})
 			assert.False(t, containsWarning(result, "missing context_files"),
 				"status=%q: terminal issues should not warn about missing context_files", status)
 		})
@@ -443,7 +443,7 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 		// For terminal statuses, W10 check is skipped anyway
 		graph := graphFromState(state)
 		result := Validate(state, graph, Options{PreExpandedScopes: nil})
-		assert.False(t, containsInfo(result, "phantom scope"),
+		assert.False(t, containsPhantomScopeInfo(result),
 			"status=%s: phantom scope should be skipped for terminal status", status)
 	}
 }
@@ -465,7 +465,7 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
-	assert.True(t, containsInfo(result, "phantom scope"),
+	assert.True(t, containsPhantomScopeInfo(result),
 		"blocked status should still trigger phantom scope warning")
 }
 
@@ -484,7 +484,7 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 		// Terminal status skips W10 check anyway
 		graph := graphFromState(state)
 		result := Validate(state, graph, Options{PreExpandedScopes: nil})
-		assert.False(t, containsInfo(result, "phantom scope"),
+		assert.False(t, containsPhantomScopeInfo(result),
 			"type=%s status=done: phantom scope should be skipped for terminal status", issueType)
 	}
 }
@@ -507,7 +507,7 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
-	assert.False(t, containsInfo(result, "phantom scope"),
+	assert.False(t, containsPhantomScopeInfo(result),
 		"scope entries with (new) suffix should not trigger phantom scope warnings")
 }
 
@@ -534,7 +534,7 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	// ghost.go is phantom (no (new) suffix, doesn't exist)
-	assert.True(t, containsInfo(result, "phantom scope"),
+	assert.True(t, containsPhantomScopeInfo(result),
 		"nonexistent file without (new) suffix should still trigger phantom scope warning")
 	// Confirm only ghost.go is mentioned, not planned.go (new)
 	var phantomInfos []string
@@ -612,7 +612,7 @@ func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 				&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
 			)
 			graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+			result := Validate(state, graph, Options{})
 			assert.False(t, containsError(result, "invalid hierarchy"),
 				"terminal parent (status=%s) must not trigger hierarchy error", status)
 		})
@@ -633,7 +633,7 @@ func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
 				&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1", Status: status},
 			)
 			graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+			result := Validate(state, graph, Options{})
 			assert.False(t, containsError(result, "invalid hierarchy"),
 				"terminal child (status=%s) must not trigger hierarchy error", status)
 		})
