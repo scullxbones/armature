@@ -304,11 +304,13 @@ func FromIndex(index map[string]*Node) *Graph {
 	return NewGraph(d)
 }
 
-// GraphFromState constructs a Graph from a materialize.State-like node index.
-// This is a convenience helper that converts the Issues map into a Graph suitable
+// BuildGraph constructs a Graph from a node index map.
+// This is a convenience helper that converts a map of Node pointers into a Graph suitable
 // for context assembly and ready-queue computation.
 // All slices are defensively copied.
-func GraphFromState(index map[string]*Node) *Graph {
+// Previously named GraphFromState — renamed to avoid ambiguity with materialize.GraphFromState,
+// which takes a *materialize.State rather than a map[string]*dag.Node.
+func BuildGraph(index map[string]*Node) *Graph {
 	nodeIndex := make(map[string]*Node)
 	for id, node := range index {
 		copiedNode := &Node{

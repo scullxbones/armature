@@ -26,9 +26,9 @@ const (
 	OpReparent = "reparent"
 )
 
-// Op type registry moved to materialize.RegisteredOpTypes().
-
 // Issue statuses.
+// Note: the op type handler registry (mapping op type string to handler function)
+// lives in materialize.RegisteredOpTypes() — see internal/materialize/engine.go.
 const (
 	StatusOpen       = "open"
 	StatusClaimed    = "claimed"

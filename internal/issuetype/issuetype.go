@@ -7,9 +7,21 @@ func IsValid(t string) bool {
 
 // IsLegalHierarchy returns true if child type is legal under parent type.
 //
-// Semantics vs. the previous inline switch in validate.go:
-//   - epic may now parent feature (intentional: feature is a first-class type)
-//   - unknown parent or child types return false (intentional hardening; previously unknown parents passed via default: return true)
+// Full set of permitted parent→child relationships:
+//
+//	epic    → story, feature, task, bug
+//	story   → task, bug
+//	feature → task, bug
+//	task    → (nothing)
+//	bug     → (nothing)
+//
+// Changes from the previous inline validHierarchy switch in validate.go:
+//   - epic→feature is now permitted (previously epic only allowed story, task, bug)
+//   - feature as a parent type now explicitly permits task and bug children
+//     (previously feature fell into the default: return true branch, making
+//     feature→anything silently pass, including illegal combinations)
+//   - unknown parent or child types now return false (hardening; previously an
+//     unknown parent type fell through to default: return true)
 func IsLegalHierarchy(parent, child string) bool {
 	if _, ok := validTypes[parent]; !ok {
 		return false
@@ -27,7 +39,8 @@ func IsReadyEligible(t string) bool {
 	return readyEligible[t]
 }
 
-// All returns all valid issue types. Returns a defensive copy so callers cannot mutate the canonical list.
+// All returns all valid issue types in declaration order (epic, story, feature, task, bug).
+// Returns a defensive copy so callers cannot mutate the canonical list.
 func All() []string {
 	return append([]string(nil), allTypes...)
 }
@@ -41,7 +54,7 @@ var validTypes = map[string]bool{
 	"bug":     true,
 }
 
-// allTypes is the sorted list of valid types.
+// allTypes is the ordered list of valid types (by hierarchy level, not alphabetically).
 var allTypes = []string{"epic", "story", "feature", "task", "bug"}
 
 // hierarchy defines which parent types may contain which child types.

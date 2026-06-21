@@ -157,8 +157,8 @@ func newListCmd() *cobra.Command {
 				if len(ids) == 0 {
 					return nil
 				}
-				// Story Board view (table format)
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE")
+				// Story Board view: migrate to output.RenderBoard for a single table renderer
+				boardEntries := make([]output.BoardEntry, 0, len(ids))
 				for _, id := range ids {
 					e := index[id]
 					claimed := ""
@@ -166,13 +166,15 @@ func newListCmd() *cobra.Command {
 					if err == nil {
 						claimed = issue.ClaimedBy
 					}
-					outcome := e.Outcome
-					if len(outcome) > 30 {
-						outcome = outcome[:27] + "..."
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-12s %-38s %-30s %s\n", id, e.Status, claimed, outcome, e.Title)
+					boardEntries = append(boardEntries, output.BoardEntry{
+						Issue:   id,
+						Status:  e.Status,
+						Claimed: claimed,
+						Outcome: e.Outcome,
+						Title:   e.Title,
+					})
 				}
-				return nil
+				return output.RenderBoard(cmd.OutOrStdout(), boardEntries)
 			}
 
 			// Use output.RenderList for simple list view
@@ -180,9 +182,10 @@ func newListCmd() *cobra.Command {
 			for _, id := range ids {
 				e := index[id]
 				le := output.ListEntry{
-					Issue:  id,
-					Status: e.Status,
-					Title:  e.Title,
+					Issue:      id,
+					Status:     e.Status,
+					Title:      e.Title,
+					AssignedTo: e.AssignedWorker,
 				}
 				entries = append(entries, le)
 			}

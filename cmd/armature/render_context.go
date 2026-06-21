@@ -110,5 +110,5 @@ func buildGraphFromState(state *materialize.State) *dag.Graph {
 			Blocks:    append([]string(nil), issue.Blocks...),
 		}
 	}
-	return dag.GraphFromState(nodeIndex)
+	return dag.BuildGraph(nodeIndex)
 }
