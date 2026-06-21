@@ -3,3 +3,4 @@
 ["transition","QLTYCNTRL-S2-T4",1781409164,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~4",{"to":"done","outcome":"ExplainNotReady now accepts variadic now ...int64 parameter for time injection. Stale claim detection uses injected time instead of wall-clock time.Now().Unix(). Tests verify stale claims are excluded when injected time exceeds TTL."}]
 ["transition","QLTYCNTRL-S2-T4",1781409172,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~4",{"to":"merged"}]
 ["heartbeat","S11-T7",1782059939,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~4",{}]
+["heartbeat","S11-T7",1782060122,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~4",{}]
