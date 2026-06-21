@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/validate"
@@ -31,7 +32,21 @@ func (m *Model) SetSize(width, height int) {
 func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	if state != nil {
-		m.results = validate.Validate(state, validate.Options{})
+		// Build a Graph projection from state
+		nodeIndex := make(map[string]*dag.Node, len(state.Issues))
+		for id, issue := range state.Issues {
+			nodeIndex[id] = &dag.Node{
+				ID:        id,
+				Title:     issue.Title,
+				Type:      issue.Type,
+				Parent:    issue.Parent,
+				Children:  append([]string(nil), issue.Children...),
+				BlockedBy: append([]string(nil), issue.BlockedBy...),
+				Blocks:    append([]string(nil), issue.Blocks...),
+			}
+		}
+		graph := dag.FromIndex(nodeIndex)
+		m.results = validate.Validate(state, graph, validate.Options{})
 	}
 }
 

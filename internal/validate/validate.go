@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -33,11 +34,8 @@ type Result struct {
 	Coverage *traceability.Coverage
 }
 
-func Validate(state *materialize.State, opts Options) Result {
+func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	var errors, warnings, infos []string
-
-	// Build a Graph projection for shared traversal logic
-	graph := graphFromState(state)
 
 	targets := issueSubset(state, opts.ScopeID, graph)
 	if opts.ParentID != "" {
@@ -80,21 +78,6 @@ func Validate(state *materialize.State, opts Options) Result {
 	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
 }
 
-func graphFromState(state *materialize.State) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
-	for id, issue := range state.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        id,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  append([]string(nil), issue.Children...),
-			BlockedBy: append([]string(nil), issue.BlockedBy...),
-			Blocks:    append([]string(nil), issue.Blocks...),
-		}
-	}
-	return dag.GraphFromState(nodeIndex)
-}
 
 func issueSubset(state *materialize.State, scopeID string, graph *dag.Graph) map[string]*materialize.Issue {
 	if scopeID == "" {
@@ -177,27 +160,13 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 			if isTerminalStatus(child.Status) {
 				continue
 			}
-			if !validHierarchy(issue.Type, child.Type) {
+			if !issuetype.IsLegalHierarchy(issue.Type, child.Type) {
 				errs = append(errs, fmt.Sprintf("invalid hierarchy: %s %s cannot parent %s %s",
 					issue.Type, id, child.Type, childID))
 			}
 		}
 	}
 	return errs
-}
-
-func validHierarchy(parentType, childType string) bool {
-	switch parentType {
-	case "epic":
-		return childType == "story" || childType == "task" || childType == "bug"
-	case "story":
-		return childType == "task" || childType == "bug"
-	case "task":
-		return false
-	case "bug":
-		return false
-	}
-	return true
 }
 
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []string {
