@@ -27,6 +27,12 @@ func RequiresAcceptance(t string) bool {
 	return requiresAcceptance[t]
 }
 
+// IsReadyEligible returns true if the type can appear in the ready queue.
+// Ready-eligible types are task, feature, and story — types that can be actively worked on.
+func IsReadyEligible(t string) bool {
+	return readyEligible[t]
+}
+
 // All returns all valid issue types.
 func All() []string {
 	return allTypes
@@ -56,6 +62,13 @@ var hierarchy = map[string]map[string]bool{
 // workable defines which types can be claimed/executed.
 var workable = map[string]bool{
 	"task": true,
+}
+
+// readyEligible defines which types can appear in the ready queue.
+var readyEligible = map[string]bool{
+	"task":    true,
+	"feature": true,
+	"story":   true,
 }
 
 // requiresAcceptance defines which types require explicit acceptance criteria.

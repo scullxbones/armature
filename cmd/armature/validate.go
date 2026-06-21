@@ -7,6 +7,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
@@ -127,30 +128,8 @@ COVERAGE and OK lines.`,
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 			} else {
-				for _, e := range result.Errors {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "ERROR: %s\n", e)
-				}
-				for _, w := range result.Warnings {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "WARNING: %s\n", w)
-				}
-				if !quiet {
-					for _, i := range result.Infos {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO: %s\n", i)
-					}
-				}
-				if result.Coverage != nil {
-					cov := result.Coverage
-					totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
-					if cov.AcceptedRiskNodes > 0 {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk)\n",
-							totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes)
-					} else {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "COVERAGE: %d/%d cited\n",
-							totalCited, cov.TotalNodes)
-					}
-				}
-				if result.OK {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "OK: no issues found")
+				if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
+					return fmt.Errorf("render validation: %w", err)
 				}
 			}
 

@@ -143,6 +143,35 @@ func TestRequiresAcceptance(t *testing.T) {
 	}
 }
 
+func TestIsReadyEligible(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		t        string
+		expected bool
+	}{
+		// task, feature, and story are eligible for the ready queue
+		{"task is ready-eligible", "task", true},
+		{"feature is ready-eligible", "feature", true},
+		{"story is ready-eligible", "story", true},
+		// epic and bug are not eligible
+		{"epic not ready-eligible", "epic", false},
+		{"bug not ready-eligible", "bug", false},
+		{"invalid not ready-eligible", "invalid", false},
+		{"empty not ready-eligible", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := IsReadyEligible(tt.t)
+			if got != tt.expected {
+				t.Errorf("IsReadyEligible(%q) = %v, want %v", tt.t, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestAll(t *testing.T) {
 	t.Parallel()
 	result := All()

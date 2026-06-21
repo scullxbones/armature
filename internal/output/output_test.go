@@ -151,11 +151,11 @@ func TestRenderValidation_ErrorsOnly(t *testing.T) {
 		Infos:    []string{},
 	}
 	var buf bytes.Buffer
-	err := RenderValidation(&buf, result)
+	err := RenderValidation(&buf, result, false)
 	require.NoError(t, err)
 	output := buf.String()
-	assert.Contains(t, output, "error 1")
-	assert.Contains(t, output, "error 2")
+	assert.Contains(t, output, "ERROR: error 1")
+	assert.Contains(t, output, "ERROR: error 2")
 }
 
 func TestRenderValidation_WithWarnings(t *testing.T) {
@@ -167,10 +167,10 @@ func TestRenderValidation_WithWarnings(t *testing.T) {
 		Infos:    []string{},
 	}
 	var buf bytes.Buffer
-	err := RenderValidation(&buf, result)
+	err := RenderValidation(&buf, result, false)
 	require.NoError(t, err)
 	output := buf.String()
-	assert.Contains(t, output, "warning 1")
+	assert.Contains(t, output, "WARNING: warning 1")
 }
 
 func TestRenderValidation_AllOK(t *testing.T) {
@@ -182,11 +182,25 @@ func TestRenderValidation_AllOK(t *testing.T) {
 		Infos:    []string{},
 	}
 	var buf bytes.Buffer
-	err := RenderValidation(&buf, result)
+	err := RenderValidation(&buf, result, false)
 	require.NoError(t, err)
 	output := buf.String()
-	// Should have some indication of success
-	assert.True(t, len(output) > 0)
+	assert.Contains(t, output, "OK: no issues found")
+}
+
+func TestRenderValidation_QuietSuppressesInfo(t *testing.T) {
+	t.Parallel()
+	result := validate.Result{
+		OK:     true,
+		Errors: []string{},
+		Infos:  []string{"info line"},
+	}
+	var buf bytes.Buffer
+	err := RenderValidation(&buf, result, true)
+	require.NoError(t, err)
+	output := buf.String()
+	assert.NotContains(t, output, "INFO:")
+	assert.Contains(t, output, "OK: no issues found")
 }
 
 func TestListEntry_struct(t *testing.T) {
@@ -282,16 +296,13 @@ func TestRenderValidation_AllFields(t *testing.T) {
 		Infos:    []string{"info 1"},
 	}
 	var buf bytes.Buffer
-	err := RenderValidation(&buf, result)
+	err := RenderValidation(&buf, result, false)
 	require.NoError(t, err)
 	output := buf.String()
-	assert.Contains(t, output, "Errors:")
-	assert.Contains(t, output, "error 1")
-	assert.Contains(t, output, "error 2")
-	assert.Contains(t, output, "Warnings:")
-	assert.Contains(t, output, "warning 1")
-	assert.Contains(t, output, "Info:")
-	assert.Contains(t, output, "info 1")
+	assert.Contains(t, output, "ERROR: error 1")
+	assert.Contains(t, output, "ERROR: error 2")
+	assert.Contains(t, output, "WARNING: warning 1")
+	assert.Contains(t, output, "INFO: info 1")
 }
 
 func TestRenderIssue_MinimalIssue(t *testing.T) {
