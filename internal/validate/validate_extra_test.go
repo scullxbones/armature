@@ -87,7 +87,6 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 	assert.True(t, found, "expected uncited node error, got: %v", result.Errors)
 }
 
-
 func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -99,7 +98,7 @@ func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
-	assert.True(t, containsInfo(result, "phantom scope"), "expected phantom scope in Infos, got: %v", result.Infos)
+	assert.True(t, containsPhantomScopeInfo(result), "expected phantom scope in Infos, got: %v", result.Infos)
 	assert.False(t, containsWarning(result, "phantom scope"), "expected phantom scope NOT in Warnings, got: %v", result.Warnings)
 }
 
@@ -207,5 +206,5 @@ func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	assert.False(t, containsWarning(result, "phantom scope"), "expected no phantom scope warning for existing file, got: %v", result.Warnings)
-	assert.False(t, containsInfo(result, "phantom scope"), "expected no phantom scope info for existing file, got: %v", result.Infos)
+	assert.False(t, containsPhantomScopeInfo(result), "expected no phantom scope info for existing file, got: %v", result.Infos)
 }

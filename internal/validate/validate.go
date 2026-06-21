@@ -78,7 +78,6 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
 }
 
-
 func issueSubset(state *materialize.State, scopeID string, graph *dag.Graph) map[string]*materialize.Issue {
 	if scopeID == "" {
 		return state.Issues
