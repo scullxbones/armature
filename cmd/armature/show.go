@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 
-	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
@@ -164,53 +163,9 @@ func newShowCmd() *cobra.Command {
 					continue
 				}
 
-				// Human-readable output
-				w := cmd.OutOrStdout()
-				_, _ = fmt.Fprintf(w, "ID:        %s\n", issue.ID)
-				_, _ = fmt.Fprintf(w, "Title:     %s\n", issue.Title)
-				_, _ = fmt.Fprintf(w, "Type:      %s\n", issue.Type)
-				_, _ = fmt.Fprintf(w, "Status:    %s\n", issue.Status)
-				if issue.Parent != "" {
-					_, _ = fmt.Fprintf(w, "Parent:    %s\n", issue.Parent)
-				}
-				if issue.ClaimedBy != "" {
-					_, _ = fmt.Fprintf(w, "ClaimedBy: %s\n", issue.ClaimedBy)
-				}
-				if issue.AssignedWorker != "" {
-					_, _ = fmt.Fprintf(w, "Assigned:  %s\n", issue.AssignedWorker)
-				}
-				if issue.DefinitionOfDone != "" {
-					_, _ = fmt.Fprintf(w, "DoD:       %s\n", issue.DefinitionOfDone)
-				}
-				if len(issue.Acceptance) > 0 && string(issue.Acceptance) != "null" {
-					compact, err := json.Marshal(issue.Acceptance)
-					if err == nil {
-						_, _ = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
-					}
-				}
-				if len(issue.Scope) > 0 {
-					_, _ = fmt.Fprintf(w, "Scope:     %s\n", strings.Join(issue.Scope, ", "))
-				}
-				if issue.Outcome != "" {
-					_, _ = fmt.Fprintf(w, "Outcome:   %s\n", issue.Outcome)
-				}
-				if len(issue.BlockedBy) > 0 {
-					_, _ = fmt.Fprintf(w, "BlockedBy: %s\n", strings.Join(issue.BlockedBy, ", "))
-				}
-				if len(issue.Blocks) > 0 {
-					_, _ = fmt.Fprintf(w, "Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
-				}
-				activeNotes := make([]materialize.Note, 0, len(issue.Notes))
-				for _, n := range issue.Notes {
-					if !n.Deleted {
-						activeNotes = append(activeNotes, n)
-					}
-				}
-				if len(activeNotes) > 0 {
-					_, _ = fmt.Fprintf(w, "Notes:\n")
-					for _, n := range activeNotes {
-						_, _ = fmt.Fprintf(w, "  - %s\n", n.Msg)
-					}
+				// Use output.RenderIssue for human-readable output
+				if err := output.RenderIssue(cmd.OutOrStdout(), &issue, false); err != nil {
+					return err
 				}
 			}
 			return nil

@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
@@ -148,13 +149,8 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
 					return nil
 				}
-				for _, e := range entries {
-					conf := ""
-					if e.RequiresConfirmation {
-						conf = " [requires confirmation]"
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s  (%s)%s\n", e.Issue, e.Title, e.Priority, conf)
-				}
+				// Use output.RenderReady for human-readable output
+				return output.RenderReady(cmd.OutOrStdout(), entries, false)
 			}
 			return nil
 		},
