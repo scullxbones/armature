@@ -41,15 +41,17 @@ Canonical workflow and command truth live in the embedded skills under
 
 ## Capture Dogfood Findings
 
-When Armature product friction appears while working, use the user-home
-`capturing-dogfood-findings` skill. Capture from the agent-user perspective,
-write one raw finding under `docs/dogfood/findings/raw/`, and continue the
-current task unless the finding affects correctness.
+Armature is used to build Armature — treat every task as a live dogfood run. Use the `capturing-dogfood-findings` skill whenever you encounter friction:
 
-Use Armature's single-writer identity when available: `arm worker-init --check`
-for the worker ID, plus `ARM_LOG_SLOT` when set. Preferred local areas are
-`bootstrap`, `hooks`, `skills`, `commands`, `workflow`, `validation`,
-`coordination`, `tooling`, `documentation`, and `other`.
+- an `arm` command fails, returns confusing output, or contradicts the docs
+- a skill does not fire as expected, or fires with wrong content
+- a workflow step requires undocumented knowledge
+- `make check`, `arm validate`, or `arm doctor` behaves unexpectedly
+- a doc or error message is misleading or absent
+
+Invoke the skill, write one raw finding under `docs/dogfood/findings/raw/` from the agent-user perspective, then continue.
+
+Writer identity: `arm worker-init --check` (UUID) + `ARM_LOG_SLOT` when set. Local areas: `bootstrap` | `hooks` | `skills` | `commands` | `workflow` | `validation` | `coordination` | `tooling` | `documentation` | `other`.
 
 ## Use The Repo-Local Skills
 
