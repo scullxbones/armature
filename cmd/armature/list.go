@@ -8,6 +8,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -174,11 +175,20 @@ func newListCmd() *cobra.Command {
 				return nil
 			}
 
+			// Use output.RenderList for simple list view
+			entries := make([]output.ListEntry, 0, len(ids))
 			for _, id := range ids {
-				entry := index[id]
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-12s  %-14s  %s\n", id, entry.Status, entry.Title)
+				e := index[id]
+				le := output.ListEntry{
+					Issue:  id,
+					Type:   e.Type,
+					Status: e.Status,
+					Parent: e.Parent,
+					Title:  e.Title,
+				}
+				entries = append(entries, le)
 			}
-			return nil
+			return output.RenderList(cmd.OutOrStdout(), entries)
 		},
 	}
 
