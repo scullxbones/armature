@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -39,7 +40,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	var ready []ReadyEntry
 
 	for id, entry := range index {
-		if !isReadyType(entry.Type) {
+		if !issuetype.IsReadyEligible(entry.Type) {
 			continue
 		}
 		if entry.Status != ops.StatusOpen {
@@ -99,7 +100,7 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 
 	result := make(map[string]string)
 	for id, entry := range index {
-		if !isReadyType(entry.Type) {
+		if !issuetype.IsReadyEligible(entry.Type) {
 			continue
 		}
 		if entry.Status != ops.StatusOpen {
@@ -269,10 +270,4 @@ func materializeIndexToNodeIndex(index materialize.Index) map[string]*dag.Node {
 		nodeIndex[id] = node
 	}
 	return nodeIndex
-}
-
-// isReadyType reports whether an issue type can appear in the ready queue.
-// Ready includes task, feature, and story — types that can be actively worked on.
-func isReadyType(t string) bool {
-	return t == "task" || t == "feature" || t == "story"
 }

@@ -249,51 +249,44 @@ func renderReadyHuman(w io.Writer, entries []ready.ReadyEntry) error {
 }
 
 // RenderValidation renders validation results to the given writer.
-// Displays errors, warnings, and success messages as appropriate.
-func RenderValidation(w io.Writer, result validate.Result) error {
-	if len(result.Errors) > 0 {
-		_, err := fmt.Fprintf(w, "Errors:\n")
-		if err != nil {
+// Displays errors, warnings, infos, coverage, and OK status using prefixed lines.
+// When quiet is true, INFO lines are suppressed; COVERAGE and OK lines are always shown.
+func RenderValidation(w io.Writer, result validate.Result, quiet bool) error {
+	for _, e := range result.Errors {
+		if _, err := fmt.Fprintf(w, "ERROR: %s\n", e); err != nil {
 			return err
-		}
-		for _, e := range result.Errors {
-			_, err = fmt.Fprintf(w, "  - %s\n", e)
-			if err != nil {
-				return err
-			}
 		}
 	}
-
-	if len(result.Warnings) > 0 {
-		_, err := fmt.Fprintf(w, "Warnings:\n")
-		if err != nil {
+	for _, warn := range result.Warnings {
+		if _, err := fmt.Fprintf(w, "WARNING: %s\n", warn); err != nil {
 			return err
-		}
-		for _, warn := range result.Warnings {
-			_, err = fmt.Fprintf(w, "  - %s\n", warn)
-			if err != nil {
-				return err
-			}
 		}
 	}
-
-	if len(result.Infos) > 0 {
-		_, err := fmt.Fprintf(w, "Info:\n")
-		if err != nil {
-			return err
-		}
+	if !quiet {
 		for _, info := range result.Infos {
-			_, err = fmt.Fprintf(w, "  - %s\n", info)
-			if err != nil {
+			if _, err := fmt.Fprintf(w, "INFO: %s\n", info); err != nil {
 				return err
 			}
 		}
 	}
-
-	if result.OK && len(result.Errors) == 0 && len(result.Warnings) == 0 {
-		_, err := fmt.Fprintln(w, "Validation successful.")
-		return err
+	if result.Coverage != nil {
+		cov := result.Coverage
+		totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
+		if cov.AcceptedRiskNodes > 0 {
+			if _, err := fmt.Fprintf(w, "COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk)\n",
+				totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(w, "COVERAGE: %d/%d cited\n", totalCited, cov.TotalNodes); err != nil {
+				return err
+			}
+		}
 	}
-
+	if result.OK {
+		if _, err := fmt.Fprintln(w, "OK: no issues found"); err != nil {
+			return err
+		}
+	}
 	return nil
 }

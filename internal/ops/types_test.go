@@ -84,13 +84,3 @@ func TestPayload_SourceEntryID_OmittedWhenEmpty(t *testing.T) {
 		t.Errorf("expected source_entry_id to be absent from JSON when empty, got: %s", data)
 	}
 }
-
-// TestManagedExecutionOperationTypesAreInvalid verifies that all nine
-// managed-execution op types are absent from the registered op types after removal.
-func TestManagedExecutionOperationTypesAreInvalid(t *testing.T) {
-	t.Parallel()
-	// This test is disabled pending removal of ValidOpTypes in S11-T4.
-	// Verification that managed-execution op types are not in materialize.RegisteredOpTypes()
-	// will be added in a follow-up task, as it requires importing materialize (circular dependency risk).
-	t.Skip("removed ValidOpTypes; verification deferred")
-}
