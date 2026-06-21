@@ -6,6 +6,10 @@ func IsValid(t string) bool {
 }
 
 // IsLegalHierarchy returns true if child type is legal under parent type.
+//
+// Semantics vs. the previous inline switch in validate.go:
+//   - epic may now parent feature (intentional: feature is a first-class type)
+//   - unknown parent or child types return false (intentional hardening; previously unknown parents passed via default: return true)
 func IsLegalHierarchy(parent, child string) bool {
 	if _, ok := validTypes[parent]; !ok {
 		return false
@@ -17,25 +21,15 @@ func IsLegalHierarchy(parent, child string) bool {
 	return ok && allowed[child]
 }
 
-// IsWorkable returns true if type can be claimed/executed.
-func IsWorkable(t string) bool {
-	return workable[t]
-}
-
-// RequiresAcceptance returns true if type requires explicit acceptance criteria.
-func RequiresAcceptance(t string) bool {
-	return requiresAcceptance[t]
-}
-
 // IsReadyEligible returns true if the type can appear in the ready queue.
 // Ready-eligible types are task, feature, and story — types that can be actively worked on.
 func IsReadyEligible(t string) bool {
 	return readyEligible[t]
 }
 
-// All returns all valid issue types.
+// All returns all valid issue types. Returns a defensive copy so callers cannot mutate the canonical list.
 func All() []string {
-	return allTypes
+	return append([]string(nil), allTypes...)
 }
 
 // validTypes is the complete set of accepted issue types.
@@ -59,23 +53,9 @@ var hierarchy = map[string]map[string]bool{
 	"bug":     {},
 }
 
-// workable defines which types can be claimed/executed.
-var workable = map[string]bool{
-	"task": true,
-}
-
 // readyEligible defines which types can appear in the ready queue.
 var readyEligible = map[string]bool{
 	"task":    true,
 	"feature": true,
 	"story":   true,
-}
-
-// requiresAcceptance defines which types require explicit acceptance criteria.
-var requiresAcceptance = map[string]bool{
-	"epic":    true,
-	"story":   true,
-	"task":    true,
-	"bug":     false,
-	"feature": false,
 }

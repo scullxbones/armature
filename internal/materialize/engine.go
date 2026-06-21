@@ -34,7 +34,7 @@ var opHandlers = map[string]func(*State, ops.Op) error{
 	ops.OpAssign:            (*State).applyAssign,
 	ops.OpAmend:             (*State).applyAmend,
 	ops.OpSourceLink:        (*State).applySourceLink,
-	ops.OpSourceFingerprint: func(s *State, op ops.Op) error { return nil },
+	ops.OpSourceFingerprint: func(_ *State, _ ops.Op) error { return nil },
 	ops.OpCitationAccepted:  (*State).applyCitationAccepted,
 	ops.OpDAGTransition:     (*State).applyDAGTransition,
 	ops.OpScopeRename:       (*State).applyScopeRename,

@@ -27,7 +27,6 @@ const (
 )
 
 // Op type registry moved to materialize.RegisteredOpTypes().
-// All 18 op types are defined as constants above.
 
 // Issue statuses.
 const (

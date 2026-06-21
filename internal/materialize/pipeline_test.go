@@ -155,6 +155,113 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 	assert.False(t, hasTaskOne, "task-01 created by excluded worker must not appear")
 }
 
+// TestMaterialize_UnknownOpTypeErrorSurfaced verifies that when an op with
+// an unknown type is included in a replay, the error is captured and returned
+// (not silently dropped). The test checks that unknown op type errors appear
+// in the Result.UnhandledOps list or are otherwise surfaced.
+func TestMaterialize_UnknownOpTypeErrorSurfaced(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	workerID := "worker-x"
+
+	// Create a valid op and an op with an unknown type
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+
+	unknownOp := ops.Op{
+		Type:      "unknown_future_op_type",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{},
+	}
+
+	allOps := []ops.Op{validOp, unknownOp}
+
+	// Materialize with unknown op type
+	result, err := Materialize(stateDir, allOps, false, nil)
+	require.NoError(t, err, "Materialize should not error, but should capture unknown ops")
+
+	// Verify the error was surfaced: check Result.UnhandledOps
+	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
+	assert.Equal(t, 1, len(result.UnhandledOps), "should have exactly one unhandled op")
+	assert.Equal(t, "unknown_future_op_type", result.UnhandledOps[0].Type, "unhandled op should be the unknown type")
+}
+
+// TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced verifies that MaterializeAndReturn
+// also surfaces unknown op type errors in the Result.
+func TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	workerID := "worker-x"
+
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+
+	unknownOp := ops.Op{
+		Type:      "another_unknown_type",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerID,
+	}
+
+	allOps := []ops.Op{validOp, unknownOp}
+
+	_, result, err := MaterializeAndReturn(stateDir, allOps, false, nil)
+	require.NoError(t, err, "MaterializeAndReturn should not error, but should capture unknown ops")
+
+	// Verify unknown op is captured
+	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
+	assert.Equal(t, 1, len(result.UnhandledOps), "should have exactly one unhandled op")
+	assert.Equal(t, "another_unknown_type", result.UnhandledOps[0].Type, "unhandled op should be the unknown type")
+}
+
+// TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced verifies that
+// MaterializeExcludeWorker also surfaces unknown op type errors.
+func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
+	t.Parallel()
+	workerA := "worker-a"
+	workerB := "worker-b"
+
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerA,
+		Payload:   ops.Payload{Title: "Task one", NodeType: "task"},
+	}
+
+	unknownOp := ops.Op{
+		Type:      "yet_another_unknown",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerB,
+	}
+
+	allOps := []ops.Op{validOp, unknownOp}
+
+	_, result, err := MaterializeExcludeWorker(allOps, "worker-c", false)
+	require.NoError(t, err, "MaterializeExcludeWorker should not error, but should capture unknown ops")
+
+	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
+}
+
 // TestIncremental_MatchesFullReplay verifies that incremental materialization
 // produces identical state to a full replay. This test:
 // 1. Runs a full replay to establish baseline state

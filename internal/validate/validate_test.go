@@ -23,19 +23,7 @@ func makeState(issues ...*materialize.Issue) *materialize.State {
 }
 
 func graphFromState(state *materialize.State) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
-	for id, issue := range state.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        id,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  append([]string(nil), issue.Children...),
-			BlockedBy: append([]string(nil), issue.BlockedBy...),
-			Blocks:    append([]string(nil), issue.Blocks...),
-		}
-	}
-	return dag.FromIndex(nodeIndex)
+	return materialize.GraphFromState(state)
 }
 
 func TestValidate_Clean(t *testing.T) {
