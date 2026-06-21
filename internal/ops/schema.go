@@ -7,7 +7,8 @@ func GenerateSchema() string {
 # Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
 #
 # Position 0: op_type (string) — one of: create, claim, heartbeat, transition,
-#             note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign
+#             note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision,
+#             assign, amend, citation-accepted, scope-rename, scope-delete, reparent
 # Position 1: target_id (string) — issue/node/source ID this op targets
 # Position 2: timestamp (integer) — Unix epoch seconds
 # Position 3: worker_id (string) — UUID of the worker emitting this op

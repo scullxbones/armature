@@ -21,9 +21,6 @@ func ParseLine(line []byte) (Op, error) {
 	if err := json.Unmarshal(raw[0], &op.Type); err != nil {
 		return Op{}, fmt.Errorf("invalid op type: %w", err)
 	}
-	if !ValidOpTypes[op.Type] {
-		return Op{}, fmt.Errorf("unknown op type: %s", op.Type)
-	}
 
 	if err := json.Unmarshal(raw[1], &op.TargetID); err != nil {
 		return Op{}, fmt.Errorf("invalid target_id: %w", err)
