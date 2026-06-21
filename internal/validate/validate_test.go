@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
@@ -21,13 +22,30 @@ func makeState(issues ...*materialize.Issue) *materialize.State {
 	return s
 }
 
+func graphFromState(state *materialize.State) *dag.Graph {
+	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
+	for id, issue := range state.Issues {
+		nodeIndex[id] = &dag.Node{
+			ID:        id,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  append([]string(nil), issue.Children...),
+			BlockedBy: append([]string(nil), issue.BlockedBy...),
+			Blocks:    append([]string(nil), issue.Blocks...),
+		}
+	}
+	return dag.FromIndex(nodeIndex)
+}
+
 func TestValidate_Clean(t *testing.T) {
 	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "A", BlockedBy: []string{}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{}, Children: []string{}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, result.OK)
 	assert.Nil(t, result.Errors)
 }
@@ -37,7 +55,8 @@ func TestValidate_OrphanedChild(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "A", Parent: "nonexistent", BlockedBy: []string{}, Children: []string{}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, result.OK)
 	assert.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0], "unresolved parent")
@@ -49,7 +68,8 @@ func TestValidate_CircularDep(t *testing.T) {
 		&materialize.Issue{ID: "A", BlockedBy: []string{"B"}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{"A"}, Children: []string{}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, result.OK)
 	// At least one circular dependency error should be present
 	found := false
@@ -67,7 +87,8 @@ func TestValidate_UnknownBlocker(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "A", BlockedBy: []string{"ghost"}, Children: []string{}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, result.OK)
 	assert.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0], "unresolved link target")
@@ -91,13 +112,23 @@ func containsError(r Result, substr string) bool {
 	return false
 }
 
+func containsInfo(r Result, substr string) bool {
+	for _, i := range r.Infos {
+		if strings.Contains(strings.ToLower(i), strings.ToLower(substr)) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestW1ScopeOverlap(t *testing.T) {
 	t.Parallel()
 	state := makeState(
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "scope overlap"))
 }
 
@@ -107,7 +138,8 @@ func TestW1ScopeOverlap_SuppressedByBlockedBy(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-B"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-A"}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when one sibling blocks the other")
 }
 
@@ -117,7 +149,8 @@ func TestW1ScopeOverlap_SkipsTerminalTasks(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "done"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "merged"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "terminal sibling tasks should not trigger scope overlap warnings")
 }
 
@@ -127,7 +160,8 @@ func TestW1ScopeOverlap_SkipsNonTaskIssues(t *testing.T) {
 		&materialize.Issue{ID: "STORY-A", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "STORY-B", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "story-level aggregate scopes should not trigger worker collision warnings")
 }
 
@@ -139,7 +173,8 @@ func TestW2NoTestCriteria(t *testing.T) {
 			Acceptance: json.RawMessage(`[{"type":"review","text":"look at it"}]`),
 		},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "no test criteria"))
 }
 
@@ -151,7 +186,8 @@ func TestW2NoTestCriteria_ManualReviewSatisfies(t *testing.T) {
 			Acceptance: json.RawMessage(`[{"type":"manual_review","description":"docs reviewed"}]`),
 		},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsWarning(result, "no test criteria"), "manual_review should satisfy test criteria requirement")
 }
 
@@ -160,7 +196,8 @@ func TestW7VagueDoD(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", DefinitionOfDone: "Make it work properly and correctly"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "vague dod"))
 }
 
@@ -175,7 +212,8 @@ func TestW8ConflictingDecisions(t *testing.T) {
 			},
 		},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "conflicting decisions"))
 }
 
@@ -191,7 +229,8 @@ func TestW8ConflictingDecisions_IgnoresDuplicateChoices(t *testing.T) {
 			},
 		},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsWarning(result, "conflicting decisions"), "repeating the same choice should not trigger a conflict warning")
 }
 
@@ -200,7 +239,8 @@ func TestW11VagueOutcome(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "vague outcome"))
 }
 
@@ -210,7 +250,8 @@ func TestE5TypeHierarchy(t *testing.T) {
 		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"TASK-2"}},
 		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsError(result, "invalid hierarchy"))
 }
 
@@ -219,7 +260,8 @@ func TestE6RequiredFields(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"}, // missing scope, acceptance, dod
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, result.OK)
 	assert.True(t, containsError(result, "missing required field"))
 }
@@ -229,7 +271,8 @@ func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "merged"}, // merged — required fields not enforced
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
 }
@@ -239,7 +282,8 @@ func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done"}, // done — required fields not enforced
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
 }
@@ -249,7 +293,8 @@ func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "cancelled"}, // cancelled — required fields not enforced
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
 }
@@ -260,7 +305,8 @@ func TestE5TypeHierarchy_EpicWithTaskIsValid(t *testing.T) {
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"TASK-2"}},
 		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "EPIC-1"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsError(result, "invalid hierarchy"), "epic with task child should be valid")
 }
 
@@ -271,7 +317,8 @@ func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-B"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-A"}},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when B blocks A")
 }
 
@@ -286,7 +333,8 @@ func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Context: json.RawMessage(jsonContext)},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "budget advisory"))
 }
 
@@ -299,7 +347,8 @@ func TestW6ComplexityMismatch_SmallWith6Files(t *testing.T) {
 			EstComplexity: "small",
 		},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "complexity mismatch"))
 }
 
@@ -312,7 +361,8 @@ func TestW6ComplexityMismatch_LargeWith1File(t *testing.T) {
 			EstComplexity: "large",
 		},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "complexity mismatch"))
 }
 
@@ -322,7 +372,8 @@ func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "vague outcome"))
 }
 
@@ -344,7 +395,8 @@ func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
 				},
 				// no ContextFiles — spans 3 dirs, would trigger W5 for active issues
 			})
-			result := Validate(state, Options{})
+			graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 			assert.False(t, containsWarning(result, "missing context_files"),
 				"status=%q: terminal issues should not warn about missing context_files", status)
 		})
@@ -359,7 +411,8 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 		Status: "open",
 		Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
 	})
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "missing context_files"),
 		"active issues spanning 3+ dirs without context_files should still warn")
 	// The warning must not reference the non-existent --context-files flag.
@@ -388,7 +441,8 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 			},
 		)
 		// For terminal statuses, W10 check is skipped anyway
-		result := Validate(state, Options{PreExpandedScopes: nil})
+		graph := graphFromState(state)
+		result := Validate(state, graph, Options{PreExpandedScopes: nil})
 		assert.False(t, containsInfo(result, "phantom scope"),
 			"status=%s: phantom scope should be skipped for terminal status", status)
 	}
@@ -409,7 +463,8 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"TSK-1": {}, // empty list means globs matched no files
 	}
-	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	assert.True(t, containsInfo(result, "phantom scope"),
 		"blocked status should still trigger phantom scope warning")
 }
@@ -427,7 +482,8 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 			},
 		)
 		// Terminal status skips W10 check anyway
-		result := Validate(state, Options{PreExpandedScopes: nil})
+		graph := graphFromState(state)
+		result := Validate(state, graph, Options{PreExpandedScopes: nil})
 		assert.False(t, containsInfo(result, "phantom scope"),
 			"type=%s status=done: phantom scope should be skipped for terminal status", issueType)
 	}
@@ -449,7 +505,8 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"ISSUE-1": {}, // empty list means no files matched
 	}
-	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	assert.False(t, containsInfo(result, "phantom scope"),
 		"scope entries with (new) suffix should not trigger phantom scope warnings")
 }
@@ -474,7 +531,8 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"ISSUE-1": {"real.go"}, // ghost.go and planned.go (new) don't appear
 	}
-	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	// ghost.go is phantom (no (new) suffix, doesn't exist)
 	assert.True(t, containsInfo(result, "phantom scope"),
 		"nonexistent file without (new) suffix should still trigger phantom scope warning")
@@ -510,7 +568,8 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"ISSUE-1": {"real.go"}, // only real.go exists; planned.go (new) and ghost.go don't
 	}
-	result := Validate(state, Options{PreExpandedScopes: preExpandedScopes})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	var phantomInfos []string
 	for _, info := range result.Infos {
 		if strings.Contains(info, "phantom scope") {
@@ -534,7 +593,8 @@ func TestValidateUsesCoverage(t *testing.T) {
 	}
 
 	state := makeState(&materialize.Issue{ID: "A"})
-	result := Validate(state, Options{Coverage: coverage})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{Coverage: coverage})
 	assert.NotNil(t, result.Coverage)
 	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }
@@ -551,7 +611,8 @@ func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 				&materialize.Issue{ID: "TASK-1", Type: "task", Status: status, Children: []string{"TASK-2"}},
 				&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
 			)
-			result := Validate(state, Options{})
+			graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 			assert.False(t, containsError(result, "invalid hierarchy"),
 				"terminal parent (status=%s) must not trigger hierarchy error", status)
 		})
@@ -571,7 +632,8 @@ func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
 				&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
 				&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1", Status: status},
 			)
-			result := Validate(state, Options{})
+			graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 			assert.False(t, containsError(result, "invalid hierarchy"),
 				"terminal child (status=%s) must not trigger hierarchy error", status)
 		})
@@ -585,7 +647,8 @@ func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "STORY-1"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsError(result, "invalid hierarchy"), "bug under story should be valid")
 }
 
@@ -596,7 +659,8 @@ func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "EPIC-1"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.False(t, containsError(result, "invalid hierarchy"), "bug under epic should be valid")
 }
 
@@ -607,7 +671,8 @@ func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
 		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1"},
 	)
-	result := Validate(state, Options{})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
 	assert.True(t, containsError(result, "invalid hierarchy"), "bug under task should be invalid")
 }
 
@@ -635,7 +700,8 @@ func TestParentFilter_NoFilterReturnsAllIssues(t *testing.T) {
 			DefinitionOfDone: "Complete the task",
 		},
 	)
-	result := Validate(state, Options{ParentID: ""})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{ParentID: ""})
 	// No errors expected in clean state
 	assert.True(t, result.OK)
 }
@@ -667,7 +733,8 @@ func TestParentFilter_RestrictsToDirectChildren(t *testing.T) {
 	)
 	// When filtering by STORY-1, only TASK-A and TASK-B should be validated (direct children)
 	// EPIC-1 and STORY-1 itself should not appear
-	result := Validate(state, Options{ParentID: "STORY-1"})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{ParentID: "STORY-1"})
 	// Validate that the result is OK (no errors from children)
 	assert.True(t, result.OK)
 }
@@ -698,7 +765,8 @@ func TestParentFilter_ExcludesNonChildren(t *testing.T) {
 		},
 	)
 	// Filter by STORY-1; only TASK-A should be validated
-	result := Validate(state, Options{ParentID: "STORY-1"})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{ParentID: "STORY-1"})
 	assert.True(t, result.OK)
 }
 
@@ -716,7 +784,8 @@ func TestParentFilter_ValidatesChildrenWithErrors(t *testing.T) {
 		&materialize.Issue{ID: "TASK-B", Type: "task", Parent: "STORY-1"},
 	)
 	// When filtering by STORY-1, only direct children (TASK-A, TASK-B) are validated
-	result := Validate(state, Options{ParentID: "STORY-1"})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{ParentID: "STORY-1"})
 	// TASK-A is missing required fields; should have errors
 	assert.False(t, result.OK)
 	assert.True(t, containsError(result, "missing required field"))
@@ -730,7 +799,8 @@ func TestParentFilter_NonexistentParentID(t *testing.T) {
 		&materialize.Issue{ID: "TASK-A", Type: "task", Parent: "STORY-1"},
 	)
 	// When filtering by a non-existent parent ID, no children exist
-	result := Validate(state, Options{ParentID: "NONEXISTENT"})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{ParentID: "NONEXISTENT"})
 	// No children to validate, so OK should be true (no errors)
 	assert.True(t, result.OK)
 }
@@ -760,7 +830,8 @@ func TestParentFilter_ParentNodeNotValidated(t *testing.T) {
 	)
 	// When filtering by TASK-PARENT, only TASK-CHILD should be validated
 	// TASK-PARENT itself should not be in the validation set
-	result := Validate(state, Options{ParentID: "TASK-PARENT"})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{ParentID: "TASK-PARENT"})
 	// TASK-CHILD has no errors; the parent's missing fields should not be reported
 	assert.True(t, result.OK)
 }

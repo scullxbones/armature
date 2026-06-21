@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
@@ -78,6 +79,21 @@ COVERAGE and OK lines.`,
 				}
 			}
 
+			// Build a Graph projection from state
+			nodeIndex := make(map[string]*dag.Node, len(state.Issues))
+			for id, issue := range state.Issues {
+				nodeIndex[id] = &dag.Node{
+					ID:        id,
+					Title:     issue.Title,
+					Type:      issue.Type,
+					Parent:    issue.Parent,
+					Children:  append([]string(nil), issue.Children...),
+					BlockedBy: append([]string(nil), issue.BlockedBy...),
+					Blocks:    append([]string(nil), issue.Blocks...),
+				}
+			}
+			graph := dag.FromIndex(nodeIndex)
+
 			// Expand globs for scope validation
 			scopeGlobs := make(map[string][]string)
 			for _, issue := range state.Issues {
@@ -93,7 +109,7 @@ COVERAGE and OK lines.`,
 				Coverage:          cov,
 				PreExpandedScopes: preExpandedScopes,
 			}
-			result := validate.Validate(state, opts)
+			result := validate.Validate(state, graph, opts)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
