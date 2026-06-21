@@ -166,3 +166,28 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	require.True(t, ok, "mblk-2 blocked_by field should be an array")
 	assert.Equal(t, []any{"mblk-1"}, blockedByList)
 }
+
+// TestShow_JSON_IncludesPriorityField verifies that the priority field is present in
+// JSON output when set. This is a non-regression test: the move from the old inline
+// showJSON struct to output.IssueJSON added the priority field to the JSON schema.
+func TestShow_JSON_IncludesPriorityField(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a task with an explicit priority
+	_, err = runTrls(t, repo, "create", "--id", "pri-task", "--title", "Priority task", "--type", "task", "--priority", "high")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "show", "--format", "json", "pri-task")
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	priority, ok := result["priority"]
+	require.True(t, ok, "JSON output from arm show must include the priority field")
+	assert.Equal(t, "high", priority, "priority field must reflect the value set at create time")
+}

@@ -72,7 +72,14 @@ func TestIsLegalHierarchy(t *testing.T) {
 		{"bug->epic", "bug", "epic", false},
 		{"bug->task", "bug", "task", false},
 
-		// Invalid parents
+		// Feature as parent: only task and bug allowed.
+		// Previously feature fell into `default: return true` in validate.go,
+		// making feature→anything silently pass. These cases now correctly return false.
+		{"feature->epic", "feature", "epic", false},
+		{"feature->story", "feature", "story", false},
+
+		// Invalid parents: previously unknown parent types returned true via default: return true.
+		// IsLegalHierarchy now returns false for unknown parents (intentional hardening).
 		{"invalid->task", "invalid", "task", false},
 		{"epic->invalid", "epic", "invalid", false},
 		{"invalid->invalid", "invalid", "invalid", false},

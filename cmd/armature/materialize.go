@@ -26,9 +26,12 @@ func newMaterializeCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"Diagnostic replay excluding worker %s: %d issues from %d ops\n",
+				msg := fmt.Sprintf("Diagnostic replay excluding worker %s: %d issues from %d ops",
 					excludeWorker, result.IssueCount, result.OpsProcessed)
+				if len(result.UnhandledOps) > 0 {
+					msg += fmt.Sprintf(" [%d unhandled ops]", len(result.UnhandledOps))
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), msg)
 				return nil
 			}
 
@@ -41,6 +44,9 @@ func newMaterializeCmd() *cobra.Command {
 				"Materialized %d issues from %d ops", result.IssueCount, result.OpsProcessed)
 			if result.FullReplay {
 				_, _ = fmt.Fprint(cmd.OutOrStdout(), " (full replay)")
+			}
+			if len(result.UnhandledOps) > 0 {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), " [%d unhandled ops]", len(result.UnhandledOps))
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			return nil

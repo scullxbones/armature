@@ -787,9 +787,9 @@ func TestIsLegalHierarchyTable(t *testing.T) {
 	}
 }
 
-// TestGraphFromState tests that GraphFromState constructs a Graph from a node index
+// TestBuildGraph tests that BuildGraph constructs a Graph from a node index
 // and defensively copies all slices.
-func TestGraphFromState(t *testing.T) {
+func TestBuildGraph(t *testing.T) {
 	t.Parallel()
 	index := map[string]*Node{
 		"epic-1": {
@@ -830,7 +830,7 @@ func TestGraphFromState(t *testing.T) {
 		},
 	}
 
-	g := GraphFromState(index)
+	g := BuildGraph(index)
 	require.NotNil(t, g)
 
 	// Test basic graph operations
@@ -846,11 +846,11 @@ func TestGraphFromState(t *testing.T) {
 	assert.NotContains(t, children, "injected")
 }
 
-// TestGraphFromStateEmpty tests that GraphFromState handles an empty index.
-func TestGraphFromStateEmpty(t *testing.T) {
+// TestBuildGraphEmpty tests that BuildGraph handles an empty index.
+func TestBuildGraphEmpty(t *testing.T) {
 	t.Parallel()
 	index := make(map[string]*Node)
-	g := GraphFromState(index)
+	g := BuildGraph(index)
 	require.NotNil(t, g)
 
 	// Empty graph should return empty results

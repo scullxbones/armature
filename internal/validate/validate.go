@@ -168,6 +168,11 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 	return errs
 }
 
+// checkE6RequiredFields checks that task issues have all required fields populated.
+// TODO: The required-field policy (which fields are required per issue type) should
+// move to the issuetype package (e.g., issuetype.RequiredFields(t string) []string)
+// to complete the seam originally planned in S11-T1. Until that is implemented,
+// the policy lives here as inline logic.
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []string {
 	var errs []string
 	for id, issue := range issues {

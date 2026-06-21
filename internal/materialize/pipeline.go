@@ -3,8 +3,10 @@ package materialize
 import (
 	"cmp"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
@@ -30,6 +32,29 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 		})
 	}
 	return refs
+}
+
+// emitUnhandledOpsWarning emits a warning to stderr listing the unknown op types
+// that were skipped during materialization.
+func emitUnhandledOpsWarning(unhandledOps []ops.Op) {
+	if len(unhandledOps) == 0 {
+		return
+	}
+
+	// Collect unique op types
+	typeSet := make(map[string]bool)
+	for _, op := range unhandledOps {
+		typeSet[op.Type] = true
+	}
+	types := make([]string, 0, len(typeSet))
+	for t := range typeSet {
+		types = append(types, t)
+	}
+	slices.Sort(types)
+
+	warning := fmt.Sprintf("warning: %d op(s) with unknown types skipped: [%s]\n",
+		len(unhandledOps), strings.Join(types, ", "))
+	fmt.Fprint(os.Stderr, warning)
 }
 
 // Materialize runs the full materialization pipeline.
@@ -92,6 +117,9 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 
 	readyPath := filepath.Join(stateDir, "ready.json")
 	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
+
+	// Emit warning if any ops were unhandled
+	emitUnhandledOpsWarning(unhandledOps)
 
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.
@@ -175,6 +203,9 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	readyPath := filepath.Join(stateDir, "ready.json")
 	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
 
+	// Emit warning if any ops were unhandled
+	emitUnhandledOpsWarning(unhandledOps)
+
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.
 	offsets := byteOffsets
@@ -225,6 +256,9 @@ func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBra
 	}
 
 	state.RunRollup()
+
+	// Emit warning if any ops were unhandled
+	emitUnhandledOpsWarning(unhandledOps)
 
 	return state, Result{
 		IssueCount:   len(state.Issues),

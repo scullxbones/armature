@@ -96,14 +96,44 @@ func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
 	}
 }
 
-func TestRegisteredOpTypes_NoDuplicates(t *testing.T) {
+// TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered verifies that managed-execution
+// op types (heartbeat, orchestrate-*, worker-runtime-decision) are NOT in RegisteredOpTypes,
+// and that all standard materialization ops ARE registered. This guards against divergence
+// between the ops package constants and the materialize engine's handler map.
+func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 	t.Parallel()
 	registered := RegisteredOpTypes()
-
-	seen := make(map[string]bool)
+	registeredSet := make(map[string]bool, len(registered))
 	for _, opType := range registered {
-		assert.False(t, seen[opType], "op type %q appears more than once in RegisteredOpTypes", opType)
-		seen[opType] = true
+		registeredSet[opType] = true
+	}
+
+	// Managed-execution ops must NOT be registered in the materializer.
+	managedOps := []string{
+		"orchestrate-start",
+		"orchestrate-dispatch",
+		"orchestrate-dispatch-complete",
+		"orchestrate-verify-fail",
+		"orchestrate-retry",
+		"orchestrate-escalate",
+		"orchestrate-complete",
+		"orchestrate-check-result",
+		"worker-runtime-decision",
+	}
+	for _, opType := range managedOps {
+		assert.False(t, registeredSet[opType], "managed-execution op type %q must NOT be in RegisteredOpTypes", opType)
+	}
+
+	// All standard materialization ops must be registered.
+	standardOps := []string{
+		ops.OpCreate, ops.OpClaim, ops.OpHeartbeat, ops.OpTransition,
+		ops.OpNote, ops.OpNoteDelete, ops.OpLink, ops.OpUnlink,
+		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
+		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
+		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
+	}
+	for _, opType := range standardOps {
+		assert.True(t, registeredSet[opType], "standard op type %q must be in RegisteredOpTypes", opType)
 	}
 }
 

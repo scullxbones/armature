@@ -87,60 +87,43 @@ func renderIssueJSON(w io.Writer, issue *materialize.Issue) error {
 	return err
 }
 
+// errWriter is a small helper that accumulates the first write error and
+// suppresses subsequent writes. This eliminates repetitive if-err-return blocks
+// in functions that write many fields sequentially.
+type errWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (ew *errWriter) printf(format string, args ...interface{}) {
+	if ew.err != nil {
+		return
+	}
+	_, ew.err = fmt.Fprintf(ew.w, format, args...)
+}
+
 func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
-	_, err := fmt.Fprintf(w, "ID:        %s\n", issue.ID)
-	if err != nil {
-		return err
-	}
+	ew := &errWriter{w: w}
 
-	_, err = fmt.Fprintf(w, "Title:     %s\n", issue.Title)
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintf(w, "Type:      %s\n", issue.Type)
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintf(w, "Status:    %s\n", issue.Status)
-	if err != nil {
-		return err
-	}
+	ew.printf("ID:        %s\n", issue.ID)
+	ew.printf("Title:     %s\n", issue.Title)
+	ew.printf("Type:      %s\n", issue.Type)
+	ew.printf("Status:    %s\n", issue.Status)
 
 	if issue.Parent != "" {
-		_, err = fmt.Fprintf(w, "Parent:    %s\n", issue.Parent)
-		if err != nil {
-			return err
-		}
+		ew.printf("Parent:    %s\n", issue.Parent)
 	}
-
 	if issue.Priority != "" {
-		_, err = fmt.Fprintf(w, "Priority:  %s\n", issue.Priority)
-		if err != nil {
-			return err
-		}
+		ew.printf("Priority:  %s\n", issue.Priority)
 	}
-
 	if issue.ClaimedBy != "" {
-		_, err = fmt.Fprintf(w, "ClaimedBy: %s\n", issue.ClaimedBy)
-		if err != nil {
-			return err
-		}
+		ew.printf("ClaimedBy: %s\n", issue.ClaimedBy)
 	}
-
 	if issue.AssignedWorker != "" {
-		_, err = fmt.Fprintf(w, "Assigned:  %s\n", issue.AssignedWorker)
-		if err != nil {
-			return err
-		}
+		ew.printf("Assigned:  %s\n", issue.AssignedWorker)
 	}
-
 	if issue.DefinitionOfDone != "" {
-		_, err = fmt.Fprintf(w, "DoD:       %s\n", issue.DefinitionOfDone)
-		if err != nil {
-			return err
-		}
+		ew.printf("DoD:       %s\n", issue.DefinitionOfDone)
 	}
 
 	if len(issue.Acceptance) > 0 && string(issue.Acceptance) != "null" {
@@ -148,38 +131,24 @@ func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
 		if err != nil {
 			return fmt.Errorf("marshal acceptance: %w", err)
 		}
-		_, err = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
-		if err != nil {
-			return err
-		}
+		ew.printf("Acceptance: %s\n", string(compact))
 	}
 
 	if len(issue.Scope) > 0 {
-		_, err = fmt.Fprintf(w, "Scope:     %s\n", strings.Join(issue.Scope, ", "))
-		if err != nil {
-			return err
-		}
+		ew.printf("Scope:     %s\n", strings.Join(issue.Scope, ", "))
 	}
-
 	if issue.Outcome != "" {
-		_, err = fmt.Fprintf(w, "Outcome:   %s\n", issue.Outcome)
-		if err != nil {
-			return err
-		}
+		ew.printf("Outcome:   %s\n", issue.Outcome)
 	}
-
 	if len(issue.BlockedBy) > 0 {
-		_, err = fmt.Fprintf(w, "BlockedBy: %s\n", strings.Join(issue.BlockedBy, ", "))
-		if err != nil {
-			return err
-		}
+		ew.printf("BlockedBy: %s\n", strings.Join(issue.BlockedBy, ", "))
+	}
+	if len(issue.Blocks) > 0 {
+		ew.printf("Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
 	}
 
-	if len(issue.Blocks) > 0 {
-		_, err = fmt.Fprintf(w, "Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
-		if err != nil {
-			return err
-		}
+	if ew.err != nil {
+		return ew.err
 	}
 
 	activeNotes := make([]materialize.Note, 0, len(issue.Notes))
@@ -189,19 +158,13 @@ func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
 		}
 	}
 	if len(activeNotes) > 0 {
-		_, err = fmt.Fprintf(w, "Notes:\n")
-		if err != nil {
-			return err
-		}
+		ew.printf("Notes:\n")
 		for _, n := range activeNotes {
-			_, err = fmt.Fprintf(w, "  - %s\n", n.Msg)
-			if err != nil {
-				return err
-			}
+			ew.printf("  - %s\n", n.Msg)
 		}
 	}
 
-	return nil
+	return ew.err
 }
 
 // RenderList renders a list of issues to the given writer.
@@ -217,6 +180,41 @@ func RenderList(w io.Writer, entries []ListEntry) error {
 			status = status + " (assigned to " + e.AssignedTo + ")"
 		}
 		_, err := fmt.Fprintf(w, "  %-12s  %-14s  %s\n", e.Issue, status, e.Title)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// BoardEntry represents a row in the story-board (parent-filtered) view, which includes
+// claim and outcome columns in addition to the standard ID/status/title columns.
+type BoardEntry struct {
+	Issue   string
+	Status  string
+	Claimed string
+	Outcome string
+	Title   string
+}
+
+// RenderBoard renders a story-board table to the given writer.
+// The board view shows ID, STATUS, CLAIMED, OUTCOME, and TITLE columns,
+// and is used when listing issues filtered by a parent (arm list --parent).
+func RenderBoard(w io.Writer, entries []BoardEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		outcome := e.Outcome
+		const maxOutcome = 30
+		if len(outcome) > maxOutcome {
+			outcome = outcome[:27] + "..."
+		}
+		_, err = fmt.Fprintf(w, "%-12s %-12s %-38s %-30s %s\n", e.Issue, e.Status, e.Claimed, outcome, e.Title)
 		if err != nil {
 			return err
 		}

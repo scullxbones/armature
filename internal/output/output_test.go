@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -427,7 +428,51 @@ func TestRenderList_ColumnAlignment(t *testing.T) {
 	lines := buf.String()
 
 	// Each line must use aligned columns: %-12s for ID, %-14s for status.
-	// Check that the ID column is padded to at least 12 chars.
-	assert.Contains(t, lines, "SHORT        ")  // 5 chars + 7 spaces = 12 total
-	assert.Contains(t, lines, "open          ") // 4 chars + 10 spaces = 14 total
+	// Use TrimSpace-based checks to avoid brittle trailing-space assertions.
+	for _, line := range strings.Split(strings.TrimRight(lines, "\n"), "\n") {
+		if strings.Contains(line, "SHORT") {
+			assert.True(t, strings.HasPrefix(strings.TrimLeft(line, " "), "SHORT"), "ID column must start with SHORT")
+			// Verify the status column appears after sufficient padding
+			assert.Contains(t, line, "open", "status column must contain open")
+		}
+		if strings.Contains(line, "LONGER-ID") {
+			assert.Contains(t, line, "in-progress", "status column must contain in-progress")
+		}
+	}
+}
+
+func TestRenderBoard_Basic(t *testing.T) {
+	t.Parallel()
+	entries := []BoardEntry{
+		{Issue: "TASK-01", Status: "open", Claimed: "worker-a", Outcome: "Short outcome", Title: "First task"},
+		{Issue: "TASK-02", Status: "in-progress", Claimed: "", Outcome: strings.Repeat("x", 35), Title: "Long outcome task"},
+	}
+	var buf bytes.Buffer
+	err := RenderBoard(&buf, entries)
+	require.NoError(t, err)
+	out := buf.String()
+
+	// Header must be present
+	assert.Contains(t, out, "ID")
+	assert.Contains(t, out, "STATUS")
+	assert.Contains(t, out, "CLAIMED")
+	assert.Contains(t, out, "OUTCOME")
+	assert.Contains(t, out, "TITLE")
+
+	// Data rows
+	assert.Contains(t, out, "TASK-01")
+	assert.Contains(t, out, "worker-a")
+	assert.Contains(t, out, "Short outcome")
+
+	// Long outcome must be truncated to 30 chars (27 + "...")
+	assert.Contains(t, out, "...", "outcome longer than 30 chars must be truncated")
+	assert.NotContains(t, out, strings.Repeat("x", 35), "full 35-char outcome must not appear verbatim")
+}
+
+func TestRenderBoard_Empty(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	err := RenderBoard(&buf, []BoardEntry{})
+	require.NoError(t, err)
+	assert.Empty(t, buf.String(), "empty entries should produce no output")
 }

@@ -1,6 +1,7 @@
 package materialize
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -156,9 +157,8 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 }
 
 // TestMaterialize_UnknownOpTypeErrorSurfaced verifies that when an op with
-// an unknown type is included in a replay, the error is captured and returned
-// (not silently dropped). The test checks that unknown op type errors appear
-// in the Result.UnhandledOps list or are otherwise surfaced.
+// an unknown type is included in a replay, the op is captured in UnhandledOps
+// (not silently dropped and not returned as an error from Materialize itself).
 func TestMaterialize_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -190,14 +190,14 @@ func TestMaterialize_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	result, err := Materialize(stateDir, allOps, false, nil)
 	require.NoError(t, err, "Materialize should not error, but should capture unknown ops")
 
-	// Verify the error was surfaced: check Result.UnhandledOps
-	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
+	// Verify the op was captured in UnhandledOps (not returned as an error)
+	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type should be captured in UnhandledOps")
 	assert.Equal(t, 1, len(result.UnhandledOps), "should have exactly one unhandled op")
 	assert.Equal(t, "unknown_future_op_type", result.UnhandledOps[0].Type, "unhandled op should be the unknown type")
 }
 
 // TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced verifies that MaterializeAndReturn
-// also surfaces unknown op type errors in the Result.
+// also captures unknown op types in Result.UnhandledOps (not returned as errors).
 func TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -233,7 +233,7 @@ func TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced(t *testing.T) {
 }
 
 // TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced verifies that
-// MaterializeExcludeWorker also surfaces unknown op type errors.
+// MaterializeExcludeWorker also captures unknown op types in Result.UnhandledOps.
 func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	t.Parallel()
 	workerA := "worker-a"
@@ -260,6 +260,166 @@ func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	require.NoError(t, err, "MaterializeExcludeWorker should not error, but should capture unknown ops")
 
 	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
+}
+
+// TestMaterialize_UnhandledOpsWarningEmitted verifies that when unknown ops exist,
+// a warning is emitted to stderr before checkpointing.
+func TestMaterialize_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralleltest
+	// Note: Not parallel to avoid stderr capture race conditions (os.Stderr is global)
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	workerID := "worker-x"
+
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+
+	unknownOp1 := ops.Op{
+		Type:      "unknown_type_1",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerID,
+	}
+
+	unknownOp2 := ops.Op{
+		Type:      "unknown_type_2",
+		TargetID:  "task-03",
+		Timestamp: 300,
+		WorkerID:  workerID,
+	}
+
+	allOps := []ops.Op{validOp, unknownOp1, unknownOp2}
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	// Run Materialize
+	result, materializeErr := Materialize(stateDir, allOps, false, nil)
+
+	// Restore stderr
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+	stderrOutput, err := io.ReadAll(r)
+	require.NoError(t, err)
+
+	require.NoError(t, materializeErr, "Materialize should not error")
+	assert.Equal(t, 2, len(result.UnhandledOps), "should have two unhandled ops")
+
+	// Verify warning was emitted to stderr
+	stderrStr := string(stderrOutput)
+	assert.Contains(t, stderrStr, "warning:", "stderr should contain warning prefix")
+	assert.Contains(t, stderrStr, "2", "stderr should mention count of unhandled ops")
+	assert.Contains(t, stderrStr, "op(s) with unknown types skipped", "stderr should describe the issue")
+}
+
+// TestMaterializeAndReturn_UnhandledOpsWarningEmitted verifies that MaterializeAndReturn
+// also emits a warning to stderr when unknown ops exist.
+func TestMaterializeAndReturn_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralleltest
+	// Note: Not parallel to avoid stderr capture race conditions (os.Stderr is global)
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	workerID := "worker-x"
+
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+
+	unknownOp := ops.Op{
+		Type:      "unknown_op_type",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerID,
+	}
+
+	allOps := []ops.Op{validOp, unknownOp}
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	// Run MaterializeAndReturn
+	_, result, funcErr := MaterializeAndReturn(stateDir, allOps, false, nil)
+
+	// Restore stderr immediately and close the write end
+	os.Stderr = oldStderr
+	require.NoError(t, w.Close())
+
+	// Read all the captured output
+	stderrOutput, readErr := io.ReadAll(r)
+	require.NoError(t, readErr)
+
+	require.NoError(t, funcErr, "MaterializeAndReturn should not error")
+	assert.Equal(t, 1, len(result.UnhandledOps), "should have one unhandled op")
+
+	// Verify warning was emitted to stderr
+	stderrStr := string(stderrOutput)
+	assert.Contains(t, stderrStr, "warning:", "stderr should contain warning prefix")
+	assert.Contains(t, stderrStr, "op(s) with unknown types skipped", "stderr should describe the issue")
+}
+
+// TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted verifies that MaterializeExcludeWorker
+// also emits a warning to stderr when unknown ops exist.
+func TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralleltest
+	// Note: Not parallel to avoid stderr capture race conditions (os.Stderr is global)
+	workerA := "worker-a"
+	workerB := "worker-b"
+
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerA,
+		Payload:   ops.Payload{Title: "Task one", NodeType: "task"},
+	}
+
+	unknownOp := ops.Op{
+		Type:      "unknown_type_3",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerB,
+	}
+
+	allOps := []ops.Op{validOp, unknownOp}
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	// Run MaterializeExcludeWorker
+	_, result, funcErr := MaterializeExcludeWorker(allOps, "worker-c", false)
+
+	// Restore stderr
+	os.Stderr = oldStderr
+	require.NoError(t, w.Close())
+	stderrOutput, readErr := io.ReadAll(r)
+	require.NoError(t, readErr)
+
+	require.NoError(t, funcErr, "MaterializeExcludeWorker should not error")
+	assert.Greater(t, len(result.UnhandledOps), 0, "should have at least one unhandled op")
+
+	// Verify warning was emitted to stderr
+	stderrStr := string(stderrOutput)
+	assert.Contains(t, stderrStr, "warning:", "stderr should contain warning prefix")
+	assert.Contains(t, stderrStr, "op(s) with unknown types skipped", "stderr should describe the issue")
 }
 
 // TestIncremental_MatchesFullReplay verifies that incremental materialization

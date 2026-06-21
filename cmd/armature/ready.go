@@ -99,8 +99,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			format, _ := cmd.Flags().GetString("format")
 			switch {
 			case format == "json" || format == "agent" || tui.IsNonInteractive():
-				data, _ := json.MarshalIndent(entries, "", "  ") //nolint:errcheck // slice of serializable structs
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				if err := output.RenderReady(cmd.OutOrStdout(), entries, true); err != nil {
+					return err
+				}
 			case tui.IsInteractive():
 				m := readytui.New(entries)
 				p := tea.NewProgram(m)
