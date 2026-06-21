@@ -985,3 +985,4 @@
 ["note","S11-T2",1782059703,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S11 detected at claim time"}]
 ["note","S11",1782059703,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S11-T2 detected at claim time"}]
 ["claim","S11-T2",1782059703,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["note","S11-T4",1782059705,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with S11 detected at claim time"}]
