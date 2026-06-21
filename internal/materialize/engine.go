@@ -20,48 +20,45 @@ func NewState() *State {
 	}
 }
 
-// ApplyOp applies a single op to the materialized state.
+// opHandlers maps op type strings to their handler functions.
+var opHandlers = map[string]func(*State, ops.Op) error{
+	ops.OpCreate:            (*State).applyCreate,
+	ops.OpClaim:             (*State).applyClaim,
+	ops.OpHeartbeat:         (*State).applyHeartbeat,
+	ops.OpTransition:        (*State).applyTransition,
+	ops.OpNote:              (*State).applyNote,
+	ops.OpNoteDelete:        (*State).applyNoteDelete,
+	ops.OpLink:              (*State).applyLink,
+	ops.OpUnlink:            (*State).applyUnlink,
+	ops.OpDecision:          (*State).applyDecision,
+	ops.OpAssign:            (*State).applyAssign,
+	ops.OpAmend:             (*State).applyAmend,
+	ops.OpSourceLink:        (*State).applySourceLink,
+	ops.OpSourceFingerprint: func(s *State, op ops.Op) error { return nil },
+	ops.OpCitationAccepted:  (*State).applyCitationAccepted,
+	ops.OpDAGTransition:     (*State).applyDAGTransition,
+	ops.OpScopeRename:       (*State).applyScopeRename,
+	ops.OpScopeDelete:       (*State).applyScopeDelete,
+	ops.OpReparent:          (*State).applyReparent,
+}
+
+// RegisteredOpTypes returns the set of supported op type strings.
+func RegisteredOpTypes() []string {
+	types := make([]string, 0, len(opHandlers))
+	for opType := range opHandlers {
+		types = append(types, opType)
+	}
+	return types
+}
+
+// ApplyOp applies a single op to the materialized state by dispatching
+// through the registered handler table. Unknown op types return an error.
 func (s *State) ApplyOp(op ops.Op) error {
-	switch op.Type {
-	case ops.OpCreate:
-		return s.applyCreate(op)
-	case ops.OpClaim:
-		return s.applyClaim(op)
-	case ops.OpHeartbeat:
-		return s.applyHeartbeat(op)
-	case ops.OpTransition:
-		return s.applyTransition(op)
-	case ops.OpNote:
-		return s.applyNote(op)
-	case ops.OpNoteDelete:
-		return s.applyNoteDelete(op)
-	case ops.OpLink:
-		return s.applyLink(op)
-	case ops.OpUnlink:
-		return s.applyUnlink(op)
-	case ops.OpDecision:
-		return s.applyDecision(op)
-	case ops.OpAssign:
-		return s.applyAssign(op)
-	case ops.OpAmend:
-		return s.applyAmend(op)
-	case ops.OpSourceLink:
-		return s.applySourceLink(op)
-	case ops.OpSourceFingerprint:
-		return nil
-	case ops.OpCitationAccepted:
-		return s.applyCitationAccepted(op)
-	case ops.OpDAGTransition:
-		return s.applyDAGTransition(op)
-	case ops.OpScopeRename:
-		return s.applyScopeRename(op)
-	case ops.OpScopeDelete:
-		return s.applyScopeDelete(op)
-	case ops.OpReparent:
-		return s.applyReparent(op)
-	default:
+	handler, exists := opHandlers[op.Type]
+	if !exists {
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
+	return handler(s, op)
 }
 
 func (s *State) applyCreate(op ops.Op) error {

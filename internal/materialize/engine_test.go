@@ -72,6 +72,41 @@ func TestApplyUnknownOpType_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown op type")
 }
 
+func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
+	t.Parallel()
+	registered := RegisteredOpTypes()
+
+	// Verify that all registered types are non-empty strings
+	require.NotEmpty(t, registered)
+	for _, opType := range registered {
+		assert.NotEmpty(t, opType, "registered op type must not be empty")
+	}
+
+	// Verify that the known op types are present
+	expectedTypes := []string{
+		ops.OpCreate, ops.OpClaim, ops.OpHeartbeat, ops.OpTransition,
+		ops.OpNote, ops.OpNoteDelete, ops.OpLink, ops.OpUnlink,
+		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
+		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
+		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
+	}
+
+	for _, expected := range expectedTypes {
+		assert.Contains(t, registered, expected, "op type %q must be in RegisteredOpTypes", expected)
+	}
+}
+
+func TestRegisteredOpTypes_NoDuplicates(t *testing.T) {
+	t.Parallel()
+	registered := RegisteredOpTypes()
+
+	seen := make(map[string]bool)
+	for _, opType := range registered {
+		assert.False(t, seen[opType], "op type %q appears more than once in RegisteredOpTypes", opType)
+		seen[opType] = true
+	}
+}
+
 func TestApplyTransitionOp(t *testing.T) {
 	t.Parallel()
 	state := NewState()
