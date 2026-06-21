@@ -26,19 +26,8 @@ const (
 	OpReparent = "reparent"
 )
 
-// ValidOpTypes for validation.
-var ValidOpTypes = map[string]bool{
-	OpCreate: true, OpClaim: true, OpHeartbeat: true,
-	OpTransition: true, OpNote: true, OpNoteDelete: true, OpLink: true, OpUnlink: true,
-	OpSourceLink: true, OpSourceFingerprint: true,
-	OpDAGTransition: true, OpDecision: true,
-	OpAssign:           true,
-	OpAmend:            true,
-	OpCitationAccepted: true,
-	OpScopeRename:      true,
-	OpScopeDelete:      true,
-	OpReparent:         true,
-}
+// Op type registry moved to materialize.RegisteredOpTypes().
+// All 18 op types are defined as constants above.
 
 // Issue statuses.
 const (
