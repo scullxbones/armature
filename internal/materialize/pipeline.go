@@ -15,6 +15,7 @@ type Result struct {
 	IssueCount   int
 	OpsProcessed int
 	FullReplay   bool
+	UnhandledOps []ops.Op
 }
 
 // toTraceabilityRefs converts the issues map into a slice of traceability.IssueRef
@@ -68,8 +69,10 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 
 	sortOpsByTimestamp(allOps)
 
+	var unhandledOps []ops.Op
 	for _, op := range allOps {
 		if err := state.ApplyOp(op); err != nil {
+			unhandledOps = append(unhandledOps, op)
 			continue
 		}
 	}
@@ -108,6 +111,7 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(allOps),
 		FullReplay:   fullReplay,
+		UnhandledOps: unhandledOps,
 	}, nil
 }
 
@@ -147,8 +151,10 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 
 	sortOpsByTimestamp(allOps)
 
+	var unhandledOps []ops.Op
 	for _, op := range allOps {
 		if err := state.ApplyOp(op); err != nil {
+			unhandledOps = append(unhandledOps, op)
 			continue
 		}
 	}
@@ -187,6 +193,7 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(allOps),
 		FullReplay:   fullReplay,
+		UnhandledOps: unhandledOps,
 	}
 	return state, result, nil
 }
@@ -209,8 +216,10 @@ func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBra
 	state := NewState()
 	state.SingleBranchMode = singleBranch
 
+	var unhandledOps []ops.Op
 	for _, op := range filteredOps {
 		if err := state.ApplyOp(op); err != nil {
+			unhandledOps = append(unhandledOps, op)
 			continue
 		}
 	}
@@ -221,6 +230,7 @@ func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBra
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(filteredOps),
 		FullReplay:   true,
+		UnhandledOps: unhandledOps,
 	}, nil
 }
 

@@ -74,18 +74,13 @@ func TestRenderList_HumanReadable(t *testing.T) {
 		{
 			Issue:      "TASK-01",
 			Title:      "First Task",
-			Type:       "task",
-			Priority:   "high",
 			Status:     "open",
 			AssignedTo: "worker-1",
 		},
 		{
-			Issue:      "TASK-02",
-			Title:      "Second Task",
-			Type:       "task",
-			Priority:   "low",
-			Status:     "done",
-			AssignedTo: "",
+			Issue:  "TASK-02",
+			Title:  "Second Task",
+			Status: "done",
 		},
 	}
 	var buf bytes.Buffer
@@ -205,25 +200,18 @@ func TestRenderValidation_QuietSuppressesInfo(t *testing.T) {
 
 func TestListEntry_struct(t *testing.T) {
 	t.Parallel()
-	// Verify that ListEntry struct can be created with expected fields
+	// Verify that ListEntry struct can be created with expected fields.
+	// ListEntry only contains fields that are both populated by callers and rendered in output.
 	entry := ListEntry{
 		Issue:      "TASK-01",
 		Title:      "Test",
-		Type:       "task",
-		Priority:   "high",
 		Status:     "open",
-		Parent:     "STORY-01",
 		AssignedTo: "worker-1",
-		Scope:      []string{"file.go"},
 	}
 	assert.Equal(t, "TASK-01", entry.Issue)
 	assert.Equal(t, "Test", entry.Title)
-	assert.Equal(t, "task", entry.Type)
-	assert.Equal(t, "high", entry.Priority)
 	assert.Equal(t, "open", entry.Status)
-	assert.Equal(t, "STORY-01", entry.Parent)
 	assert.Equal(t, "worker-1", entry.AssignedTo)
-	assert.Len(t, entry.Scope, 1)
 }
 
 func TestRenderIssue_WithAllFields(t *testing.T) {
@@ -329,9 +317,9 @@ func TestRenderIssue_MinimalIssue(t *testing.T) {
 func TestRenderList_WithMultipleStatuses(t *testing.T) {
 	t.Parallel()
 	entries := []ListEntry{
-		{Issue: "T1", Title: "Task 1", Type: "task", Status: "open", Priority: "high"},
-		{Issue: "T2", Title: "Task 2", Type: "task", Status: "in-progress", Priority: "low", AssignedTo: "worker-1"},
-		{Issue: "T3", Title: "Task 3", Type: "feature", Status: "done", Priority: ""},
+		{Issue: "T1", Title: "Task 1", Status: "open"},
+		{Issue: "T2", Title: "Task 2", Status: "in-progress", AssignedTo: "worker-1"},
+		{Issue: "T3", Title: "Task 3", Status: "done"},
 	}
 	var buf bytes.Buffer
 	err := RenderList(&buf, entries)
@@ -398,4 +386,48 @@ func TestRenderIssue_JSON_WithAllFields(t *testing.T) {
 	assert.Equal(t, "high", result["priority"])
 	assert.Equal(t, "All tests pass", result["definition_of_done"])
 	assert.Equal(t, "Implementation done", result["outcome"])
+}
+
+func TestRenderIssue_JSON_IncludesNotes(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID:     "TASK-01",
+		Type:   "task",
+		Status: "open",
+		Title:  "Task with notes",
+		Notes: []materialize.Note{
+			{Msg: "Active note", Deleted: false},
+			{Msg: "Deleted note", Deleted: true},
+		},
+	}
+	var buf bytes.Buffer
+	err := RenderIssue(&buf, issue, true)
+	require.NoError(t, err)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(buf.Bytes(), &result)
+	require.NoError(t, err)
+	notes, ok := result["notes"]
+	require.True(t, ok, "notes field must be present in JSON output")
+	noteSlice, ok := notes.([]interface{})
+	require.True(t, ok)
+	assert.Len(t, noteSlice, 1, "only non-deleted notes should appear")
+	assert.Equal(t, "Active note", noteSlice[0])
+}
+
+func TestRenderList_ColumnAlignment(t *testing.T) {
+	t.Parallel()
+	entries := []ListEntry{
+		{Issue: "SHORT", Status: "open", Title: "First"},
+		{Issue: "LONGER-ID", Status: "in-progress", Title: "Second"},
+	}
+	var buf bytes.Buffer
+	err := RenderList(&buf, entries)
+	require.NoError(t, err)
+	lines := buf.String()
+
+	// Each line must use aligned columns: %-12s for ID, %-14s for status.
+	// Check that the ID column is padded to at least 12 chars.
+	assert.Contains(t, lines, "SHORT        ")  // 5 chars + 7 spaces = 12 total
+	assert.Contains(t, lines, "open          ") // 4 chars + 10 spaces = 14 total
 }

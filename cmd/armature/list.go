@@ -181,9 +181,7 @@ func newListCmd() *cobra.Command {
 				e := index[id]
 				le := output.ListEntry{
 					Issue:  id,
-					Type:   e.Type,
 					Status: e.Status,
-					Parent: e.Parent,
 					Title:  e.Title,
 				}
 				entries = append(entries, le)

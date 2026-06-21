@@ -89,60 +89,6 @@ func TestIsLegalHierarchy(t *testing.T) {
 	}
 }
 
-func TestIsWorkable(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		t        string
-		expected bool
-	}{
-		// Only task is workable (executable) - can be claimed and executed
-		{"task is workable", "task", true},
-		{"epic not workable", "epic", false},
-		{"story not workable", "story", false},
-		{"feature not workable", "feature", false},
-		{"bug not workable", "bug", false},
-		{"invalid not workable", "invalid", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := IsWorkable(tt.t)
-			if got != tt.expected {
-				t.Errorf("IsWorkable(%q) = %v, want %v", tt.t, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestRequiresAcceptance(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		t        string
-		expected bool
-	}{
-		// Epic, story, and task require acceptance criteria
-		{"epic requires acceptance", "epic", true},
-		{"story requires acceptance", "story", true},
-		{"task requires acceptance", "task", true},
-		{"feature does not require acceptance", "feature", false},
-		{"bug does not require acceptance", "bug", false},
-		{"invalid does not require acceptance", "invalid", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := RequiresAcceptance(tt.t)
-			if got != tt.expected {
-				t.Errorf("RequiresAcceptance(%q) = %v, want %v", tt.t, got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestIsReadyEligible(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

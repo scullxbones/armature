@@ -12,15 +12,13 @@ import (
 )
 
 // ListEntry represents a row in a list view of issues.
+// Only fields rendered by RenderList are included; add fields here only when they
+// are both populated by callers and rendered in output.
 type ListEntry struct {
-	Issue      string   `json:"issue"`
-	Title      string   `json:"title"`
-	Type       string   `json:"type"`
-	Status     string   `json:"status"`
-	Priority   string   `json:"priority,omitempty"`
-	Parent     string   `json:"parent,omitempty"`
-	AssignedTo string   `json:"assigned_to,omitempty"`
-	Scope      []string `json:"scope,omitempty"`
+	Issue      string `json:"issue"`
+	Title      string `json:"title"`
+	Status     string `json:"status"`
+	AssignedTo string `json:"assigned_to,omitempty"`
 }
 
 // RenderIssue renders a single issue to the given writer.
@@ -32,25 +30,35 @@ func RenderIssue(w io.Writer, issue *materialize.Issue, asJSON bool) error {
 	return renderIssueHuman(w, issue)
 }
 
-func renderIssueJSON(w io.Writer, issue *materialize.Issue) error {
-	type issueJSON struct {
-		ID               string          `json:"id"`
-		Title            string          `json:"title"`
-		Type             string          `json:"type"`
-		Status           string          `json:"status"`
-		Parent           string          `json:"parent,omitempty"`
-		Priority         string          `json:"priority,omitempty"`
-		DefinitionOfDone string          `json:"definition_of_done,omitempty"`
-		Scope            []string        `json:"scope,omitempty"`
-		Outcome          string          `json:"outcome,omitempty"`
-		ClaimedBy        string          `json:"claimed_by,omitempty"`
-		AssignedWorker   string          `json:"assigned_worker,omitempty"`
-		BlockedBy        []string        `json:"blocked_by,omitempty"`
-		Blocks           []string        `json:"blocks,omitempty"`
-		Acceptance       json.RawMessage `json:"acceptance,omitempty"`
-	}
+// IssueJSON is the canonical JSON representation of an issue.
+// All JSON serialization of issues must go through this struct to ensure schema consistency.
+type IssueJSON struct {
+	ID               string          `json:"id"`
+	Title            string          `json:"title"`
+	Type             string          `json:"type"`
+	Status           string          `json:"status"`
+	Parent           string          `json:"parent,omitempty"`
+	Priority         string          `json:"priority,omitempty"`
+	DefinitionOfDone string          `json:"definition_of_done,omitempty"`
+	Scope            []string        `json:"scope,omitempty"`
+	Outcome          string          `json:"outcome,omitempty"`
+	ClaimedBy        string          `json:"claimed_by,omitempty"`
+	AssignedWorker   string          `json:"assigned_worker,omitempty"`
+	BlockedBy        []string        `json:"blocked_by,omitempty"`
+	Blocks           []string        `json:"blocks,omitempty"`
+	Acceptance       json.RawMessage `json:"acceptance,omitempty"`
+	Notes            []string        `json:"notes,omitempty"`
+}
 
-	out := issueJSON{
+// MarshalIssue converts a materialize.Issue to the canonical IssueJSON representation.
+func MarshalIssue(issue *materialize.Issue) IssueJSON {
+	noteTexts := make([]string, 0, len(issue.Notes))
+	for _, n := range issue.Notes {
+		if !n.Deleted {
+			noteTexts = append(noteTexts, n.Msg)
+		}
+	}
+	return IssueJSON{
 		ID:               issue.ID,
 		Title:            issue.Title,
 		Type:             issue.Type,
@@ -65,8 +73,12 @@ func renderIssueJSON(w io.Writer, issue *materialize.Issue) error {
 		BlockedBy:        issue.BlockedBy,
 		Blocks:           issue.Blocks,
 		Acceptance:       issue.Acceptance,
+		Notes:            noteTexts,
 	}
+}
 
+func renderIssueJSON(w io.Writer, issue *materialize.Issue) error {
+	out := MarshalIssue(issue)
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal issue JSON: %w", err)
@@ -133,11 +145,12 @@ func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
 
 	if len(issue.Acceptance) > 0 && string(issue.Acceptance) != "null" {
 		compact, err := json.Marshal(issue.Acceptance)
-		if err == nil {
-			_, err = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
-			if err != nil {
-				return err
-			}
+		if err != nil {
+			return fmt.Errorf("marshal acceptance: %w", err)
+		}
+		_, err = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
+		if err != nil {
+			return err
 		}
 	}
 
@@ -203,7 +216,7 @@ func RenderList(w io.Writer, entries []ListEntry) error {
 		if e.AssignedTo != "" {
 			status = status + " (assigned to " + e.AssignedTo + ")"
 		}
-		_, err := fmt.Fprintf(w, "  %s  %s  [%s] (%s)\n", e.Issue, e.Title, e.Type, status)
+		_, err := fmt.Fprintf(w, "  %-12s  %-14s  %s\n", e.Issue, status, e.Title)
 		if err != nil {
 			return err
 		}

@@ -43,56 +43,20 @@ func newShowCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-			// Multi-issue JSON: emit a JSON array
+			// Multi-issue JSON: emit a JSON array using the canonical output.IssueJSON schema
 			if format == "json" && len(ids) > 1 {
-				type showJSON struct {
-					ID         string          `json:"id"`
-					Title      string          `json:"title"`
-					Type       string          `json:"type"`
-					Status     string          `json:"status"`
-					Parent     string          `json:"parent,omitempty"`
-					ClaimedBy  string          `json:"claimed_by,omitempty"`
-					DoD        string          `json:"definition_of_done,omitempty"`
-					Acceptance json.RawMessage `json:"acceptance,omitempty"`
-					Scope      []string        `json:"scope,omitempty"`
-					Notes      []string        `json:"notes,omitempty"`
-					Outcome    string          `json:"outcome,omitempty"`
-					AssignedTo string          `json:"assigned_worker,omitempty"`
-					BlockedBy  []string        `json:"blocked_by,omitempty"`
-					Blocks     []string        `json:"blocks,omitempty"`
-				}
-				results := make([]showJSON, 0, len(ids))
+				results := make([]output.IssueJSON, 0, len(ids))
 				for _, id := range ids {
 					issuePtr, ok := snap.Issues[id]
 					if !ok || issuePtr == nil {
 						return fmt.Errorf("issue %q not found", id)
 					}
-					issue := *issuePtr
-					noteTexts := make([]string, 0, len(issue.Notes))
-					for _, n := range issue.Notes {
-						if n.Deleted {
-							continue
-						}
-						noteTexts = append(noteTexts, n.Msg)
-					}
-					results = append(results, showJSON{
-						ID:         issue.ID,
-						Title:      issue.Title,
-						Type:       issue.Type,
-						Status:     issue.Status,
-						Parent:     issue.Parent,
-						ClaimedBy:  issue.ClaimedBy,
-						DoD:        issue.DefinitionOfDone,
-						Acceptance: issue.Acceptance,
-						Scope:      issue.Scope,
-						Notes:      noteTexts,
-						Outcome:    issue.Outcome,
-						AssignedTo: issue.AssignedWorker,
-						BlockedBy:  issue.BlockedBy,
-						Blocks:     issue.Blocks,
-					})
+					results = append(results, output.MarshalIssue(issuePtr))
 				}
-				data, _ := json.MarshalIndent(results, "", "  ") //nolint:errcheck // result struct contains only serializable values
+				data, err := json.MarshalIndent(results, "", "  ")
+				if err != nil {
+					return fmt.Errorf("marshal issues JSON: %w", err)
+				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
@@ -119,47 +83,10 @@ func newShowCmd() *cobra.Command {
 				}
 
 				if format == "json" {
-					type showJSON struct {
-						ID         string          `json:"id"`
-						Title      string          `json:"title"`
-						Type       string          `json:"type"`
-						Status     string          `json:"status"`
-						Parent     string          `json:"parent,omitempty"`
-						ClaimedBy  string          `json:"claimed_by,omitempty"`
-						DoD        string          `json:"definition_of_done,omitempty"`
-						Acceptance json.RawMessage `json:"acceptance,omitempty"`
-						Scope      []string        `json:"scope,omitempty"`
-						Notes      []string        `json:"notes,omitempty"`
-						Outcome    string          `json:"outcome,omitempty"`
-						AssignedTo string          `json:"assigned_worker,omitempty"`
-						BlockedBy  []string        `json:"blocked_by,omitempty"`
-						Blocks     []string        `json:"blocks,omitempty"`
+					// Route single-issue JSON through the canonical output package schema
+					if err := output.RenderIssue(cmd.OutOrStdout(), &issue, true); err != nil {
+						return err
 					}
-					noteTexts := make([]string, 0, len(issue.Notes))
-					for _, n := range issue.Notes {
-						if n.Deleted {
-							continue
-						}
-						noteTexts = append(noteTexts, n.Msg)
-					}
-					out := showJSON{
-						ID:         issue.ID,
-						Title:      issue.Title,
-						Type:       issue.Type,
-						Status:     issue.Status,
-						Parent:     issue.Parent,
-						ClaimedBy:  issue.ClaimedBy,
-						DoD:        issue.DefinitionOfDone,
-						Acceptance: issue.Acceptance,
-						Scope:      issue.Scope,
-						Notes:      noteTexts,
-						Outcome:    issue.Outcome,
-						AssignedTo: issue.AssignedWorker,
-						BlockedBy:  issue.BlockedBy,
-						Blocks:     issue.Blocks,
-					}
-					data, _ := json.MarshalIndent(out, "", "  ") //nolint:errcheck // result struct contains only serializable values
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 					continue
 				}
 
