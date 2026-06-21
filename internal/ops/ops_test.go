@@ -67,8 +67,9 @@ func TestParseInvalidLine(t *testing.T) {
 	_, err := ParseLine([]byte(`not json`))
 	assert.Error(t, err)
 
+	// Unknown op types are now allowed at parse time; the engine validates them.
 	_, err = ParseLine([]byte(`["unknown","x",0,"w",{}]`))
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestPropOpRoundTrip(t *testing.T) {
