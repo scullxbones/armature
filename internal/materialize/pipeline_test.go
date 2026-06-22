@@ -156,6 +156,85 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 	assert.False(t, hasTaskOne, "task-01 created by excluded worker must not appear")
 }
 
+// TestMaterializeExcludeWorker_ToleratesMissingTargetsFromExcludedCreates verifies that
+// diagnostic replay keeps going when filtering out a worker removes a create that later
+// ops from other workers reference.
+func TestMaterializeExcludeWorker_ToleratesMissingTargetsFromExcludedCreates(t *testing.T) {
+	t.Parallel()
+
+	workerA := "worker-a"
+	workerB := "worker-b"
+
+	validCreate := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-02",
+		Timestamp: 100,
+		WorkerID:  workerB,
+		Payload:   ops.Payload{Title: "Task two", NodeType: "task"},
+	}
+	missingTargetClaim := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: 200,
+		WorkerID:  workerB,
+		Payload:   ops.Payload{TTL: 60},
+	}
+	excludedCreate := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 300,
+		WorkerID:  workerA,
+		Payload:   ops.Payload{Title: "Task one", NodeType: "task"},
+	}
+
+	allOps := []ops.Op{validCreate, missingTargetClaim, excludedCreate}
+
+	state, result, err := MaterializeExcludeWorker(allOps, workerA, false)
+	require.NoError(t, err, "exclude-worker replay should tolerate missing targets from filtered creates")
+	assert.Equal(t, 1, result.IssueCount)
+	assert.Equal(t, 2, result.OpsProcessed)
+	_, hasTaskTwo := state.Issues["task-02"]
+	assert.True(t, hasTaskTwo, "task-02 should still be materialized")
+	_, hasTaskOne := state.Issues["task-01"]
+	assert.False(t, hasTaskOne, "excluded task-01 should not be materialized")
+}
+
+// TestMaterializeExcludeWorker_DoesNotSuppressUnrelatedMissingTargets verifies that
+// exclude-worker replay still fails when a missing-target replay error is unrelated to
+// the excluded worker's ops.
+func TestMaterializeExcludeWorker_DoesNotSuppressUnrelatedMissingTargets(t *testing.T) {
+	t.Parallel()
+
+	workerA := "worker-a"
+	workerB := "worker-b"
+
+	validCreate := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-02",
+		Timestamp: 100,
+		WorkerID:  workerB,
+		Payload:   ops.Payload{Title: "Task two", NodeType: "task"},
+	}
+	missingTargetClaim := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: 200,
+		WorkerID:  workerB,
+		Payload:   ops.Payload{TTL: 60},
+	}
+	unrelatedExcludedCreate := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-99",
+		Timestamp: 300,
+		WorkerID:  workerA,
+		Payload:   ops.Payload{Title: "Task ninety-nine", NodeType: "task"},
+	}
+
+	_, _, err := MaterializeExcludeWorker([]ops.Op{validCreate, missingTargetClaim, unrelatedExcludedCreate}, workerA, false)
+	require.Error(t, err, "unrelated missing-target replay errors should still surface")
+	assert.Contains(t, err.Error(), "task-01")
+}
+
 // TestMaterialize_UnknownOpTypeErrorSurfaced verifies that when an op with
 // an unknown type is included in a replay, the op is captured in UnhandledOps
 // (not silently dropped and not returned as an error from Materialize itself).

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,6 +253,49 @@ func TestMaterializeCommand_WarningsVisible(t *testing.T) {
 	// (they have worker ID mismatches and must be excluded)
 	assert.NotContains(t, index, "mismatch-01", "mismatched op should be excluded")
 	assert.NotContains(t, index, "mismatch-02", "mismatched op should be excluded")
+}
+
+// TestReadyCommand_UnknownOpWarningPrintedOnce verifies that snapshot-backed commands
+// surface unknown-op warnings through the command error stream without duplicating them
+// on raw process stderr.
+func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--title", "Ready Task", "--type", "task", "--id", "ready-01")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	unknownLog := filepath.Join(opsDir, "worker-unknown.log")
+	require.NoError(t, ops.AppendOp(unknownLog, ops.Op{
+		Type:      "unknown_future_type",
+		TargetID:  "ready-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-unknown",
+	}))
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	stdout, cmdStderr, cmdErr := runTrlsWithStderr(t, repo, "ready")
+
+	require.NoError(t, w.Close())
+	os.Stderr = oldStderr
+	rawStderr, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, cmdErr)
+
+	assert.Contains(t, stdout, "Ready Task")
+	assert.Contains(t, cmdStderr, "warning:", "command stderr should contain the warning")
+	assert.Empty(t, string(rawStderr), "raw stderr should stay quiet for snapshot-backed warnings")
 }
 
 // TestMaterializeOffsetTracking tests that offsets are properly tracked even for

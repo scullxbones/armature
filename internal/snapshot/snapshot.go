@@ -26,7 +26,7 @@ func Load(opsDir, stateDir string, singleBranch bool) (*Snapshot, error) {
 
 	allOps := ops.ExtractOps(items)
 
-	state, result, err := materialize.MaterializeAndReturn(stateDir, allOps, singleBranch, offsets)
+	state, result, err := materialize.MaterializeAndReturnQuiet(stateDir, allOps, singleBranch, offsets)
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
 	}
