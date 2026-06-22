@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leanovate/gopter"
@@ -134,6 +135,26 @@ func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 	}
 	for _, opType := range standardOps {
 		assert.True(t, registeredSet[opType], "standard op type %q must be in RegisteredOpTypes", opType)
+	}
+}
+
+func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
+	t.Parallel()
+
+	schema := ops.GenerateSchema()
+	documented := make(map[string]bool)
+	for _, line := range strings.Split(schema, "\n") {
+		if !strings.HasPrefix(line, "#   ") {
+			continue
+		}
+		opType, _, found := strings.Cut(strings.TrimPrefix(line, "#   "), ":")
+		if found {
+			documented[opType] = true
+		}
+	}
+
+	for _, opType := range RegisteredOpTypes() {
+		assert.True(t, documented[opType], "schema payload docs must include registered op type %q", opType)
 	}
 }
 

@@ -18,6 +18,7 @@ type Result struct {
 	OpsProcessed int
 	FullReplay   bool
 	UnhandledOps []ops.Op
+	Warnings     []string
 }
 
 // toTraceabilityRefs converts the issues map into a slice of traceability.IssueRef
@@ -37,8 +38,14 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 // emitUnhandledOpsWarning emits a warning to stderr listing the unknown op types
 // that were skipped during materialization.
 func emitUnhandledOpsWarning(unhandledOps []ops.Op) {
+	for _, warning := range formatUnhandledOpsWarnings(unhandledOps) {
+		fmt.Fprint(os.Stderr, warning+"\n")
+	}
+}
+
+func formatUnhandledOpsWarnings(unhandledOps []ops.Op) []string {
 	if len(unhandledOps) == 0 {
-		return
+		return nil
 	}
 
 	// Collect unique op types
@@ -52,9 +59,28 @@ func emitUnhandledOpsWarning(unhandledOps []ops.Op) {
 	}
 	slices.Sort(types)
 
-	warning := fmt.Sprintf("warning: %d op(s) with unknown types skipped: [%s]\n",
-		len(unhandledOps), strings.Join(types, ", "))
-	fmt.Fprint(os.Stderr, warning)
+	return []string{
+		fmt.Sprintf("warning: %d op(s) with unknown types skipped: [%s]",
+			len(unhandledOps), strings.Join(types, ", ")),
+	}
+}
+
+func isUnknownOpTypeError(err error) bool {
+	return strings.HasPrefix(err.Error(), "unknown op type: ")
+}
+
+func applyOps(state *State, allOps []ops.Op) ([]ops.Op, error) {
+	var unhandledOps []ops.Op
+	for _, op := range allOps {
+		if err := state.ApplyOp(op); err != nil {
+			if isUnknownOpTypeError(err) {
+				unhandledOps = append(unhandledOps, op)
+				continue
+			}
+			return unhandledOps, err
+		}
+	}
+	return unhandledOps, nil
 }
 
 // Materialize runs the full materialization pipeline.
@@ -94,12 +120,9 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 
 	sortOpsByTimestamp(allOps)
 
-	var unhandledOps []ops.Op
-	for _, op := range allOps {
-		if err := state.ApplyOp(op); err != nil {
-			unhandledOps = append(unhandledOps, op)
-			continue
-		}
+	unhandledOps, err := applyOps(state, allOps)
+	if err != nil {
+		return Result{}, err
 	}
 
 	state.RunRollup()
@@ -135,11 +158,13 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
 	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
 
+	warnings := formatUnhandledOpsWarnings(unhandledOps)
 	return Result{
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(allOps),
 		FullReplay:   fullReplay,
 		UnhandledOps: unhandledOps,
+		Warnings:     warnings,
 	}, nil
 }
 
@@ -179,12 +204,9 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 
 	sortOpsByTimestamp(allOps)
 
-	var unhandledOps []ops.Op
-	for _, op := range allOps {
-		if err := state.ApplyOp(op); err != nil {
-			unhandledOps = append(unhandledOps, op)
-			continue
-		}
+	unhandledOps, err := applyOps(state, allOps)
+	if err != nil {
+		return nil, Result{}, err
 	}
 
 	state.RunRollup()
@@ -220,11 +242,13 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
 	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
 
+	warnings := formatUnhandledOpsWarnings(unhandledOps)
 	result := Result{
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(allOps),
 		FullReplay:   fullReplay,
 		UnhandledOps: unhandledOps,
+		Warnings:     warnings,
 	}
 	return state, result, nil
 }
@@ -247,24 +271,23 @@ func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBra
 	state := NewState()
 	state.SingleBranchMode = singleBranch
 
-	var unhandledOps []ops.Op
-	for _, op := range filteredOps {
-		if err := state.ApplyOp(op); err != nil {
-			unhandledOps = append(unhandledOps, op)
-			continue
-		}
+	unhandledOps, err := applyOps(state, filteredOps)
+	if err != nil {
+		return nil, Result{}, err
 	}
 
 	state.RunRollup()
 
 	// Emit warning if any ops were unhandled
 	emitUnhandledOpsWarning(unhandledOps)
+	warnings := formatUnhandledOpsWarnings(unhandledOps)
 
 	return state, Result{
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(filteredOps),
 		FullReplay:   true,
 		UnhandledOps: unhandledOps,
+		Warnings:     warnings,
 	}, nil
 }
 
