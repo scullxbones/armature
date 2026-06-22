@@ -65,7 +65,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 }
 
 // runTrlsWithStderr invokes the armature cobra command tree and returns stdout, stderr, and error.
-func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) { //nolint:unparam // first return unused today
+func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) {
 	t.Helper()
 	runTrlsMu.Lock()
 	defer runTrlsMu.Unlock()
@@ -3469,6 +3469,16 @@ func TestCreateCommand_InvalidType(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bogustype", "error must name the invalid type")
 	assert.Contains(t, err.Error(), "valid types", "error must list valid types")
+}
+
+// TestCreateCommand_HelpIncludesFeatureType verifies the create help text reflects the
+// canonical issue type list.
+func TestCreateCommand_HelpIncludesFeatureType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "create", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "feature", "help text should list feature as an accepted type")
 }
 
 // TestCreateCommand_BugTypeAccepted verifies that arm create accepts the bug type.

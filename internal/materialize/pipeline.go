@@ -70,6 +70,26 @@ func isUnknownOpTypeError(err error) bool {
 }
 
 func applyOps(state *State, allOps []ops.Op) ([]ops.Op, error) {
+	return applyOpsWithTolerance(state, allOps, nil)
+}
+
+func missingTargetReplayID(err error) (string, bool) {
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "claim: issue ") && strings.HasSuffix(msg, " not found"):
+		return strings.TrimSuffix(strings.TrimPrefix(msg, "claim: issue "), " not found"), true
+	case strings.HasPrefix(msg, "transition: issue ") && strings.HasSuffix(msg, " not found"):
+		return strings.TrimSuffix(strings.TrimPrefix(msg, "transition: issue "), " not found"), true
+	case strings.HasPrefix(msg, "link: source issue ") && strings.HasSuffix(msg, " not found"):
+		return strings.TrimSuffix(strings.TrimPrefix(msg, "link: source issue "), " not found"), true
+	case strings.HasPrefix(msg, "unlink: source issue ") && strings.HasSuffix(msg, " not found"):
+		return strings.TrimSuffix(strings.TrimPrefix(msg, "unlink: source issue "), " not found"), true
+	default:
+		return "", false
+	}
+}
+
+func applyOpsWithTolerance(state *State, allOps []ops.Op, toleratedMissingTargetIDs map[string]bool) ([]ops.Op, error) {
 	var unhandledOps []ops.Op
 	for _, op := range allOps {
 		if err := state.ApplyOp(op); err != nil {
@@ -77,101 +97,20 @@ func applyOps(state *State, allOps []ops.Op) ([]ops.Op, error) {
 				unhandledOps = append(unhandledOps, op)
 				continue
 			}
+			if missingTargetID, ok := missingTargetReplayID(err); ok {
+				if toleratedMissingTargetIDs != nil && toleratedMissingTargetIDs[missingTargetID] {
+					continue
+				}
+			}
 			return unhandledOps, err
 		}
 	}
 	return unhandledOps, nil
 }
 
-// Materialize runs the full materialization pipeline.
-// It accepts pre-read ops and writes state and checkpoint files to stateDir.
-// issuesDir is used to resolve stateDir paths; allOps should be pre-read from the log files.
-// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
-func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (Result, error) {
-	issuesStateDir := filepath.Join(stateDir, "issues")
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-
-	if err := adapters.MkdirAll(issuesStateDir, 0755); err != nil {
-		return Result{}, fmt.Errorf("create state dir: %w", err)
-	}
-
-	cp, err := LoadCheckpoint(checkpointPath)
-	if err != nil {
-		return Result{}, fmt.Errorf("load checkpoint: %w", err)
-	}
-
-	// Detect incremental vs full replay based on checkpoint
-	fullReplay := len(cp.ByteOffsets) == 0
-	var state *State
-
-	// For incremental replay, load prior state from issuesStateDir
-	if !fullReplay {
-		loadedIssues, err := LoadAllIssues(issuesStateDir)
-		if err != nil {
-			return Result{}, fmt.Errorf("load prior state: %w", err)
-		}
-		state = NewState()
-		state.Issues = loadedIssues
-		state.SingleBranchMode = singleBranch
-	} else {
-		state = NewState()
-		state.SingleBranchMode = singleBranch
-	}
-
-	sortOpsByTimestamp(allOps)
-
-	unhandledOps, err := applyOps(state, allOps)
-	if err != nil {
-		return Result{}, err
-	}
-
-	state.RunRollup()
-
-	index := state.BuildIndex()
-	if err := WriteIndex(filepath.Join(stateDir, "index.json"), index); err != nil {
-		return Result{}, fmt.Errorf("write index: %w", err)
-	}
-
-	for _, issue := range state.Issues {
-		if err := WriteIssue(issuesStateDir, *issue); err != nil {
-			return Result{}, fmt.Errorf("write issue %s: %w", issue.ID, err)
-		}
-	}
-
-	readyPath := filepath.Join(stateDir, "ready.json")
-	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
-
-	// Emit warning if any ops were unhandled
-	emitUnhandledOpsWarning(unhandledOps)
-
-	// Write checkpoint with byte offsets for next incremental replay.
-	// If byteOffsets not provided, use empty map.
-	offsets := byteOffsets
-	if offsets == nil {
-		offsets = make(map[string]int64)
-	}
-	newCp := Checkpoint{ByteOffsets: offsets}
-	if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
-		return Result{}, fmt.Errorf("write checkpoint: %w", err)
-	}
-
-	cov := traceability.Compute(toTraceabilityRefs(state.Issues))
-	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
-
-	warnings := formatUnhandledOpsWarnings(unhandledOps)
-	return Result{
-		IssueCount:   len(state.Issues),
-		OpsProcessed: len(allOps),
-		FullReplay:   fullReplay,
-		UnhandledOps: unhandledOps,
-		Warnings:     warnings,
-	}, nil
-}
-
-// MaterializeAndReturn runs the full materialization pipeline and returns the resulting State.
-// It accepts pre-read ops and writes state and checkpoint files to stateDir.
-// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
-func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (*State, Result, error) {
+// runMaterializePipeline runs the full materialization pipeline.
+// If emitWarnings is true, unknown-op warnings are printed to stderr.
+func runMaterializePipeline(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64, emitWarnings bool) (*State, Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -226,7 +165,9 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
 
 	// Emit warning if any ops were unhandled
-	emitUnhandledOpsWarning(unhandledOps)
+	if emitWarnings {
+		emitUnhandledOpsWarning(unhandledOps)
+	}
 
 	// Write checkpoint with byte offsets for next incremental replay.
 	// If byteOffsets not provided, use empty map.
@@ -243,14 +184,36 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 	_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
 
 	warnings := formatUnhandledOpsWarnings(unhandledOps)
-	result := Result{
+	return state, Result{
 		IssueCount:   len(state.Issues),
 		OpsProcessed: len(allOps),
 		FullReplay:   fullReplay,
 		UnhandledOps: unhandledOps,
 		Warnings:     warnings,
-	}
-	return state, result, nil
+	}, nil
+}
+
+// Materialize runs the full materialization pipeline.
+// It accepts pre-read ops and writes state and checkpoint files to stateDir.
+// issuesDir is used to resolve stateDir paths; allOps should be pre-read from the log files.
+// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
+func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (Result, error) {
+	_, result, err := runMaterializePipeline(stateDir, allOps, singleBranch, byteOffsets, true)
+	return result, err
+}
+
+// MaterializeAndReturnQuiet runs the full materialization pipeline without emitting
+// warnings to stderr. Snapshot-backed commands use this to avoid duplicate warnings
+// because they render returned warnings themselves.
+func MaterializeAndReturnQuiet(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (*State, Result, error) {
+	return runMaterializePipeline(stateDir, allOps, singleBranch, byteOffsets, false)
+}
+
+// MaterializeAndReturn runs the full materialization pipeline and returns the resulting State.
+// It accepts pre-read ops and writes state and checkpoint files to stateDir.
+// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
+func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (*State, Result, error) {
+	return runMaterializePipeline(stateDir, allOps, singleBranch, byteOffsets, true)
 }
 
 // MaterializeExcludeWorker replays ops excluding all ops from the given
@@ -260,9 +223,12 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
 	// Filter out ops from the excluded worker
 	var filteredOps []ops.Op
+	toleratedMissingTargetIDs := make(map[string]bool)
 	for _, op := range allOps {
 		if op.WorkerID != excludeWorkerID {
 			filteredOps = append(filteredOps, op)
+		} else {
+			toleratedMissingTargetIDs[op.TargetID] = true
 		}
 	}
 
@@ -271,7 +237,7 @@ func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBra
 	state := NewState()
 	state.SingleBranchMode = singleBranch
 
-	unhandledOps, err := applyOps(state, filteredOps)
+	unhandledOps, err := applyOpsWithTolerance(state, filteredOps, toleratedMissingTargetIDs)
 	if err != nil {
 		return nil, Result{}, err
 	}

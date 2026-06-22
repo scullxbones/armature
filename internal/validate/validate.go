@@ -168,29 +168,29 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 	return errs
 }
 
-// checkE6RequiredFields checks that task issues have all required fields populated.
-// TODO: The required-field policy (which fields are required per issue type) should
-// move to the issuetype package (e.g., issuetype.RequiredFields(t string) []string)
-// to complete the seam originally planned in S11-T1. Until that is implemented,
-// the policy lives here as inline logic.
+// checkE6RequiredFields checks that each issue has the required fields for its type.
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []string {
 	var errs []string
 	for id, issue := range issues {
-		if issue.Type != "task" {
-			continue
-		}
-		// Terminal-status tasks have already been delivered; skip required-field checks.
+		// Terminal-status issues have already been delivered; skip required-field checks.
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}
-		if len(issue.Scope) == 0 {
-			errs = append(errs, fmt.Sprintf("missing required field: scope on task %s", id))
-		}
-		if len(issue.Acceptance) == 0 || string(issue.Acceptance) == "null" {
-			errs = append(errs, fmt.Sprintf("missing required field: acceptance on task %s", id))
-		}
-		if issue.DefinitionOfDone == "" {
-			errs = append(errs, fmt.Sprintf("missing required field: definition_of_done on task %s", id))
+		for _, field := range issuetype.RequiredFields(issue.Type) {
+			switch field {
+			case "scope":
+				if len(issue.Scope) == 0 {
+					errs = append(errs, fmt.Sprintf("missing required field: scope on %s %s", issue.Type, id))
+				}
+			case "acceptance":
+				if len(issue.Acceptance) == 0 || string(issue.Acceptance) == "null" {
+					errs = append(errs, fmt.Sprintf("missing required field: acceptance on %s %s", issue.Type, id))
+				}
+			case "definition_of_done":
+				if issue.DefinitionOfDone == "" {
+					errs = append(errs, fmt.Sprintf("missing required field: definition_of_done on %s %s", issue.Type, id))
+				}
+			}
 		}
 	}
 	return errs

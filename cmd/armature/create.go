@@ -147,7 +147,7 @@ func newCreateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&title, "title", "", "item title")
-	cmd.Flags().StringVar(&nodeType, "type", "task", "item type: epic, story, task, bug")
+	cmd.Flags().StringVar(&nodeType, "type", "task", "item type: "+strings.Join(issuetype.All(), ", "))
 	cmd.Flags().StringVar(&parent, "parent", "", "parent node ID")
 	cmd.Flags().StringVar(&id, "id", "", "explicit ID (auto-generated if empty)")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")

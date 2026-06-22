@@ -47,12 +47,12 @@ func TestIsLegalHierarchy(t *testing.T) {
 		{"epic->bug", "epic", "bug", true},
 		{"epic->epic", "epic", "epic", false},
 
-		// Story can contain task, bug
+		// Story can contain task, feature, bug
 		{"story->task", "story", "task", true},
+		{"story->feature", "story", "feature", true},
 		{"story->bug", "story", "bug", true},
 		{"story->story", "story", "story", false},
 		{"story->epic", "story", "epic", false},
-		{"story->feature", "story", "feature", false},
 
 		// Feature can contain task, bug
 		{"feature->task", "feature", "task", true},
@@ -71,12 +71,6 @@ func TestIsLegalHierarchy(t *testing.T) {
 		{"bug->bug", "bug", "bug", false},
 		{"bug->epic", "bug", "epic", false},
 		{"bug->task", "bug", "task", false},
-
-		// Feature as parent: only task and bug allowed.
-		// Previously feature fell into `default: return true` in validate.go,
-		// making feature→anything silently pass. These cases now correctly return false.
-		{"feature->epic", "feature", "epic", false},
-		{"feature->story", "feature", "story", false},
 
 		// Invalid parents: previously unknown parent types returned true via default: return true.
 		// IsLegalHierarchy now returns false for unknown parents (intentional hardening).
@@ -103,13 +97,13 @@ func TestIsReadyEligible(t *testing.T) {
 		t        string
 		expected bool
 	}{
-		// task, feature, and story are eligible for the ready queue
+		// task, feature, story, and bug are eligible for the ready queue
 		{"task is ready-eligible", "task", true},
 		{"feature is ready-eligible", "feature", true},
 		{"story is ready-eligible", "story", true},
-		// epic and bug are not eligible
+		{"bug is ready-eligible", "bug", true},
+		// epic is not eligible
 		{"epic not ready-eligible", "epic", false},
-		{"bug not ready-eligible", "bug", false},
 		{"invalid not ready-eligible", "invalid", false},
 		{"empty not ready-eligible", "", false},
 	}
@@ -159,5 +153,31 @@ func TestAll(t *testing.T) {
 		if !found {
 			t.Errorf("All() missing expected type %q", expectedType)
 		}
+	}
+}
+
+func TestRequiredFields(t *testing.T) {
+	t.Parallel()
+
+	fields := RequiredFields("task")
+	if len(fields) != 3 {
+		t.Fatalf("RequiredFields(task) returned %d fields, want 3", len(fields))
+	}
+	expected := map[string]bool{
+		"scope":              true,
+		"acceptance":         true,
+		"definition_of_done": true,
+	}
+	for _, field := range fields {
+		if !expected[field] {
+			t.Fatalf("RequiredFields(task) returned unexpected field %q", field)
+		}
+		delete(expected, field)
+	}
+	if len(expected) != 0 {
+		t.Fatalf("RequiredFields(task) missing fields: %v", expected)
+	}
+	if got := RequiredFields("story"); len(got) != 0 {
+		t.Fatalf("RequiredFields(story) = %v, want empty", got)
 	}
 }
