@@ -1,8 +1,20 @@
 package tui
 
 import (
+	"sync"
 	"testing"
 )
+
+var ttyStateMu sync.Mutex
+
+func lockTTYState(t *testing.T) {
+	ttyStateMu.Lock()
+	t.Cleanup(func() {
+		SetFormat("")
+		SetNonInteractive(false)
+		ttyStateMu.Unlock()
+	})
+}
 
 func TestIsTerminalReturnsFalseInTests(t *testing.T) {
 	t.Parallel()
@@ -13,8 +25,8 @@ func TestIsTerminalReturnsFalseInTests(t *testing.T) {
 
 func TestSetNonInteractive(t *testing.T) {
 	t.Parallel()
+	lockTTYState(t)
 	SetNonInteractive(true)
-	t.Cleanup(func() { SetNonInteractive(false) })
 	if !IsNonInteractive() {
 		t.Error("expected IsNonInteractive() to return true after SetNonInteractive(true)")
 	}
@@ -22,8 +34,8 @@ func TestSetNonInteractive(t *testing.T) {
 
 func TestIsNonInteractive_DefaultFalse(t *testing.T) {
 	t.Parallel()
+	lockTTYState(t)
 	SetNonInteractive(false)
-	t.Cleanup(func() { SetNonInteractive(false) })
 	if IsNonInteractive() {
 		t.Error("expected IsNonInteractive() to return false by default")
 	}
@@ -31,8 +43,8 @@ func TestIsNonInteractive_DefaultFalse(t *testing.T) {
 
 func TestIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
 	t.Parallel()
+	lockTTYState(t)
 	SetNonInteractive(true)
-	t.Cleanup(func() { SetNonInteractive(false) })
 	if IsInteractive() {
 		t.Error("expected IsInteractive() to return false when non-interactive is set")
 	}
@@ -40,8 +52,8 @@ func TestIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
 
 func TestIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
 	t.Parallel()
+	lockTTYState(t)
 	SetFormat("json")
-	t.Cleanup(func() { SetFormat("") })
 	if IsInteractive() {
 		t.Error("expected IsInteractive() to return false when format=json")
 	}
@@ -49,8 +61,8 @@ func TestIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
 
 func TestIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
 	t.Parallel()
+	lockTTYState(t)
 	SetFormat("agent")
-	t.Cleanup(func() { SetFormat("") })
 	if IsInteractive() {
 		t.Error("expected IsInteractive() to return false when format=agent")
 	}
@@ -58,10 +70,10 @@ func TestIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
 
 func TestIsInteractiveReturnsFalseWhenNotTTY(t *testing.T) {
 	t.Parallel()
+	lockTTYState(t)
 	// In the test runner stdout is never a TTY, so IsInteractive must be false
 	// regardless of format.
 	SetFormat("human")
-	t.Cleanup(func() { SetFormat("") })
 	if IsInteractive() {
 		t.Error("expected IsInteractive() to return false when not a TTY")
 	}
