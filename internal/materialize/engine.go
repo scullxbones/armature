@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	claimpkg "github.com/scullxbones/armature/internal/claim"
@@ -172,6 +173,9 @@ func (s *State) applyNote(op ops.Op) error {
 	if !ok {
 		return nil
 	}
+	if hasAppliedNote(issue.Notes, op) {
+		return nil
+	}
 	issue.Notes = append(issue.Notes, Note{
 		ID:        resolveNoteID(issue, op),
 		WorkerID:  op.WorkerID,
@@ -180,6 +184,18 @@ func (s *State) applyNote(op ops.Op) error {
 	})
 	issue.Updated = op.Timestamp
 	return nil
+}
+
+func hasAppliedNote(notes []Note, op ops.Op) bool {
+	for _, note := range notes {
+		if note.WorkerID != op.WorkerID || note.Timestamp != op.Timestamp || note.Msg != op.Payload.Msg {
+			continue
+		}
+		if op.Payload.NoteID == "" || note.ID == op.Payload.NoteID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) applyNoteDelete(op ops.Op) error {
@@ -267,16 +283,36 @@ func (s *State) applyDecision(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	issue.Decisions = append(issue.Decisions, Decision{
+	decision := Decision{
 		Topic:     op.Payload.Topic,
 		Choice:    op.Payload.Choice,
 		Rationale: op.Payload.Rationale,
 		Affects:   op.Payload.Affects,
 		WorkerID:  op.WorkerID,
 		Timestamp: op.Timestamp,
-	})
+	}
+	if hasDecision(issue.Decisions, decision) {
+		return nil
+	}
+	issue.Decisions = append(issue.Decisions, decision)
 	issue.Updated = op.Timestamp
 	return nil
+}
+
+func hasDecision(decisions []Decision, want Decision) bool {
+	for _, decision := range decisions {
+		if decision.Topic != want.Topic ||
+			decision.Choice != want.Choice ||
+			decision.Rationale != want.Rationale ||
+			decision.WorkerID != want.WorkerID ||
+			decision.Timestamp != want.Timestamp {
+			continue
+		}
+		if slices.Equal(decision.Affects, want.Affects) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) applyAmend(op ops.Op) error {
@@ -311,11 +347,15 @@ func (s *State) applySourceLink(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	issue.SourceLinks = append(issue.SourceLinks, SourceLink{
+	link := SourceLink{
 		SourceEntryID: op.Payload.SourceID,
 		SourceURL:     op.Payload.SourceURL,
 		Title:         op.Payload.Title,
-	})
+	}
+	if slices.Contains(issue.SourceLinks, link) {
+		return nil
+	}
+	issue.SourceLinks = append(issue.SourceLinks, link)
 	issue.Updated = op.Timestamp
 	return nil
 }
@@ -325,12 +365,16 @@ func (s *State) applyCitationAccepted(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	issue.CitationAcceptances = append(issue.CitationAcceptances, CitationAcceptance{
+	acceptance := CitationAcceptance{
 		WorkerID:                  op.WorkerID,
 		Timestamp:                 op.Timestamp,
 		ConfirmedNoninteractively: op.Payload.ConfirmedNoninteractively,
 		SourceEntryID:             op.Payload.SourceEntryID,
-	})
+	}
+	if slices.Contains(issue.CitationAcceptances, acceptance) {
+		return nil
+	}
+	issue.CitationAcceptances = append(issue.CitationAcceptances, acceptance)
 	issue.Updated = op.Timestamp
 	return nil
 }

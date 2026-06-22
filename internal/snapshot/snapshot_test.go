@@ -90,6 +90,37 @@ func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
 	assert.True(t, found, "expected warning about worker ID mismatch, got: %v", snap.Warnings)
 }
 
+func TestLoad_UnknownOpWarningIncluded(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	logPath := filepath.Join(opsDir, "worker-x.log")
+	content := "" +
+		`["create","issue-1",1000,"worker-x",{"title":"Test Issue","type":"task","scope":[],"context_files":[]}]` + "\n" +
+		`["unknown_future_type","issue-1",1001,"worker-x",{}]` + "\n"
+	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
+
+	snap, err := Load(opsDir, stateDir, false)
+	require.NoError(t, err)
+
+	assert.NotNil(t, snap)
+	assert.Equal(t, 1, len(snap.Issues))
+	assert.NotEmpty(t, snap.Warnings)
+	found := false
+	for _, warning := range snap.Warnings {
+		if containsAny(warning, "unknown", "unknown_future_type") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected unknown op warning, got: %v", snap.Warnings)
+}
+
 // Test 4: state+issues agreement → Snapshot.State and Snapshot.Issues are consistent
 func TestLoad_StateAndIssuesAgreement(t *testing.T) {
 	t.Parallel()

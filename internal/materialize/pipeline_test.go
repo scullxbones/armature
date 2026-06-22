@@ -232,6 +232,41 @@ func TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	assert.Equal(t, "another_unknown_type", result.UnhandledOps[0].Type, "unhandled op should be the unknown type")
 }
 
+// TestMaterializeAndReturn_HandlerErrorSurfaced verifies that concrete handler
+// errors are returned instead of being treated as unhandled unknown ops.
+func TestMaterializeAndReturn_HandlerErrorSurfaced(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	workerID := "worker-x"
+
+	validOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+
+	handlerErrOp := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}
+
+	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{validOp, handlerErrOp}, false, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "claim: issue task-02 not found")
+
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	_, statErr := os.Stat(checkpointPath)
+	assert.True(t, os.IsNotExist(statErr), "checkpoint should not be written after a handler error")
+}
+
 // TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced verifies that
 // MaterializeExcludeWorker also captures unknown op types in Result.UnhandledOps.
 func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
@@ -438,7 +473,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	workerID := "worker-x"
 	logPath := filepath.Join(opsDir, workerID+".log")
 
-	// Initial ops: create two tasks
+	// Initial ops: create two tasks plus append-only state on task-01.
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: workerID,
 		Payload: ops.Payload{Title: "Task one", NodeType: "task"},
@@ -446,6 +481,22 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpCreate, TargetID: "task-02", Timestamp: 200, WorkerID: workerID,
 		Payload: ops.Payload{Title: "Task two", NodeType: "task"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpNote, TargetID: "task-01", Timestamp: 210, WorkerID: workerID,
+		Payload: ops.Payload{Msg: "first note"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpDecision, TargetID: "task-01", Timestamp: 220, WorkerID: workerID,
+		Payload: ops.Payload{Topic: "delivery", Choice: "ship", Rationale: "ready", Affects: []string{"task-01"}},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpSourceLink, TargetID: "task-01", Timestamp: 230, WorkerID: workerID,
+		Payload: ops.Payload{SourceID: "src-1", SourceURL: "https://example.com/spec", Title: "Spec"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 240, WorkerID: workerID,
+		Payload: ops.Payload{SourceEntryID: "src-1", ConfirmedNoninteractively: true},
 	}))
 
 	// Run full replay to get baseline state
@@ -457,7 +508,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	baselineState, baselineResult, err := MaterializeAndReturn(stateDir, opsInitial, false, offsets)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(baselineState.Issues))
-	assert.Equal(t, 2, baselineResult.OpsProcessed)
+	assert.Equal(t, 6, baselineResult.OpsProcessed)
 	assert.True(t, baselineResult.FullReplay, "baseline should be a full replay")
 
 	// Verify checkpoint was written
@@ -485,7 +536,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	incrementalState, incrementalResult, err := MaterializeAndReturn(stateDir, opsAll, false, offsets2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(incrementalState.Issues))
-	assert.Equal(t, 4, incrementalResult.OpsProcessed, "should have processed all 4 ops (including the 2 new ones)")
+	assert.Equal(t, 8, incrementalResult.OpsProcessed, "should have processed all 8 ops")
 	assert.False(t, incrementalResult.FullReplay, "incremental replay should set FullReplay=false")
 
 	// Now run full replay again from scratch in a different directory
@@ -505,6 +556,22 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		Payload: ops.Payload{Title: "Task two", NodeType: "task"},
 	}))
 	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
+		Type: ops.OpNote, TargetID: "task-01", Timestamp: 210, WorkerID: workerID,
+		Payload: ops.Payload{Msg: "first note"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
+		Type: ops.OpDecision, TargetID: "task-01", Timestamp: 220, WorkerID: workerID,
+		Payload: ops.Payload{Topic: "delivery", Choice: "ship", Rationale: "ready", Affects: []string{"task-01"}},
+	}))
+	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
+		Type: ops.OpSourceLink, TargetID: "task-01", Timestamp: 230, WorkerID: workerID,
+		Payload: ops.Payload{SourceID: "src-1", SourceURL: "https://example.com/spec", Title: "Spec"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
+		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 240, WorkerID: workerID,
+		Payload: ops.Payload{SourceEntryID: "src-1", ConfirmedNoninteractively: true},
+	}))
+	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300, WorkerID: workerID,
 		Payload: ops.Payload{TTL: 60},
 	}))
@@ -519,7 +586,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	fullReplayState, fullReplayResult, err := MaterializeAndReturn(stateDir2, opsAll2, false, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(fullReplayState.Issues))
-	assert.Equal(t, 4, fullReplayResult.OpsProcessed)
+	assert.Equal(t, 8, fullReplayResult.OpsProcessed)
 	assert.True(t, fullReplayResult.FullReplay)
 
 	// Assert that incremental and full replay produce identical state
@@ -532,5 +599,9 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		assert.Equal(t, fullIssue.Status, incrementalIssue.Status, "status must match: %v vs %v", fullIssue.Status, incrementalIssue.Status)
 		assert.Equal(t, fullIssue.ClaimedBy, incrementalIssue.ClaimedBy, "claimed_by must match")
 		assert.Equal(t, fullIssue.Outcome, incrementalIssue.Outcome, "outcome must match")
+		assert.Equal(t, fullIssue.Notes, incrementalIssue.Notes, "notes must match")
+		assert.Equal(t, fullIssue.Decisions, incrementalIssue.Decisions, "decisions must match")
+		assert.Equal(t, fullIssue.SourceLinks, incrementalIssue.SourceLinks, "source links must match")
+		assert.Equal(t, fullIssue.CitationAcceptances, incrementalIssue.CitationAcceptances, "citation acceptances must match")
 	}
 }
