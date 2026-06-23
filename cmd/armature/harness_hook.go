@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +27,9 @@ func resolveTaskBinding(gitDir string) string {
 	return os.Getenv("ARMATURE_TASK_ID")
 }
 
-// logPassThrough logs a pass-through event to <git-dir>/armature-hook.log
+// logPassThrough logs a pass-through event to <git-dir>/armature-hook.log.
+// Each entry is prefixed with an RFC3339 UTC timestamp so operators can
+// correlate entries with specific git operations.
 func logPassThrough(gitDir string, reason string) error {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	// #nosec G304 - logPath is derived from a trusted git directory
@@ -36,17 +40,18 @@ func logPassThrough(gitDir string, reason string) error {
 	defer func() {
 		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
 	}()
-	_, err = fmt.Fprintf(f, "pass-through: %s\n", reason)
+	ts := time.Now().UTC().Format(time.RFC3339)
+	_, err = fmt.Fprintf(f, "%s pass-through: %s\n", ts, reason)
 	return err
 }
 
-// isBindingStale checks if the task binding's status is not "claimed" or "in-progress"
+// isBindingStale checks if the task binding's status is not claimed or in-progress.
 func isBindingStale(snap *snapshot.Snapshot, taskID string) bool {
 	issue, ok := snap.Issues[taskID]
 	if !ok {
 		return true // Missing issue = stale
 	}
-	return issue.Status != "claimed" && issue.Status != "in-progress"
+	return issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress
 }
 
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
@@ -67,7 +72,23 @@ func newHarnessHookCmd() *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			appCtx := currentCtx(cmd)
-			gitDir := filepath.Join(appCtx.RepoPath, ".git")
+			// Resolve the worktree's own git dir (e.g., <parent>/.git/worktrees/<name>),
+			// not the parent repo's .git. This ensures we read the binding file that
+			// claim --worktree wrote into the worktree-specific git directory.
+			//
+			// appCtx.RepoPath is already resolved to the parent repo root when invoked
+			// from a worktree, so we read the raw --repo flag to get the path the user
+			// actually passed (which may be the worktree directory itself).
+			rawRepo, _ := cmd.Root().PersistentFlags().GetString("repo")
+			if rawRepo == "" {
+				rawRepo = "."
+			}
+			gitDir, err := resolveWorktreeGitDir(rawRepo)
+			if err != nil {
+				// Fall back to the conventional path if resolution fails (e.g., bare repo or
+				// unusual layout); the binding file may not exist but we degrade gracefully.
+				gitDir = filepath.Join(appCtx.RepoPath, ".git")
+			}
 			taskID := resolveTaskBinding(gitDir)
 
 			// If no task binding is found, pass through with exit 0

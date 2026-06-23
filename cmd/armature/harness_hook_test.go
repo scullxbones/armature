@@ -233,8 +233,8 @@ func TestResolveTaskBinding_FilePreferredOverEnv(t *testing.T) {
 	assert.Equal(t, "task-from-file", taskID)
 }
 
-// TestLogPassThrough verifies that logPassThrough writes to the armature-hook.log
-// file in the git directory.
+// TestLogPassThrough verifies that logPassThrough writes a timestamped entry to
+// the armature-hook.log file in the git directory.
 func TestLogPassThrough(t *testing.T) {
 	gitDir := t.TempDir()
 
@@ -244,11 +244,14 @@ func TestLogPassThrough(t *testing.T) {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	data, err := os.ReadFile(logPath)
 	require.NoError(t, err)
-	assert.Equal(t, "pass-through: test reason\n", string(data))
+	// Log lines now include an RFC3339 timestamp prefix.
+	content := string(data)
+	assert.Contains(t, content, "pass-through: test reason")
+	assert.Contains(t, content, "Z pass-through:") // UTC RFC3339 ends in 'Z'
 }
 
-// TestLogPassThrough_Append verifies that logPassThrough appends to the
-// armature-hook.log file.
+// TestLogPassThrough_Append verifies that logPassThrough appends timestamped
+// entries to the armature-hook.log file.
 func TestLogPassThrough_Append(t *testing.T) {
 	gitDir := t.TempDir()
 
@@ -260,7 +263,12 @@ func TestLogPassThrough_Append(t *testing.T) {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	data, err := os.ReadFile(logPath)
 	require.NoError(t, err)
-	assert.Equal(t, "pass-through: first reason\npass-through: second reason\n", string(data))
+	content := string(data)
+	assert.Contains(t, content, "pass-through: first reason")
+	assert.Contains(t, content, "pass-through: second reason")
+	// Two lines, each with a timestamp.
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	assert.Len(t, lines, 2)
 }
 
 // TestIsBindingStale_Claimed verifies that a task with "claimed" status is not stale.
@@ -336,4 +344,56 @@ func TestIsBindingStale_Open(t *testing.T) {
 	stale := isBindingStale(snap, "task-01")
 
 	assert.True(t, stale)
+}
+
+// TestHarnessHookReadsBindingFromFileWithoutEnv verifies that harness-hook reads the
+// task binding from the worktree's armature-task-id file even when ARMATURE_TASK_ID
+// is not set (F1/F13: file-based binding must work end-to-end).
+//
+// The test claims a task with --worktree, which writes armature-task-id into the
+// worktree-specific git dir. It then invokes harness-hook with --repo pointing at
+// the worktree (not the parent repo) and no ARMATURE_TASK_ID env var. The hook
+// must still find the task binding and process the event.
+func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
+	require.NoError(t, err)
+
+	// Claim the task to write armature-task-id into the worktree git dir.
+	worktreeDir := t.TempDir()
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify armature-task-id was written.
+	gitPath := filepath.Join(worktreeDir, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
+	}
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	require.FileExists(t, taskIDFile, "armature-task-id must exist in worktree git dir")
+
+	// Ensure ARMATURE_TASK_ID is NOT set — hook must rely on the file alone.
+	t.Setenv("ARMATURE_TASK_ID", "")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	var out bytes.Buffer
+	hookCmd := newRootCmd()
+	// Point --repo at the worktree so resolveWorktreeGitDir reads the .git file there.
+	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll
+	hookCmd.SetOut(&out)
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", worktreeDir})
+
+	err = hookCmd.Execute()
+
+	// The hook should find the task binding from the file and process the event.
+	// Since the path is in-scope, it should approve (not pass-through).
+	require.NoError(t, err)
+	// An approve decision means the hook found the binding and evaluated policy.
+	assert.Contains(t, out.String(), `"decision":"approve"`, "hook must read binding from file and approve in-scope edit")
 }
