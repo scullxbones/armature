@@ -3,10 +3,14 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/harnesshook"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,19 +24,20 @@ func TestHarnessHookCommandIsRegistered(t *testing.T) {
 	assert.Equal(t, "harness-hook", cmd.Name())
 }
 
-func TestHarnessHookRequiresTaskID(t *testing.T) {
+func TestHarnessHookPassesThroughWithoutTaskID(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	cmd := newRootCmd()
 	cmd.SetIn(strings.NewReader(`{}`))
-	cmd.SetOut(new(bytes.Buffer))
+	out := new(bytes.Buffer)
+	cmd.SetOut(out)
 	cmd.SetErr(new(bytes.Buffer))
 	cmd.SetArgs([]string{"harness-hook", "--repo", repo})
 
 	err := cmd.Execute()
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ARMATURE_TASK_ID is required")
+	require.NoError(t, err)
+	// Pass-through should exit 0
 }
 
 func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
@@ -40,11 +45,19 @@ func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
+	// Claim the task so it has claimed/in-progress status
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	err = cmd.Execute()
+	require.NoError(t, err)
+
 	t.Setenv("ARMATURE_TASK_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	cmd := newRootCmd()
+	cmd = newRootCmd()
 	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
@@ -63,11 +76,19 @@ func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
+	// Claim the task so it has claimed/in-progress status
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	err = cmd.Execute()
+	require.NoError(t, err)
+
 	t.Setenv("ARMATURE_TASK_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	cmd := newRootCmd()
+	cmd = newRootCmd()
 	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
@@ -84,11 +105,19 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["human review only"]`)
 	require.NoError(t, err)
 
+	// Claim the task so it has claimed/in-progress status
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	err = cmd.Execute()
+	require.NoError(t, err)
+
 	t.Setenv("ARMATURE_TASK_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	cmd := newRootCmd()
+	cmd = newRootCmd()
 	cmd.SetIn(strings.NewReader(`{"hook_event_name":"Stop","tool_name":"","tool_input":{}}`))
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
@@ -153,4 +182,158 @@ func TestApplyRunResult_ZeroExitCode(t *testing.T) {
 	err := applyRunResult(&buf, result)
 	require.NoError(t, err)
 	assert.Equal(t, `{"decision":"approve"}`, buf.String())
+}
+
+// TestResolveTaskBinding_FromFile verifies that resolveTaskBinding reads from
+// <git-dir>/armature-task-id file.
+func TestResolveTaskBinding_FromFile(t *testing.T) {
+	gitDir := t.TempDir()
+	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
+	require.NoError(t, err)
+
+	taskID := resolveTaskBinding(gitDir)
+
+	assert.Equal(t, "task-from-file", taskID)
+}
+
+// TestResolveTaskBinding_FromEnv verifies that resolveTaskBinding falls back to
+// ARMATURE_TASK_ID environment variable when file does not exist.
+func TestResolveTaskBinding_FromEnv(t *testing.T) {
+	gitDir := t.TempDir()
+	t.Setenv("ARMATURE_TASK_ID", "task-from-env")
+
+	taskID := resolveTaskBinding(gitDir)
+
+	assert.Equal(t, "task-from-env", taskID)
+}
+
+// TestResolveTaskBinding_Empty verifies that resolveTaskBinding returns an
+// empty string when neither file nor environment variable exists.
+func TestResolveTaskBinding_Empty(t *testing.T) {
+	gitDir := t.TempDir()
+	t.Setenv("ARMATURE_TASK_ID", "")
+
+	taskID := resolveTaskBinding(gitDir)
+
+	assert.Equal(t, "", taskID)
+}
+
+// TestResolveTaskBinding_FilePreferredOverEnv verifies that the file takes
+// precedence over the environment variable.
+func TestResolveTaskBinding_FilePreferredOverEnv(t *testing.T) {
+	gitDir := t.TempDir()
+	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
+	require.NoError(t, err)
+	t.Setenv("ARMATURE_TASK_ID", "task-from-env")
+
+	taskID := resolveTaskBinding(gitDir)
+
+	assert.Equal(t, "task-from-file", taskID)
+}
+
+// TestLogPassThrough verifies that logPassThrough writes to the armature-hook.log
+// file in the git directory.
+func TestLogPassThrough(t *testing.T) {
+	gitDir := t.TempDir()
+
+	err := logPassThrough(gitDir, "test reason")
+
+	require.NoError(t, err)
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, "pass-through: test reason\n", string(data))
+}
+
+// TestLogPassThrough_Append verifies that logPassThrough appends to the
+// armature-hook.log file.
+func TestLogPassThrough_Append(t *testing.T) {
+	gitDir := t.TempDir()
+
+	err := logPassThrough(gitDir, "first reason")
+	require.NoError(t, err)
+	err = logPassThrough(gitDir, "second reason")
+	require.NoError(t, err)
+
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, "pass-through: first reason\npass-through: second reason\n", string(data))
+}
+
+// TestIsBindingStale_Claimed verifies that a task with "claimed" status is not stale.
+func TestIsBindingStale_Claimed(t *testing.T) {
+	snap := &snapshot.Snapshot{
+		Issues: map[string]*materialize.Issue{
+			"task-01": {
+				ID:     "task-01",
+				Status: "claimed",
+			},
+		},
+	}
+
+	stale := isBindingStale(snap, "task-01")
+
+	assert.False(t, stale)
+}
+
+// TestIsBindingStale_InProgress verifies that a task with "in-progress" status is not stale.
+func TestIsBindingStale_InProgress(t *testing.T) {
+	snap := &snapshot.Snapshot{
+		Issues: map[string]*materialize.Issue{
+			"task-01": {
+				ID:     "task-01",
+				Status: "in-progress",
+			},
+		},
+	}
+
+	stale := isBindingStale(snap, "task-01")
+
+	assert.False(t, stale)
+}
+
+// TestIsBindingStale_Done verifies that a task with "done" status is stale.
+func TestIsBindingStale_Done(t *testing.T) {
+	snap := &snapshot.Snapshot{
+		Issues: map[string]*materialize.Issue{
+			"task-01": {
+				ID:     "task-01",
+				Status: "done",
+			},
+		},
+	}
+
+	stale := isBindingStale(snap, "task-01")
+
+	assert.True(t, stale)
+}
+
+// TestIsBindingStale_Missing verifies that a missing task is stale.
+func TestIsBindingStale_Missing(t *testing.T) {
+	snap := &snapshot.Snapshot{
+		Issues: make(map[string]*materialize.Issue),
+	}
+
+	stale := isBindingStale(snap, "task-01")
+
+	assert.True(t, stale)
+}
+
+// TestIsBindingStale_Open verifies that a task with "open" status is stale.
+func TestIsBindingStale_Open(t *testing.T) {
+	snap := &snapshot.Snapshot{
+		Issues: map[string]*materialize.Issue{
+			"task-01": {
+				ID:     "task-01",
+				Status: "open",
+			},
+		},
+	}
+
+	stale := isBindingStale(snap, "task-01")
+
+	assert.True(t, stale)
 }
