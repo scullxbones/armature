@@ -41,3 +41,4 @@
 ["note","S11-T2",1782059782,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{"msg":"Starting migration: analyzing create.go, compute.go, decompose.go for type-string refactoring","note_id":"note-1782059782037931344"}]
 ["heartbeat","S11-T2",1782059846,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{}]
 ["transition","S11-T2",1782060155,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{"to":"done","outcome":"Migrated type-string callers to issuetype package: (1) create.go replaced validNodeTypes map with issuetype.IsValid, validNodeTypesList with issuetype.All, and validParentChildTypes map with issuetype.IsLegalHierarchy; (2) ready/compute.go created isReadyType helper to check for task/feature/story types in ready queue; (3) decompose.go replaced hardcoded type enum with issuetype.All() in JSON schema; (4) reparent.go updated to use issuetype.IsLegalHierarchy; (5) All tests pass; go build succeeds"}]
+["heartbeat","ARCHIMP-S12-T1",1782175853,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{}]
