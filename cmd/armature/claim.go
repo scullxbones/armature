@@ -216,6 +216,15 @@ or updates the armature-task-id file if the worktree exists.`,
 				return fmt.Errorf("--worktree is required")
 			}
 
+			// Normalize worktreePath to an absolute path to ensure all subsequent
+			// operations (worktreePathExists, updateTaskIDFile, etc.) resolve paths
+			// relative to the worktree location, not the current working directory.
+			absWorktreePath, err := filepath.Abs(worktreePath)
+			if err != nil {
+				return fmt.Errorf("resolve worktree path: %w", err)
+			}
+			worktreePath = absWorktreePath
+
 			issuesDir := ctx.IssuesDir
 
 			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
@@ -336,13 +345,33 @@ or updates the armature-task-id file if the worktree exists.`,
 			// validations pass and this worker has won the claim race.
 			if !worktreeExists {
 				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
-					return fmt.Errorf("create worktree: %w", err)
+					// Worktree creation failed after winning the claim race.
+					// Release the claim by writing a compensating transition op.
+					rollbackOp := ops.Op{
+						Type:      ops.OpTransition,
+						TargetID:  issueID,
+						Timestamp: nowEpoch(),
+						WorkerID:  workerID,
+						Payload:   ops.Payload{To: ops.StatusOpen},
+					}
+					appendOp(ctx, logPath, rollbackOp) //nolint:errcheck,gosec
+					return fmt.Errorf("create worktree: %w (claim released; retry arm claim)", err)
 				}
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
-					return fmt.Errorf("update task ID file: %w", err)
+					// Task ID update failed after winning the claim race.
+					// Release the claim by writing a compensating transition op.
+					rollbackOp := ops.Op{
+						Type:      ops.OpTransition,
+						TargetID:  issueID,
+						Timestamp: nowEpoch(),
+						WorkerID:  workerID,
+						Payload:   ops.Payload{To: ops.StatusOpen},
+					}
+					appendOp(ctx, logPath, rollbackOp) //nolint:errcheck,gosec
+					return fmt.Errorf("update task ID file: %w (claim released; retry arm claim)", err)
 				}
 			}
 
