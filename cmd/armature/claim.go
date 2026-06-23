@@ -354,7 +354,9 @@ or updates the armature-task-id file if the worktree exists.`,
 						WorkerID:  workerID,
 						Payload:   ops.Payload{To: ops.StatusOpen},
 					}
-					appendOp(ctx, logPath, rollbackOp) //nolint:errcheck,gosec
+					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
+						return fmt.Errorf("create worktree: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
+					}
 					return fmt.Errorf("create worktree: %w (claim released; retry arm claim)", err)
 				}
 			} else {
@@ -370,7 +372,9 @@ or updates the armature-task-id file if the worktree exists.`,
 						WorkerID:  workerID,
 						Payload:   ops.Payload{To: ops.StatusOpen},
 					}
-					appendOp(ctx, logPath, rollbackOp) //nolint:errcheck,gosec
+					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
+						return fmt.Errorf("update task ID file: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
+					}
 					return fmt.Errorf("update task ID file: %w (claim released; retry arm claim)", err)
 				}
 			}
