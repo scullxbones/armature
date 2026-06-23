@@ -138,7 +138,7 @@ func newMergedCmd() *cobra.Command {
 					return fmt.Errorf("issue %s is in status %q; arm merged in single-branch mode requires status=merged (or done)", issueID, entry.Status)
 				}
 			} else {
-				if entry.Status != ops.StatusDone {
+				if entry.Status != ops.StatusDone && entry.Status != ops.StatusMerged {
 					return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
 				}
 			}
@@ -152,21 +152,25 @@ func newMergedCmd() *cobra.Command {
 			// Record the merge op FIRST, before removing the worktree.
 			// This ensures that if appendOp fails, the worktree is still present
 			// and recovery is possible (P2 bug fix).
-			state := mustState(cmd)
-			workerID, logPath, err := resolveWorkerAndLog(state.ctx)
-			if err != nil {
-				return err
-			}
+			// Only record the merge op if not already merged (idempotent retry support).
+			// If already merged, the op was previously recorded and we skip to cleanup.
+			if entry.Status != ops.StatusMerged {
+				state := mustState(cmd)
+				workerID, logPath, err := resolveWorkerAndLog(state.ctx)
+				if err != nil {
+					return err
+				}
 
-			op := ops.Op{
-				Type:      ops.OpTransition,
-				TargetID:  issueID,
-				Timestamp: nowEpoch(),
-				WorkerID:  workerID,
-				Payload:   ops.Payload{To: ops.StatusMerged, PR: pr},
-			}
-			if err := appendOp(state.ctx, logPath, op); err != nil {
-				return err
+				op := ops.Op{
+					Type:      ops.OpTransition,
+					TargetID:  issueID,
+					Timestamp: nowEpoch(),
+					WorkerID:  workerID,
+					Payload:   ops.Payload{To: ops.StatusMerged, PR: pr},
+				}
+				if err := appendOp(state.ctx, logPath, op); err != nil {
+					return err
+				}
 			}
 
 			// Remove worktree if this is a task, bug, feature, or story type.
@@ -176,7 +180,11 @@ func newMergedCmd() *cobra.Command {
 			}
 
 			if singleBranch {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: in single-branch mode, done→merged is automatic. Op recorded for %s.\n", issueID)
+				if entry.Status == ops.StatusMerged {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %s already merged. Worktree cleaned up.\n", issueID)
+				} else {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: in single-branch mode, done→merged is automatic. Op recorded for %s.\n", issueID)
+				}
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
 				if pr != "" {

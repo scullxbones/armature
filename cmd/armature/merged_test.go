@@ -515,3 +515,74 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		assert.DirExists(t, worktreePath, "worktree must NOT be removed when appendOp fails")
 	})
 }
+
+// TestMergedAllowsRetryAfterWorktreeRemovalFails tests the P2 bug fix in dual-branch mode:
+// If removeWorktreeForIssue fails after the merge op is recorded, the issue's status
+// becomes 'merged'. On retry, the dual-branch guard (the `else` branch in merged.go)
+// must accept 'merged' status (in addition to 'done'), and the command should skip
+// re-recording the op and just attempt worktree cleanup. This test runs in dual-branch
+// mode so that it actually exercises the dual-branch guard at merged.go:141 rather than
+// the single-branch guard.
+func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap in dual-branch mode so the dual-branch guard (else branch) is exercised.
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(new(bytes.Buffer))
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+	require.NoError(t, bootstrapCmd.Execute())
+
+	workerCmd := newRootCmd()
+	workerCmd.SetOut(new(bytes.Buffer))
+	workerCmd.SetArgs([]string{"worker-init", "--repo", repo})
+	require.NoError(t, workerCmd.Execute())
+
+	createCmd := newRootCmd()
+	createCmd.SetOut(new(bytes.Buffer))
+	createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, createCmd.Execute())
+
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// First merged call: records the op and removes the worktree (happy path).
+	// In dual-branch mode the status check goes through the else branch at merged.go:141.
+	mergedCmd1 := newRootCmd()
+	mergedCmd1.SetOut(new(bytes.Buffer))
+	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
+	require.NoError(t, mergedCmd1.Execute())
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after first merged call")
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Second merged call: status is now 'merged'. Before the fix, the dual-branch guard
+	// (entry.Status != ops.StatusDone) would reject this with "requires status=done".
+	// After the fix, the guard accepts status=merged and skips re-recording the op,
+	// then just attempts worktree cleanup (which is a no-op since it's already gone).
+	mergedCmd2 := newRootCmd()
+	outBuf2 := new(bytes.Buffer)
+	mergedCmd2.SetOut(outBuf2)
+	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
+	err = mergedCmd2.Execute()
+	require.NoError(t, err, "merged must succeed on retry when status is already merged in dual-branch mode (P2 bug fix)")
+}
