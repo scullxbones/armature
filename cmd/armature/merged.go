@@ -152,9 +152,14 @@ func newMergedCmd() *cobra.Command {
 			// Record the merge op FIRST, before removing the worktree.
 			// This ensures that if appendOp fails, the worktree is still present
 			// and recovery is possible (P2 bug fix).
-			// Only record the merge op if not already merged (idempotent retry support).
-			// If already merged, the op was previously recorded and we skip to cleanup.
-			if entry.Status != ops.StatusMerged {
+			// Only skip op re-recording if already merged AND no new PR to attach OR
+			// the issue already has the same PR recorded.
+			// If a new --pr value is provided and not already on the issue, record a
+			// new transition op to capture it.
+			alreadyMerged := entry.Status == ops.StatusMerged
+			prAlreadyRecorded := alreadyMerged && issue.PR == pr
+
+			if !alreadyMerged || (pr != "" && !prAlreadyRecorded) {
 				state := mustState(cmd)
 				workerID, logPath, err := resolveWorkerAndLog(state.ctx)
 				if err != nil {

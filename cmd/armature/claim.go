@@ -90,9 +90,13 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 		return nil // no HEAD yet (fresh or detached); allow claim to proceed
 	}
 	headStr := strings.TrimSpace(string(headBytes))
-	// Skip branch check for detached HEAD (mid-rebase, mid-bisect, etc.)
+	// Skip branch check for detached HEAD only when already bound to this issue
 	if !strings.HasPrefix(headStr, "ref: refs/heads/") {
-		return nil
+		if existingTaskID == issueID {
+			return nil // already bound to this issue, detached HEAD is acceptable (mid-rebase, etc.)
+		}
+		return fmt.Errorf("worktree at %s has a detached HEAD with no existing binding for %s: checkout the expected branch %q or use a different --worktree path",
+			worktreePath, issueID, expectedBranch)
 	}
 	expectedRef := "ref: refs/heads/" + expectedBranch
 	if headStr != expectedRef {
@@ -280,6 +284,11 @@ or updates the armature-task-id file if the worktree exists.`,
 				return err
 			}
 
+			// Capture the prior status before writing the claim op.
+			// If worktree setup fails, we'll use this to determine whether to rollback to
+			// StatusOpen or keep the prior state (fix for P2 bug: don't release pre-existing claims).
+			priorStatus := issue.Status
+
 			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			for id, entry := range index {
 				if id == issueID || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
@@ -353,13 +362,15 @@ or updates the armature-task-id file if the worktree exists.`,
 			if !worktreeExists {
 				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
 					// Worktree creation failed after winning the claim race.
-					// Release the claim by writing a compensating transition op.
+					// Only roll back to StatusOpen if the task was previously open (this claim initiated it).
+					// If the task was already claimed or in-progress, restore the prior status to avoid
+					// releasing a pre-existing claim (P2 bug fix).
 					rollbackOp := ops.Op{
 						Type:      ops.OpTransition,
 						TargetID:  issueID,
 						Timestamp: nowEpoch(),
 						WorkerID:  workerID,
-						Payload:   ops.Payload{To: ops.StatusOpen},
+						Payload:   ops.Payload{To: priorStatus},
 					}
 					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
 						return fmt.Errorf("create worktree: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
@@ -371,13 +382,15 @@ or updates the armature-task-id file if the worktree exists.`,
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
 					// Task ID update failed after winning the claim race.
-					// Release the claim by writing a compensating transition op.
+					// Only roll back to StatusOpen if the task was previously open (this claim initiated it).
+					// If the task was already claimed or in-progress, restore the prior status to avoid
+					// releasing a pre-existing claim (P2 bug fix).
 					rollbackOp := ops.Op{
 						Type:      ops.OpTransition,
 						TargetID:  issueID,
 						Timestamp: nowEpoch(),
 						WorkerID:  workerID,
-						Payload:   ops.Payload{To: ops.StatusOpen},
+						Payload:   ops.Payload{To: priorStatus},
 					}
 					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
 						return fmt.Errorf("update task ID file: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
