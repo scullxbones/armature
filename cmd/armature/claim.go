@@ -61,6 +61,45 @@ func worktreePathExists(path string) (bool, error) {
 	return false, err // other error
 }
 
+// checkExistingWorktreeBinding verifies that an existing worktree at path is bound
+// to the expected issue and is on the expected branch. Returns an error if the
+// worktree is bound to a different issue or is on a mismatched branch, preventing
+// silent overwrite of the binding (fix for worktree mismatch governance gap).
+func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) error {
+	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return nil // can't resolve git dir; let later steps surface the error
+	}
+
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	existingBytes, err := os.ReadFile(taskIDFile) //nolint:gosec // internal path
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read existing binding: %w", err)
+	}
+
+	existingTaskID := strings.TrimSpace(string(existingBytes))
+	if existingTaskID != "" && existingTaskID != issueID {
+		return fmt.Errorf("worktree at %s is already bound to %s: use a different --worktree path or release it with 'arm merged --issue %s'",
+			worktreePath, existingTaskID, existingTaskID)
+	}
+
+	// Also verify the worktree's current branch matches the expected branch.
+	headFile := filepath.Join(actualGitDir, "HEAD")
+	headBytes, err := os.ReadFile(headFile) //nolint:gosec // internal path
+	if err != nil {
+		return nil // no HEAD yet (fresh or detached); allow claim to proceed
+	}
+	headStr := strings.TrimSpace(string(headBytes))
+	expectedRef := "ref: refs/heads/" + expectedBranch
+	if headStr != "" && headStr != expectedRef {
+		actualBranch := strings.TrimPrefix(headStr, "ref: refs/heads/")
+		return fmt.Errorf("worktree at %s is on branch %q but expected %q for issue %s: use a different --worktree path",
+			worktreePath, actualBranch, expectedBranch, issueID)
+	}
+
+	return nil
+}
+
 // deriveBranchName determines the branch name for a worktree based on issue type.
 // Returns an empty string for types that do not receive a worktree (e.g., epic).
 // claim creates worktrees for task, bug, feature, and story; merged uses this to tear them down.
@@ -192,25 +231,27 @@ or updates the armature-task-id file if the worktree exists.`,
 				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
 			}
 
-			// Epic cannot be claimed with a worktree
-			if issue.Type == "epic" {
-				return fmt.Errorf("cannot claim epic %s with --worktree; only tasks and bugs can use worktrees", issueID)
+			// Determine the expected branch for this issue type.
+			// Issues with no branch mapping (epic, unknown) cannot use --worktree.
+			expectedBranch := deriveBranchName(issue.Type, issueID)
+			if expectedBranch == "" {
+				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
 			}
 
-			// Handle worktree creation/update
+			// Check whether the worktree path already exists. Capture the state here
+			// (no side effects yet) so worktree creation can be deferred until after
+			// all claim validations pass.
 			worktreeExists, err := worktreePathExists(worktreePath)
 			if err != nil {
 				return fmt.Errorf("check worktree path: %w", err)
 			}
 
-			if !worktreeExists {
-				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
-					return fmt.Errorf("create worktree: %w", err)
-				}
-			} else {
-				// Update armature-task-id file
-				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
-					return fmt.Errorf("update task ID file: %w", err)
+			// If the worktree already exists, verify it is bound to the correct issue
+			// and is on the correct branch. Reject silently overwriting a binding that
+			// belongs to a different issue.
+			if worktreeExists {
+				if err := checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch); err != nil {
+					return err
 				}
 			}
 
@@ -285,6 +326,20 @@ or updates the armature-task-id file if the worktree exists.`,
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claim lost for %s (claimed by %s)\n", issueID, issueAfter.ClaimedBy)
 				}
 				return nil
+			}
+
+			// Worktree setup is deferred to here so it only happens after all claim
+			// validations pass and this worker has won the claim race.
+			if !worktreeExists {
+				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
+					return fmt.Errorf("create worktree: %w", err)
+				}
+			} else {
+				// Worktree exists and binding was already validated above; update the
+				// task ID file to ensure the binding is current (idempotent).
+				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
+					return fmt.Errorf("update task ID file: %w", err)
+				}
 			}
 
 			// Auto-advance any open ancestor story/epic to in-progress.
