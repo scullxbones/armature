@@ -100,6 +100,35 @@ func TestSetAndReadGitConfig(t *testing.T) {
 	assert.Equal(t, "/some/path", val)
 }
 
+func TestCreateBranchFrom_DoesNotUseTags(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// init repo and make an initial commit
+	run := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	run("init")
+	run("config", "user.email", "test@test.com")
+	run("config", "user.name", "Test")
+	run("config", "commit.gpgsign", "false")
+	run("commit", "--allow-empty", "-m", "init")
+
+	// Create a tag with the same name as the would-be branch
+	run("tag", "task/fix-123")
+
+	c := adapters.New(dir)
+	err := c.CreateBranchFrom("task/fix-123", "HEAD")
+	require.NoError(t, err, "CreateBranchFrom should succeed even when a tag of the same name exists")
+
+	// Verify the branch was actually created (not just the tag)
+	checkCmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "--verify", "refs/heads/task/fix-123")
+	assert.NoError(t, checkCmd.Run(), "refs/heads/task/fix-123 branch must exist after CreateBranchFrom")
+}
+
 func TestReadGitConfig_Unset(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -379,12 +408,10 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	require.NoError(t, os.WriteFile(lockPath, []byte("lock"), 0644))
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(120 * time.Millisecond)
 		_ = os.Remove(lockPath) //nolint:errcheck // os.Remove in goroutine; t.Fatal not callable from goroutine
-	}()
+	})
 
 	wc := adapters.New(worktreePath)
 	err = wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")

@@ -111,7 +111,7 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 // Unlike CreateOrphanBranch, this new branch includes all commits and files from baseBranch.
 func (c *Client) CreateBranchFrom(branch, baseBranch string) error {
 	// Check if branch already exists — idempotent fast-path
-	check := c.cmd("rev-parse", "--verify", branch)
+	check := c.cmd("rev-parse", "--verify", "refs/heads/"+branch)
 	if err := check.Run(); err == nil {
 		return nil
 	}
