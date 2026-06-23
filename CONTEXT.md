@@ -213,6 +213,14 @@ _Avoid_: DAG, status list
 The integration boundary through which Armature applies scope and verification policy to an external harness. A harness hook is part of Armature's control surface, not an external worker in itself.
 _Avoid_: Queue runner, orchestrator
 
+**Task Binding**:
+The association between a claimed task and a specific worktree, established when `arm claim` writes the task ID into the worktree's local git state. Task binding is what allows the harness hook to enforce a task's scope within that worktree. It is distinct from the claim itself: the claim records reservation in the ops log; the binding records the active task in the worktree.
+_Avoid_: Claim, worktree assignment
+
+**Hook Pass-through**:
+The condition where the harness hook allows a tool operation without evaluating scope or verification policy. Pass-through occurs when no task is bound to the current worktree or when the bound task is no longer in an active state (claimed or in-progress). Pass-through events are logged to the worktree's hook log.
+_Avoid_: Allow, bypass, skip
+
 **Priority**:
 The relative urgency Armature records for an issue when ordering or reviewing work. Priority influences how work is discussed and queued, but it is not a lifecycle state.
 _Avoid_: Status, complexity
