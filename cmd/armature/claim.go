@@ -225,6 +225,13 @@ or updates the armature-task-id file if the worktree exists.`,
 			}
 			worktreePath = absWorktreePath
 
+			// Reject the main checkout as a worktree — it can't be removed by git worktree remove.
+			// The main checkout has .git as a directory; a linked worktree has .git as a file.
+			gitEntry := filepath.Join(worktreePath, ".git")
+			if info, statErr := os.Stat(gitEntry); statErr == nil && info.IsDir() {
+				return fmt.Errorf("--worktree %s is the main checkout; pass a linked worktree path (created with git worktree add) instead", worktreePath)
+			}
+
 			issuesDir := ctx.IssuesDir
 
 			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
