@@ -726,3 +726,82 @@ func TestCommitWithMessage_NothingStaged(t *testing.T) {
 	err := c.CommitWithMessage("test: empty commit")
 	assert.Error(t, err)
 }
+
+func TestCreateBranchFrom(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Create a commit on main so we have something to branch from
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "initial commit")
+
+	// Get current branch (main or master)
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(branchOut))
+
+	// Create a branch from main
+	newBranch := "feature/test-branch"
+	err = c.CreateBranchFrom(newBranch, mainBranch)
+	require.NoError(t, err)
+
+	// Verify branch exists
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "branch", "--list", newBranch)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), newBranch)
+
+	// Verify the new branch contains the commit from main
+	// by checking out the branch and verifying the file exists
+	gitRun("checkout", newBranch)
+	_, err = os.Stat(filepath.Join(repo, "file.txt"))
+	require.NoError(t, err, "file should exist in the new branch (inherited from main)")
+}
+
+func TestCreateBranchFrom_Idempotent(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Create a commit on main
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "initial commit")
+
+	// Get current branch
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(branchOut))
+
+	newBranch := "feature/test-branch"
+
+	// First call creates the branch
+	err = c.CreateBranchFrom(newBranch, mainBranch)
+	require.NoError(t, err)
+
+	// Second call should not error (idempotent)
+	err = c.CreateBranchFrom(newBranch, mainBranch)
+	assert.NoError(t, err)
+
+	// Verify branch still exists and is correct
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "branch", "--list", newBranch)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), newBranch)
+}

@@ -34,7 +34,7 @@ func readHookLogForPassThroughs(gitDir string) bool {
 // Returns true if a pass-through warning was found.
 func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter io.Writer) (bool, error) {
 	// Only remove worktrees for types that claim creates them for.
-	// deriveBranchName returns a non-empty prefix for task, bug, and feature types.
+	// deriveBranchName returns a non-empty prefix for task, bug, feature, and story types.
 	branchName := deriveBranchName(issue.Type, issue.ID)
 	if branchName == "" {
 		return false, nil
@@ -143,7 +143,7 @@ func newMergedCmd() *cobra.Command {
 				return fmt.Errorf("load issue %s: %w", issueID, err)
 			}
 
-			// Remove worktree if this is a task, bug, or feature type
+			// Remove worktree if this is a task, bug, feature, or story type
 			if _, err := removeWorktreeForIssue(ctx.RepoPath, issue, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
