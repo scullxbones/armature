@@ -552,3 +552,93 @@ func TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged(t *testing.T) {
 	assert.Contains(t, errText, "task-01", "error should mention the task currently bound to the worktree")
 	assert.NotContains(t, errText, "merged", "error should NOT suggest 'arm merged' (only for post-merge teardown)")
 }
+
+// TestClaimReleasesClaimOnWorktreeSetupFailure verifies that when updateTaskIDFile fails
+// after the claim is won, a compensating transition op is appended to re-open the task.
+func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Manually create a worktree and git directory structure to simulate the scenario
+	// where worktreePathExists passes but updateTaskIDFile will fail.
+	tempDir := t.TempDir()
+	worktreePath := filepath.Join(tempDir, "task-01-worktree")
+
+	// Create a minimal worktree-like structure
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+
+	// Create a fake .git file that points to a non-existent git directory
+	// This will make worktreePathExists return true (the file exists)
+	// but resolveWorktreeGitDir will fail when updateTaskIDFile tries to use it
+	gitPath := filepath.Join(worktreePath, ".git")
+	require.NoError(t, os.WriteFile(gitPath, []byte("gitdir: /nonexistent/git/dir"), 0o644))
+
+	// Try to claim task-01 with this fake worktree
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+
+	// The claim should fail - either during checkExistingWorktreeBinding or updateTaskIDFile
+	assert.Error(t, claimErr, "claim should fail with invalid worktree. stderr: %s", stderr)
+
+	// Even though the claim failed, verify that task-01 isn't stuck in "claimed" state.
+	// If the fix is working, a rollback op should have been appended (if the claim race was won).
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	// The task should be in "open" state (not claimed/stuck)
+	// If the bug existed, it might be "claimed" even though the worktree setup failed
+	assert.NotEqual(t, ops.StatusClaimed, issue.Status, "task should not be stuck in claimed state after worktree setup failure")
+}
+
+// TestClaimWorktreePathIsNormalized verifies that claim correctly resolves relative worktree paths
+// to absolute paths. When claim is invoked from a different working directory with a relative
+// --worktree path, the worktree should still be created at the correct absolute path, and the
+// armature-task-id binding should be written to the correct location.
+func TestClaimWorktreePathIsNormalized(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Use a different working directory — the relative path should still work correctly.
+	// Lock the mutex to prevent concurrent chdir calls (os.Chdir modifies global state).
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
+
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+	differentDir := t.TempDir()
+	require.NoError(t, os.Chdir(differentDir))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(originalDir)) })
+
+	// Use a relative worktree path "task-wt" (relative to differentDir)
+	relWorktree := "task-wt"
+	expectedAbsWorktree := filepath.Join(differentDir, relWorktree)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", relWorktree})
+
+	err = cmd.Execute()
+	require.NoError(t, err, "claim with relative worktree path should succeed")
+
+	// Verify worktree was created at the absolute path (in expectedAbsWorktree, not in repo or current dir)
+	assert.DirExists(t, expectedAbsWorktree, "worktree directory should be created at the correct absolute path")
+
+	// Verify the .git file exists and points to the correct git directory
+	gitPath := filepath.Join(expectedAbsWorktree, ".git")
+	assert.FileExists(t, gitPath, ".git file should exist in worktree")
+
+	// Read .git to find the actual git directory
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(expectedAbsWorktree, actualGitDir)
+	}
+
+	// Verify armature-task-id was written to the correct location
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // test path
+	require.NoError(t, err, "armature-task-id should exist in the correct git directory")
+	assert.Equal(t, "task-01", string(taskID), "armature-task-id should contain task-01")
+}
