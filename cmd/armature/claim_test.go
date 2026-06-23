@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // setupRepoWithEpic creates a repo with an epic issue.
@@ -343,6 +345,85 @@ func TestCreateWorktreeAndBranchFailsWhenWorktreeCannotBeCreated(t *testing.T) {
 	err = createWorktreeAndBranch(repo, worktree2, "task-01", issue)
 	require.Error(t, err, "creating worktree with already-checked-out branch should fail")
 	assert.Contains(t, err.Error(), "worktree")
+}
+
+// TestClaimDoesNotCreateWorktreeWhenOverlapFails verifies that when claim fails due to
+// scope overlap (without --force), NO worktree is created at the target path.
+// This is the fix for: worktree setup must be deferred until all claim validations pass.
+func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Create two tasks with overlapping scopes
+	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "cmd/armature/claim.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "task-02", "--scope", "cmd/armature/claim.go")
+	require.NoError(t, err)
+
+	// Inject a claim op for task-01 from a DIFFERENT worker, simulating a concurrent claim.
+	otherWorker := "other-worker-uuid"
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, otherWorker+".log")
+	claimOp := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  otherWorker,
+		Payload:   ops.Payload{TTL: 60},
+	}
+	require.NoError(t, ops.AppendOp(logPath, claimOp))
+
+	// Try to claim task-02 without --force — should fail due to scope overlap with task-01.
+	worktreePath := filepath.Join(t.TempDir(), "task-02-worktree")
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-02", "--worktree", worktreePath)
+
+	assert.Error(t, claimErr, "claim should fail due to scope overlap (without --force). stderr: %s", stderr)
+
+	// Worktree must NOT have been created — worktree setup must be deferred past validation.
+	_, statErr := os.Stat(worktreePath)
+	assert.True(t, os.IsNotExist(statErr), "worktree must not be created when claim fails due to scope overlap")
+}
+
+// TestClaimRejectsWorktreeBoundToDifferentTask verifies that when the --worktree path
+// already has an armature-task-id binding for a different issue, claim fails with a
+// descriptive error rather than silently overwriting the binding.
+func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Create a second task
+	_, err := runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
+	require.NoError(t, err)
+
+	// Claim task-01 with a worktree — binds the worktree to task-01.
+	worktreePath := filepath.Join(t.TempDir(), "shared-worktree")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	require.NoError(t, err)
+
+	// Verify that armature-task-id is "task-01".
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, readErr := os.ReadFile(gitPath)
+	require.NoError(t, readErr)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	taskID, readErr := os.ReadFile(taskIDFile) //nolint:gosec // test path
+	require.NoError(t, readErr)
+	require.Equal(t, "task-01", string(taskID))
+
+	// Now try to claim task-02 pointing at the same worktree — should fail.
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail when worktree is already bound to task-01. stderr: %s", stderr)
+	assert.Contains(t, stderr+claimErr.Error(), "task-01",
+		"error should mention the task currently bound to the worktree")
 }
 
 // TestClaimFailsWhenWorktreeCreationFails verifies that when createWorktreeAndBranch fails
