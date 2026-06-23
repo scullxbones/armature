@@ -1083,3 +1083,96 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 	assert.Equal(t, "", issueAfter.ClaimedBy,
 		"ClaimedBy must be cleared so other workers can pick up the task")
 }
+
+// TestClaimPreservesNeverExpiringClaimOnRetry verifies the P2 bug fix:
+// When a same-worker claim has TTL=0 (never-expiring) and the same worker retries
+// `arm claim` with a new worktree, if worktree setup fails, the rollback must
+// preserve the prior claimed status (not release to Open).
+//
+// This is the inverse of TestClaimRollsBackStaleSameWorkerClaimToOpen:
+// - Stale claim (TTL=1 min, 2 hours old) → rollback to Open ✓
+// - Never-expiring claim (TTL=0, any age) → rollback to Claimed (preserve) ✓
+//
+// The bug was: rollback code normalized TTL (0 → 60), breaking the never-expiring
+// claim so it was wrongly treated as stale and released.
+//
+// Scenario:
+//  1. Inject a claim op from the SAME worker ID with TTL=0 (never-expiring) and old timestamp (2 hours ago)
+//  2. Materialize to apply the never-expiring claim
+//  3. Call `arm claim --issue task-01 --worktree <blocked-path>` — same worker retries
+//  4. The OpClaim wins the race and refreshes ClaimedAt/LastHeartbeat
+//  5. Worktree setup fails (file blocking git worktree add)
+//  6. Rollback must transition to StatusClaimed (preserve) because the prior claim
+//     was never-expiring (TTL=0), even though it's old
+//  7. Assert task-01 remains StatusClaimed with ClaimedBy still set to the worker
+func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap and create task
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task never-expiring", "--type", "task", "--id", "task-01")
+	require.NoError(t, err)
+
+	// Materialize first to establish baseline state
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Resolve the current worker ID (set by bootstrap/worker-init)
+	workerID, logPath, err := resolveWorkerAndLog(&config.Context{
+		RepoPath:  repo,
+		IssuesDir: filepath.Join(repo, ".armature"),
+		StateDir:  filepath.Join(repo, ".armature", "state"),
+	})
+	require.NoError(t, err, "should resolve worker ID and log path")
+
+	// Inject a never-expiring claim op from the SAME worker with an old timestamp
+	// Claim timestamp 2 hours ago, TTL 0 (never expires) — must NOT be treated as stale
+	neverExpiringClaimTime := time.Now().Unix() - 7200
+	neverExpiringClaimOp := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: neverExpiringClaimTime,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 0},
+	}
+	require.NoError(t, ops.AppendOp(logPath, neverExpiringClaimOp))
+
+	// Materialize to apply the never-expiring claim
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Verify task-01 is currently claimed by the same worker (with TTL=0)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed")
+	require.Equal(t, workerID, issue.ClaimedBy, "task should be claimed by same worker")
+	require.Equal(t, 0, issue.ClaimTTL, "task claim TTL should be 0 (never-expiring)")
+
+	// Now try to claim with a worktree that will fail setup (same worker retrying).
+	// Create a file at the worktree path to block git worktree add.
+	worktreePath := filepath.Join(t.TempDir(), "task-01-worktree")
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+	// Create a file inside the directory to block worktree creation
+	blockingFile := filepath.Join(worktreePath, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
+
+	// Attempt to claim — should fail due to worktree creation failure
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
+
+	// Materialize and verify task-01 is still CLAIMED (not released to open)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issueAfter, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	// The critical assertion: after never-expiring same-worker claim + worktree failure,
+	// rollback must preserve the claimed status (not release to open) because the prior
+	// claim has TTL=0 (never expires, always active)
+	assert.Equal(t, ops.StatusClaimed, issueAfter.Status,
+		"task should remain claimed after never-expiring same-worker claim failure (not be released to open)")
+	assert.Equal(t, workerID, issueAfter.ClaimedBy,
+		"ClaimedBy must remain set since the claim never expires")
+}

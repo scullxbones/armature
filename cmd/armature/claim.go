@@ -431,12 +431,8 @@ or updates the armature-task-id file if the worktree exists.`,
 					// - Same-worker STALE claim (priorClaimedBy == workerID && stale): rollback to StatusOpen (release)
 					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
 					rollbackStatus := ops.StatusOpen
-					effectivePriorTTL := priorClaimTTL
-					if effectivePriorTTL <= 0 {
-						effectivePriorTTL = 60
-					}
 					priorWasActive := priorClaimedBy == workerID &&
-						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, effectivePriorTTL, nowEpoch())
+						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimTTL, nowEpoch())
 					if priorWasActive {
 						rollbackStatus = priorStatus
 					}
@@ -462,12 +458,8 @@ or updates the armature-task-id file if the worktree exists.`,
 					// - Same-worker STALE claim (priorClaimedBy == workerID && stale): rollback to StatusOpen (release)
 					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
 					rollbackStatus := ops.StatusOpen
-					effectivePriorTTL := priorClaimTTL
-					if effectivePriorTTL <= 0 {
-						effectivePriorTTL = 60
-					}
 					priorWasActive := priorClaimedBy == workerID &&
-						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, effectivePriorTTL, nowEpoch())
+						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimTTL, nowEpoch())
 					if priorWasActive {
 						rollbackStatus = priorStatus
 					}

@@ -593,6 +593,123 @@ func TestMergedRecordsPRInSingleBranchModeOnRetry(t *testing.T) {
 	assert.Equal(t, "456", issue.PR, "issue PR field should equal the new PR number provided via --pr flag")
 }
 
+// TestMergedSkipsUnboundWorktree tests the P2 bug fix: if a worktree exists on the
+// correct branch but has no (or wrong) armature-task-id binding, the worktree must
+// NOT be removed. This prevents arm merged from deleting user-created worktrees
+// that happen to match the branch name.
+//
+// Scenario: user manually runs `git worktree add /tmp/foo -b task/task-01` for their
+// own purposes (not via `arm claim`). Then `arm merged --issue task-01` must:
+// 1. Find the worktree by branch name
+// 2. Check the binding in <gitDir>/armature-task-id
+// 3. Skip removal and log a warning if binding is missing or wrong
+// 4. Still mark the issue as merged (don't fail on binding mismatch)
+//
+// The test:
+// 1. Set up repo with task-01
+// 2. Manually create a git worktree on task/task-01 WITHOUT running `arm claim`
+// 3. Transition task to done
+// 4. Run `arm merged --issue task-01`
+// 5. Assert command succeeds (issue marked merged)
+// 6. Assert worktree still exists (was not removed)
+// 7. Assert warning was logged about the unbound worktree
+func TestMergedSkipsUnboundWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	unboundWorktreePath := filepath.Join(t.TempDir(), "unbound-worktree")
+
+	// Manually create a git worktree on the task branch WITHOUT running `arm claim`.
+	// This simulates a user worktree that happens to match the expected branch name.
+	run(t, repo, "git", "worktree", "add", unboundWorktreePath, "-b", "task/task-01")
+
+	// Verify the worktree exists
+	assert.DirExists(t, unboundWorktreePath, "manually-created worktree should exist")
+
+	// Verify there is NO armature-task-id binding file in the git dir.
+	// This is the key difference: a real claimed worktree would have this file.
+	gitDir, err := resolveWorktreeGitDir(unboundWorktreePath)
+	require.NoError(t, err)
+	bindingPath := filepath.Join(gitDir, "armature-task-id")
+	assert.NoFileExists(t, bindingPath, "unbound worktree should have no armature-task-id file")
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Call merged command and capture stderr to check for warning
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+
+	// Command must succeed (issue is marked merged)
+	require.NoError(t, err, "merged should succeed even with unbound worktree")
+
+	// The unbound worktree must NOT be removed
+	assert.DirExists(t, unboundWorktreePath, "unbound worktree should NOT be removed (P2 bug fix)")
+
+	// A warning should be logged to stderr about the binding mismatch
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "Warning:", "should warn about unbound worktree")
+	assert.Contains(t, errOutput, "task-01", "warning should mention the issue ID")
+	assert.Contains(t, errOutput, "not bound", "warning should mention binding mismatch")
+}
+
+// TestMergedRemovesBoundWorktree verifies that if a worktree IS properly bound
+// (has the correct armature-task-id file), it will be removed during merged.
+// This ensures the binding check doesn't break the normal flow of removing
+// properly claimed worktrees.
+func TestMergedRemovesBoundWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "bound-worktree")
+
+	// Claim the task to create a properly bound worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists and IS bound
+	assert.DirExists(t, worktreePath, "claimed worktree should exist")
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+	bindingPath := filepath.Join(gitDir, "armature-task-id")
+	assert.FileExists(t, bindingPath, "claimed worktree should have armature-task-id file")
+	bindingBytes, err := os.ReadFile(bindingPath)
+	require.NoError(t, err)
+	binding := strings.TrimSpace(string(bindingBytes))
+	assert.Equal(t, "task-01", binding, "binding should be task-01")
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+
+	// Command must succeed
+	require.NoError(t, err, "merged should succeed for bound worktree")
+
+	// The bound worktree MUST be removed
+	assert.NoDirExists(t, worktreePath, "bound worktree should be removed normally")
+
+	// No warning should be logged for a properly bound worktree
+	errOutput := errBuf.String()
+	assert.NotContains(t, errOutput, "not bound", "should not warn for properly bound worktree")
+}
+
 // TestMergedAllowsRetryAfterWorktreeRemovalFails tests the P2 bug fix in dual-branch mode:
 // If removeWorktreeForIssue fails after the merge op is recorded, the issue's status
 // becomes 'merged'. On retry, the dual-branch guard (the `else` branch in merged.go)
