@@ -29,9 +29,10 @@ func readHookLogForPassThroughs(gitDir string) bool {
 }
 
 // removeWorktreeForIssue removes the git worktree for a given issue if it exists.
-// It checks for pass-through log entries before removing the worktree, so the
-// warning is always emitted even when the worktree is found and removed.
-// Returns true if a pass-through warning was found.
+// If the worktree is found, it checks the hook log before removing it; if pass-through
+// entries are present, a warning is emitted to errWriter. If the worktree is already
+// gone (e.g., manually removed), no warning is emitted even if pass-throughs occurred.
+// Returns true if a pass-through warning was found and emitted.
 func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter io.Writer) (bool, error) {
 	// Only remove worktrees for types that claim creates them for.
 	// deriveBranchName returns a non-empty prefix for task, bug, feature, and story types.
@@ -90,11 +91,10 @@ func findWorktreePathByBranch(repoPath, branchName string) string {
 	lines := strings.Split(string(output), "\n")
 	var currentPath string
 	for _, line := range lines {
-		if strings.HasPrefix(line, "worktree ") {
-			currentPath = strings.TrimPrefix(line, "worktree ")
-		} else if strings.HasPrefix(line, "branch ") {
-			branchRef := strings.TrimPrefix(line, "branch ")
-			if branchRef == wantRef {
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			currentPath = rest
+		} else if rest, ok := strings.CutPrefix(line, "branch "); ok {
+			if rest == wantRef {
 				return currentPath
 			}
 		}
@@ -132,9 +132,15 @@ func newMergedCmd() *cobra.Command {
 				return fmt.Errorf("issue %s not found", issueID)
 			}
 
-			// In dual-branch mode, require current status to be "done"
-			if !singleBranch && entry.Status != ops.StatusDone {
-				return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
+			// Require status=done (dual-branch) or status=merged (single-branch, where done auto-advances)
+			if singleBranch {
+				if entry.Status != ops.StatusMerged && entry.Status != ops.StatusDone {
+					return fmt.Errorf("issue %s is in status %q; arm merged in single-branch mode requires status=merged (or done)", issueID, entry.Status)
+				}
+			} else {
+				if entry.Status != ops.StatusDone {
+					return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
+				}
 			}
 
 			// Load the issue to get its type
@@ -143,11 +149,9 @@ func newMergedCmd() *cobra.Command {
 				return fmt.Errorf("load issue %s: %w", issueID, err)
 			}
 
-			// Remove worktree if this is a task, bug, feature, or story type
-			if _, err := removeWorktreeForIssue(ctx.RepoPath, issue, cmd.ErrOrStderr()); err != nil {
-				return err
-			}
-
+			// Record the merge op FIRST, before removing the worktree.
+			// This ensures that if appendOp fails, the worktree is still present
+			// and recovery is possible (P2 bug fix).
 			state := mustState(cmd)
 			workerID, logPath, err := resolveWorkerAndLog(state.ctx)
 			if err != nil {
@@ -162,6 +166,12 @@ func newMergedCmd() *cobra.Command {
 				Payload:   ops.Payload{To: ops.StatusMerged, PR: pr},
 			}
 			if err := appendOp(state.ctx, logPath, op); err != nil {
+				return err
+			}
+
+			// Remove worktree if this is a task, bug, feature, or story type.
+			// This happens AFTER the op is recorded, so on failure the worktree is preserved.
+			if _, err := removeWorktreeForIssue(ctx.RepoPath, issue, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
 

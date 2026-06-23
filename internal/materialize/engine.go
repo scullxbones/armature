@@ -143,13 +143,13 @@ func (s *State) applyTransition(op ops.Op) error {
 		return fmt.Errorf("transition: issue %s not found", op.TargetID)
 	}
 	newStatus := op.Payload.To
-	if newStatus == ops.StatusOpen && issue.Status == ops.StatusDone {
-		if issue.Outcome != "" {
+	if newStatus == ops.StatusOpen {
+		issue.ClaimedBy = ""
+		issue.ClaimedAt = 0
+		if issue.Status == ops.StatusDone && issue.Outcome != "" {
 			issue.PriorOutcomes = append(issue.PriorOutcomes, issue.Outcome)
 			issue.Outcome = ""
 		}
-		issue.ClaimedBy = ""
-		issue.ClaimedAt = 0
 	}
 	issue.Status = newStatus
 	issue.Updated = op.Timestamp
@@ -608,10 +608,8 @@ func confidenceOrDefault(confidence string) string {
 }
 
 func appendUnique(slice []string, item string) []string {
-	for _, s := range slice {
-		if s == item {
-			return slice
-		}
+	if slices.Contains(slice, item) {
+		return slice
 	}
 	return append(slice, item)
 }

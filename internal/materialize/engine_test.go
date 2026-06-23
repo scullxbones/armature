@@ -143,7 +143,7 @@ func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 
 	schema := ops.GenerateSchema()
 	documented := make(map[string]bool)
-	for _, line := range strings.Split(schema, "\n") {
+	for line := range strings.SplitSeq(schema, "\n") {
 		if !strings.HasPrefix(line, "#   ") {
 			continue
 		}
@@ -713,6 +713,30 @@ func TestApplyTransition_ReopenClearsPriorOutcome(t *testing.T) {
 	assert.Contains(t, issue.PriorOutcomes, "First attempt done")
 }
 
+func TestApplyTransition_ClaimedToOpenClearsClaimedBy(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
+	// Verify the claim was applied
+	issue := state.Issues["task-01"]
+	assert.Equal(t, "claimed", issue.Status)
+	assert.Equal(t, "w1", issue.ClaimedBy)
+	assert.Equal(t, int64(200), issue.ClaimedAt)
+
+	// Apply compensating rollback: claimed → open (not done → open)
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: "open"}}))
+
+	// After transitioning to open, ClaimedBy and ClaimedAt must be cleared
+	issue = state.Issues["task-01"]
+	assert.Equal(t, "open", issue.Status)
+	assert.Equal(t, "", issue.ClaimedBy, "ClaimedBy should be cleared on transition to open")
+	assert.Equal(t, int64(0), issue.ClaimedAt, "ClaimedAt should be cleared on transition to open")
+}
+
 func TestPromoteParentToInProgress_SkipsAlreadyInProgress(t *testing.T) {
 	t.Parallel()
 	state := NewState()
@@ -1048,7 +1072,7 @@ func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 
 	refs := toTraceabilityRefs(issues)
 
-	refsByID := make(map[string]interface{})
+	refsByID := make(map[string]any)
 	for _, r := range refs {
 		refsByID[r.ID] = r
 	}
@@ -1301,7 +1325,7 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 
 	// Create stories under epic
 	storyIDs := make([]string, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		storyID := "story-" + string(rune('0'+i/10)) + string(rune('0'+i%10))
 		storyIDs[i] = storyID
 		require.NoError(b, state.ApplyOp(ops.Op{
@@ -1313,9 +1337,9 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 
 	// Create tasks under each story
 	taskIDs := make([][]string, 100)
-	for si := 0; si < 100; si++ {
+	for si := range 100 {
 		taskIDs[si] = make([]string, 100)
-		for ti := 0; ti < 100; ti++ {
+		for ti := range 100 {
 			taskID := "task-" + string(rune('0'+si/10)) + string(rune('0'+si%10)) + "-" + string(rune('0'+ti/10)) + string(rune('0'+ti%10))
 			taskIDs[si][ti] = taskID
 			require.NoError(b, state.ApplyOp(ops.Op{
@@ -1327,8 +1351,8 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 	}
 
 	// Mark all tasks as done, which becomes merged in single branch mode
-	for si := 0; si < 100; si++ {
-		for ti := 0; ti < 100; ti++ {
+	for si := range 100 {
+		for ti := range 100 {
 			taskID := taskIDs[si][ti]
 			require.NoError(b, state.ApplyOp(ops.Op{
 				Type: ops.OpClaim, TargetID: taskID, Timestamp: timestamp, WorkerID: "w1",
@@ -1345,7 +1369,7 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 
 	// Now run the benchmark
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		state.RunRollup()
 	}
 	b.StopTimer()
