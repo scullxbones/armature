@@ -457,3 +457,98 @@ func TestClaimFailsWhenWorktreeCreationFails(t *testing.T) {
 	// Error message should mention worktree
 	assert.Contains(t, errBuf.String()+err.Error(), "worktree")
 }
+
+// TestClaimRejectsWorktreeWithMismatchedBranch verifies that when a worktree exists
+// on a different branch than the expected branch for the issue, claim fails with a
+// descriptive error.
+func TestClaimRejectsWorktreeWithMismatchedBranch(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Create a second task
+	_, err := runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
+	require.NoError(t, err)
+
+	// Claim task-01 with a worktree — creates branch task/task-01, worktree bound to task-01
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	require.NoError(t, err)
+
+	// Delete the armature-task-id file from the worktree's git dir so the binding check is bypassed
+	// and only the branch mismatch check applies
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-task-id file") //nolint:gosec // internal test path
+
+	// Now try to claim task-02 using the same worktree path (which is still on task/task-01 branch)
+	// This should fail due to branch mismatch
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail due to branch mismatch. stderr: %s", stderr)
+	assert.Contains(t, stderr+claimErr.Error(), "branch",
+		"error should mention the branch mismatch")
+}
+
+// TestClaimAllowsWorktreeWithDetachedHEAD verifies that when a worktree has a detached HEAD
+// (e.g., from mid-rebase, mid-bisect, or manual checkout), claim should allow the re-claim
+// as long as the binding matches.
+func TestClaimAllowsWorktreeWithDetachedHEAD(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Claim task-01 with a worktree — creates branch task/task-01, worktree bound to task-01
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	require.NoError(t, err)
+
+	// Detach the HEAD in the worktree by checking out a specific commit
+	run(t, worktreePath, "git", "checkout", "--detach", "HEAD")
+
+	// Verify HEAD is now a SHA (not a branch ref)
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	headFile := filepath.Join(actualGitDir, "HEAD")
+	headContent, err := os.ReadFile(headFile) //nolint:gosec // internal test path
+	require.NoError(t, err)
+	headStr := strings.TrimSpace(string(headContent))
+	// Verify it's a detached HEAD (a SHA, not a ref)
+	assert.False(t, strings.HasPrefix(headStr, "ref: "), "HEAD should be detached (not a branch ref)")
+
+	// Now try to claim task-01 AGAIN using the same worktree path
+	// This should succeed because the detached HEAD should not block re-claim when binding matches
+	_, claimErr := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	assert.NoError(t, claimErr, "claim should succeed with detached HEAD when binding matches")
+}
+
+// TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged verifies that when a worktree is bound
+// to a different task, the error message does NOT suggest using 'arm merged' (which is only
+// for post-merge teardown of completed tasks, not for live claimed/in-progress tasks).
+func TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Create a second task
+	_, err := runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
+	require.NoError(t, err)
+
+	// Claim task-01 with a worktree — binds the worktree to task-01.
+	worktreePath := filepath.Join(t.TempDir(), "shared-worktree")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	require.NoError(t, err)
+
+	// Now try to claim task-02 with the same worktree path — should fail
+	// and should NOT suggest "arm merged" in the error message.
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail when worktree is already bound to task-01. stderr: %s", stderr)
+
+	errText := stderr + claimErr.Error()
+	assert.Contains(t, errText, "task-01", "error should mention the task currently bound to the worktree")
+	assert.NotContains(t, errText, "merged", "error should NOT suggest 'arm merged' (only for post-merge teardown)")
+}

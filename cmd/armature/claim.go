@@ -79,8 +79,8 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 
 	existingTaskID := strings.TrimSpace(string(existingBytes))
 	if existingTaskID != "" && existingTaskID != issueID {
-		return fmt.Errorf("worktree at %s is already bound to %s: use a different --worktree path or release it with 'arm merged --issue %s'",
-			worktreePath, existingTaskID, existingTaskID)
+		return fmt.Errorf("worktree at %s is already bound to %s: use a different --worktree path",
+			worktreePath, existingTaskID)
 	}
 
 	// Also verify the worktree's current branch matches the expected branch.
@@ -90,8 +90,12 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 		return nil // no HEAD yet (fresh or detached); allow claim to proceed
 	}
 	headStr := strings.TrimSpace(string(headBytes))
+	// Skip branch check for detached HEAD (mid-rebase, mid-bisect, etc.)
+	if !strings.HasPrefix(headStr, "ref: refs/heads/") {
+		return nil
+	}
 	expectedRef := "ref: refs/heads/" + expectedBranch
-	if headStr != "" && headStr != expectedRef {
+	if headStr != expectedRef {
 		actualBranch := strings.TrimPrefix(headStr, "ref: refs/heads/")
 		return fmt.Errorf("worktree at %s is on branch %q but expected %q for issue %s: use a different --worktree path",
 			worktreePath, actualBranch, expectedBranch, issueID)
