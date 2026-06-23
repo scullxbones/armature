@@ -47,8 +47,19 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 
 	worktreePath := findWorktreePathByBranch(repoPath, branchName)
 	if worktreePath != "" {
-		// Resolve the worktree-specific git dir to check its hook log.
+		// Verify binding before proceeding: check if the worktree is actually bound
+		// to this issue via the armature-task-id file in the git dir.
+		// If the binding is missing or wrong, skip removal to protect user-created
+		// worktrees that happen to match the branch name (P2 bug fix).
 		if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
+			bindingBytes, readErr := os.ReadFile(filepath.Join(actualGitDir, "armature-task-id")) //nolint:gosec // internal git dir path
+			binding := strings.TrimSpace(string(bindingBytes))
+			// If the file doesn't exist or contains a different ID, skip removal
+			if readErr != nil || binding != issue.ID {
+				_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is on branch %s but not bound to %s (binding=%q); skipping removal\n",
+					worktreePath, branchName, issue.ID, binding)
+				worktreePath = "" // skip removal
+			}
 			hasPassThrough = readHookLogForPassThroughs(actualGitDir)
 		}
 	}
