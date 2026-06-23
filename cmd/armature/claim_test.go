@@ -729,3 +729,25 @@ func TestClaimWorktreePathIsNormalized(t *testing.T) {
 	require.NoError(t, err, "armature-task-id should exist in the correct git directory")
 	assert.Equal(t, "task-01", string(taskID), "armature-task-id should contain task-01")
 }
+
+// TestClaimRejectsMainCheckoutAsWorktree verifies that claim rejects the main checkout
+// as a worktree path. The main checkout has .git as a directory (not a file), and should
+// not be used as a worktree because git worktree remove cannot remove the main working tree.
+func TestClaimRejectsMainCheckoutAsWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	// Try to claim using the repo root (main checkout) as the worktree path
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", repo})
+
+	err := cmd.Execute()
+	assert.Error(t, err, "claim should fail when --worktree is the main checkout")
+
+	errOutput := errBuf.String() + buf.String() + err.Error()
+	assert.Contains(t, errOutput, "main checkout",
+		"error message should mention that the path is the main checkout")
+}
