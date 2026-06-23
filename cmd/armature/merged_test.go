@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -514,6 +515,82 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		// was called, the worktree must still be present and recovery is possible.
 		assert.DirExists(t, worktreePath, "worktree must NOT be removed when appendOp fails")
 	})
+}
+
+// TestMergedRecordsPRInSingleBranchModeOnRetry tests the P2 bug fix: when a new --pr flag
+// is provided with a different PR number, the merge op must be recorded even if the issue
+// is already in 'merged' status. This ensures that `arm merged --issue <id> --pr 123` in
+// single-branch mode captures the PR reference and doesn't silently discard it.
+//
+// The bug: the idempotent skip (entry.Status == ops.StatusMerged) unconditionally skips
+// re-recording, so the PR field stays empty even when --pr is provided.
+//
+// The fix: only skip op re-recording if there is no new PR to attach OR if the issue
+// already has the same PR recorded.
+func TestMergedRecordsPRInSingleBranchModeOnRetry(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap in single-branch mode (default, no --dual-branch flag)
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(new(bytes.Buffer))
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, bootstrapCmd.Execute())
+
+	workerCmd := newRootCmd()
+	workerCmd.SetOut(new(bytes.Buffer))
+	workerCmd.SetArgs([]string{"worker-init", "--repo", repo})
+	require.NoError(t, workerCmd.Execute())
+
+	// Create a task
+	createCmd := newRootCmd()
+	createCmd.SetOut(new(bytes.Buffer))
+	createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, createCmd.Execute())
+
+	// Materialize to initialize state
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Materialize to update status
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Transition to done (auto-advances to merged in single-branch mode)
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize to finalize the transition to merged
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Now the issue is in 'merged' status. Call merged again with a new PR.
+	// The fix requires this to record the PR, not skip it.
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "456"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Materialize to apply the new PR op
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Load the issue and verify the PR field is set
+	stateDir := getTestStateDir(t, repo)
+	issue, err := materialize.LoadIssue(filepath.Join(stateDir, "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "456", issue.PR, "issue PR field should equal the new PR number provided via --pr flag")
 }
 
 // TestMergedAllowsRetryAfterWorktreeRemovalFails tests the P2 bug fix in dual-branch mode:

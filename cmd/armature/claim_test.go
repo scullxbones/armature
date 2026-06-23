@@ -751,3 +751,100 @@ func TestClaimRejectsMainCheckoutAsWorktree(t *testing.T) {
 	assert.Contains(t, errOutput, "main checkout",
 		"error message should mention that the path is the main checkout")
 }
+
+// TestClaimRejectsUnboundDetachedWorktree verifies that when a worktree has a detached HEAD
+// and NO existing binding (existingTaskID == ""), claim must reject it rather than allowing
+// the detached HEAD to bypass the branch check. This prevents writing a fresh binding to a
+// detached worktree that is not on the expected branch.
+func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Create a linked worktree on the task/task-01 branch
+	worktreePath := filepath.Join(t.TempDir(), "detached-worktree")
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	require.NoError(t, err, "first claim should succeed")
+
+	// Verify the worktree was created and bound to task-01
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // test path
+	require.NoError(t, err)
+	require.Equal(t, "task-01", string(taskID), "worktree should initially be bound to task-01")
+
+	// Detach HEAD in the worktree
+	run(t, worktreePath, "git", "checkout", "--detach", "HEAD")
+
+	// Verify HEAD is now detached (a SHA, not a branch ref)
+	headFile := filepath.Join(actualGitDir, "HEAD")
+	headContent, err := os.ReadFile(headFile) //nolint:gosec // internal test path
+	require.NoError(t, err)
+	headStr := strings.TrimSpace(string(headContent))
+	require.False(t, strings.HasPrefix(headStr, "ref: "), "HEAD should be detached")
+
+	// Remove the armature-task-id binding so the worktree has NO binding
+	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-task-id file") //nolint:gosec // internal test path
+
+	// Now try to claim task-01 again with the unbound detached HEAD
+	// This should fail because even though the binding is empty, the detached HEAD
+	// should only be allowed when there IS a binding that matches
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail when worktree has unbound detached HEAD. stderr: %s", stderr)
+
+	errText := stderr + claimErr.Error()
+	assert.Contains(t, errText, "detached HEAD",
+		"error should mention detached HEAD in the error message")
+}
+
+// TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure verifies the P2 bug fix:
+// when a worker retries claiming an already-claimed task with an existing worktree,
+// and the task ID file update fails, the task must remain claimed (not be released to open).
+//
+// Scenario:
+// 1. Worker claims task-01 with --worktree /wt1 → succeeds, status=claimed, ClaimedBy=worker-A
+// 2. Worker retries with --worktree /wt1 again → wins claim race again (same worker, TTL not expired)
+// 3. updateTaskIDFile fails (e.g., .git file points to non-existent directory)
+// 4. Before the fix: compensating rollback → status=open (WRONG)
+// 5. After the fix: only rollback to open if the prior status was open; otherwise keep it claimed
+func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// First claim succeeds: creates worktree at wt1 with task-01 claimed
+	worktree1 := filepath.Join(t.TempDir(), "wt1")
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktree1)
+	require.NoError(t, err, "first claim should succeed")
+
+	// Materialize and verify task-01 is claimed
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed after first claim")
+
+	// Now break the worktree's .git file by replacing it with a pointer to a non-existent directory.
+	// This will cause updateTaskIDFile to fail on the re-claim attempt.
+	gitPath := filepath.Join(worktree1, ".git")
+	require.NoError(t, os.WriteFile(gitPath, []byte("gitdir: /nonexistent/git/dir"), 0o644),
+		"should be able to overwrite .git file")
+
+	// Second claim with same worktree should fail due to updateTaskIDFile failure
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktree1)
+	assert.Error(t, claimErr, "second claim with broken worktree should error. stderr: %s", stderr)
+
+	// Materialize and verify task-01 is STILL claimed (not released to open)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issueAfter, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	// This is the critical assertion: the task must NOT be released to open
+	assert.Equal(t, ops.StatusClaimed, issueAfter.Status,
+		"task should remain claimed after failed worktree retry (not be released to open)")
+	assert.NotEqual(t, ops.StatusOpen, issueAfter.Status,
+		"task must NOT transition to open on worktree retry failure when it was already claimed")
+}
