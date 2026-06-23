@@ -848,3 +848,147 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 	assert.NotEqual(t, ops.StatusOpen, issueAfter.Status,
 		"task must NOT transition to open on worktree retry failure when it was already claimed")
 }
+
+// TestClaimRollsBackStaleTakeoverToOpen verifies the P2 bug fix:
+// When worker-B takes over a stale claim from worker-A and worktree setup fails,
+// the compensating rollback must transition to StatusOpen (not to the prior claimed status).
+// This ensures other workers can pick up the task, not see it as claimed by worker-B.
+//
+// Scenario:
+// 1. Inject a stale claim op from "other-worker-uuid" with old timestamp (2 hours ago, 1 min TTL)
+// 2. Call `arm claim --issue task-01` — worker-B takes over the stale claim
+// 3. Make worktree setup fail (e.g., put a file at worktree path that blocks `git worktree add`)
+// 4. Assert task-01 is rolled back to StatusOpen (not claimed), so other workers can pick it up
+func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap and create task
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
+	require.NoError(t, err)
+
+	// Materialize first to establish baseline state
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Inject a stale claim op from another worker with an old timestamp
+	otherWorker := "other-worker-uuid"
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, otherWorker+".log")
+
+	// Claim timestamp 2 hours ago, TTL 1 minute — definitely stale
+	staleClaimTime := time.Now().Unix() - 7200
+	staleClaimOp := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: staleClaimTime,
+		WorkerID:  otherWorker,
+		Payload:   ops.Payload{TTL: 1},
+	}
+	require.NoError(t, ops.AppendOp(logPath, staleClaimOp))
+
+	// Materialize to apply the stale claim
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Verify task-01 is currently claimed by the stale claimer
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed by stale worker")
+	require.Equal(t, otherWorker, issue.ClaimedBy, "task should be claimed by other-worker-uuid")
+
+	// Now try to claim with a worktree that will fail setup.
+	// Create a file at the worktree path to block git worktree add.
+	worktreePath := filepath.Join(t.TempDir(), "task-01-worktree")
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+	// Create a file inside the directory to block worktree creation
+	blockingFile := filepath.Join(worktreePath, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
+
+	// Attempt to claim — should fail due to worktree creation failure
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
+
+	// Materialize and verify task-01 is now OPEN (not still claimed by the new worker)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issueAfter, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	// The critical assertion: after stale takeover + worktree failure, rollback must clear ownership
+	assert.Equal(t, ops.StatusOpen, issueAfter.Status,
+		"task should be rolled back to open after stale takeover failure (not remain claimed)")
+	assert.Equal(t, "", issueAfter.ClaimedBy,
+		"ClaimedBy must be cleared so other workers can pick up the task")
+}
+
+// TestClaimRejectsForeignWorktree verifies the P2 bug fix: when a --worktree path is given
+// that points to a linked worktree belonging to a DIFFERENT git repository (not the main repo),
+// claim must reject it even if the worktree is on the expected branch and has no conflicting binding.
+//
+// This prevents updateTaskIDFile from writing armature-task-id into a foreign repo's git dir,
+// which would cause later merged operations (which search only the main repo's worktree list)
+// to permanently fail to find and clean up the worktree.
+//
+// Scenario:
+// 1. Create repo-A with task-01 but DON'T claim it yet (so no worktree exists in repo-A)
+// 2. Create repo-B (unrelated git repo) with a worktree on the matching task/task-01 branch
+// 3. Try to claim task-01 in repo-A using the foreign worktree from repo-B
+// 4. Expect an error mentioning "not registered to this repository"
+func TestClaimRejectsForeignWorktree(t *testing.T) {
+	// Setup repo-A (create but don't claim the task yet)
+	repoA := initTempRepo(t)
+	run(t, repoA, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repoA})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repoA, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, cmd2.Execute())
+	// Note: we do NOT claim task-01 in repo-A, so no worktree is created for task/task-01 in repo-A yet
+
+	// Setup repo-B (a separate, unrelated git repo)
+	repoBTempDir := t.TempDir()
+	repoB := filepath.Join(repoBTempDir, "repo-B")
+	require.NoError(t, os.Mkdir(repoB, 0o755))
+	run(t, repoB, "git", "init")
+	run(t, repoB, "git", "config", "user.email", "test@test.com")
+	run(t, repoB, "git", "config", "user.name", "Test")
+	run(t, repoB, "git", "config", "commit.gpgsign", "false")
+	run(t, repoB, "git", "commit", "--allow-empty", "-m", "init from repo-B")
+
+	// Create a branch "task/task-01" in repo-B on which the foreign worktree will live
+	// Start from main (or the current default branch name), then create task/task-01
+	run(t, repoB, "git", "checkout", "-b", "task/task-01", "HEAD")
+	// Now switch main branch back to something else so task/task-01 is not the checked-out branch
+	run(t, repoB, "git", "checkout", "-b", "main-branch")
+
+	// Create a linked worktree in repo-B on the task/task-01 branch
+	foreignWorktreeDir := filepath.Join(repoBTempDir, "foreign-wt")
+	require.NoError(t, os.Mkdir(foreignWorktreeDir, 0o755))
+	foreignWorktreePath := filepath.Join(foreignWorktreeDir, "worktree")
+	run(t, repoB, "git", "worktree", "add", foreignWorktreePath, "task/task-01")
+
+	// Verify the foreign worktree exists and is on the correct branch
+	assert.DirExists(t, foreignWorktreePath, "foreign worktree should exist")
+	gitPath := filepath.Join(foreignWorktreePath, ".git")
+	assert.FileExists(t, gitPath, ".git file should exist in foreign worktree")
+
+	// Now try to claim task-01 in repo-A using the foreign worktree path from repo-B
+	// This should fail with an error mentioning that the worktree is not registered
+	_, stderr, claimErr := runTrlsWithStderr(t, repoA, "claim", "--issue", "task-01", "--worktree", foreignWorktreePath)
+
+	// Verify the claim fails
+	assert.Error(t, claimErr, "claim should fail when worktree belongs to a different repository")
+
+	// Verify the error message is informative
+	errText := stderr + claimErr.Error()
+	assert.Contains(t, errText, "not registered",
+		"error should mention that the worktree is not registered to this repository")
+}

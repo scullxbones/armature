@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -59,6 +61,52 @@ func worktreePathExists(path string) (bool, error) {
 		return false, nil // path doesn't exist or no .git file
 	}
 	return false, err // other error
+}
+
+// isWorktreeOf checks if a worktree at worktreePath is registered to the git repository at repoPath.
+// It runs `git -C repoPath worktree list --porcelain` and checks if worktreePath appears in the list.
+// This prevents claiming a worktree that belongs to a different git repository.
+func isWorktreeOf(repoPath, worktreePath string) bool {
+	// Use EvalSymlinks to resolve symlinks for accurate path comparison.
+	// git worktree list --porcelain emits resolved paths, so we must match them.
+	absWorktreePath, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		// Fall back to Abs if EvalSymlinks fails (path may not exist yet).
+		absWorktreePath, err = filepath.Abs(worktreePath)
+		if err != nil {
+			return false
+		}
+	}
+
+	// Get the worktree registered to this repo by parsing `git worktree list --porcelain`
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	// Parse porcelain format: each worktree entry starts with "worktree <path>"
+	for line := range strings.SplitSeq(string(output), "\n") {
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			registeredPath := strings.TrimSpace(rest)
+			// Use EvalSymlinks to resolve symlinks for accurate path comparison.
+			// git worktree list --porcelain emits resolved paths, so we must match them.
+			absRegisteredPath, err := filepath.EvalSymlinks(registeredPath)
+			if err != nil {
+				// Fall back to Abs if EvalSymlinks fails (path may not exist yet).
+				absRegisteredPath, err = filepath.Abs(registeredPath)
+				if err != nil {
+					continue
+				}
+			}
+			if absRegisteredPath == absWorktreePath {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // checkExistingWorktreeBinding verifies that an existing worktree at path is bound
@@ -270,6 +318,16 @@ or updates the armature-task-id file if the worktree exists.`,
 				return fmt.Errorf("check worktree path: %w", err)
 			}
 
+			// Verify the existing worktree is registered to this repo (not a foreign repo).
+			// This prevents writing armature-task-id into a foreign repo's git dir,
+			// which would cause later merged operations (which search only this repo's worktree list)
+			// to permanently fail to find and clean up the worktree.
+			if worktreeExists {
+				if !isWorktreeOf(ctx.RepoPath, worktreePath) {
+					return fmt.Errorf("worktree at %s is not registered to this repository; it may belong to a different clone", worktreePath)
+				}
+			}
+
 			// If the worktree already exists, verify it is bound to the correct issue
 			// and is on the correct branch. Reject silently overwriting a binding that
 			// belongs to a different issue.
@@ -284,10 +342,12 @@ or updates the armature-task-id file if the worktree exists.`,
 				return err
 			}
 
-			// Capture the prior status before writing the claim op.
-			// If worktree setup fails, we'll use this to determine whether to rollback to
-			// StatusOpen or keep the prior state (fix for P2 bug: don't release pre-existing claims).
+			// Capture the prior status and claimed-by before writing the claim op.
+			// If worktree setup fails, we'll use this to determine rollback behavior:
+			// - Same-worker retry (priorClaimedBy == workerID): keep prior status
+			// - Stale takeover (priorClaimedBy != workerID): rollback to StatusOpen
 			priorStatus := issue.Status
+			priorClaimedBy := issue.ClaimedBy
 
 			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			for id, entry := range index {
@@ -362,15 +422,19 @@ or updates the armature-task-id file if the worktree exists.`,
 			if !worktreeExists {
 				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
 					// Worktree creation failed after winning the claim race.
-					// Only roll back to StatusOpen if the task was previously open (this claim initiated it).
-					// If the task was already claimed or in-progress, restore the prior status to avoid
-					// releasing a pre-existing claim (P2 bug fix).
+					// Determine rollback status based on whether this is a same-worker retry or stale takeover:
+					// - Same-worker retry (priorClaimedBy == workerID): restore priorStatus (keep the claim)
+					// - Stale takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
+					rollbackStatus := ops.StatusOpen
+					if priorClaimedBy == workerID {
+						rollbackStatus = priorStatus
+					}
 					rollbackOp := ops.Op{
 						Type:      ops.OpTransition,
 						TargetID:  issueID,
 						Timestamp: nowEpoch(),
 						WorkerID:  workerID,
-						Payload:   ops.Payload{To: priorStatus},
+						Payload:   ops.Payload{To: rollbackStatus},
 					}
 					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
 						return fmt.Errorf("create worktree: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
@@ -382,15 +446,19 @@ or updates the armature-task-id file if the worktree exists.`,
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
 					// Task ID update failed after winning the claim race.
-					// Only roll back to StatusOpen if the task was previously open (this claim initiated it).
-					// If the task was already claimed or in-progress, restore the prior status to avoid
-					// releasing a pre-existing claim (P2 bug fix).
+					// Determine rollback status based on whether this is a same-worker retry or stale takeover:
+					// - Same-worker retry (priorClaimedBy == workerID): restore priorStatus (keep the claim)
+					// - Stale takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
+					rollbackStatus := ops.StatusOpen
+					if priorClaimedBy == workerID {
+						rollbackStatus = priorStatus
+					}
 					rollbackOp := ops.Op{
 						Type:      ops.OpTransition,
 						TargetID:  issueID,
 						Timestamp: nowEpoch(),
 						WorkerID:  workerID,
-						Payload:   ops.Payload{To: priorStatus},
+						Payload:   ops.Payload{To: rollbackStatus},
 					}
 					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
 						return fmt.Errorf("update task ID file: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
