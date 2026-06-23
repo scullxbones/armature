@@ -5,12 +5,49 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
+
+// resolveTaskBinding reads the task ID from <git-dir>/armature-task-id,
+// falls back to ARMATURE_TASK_ID environment variable, and returns an empty
+// string if neither is present.
+func resolveTaskBinding(gitDir string) string {
+	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	// #nosec G304 - taskIDPath is derived from a trusted git directory
+	if data, err := os.ReadFile(taskIDPath); err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	return os.Getenv("ARMATURE_TASK_ID")
+}
+
+// logPassThrough logs a pass-through event to <git-dir>/armature-hook.log
+func logPassThrough(gitDir string, reason string) error {
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	// #nosec G304 - logPath is derived from a trusted git directory
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
+	}()
+	_, err = fmt.Fprintf(f, "pass-through: %s\n", reason)
+	return err
+}
+
+// isBindingStale checks if the task binding's status is not "claimed" or "in-progress"
+func isBindingStale(snap *snapshot.Snapshot, taskID string) bool {
+	issue, ok := snap.Issues[taskID]
+	if !ok {
+		return true // Missing issue = stale
+	}
+	return issue.Status != "claimed" && issue.Status != "in-progress"
+}
 
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
 // if the result's ExitCode is non-zero.
@@ -29,9 +66,29 @@ func newHarnessHookCmd() *cobra.Command {
 		Hidden:        true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			taskID := os.Getenv("ARMATURE_TASK_ID")
+			appCtx := currentCtx(cmd)
+			gitDir := filepath.Join(appCtx.RepoPath, ".git")
+			taskID := resolveTaskBinding(gitDir)
+
+			// If no task binding is found, pass through with exit 0
 			if taskID == "" {
-				return fmt.Errorf("ARMATURE_TASK_ID is required")
+				_ = logPassThrough(gitDir, "no task binding found") //nolint:errcheck // logging only, error not actionable
+				return nil
+			}
+
+			// Load snapshot to check if binding is stale
+			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+			if err != nil {
+				return fmt.Errorf("load snapshot: %w", err)
+			}
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+			}
+
+			// If binding is stale (status != claimed/in-progress), pass through
+			if isBindingStale(snap, taskID) {
+				_ = logPassThrough(gitDir, "stale binding") //nolint:errcheck // logging only, error not actionable
+				return nil
 			}
 
 			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
@@ -42,17 +99,6 @@ func newHarnessHookCmd() *cobra.Command {
 			input, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return fmt.Errorf("read hook input: %w", err)
-			}
-
-			appCtx := currentCtx(cmd)
-
-			// Load snapshot to ensure state is up to date (required before resolver can work)
-			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			resolver := harnesspolicy.NewTaskPolicyResolver(harnesspolicy.ResolverConfig{
