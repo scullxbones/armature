@@ -1060,3 +1060,4 @@
 ["link","ARCHIMP-S12-T3",1782174933,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"ARCHIMP-S12-T2","rel":"blocked_by"}]
 ["dag-transition","ARCHIMP-S12",1782174937,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"ARCHIMP-S12"}]
 ["source-link","ARCHIMP-S12",1782174950,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"d198b553-d187-40c4-8e56-a31cd9121c47","source_url":"docs/superpowers/specs/2026-06-22-harness-hook-worktree-governance.md"}]
+["source-link","ARCHIMP-S12-T1",1782174950,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"d198b553-d187-40c4-8e56-a31cd9121c47","source_url":"docs/superpowers/specs/2026-06-22-harness-hook-worktree-governance.md"}]
