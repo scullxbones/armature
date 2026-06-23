@@ -72,18 +72,21 @@ arm assign TASK-001 --worker "brian"
 
 ## claim
 
-Claim a ready task.
+Claim a ready task and associate it with a git worktree.
 
 **Synopsis:**
 `arm claim [issue-id] [flags]`
 
 **Flags:**
+- `--force`: Override scope overlap warning and proceed with claim.
 - `--issue string`: Issue ID to claim.
 - `--ttl int`: Claim TTL in minutes (default 60).
+- `--worktree string`: Path to task worktree (required). Creates a new git worktree and a derived branch (`task/<id>`, `fix/<id>`, or `feat/<id>`) if the path does not exist. Writes the task ID to `<worktree-git-dir>/armature-task-id` so the harness hook can read it without an environment variable.
 
 **Example:**
 ```bash
-arm claim TASK-001 --ttl 120
+arm claim TASK-001 --worktree ./task-001-work
+arm claim TASK-001 --ttl 120 --worktree ./task-001-work
 ```
 
 ---
@@ -447,14 +450,25 @@ Replay op logs and update materialized state files.
 
 ## merged
 
-Mark a done issue as merged.
+Mark a done issue as merged after its branch or PR has landed on the main branch.
+
+For task, bug, and feature issues that were claimed with `--worktree`, this command also:
+1. Tears down the associated git worktree (if still present).
+2. Warns to stderr if the worktree's `armature-hook.log` contains pass-through entries
+   (hooks that fired without an active task binding).
 
 **Synopsis:**
 `arm merged [flags]`
 
 **Flags:**
-- `--issue string`: Issue ID.
+- `--issue string`: Issue ID (required).
 - `--pr string`: PR number or URL.
+
+**Example:**
+```bash
+arm merged --issue TASK-001
+arm merged --issue TASK-001 --pr 42
+```
 
 ---
 

@@ -162,9 +162,9 @@ func TestClaimWithEpicReturnsError(t *testing.T) {
 	assert.Contains(t, errBuf.String()+buf.String(), "epic")
 }
 
-// TestClaimCreatesTaskBranchOffParentStory verifies that claim creates a task branch
-// off the parent story branch (for task/bug types).
-func TestClaimCreatesTaskBranchOffParentStory(t *testing.T) {
+// TestClaimCreatesTaskBranch verifies that claim creates an orphan branch with the
+// correct prefix (task/<id>) in the new worktree's git directory.
+func TestClaimCreatesTaskBranch(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 

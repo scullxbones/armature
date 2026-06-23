@@ -21,12 +21,29 @@ The `harness-hook` command is an internal integration surface called by harness-
    - Block (tool denied, reason provided to model)
    - None (event ignored, no policy applies)
 
+## Task Binding
+
+The hook discovers the active task ID through two mechanisms, tried in order:
+
+### 1. Worktree binding file (preferred)
+When a task is claimed with `arm claim --worktree <path>`, the task ID is written to
+`<worktree-git-dir>/armature-task-id` (e.g., `<parent>/.git/worktrees/<name>/armature-task-id`).
+The hook reads this file automatically when invoked inside the worktree — no environment variable is needed.
+
+This is the recommended approach: claim the task with `--worktree`, launch the harness from that
+worktree directory, and set only `ARMATURE_HOOK_PLATFORM`.
+
+### 2. `ARMATURE_TASK_ID` environment variable (fallback)
+If the binding file is absent (e.g., the worktree was not created via `arm claim --worktree`),
+the hook falls back to the `ARMATURE_TASK_ID` environment variable.
+
 ## Environment Variables
 
 When launching an external harness, set these variables in the harness environment:
 
-### `ARMATURE_TASK_ID` (required)
-The active Armature task ID for the worker. The hook uses this to load task scope, acceptance criteria, and citation state from `.armature/state/`.
+### `ARMATURE_TASK_ID` (fallback only)
+The active Armature task ID for the worker. Only required when NOT using `arm claim --worktree`.
+When a worktree binding file is present, this variable is ignored.
 
 **Example:**
 ```bash
@@ -230,11 +247,20 @@ When the harness stops:
 
 ## Common Issues and Troubleshooting
 
-### "ARMATURE_TASK_ID is required"
+### Hook passes through with "no task binding found"
 
-**Cause:** The environment variable is not set when the harness starts.
+**Cause:** Neither the worktree binding file (`<git-dir>/armature-task-id`) nor the
+`ARMATURE_TASK_ID` environment variable is present when the harness starts.
 
-**Fix:** Export the variable before launching the harness:
+**Fix (preferred):** Claim the task with `--worktree` before launching the harness:
+```bash
+arm claim TASK-001 --worktree ./task-001-work
+# then launch harness from the worktree directory
+cd ./task-001-work
+ARMATURE_HOOK_PLATFORM=claude claude .
+```
+
+**Fix (fallback):** Set the environment variable before launching the harness:
 ```bash
 export ARMATURE_TASK_ID=TASK-001
 export ARMATURE_HOOK_PLATFORM=claude
@@ -308,13 +334,14 @@ Example (Codex):
 ## How Hooks Integrate with Armature Workflow
 
 1. **Coordinator runs `arm ready`** to find unblocked tasks.
-2. **Coordinator runs `arm claim <task-id>`** to reserve a task.
-3. **Coordinator launches harness** with `ARMATURE_TASK_ID` and `ARMATURE_HOOK_PLATFORM` set.
+2. **Coordinator runs `arm claim <task-id> --worktree <path>`** to reserve a task and create a git worktree. The task ID is written to `<worktree-git-dir>/armature-task-id`.
+3. **Coordinator launches harness** from the worktree directory with `ARMATURE_HOOK_PLATFORM` set. `ARMATURE_TASK_ID` is optional when a worktree binding file exists.
 4. **Model within harness requests tools** (file edits, shell commands).
-5. **Pre-tool hook fires** → `arm harness-hook` checks scope → allow/block returned.
+5. **Pre-tool hook fires** → `arm harness-hook` reads task binding from file → checks scope → allow/block returned.
 6. **Model completes work** and requests harness to stop.
 7. **Stop hook fires** → `arm harness-hook` runs verification → allow/block returned.
 8. **Coordinator runs `arm transition --to done`** to record completion.
+9. **Coordinator runs `arm merged --issue <task-id>`** to tear down the worktree and record the merge. A warning is emitted if the hook log contains pass-through entries.
 
 ## See Also
 

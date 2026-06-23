@@ -15,6 +15,39 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
+// resolveWorktreeGitDir resolves the actual git directory for a worktree path.
+// In a git worktree, the .git entry is a file (not a directory) containing
+// "gitdir: <path>" pointing to the real git dir (e.g., <parent>/.git/worktrees/<name>).
+// This function reads that file and returns the resolved absolute path.
+// It is used by both claim and harness-hook so that both read from the same location.
+func resolveWorktreeGitDir(worktreePath string) (string, error) {
+	gitPath := filepath.Join(worktreePath, ".git")
+	// If .git is a directory (main worktree), return it directly.
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return "", fmt.Errorf("stat .git: %w", err)
+	}
+	if info.IsDir() {
+		return gitPath, nil
+	}
+
+	// .git is a file — read "gitdir: <path>" from it.
+	//nolint:gosec // git paths are internal, not user-provided
+	gitFileContent, err := os.ReadFile(gitPath)
+	if err != nil {
+		return "", fmt.Errorf("read .git file: %w", err)
+	}
+	gitDirLine := strings.TrimSpace(string(gitFileContent))
+	if !strings.HasPrefix(gitDirLine, "gitdir: ") {
+		return "", fmt.Errorf("unexpected .git file format: %s", gitDirLine)
+	}
+	actualGitDir := strings.TrimPrefix(gitDirLine, "gitdir: ")
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	return actualGitDir, nil
+}
+
 // worktreePathExists checks if a worktree exists at the given path.
 func worktreePathExists(path string) (bool, error) {
 	gitFile := filepath.Join(path, ".git")
@@ -28,15 +61,20 @@ func worktreePathExists(path string) (bool, error) {
 	return false, err // other error
 }
 
-// deriveBranchName determines the branch name prefix based on issue type.
+// deriveBranchName determines the branch name for a worktree based on issue type.
+// Returns an empty string for types that do not receive a worktree (e.g., story, epic).
+// claim creates worktrees for task, bug, and feature; merged uses this to tear them down.
 func deriveBranchName(issueType, issueID string) string {
 	switch issueType {
 	case "bug":
 		return "fix/" + issueID
 	case "feature":
 		return "feat/" + issueID
-	default:
+	case "task":
 		return "task/" + issueID
+	default:
+		// story, epic, and unknown types do not have worktrees.
+		return ""
 	}
 }
 
@@ -71,31 +109,16 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 
 // updateTaskIDFile writes the task ID to the armature-task-id file in the worktree's .git directory.
 // In a git worktree, .git is a file (not a directory) that points to the actual git directory.
-// We read the .git file to extract the actual git directory path.
+// We use resolveWorktreeGitDir to find the real git directory.
 func updateTaskIDFile(worktreePath, issueID string) error {
-	gitPath := filepath.Join(worktreePath, ".git")
-
-	// Read the .git file to extract the actual git directory
-	gitFileContent, err := os.ReadFile(gitPath) //nolint:gosec // git paths are internal, not user-provided
+	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
 	if err != nil {
-		return fmt.Errorf("read .git file: %w", err)
-	}
-
-	// Parse "gitdir: <path>" format
-	gitDirLine := string(gitFileContent)
-	if !strings.HasPrefix(gitDirLine, "gitdir: ") {
-		return fmt.Errorf("unexpected .git file format: %s", gitDirLine)
-	}
-
-	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
-	if !filepath.IsAbs(actualGitDir) {
-		// Relative path: resolve relative to worktree root
-		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
 
 	// Write the task ID file to the actual git directory
 	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	if err := os.WriteFile(taskIDFile, []byte(issueID), 0o600); err != nil { //nolint:gosec // internal git file, safe permissions
+	if err := os.WriteFile(taskIDFile, []byte(issueID), 0o600); err != nil {
 		return fmt.Errorf("write task ID file: %w", err)
 	}
 	return nil
@@ -173,11 +196,12 @@ or updates the armature-task-id file if the worktree exists.`,
 			}
 
 			if !worktreeExists {
-				// Create worktree + derived branch
-				// Note: if this fails (e.g., branch already in use by another worktree),
-				// we continue with the claim operation anyway. The claim will be recorded,
-				// but the worktree creation failure may indicate the task is already claimed elsewhere.
-				_ = createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue) //nolint:errcheck // intentionally swallow error: worktree creation is best-effort
+				// Create worktree + derived branch.
+				// If this fails (e.g., branch already in use by another worktree),
+				// warn the user but continue recording the claim op anyway.
+				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not create worktree: %v\n", err)
+				}
 			} else {
 				// Update armature-task-id file
 				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
@@ -192,7 +216,7 @@ or updates the armature-task-id file if the worktree exists.`,
 
 			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			for id, entry := range index {
-				if id == issueID || (entry.Status != "claimed" && entry.Status != "in-progress") {
+				if id == issueID || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
 					continue
 				}
 				if claimPkg.ScopesOverlap(issue.Scope, entry.Scope) {
