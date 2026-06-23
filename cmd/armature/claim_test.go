@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -991,4 +992,94 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 	errText := stderr + claimErr.Error()
 	assert.Contains(t, errText, "not registered",
 		"error should mention that the worktree is not registered to this repository")
+}
+
+// TestClaimRollsBackStaleSameWorkerClaimToOpen verifies the P2 bug fix:
+// When worker-A's own claim is stale (TTL expired) and worker-A retries `arm claim`
+// with a new worktree, then worktree setup fails, the compensating rollback must
+// transition to StatusOpen (not preserve the prior claimed status).
+// This is critical because OpClaim already refreshed ClaimedAt and LastHeartbeat,
+// so if rollback preserves "claimed", the issue will have a fresh claim with no
+// usable worktree binding, blocking other workers from picking it up.
+//
+// Scenario:
+//  1. Inject a claim op from the SAME worker ID with an old timestamp (2 hours ago, 1 min TTL)
+//  2. Materialize to apply the stale claim
+//  3. Call `arm claim --issue task-01 --worktree <blocked-path>` — same worker retries
+//  4. The OpClaim wins the race and refreshes ClaimedAt/LastHeartbeat
+//  5. Worktree setup fails (file blocking git worktree add)
+//  6. Rollback must transition to StatusOpen (not keep the claim) because the prior
+//     claim was stale, even though it's the same worker
+//  7. Assert task-01 is rolled back to StatusOpen so other workers can pick it up
+func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap and create task
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task stale same-worker", "--type", "task", "--id", "task-01")
+	require.NoError(t, err)
+
+	// Materialize first to establish baseline state
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Get the current worker ID (set by bootstrap/worker-init or read from git config)
+	// We need to determine what worker ID will be used when we call `arm claim`
+	// The test uses the same repo/git config, so the worker ID from the initial setup is used
+	// We'll inject ops from that same worker with a stale timestamp
+	workerID, logPath, err := resolveWorkerAndLog(&config.Context{
+		RepoPath:  repo,
+		IssuesDir: filepath.Join(repo, ".armature"),
+		StateDir:  filepath.Join(repo, ".armature", "state"),
+	})
+	require.NoError(t, err, "should resolve worker ID and log path")
+
+	// Inject a stale claim op from the SAME worker with an old timestamp
+	// Claim timestamp 2 hours ago, TTL 1 minute — definitely stale
+	staleClaimTime := time.Now().Unix() - 7200
+	staleClaimOp := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: staleClaimTime,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 1},
+	}
+	require.NoError(t, ops.AppendOp(logPath, staleClaimOp))
+
+	// Materialize to apply the stale claim
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Verify task-01 is currently claimed by the same worker (but stale)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed by stale worker")
+	require.Equal(t, workerID, issue.ClaimedBy, "task should be claimed by same worker")
+
+	// Now try to claim with a worktree that will fail setup (same worker retrying).
+	// Create a file at the worktree path to block git worktree add.
+	worktreePath := filepath.Join(t.TempDir(), "task-01-worktree")
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+	// Create a file inside the directory to block worktree creation
+	blockingFile := filepath.Join(worktreePath, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
+
+	// Attempt to claim — should fail due to worktree creation failure
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
+
+	// Materialize and verify task-01 is now OPEN (not still claimed by the same worker)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issueAfter, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	// The critical assertion: after stale same-worker claim + worktree failure, rollback must
+	// clear ownership even though it's the same worker, because the prior claim was stale
+	assert.Equal(t, ops.StatusOpen, issueAfter.Status,
+		"task should be rolled back to open after stale same-worker claim failure (not remain claimed)")
+	assert.Equal(t, "", issueAfter.ClaimedBy,
+		"ClaimedBy must be cleared so other workers can pick up the task")
 }

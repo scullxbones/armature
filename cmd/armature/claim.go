@@ -344,10 +344,14 @@ or updates the armature-task-id file if the worktree exists.`,
 
 			// Capture the prior status and claimed-by before writing the claim op.
 			// If worktree setup fails, we'll use this to determine rollback behavior:
-			// - Same-worker retry (priorClaimedBy == workerID): keep prior status
-			// - Stale takeover (priorClaimedBy != workerID): rollback to StatusOpen
+			// - Same-worker active claim (priorClaimedBy == workerID && !stale): keep prior status
+			// - Stale same-worker claim (priorClaimedBy == workerID && stale): rollback to StatusOpen
+			// - Different-worker takeover (priorClaimedBy != workerID): rollback to StatusOpen
 			priorStatus := issue.Status
 			priorClaimedBy := issue.ClaimedBy
+			priorClaimedAt := issue.ClaimedAt
+			priorLastHeartbeat := issue.LastHeartbeat
+			priorClaimTTL := issue.ClaimTTL
 
 			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
 			for id, entry := range index {
@@ -422,11 +426,18 @@ or updates the armature-task-id file if the worktree exists.`,
 			if !worktreeExists {
 				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
 					// Worktree creation failed after winning the claim race.
-					// Determine rollback status based on whether this is a same-worker retry or stale takeover:
-					// - Same-worker retry (priorClaimedBy == workerID): restore priorStatus (keep the claim)
-					// - Stale takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
+					// Determine rollback status based on whether this is a same-worker active claim or stale/takeover:
+					// - Same-worker ACTIVE claim (priorClaimedBy == workerID && !stale): restore priorStatus (keep the claim)
+					// - Same-worker STALE claim (priorClaimedBy == workerID && stale): rollback to StatusOpen (release)
+					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
 					rollbackStatus := ops.StatusOpen
-					if priorClaimedBy == workerID {
+					effectivePriorTTL := priorClaimTTL
+					if effectivePriorTTL <= 0 {
+						effectivePriorTTL = 60
+					}
+					priorWasActive := priorClaimedBy == workerID &&
+						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, effectivePriorTTL, nowEpoch())
+					if priorWasActive {
 						rollbackStatus = priorStatus
 					}
 					rollbackOp := ops.Op{
@@ -446,11 +457,18 @@ or updates the armature-task-id file if the worktree exists.`,
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
 					// Task ID update failed after winning the claim race.
-					// Determine rollback status based on whether this is a same-worker retry or stale takeover:
-					// - Same-worker retry (priorClaimedBy == workerID): restore priorStatus (keep the claim)
-					// - Stale takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
+					// Determine rollback status based on whether this is a same-worker active claim or stale/takeover:
+					// - Same-worker ACTIVE claim (priorClaimedBy == workerID && !stale): restore priorStatus (keep the claim)
+					// - Same-worker STALE claim (priorClaimedBy == workerID && stale): rollback to StatusOpen (release)
+					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
 					rollbackStatus := ops.StatusOpen
-					if priorClaimedBy == workerID {
+					effectivePriorTTL := priorClaimTTL
+					if effectivePriorTTL <= 0 {
+						effectivePriorTTL = 60
+					}
+					priorWasActive := priorClaimedBy == workerID &&
+						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, effectivePriorTTL, nowEpoch())
+					if priorWasActive {
 						rollbackStatus = priorStatus
 					}
 					rollbackOp := ops.Op{
