@@ -106,6 +106,24 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	return nil
 }
 
+// CreateBranchFrom creates a branch from a base branch (with full history).
+// If the branch already exists, this is a no-op (idempotent).
+// Unlike CreateOrphanBranch, this new branch includes all commits and files from baseBranch.
+func (c *Client) CreateBranchFrom(branch, baseBranch string) error {
+	// Check if branch already exists — idempotent fast-path
+	check := c.cmd("rev-parse", "--verify", branch)
+	if err := check.Run(); err == nil {
+		return nil
+	}
+
+	// Create branch from baseBranch using git branch <branch> <baseBranch>
+	cmd := c.cmd("branch", branch, baseBranch)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git branch %s %s: %w\n%s", branch, baseBranch, err, out)
+	}
+	return nil
+}
+
 // AddWorktree adds a linked worktree for an existing branch at the given path.
 // If the worktree already exists at that path (has a .git file), this is a no-op.
 func (c *Client) AddWorktree(branch, path string) error {

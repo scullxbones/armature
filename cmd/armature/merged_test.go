@@ -83,8 +83,11 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
 }
 
-// TestMergedDoesNotRemoveStoryWorktree verifies that merged does NOT remove worktrees for story-type issues.
-func TestMergedDoesNotRemoveStoryWorktree(t *testing.T) {
+// TestMergedHandlesStoryWithNoActiveWorktree verifies that merged handles gracefully
+// a story-type issue when no worktree was created for it (e.g. no --worktree used at claim time).
+// Stories now map to feat/<id> via deriveBranchName, so merged will attempt worktree removal,
+// but must not fail when no matching worktree exists.
+func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -98,11 +101,55 @@ func TestMergedDoesNotRemoveStoryWorktree(t *testing.T) {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"})
 	require.NoError(t, cmd2.Execute())
 
-	// Call merged command (stories don't have worktrees, but command should handle gracefully)
+	// Call merged command (no worktree was created for this story; command must handle gracefully)
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
 	require.NoError(t, mergedCmd.Execute())
+}
+
+// TestMergedRemovesStoryWorktree verifies that merged removes the worktree for a story-type
+// issue when one was created via claim. Stories map to feat/<id> via deriveBranchName, so
+// merged must tear down the story worktree just like task/bug/feature worktrees.
+func TestMergedRemovesStoryWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"})
+	require.NoError(t, cmd2.Execute())
+
+	worktreePath := filepath.Join(t.TempDir(), "story-worktree")
+
+	// Claim the story to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "story-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	// Transition story to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Verify worktree is removed
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
 }
 
 // TestMergedRemovesFeatureWorktree verifies that merged removes a worktree for feature-type issues

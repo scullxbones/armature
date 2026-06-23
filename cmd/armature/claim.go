@@ -62,35 +62,43 @@ func worktreePathExists(path string) (bool, error) {
 }
 
 // deriveBranchName determines the branch name for a worktree based on issue type.
-// Returns an empty string for types that do not receive a worktree (e.g., story, epic).
-// claim creates worktrees for task, bug, and feature; merged uses this to tear them down.
+// Returns an empty string for types that do not receive a worktree (e.g., epic).
+// claim creates worktrees for task, bug, feature, and story; merged uses this to tear them down.
 func deriveBranchName(issueType, issueID string) string {
 	switch issueType {
 	case "bug":
 		return "fix/" + issueID
 	case "feature":
 		return "feat/" + issueID
+	case "story":
+		return "feat/" + issueID
 	case "task":
 		return "task/" + issueID
 	default:
-		// story, epic, and unknown types do not have worktrees.
+		// epic and unknown types do not have worktrees.
 		return ""
 	}
 }
 
 // createWorktreeAndBranch creates a new worktree and branches for a task/bug.
 // It uses a git client to create a worktree at the given path with a derived branch name.
-// If the branch is already checked out in another worktree, it returns an error
-// (the user should reuse the existing worktree or unassign/reassign the task).
+// If the branch is already checked out in another worktree or if worktree creation fails,
+// it returns an error (the user should reuse the existing worktree or unassign/reassign the task).
 func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue) error {
 	// Determine branch name based on issue type
 	branchName := deriveBranchName(issue.Type, issueID)
 
+	// Safety guard: empty branch name indicates an issue type that should not have a worktree
+	if branchName == "" {
+		return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
+	}
+
 	// Create git client for main repo
 	gitClient := adapters.New(repoPath)
 
-	// Create an orphan branch for this task/bug first (idempotent: no-op if already exists)
-	if err := gitClient.CreateOrphanBranch(branchName); err != nil {
+	// Create a branch from HEAD for this task/bug (idempotent: no-op if already exists)
+	// The branch inherits all commits and files from HEAD, unlike an orphan branch.
+	if err := gitClient.CreateBranchFrom(branchName, "HEAD"); err != nil {
 		return fmt.Errorf("create branch: %w", err)
 	}
 
@@ -196,11 +204,8 @@ or updates the armature-task-id file if the worktree exists.`,
 			}
 
 			if !worktreeExists {
-				// Create worktree + derived branch.
-				// If this fails (e.g., branch already in use by another worktree),
-				// warn the user but continue recording the claim op anyway.
 				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not create worktree: %v\n", err)
+					return fmt.Errorf("create worktree: %w", err)
 				}
 			} else {
 				// Update armature-task-id file

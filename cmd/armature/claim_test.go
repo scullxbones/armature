@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // setupRepoWithEpic creates a repo with an epic issue.
@@ -162,7 +164,7 @@ func TestClaimWithEpicReturnsError(t *testing.T) {
 	assert.Contains(t, errBuf.String()+buf.String(), "epic")
 }
 
-// TestClaimCreatesTaskBranch verifies that claim creates an orphan branch with the
+// TestClaimCreatesTaskBranch verifies that claim creates a task branch from HEAD with the
 // correct prefix (task/<id>) in the new worktree's git directory.
 func TestClaimCreatesTaskBranch(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
@@ -214,4 +216,163 @@ func TestClaimStillAppendsClaimOpToLog(t *testing.T) {
 	// Verify claim operation was appended to ops log
 	// The output should indicate successful claim
 	assert.Contains(t, buf.String(), "task-01", "output should mention the claimed task")
+}
+
+// TestDeriveBranchName verifies that deriveBranchName returns correct branch names for all issue types.
+func TestDeriveBranchName(t *testing.T) {
+	tests := []struct {
+		issueType    string
+		issueID      string
+		expectedName string
+		description  string
+	}{
+		{
+			issueType:    "bug",
+			issueID:      "ARCHIMP-B1",
+			expectedName: "fix/ARCHIMP-B1",
+			description:  "bug issues should have fix/ prefix",
+		},
+		{
+			issueType:    "feature",
+			issueID:      "ARCHIMP-F1",
+			expectedName: "feat/ARCHIMP-F1",
+			description:  "feature issues should have feat/ prefix",
+		},
+		{
+			issueType:    "task",
+			issueID:      "ARCHIMP-T1",
+			expectedName: "task/ARCHIMP-T1",
+			description:  "task issues should have task/ prefix",
+		},
+		{
+			issueType:    "story",
+			issueID:      "ARCHIMP-S5",
+			expectedName: "feat/ARCHIMP-S5",
+			description:  "story issues should have feat/ prefix",
+		},
+		{
+			issueType:    "epic",
+			issueID:      "ARCHIMP-E1",
+			expectedName: "",
+			description:  "epic issues should return empty string",
+		},
+		{
+			issueType:    "unknown",
+			issueID:      "ARCHIMP-U1",
+			expectedName: "",
+			description:  "unknown issue types should return empty string",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			result := deriveBranchName(tt.issueType, tt.issueID)
+			assert.Equal(t, tt.expectedName, result)
+		})
+	}
+}
+
+// TestCreateWorktreeAndBranchInheritsFilesFromHEAD verifies that the worktree branch
+// contains files from HEAD (not an orphan branch).
+func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Create a marker file in the main repo that should be visible in the task branch
+	markerFile := filepath.Join(repo, "marker.txt")
+	require.NoError(t, os.WriteFile(markerFile, []byte("hello from main"), 0644))
+	run(t, repo, "git", "add", "marker.txt")
+	run(t, repo, "git", "commit", "-m", "add marker file")
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+
+	require.NoError(t, cmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree directory should be created")
+
+	// Check out the task branch and verify the marker file exists
+	// This proves the branch has files from HEAD (not an orphan)
+	markerInWorktree := filepath.Join(worktreePath, "marker.txt")
+	assert.FileExists(t, markerInWorktree, "marker file from HEAD should exist in task branch worktree")
+
+	// Verify the content
+	content, err := os.ReadFile(markerInWorktree)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from main", string(content))
+}
+
+// TestCreateWorktreeAndBranchRejectsEmptyBranchName verifies that an empty branch name
+// (from epic or unknown issue types) triggers an error.
+func TestCreateWorktreeAndBranchRejectsEmptyBranchName(t *testing.T) {
+	repo := setupRepoWithEpic(t)
+	worktreePath := filepath.Join(t.TempDir(), "epic-worktree")
+
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree", worktreePath})
+
+	err := cmd.Execute()
+	assert.Error(t, err)
+	// The error should come from the epic check in newClaimCmd, not from createWorktreeAndBranch
+	assert.Contains(t, errBuf.String()+buf.String(), "epic")
+}
+
+// TestClaimFailsWhenWorktreeCreationFails tests that the claim command returns an error
+// when createWorktreeAndBranch would fail. We simulate a failure by using a duplicate
+// branch name that's already checked out in another worktree.
+func TestCreateWorktreeAndBranchFailsWhenWorktreeCannotBeCreated(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	issue := materialize.Issue{Type: "task"}
+
+	// Create the first worktree successfully
+	worktree1 := filepath.Join(t.TempDir(), "worktree1")
+	err := createWorktreeAndBranch(repo, worktree1, "task-01", issue)
+	require.NoError(t, err, "first worktree creation should succeed")
+
+	// Now try to create a second worktree with the same task/branch
+	// This should fail because the branch is already checked out
+	worktree2 := filepath.Join(t.TempDir(), "worktree2")
+	err = createWorktreeAndBranch(repo, worktree2, "task-01", issue)
+	require.Error(t, err, "creating worktree with already-checked-out branch should fail")
+	assert.Contains(t, err.Error(), "worktree")
+}
+
+// TestClaimFailsWhenWorktreeCreationFails verifies that when createWorktreeAndBranch fails
+// (e.g., due to branch already being checked out in another worktree), the claim command
+// returns an error and does NOT record a claim op.
+func TestClaimFailsWhenWorktreeCreationFails(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// First claim succeeds - creates worktree with task/task-01 branch
+	worktree1 := filepath.Join(t.TempDir(), "worktree1")
+	buf1 := new(bytes.Buffer)
+	cmd1 := newRootCmd()
+	cmd1.SetOut(buf1)
+	cmd1.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktree1})
+	err1 := cmd1.Execute()
+	require.NoError(t, err1, "first claim should succeed")
+
+	// Second claim with same task but different worktree should fail
+	// because the task/task-01 branch is already checked out in worktree1
+	worktree2 := filepath.Join(t.TempDir(), "worktree2")
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktree2})
+
+	err := cmd.Execute()
+	// Claim should fail with an error
+	assert.Error(t, err, "second claim should fail when branch is already checked out. stdout: %s, stderr: %s", buf.String(), errBuf.String())
+	// Error message should mention worktree
+	assert.Contains(t, errBuf.String()+err.Error(), "worktree")
 }

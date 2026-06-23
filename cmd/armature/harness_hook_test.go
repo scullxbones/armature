@@ -282,7 +282,7 @@ func TestIsBindingStale_Claimed(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01")
+	stale := isBindingStale(snap, "task-01", 1000)
 
 	assert.False(t, stale)
 }
@@ -298,7 +298,7 @@ func TestIsBindingStale_InProgress(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01")
+	stale := isBindingStale(snap, "task-01", 1000)
 
 	assert.False(t, stale)
 }
@@ -314,7 +314,7 @@ func TestIsBindingStale_Done(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01")
+	stale := isBindingStale(snap, "task-01", 1000)
 
 	assert.True(t, stale)
 }
@@ -325,7 +325,7 @@ func TestIsBindingStale_Missing(t *testing.T) {
 		Issues: make(map[string]*materialize.Issue),
 	}
 
-	stale := isBindingStale(snap, "task-01")
+	stale := isBindingStale(snap, "task-01", 1000)
 
 	assert.True(t, stale)
 }
@@ -341,9 +341,61 @@ func TestIsBindingStale_Open(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01")
+	stale := isBindingStale(snap, "task-01", 1000)
 
 	assert.True(t, stale)
+}
+
+// TestIsBindingStale_ClaimedWithExpiredTTL verifies that a claimed task with an
+// expired TTL (no recent heartbeat) is treated as stale, causing the harness-hook
+// to pass through (not enforce governance).
+func TestIsBindingStale_ClaimedWithExpiredTTL(t *testing.T) {
+	now := int64(2000)
+	claimedAt := int64(1000)
+	lastHeartbeat := int64(1100)
+	ttlMinutes := 10 // 600 seconds
+
+	snap := &snapshot.Snapshot{
+		Issues: map[string]*materialize.Issue{
+			"task-01": {
+				ID:            "task-01",
+				Status:        "claimed",
+				ClaimedAt:     claimedAt,
+				LastHeartbeat: lastHeartbeat,
+				ClaimTTL:      ttlMinutes,
+			},
+		},
+	}
+
+	// At time 2000, the most recent activity was 1100. TTL is 600 seconds.
+	// lastActivity + ttl = 1100 + 600 = 1700, which is less than now (2000),
+	// so the claim has expired and binding should be stale.
+	stale := isBindingStale(snap, "task-01", now)
+
+	assert.True(t, stale, "claimed task with expired TTL should be stale")
+}
+
+// TestIsBindingStale_ClaimedWithinTTLWindow verifies that a claimed task whose last heartbeat
+// falls within the TTL window is NOT stale. This exercises the actual TTL window check rather
+// than the ClaimTTL==0 fast-path used in TestIsBindingStale_Claimed and TestIsBindingStale_InProgress.
+func TestIsBindingStale_ClaimedWithinTTLWindow(t *testing.T) {
+	// TTL = 10 minutes = 600 seconds.
+	// LastHeartbeat = 1500, now = 1600 → elapsed = 100 seconds, well within TTL.
+	snap := &snapshot.Snapshot{
+		Issues: map[string]*materialize.Issue{
+			"task-01": {
+				ID:            "task-01",
+				Status:        "claimed",
+				ClaimedAt:     1000,
+				LastHeartbeat: 1500,
+				ClaimTTL:      10,
+			},
+		},
+	}
+
+	stale := isBindingStale(snap, "task-01", 1600)
+
+	assert.False(t, stale, "claimed task with heartbeat within TTL window should not be stale")
 }
 
 // TestHarnessHookReadsBindingFromFileWithoutEnv verifies that harness-hook reads the

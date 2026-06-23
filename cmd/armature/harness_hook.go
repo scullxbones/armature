@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/ops"
@@ -45,13 +46,19 @@ func logPassThrough(gitDir string, reason string) error {
 	return err
 }
 
-// isBindingStale checks if the task binding's status is not claimed or in-progress.
-func isBindingStale(snap *snapshot.Snapshot, taskID string) bool {
+// isBindingStale checks if the task binding's status is not claimed or in-progress,
+// or if the claim's TTL has expired.
+func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	issue, ok := snap.Issues[taskID]
 	if !ok {
 		return true // Missing issue = stale
 	}
-	return issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress
+	// If status is not claimed/in-progress, it's stale
+	if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
+		return true
+	}
+	// Check if the claim's TTL has expired
+	return claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, now)
 }
 
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
@@ -106,8 +113,8 @@ func newHarnessHookCmd() *cobra.Command {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
-			// If binding is stale (status != claimed/in-progress), pass through
-			if isBindingStale(snap, taskID) {
+			// If binding is stale (status != claimed/in-progress or claim TTL expired), pass through
+			if isBindingStale(snap, taskID, time.Now().Unix()) {
 				_ = logPassThrough(gitDir, "stale binding") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}

@@ -2757,10 +2757,10 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 	require.NoError(t, err)
 
 	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	out, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt-2"))
-	require.NoError(t, err)
-	assert.Contains(t, out, `"claimed":false`)
-	assert.Contains(t, out, `"reason":"lost_claim_race"`)
+	// When worktree creation fails (branch already checked out), the claim must abort
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt-2"))
+	require.Error(t, err, "second claim should fail because branch task/task-01 is already checked out in another worktree")
+	assert.Contains(t, err.Error(), "worktree", "error should mention worktree")
 
 	showOut, err := runTrls(t, repo, "show", "--issue", "task-01")
 	require.NoError(t, err)
