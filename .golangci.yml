@@ -52,20 +52,89 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "dag is a pure graph package and must not import other internal packages"
-        # Domain primitives (ops, claim, traceability, materialize) must not import
-        # higher-level adapter wrappers (platform, sources) — those belong above them
-        domain-no-adapters:
+        # issuetype is a pure vocabulary package; no internal imports allowed
+        issuetype-pure:
           list-mode: lax
           files:
-            - "**/internal/materialize/*.go"
-            - "**/internal/ops/*.go"
-            - "**/internal/claim/*.go"
-            - "**/internal/traceability/*.go"
+            - "**/internal/issuetype/*.go"
           deny:
-            - pkg: "github.com/scullxbones/armature/internal/platform"
-              desc: "domain primitives must not import adapter packages"
-            - pkg: "github.com/scullxbones/armature/internal/sources"
-              desc: "domain primitives must not import adapter packages"
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "issuetype is a pure vocabulary package and must not import other internal packages"
+        # ops uses adapters as its I/O port; all other internal imports are forbidden
+        ops-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/ops/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+        # claim uses ops as its natural sub-domain; all other internal imports are forbidden
+        claim-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/claim/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/ops"
+        # traceability uses adapters as its I/O port; all other internal imports are forbidden
+        traceability-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/traceability/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+        # materialize owns the replay pipeline; its allow list is its complete sub-domain
+        materialize-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/materialize/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/claim"
+            - "github.com/scullxbones/armature/internal/dag"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/traceability"
+        # sources (functional core) is a pure registry; only adapters for file I/O allowed.
+        # Provider implementations (Confluence, SharePoint, Filesystem) live in cmd/.
+        sources-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/sources/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+        # validate may only import the deep domain core below it
+        validate-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/validate/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/dag"
+            - "github.com/scullxbones/armature/internal/issuetype"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/sources"
+            - "github.com/scullxbones/armature/internal/traceability"
+        # output may only import the domain layer beneath it; orchestration packages are forbidden
+        output-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/output/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ready"
+            - "github.com/scullxbones/armature/internal/validate"
     errcheck:
       check-type-assertions: true
       check-blank: true

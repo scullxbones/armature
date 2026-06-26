@@ -16,5 +16,5 @@ unleash:
   # threshold-mcover: % of mutation sites reachable by tests (analogous to code coverage).
   # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
   threshold:
-    mutant-coverage: 90
+    mutant-coverage: 95
     efficacy: 99

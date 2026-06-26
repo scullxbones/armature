@@ -161,6 +161,20 @@ func TestImportCommand_ActualImport(t *testing.T) {
 	assert.Contains(t, out, "imported 1 items")
 }
 
+// TestImportCommand_WithSource verifies that --source links each imported item to a source.
+func TestImportCommand_WithSource(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	csvFile := filepath.Join(t.TempDir(), "issues.csv")
+	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nwith-src-1,With Source Task,task\n"), 0644))
+
+	out, err := runTrls(t, repo, "import", "--source", "src-import-01", csvFile)
+	require.NoError(t, err)
+	assert.Contains(t, out, "imported 1 items")
+}
+
 func TestStaleReviewCommand_NoStale(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -1485,4 +1499,138 @@ func TestReparentCommand_EmptyParentMakesTopLevel(t *testing.T) {
 	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "")
 	require.NoError(t, err, "arm reparent --parent '' should succeed")
 	assert.Contains(t, out, "task-01", "output should include issue ID")
+}
+
+// TestAcceptCitationCmd_Interactive_Confirm sends "y" to stdin and verifies success.
+func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	outBuf := new(bytes.Buffer)
+	stdin := strings.NewReader("y\n")
+	root := newRootCmd()
+	root.SetOut(outBuf)
+	root.SetIn(stdin)
+	root.SetArgs([]string{"accept-citation", "--repo", repo,
+		"--issue", "task-01",
+		"--rationale", "cited because it matches",
+	})
+	require.NoError(t, root.Execute())
+	assert.Contains(t, outBuf.String(), "task-01")
+}
+
+// TestAcceptCitationCmd_PositionalIssueID verifies that the positional argument is accepted.
+func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "accept-citation",
+		"task-01",
+		"--rationale", "cited because it matches here",
+		"--ci",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+// TestWorkersCommand_WithCancelledTransition verifies workers handles cancelled status ops.
+func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Claim the task, then cancel it so an OpTransition with StatusCancelled is recorded.
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "wt-01"))
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "workers", "--repo", repo)
+	require.NoError(t, err)
+	_ = out
+}
+
+// TestListCmd_Group_MultipleStatusGroups verifies the sort comparator runs with 2+ status groups.
+func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a second task and claim it so we get two status groups: open and claimed.
+	_, err := runTrls(t, repo, "create",
+		"--title", "Task two",
+		"--type", "task",
+		"--id", "task-02",
+	)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-02",
+		"--worktree", filepath.Join(t.TempDir(), "wt-task-02"),
+	)
+	require.NoError(t, err)
+
+	buf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetArgs([]string{"--format", "human", "--repo", repo, "list", "--group"})
+	require.NoError(t, root.Execute())
+
+	out := buf.String()
+	// Both status groups should appear.
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "task-02")
+}
+
+// TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus verifies the parent story
+// status check is called when transitioning a task with a parent to done.
+func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
+	repo := setupRepoWithStoryAndTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Claim task-01 (child of story-01) then transition it to done.
+	_, err = runTrls(t, repo, "claim", "task-01",
+		"--worktree", filepath.Join(t.TempDir(), "wt-task-01"),
+	)
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+}
+
+// TestDecomposeContextCmd_BasicOutput verifies that decompose-context outputs a template.
+func TestDecomposeContextCmd_BasicOutput(t *testing.T) {
+	buf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetArgs([]string{"decompose-context"})
+	require.NoError(t, root.Execute())
+	// Should output the default prompt template (non-empty).
+	assert.NotEmpty(t, buf.String())
+}
+
+// TestDecomposeContextCmd_JSONFormat verifies --format json output.
+func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
+	buf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetArgs([]string{"decompose-context", "--format", "json"})
+	require.NoError(t, root.Execute())
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
+}
+
+// TestDecomposeContextCmd_WithSources verifies --sources flag parses and filters empty segments.
+func TestDecomposeContextCmd_WithSources(t *testing.T) {
+	buf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	// Pass comma-separated sources with an empty segment to exercise the `if s != "" {` guard.
+	root.SetArgs([]string{"decompose-context", "--format", "json", "--sources", "src-01,,src-02"})
+	require.NoError(t, root.Execute())
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
 }

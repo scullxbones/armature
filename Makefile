@@ -47,8 +47,8 @@ coverage-check:
 	$(GO) test -coverprofile=coverage.out ./...
 	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
 	echo "Total coverage: $${COVERAGE}%"; \
-	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 80) }'; then \
-		echo "FAIL: coverage $${COVERAGE}% is below 80% threshold"; \
+	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 85) }'; then \
+		echo "FAIL: coverage $${COVERAGE}% is below 85% threshold"; \
 		exit 1; \
 	fi
 

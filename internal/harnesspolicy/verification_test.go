@@ -68,6 +68,36 @@ func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
 	assert.Equal(t, CheckCitations, result.Name)
 }
 
+func TestVerificationServiceCheckAcceptanceCriteria_NullJSON(t *testing.T) {
+	t.Parallel()
+	service := NewVerificationService()
+
+	result := service.CheckAcceptanceCriteria(json.RawMessage("null"))
+
+	assert.False(t, result.Passed)
+	assert.Contains(t, result.Message, "empty or absent")
+}
+
+func TestVerificationServiceCheckAcceptanceCriteria_EmptyArray(t *testing.T) {
+	t.Parallel()
+	service := NewVerificationService()
+
+	result := service.CheckAcceptanceCriteria(json.RawMessage(`[]`))
+
+	assert.False(t, result.Passed)
+	assert.Contains(t, result.Message, "empty or absent")
+}
+
+func TestVerificationServiceCheckAcceptanceCriteria_MalformedJSON(t *testing.T) {
+	t.Parallel()
+	service := NewVerificationService()
+
+	result := service.CheckAcceptanceCriteria(json.RawMessage(`"not-an-array"`))
+
+	assert.False(t, result.Passed)
+	assert.Contains(t, result.Message, "not parseable")
+}
+
 func TestVerificationServiceRunReturnsAcceptanceAndCitationResults(t *testing.T) {
 	t.Parallel()
 	service := NewVerificationService()

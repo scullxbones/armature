@@ -703,3 +703,136 @@ func TestCodexAdapterMigratesMarkerBearingRootConfig(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(dir, "codex.toml"))
 	assert.True(t, os.IsNotExist(statErr), "marker-bearing root codex.toml must be removed after migration")
 }
+
+func TestCodexAdapterEncodeApproveDecision(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	event := Event{Kind: EventPreToolUse}
+
+	out, code, err := adapter.Encode(event, Decision{Action: DecisionAllow})
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.Contains(t, string(out), `"approve"`)
+}
+
+func TestCodexAdapterNormalizeEventPostToolUse(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, EventPostToolUse, evt.Kind)
+}
+
+func TestCodexAdapterNormalizeEventPostToolUseLower(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"post_tool_use","tool_name":"Bash","tool_input":{}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, EventPostToolUse, evt.Kind)
+}
+
+func TestCodexAdapterNormalizeEventStop(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"Stop","tool_name":"","tool_input":{}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, EventStop, evt.Kind)
+}
+
+func TestCodexAdapterNormalizeEventStopLower(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"stop","tool_name":"","tool_input":{}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, EventStop, evt.Kind)
+}
+
+func TestCodexAdapterNormalizeEventUnknown(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"CustomEvent","tool_name":"","tool_input":{}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, EventKind("CustomEvent"), evt.Kind)
+}
+
+func TestCodexAdapterExtractPathsWithPathKey(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"path":"/some/file.go"}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"/some/file.go"}, evt.Paths)
+}
+
+func TestCodexAdapterExtractPathsWithChangesArray(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"changes":[{"path":"a.go"},{"path":"b.go"}]}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.go", "b.go"}, evt.Paths)
+}
+
+func TestCodexAdapterExtractCommandWithCmdKey(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"cmd":"ls -la"}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, "ls -la", evt.Command)
+}
+
+func TestCodexAdapterExtractCommandFallback(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	// No "command" or "cmd" key — falls back to fmt.Sprint(input["input"])
+	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"input":"something"}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, "something", evt.Command)
+}
+
+func TestDevinAdapterDecode_PreToolUse(t *testing.T) {
+	t.Parallel()
+	adapter := NewDevinAdapter()
+	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"edit","tool_input":{}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, EventPreToolUse, evt.Kind)
+}
+
+func TestDevinAdapterEncode_ApproveDecision(t *testing.T) {
+	t.Parallel()
+	adapter := NewDevinAdapter()
+
+	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: DecisionAllow})
+	require.NoError(t, err)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, string(data), "approve")
+}
+
+func TestDevinAdapterEncode_BlockDecision(t *testing.T) {
+	t.Parallel()
+	adapter := NewDevinAdapter()
+
+	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: DecisionBlock, Message: "blocked"})
+	require.NoError(t, err)
+	// Devin processes the response on exit 0 always.
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, string(data), "block")
+}

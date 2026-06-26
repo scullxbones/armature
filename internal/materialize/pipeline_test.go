@@ -684,3 +684,13 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		assert.Equal(t, fullIssue.CitationAcceptances, incrementalIssue.CitationAcceptances, "citation acceptances must match")
 	}
 }
+
+func TestMaterializeAndReturnQuiet_BasicRoundTrip(t *testing.T) {
+	t.Parallel()
+	stateDir := t.TempDir()
+
+	state, result, err := MaterializeAndReturnQuiet(stateDir, []ops.Op{}, true, nil)
+	require.NoError(t, err)
+	assert.NotNil(t, state)
+	assert.Equal(t, 0, result.OpsProcessed)
+}

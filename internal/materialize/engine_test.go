@@ -1379,3 +1379,56 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 		b.Fatalf("epic should be merged after rollup, got %s", state.Issues[epicID].Status)
 	}
 }
+
+func TestApplyReparent_MovesIssueToNewParent(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	state.Issues["parent-A"] = &Issue{ID: "parent-A", Children: []string{"child-01"}}
+	state.Issues["parent-B"] = &Issue{ID: "parent-B", Children: []string{}}
+	state.Issues["child-01"] = &Issue{ID: "child-01", Parent: "parent-A"}
+
+	err := state.ApplyOp(ops.Op{
+		Type:      ops.OpReparent,
+		TargetID:  "child-01",
+		Timestamp: 1000,
+		WorkerID:  "w1",
+		Payload:   ops.Payload{Parent: "parent-B"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "parent-B", state.Issues["child-01"].Parent)
+	assert.Contains(t, state.Issues["parent-B"].Children, "child-01")
+	assert.NotContains(t, state.Issues["parent-A"].Children, "child-01")
+}
+
+func TestApplyReparent_MissingTargetIsNoop(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+
+	err := state.ApplyOp(ops.Op{
+		Type:     ops.OpReparent,
+		TargetID: "nonexistent",
+		WorkerID: "w1",
+		Payload:  ops.Payload{Parent: "some-parent"},
+	})
+	require.NoError(t, err)
+}
+
+func TestApplyReparent_EmptyNewParentMakesTopLevel(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	state.Issues["parent-A"] = &Issue{ID: "parent-A", Children: []string{"child-01"}}
+	state.Issues["child-01"] = &Issue{ID: "child-01", Parent: "parent-A"}
+
+	err := state.ApplyOp(ops.Op{
+		Type:      ops.OpReparent,
+		TargetID:  "child-01",
+		Timestamp: 1000,
+		WorkerID:  "w1",
+		Payload:   ops.Payload{Parent: ""},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "", state.Issues["child-01"].Parent)
+	assert.NotContains(t, state.Issues["parent-A"].Children, "child-01")
+}

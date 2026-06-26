@@ -87,11 +87,10 @@ This enforces branch + PR discipline.`,
 				return err
 			}
 
-			issuesDir := appCtx.IssuesDir
 			cfg := appCtx.Config
 
 			// Get current issue status from materialized index and load index entries for all issues
-			index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json")) //nolint:errcheck // missing index treated as empty; access uses ok-check
+			index, _ := materialize.LoadIndex(filepath.Join(state.ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty; access uses ok-check
 			currentStatus := ""
 			var currentEntry *materialize.IndexEntry
 			if entry, ok := index[issueID]; ok {

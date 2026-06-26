@@ -204,6 +204,28 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	assert.Contains(t, out, "task-delete-01")
 }
 
+// TestHookRunPreCommit_NoStagedFiles verifies that pre-commit succeeds when no
+// files are staged.
+func TestHookRunPreCommit_NoStagedFiles(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	run(t, repo, "git", "reset", "HEAD")
+
+	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
+	require.NoError(t, err)
+}
+
+// TestHookRunPreCommit_StagedNonOpsFile verifies that staging a non-ops file is allowed.
+func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	writeFile(t, repo, "src/main.go", "package main")
+	run(t, repo, "git", "add", filepath.Join("src", "main.go"))
+
+	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
+	require.NoError(t, err)
+}
+
 // setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.
 func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	t.Helper()

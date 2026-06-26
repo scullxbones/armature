@@ -365,3 +365,144 @@ func TestReadLogLinesWithOffsets_StartOffsetPositive(t *testing.T) {
 		t.Errorf("expected lines[1].EndOffset to be 23, got %d", lines[1].EndOffset)
 	}
 }
+
+func TestListLogFiles_ReturnsLogFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "worker1.log"), []byte("line"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("text"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := ListLogFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 log file, got %d", len(files))
+	}
+}
+
+func TestListLogFiles_MissingDir_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	files, err := ListLogFiles("/nonexistent/dir/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files != nil {
+		t.Fatalf("expected nil for missing dir, got %v", files)
+	}
+}
+
+func TestExpandGlobs_MatchesFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "foo.go"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	globs := map[string][]string{
+		"issue-01": {filepath.Join(dir, "*.go")},
+	}
+	result := ExpandGlobs(globs)
+	if len(result["issue-01"]) != 1 {
+		t.Fatalf("expected 1 match, got %v", result["issue-01"])
+	}
+}
+
+func TestMkdirAll_CreatesDirectory(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "a", "b", "c")
+
+	if err := MkdirAll(dir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		t.Fatal("expected directory to be created")
+	}
+}
+
+func TestReadDir_ReturnsDirEntries(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+}
+
+func TestReadDir_MissingDir_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	entries, err := ReadDir("/nonexistent/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected empty, got %v", entries)
+	}
+}
+
+func TestStat_ReturnsFileInfo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := Stat(path)
+	if err != nil || info == nil {
+		t.Fatalf("expected file info, got err=%v info=%v", err, info)
+	}
+}
+
+func TestStat_MissingFile_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	info, err := Stat("/nonexistent/file.go")
+	if err != nil || info != nil {
+		t.Fatalf("expected nil for missing path, got err=%v info=%v", err, info)
+	}
+}
+
+func TestReadFile_ReadsContent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.txt")
+	if err := os.WriteFile(path, []byte("content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := ReadFile(path)
+	if err != nil || string(data) != "content" {
+		t.Fatalf("expected 'content', got err=%v data=%q", err, data)
+	}
+}
+
+func TestWriteFile_WritesContent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.txt")
+
+	if err := WriteFile(path, []byte("written"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "written" {
+		t.Fatalf("expected 'written', got err=%v data=%q", err, data)
+	}
+}

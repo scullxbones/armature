@@ -111,3 +111,60 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 	assert.Equal(t, fixedTimestamp, readOps[0].Timestamp,
 		"injected clock timestamp should appear in written op")
 }
+
+func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
+	t.Parallel()
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Dry Run Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "New issue", Type: "task"},
+			{ID: "PLAN-002", Title: "Another issue", Type: "task"},
+		},
+	}
+	state := materialize.NewState()
+
+	result, err := DryRunApplyPlan(plan, state)
+	require.NoError(t, err)
+	assert.Len(t, result.WouldCreate, 2)
+}
+
+func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
+	t.Parallel()
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Plan with existing",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "New issue", Type: "task"},
+			{ID: "PLAN-EXISTING", Title: "Already exists", Type: "task"},
+		},
+	}
+	state := materialize.NewState()
+	state.Issues["PLAN-EXISTING"] = &materialize.Issue{ID: "PLAN-EXISTING"}
+
+	result, err := DryRunApplyPlan(plan, state)
+	require.NoError(t, err)
+	assert.Len(t, result.WouldCreate, 1)
+	assert.Equal(t, "PLAN-001", result.WouldCreate[0].ID)
+}
+
+func TestDryRunApplyPlanWithOptions_StrictRejectsWarnings(t *testing.T) {
+	t.Parallel()
+
+	// Create a plan with a duplicate ID to trigger a warning.
+	plan := &Plan{
+		Version: 1,
+		Title:   "Strict plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "Task one", Type: "task"},
+			{ID: "PLAN-001", Title: "Duplicate ID", Type: "task"},
+		},
+	}
+	state := materialize.NewState()
+
+	_, err := DryRunApplyPlanWithOptions(plan, state, ApplyOptions{Strict: true})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "warning")
+}

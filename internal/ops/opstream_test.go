@@ -478,3 +478,21 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t 
 	assert.Equal(t, fileSize, offsets[logName],
 		"offset must equal file size even when trailing line is corrupt")
 }
+
+func TestExtractOps_ReturnsOpsFromItems(t *testing.T) {
+	t.Parallel()
+	items := []OpItem{
+		{Op: Op{Type: "create", TargetID: "A"}},
+		{Op: Op{Type: "transition", TargetID: "B"}},
+	}
+	result := ExtractOps(items)
+	require.Len(t, result, 2)
+	assert.Equal(t, "create", result[0].Type)
+	assert.Equal(t, "transition", result[1].Type)
+}
+
+func TestExtractOps_EmptyInput(t *testing.T) {
+	t.Parallel()
+	result := ExtractOps([]OpItem{})
+	assert.Empty(t, result)
+}

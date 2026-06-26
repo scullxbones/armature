@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -897,4 +898,128 @@ func TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive(t *testing.T) {
 
 	result := graph.ScopedHasCycle("A", scope)
 	assert.False(t, result, "out-of-scope cycle B→C→B must not be reported as a cycle for scoped node A")
+}
+
+func TestE9DoDLength_Exceeds500Chars(t *testing.T) {
+	t.Parallel()
+	longDoD := string(make([]byte, 501))
+	state := makeState(&materialize.Issue{
+		ID:               "task-01",
+		Type:             "task",
+		Status:           "open",
+		DefinitionOfDone: longDoD,
+		BlockedBy:        []string{},
+		Children:         []string{},
+	})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	hasErr := false
+	for _, e := range result.Errors {
+		if strings.Contains(e, "definition_of_done exceeds") {
+			hasErr = true
+			break
+		}
+	}
+	assert.True(t, hasErr, "expected definition_of_done length error for 501-char DoD")
+}
+
+func TestE9DoDLength_ExactlyAtLimit_NoError(t *testing.T) {
+	t.Parallel()
+	doD := string(make([]byte, 500))
+	state := makeState(&materialize.Issue{
+		ID:               "task-01",
+		Type:             "task",
+		Status:           "open",
+		DefinitionOfDone: doD,
+		BlockedBy:        []string{},
+		Children:         []string{},
+	})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	for _, e := range result.Errors {
+		assert.NotContains(t, e, "definition_of_done exceeds")
+	}
+}
+
+func TestE10ScopeGlobs_InvalidGlob_EmitsError(t *testing.T) {
+	t.Parallel()
+	state := makeState(&materialize.Issue{
+		ID:        "task-01",
+		Type:      "task",
+		Status:    "open",
+		Scope:     []string{"[invalid"},
+		BlockedBy: []string{},
+		Children:  []string{},
+	})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	hasErr := false
+	for _, e := range result.Errors {
+		if strings.Contains(e, "invalid glob") {
+			hasErr = true
+			break
+		}
+	}
+	assert.True(t, hasErr, "expected invalid glob error")
+}
+
+func TestW4BroadScope_DoubleStarScope(t *testing.T) {
+	t.Parallel()
+	state := makeState(&materialize.Issue{
+		ID:        "task-01",
+		Type:      "task",
+		Status:    "open",
+		Scope:     []string{"**"},
+		BlockedBy: []string{},
+		Children:  []string{},
+	})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	hasWarn := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "broad scope") {
+			hasWarn = true
+			break
+		}
+	}
+	assert.True(t, hasWarn, "expected broad scope warning for ** glob")
+}
+
+func TestW4BroadScope_DotScope(t *testing.T) {
+	t.Parallel()
+	state := makeState(&materialize.Issue{
+		ID:        "task-01",
+		Type:      "task",
+		Status:    "open",
+		Scope:     []string{"."},
+		BlockedBy: []string{},
+		Children:  []string{},
+	})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	hasWarn := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "broad scope") {
+			hasWarn = true
+			break
+		}
+	}
+	assert.True(t, hasWarn, "expected broad scope warning for . glob")
+}
+
+func TestW4BroadScope_SkipsTerminalStatus(t *testing.T) {
+	t.Parallel()
+	state := makeState(&materialize.Issue{
+		ID:        "task-01",
+		Type:      "task",
+		Status:    ops.StatusDone,
+		Scope:     []string{"**/*"},
+		BlockedBy: []string{},
+		Children:  []string{},
+	})
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	for _, w := range result.Warnings {
+		assert.NotContains(t, w, "broad scope", "done tasks must not produce broad scope warning")
+	}
 }
