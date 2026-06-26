@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "title": "Anchor harness-hook governance to worktree filesystem",
+  "issues": [
+    {
+      "id": "ARCHIMP-S12",
+      "title": "Anchor harness-hook governance to worktree filesystem",
+      "type": "story",
+      "parent": "ARCHIMP",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "arm claim requires --worktree, creates/updates worktrees with derived branch names, writes <git-dir>/armature-task-id. Harness hook reads binding from that file (env var fallback), passes through silently when absent or stale, logs pass-throughs. arm merged tears down task/bug worktrees and warns on logged pass-throughs. make check green.",
+      "scope": "cmd/armature/claim.go, cmd/armature/claim_test.go, cmd/armature/harness_hook.go, cmd/armature/harness_hook_test.go, cmd/armature/merged.go, cmd/armature/merged_test.go, internal/harnesshook/runner.go, internal/harnesshook/runner_test.go",
+      "acceptance": [
+        "make check green",
+        "arm validate exits 0",
+        "arm doctor exits 0"
+      ],
+      "notes": []
+    },
+    {
+      "id": "ARCHIMP-S12-T1",
+      "title": "Add --worktree to arm claim: create/update worktree and write task binding file",
+      "type": "task",
+      "parent": "ARCHIMP-S12",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "arm claim requires --worktree (error if omitted). Creates worktree + derived branch (feat/<id>, task/<id>, fix/<id>) if path absent; updates <git-dir>/armature-task-id if path exists. Epic returns error. Branch off parent story branch for task/bug. Claim op still appended to ops log.",
+      "scope": "cmd/armature/claim.go, cmd/armature/claim_test.go (new)",
+      "acceptance": [
+        "TestClaimRequiresWorktree_REQ_ARCHIMP-S12-T1 passes",
+        "TestClaimCreatesWorktreeOnStoryBranch_REQ_ARCHIMP-S12-T1 passes",
+        "TestClaimCreatesWorktreeOnTaskBranch_REQ_ARCHIMP-S12-T1 passes",
+        "TestClaimCreatesWorktreeOnBugBranch_REQ_ARCHIMP-S12-T1 passes",
+        "TestClaimEpicReturnsError_REQ_ARCHIMP-S12-T1 passes",
+        "TestClaimWritesTaskBindingFile_REQ_ARCHIMP-S12-T1 passes",
+        "TestClaimUpdatesTaskBindingInExistingWorktree_REQ_ARCHIMP-S12-T1 passes",
+        "make check green"
+      ],
+      "notes": [
+        "Branch naming: story/feature → feat/<id>, task → task/<id>, bug → fix/<id>",
+        "Binding file path: <git-dir>/armature-task-id (git rev-parse --git-dir inside worktree)",
+        "Worktree create: git worktree add <path> <branch>; update path = write binding file only",
+        "Task/bug branch off parent story/feature branch, not main"
+      ]
+    },
+    {
+      "id": "ARCHIMP-S12-T2",
+      "title": "Update harness-hook to read binding from file, pass through silently, and log pass-throughs",
+      "type": "task",
+      "parent": "ARCHIMP-S12",
+      "priority": "high",
+      "blocked_by": ["ARCHIMP-S12-T1"],
+      "dod": "resolveTaskBinding(gitDir) reads <git-dir>/armature-task-id, falls back to ARMATURE_TASK_ID, returns empty string when absent. Hook passes through (exit 0) when no binding or stale (status != claimed/in-progress). Pass-throughs logged to <git-dir>/armature-hook.log. TestHarnessHookRequiresTaskID inverted to TestHarnessHookPassesThroughWithoutTaskID.",
+      "scope": "cmd/armature/harness_hook.go, cmd/armature/harness_hook_test.go, internal/harnesshook/runner.go, internal/harnesshook/runner_test.go",
+      "acceptance": [
+        "TestHarnessHookPassesThroughWithoutTaskID_REQ_ARCHIMP-S12-T2 passes",
+        "TestHarnessHookPassesThroughWhenTaskDone_REQ_ARCHIMP-S12-T2 passes",
+        "TestHarnessHookPassesThroughWhenTaskMerged_REQ_ARCHIMP-S12-T2 passes",
+        "TestHarnessHookEnforcesWhenTaskClaimed_REQ_ARCHIMP-S12-T2 passes",
+        "TestHarnessHookEnforcesFromEnvVar_REQ_ARCHIMP-S12-T2 passes",
+        "TestHarnessHookLogsPassThroughToFile_REQ_ARCHIMP-S12-T2 passes",
+        "make check green"
+      ],
+      "notes": [
+        "Resolution order: file > env var > empty string (pass-through, exit 0)",
+        "Stale detection: load materialized state snapshot, check status; anything != claimed or in-progress is stale",
+        "Log line format: <RFC3339 timestamp> <tool-name> <reason> where reason is no-binding or stale:<status>",
+        "Log file is under .git/ — never committed, no .gitignore entry needed",
+        "Prior art: setupRepoWithTask, runTrls, newRootCmd()+cmd.Execute() in harness_hook_test.go"
+      ]
+    },
+    {
+      "id": "ARCHIMP-S12-T3",
+      "title": "Update arm merged --issue to tear down task/bug worktrees and warn on pass-throughs",
+      "type": "task",
+      "parent": "ARCHIMP-S12",
+      "priority": "high",
+      "blocked_by": ["ARCHIMP-S12-T2"],
+      "dod": "arm merged --issue removes git worktree for task-type and bug-type issues via git worktree remove. Reads <git-dir>/armature-hook.log from that worktree before removal; emits warning to stderr if any pass-through entries present. Story/feature issues: no worktree removal.",
+      "scope": "cmd/armature/merged.go, cmd/armature/merged_test.go (new)",
+      "acceptance": [
+        "TestMergedRemovesTaskWorktree_REQ_ARCHIMP-S12-T3 passes",
+        "TestMergedRemovesBugWorktree_REQ_ARCHIMP-S12-T3 passes",
+        "TestMergedDoesNotRemoveStoryWorktree_REQ_ARCHIMP-S12-T3 passes",
+        "TestMergedWarnsOnPassThroughLog_REQ_ARCHIMP-S12-T3 passes",
+        "TestMergedNoWarnWhenLogAbsent_REQ_ARCHIMP-S12-T3 passes",
+        "make check green"
+      ],
+      "notes": [
+        "Worktree removal: git worktree remove <path>",
+        "Read <git-dir>/armature-hook.log before removal; warn to stderr if file exists and non-empty",
+        "Story and feature worktrees are not removed by arm merged; coordinator manages their lifecycle"
+      ]
+    }
+  ]
+}
