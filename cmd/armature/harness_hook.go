@@ -119,32 +119,29 @@ func newHarnessHookCmd() *cobra.Command {
 				return nil
 			}
 
-			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
-			if err != nil {
-				return err
-			}
-
-			input, err := io.ReadAll(cmd.InOrStdin())
+			// Read hook input from stdin
+			inputData, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return fmt.Errorf("read hook input: %w", err)
 			}
 
+			// Create policy resolver
 			resolver := harnesspolicy.NewTaskPolicyResolver(harnesspolicy.ResolverConfig{
 				RepoPath:   appCtx.RepoPath,
 				StateDir:   appCtx.StateDir,
 				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
 			})
 
-			runner := harnesshook.NewRunner(&harnesshook.RunnerConfig{
-				Adapter:   adapter,
-				Resolver:  resolver,
-				Evaluator: nil, // Will be created in runner based on resolved policy
-				TaskID:    taskID,
-				IssuesDir: appCtx.IssuesDir,
-				StateDir:  appCtx.StateDir,
+			// Create hook and evaluate
+			hook := harnesshook.NewHook(resolver)
+			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
+				Input:      inputData,
+				TaskID:     taskID,
+				Platform:   os.Getenv("ARMATURE_HOOK_PLATFORM"),
+				RepoPath:   appCtx.RepoPath,
+				StateDir:   appCtx.StateDir,
+				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
 			})
-
-			result, err := runner.Run(cmd.Context(), input)
 			if err != nil {
 				return err
 			}
