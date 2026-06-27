@@ -342,3 +342,55 @@ func TestStore_Paths_REQ_ARCHIMP_S14_T1(t *testing.T) {
 	expectedIndexPath := filepath.Join(stateDir, "index.json")
 	assert.Equal(t, expectedIndexPath, indexPath)
 }
+
+// TestStore_ReadIndex_ReadsFromDiskWithoutMaterialize tests that Store.ReadIndex()
+// reads the index from disk without triggering materialization.
+func TestStore_ReadIndex_ReadsFromDiskWithoutMaterialize(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	// Write a pre-made index.json without materializing
+	indexContent := `{
+  "task-1": {
+    "status": "open",
+    "type": "task",
+    "updated": 1000,
+    "title": "Test Task"
+  },
+  "task-2": {
+    "status": "done",
+    "type": "task",
+    "updated": 1001,
+    "title": "Completed Task"
+  }
+}`
+	indexPath := filepath.Join(stateDir, "index.json")
+	require.NoError(t, adapters.WriteFile(indexPath, []byte(indexContent), 0644))
+
+	// Create Store (note: no ops, so Load would fail or behave differently)
+	opsDir := filepath.Join(tmpDir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+
+	store := NewStore(opsDir, stateDir, false)
+
+	// Call ReadIndex without calling Load first
+	index, err := store.ReadIndex()
+	require.NoError(t, err)
+
+	// Verify index was read correctly from disk
+	assert.NotNil(t, index)
+	assert.Equal(t, 2, len(index))
+
+	entry1, ok1 := index["task-1"]
+	require.True(t, ok1)
+	assert.Equal(t, "open", entry1.Status)
+	assert.Equal(t, "Test Task", entry1.Title)
+
+	entry2, ok2 := index["task-2"]
+	require.True(t, ok2)
+	assert.Equal(t, "done", entry2.Status)
+	assert.Equal(t, "Completed Task", entry2.Title)
+}

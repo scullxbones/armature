@@ -93,8 +93,10 @@ This enforces branch + PR discipline.`,
 			store := newSnapshotStore(state.ctx)
 			// A load error degrades gracefully to an empty index, matching the previous
 			// behavior of silently ignoring missing-file errors from LoadIndex.
-			store.Load(context.Background()) //nolint:errcheck,gosec // missing index treated as empty; access uses ok-check
-			index := store.Index()
+			index, _ := store.ReadIndex() //nolint:errcheck // missing index treated as empty; access uses ok-check
+			if index == nil {
+				index = make(materialize.Index)
+			}
 			currentStatus := ""
 			var currentEntry *materialize.IndexEntry
 			if entry, ok := index[issueID]; ok {
