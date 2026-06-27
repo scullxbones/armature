@@ -91,7 +91,7 @@ This enforces branch + PR discipline.`,
 
 			// Get current issue status from materialized index and load index entries for all issues
 			store := newSnapshotStore(state.ctx)
-			store.Load(context.Background()) //nolint:errcheck // missing index treated as empty; access uses ok-check
+			store.Load(context.Background()) //nolint:errcheck,gosec // missing index treated as empty; access uses ok-check
 			index := store.Index()
 			currentStatus := ""
 			var currentEntry *materialize.IndexEntry
@@ -170,7 +170,7 @@ This enforces branch + PR discipline.`,
 // loaded (e.g. not yet materialized), it returns false to avoid false positives.
 func isIssueUncited(issueID string) bool {
 	store := newSnapshotStore(appCtx)
-	store.Load(context.Background()) //nolint:errcheck // missing issue treated as not uncited; access uses nil check
+	store.Load(context.Background()) //nolint:errcheck,gosec // missing issue treated as not uncited; access uses nil check
 	issue := store.Issue(issueID)
 	if issue == nil {
 		// Cannot load — graceful degradation, don't warn

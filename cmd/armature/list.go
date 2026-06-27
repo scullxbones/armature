@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -52,19 +52,15 @@ func newListCmd() *cobra.Command {
 		Short: "List issues with optional --type, --parent, and --status filters",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
-			issuesDir := ctx.IssuesDir
-			singleBranch := ctx.Mode == "single-branch"
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			store := newSnapshotStore(ctx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, err := materialize.Materialize(ctx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return err
-			}
 
-			index, err := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json"))
-			if err != nil {
-				return err
+			index := snap.Index
+			if index == nil {
+				index = make(materialize.Index)
 			}
 
 			var ids []string
@@ -98,8 +94,8 @@ func newListCmd() *cobra.Command {
 						Title:   e.Title,
 						Outcome: e.Outcome,
 					}
-					issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", id+".json"))
-					if err == nil {
+					issue := snap.State.Issues[id]
+					if issue != nil {
 						le.ClaimedBy = issue.ClaimedBy
 					}
 					entries = append(entries, le)
@@ -162,8 +158,8 @@ func newListCmd() *cobra.Command {
 				for _, id := range ids {
 					e := index[id]
 					claimed := ""
-					issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", id+".json"))
-					if err == nil {
+					issue := snap.State.Issues[id]
+					if issue != nil {
 						claimed = issue.ClaimedBy
 					}
 					boardEntries = append(boardEntries, output.BoardEntry{

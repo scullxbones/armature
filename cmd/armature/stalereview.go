@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -23,7 +23,6 @@ func newStaleReviewCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			execState := mustState(cmd)
 			appCtx := execState.ctx
-			issuesDir := appCtx.IssuesDir
 
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
@@ -35,13 +34,15 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("read manifest: %w", err)
 			}
 
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			// Load snapshot to get materialized state
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
-			if err != nil {
-				return fmt.Errorf("materialize: %w", err)
+			state := snap.State
+			if state == nil {
+				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 
 			// Detect stale entries.

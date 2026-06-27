@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -35,21 +35,17 @@ func newScopeRenameCmd() *cobra.Command {
 				return err
 			}
 
-			// Materialize to ensure state is current before scanning scope entries.
-			singleBranch := appCtx.Mode == "single-branch"
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			// Load snapshot to ensure state is current before scanning scope entries.
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
-			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return fmt.Errorf("materialize: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
 
-			// Load materialized issues to find which ones have matching scope entries.
-			issuesStateDir := filepath.Join(appCtx.StateDir, "issues")
-			issues, err := materialize.LoadAllIssues(issuesStateDir)
-			if err != nil {
-				return fmt.Errorf("load issues: %w", err)
+			// Get issues from snapshot
+			issues := snap.State.Issues
+			if issues == nil {
+				issues = make(map[string]*materialize.Issue)
 			}
 
 			// Find issues with scope entries that contain oldPath as a substring.
@@ -90,13 +86,9 @@ func newScopeRenameCmd() *cobra.Command {
 				}
 			}
 
-			// Rematerialize to apply the ops to state.
-			allOps, err = readAllOpsFromDir(filepath.Join(appCtx.IssuesDir, "ops"))
-			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
-			}
-			if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return fmt.Errorf("rematerialize: %w", err)
+			// Refresh snapshot to apply the ops to state.
+			if _, err := store.Refresh(context.Background()); err != nil {
+				return fmt.Errorf("refresh snapshot: %w", err)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")

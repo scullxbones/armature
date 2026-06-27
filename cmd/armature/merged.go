@@ -124,18 +124,16 @@ func newMergedCmd() *cobra.Command {
 			ctx := currentCtx(cmd)
 			singleBranch := ctx.Mode == "single-branch"
 
-			// Materialize to get current state
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(ctx.IssuesDir, "ops"))
+			// Load snapshot to get current state
+			store := newSnapshotStore(ctx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
-			}
-			if _, err := materialize.Materialize(ctx.StateDir, allOps, singleBranch, offsets); err != nil {
-				return fmt.Errorf("materialize: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
 
-			index, err := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json"))
-			if err != nil {
-				return fmt.Errorf("load index: %w", err)
+			index := snap.Index
+			if index == nil {
+				index = make(materialize.Index)
 			}
 
 			entry, ok := index[issueID]
@@ -155,9 +153,9 @@ func newMergedCmd() *cobra.Command {
 			}
 
 			// Load the issue to get its type
-			issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", issueID+".json"))
-			if err != nil {
-				return fmt.Errorf("load issue %s: %w", issueID, err)
+			issue := snap.State.Issues[issueID]
+			if issue == nil {
+				return fmt.Errorf("load issue %s: issue not found in snapshot", issueID)
 			}
 
 			// Record the merge op FIRST, before removing the worktree.
@@ -191,7 +189,7 @@ func newMergedCmd() *cobra.Command {
 
 			// Remove worktree if this is a task, bug, feature, or story type.
 			// This happens AFTER the op is recorded, so on failure the worktree is preserved.
-			if _, err := removeWorktreeForIssue(ctx.RepoPath, issue, cmd.ErrOrStderr()); err != nil {
+			if _, err := removeWorktreeForIssue(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
 

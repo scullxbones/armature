@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -17,13 +17,15 @@ func newConfirmCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			nodeID := args[0]
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			// Load snapshot to get materialized state
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
-			if err != nil {
-				return err
+			state := snap.State
+			if state == nil {
+				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 			if _, ok := state.Issues[nodeID]; !ok {
 				return fmt.Errorf("node %q not found", nodeID)

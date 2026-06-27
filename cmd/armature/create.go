@@ -1,14 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/issuetype"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
@@ -32,16 +31,14 @@ func newCreateCmd() *cobra.Command {
 			// Validate parent/type combination when a parent is specified.
 			if parent != "" {
 				ctx := currentCtx(cmd)
-				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(ctx.IssuesDir, "ops"))
+				store := newSnapshotStore(ctx)
+				snap, err := store.Load(context.Background())
 				if err != nil {
 					return fmt.Errorf("load snapshot: %w", err)
 				}
-				if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
-					return err
-				}
-				parentIssue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", parent+".json"))
-				if err != nil {
-					return fmt.Errorf("parent %s not found: %w", parent, err)
+				parentIssue := snap.State.Issues[parent]
+				if parentIssue == nil {
+					return fmt.Errorf("parent %s not found", parent)
 				}
 				if !issuetype.IsLegalHierarchy(parentIssue.Type, nodeType) {
 					return fmt.Errorf("invalid parent: %s (%s) cannot contain %s", parent, parentIssue.Type, nodeType)
