@@ -17,21 +17,29 @@ import (
 // Exemptions:
 // - materialize.go (the arm-materialize command)
 // - render_context.go (time-travel branch uses MaterializeAtSHA)
-// - claim.go, transition.go (already migrated)
+// - claim.go (already migrated)
+//
+// ARCHITECTURE GUARD LIMITATION: This test catches direct materialize.* call expressions
+// and filepath.Join(x.StateDir, ...) patterns. It does NOT detect the store.Load()-before-append
+// anti-pattern, where a handler calls store.Load() purely to read the index before writing an
+// op (instead of using store.ReadIndex()). That premature-rematerialization bug class must be
+// caught by code review. Files known to be fully migrated to store.ReadIndex() are removed from
+// the exempt list and added to scope so the AST guard continues to protect them.
 func TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6(t *testing.T) {
-	// Scope of files that must be migrated
+	// Scope of files that must be migrated (includes fully-migrated files so the guard
+	// actively protects them against regressions).
 	scope := []string{
 		"create.go", "assign.go", "dagsum.go", "confirm.go", "list.go",
 		"context_history.go", "decompose.go", "harness_context.go", "hook.go",
 		"scope_delete.go", "merged.go", "scope_rename.go", "ready.go",
 		"reparent.go", "show.go", "stalereview.go", "sync.go", "tui.go", "validate.go",
+		"transition.go",
 	}
 
 	// Exempt files
 	exempt := map[string]bool{
 		"render_context.go": true,
 		"claim.go":          true,
-		"transition.go":     true,
 		"materialize.go":    true,
 	}
 

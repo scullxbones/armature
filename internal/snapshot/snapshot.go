@@ -100,8 +100,12 @@ func (s *Store) Index() materialize.Index {
 	return s.current.Index
 }
 
-// ReadIndex reads the index from disk without triggering materialization.
-// Returns the index and any error from loading the index file.
+// ReadIndex reads the index directly from disk without triggering materialization and
+// without consulting the s.current cache. It does not call materialize.Materialize* or
+// write any state files. Use this instead of Index() when you need the on-disk index
+// without a full Load/Refresh cycle, or instead of store.Load() when the caller only
+// needs index data before appending an op. Contrast with Index(), which returns the
+// cached data from the most recent Load/Refresh call.
 func (s *Store) ReadIndex() (materialize.Index, error) {
 	return materialize.LoadIndex(s.IndexPath())
 }

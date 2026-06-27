@@ -1,10 +1,10 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -83,12 +83,13 @@ This allows the issue to be claimed again by another worker.`,
 			}
 
 			// Check current status before unassigning so we can release claimed → open.
+			// Use ReadIndex to avoid premature rematerialization; gracefully degrade to
+			// an empty index if the index file is missing.
 			store := newSnapshotStore(ctx)
-			snap, err := store.Load(context.Background())
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
+			index, _ := store.ReadIndex() //nolint:errcheck // missing index treated as empty; access uses ok-check
+			if index == nil {
+				index = make(materialize.Index)
 			}
-			index := snap.Index
 			currentStatus := ""
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status

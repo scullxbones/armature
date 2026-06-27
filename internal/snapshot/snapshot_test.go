@@ -393,4 +393,14 @@ func TestStore_ReadIndex_ReadsFromDiskWithoutMaterialize(t *testing.T) {
 	require.True(t, ok2)
 	assert.Equal(t, "done", entry2.Status)
 	assert.Equal(t, "Completed Task", entry2.Title)
+
+	// ReadIndex must not trigger materialization: checkpoint.json and issues/ must be absent.
+	// If materialize.MaterializeAndReturn* had been called it would have written these paths.
+	assert.NoFileExists(t, filepath.Join(stateDir, "checkpoint.json"),
+		"ReadIndex must not write checkpoint.json (materialization must not occur)")
+	issuesDir := filepath.Join(stateDir, "issues")
+	if entries, err := os.ReadDir(issuesDir); err == nil {
+		assert.Empty(t, entries, "ReadIndex must not populate the issues/ directory (materialization must not occur)")
+	}
+	// os.ReadDir returning an error means the directory doesn't exist, which is also acceptable.
 }
