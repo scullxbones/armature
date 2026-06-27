@@ -3,8 +3,6 @@ package context
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -27,20 +25,22 @@ type Context struct {
 }
 
 // Assemble builds a layered context for the given issue from state.
-func Assemble(issueID string, stateDir string, state *materialize.State, graph *dag.Graph) (*Context, error) {
+func Assemble(issueID string, state *materialize.State, reader FileReader) (*Context, error) {
 	issue, ok := state.Issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
 	}
 
+	// Derive graph internally from state
+	graph := graphFromState(state)
+
 	var layers []Layer
-	repoRoot := inferRepoRoot(stateDir)
 
 	// Layer 1: core_spec
 	layers = append(layers, buildCoreSpec(issue))
 
 	// Layer 2: context_files
-	layers = append(layers, buildContextFiles(issue, repoRoot))
+	layers = append(layers, buildContextFiles(issue, reader))
 
 	// Layer 3: snippets
 	layers = append(layers, buildSnippets(issue))
@@ -70,29 +70,13 @@ func Assemble(issueID string, stateDir string, state *materialize.State, graph *
 	}, nil
 }
 
-func inferRepoRoot(stateDir string) string {
-	clean := filepath.Clean(stateDir)
-	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		base := filepath.Base(dir)
-		if base == ".arm" || base == ".armature" {
-			return filepath.Dir(dir)
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-	}
-	return clean
-}
-
-func buildContextFiles(issue *materialize.Issue, repoRoot string) Layer {
+func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
 	if len(issue.ContextFiles) == 0 {
 		return Layer{Name: "context_files", Priority: 2, Content: ""}
 	}
 	var sections []string
 	for _, relPath := range issue.ContextFiles {
-		fullPath := filepath.Join(repoRoot, relPath)
-		data, err := os.ReadFile(fullPath) //nolint:gosec // G304: path joined from repo root and issue-defined relative path
+		data, err := reader.ReadFile(relPath)
 		if err != nil {
 			sections = append(sections, fmt.Sprintf("### %s\n(missing: %v)", relPath, err))
 			continue
@@ -264,4 +248,23 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
 	return Layer{Name: "sibling_outcomes", Priority: 8, Content: content}
+}
+
+// graphFromState constructs a dag.Graph from a materialize.State.
+// This is the canonical way to build a graph for context assembly and other operations
+// that need to traverse the issue hierarchy and dependencies.
+func graphFromState(state *materialize.State) *dag.Graph {
+	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
+	for id, issue := range state.Issues {
+		nodeIndex[id] = &dag.Node{
+			ID:        issue.ID,
+			Title:     issue.Title,
+			Type:      issue.Type,
+			Parent:    issue.Parent,
+			Children:  append([]string(nil), issue.Children...),
+			BlockedBy: append([]string(nil), issue.BlockedBy...),
+			Blocks:    append([]string(nil), issue.Blocks...),
+		}
+	}
+	return dag.BuildGraph(nodeIndex)
 }

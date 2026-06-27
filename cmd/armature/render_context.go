@@ -7,7 +7,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
@@ -60,10 +59,18 @@ func newRenderContextCmd() *cobra.Command {
 				state = snap.State
 			}
 
-			// Build graph from state using the helper function
-			graph := buildGraphFromState(state)
+			// Create an OSFileReader for file access
+			repoRoot := filepath.Dir(appCtx.StateDir)
+			if repoRoot == "." || repoRoot == "" {
+				var err error
+				repoRoot, err = os.Getwd()
+				if err != nil {
+					return fmt.Errorf("get current directory: %w", err)
+				}
+			}
+			reader := &context.OSFileReader{Root: repoRoot}
 
-			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state, graph)
+			ctx, err := context.Assemble(rcIssue, state, reader)
 			if err != nil {
 				return fmt.Errorf("assemble context: %w", err)
 			}
@@ -92,23 +99,4 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
 	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
 	return cmd
-}
-
-// buildGraphFromState constructs a dag.Graph from a materialize.State.
-// This is the canonical way to build a graph for context assembly and other operations
-// that need to traverse the issue hierarchy and dependencies.
-func buildGraphFromState(state *materialize.State) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
-	for id, issue := range state.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        issue.ID,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  append([]string(nil), issue.Children...),
-			BlockedBy: append([]string(nil), issue.BlockedBy...),
-			Blocks:    append([]string(nil), issue.Blocks...),
-		}
-	}
-	return dag.BuildGraph(nodeIndex)
 }
