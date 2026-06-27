@@ -1223,3 +1223,4 @@
 ["note","ARCHIMP-S14-T6",1782570577,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S14 detected at claim time"}]
 ["note","ARCHIMP-S14",1782570577,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S14-T6 detected at claim time"}]
 ["claim","ARCHIMP-S14-T6",1782570577,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":300}]
+["transition","ARCHIMP-S14-T6",1782571715,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
