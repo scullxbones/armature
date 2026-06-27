@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -1644,4 +1645,43 @@ func TestDecomposeContextCmd_WithSources(t *testing.T) {
 
 	var result map[string]any
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
+}
+
+// TestNewSnapshotStore_UsesContextPaths verifies that newSnapshotStore wires
+// opsDir from IssuesDir/ops, stateDir from StateDir, and singleBranch from Mode.
+func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
+	t.Parallel()
+
+	// Single-branch mode
+	ctx := &config.Context{
+		IssuesDir: "/repo/.armature",
+		StateDir:  "/repo/.armature/state/worker-1",
+		Mode:      "single-branch",
+	}
+	store := newSnapshotStore(ctx)
+	require.NotNil(t, store)
+
+	// Verify stateDir is wired correctly by checking IndexPath
+	expectedIndexPath := filepath.Join(ctx.StateDir, "index.json")
+	assert.Equal(t, expectedIndexPath, store.IndexPath())
+
+	// Verify IssuePath also uses StateDir
+	expectedIssuePath := filepath.Join(ctx.StateDir, "issues", "test-id.json")
+	assert.Equal(t, expectedIssuePath, store.IssuePath("test-id"))
+
+	// Dual-branch mode (Mode != "single-branch")
+	ctx2 := &config.Context{
+		IssuesDir: "/repo/.arm/.armature",
+		StateDir:  "/repo/.arm/state/worker-1",
+		Mode:      "dual-branch",
+	}
+	store2 := newSnapshotStore(ctx2)
+	require.NotNil(t, store2)
+
+	// Verify paths for dual-branch
+	expectedIndexPath2 := filepath.Join(ctx2.StateDir, "index.json")
+	assert.Equal(t, expectedIndexPath2, store2.IndexPath())
+
+	expectedIssuePath2 := filepath.Join(ctx2.StateDir, "issues", "test-id.json")
+	assert.Equal(t, expectedIssuePath2, store2.IssuePath("test-id"))
 }

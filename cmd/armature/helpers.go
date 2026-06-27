@@ -14,6 +14,7 @@ import (
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -343,4 +344,14 @@ func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, er
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	return ops.ExtractOps(items), offsets, nil
+}
+
+// newSnapshotStore creates a snapshot.Store from the given config context.
+// It wires opsDir from IssuesDir/ops, stateDir from StateDir, and
+// singleBranch from the context mode.
+func newSnapshotStore(ctx *config.Context) *snapshot.Store {
+	opsDir := filepath.Join(ctx.IssuesDir, "ops")
+	stateDir := ctx.StateDir
+	singleBranch := ctx.Mode == "single-branch"
+	return snapshot.NewStore(opsDir, stateDir, singleBranch)
 }
