@@ -16,6 +16,8 @@ import (
 type Options struct {
 	WriteStateFiles bool   // Controls whether state files and checkpoints are written to disk
 	ExcludeWorkerID string // If set, filters out ops from this worker (diagnostic mode only)
+	EmitWarnings    bool   // Controls whether warnings are emitted to stderr
+	SingleBranch    bool   // Controls single-branch mode for auto-merging
 }
 
 type Result struct {
@@ -256,12 +258,13 @@ func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBranch bool
 // It accepts pre-read ops and processes them according to the Options.
 // If Options.ExcludeWorkerID is set, it runs in diagnostic-only mode (no disk writes).
 // If Options.WriteStateFiles is false, no state files or checkpoints are written.
+// If Options.EmitWarnings is false, warnings are suppressed from stderr.
 // byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
 func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
 	if opts.ExcludeWorkerID != "" {
-		return runExcludeWorker(allOps, opts.ExcludeWorkerID, false, true)
+		return runExcludeWorker(allOps, opts.ExcludeWorkerID, opts.SingleBranch, opts.EmitWarnings)
 	}
-	return runFullPipeline(stateDir, allOps, false, byteOffsets, true, opts.WriteStateFiles)
+	return runFullPipeline(stateDir, allOps, opts.SingleBranch, byteOffsets, opts.EmitWarnings, opts.WriteStateFiles)
 }
 
 // Materialize runs the full materialization pipeline.
@@ -269,7 +272,7 @@ func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Op
 // issuesDir is used to resolve stateDir paths; allOps should be pre-read from the log files.
 // byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
 func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (Result, error) {
-	_, result, err := runFullPipeline(stateDir, allOps, singleBranch, byteOffsets, true, true)
+	_, result, err := Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true, SingleBranch: singleBranch})
 	return result, err
 }
 
@@ -277,14 +280,14 @@ func Materialize(stateDir string, allOps []ops.Op, singleBranch bool, byteOffset
 // warnings to stderr. Snapshot-backed commands use this to avoid duplicate warnings
 // because they render returned warnings themselves.
 func MaterializeAndReturnQuiet(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (*State, Result, error) {
-	return runFullPipeline(stateDir, allOps, singleBranch, byteOffsets, false, true)
+	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: false, SingleBranch: singleBranch})
 }
 
 // MaterializeAndReturn runs the full materialization pipeline and returns the resulting State.
 // It accepts pre-read ops and writes state and checkpoint files to stateDir.
 // byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
 func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, byteOffsets map[string]int64) (*State, Result, error) {
-	return runFullPipeline(stateDir, allOps, singleBranch, byteOffsets, true, true)
+	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true, SingleBranch: singleBranch})
 }
 
 // MaterializeExcludeWorker replays ops excluding all ops from the given
@@ -292,7 +295,7 @@ func MaterializeAndReturn(stateDir string, allOps []ops.Op, singleBranch bool, b
 // updated. Returns the resulting State and Result.
 // allOps should be pre-read from log files.
 func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBranch bool) (*State, Result, error) {
-	return runExcludeWorker(allOps, excludeWorkerID, singleBranch, true)
+	return Run("", allOps, nil, Options{ExcludeWorkerID: excludeWorkerID, EmitWarnings: true, SingleBranch: singleBranch})
 }
 
 // opSortKey returns a secondary sort key so that at equal timestamps: creates
