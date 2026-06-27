@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -30,13 +31,15 @@ func newTUICmd() *cobra.Command {
 			}
 
 			if !tui.IsInteractive() {
-				allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+				// Load snapshot to get materialized state
+				store := newSnapshotStore(appCtx)
+				snap, err := store.Load(context.Background())
 				if err != nil {
-					return fmt.Errorf("read ops: %w", err)
+					return fmt.Errorf("load snapshot: %w", err)
 				}
-				state, _, err := materialize.MaterializeAndReturn(stateDir, allOps, true, offsets)
-				if err != nil {
-					return err
+				state := snap.State
+				if state == nil {
+					state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "board: %d issues\n", len(state.Issues))
 				return nil

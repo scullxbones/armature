@@ -1,11 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -84,15 +83,12 @@ This allows the issue to be claimed again by another worker.`,
 			}
 
 			// Check current status before unassigning so we can release claimed → open.
-			issuesDir := ctx.IssuesDir
-			allOps, offsets, matErr := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
-			if matErr != nil {
-				return fmt.Errorf("read ops: %w", matErr)
+			store := newSnapshotStore(ctx)
+			snap, err := store.Load(context.Background())
+			if err != nil {
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			if _, matErr := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); matErr != nil {
-				return matErr
-			}
-			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
+			index := snap.Index
 			currentStatus := ""
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status

@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/clock"
@@ -193,13 +193,15 @@ plan, or --schema to view the JSON schema.`,
 				return err
 			}
 
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			// Load snapshot to get materialized state
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
-			if err != nil {
-				return err
+			state := snap.State
+			if state == nil {
+				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 
 			applyOpts := decompose.ApplyOptions{
@@ -261,13 +263,15 @@ func newDecomposeRevertCmd() *cobra.Command {
 				return err
 			}
 
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			// Load snapshot to get materialized state
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(context.Background())
 			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-			state, _, err := materialize.MaterializeAndReturn(appCtx.StateDir, allOps, true, offsets)
-			if err != nil {
-				return err
+			state := snap.State
+			if state == nil {
+				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 
 			if dryRunFlag {

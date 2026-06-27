@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -224,10 +224,14 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	}
 
 	// Load current materialized index to discover which issues are affected.
-	indexPath := filepath.Join(appCtx.StateDir, "index.json")
-	index, err := materialize.LoadIndex(indexPath)
+	store := newSnapshotStore(appCtx)
+	snap, err := store.Load(context.Background())
 	if err != nil {
 		return
+	}
+	index := snap.Index
+	if index == nil {
+		index = make(materialize.Index)
 	}
 
 	ts := nowEpoch()
@@ -297,22 +301,23 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		return nil
 	}
 
-	issuesDir := appCtx.IssuesDir
-	singleBranch := appCtx.Mode == "single-branch"
-
-	allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+	// Load snapshot to get materialized state
+	store := newSnapshotStore(appCtx)
+	snap, err := store.Load(context.Background())
 	if err != nil {
-		return fmt.Errorf("read ops: %w", err)
-	}
-	if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-		return fmt.Errorf("materialize: %w", err)
+		return fmt.Errorf("load snapshot: %w", err)
 	}
 
-	// Load materialized issues
-	stateIssuesDir := filepath.Join(appCtx.StateDir, "issues")
-	issues, err := loadIssuesFromDir(stateIssuesDir)
-	if err != nil {
-		return fmt.Errorf("load issues: %w", err)
+	// Extract issues map from snapshot and convert to slice for DetectMerges
+	issuesMap := snap.State.Issues
+	if issuesMap == nil {
+		issuesMap = make(map[string]*materialize.Issue)
+	}
+	issues := make([]materialize.Issue, 0, len(issuesMap))
+	for _, issue := range issuesMap {
+		if issue != nil {
+			issues = append(issues, *issue)
+		}
 	}
 
 	gc := adapters.New(appCtx.RepoPath)
@@ -349,12 +354,9 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 	}
 
-	allOps, err = readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
-	if err != nil {
-		return fmt.Errorf("read ops: %w", err)
-	}
-	if _, err := materialize.Materialize(appCtx.StateDir, allOps, singleBranch, offsets); err != nil {
-		return fmt.Errorf("re-materialize: %w", err)
+	// Refresh snapshot after writing ops
+	if _, err := store.Refresh(context.Background()); err != nil {
+		return fmt.Errorf("refresh snapshot: %w", err)
 	}
 
 	return nil
