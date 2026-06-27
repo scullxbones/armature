@@ -122,26 +122,3 @@ preview changes without committing them.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print which issues would be transitioned without writing ops")
 	return cmd
 }
-
-// loadIssuesFromDir loads all materialized issues from a directory.
-// Returns a slice of Issue structs.
-// Note: This is kept for backward compatibility with other commands that may still use it.
-func loadIssuesFromDir(issuesDir string) ([]materialize.Issue, error) {
-	var issues []materialize.Issue
-
-	entries, err := adapters.ReadIssuesDir(issuesDir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, issueID := range entries {
-		issueFile := filepath.Join(issuesDir, issueID+".json")
-		var issue materialize.Issue
-		if err := adapters.LoadIssueJSON(issueFile, &issue); err != nil {
-			continue // Skip unreadable issues
-		}
-		issues = append(issues, issue)
-	}
-
-	return issues, nil
-}

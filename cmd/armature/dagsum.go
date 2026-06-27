@@ -60,7 +60,7 @@ mode (agents) to auto-approve all pending draft items.`,
 				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 
-			tracePath := filepath.Join(appCtx.StateDir, "traceability.json")
+			tracePath := store.StatePath("traceability.json")
 			cov, _ := traceability.Read(tracePath) //nolint:errcheck // best-effort read of derived traceability state
 
 			// Build a set of uncited IDs for fast lookup.

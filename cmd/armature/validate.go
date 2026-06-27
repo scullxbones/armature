@@ -8,7 +8,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
@@ -52,7 +51,8 @@ COVERAGE and OK lines.`,
   # Suppress INFO lines (e.g. phantom-scope notices)
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, true)
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
@@ -68,7 +68,7 @@ COVERAGE and OK lines.`,
 			}
 
 			// Read coverage data
-			coverageData, err := adapters.ReadCoverageFile(filepath.Join(appCtx.StateDir, "traceability.json"))
+			coverageData, err := adapters.ReadCoverageFile(store.StatePath("traceability.json"))
 			if err != nil {
 				return fmt.Errorf("read coverage: %w", err)
 			}

@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/app"
 	"github.com/scullxbones/armature/internal/tui/dagtree"
@@ -31,8 +32,12 @@ func newTUICmd() *cobra.Command {
 			}
 
 			if !tui.IsInteractive() {
-				// Load snapshot to get materialized state
-				store := newSnapshotStore(appCtx)
+				// Non-interactive path uses a scratch dir to avoid writing checkpoint/issues/index
+				// into the canonical StateDir. The interactive path (app.New below) uses stateDir
+				// which already points to the .tui isolation dir.
+				tuiOpsDir := filepath.Join(appCtx.IssuesDir, "ops")
+				singleBranch := appCtx.Mode == "single-branch"
+				store := snapshot.NewStore(tuiOpsDir, stateDir, singleBranch)
 				snap, err := store.Load(context.Background())
 				if err != nil {
 					return fmt.Errorf("load snapshot: %w", err)

@@ -51,6 +51,8 @@ func Load(opsDir, stateDir string, singleBranch bool) (*Snapshot, error) {
 }
 
 // Store owns ops-read→materialize→snapshot operations for a configured directory pair.
+// Store is not safe for concurrent use. It is designed for sequential, per-command usage
+// where Load/Refresh/Issue/Index are called from a single goroutine.
 type Store struct {
 	opsDir       string
 	stateDir     string
@@ -107,4 +109,10 @@ func (s *Store) IssuePath(id string) string {
 // IndexPath returns the filesystem path to the index file.
 func (s *Store) IndexPath() string {
 	return filepath.Join(s.stateDir, "index.json")
+}
+
+// StatePath returns the filesystem path for a named file within the state directory.
+// Use this instead of filepath.Join(ctx.StateDir, name) in handler code.
+func (s *Store) StatePath(name string) string {
+	return filepath.Join(s.stateDir, name)
 }
