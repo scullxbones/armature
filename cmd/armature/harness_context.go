@@ -24,9 +24,9 @@ func buildHarnessStructuredContext(appCtx *config.Context, issueID string) (stri
 	if err != nil {
 		return "", fmt.Errorf("load snapshot: %w", err)
 	}
-	// Build graph from state using the helper function
-	graph := buildGraphFromState(snap.State)
-	assembled, err := armcontext.Assemble(issueID, stateDir, snap.State, graph)
+	// Create an OSFileReader for file access
+	reader := &armcontext.OSFileReader{Root: appCtx.RepoPath}
+	assembled, err := armcontext.Assemble(issueID, snap.State, reader)
 	if err != nil {
 		return "", fmt.Errorf("assemble context: %w", err)
 	}

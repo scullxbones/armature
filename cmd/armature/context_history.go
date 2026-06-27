@@ -60,10 +60,10 @@ func newContextHistoryCmd() *cobra.Command {
 					continue
 				}
 
-				// Build graph from state using the helper function
-				graph := buildGraphFromState(state)
+				// Create an OSFileReader for file access
+				reader := &context.OSFileReader{Root: appCtx.RepoPath}
 
-				ctx, err := context.Assemble(chIssue, appCtx.IssuesDir, state, graph)
+				ctx, err := context.Assemble(chIssue, state, reader)
 				if err != nil {
 					// Issue doesn't exist at this commit — skip
 					continue

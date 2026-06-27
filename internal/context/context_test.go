@@ -7,29 +7,26 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const stateDir = "/tmp/fake"
+// emptyFileReader is a test FileReader that returns an error for all files.
+type emptyFileReader struct{}
 
-// buildGraphFromState constructs a dag.Graph from a materialize.State for testing.
-func buildGraphFromState(state *materialize.State) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node)
-	for id, issue := range state.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        issue.ID,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  issue.Children,
-			BlockedBy: issue.BlockedBy,
-			Blocks:    issue.Blocks,
-		}
-	}
-	return dag.BuildGraph(nodeIndex)
+func (f *emptyFileReader) ReadFile(relPath string) ([]byte, error) {
+	return nil, fmt.Errorf("file not found: %s", relPath)
+}
+
+// realFileReader reads files from the filesystem.
+type realFileReader struct {
+	root string
+}
+
+func (r *realFileReader) ReadFile(relPath string) ([]byte, error) {
+	fullPath := filepath.Join(r.root, relPath)
+	return os.ReadFile(fullPath) //nolint:gosec // G304: path is joined from configured root
 }
 
 func TestAssembleContext_CoreSpec(t *testing.T) {
@@ -48,9 +45,8 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 		Blocks:           []string{},
 		DecisionRefs:     []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 	require.NotEmpty(t, ctx.Layers)
 
@@ -88,9 +84,8 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 		Children:     []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-A", stateDir, state, graph)
+	ctx, err := Assemble("TST-A", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -128,9 +123,8 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 		Children:     []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-A", stateDir, state, graph)
+	ctx, err := Assemble("TST-A", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -170,9 +164,8 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 		Children:     []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-A", stateDir, state, graph)
+	ctx, err := Assemble("TST-A", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -214,9 +207,8 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-C", stateDir, state, graph)
+	ctx, err := Assemble("TST-C", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -258,8 +250,7 @@ func TestAssembleContext_Truncation(t *testing.T) {
 func TestAssembleContext_UnknownIssue(t *testing.T) {
 	t.Parallel()
 	state := materialize.NewState()
-	graph := buildGraphFromState(state)
-	_, err := Assemble("MISSING-001", stateDir, state, graph)
+	_, err := Assemble("MISSING-001", state, &emptyFileReader{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "MISSING-001")
 }
@@ -278,9 +269,7 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
-
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var snippetsLayer *Layer
@@ -314,9 +303,7 @@ func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
-
-	ctx, err := Assemble("TST-001", dir, state, graph)
+	ctx, err := Assemble("TST-001", state, &realFileReader{root: dir})
 	require.NoError(t, err)
 
 	var contextFilesLayer *Layer
@@ -350,9 +337,8 @@ func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", dir, state, graph)
+	ctx, err := Assemble("TST-001", state, &realFileReader{root: dir})
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -377,9 +363,7 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
-
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -405,9 +389,8 @@ func TestBuildDecisions(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var decLayer *Layer
@@ -440,9 +423,8 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -475,9 +457,8 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -511,9 +492,8 @@ func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -564,9 +544,8 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-B", stateDir, state, graph)
+	ctx, err := Assemble("TST-B", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -595,9 +574,8 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-001", stateDir, state, graph)
+	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -632,9 +610,8 @@ func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", stateDir, state, graph)
+	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -674,9 +651,8 @@ func TestBuildParentChain_FromState(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", stateDir, state, graph)
+	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -728,9 +704,8 @@ func TestBuildParentChain_WithGrandparent(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", stateDir, state, graph)
+	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -785,9 +760,8 @@ func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X", stateDir, state, graph)
+	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -839,9 +813,8 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
 
-	ctx, err := Assemble("TST-X2", stateDir, state, graph)
+	ctx, err := Assemble("TST-X2", state, &emptyFileReader{})
 	require.NoError(t, err)
 
 	var sibLayer *Layer
