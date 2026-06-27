@@ -39,6 +39,9 @@ func newAmendCmd() *cobra.Command {
 			}
 			scopeChanged := cmd.Flags().Changed("scope")
 			contextFilesChanged := cmd.Flags().Changed("context-file")
+			if clearContextFiles && contextFilesChanged {
+				return fmt.Errorf("cannot use --clear-context-files and --context-file together")
+			}
 			if scopeChanged {
 				payload.Scope = scope
 			}

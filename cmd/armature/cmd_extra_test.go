@@ -558,6 +558,17 @@ func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// Fix W3: passing both --clear-context-files and --context-file must be a hard error.
+func TestAmendCmd_ClearContextFilesAndContextFileConflict_ReturnsError(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--clear-context-files",
+		"--context-file", "docs/guide.md")
+	require.Error(t, err, "using --clear-context-files together with --context-file must return an error")
+	assert.Contains(t, err.Error(), "--clear-context-files")
+}
+
 // setupRepoWithSource creates a repo with a task and a source entry in the manifest,
 // returning the repo path and the source UUID.
 func setupRepoWithSource(t *testing.T) (string, string) {

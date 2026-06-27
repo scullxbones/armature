@@ -1,8 +1,10 @@
 package context
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -929,4 +931,72 @@ func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "core_spec (priority 1) must survive truncation")
+}
+
+// Fix B1: inferRepoRoot must fall back to git in worktree mode.
+func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
+	t.Parallel()
+	// Create a git repo without .arm/.armature directory; simulates a worktree layout.
+	repoDir := t.TempDir()
+	initCmd := exec.CommandContext(context.Background(), "git", "init")
+	initCmd.Dir = repoDir
+	require.NoError(t, initCmd.Run(), "git init must succeed")
+
+	// stateDir is a subdirectory with no .arm/.armature in the path hierarchy.
+	stateDir := filepath.Join(repoDir, "state", "worker-abc")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	root := inferRepoRoot(stateDir)
+	assert.Equal(t, repoDir, root, "inferRepoRoot must return git repo root when no .arm/.armature directory exists in path")
+}
+
+// Fix B1: inferRepoRoot still uses the fast path when .armature is in the hierarchy.
+func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {
+	t.Parallel()
+	repoDir := t.TempDir()
+	armatureDir := filepath.Join(repoDir, ".armature")
+	stateDir := filepath.Join(armatureDir, "state", "worker-abc")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	root := inferRepoRoot(stateDir)
+	assert.Equal(t, repoDir, root, "inferRepoRoot must find repo root from .armature directory in path")
+}
+
+// Fix W1: buildContextFiles must use a longer fence when file content contains triple backticks.
+func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// Content containing a triple-backtick code fence.
+	mdContent := "# Guide\n```go\nfmt.Println(\"hello\")\n```\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte(mdContent), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:           "TST-001",
+		Title:        "Test",
+		Type:         "task",
+		Status:       "open",
+		ContextFiles: []string{"guide.md"},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	graph := buildGraphFromState(state)
+
+	ctx, err := Assemble("TST-001", dir, state, graph)
+	require.NoError(t, err)
+
+	var cfLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "context_files" {
+			cfLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, cfLayer)
+	// The wrapper fence must be at least 4 backticks (longer than the content's 3).
+	assert.Contains(t, cfLayer.Content, "````", "wrapper fence must be longer than content's triple-backtick fence")
+	// The content itself must still be present.
+	assert.Contains(t, cfLayer.Content, "fmt.Println")
 }

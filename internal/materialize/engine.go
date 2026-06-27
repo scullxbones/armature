@@ -626,7 +626,7 @@ func normalizeScopeEntries(scope []string) []string {
 					result = append(result, part)
 				}
 			}
-		} else {
+		} else if entry = strings.TrimSpace(entry); entry != "" {
 			result = append(result, entry)
 		}
 	}
