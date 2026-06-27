@@ -1,4 +1,3 @@
-# In single-branch mode, state/ lives here and must not be committed.
-# In dual-branch mode, state/ lives at the worktree root — see ../.gitignore.
-# See architecture.md §2 (Directory Structure).
+# Materialized state — derived from ops logs, regenerated locally by each worker.
+# Never commit. See architecture.md §2 (Directory Structure).
 state/

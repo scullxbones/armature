@@ -1,4 +1,13 @@
 #!/bin/sh
+# armature:managed
 # Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
+# Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-merge && chmod +x .git/hooks/post-merge
+
+# Skip on _armature branch where ops logs are committed directly
+current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$current_branch" = "_armature" ]; then
+  exit 0
+fi
+
 arm sync
