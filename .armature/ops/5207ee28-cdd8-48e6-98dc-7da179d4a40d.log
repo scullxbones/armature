@@ -1195,3 +1195,4 @@
 ["note","ARCHIMP-S13-T2",1782568289,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S13 detected at claim time"}]
 ["note","ARCHIMP-S13",1782568289,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S13-T2 detected at claim time"}]
 ["claim","ARCHIMP-S13-T2",1782568289,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
+["transition","ARCHIMP-S13-T2",1782568979,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Rewrote Materialize, MaterializeAndReturn, MaterializeAndReturnQuiet, MaterializeExcludeWorker as single-line wrappers delegating to Run(); added SingleBranch and EmitWarnings fields to Options; all TestMaterialize* tests pass unchanged; make check green at 85.6% coverage, mutation efficacy 100%."}]
