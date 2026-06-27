@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,12 +69,8 @@ func TestAssemble_ContextFilesLayerUsesReader_REQ_ARCHIMP_S16_T2(t *testing.T) {
 	}
 
 	ctx, err := Assemble("TEST-1", state, reader)
-	if err != nil {
-		t.Fatalf("Assemble failed: %v", err)
-	}
-	if ctx == nil {
-		t.Fatal("Assemble returned nil context")
-	}
+	require.NoError(t, err, "Assemble failed")
+	require.NotNil(t, ctx, "Assemble returned nil context")
 
 	var contextFilesLayer *Layer
 	for i := range ctx.Layers {
@@ -82,34 +80,11 @@ func TestAssemble_ContextFilesLayerUsesReader_REQ_ARCHIMP_S16_T2(t *testing.T) {
 		}
 	}
 
-	if contextFilesLayer == nil {
-		t.Fatal("context_files layer not found in assembled context")
-	}
-	if len(contextFilesLayer.Content) == 0 {
-		t.Fatal("context_files layer has empty content")
-	}
-	if !containsStr(contextFilesLayer.Content, "path/to/file1.txt") {
-		t.Errorf("context_files layer missing path/to/file1.txt")
-	}
-	if !containsStr(contextFilesLayer.Content, "content of file 1") {
-		t.Errorf("context_files layer missing content from file1")
-	}
-	if !containsStr(contextFilesLayer.Content, "path/to/file2.md") {
-		t.Errorf("context_files layer missing path/to/file2.md")
-	}
-	if !containsStr(contextFilesLayer.Content, "Markdown Content") {
-		t.Errorf("context_files layer missing content from file2")
-	}
-	if !containsStr(contextFilesLayer.Content, "missing/file.txt") {
-		t.Errorf("context_files layer missing reference to missing file")
-	}
-}
-
-func containsStr(s, substring string) bool {
-	for i := 0; i <= len(s)-len(substring); i++ {
-		if s[i:i+len(substring)] == substring {
-			return true
-		}
-	}
-	return false
+	require.NotNil(t, contextFilesLayer, "context_files layer not found in assembled context")
+	require.NotEmpty(t, contextFilesLayer.Content, "context_files layer has empty content")
+	assert.True(t, strings.Contains(contextFilesLayer.Content, "path/to/file1.txt"), "context_files layer missing path/to/file1.txt")
+	assert.True(t, strings.Contains(contextFilesLayer.Content, "content of file 1"), "context_files layer missing content from file1")
+	assert.True(t, strings.Contains(contextFilesLayer.Content, "path/to/file2.md"), "context_files layer missing path/to/file2.md")
+	assert.True(t, strings.Contains(contextFilesLayer.Content, "Markdown Content"), "context_files layer missing content from file2")
+	assert.True(t, strings.Contains(contextFilesLayer.Content, "missing/file.txt"), "context_files layer missing reference to missing file")
 }

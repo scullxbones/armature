@@ -135,12 +135,9 @@ func newHarnessHookCmd() *cobra.Command {
 			// Create hook and evaluate
 			hook := harnesshook.NewHook(resolver)
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
-				Input:      inputData,
-				TaskID:     taskID,
-				Platform:   os.Getenv("ARMATURE_HOOK_PLATFORM"),
-				RepoPath:   appCtx.RepoPath,
-				StateDir:   appCtx.StateDir,
-				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
+				Input:    inputData,
+				TaskID:   taskID,
+				Platform: os.Getenv("ARMATURE_HOOK_PLATFORM"),
 			})
 			if err != nil {
 				return err
