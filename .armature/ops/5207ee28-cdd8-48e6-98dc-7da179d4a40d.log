@@ -1248,3 +1248,4 @@
 ["note","ARCHIMP-S15",1782573657,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S17-T2 detected at claim time"}]
 ["note","ARCHIMP-S17-T2",1782573657,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S17 detected at claim time"}]
 ["note","ARCHIMP-S17",1782573657,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S17-T2 detected at claim time"}]
+["note","ARCHIMP-S17-T2",1782573657,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with ARCHIMP-S15-T2 (same worker, dismissed)"}]
