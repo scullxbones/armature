@@ -694,3 +694,134 @@ func TestMaterializeAndReturnQuiet_BasicRoundTrip(t *testing.T) {
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.OpsProcessed)
 }
+
+// TestRun_WriteStateFilesControlsDiskWrites_REQ_ARCHIMP_S13 verifies that when Options.WriteStateFiles=false,
+// the Run function skips all disk-write operations but still materializes state in memory.
+func TestRun_WriteStateFilesControlsDiskWrites_REQ_ARCHIMP_S13(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+
+	workerID := "worker-x"
+
+	// Create test ops
+	createOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+
+	allOps := []ops.Op{createOp}
+
+	// Run with WriteStateFiles=false
+	state, result, err := Run(stateDir, allOps, nil, Options{WriteStateFiles: false})
+	require.NoError(t, err, "Run should succeed with WriteStateFiles=false")
+
+	// Verify state is materialized in memory
+	assert.Equal(t, 1, result.IssueCount, "should have one issue in memory")
+	assert.Equal(t, 1, result.OpsProcessed)
+	assert.NotNil(t, state)
+	_, hasTask := state.Issues["task-01"]
+	assert.True(t, hasTask, "issue should be materialized in state")
+
+	// Verify disk files were NOT written
+	indexPath := filepath.Join(stateDir, "index.json")
+	_, err = os.Stat(indexPath)
+	assert.True(t, os.IsNotExist(err), "index.json should not exist when WriteStateFiles=false")
+
+	issuesDir := filepath.Join(stateDir, "issues")
+	_, err = os.Stat(issuesDir)
+	assert.True(t, os.IsNotExist(err), "issues directory should not exist when WriteStateFiles=false")
+
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	_, err = os.Stat(checkpointPath)
+	assert.True(t, os.IsNotExist(err), "checkpoint.json should not exist when WriteStateFiles=false")
+
+	// Now run with WriteStateFiles=true to verify disk writes work
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+	state2, result2, err := Run(stateDir, allOps, nil, Options{WriteStateFiles: true})
+	require.NoError(t, err, "Run should succeed with WriteStateFiles=true")
+
+	// Verify disk files ARE written
+	_, err = os.Stat(indexPath)
+	assert.NoError(t, err, "index.json should exist when WriteStateFiles=true")
+
+	_, err = os.Stat(checkpointPath)
+	assert.NoError(t, err, "checkpoint.json should exist when WriteStateFiles=true")
+
+	// Verify both runs produced equivalent state
+	assert.Equal(t, result.IssueCount, result2.IssueCount)
+	assert.Equal(t, result.OpsProcessed, result2.OpsProcessed)
+	_, hasTask2 := state2.Issues["task-01"]
+	assert.True(t, hasTask2)
+}
+
+// TestRun_ExcludeWorkerFiltersOpsAndSkipsWrites_REQ_ARCHIMP_S13 verifies that when Options.ExcludeWorkerID is set,
+// the Run function filters out ops from that worker and does not write disk files (diagnostic mode).
+func TestRun_ExcludeWorkerFiltersOpsAndSkipsWrites_REQ_ARCHIMP_S13(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+
+	workerA := "worker-a"
+	workerB := "worker-b"
+
+	// worker-a creates task-01
+	opFromA := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerA,
+		Payload:   ops.Payload{Title: "Task from A", NodeType: "task"},
+	}
+
+	// worker-b creates task-02
+	opFromB := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerB,
+		Payload:   ops.Payload{Title: "Task from B", NodeType: "task"},
+	}
+
+	allOps := []ops.Op{opFromA, opFromB}
+
+	// Run with ExcludeWorkerID=worker-a
+	state, result, err := Run(stateDir, allOps, nil, Options{ExcludeWorkerID: workerA})
+	require.NoError(t, err, "Run should succeed with ExcludeWorkerID set")
+
+	// Verify only worker-b's ops were processed
+	assert.Equal(t, 1, result.IssueCount, "should have one issue (only from worker-b)")
+	assert.Equal(t, 1, result.OpsProcessed, "should have processed only one op")
+	_, hasTaskOne := state.Issues["task-01"]
+	assert.False(t, hasTaskOne, "task-01 from excluded worker-a should not exist")
+	_, hasTaskTwo := state.Issues["task-02"]
+	assert.True(t, hasTaskTwo, "task-02 from worker-b should exist")
+
+	// Verify disk files were NOT written (diagnostic mode)
+	indexPath := filepath.Join(stateDir, "index.json")
+	_, err = os.Stat(indexPath)
+	assert.True(t, os.IsNotExist(err), "index.json should not exist in diagnostic mode")
+
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	_, err = os.Stat(checkpointPath)
+	assert.True(t, os.IsNotExist(err), "checkpoint.json should not exist in diagnostic mode")
+
+	// Run again without exclusion to verify normal mode writes files
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+	state2, result2, err := Run(stateDir, allOps, nil, Options{WriteStateFiles: true})
+	require.NoError(t, err, "normal Run should succeed")
+
+	// Verify disk files are written in normal mode
+	_, err = os.Stat(indexPath)
+	assert.NoError(t, err, "index.json should exist in normal mode")
+
+	// Verify both issues are present in normal mode
+	assert.Equal(t, 2, result2.IssueCount, "should have both issues in normal mode")
+	_, hasTaskOne2 := state2.Issues["task-01"]
+	assert.True(t, hasTaskOne2, "task-01 should exist in normal mode")
+	_, hasTaskTwo2 := state2.Issues["task-02"]
+	assert.True(t, hasTaskTwo2, "task-02 should exist in normal mode")
+}
