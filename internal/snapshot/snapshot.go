@@ -100,6 +100,12 @@ func (s *Store) Index() materialize.Index {
 	return s.current.Index
 }
 
+// ReadIndex reads the index from disk without triggering materialization.
+// Returns the index and any error from loading the index file.
+func (s *Store) ReadIndex() (materialize.Index, error) {
+	return materialize.LoadIndex(s.IndexPath())
+}
+
 // IssuePath returns the filesystem path where an issue with the given ID is stored.
 func (s *Store) IssuePath(id string) string {
 	issuesDir := filepath.Join(s.stateDir, "issues")
