@@ -40,6 +40,7 @@ func (f *fakeReader) ReadFile(relPath string) ([]byte, error) {
 }
 
 func TestAssemble_ContextFilesLayerUsesReader_REQ_ARCHIMP_S16_T2(t *testing.T) {
+	t.Parallel()
 	reader := &fakeReader{
 		files: map[string][]byte{
 			"path/to/file1.txt": []byte("content of file 1"),

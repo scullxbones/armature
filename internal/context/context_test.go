@@ -26,7 +26,7 @@ type realFileReader struct {
 
 func (r *realFileReader) ReadFile(relPath string) ([]byte, error) {
 	fullPath := filepath.Join(r.root, relPath)
-	return os.ReadFile(fullPath) //nolint:gosec // G304: path is joined from configured root
+	return os.ReadFile(fullPath)
 }
 
 func TestAssembleContext_CoreSpec(t *testing.T) {
