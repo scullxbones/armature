@@ -286,18 +286,18 @@ or updates the armature-task-id file if the worktree exists.`,
 
 			issuesDir := ctx.IssuesDir
 
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			// allOps is retained here because HasOverlapDismissalNote (below) needs the raw
+			// op log to detect prior dismissal notes — data the store's Index does not expose.
+			// The store.Load call below independently materializes state; this read is not redundant.
+			allOps, err := readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
 			}
-			if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
-				return err
-			}
 
-			// Create store and refresh before first issue read
+			// Create store and load before first issue read
 			store := newSnapshotStore(ctx)
-			if _, err := store.Refresh(context.Background()); err != nil {
-				return fmt.Errorf("refresh store: %w", err)
+			if _, err := store.Load(context.Background()); err != nil {
+				return fmt.Errorf("load store: %w", err)
 			}
 
 			issue := store.Issue(issueID)

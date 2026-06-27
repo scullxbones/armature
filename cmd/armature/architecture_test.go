@@ -59,7 +59,7 @@ func TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6(t *testing.T) {
 		}
 
 		// Check for direct materialize calls and state path construction
-		checkFile(path, file, &violations)
+		checkFile(fset, path, file, &violations)
 	}
 
 	if len(violations) > 0 {
@@ -69,7 +69,7 @@ func TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6(t *testing.T) {
 }
 
 // checkFile walks the AST to find violations
-func checkFile(filename string, file *ast.File, violations *[]string) {
+func checkFile(fset *token.FileSet, filename string, file *ast.File, violations *[]string) {
 	ast.Inspect(file, func(n ast.Node) bool {
 		node, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -78,14 +78,14 @@ func checkFile(filename string, file *ast.File, violations *[]string) {
 
 		// Check for direct materialize.* calls
 		if isMaterializeCall(node) {
-			pos := node.Pos()
-			*violations = append(*violations, fmt.Sprintf("%s:%d: direct materialize call detected", filename, pos))
+			line := fset.Position(node.Pos()).Line
+			*violations = append(*violations, fmt.Sprintf("%s:%d: direct materialize call detected", filename, line))
 		}
 
-		// Check for filepath.Join(ctx.StateDir, ...) pattern
+		// Check for filepath.Join(x.StateDir, ...) pattern
 		if isStatePathJoin(node) {
-			pos := node.Pos()
-			*violations = append(*violations, fmt.Sprintf("%s:%d: direct state path construction with filepath.Join", filename, pos))
+			line := fset.Position(node.Pos()).Line
+			*violations = append(*violations, fmt.Sprintf("%s:%d: direct state path construction with filepath.Join", filename, line))
 		}
 		return true
 	})
@@ -123,7 +123,8 @@ func isMaterializeCall(call *ast.CallExpr) bool {
 	return forbidden[methodName]
 }
 
-// isStatePathJoin detects filepath.Join(ctx.StateDir, ...) pattern
+// isStatePathJoin detects filepath.Join(x.StateDir, ...) pattern regardless of what x is named.
+// This catches ctx.StateDir, appCtx.StateDir, state.ctx.StateDir, and similar expressions.
 func isStatePathJoin(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
@@ -136,7 +137,7 @@ func isStatePathJoin(call *ast.CallExpr) bool {
 		return false
 	}
 
-	// Check if first argument is ctx.StateDir
+	// Check if first argument is any x.StateDir selector expression
 	if len(call.Args) == 0 {
 		return false
 	}
@@ -146,10 +147,6 @@ func isStatePathJoin(call *ast.CallExpr) bool {
 		return false
 	}
 
-	ctx, ok := firstArg.X.(*ast.Ident)
-	if !ok || ctx.Name != "ctx" || firstArg.Sel.Name != "StateDir" {
-		return false
-	}
-
-	return true
+	// Match on the .StateDir field name regardless of what the receiver is named
+	return firstArg.Sel.Name == "StateDir"
 }

@@ -349,6 +349,11 @@ func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, er
 // newSnapshotStore creates a snapshot.Store from the given config context.
 // It wires opsDir from IssuesDir/ops, stateDir from StateDir, and
 // singleBranch from the context mode.
+//
+// Note: the Store always derives singleBranch from ctx.Mode == "single-branch".
+// Several handlers previously passed a hardcoded true to MaterializeAndReturn,
+// creating an inconsistency between their read path and the write path. The Store
+// corrects this by consistently reading singleBranch from ctx.Mode.
 func newSnapshotStore(ctx *config.Context) *snapshot.Store {
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
 	stateDir := ctx.StateDir
