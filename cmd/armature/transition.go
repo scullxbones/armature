@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -90,7 +90,9 @@ This enforces branch + PR discipline.`,
 			cfg := appCtx.Config
 
 			// Get current issue status from materialized index and load index entries for all issues
-			index, _ := materialize.LoadIndex(filepath.Join(state.ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty; access uses ok-check
+			store := newSnapshotStore(state.ctx)
+			store.Load(context.Background()) //nolint:errcheck // missing index treated as empty; access uses ok-check
+			index := store.Index()
 			currentStatus := ""
 			var currentEntry *materialize.IndexEntry
 			if entry, ok := index[issueID]; ok {
@@ -164,12 +166,13 @@ This enforces branch + PR discipline.`,
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
-// It loads the materialized issue from the state directory. If the issue cannot be
+// It loads the materialized issue from the store. If the issue cannot be
 // loaded (e.g. not yet materialized), it returns false to avoid false positives.
 func isIssueUncited(issueID string) bool {
-	issuePath := filepath.Join(appCtx.StateDir, "issues", issueID+".json")
-	issue, err := materialize.LoadIssue(issuePath)
-	if err != nil {
+	store := newSnapshotStore(appCtx)
+	store.Load(context.Background()) //nolint:errcheck // missing issue treated as not uncited; access uses nil check
+	issue := store.Issue(issueID)
+	if issue == nil {
 		// Cannot load — graceful degradation, don't warn
 		return false
 	}
