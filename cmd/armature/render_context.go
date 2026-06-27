@@ -1,14 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/context"
+	ctxpkg "github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -32,8 +32,6 @@ func newRenderContextCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			issuesDir := appCtx.IssuesDir
-
 			var state *materialize.State
 			if rcAt != "" {
 				// Time-travel: replay ops as they existed at the given commit SHA.
@@ -49,7 +47,7 @@ func newRenderContextCmd() *cobra.Command {
 					return fmt.Errorf("materialize at %s: %w", rcAt, err)
 				}
 			} else {
-				snap, snapErr := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+				snap, snapErr := newSnapshotStore(appCtx).Load(context.Background())
 				if snapErr != nil {
 					return fmt.Errorf("load snapshot: %w", snapErr)
 				}
@@ -60,27 +58,27 @@ func newRenderContextCmd() *cobra.Command {
 			}
 
 			// Create an OSFileReader for file access
-			repoRoot := context.InferRepoRoot(appCtx.StateDir)
-			reader := &context.OSFileReader{Root: repoRoot}
+			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
+			reader := &ctxpkg.OSFileReader{Root: repoRoot}
 
-			ctx, err := context.Assemble(rcIssue, state, reader)
+			ctx, err := ctxpkg.Assemble(rcIssue, state, reader)
 			if err != nil {
 				return fmt.Errorf("assemble context: %w", err)
 			}
 
 			if !rcRaw {
-				ctx = context.Truncate(ctx, rcBudget)
+				ctx = ctxpkg.Truncate(ctx, rcBudget)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				out, err := context.RenderAgent(ctx)
+				out, err := ctxpkg.RenderAgent(ctx)
 				if err != nil {
 					return err
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), out)
 			} else {
-				_, _ = fmt.Fprint(cmd.OutOrStdout(), context.RenderHuman(ctx))
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), ctxpkg.RenderHuman(ctx))
 			}
 
 			return nil
