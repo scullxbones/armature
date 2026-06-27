@@ -294,9 +294,15 @@ or updates the armature-task-id file if the worktree exists.`,
 				return err
 			}
 
-			issue, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", issueID+".json"))
-			if err != nil {
-				return fmt.Errorf("issue %s not found: %w", issueID, err)
+			// Create store and refresh before first issue read
+			store := newSnapshotStore(ctx)
+			if _, err := store.Refresh(context.Background()); err != nil {
+				return fmt.Errorf("refresh store: %w", err)
+			}
+
+			issue := store.Issue(issueID)
+			if issue == nil {
+				return fmt.Errorf("issue %s not found", issueID)
 			}
 
 			if issue.Provenance.Confidence == "inferred" {
@@ -353,7 +359,7 @@ or updates the armature-task-id file if the worktree exists.`,
 			priorLastHeartbeat := issue.LastHeartbeat
 			priorClaimTTL := issue.ClaimTTL
 
-			index, _ := materialize.LoadIndex(filepath.Join(ctx.StateDir, "index.json")) //nolint:errcheck // missing index treated as empty
+			index := store.Index()
 			for id, entry := range index {
 				if id == issueID || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
 					continue
@@ -392,16 +398,14 @@ or updates the armature-task-id file if the worktree exists.`,
 				return err
 			}
 
-			allOps, offsets, err = readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
-			if err != nil {
-				return fmt.Errorf("read ops: %w", err)
+			// Refresh store after appending claim Op
+			if _, err := store.Refresh(context.Background()); err != nil {
+				return fmt.Errorf("refresh store after claim: %w", err)
 			}
-			if _, err := materialize.Materialize(ctx.StateDir, allOps, ctx.Mode == "single-branch", offsets); err != nil {
-				return err
-			}
-			issueAfter, err := materialize.LoadIssue(filepath.Join(ctx.StateDir, "issues", issueID+".json"))
-			if err != nil {
-				return fmt.Errorf("issue %s not found after claim: %w", issueID, err)
+
+			issueAfter := store.Issue(issueID)
+			if issueAfter == nil {
+				return fmt.Errorf("issue %s not found after claim", issueID)
 			}
 			won := issueAfter.ClaimedBy == workerID
 			if !won {
@@ -424,7 +428,7 @@ or updates the armature-task-id file if the worktree exists.`,
 			// Worktree setup is deferred to here so it only happens after all claim
 			// validations pass and this worker has won the claim race.
 			if !worktreeExists {
-				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, issue); err != nil {
+				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, *issue); err != nil {
 					// Worktree creation failed after winning the claim race.
 					// Determine rollback status based on whether this is a same-worker active claim or stale/takeover:
 					// - Same-worker ACTIVE claim (priorClaimedBy == workerID && !stale): restore priorStatus (keep the claim)
