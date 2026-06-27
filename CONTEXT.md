@@ -13,6 +13,10 @@ _Avoid_: Node, ticket, item
 A graph-structural view of an issue when discussing parentage, dependency edges, or subtree operations. Use `Node` for DAG structure, not as the default name for work.
 _Avoid_: Ticket, work item
 
+**Leaf Issue**:
+An issue with no children in the current DAG. Leaf is a graph-shape property, not a lifecycle status; Task and Bug are always leaf issues in a valid DAG.
+_Avoid_: Terminal issue, completed issue
+
 **Epic**:
 A top-level issue representing the broadest body of planned work in Armature's issue graph. An epic can contain stories, features, tasks, or bugs.
 _Avoid_: Initiative, project
@@ -26,11 +30,11 @@ A first-class issue type for feature-shaped work. A feature can contain tasks or
 _Avoid_: Story, enhancement
 
 **Task**:
-A first-class issue type for the smallest executable unit of planned work. Tasks are terminal issues and do not contain other issue types.
+A first-class issue type for the smallest executable unit of planned work. Tasks cannot contain other issue types and are therefore always leaf issues in a valid DAG.
 _Avoid_: Subtask, step
 
 **Bug**:
-A first-class issue type for defect-shaped work. Bugs are terminal issues and do not contain other issue types.
+A first-class issue type for defect-shaped work. Bugs cannot contain other issue types and are therefore always leaf issues in a valid DAG.
 _Avoid_: Defect task, hotfix task
 
 **Ready**:
@@ -100,6 +104,14 @@ _Avoid_: Verified, done
 **Worker**:
 An actor identity that reads, claims, and updates issues in Armature. A worker is the system's unit of authorship and coordination.
 _Avoid_: Agent session, assignee
+
+**Reviewer**:
+A fresh LLM worker role that uses the `armature-reviewer` skill to produce a conformance assessment for an assessable delivery. A reviewer judges the delivery diff with bounded read-only repository access for interpretation; it does not implement or remediate the delivery.
+_Avoid_: Implementer, auditor, deterministic gate
+
+**Auditor**:
+A worker role that verifies deterministic governance and repository health before story sign-off. An auditor does not perform the reviewer's semantic conformance judgment.
+_Avoid_: Reviewer, implementer, conformance assessor
 
 **Bootstrap**:
 The first-time preparation that makes a repository clone ready for Armature workflow. Bootstrap establishes local participation in the workflow; it is not issue decomposition or work execution.
@@ -185,9 +197,41 @@ _Avoid_: Outcome, definition of done
 The plain-language statement of what it means for an issue to be complete. Definition of done sets the completion bar; it is not the record of what actually happened.
 _Avoid_: Acceptance, outcome
 
+**Task Contract**:
+The authoritative description of an issue's intended delivery: its definition of done, acceptance, scope, and linked requirement references. Phase-one conformance assessment judges definition of done and acceptance; deterministic policy owns scope, while requirement references remain provenance context for a future phase.
+_Avoid_: Render context, outcome, parent description
+
 **Outcome**:
 The recorded result of work on an issue when a worker reports completion or another terminal change. Outcome states what was actually delivered or observed, not the abstract completion bar.
 _Avoid_: Definition of done, acceptance
+
+**Verification Evidence**:
+A machine-readable record that a deterministic check ran and what it reported for an issue or requirement. Verification evidence supports review but does not by itself establish semantic conformance with the intended work.
+_Avoid_: Conformance assessment, acceptance, outcome
+
+**Conformance Assessment**:
+A structured LLM-as-judge evaluation of whether delivered work is semantically faithful to an issue's definition of done and acceptance. A conformance assessment informs review; it neither reruns deterministic checks nor acts as a completion gate.
+_Avoid_: Verification evidence, acceptance, outcome
+
+**Criterion Result**:
+The evidence-cited assessment of one definition-of-done or acceptance criterion as `satisfied`, `partially_satisfied`, `not_satisfied`, or `indeterminate`. Criterion results are the authoritative semantic judgments within a conformance assessment.
+_Avoid_: Conformance rating, verification result
+
+**Conformance Rating**:
+The reviewer-facing green, yellow, or red summary derived from criterion results. Green means all criteria are satisfied; yellow means at least one is partial or indeterminate and none are unsatisfied; red means at least one is not satisfied.
+_Avoid_: Criterion result, confidence score, completion status
+
+**Assessment Attestation**:
+The compact durable record that a conformance assessment was performed against a specific delivery and task contract. An assessment attestation preserves identity, fingerprints, conformance rating, and criterion-result counts without retaining the full assessment report.
+_Avoid_: Conformance assessment, verification evidence, audit transcript
+
+**Assessable Delivery**:
+Work recorded by an issue's transition to `Done` with an outcome and an associated repository diff. Any issue type can produce an assessable delivery, although work should ordinarily be planned on leaf issues.
+_Avoid_: Leaf issue, outcome, pull request
+
+**Review Bundle**:
+The canonical read-only package Armature assembles for a reviewer, containing the assessable delivery's task contract, outcome, delivery identity, and diff. A review bundle excludes implementation activity history and customer check configuration.
+_Avoid_: Render context, activity log, verification pipeline
 
 **Transition**:
 The intentional state change of an issue from one status to another. A transition records lifecycle movement, not just current state.
