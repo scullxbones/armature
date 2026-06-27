@@ -166,7 +166,7 @@ The intended command group is:
 
 ```text
 arm review prepare ISSUE --base BASE_SHA --head HEAD_SHA [--format agent|json]
-arm review record ISSUE --input RESULT_JSON [--format human|json|markdown]
+arm review record ISSUE --base BASE_SHA --head HEAD_SHA --input RESULT_PATH [--format human|json|markdown]
 ```
 
 `prepare` verifies that the issue is an assessable delivery and that the Git
@@ -174,11 +174,12 @@ range exists. It emits the canonical bundle. A task normally uses the parent of
 its delivery commit as `base` and the delivery commit as `head`. A Story uses
 the feature-branch base and final feature head.
 
-`record` validates a Reviewer result against the referenced bundle, derives the
-rating, emits an `assessment-attested` op for a valid non-duplicate result,
-materializes the attestation, and renders the detailed report. An idempotent
-duplicate returns the existing result without appending another op. The command
-does not persist the detailed report itself.
+`record` reconstructs the bundle from the explicit delivery range, then
+validates a Reviewer result against it, derives the rating, emits an
+`assessment-attested` op for a valid non-duplicate result, materializes the
+attestation, and renders the detailed report. `--input -` reads the result from
+standard input. An idempotent duplicate returns the existing result without
+appending another op. The command does not persist the detailed report itself.
 
 Exact Cobra wiring and flag spelling may be refined during implementation, but
 the prepare/record separation and explicit delivery range are design
@@ -227,6 +228,12 @@ base/head identities allow the Reviewer to retrieve and inspect large diffs in
 bounded pieces when inlining the entire patch is impractical. Surrounding code
 may be read to interpret a change, but unchanged code is not itself evidence
 that the delivery implemented a requirement.
+
+Armature-owned coordination paths, including `.armature/**` and `.arm/**`, are
+excluded from the delivery diff and changed-file manifest. This prevents
+single-branch op logs and generated coordination state from becoming reviewer
+input. A range containing only excluded coordination paths is not an assessable
+delivery.
 
 The bundle excludes customer check commands and results, implementation
 activity, worker-authored arguments, and hidden prompt context. The recorded
@@ -378,8 +385,9 @@ customers.
 
 ### Reviewer Eval Corpus
 
-The bundled Skill includes or references a repo-owned corpus of human-labeled
-Task Contracts and delivery diffs. Cases cover:
+The Armature repository includes a development-only corpus of human-labeled
+Task Contracts and delivery diffs for calibrating the bundled Skill. The corpus
+is not deployed as a customer Skill artifact. Cases cover:
 
 - complete implementations
 - partial implementations
