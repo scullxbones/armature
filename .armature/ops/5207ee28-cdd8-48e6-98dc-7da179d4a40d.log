@@ -1200,3 +1200,4 @@
 ["transition","ARCHIMP-S13",1782569020,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Introduced Options struct and unified Run(stateDir, allOps, byteOffsets, Options) entry point; WriteStateFiles controls disk writes; ExcludeWorkerID filters ops in diagnostic mode; all four Materialize* functions are now single-line wrappers; make check green at 85.6% coverage, mutation efficacy 100%."}]
 ["claim","ARCHIMP-S14-T1",1782569466,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["transition","ARCHIMP-S14",1782569468,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
+["transition","ARCHIMP-S14-T1",1782569746,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
