@@ -739,6 +739,14 @@ func TestRun_WriteStateFilesControlsDiskWrites_REQ_ARCHIMP_S13(t *testing.T) {
 	_, err = os.Stat(checkpointPath)
 	assert.True(t, os.IsNotExist(err), "checkpoint.json should not exist when WriteStateFiles=false")
 
+	traceabilityPath := filepath.Join(stateDir, "traceability.json")
+	_, err = os.Stat(traceabilityPath)
+	assert.True(t, os.IsNotExist(err), "traceability.json should not exist when WriteStateFiles=false")
+
+	readyPath := filepath.Join(stateDir, "ready.json")
+	_, err = os.Stat(readyPath)
+	assert.True(t, os.IsNotExist(err), "ready.json should not exist when WriteStateFiles=false")
+
 	// Now run with WriteStateFiles=true to verify disk writes work
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 	state2, result2, err := Run(stateDir, allOps, nil, Options{WriteStateFiles: true})
@@ -750,6 +758,12 @@ func TestRun_WriteStateFilesControlsDiskWrites_REQ_ARCHIMP_S13(t *testing.T) {
 
 	_, err = os.Stat(checkpointPath)
 	assert.NoError(t, err, "checkpoint.json should exist when WriteStateFiles=true")
+
+	_, err = os.Stat(traceabilityPath)
+	assert.NoError(t, err, "traceability.json should exist when WriteStateFiles=true")
+
+	_, err = os.Stat(readyPath)
+	assert.NoError(t, err, "ready.json should exist when WriteStateFiles=true")
 
 	// Verify both runs produced equivalent state
 	assert.Equal(t, result.IssueCount, result2.IssueCount)
@@ -809,6 +823,14 @@ func TestRun_ExcludeWorkerFiltersOpsAndSkipsWrites_REQ_ARCHIMP_S13(t *testing.T)
 	_, err = os.Stat(checkpointPath)
 	assert.True(t, os.IsNotExist(err), "checkpoint.json should not exist in diagnostic mode")
 
+	traceabilityPath := filepath.Join(stateDir, "traceability.json")
+	_, err = os.Stat(traceabilityPath)
+	assert.True(t, os.IsNotExist(err), "traceability.json should not exist in diagnostic mode")
+
+	readyPath := filepath.Join(stateDir, "ready.json")
+	_, err = os.Stat(readyPath)
+	assert.True(t, os.IsNotExist(err), "ready.json should not exist in diagnostic mode")
+
 	// Run again without exclusion to verify normal mode writes files
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 	state2, result2, err := Run(stateDir, allOps, nil, Options{WriteStateFiles: true})
@@ -818,10 +840,63 @@ func TestRun_ExcludeWorkerFiltersOpsAndSkipsWrites_REQ_ARCHIMP_S13(t *testing.T)
 	_, err = os.Stat(indexPath)
 	assert.NoError(t, err, "index.json should exist in normal mode")
 
+	_, err = os.Stat(traceabilityPath)
+	assert.NoError(t, err, "traceability.json should exist in normal mode")
+
+	_, err = os.Stat(readyPath)
+	assert.NoError(t, err, "ready.json should exist in normal mode")
+
 	// Verify both issues are present in normal mode
 	assert.Equal(t, 2, result2.IssueCount, "should have both issues in normal mode")
 	_, hasTaskOne2 := state2.Issues["task-01"]
 	assert.True(t, hasTaskOne2, "task-01 should exist in normal mode")
 	_, hasTaskTwo2 := state2.Issues["task-02"]
 	assert.True(t, hasTaskTwo2, "task-02 should exist in normal mode")
+}
+
+// TestRun_EmitWarningsFalse_SuppressesStderr_REQ_ARCHIMP_S13 verifies that when
+// Options.EmitWarnings=false, unknown-op warnings are NOT printed to stderr.
+func TestRun_EmitWarningsFalse_SuppressesStderr_REQ_ARCHIMP_S13(t *testing.T) { //nolint:paralleltest
+	// Note: Not parallel to avoid stderr capture race conditions (os.Stderr is global)
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	workerID := "worker-x"
+
+	createOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "My task", NodeType: "task"},
+	}
+	unknownOp := ops.Op{
+		Type:      "unknown_emit_test_type",
+		TargetID:  "task-02",
+		Timestamp: 200,
+		WorkerID:  workerID,
+	}
+
+	allOps := []ops.Op{createOp, unknownOp}
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	_, result, runErr := Run(stateDir, allOps, nil, Options{WriteStateFiles: true, EmitWarnings: false})
+
+	os.Stderr = oldStderr
+	require.NoError(t, w.Close())
+	stderrOutput, readErr := io.ReadAll(r)
+	require.NoError(t, readErr)
+
+	require.NoError(t, runErr, "Run should not error")
+	assert.Equal(t, 1, len(result.UnhandledOps), "unhandled op should be captured in Result")
+	assert.Equal(t, "unknown_emit_test_type", result.UnhandledOps[0].Type)
+
+	// Warnings must be suppressed from stderr when EmitWarnings=false
+	assert.Empty(t, string(stderrOutput), "stderr should be empty when EmitWarnings=false")
 }
