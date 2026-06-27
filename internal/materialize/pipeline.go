@@ -14,7 +14,10 @@ import (
 )
 
 type Options struct {
-	WriteStateFiles bool   // Controls whether state files and checkpoints are written to disk
+	// WriteStateFiles controls whether state files and checkpoints are written to disk.
+	// When false, checkpoint reads are also skipped, forcing a full in-memory replay
+	// (no incremental mode). Use false for read-only/diagnostic calls.
+	WriteStateFiles bool
 	ExcludeWorkerID string // If set, filters out ops from this worker (diagnostic mode only)
 	EmitWarnings    bool   // Controls whether warnings are emitted to stderr
 	SingleBranch    bool   // Controls single-branch mode for auto-merging
@@ -143,7 +146,7 @@ func runFullPipeline(stateDir string, allOps []ops.Op, singleBranch bool,
 	var state *State
 
 	// For incremental replay, load prior state from issuesStateDir
-	if !fullReplay && writeStateFiles {
+	if !fullReplay {
 		loadedIssues, err := LoadAllIssues(issuesStateDir)
 		if err != nil {
 			return nil, Result{}, fmt.Errorf("load prior state: %w", err)
