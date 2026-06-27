@@ -1213,3 +1213,4 @@
 ["note","ARCHIMP-S14",1782570216,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S14-T4 detected at claim time"}]
 ["claim","ARCHIMP-S14-T4",1782570216,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":300}]
 ["note","ARCHIMP-S14-T5",1782570218,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with ARCHIMP-S14-T3 (same worker, dismissed)"}]
+["note","ARCHIMP-S14-T5",1782570218,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with ARCHIMP-S14 detected at claim time"}]
