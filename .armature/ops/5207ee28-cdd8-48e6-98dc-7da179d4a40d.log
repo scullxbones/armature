@@ -1225,3 +1225,4 @@
 ["claim","ARCHIMP-S14-T6",1782570577,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":300}]
 ["transition","ARCHIMP-S14-T6",1782571715,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","ARCHIMP-S14",1782571733,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"snapshot.Store owns ops-read→materialize→snapshot; newSnapshotStore wires config; all handlers (render_context, transition, claim, create, assign, list, hook, scope_delete, merged, scope_rename, dagsum, confirm, decompose, stalereview, tui) migrated off direct materialize calls; architecture guard test TestHandlersDoNotReloadStateDirectly enforces the constraint; make check green at 85.6% coverage, mutation efficacy 100%."}]
+["claim","ARCHIMP-S15-T1",1782573412,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":300}]
