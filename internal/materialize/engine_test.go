@@ -1432,3 +1432,33 @@ func TestApplyReparent_EmptyNewParentMakesTopLevel(t *testing.T) {
 	assert.Equal(t, "", state.Issues["child-01"].Parent)
 	assert.NotContains(t, state.Issues["parent-A"].Children, "child-01")
 }
+
+// Fix N4: normalizeScopeEntries must filter empty string entries so that
+// --context-file "" does not become [""] and render as (missing: ).
+func TestNormalizeScopeEntries_FiltersEmptyStrings(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	// Apply a create op with an empty string in ContextFiles (simulates --context-file "").
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task", ContextFiles: []string{""}},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Empty(t, issue.ContextFiles, "empty string context_files entries must be filtered out")
+}
+
+func TestNormalizeScopeEntries_FiltersEmptyStringsViaAmend(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	// Amend with an empty context-file string.
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAmend, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+		Payload: ops.Payload{ContextFiles: []string{""}},
+	}))
+	issue := state.Issues["task-01"]
+	assert.Empty(t, issue.ContextFiles, "empty string context_files from amend must be filtered out")
+}

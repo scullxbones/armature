@@ -1,8 +1,13 @@
 package context
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -70,7 +75,56 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 	}, nil
 }
 
-func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
+func inferRepoRoot(stateDir string) string {
+	// Fast path: walk up looking for .arm/.armature directory name (no subprocess).
+	if root := inferRepoRootByPath(stateDir); root != "" {
+		return root
+	}
+	// Fallback: ask git, handles worktree layouts where .arm/.armature is not in stateDir's path.
+	if root := inferRepoRootByGit(stateDir); root != "" {
+		return root
+	}
+	return filepath.Clean(stateDir)
+}
+
+// inferRepoRootByPath walks up from stateDir looking for a directory component
+// named ".arm" or ".armature" and returns its parent (the project root).
+func inferRepoRootByPath(stateDir string) string {
+	clean := filepath.Clean(stateDir)
+	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
+		base := filepath.Base(dir)
+		if base == ".arm" || base == ".armature" {
+			return filepath.Dir(dir)
+		}
+	}
+	return ""
+}
+
+// inferRepoRootByGit runs "git rev-parse --show-toplevel" from stateDir (or
+// the nearest existing ancestor) to locate the repo root in worktree layouts.
+func inferRepoRootByGit(stateDir string) string {
+	// Walk up to find an existing directory to run git from.
+	dir := filepath.Clean(stateDir)
+	for dir != "." && dir != string(filepath.Separator) {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
+	if dir == "." || dir == string(filepath.Separator) {
+		return ""
+	}
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
+	cmd.Dir = dir
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out.String())
+}
+
+func buildContextFiles(issue *materialize.Issue, repoRoot string) Layer {
 	if len(issue.ContextFiles) == 0 {
 		return Layer{Name: "context_files", Priority: 2, Content: ""}
 	}
@@ -81,13 +135,39 @@ func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
 			sections = append(sections, fmt.Sprintf("### %s\n(missing: %v)", relPath, err))
 			continue
 		}
-		sections = append(sections, fmt.Sprintf("### %s\n```text\n%s\n```", relPath, strings.TrimRight(string(data), "\n")))
+		content := strings.TrimRight(string(data), "\n")
+		fence := codeBlockFence(content)
+		sections = append(sections, fmt.Sprintf("### %s\n%stext\n%s\n%s", relPath, fence, content, fence))
 	}
 	return Layer{
 		Name:     "context_files",
 		Priority: 2,
 		Content:  "## Context Files\n" + strings.Join(sections, "\n\n"),
 	}
+}
+
+// codeBlockFence returns a backtick fence string long enough that it cannot
+// be closed prematurely by any backtick sequence in content.  The returned
+// fence is at least three backticks and always one longer than the longest
+// consecutive run of backticks found in content.
+func codeBlockFence(content string) string {
+	maxRun := 0
+	cur := 0
+	for _, ch := range content {
+		if ch == '`' {
+			cur++
+			if cur > maxRun {
+				maxRun = cur
+			}
+		} else {
+			cur = 0
+		}
+	}
+	fenceLen := maxRun + 1
+	if fenceLen < 3 { //nolint:mnd // 3 is the minimum valid Markdown code-fence length
+		fenceLen = 3
+	}
+	return strings.Repeat("`", fenceLen)
 }
 
 func buildCoreSpec(issue *materialize.Issue) Layer {
