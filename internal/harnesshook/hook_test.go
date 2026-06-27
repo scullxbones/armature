@@ -10,6 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockResolver struct {
+	policy harnesspolicy.TaskPolicy
+	err    error
+}
+
+func (m *mockResolver) Resolve(_ string) (harnesspolicy.TaskPolicy, error) {
+	return m.policy, m.err
+}
+
 func TestHook_Evaluate_AllowsInScopeEdit_REQ_ARCHIMP_S17_T1(t *testing.T) {
 	t.Parallel()
 	// Test that Hook.Evaluate allows an in-scope edit event.

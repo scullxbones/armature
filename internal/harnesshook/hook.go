@@ -7,14 +7,23 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
 
+// PolicyResolver is the interface for resolving task policies.
+type PolicyResolver interface {
+	Resolve(taskID string) (harnesspolicy.TaskPolicy, error)
+}
+
+// RunResult contains the output and exit code from a hook run.
+type RunResult struct {
+	Output   []byte
+	Decision Decision
+	ExitCode int
+}
+
 // EvaluateInput captures all inputs needed to evaluate a hook event.
 type EvaluateInput struct {
-	Input      []byte // raw hook event JSON
-	TaskID     string
-	Platform   string // platform identifier (claude, codex, devin); defaults to "claude"
-	RepoPath   string // repository root path
-	StateDir   string // optional override for state directory
-	SourcesDir string // optional override for sources directory
+	Input    []byte // raw hook event JSON
+	TaskID   string
+	Platform string // platform identifier (claude, codex, devin); defaults to "claude"
 }
 
 // Hook orchestrates hook evaluation: adapter selection, policy resolution,
@@ -37,11 +46,7 @@ func NewHook(resolver PolicyResolver) *Hook {
 // 6. Encodes result to output
 func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, error) {
 	// Select adapter for platform
-	platform := input.Platform
-	if platform == "" {
-		platform = "claude"
-	}
-	adapter, err := NewAdapterForPlatform(platform)
+	adapter, err := NewAdapterForPlatform(input.Platform)
 	if err != nil {
 		return RunResult{}, err
 	}
