@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -250,4 +251,94 @@ func containsAny(s string, substrs ...string) bool {
 		}
 	}
 	return false
+}
+
+// TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1 tests that Store can load and retrieve
+// issues after refresh.
+func TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	// Create an issue in ops
+	workerID := "test-worker"
+	logPath := filepath.Join(opsDir, workerID+".log")
+	opLine := `["create","issue-1",1000,"test-worker",{"title":"Test Issue","type":"task","scope":[],"context_files":[]}]`
+	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
+
+	// Create Store and load
+	store := NewStore(opsDir, stateDir, false)
+	ctx := context.Background()
+
+	snap, err := store.Load(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+
+	// Issue should be accessible
+	issue := store.Issue("issue-1")
+	require.NotNil(t, issue)
+	assert.Equal(t, "issue-1", issue.ID)
+	assert.Equal(t, "Test Issue", issue.Title)
+
+	// Refresh should work
+	snap2, err := store.Refresh(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, snap2)
+
+	// Issue should still be accessible after refresh
+	issue2 := store.Issue("issue-1")
+	require.NotNil(t, issue2)
+	assert.Equal(t, "issue-1", issue2.ID)
+	assert.Equal(t, "Test Issue", issue2.Title)
+}
+
+// TestStore_IssueNotFound_REQ_ARCHIMP_S14_T1 tests that Store.Issue returns nil for
+// non-existent issues.
+func TestStore_IssueNotFound_REQ_ARCHIMP_S14_T1(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	store := NewStore(opsDir, stateDir, false)
+	ctx := context.Background()
+
+	// Before load, Issue should return nil
+	issue := store.Issue("nonexistent")
+	assert.Nil(t, issue)
+
+	// After load, Issue should still return nil for nonexistent issue
+	_, err := store.Load(ctx)
+	require.NoError(t, err)
+
+	issue = store.Issue("nonexistent")
+	assert.Nil(t, issue)
+}
+
+// TestStore_Paths_REQ_ARCHIMP_S14_T1 tests that Store correctly returns filesystem
+// paths for issues and index.
+func TestStore_Paths_REQ_ARCHIMP_S14_T1(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	store := NewStore(opsDir, stateDir, false)
+
+	// Test IssuePath
+	issuePath := store.IssuePath("issue-1")
+	expectedIssuePath := filepath.Join(stateDir, "issues", "issue-1.json")
+	assert.Equal(t, expectedIssuePath, issuePath)
+
+	// Test IndexPath
+	indexPath := store.IndexPath()
+	expectedIndexPath := filepath.Join(stateDir, "index.json")
+	assert.Equal(t, expectedIndexPath, indexPath)
 }

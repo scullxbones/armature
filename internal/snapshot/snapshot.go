@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -47,4 +48,63 @@ func Load(opsDir, stateDir string, singleBranch bool) (*Snapshot, error) {
 		Issues:   issues,
 		Warnings: append(warnings, result.Warnings...),
 	}, nil
+}
+
+// Store owns ops-read→materialize→snapshot operations for a configured directory pair.
+type Store struct {
+	opsDir       string
+	stateDir     string
+	singleBranch bool
+	current      *Snapshot
+}
+
+// NewStore creates a new Store for loading snapshots from the given directories.
+func NewStore(opsDir, stateDir string, singleBranch bool) *Store {
+	return &Store{
+		opsDir:       opsDir,
+		stateDir:     stateDir,
+		singleBranch: singleBranch,
+	}
+}
+
+// Load loads the snapshot from disk and caches it.
+func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
+	snap, err := Load(s.opsDir, s.stateDir, s.singleBranch)
+	if err != nil {
+		return nil, err
+	}
+	s.current = snap
+	return snap, nil
+}
+
+// Refresh reloads the snapshot from disk, updating the cache.
+func (s *Store) Refresh(ctx context.Context) (*Snapshot, error) {
+	return s.Load(ctx)
+}
+
+// Issue returns the Issue with the given ID, or nil if not found.
+func (s *Store) Issue(id string) *materialize.Issue {
+	if s.current == nil {
+		return nil
+	}
+	return s.current.Issues[id]
+}
+
+// Index returns the current snapshot's index.
+func (s *Store) Index() materialize.Index {
+	if s.current == nil {
+		return make(materialize.Index)
+	}
+	return s.current.Index
+}
+
+// IssuePath returns the filesystem path where an issue with the given ID is stored.
+func (s *Store) IssuePath(id string) string {
+	issuesDir := filepath.Join(s.stateDir, "issues")
+	return filepath.Join(issuesDir, id+".json")
+}
+
+// IndexPath returns the filesystem path to the index file.
+func (s *Store) IndexPath() string {
+	return filepath.Join(s.stateDir, "index.json")
 }
