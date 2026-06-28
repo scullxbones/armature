@@ -1362,3 +1362,4 @@
 ["link","SMTC-S1-T5C",1782681058,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"SMTC-S1-T5B","rel":"blocked_by"}]
 ["dag-transition","SMTC-S1-T5A",1782681064,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"SMTC-S1-T5A"}]
 ["dag-transition","SMTC-S1-T5B",1782681064,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"SMTC-S1-T5B"}]
+["dag-transition","SMTC-S1-T5C",1782681065,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"SMTC-S1-T5C"}]
