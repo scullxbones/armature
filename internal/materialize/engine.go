@@ -1,12 +1,14 @@
 package materialize
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 
 	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/review"
 )
 
 // State holds the complete materialized state built from op replay.
@@ -23,24 +25,25 @@ func NewState() *State {
 
 // opHandlers maps op type strings to their handler functions.
 var opHandlers = map[string]func(*State, ops.Op) error{
-	ops.OpCreate:            (*State).applyCreate,
-	ops.OpClaim:             (*State).applyClaim,
-	ops.OpHeartbeat:         (*State).applyHeartbeat,
-	ops.OpTransition:        (*State).applyTransition,
-	ops.OpNote:              (*State).applyNote,
-	ops.OpNoteDelete:        (*State).applyNoteDelete,
-	ops.OpLink:              (*State).applyLink,
-	ops.OpUnlink:            (*State).applyUnlink,
-	ops.OpDecision:          (*State).applyDecision,
-	ops.OpAssign:            (*State).applyAssign,
-	ops.OpAmend:             (*State).applyAmend,
-	ops.OpSourceLink:        (*State).applySourceLink,
-	ops.OpSourceFingerprint: func(_ *State, _ ops.Op) error { return nil },
-	ops.OpCitationAccepted:  (*State).applyCitationAccepted,
-	ops.OpDAGTransition:     (*State).applyDAGTransition,
-	ops.OpScopeRename:       (*State).applyScopeRename,
-	ops.OpScopeDelete:       (*State).applyScopeDelete,
-	ops.OpReparent:          (*State).applyReparent,
+	ops.OpCreate:             (*State).applyCreate,
+	ops.OpClaim:              (*State).applyClaim,
+	ops.OpHeartbeat:          (*State).applyHeartbeat,
+	ops.OpTransition:         (*State).applyTransition,
+	ops.OpNote:               (*State).applyNote,
+	ops.OpNoteDelete:         (*State).applyNoteDelete,
+	ops.OpLink:               (*State).applyLink,
+	ops.OpUnlink:             (*State).applyUnlink,
+	ops.OpDecision:           (*State).applyDecision,
+	ops.OpAssign:             (*State).applyAssign,
+	ops.OpAmend:              (*State).applyAmend,
+	ops.OpSourceLink:         (*State).applySourceLink,
+	ops.OpSourceFingerprint:  func(_ *State, _ ops.Op) error { return nil },
+	ops.OpCitationAccepted:   (*State).applyCitationAccepted,
+	ops.OpDAGTransition:      (*State).applyDAGTransition,
+	ops.OpScopeRename:        (*State).applyScopeRename,
+	ops.OpScopeDelete:        (*State).applyScopeDelete,
+	ops.OpReparent:           (*State).applyReparent,
+	ops.OpAssessmentAttested: (*State).applyAssessmentAttested,
 }
 
 // RegisteredOpTypes returns the set of supported op type strings.
@@ -461,6 +464,34 @@ func (s *State) applyReparent(op ops.Op) error {
 	}
 
 	issue.Parent = newParentID
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+// applyAssessmentAttested replays an assessment attestation op by unmarshaling
+// the assessment, deduplicating by ResultFingerprint, and appending to the issue's
+// assessment attestations list.
+func (s *State) applyAssessmentAttested(op ops.Op) error {
+	issue, ok := s.Issues[op.TargetID]
+	if !ok {
+		return fmt.Errorf("assessment-attested: issue %s not found", op.TargetID)
+	}
+
+	// Unmarshal the assessment attestation from op.Payload.Assessment
+	var att review.AssessmentAttestation
+	if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {
+		return fmt.Errorf("unmarshal assessment attestation: %w", err)
+	}
+
+	// Deduplicate by ResultFingerprint
+	for _, existing := range issue.AssessmentAttestations {
+		if existing.ResultFingerprint == att.ResultFingerprint {
+			return nil // duplicate, skip
+		}
+	}
+
+	// Append the attestation
+	issue.AssessmentAttestations = append(issue.AssessmentAttestations, att)
 	issue.Updated = op.Timestamp
 	return nil
 }
