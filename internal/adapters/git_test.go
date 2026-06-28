@@ -419,6 +419,36 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCommitWorktreeOp_ExhaustsContentionRetries(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
+	worktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
+
+	opsDir := filepath.Join(worktreePath, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	logFile := filepath.Join(opsDir, "worker-abc.log")
+	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
+
+	gitDirCmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--git-dir")
+	gitDirOut, err := gitDirCmd.Output()
+	require.NoError(t, err)
+	gitDir := strings.TrimSpace(string(gitDirOut))
+	lockPath := filepath.Join(gitDir, "index.lock")
+	require.NoError(t, os.WriteFile(lockPath, []byte("lock"), 0644))
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(lockPath))
+	})
+
+	wc := adapters.New(worktreePath)
+	err = wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3 contention retries")
+}
+
 func TestLogBranch_InvalidBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -426,6 +456,61 @@ func TestLogBranch_InvalidBranch(t *testing.T) {
 
 	_, err := c.LogBranch("no-such-branch", 10)
 	assert.Error(t, err)
+}
+
+func TestListFilesAtCommit_EmptyTree(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOut))
+
+	files, err := c.ListFilesAtCommit(sha)
+	require.NoError(t, err)
+	assert.Empty(t, files)
+}
+
+func TestFetchAndRebase_ReportsFetchError(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	err := c.FetchAndRebase("main")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git fetch origin")
+}
+
+func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	origin := filepath.Join(t.TempDir(), "origin.git")
+
+	run := func(dir string, args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	run(t.TempDir(), "init", "--bare", origin)
+	run(repo, "remote", "add", "origin", origin)
+	run(repo, "push", "-u", "origin", "HEAD:main")
+
+	c := adapters.New(repo)
+	err := c.FetchAndRebase("feature/missing")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git rebase origin/feature/missing")
+}
+
+func TestHeadSHA_InvalidRepo(t *testing.T) {
+	t.Parallel()
+	c := adapters.New(filepath.Join(t.TempDir(), "no-such-repo"))
+
+	_, err := c.HeadSHA()
+	require.Error(t, err)
 }
 
 func TestCurrentBranch(t *testing.T) {

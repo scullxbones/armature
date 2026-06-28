@@ -351,6 +351,42 @@ func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
 	}
 }
 
+func TestAssemble_ResolvesRepoRootFromNestedStateDir(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, ".armature", "state", "worker-1"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, "guide.md"), []byte("repo-root context"), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:           "TST-001",
+		Title:        "Test",
+		Type:         "task",
+		Status:       "open",
+		ContextFiles: []string{"guide.md"},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	stateDir := filepath.Join(repoRoot, ".armature", "state", "worker-1")
+	inferredRoot := InferRepoRoot(stateDir)
+	reader := &OSFileReader{Root: inferredRoot}
+
+	ctx, err := Assemble("TST-001", state, reader)
+	require.NoError(t, err)
+
+	var contextFilesLayer *Layer
+	for i := range ctx.Layers {
+		if ctx.Layers[i].Name == "context_files" {
+			contextFilesLayer = &ctx.Layers[i]
+			break
+		}
+	}
+	require.NotNil(t, contextFilesLayer)
+	assert.Contains(t, contextFilesLayer.Content, "repo-root context")
+}
+
 func TestBuildSnippets_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	state := materialize.NewState()

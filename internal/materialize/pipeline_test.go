@@ -1,6 +1,7 @@
 package materialize
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,35 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMaterialize_IncrementalReplayNormalizesLoadedIssues(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, ".armature", "state", "worker-1")
+	issuesDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	legacyIssue := []byte(`{
+		"id": "task-01",
+		"type": "task",
+		"status": "open",
+		"title": "Fix auth",
+		"scope": ["src/auth/**", ""],
+		"context_files": ["docs/design.md", ""]
+	}`)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "task-01.json"), legacyIssue, 0644))
+	require.NoError(t, WriteCheckpoint(filepath.Join(stateDir, "checkpoint.json"), Checkpoint{
+		ByteOffsets: map[string]int64{"worker-1.log": 123},
+	}))
+
+	_, err := Materialize(stateDir, nil, false, nil)
+	require.NoError(t, err)
+
+	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src/auth/**"}, loaded.Scope)
+	assert.Equal(t, []string{"docs/design.md"}, loaded.ContextFiles)
+}
 
 // TestMaterialize_MkdirAllErrorPropagated verifies that when os.MkdirAll fails
 // (because the state directory cannot be created), Materialize returns an error.
@@ -683,6 +713,56 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		assert.Equal(t, fullIssue.SourceLinks, incrementalIssue.SourceLinks, "source links must match")
 		assert.Equal(t, fullIssue.CitationAcceptances, incrementalIssue.CitationAcceptances, "citation acceptances must match")
 	}
+}
+
+func TestIncremental_ReplayRepairsStaleIssueState(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	issuesDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	staleIssue := Issue{
+		ID:           "task-01",
+		Type:         "task",
+		Status:       "open",
+		Title:        "Repair stale state",
+		Scope:        []string{"", "src/task.go", ""},
+		ContextFiles: []string{"", "docs/spec.md", ""},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	require.NoError(t, WriteIssue(issuesDir, staleIssue))
+
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	require.NoError(t, WriteCheckpoint(checkpointPath, Checkpoint{
+		ByteOffsets: map[string]int64{"worker-a.log": 128},
+	}))
+
+	state, result, err := MaterializeAndReturn(stateDir, nil, false, map[string]int64{"worker-a.log": 128})
+	require.NoError(t, err)
+	assert.False(t, result.FullReplay, "checkpointed replay should take the incremental path")
+
+	loadedIssue, err := LoadIssue(filepath.Join(issuesDir, "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src/task.go"}, loadedIssue.Scope)
+	assert.Equal(t, []string{"docs/spec.md"}, loadedIssue.ContextFiles)
+
+	currentIssue, ok := state.Issues["task-01"]
+	require.True(t, ok)
+	assert.Equal(t, []string{"src/task.go"}, currentIssue.Scope)
+	assert.Equal(t, []string{"docs/spec.md"}, currentIssue.ContextFiles)
+
+	rawIssuePath := filepath.Join(issuesDir, "task-01.json")
+	rawData, err := os.ReadFile(rawIssuePath)
+	require.NoError(t, err)
+	var rawIssue Issue
+	require.NoError(t, json.Unmarshal(rawData, &rawIssue))
+	assert.Equal(t, []string{"src/task.go"}, rawIssue.Scope)
+	assert.Equal(t, []string{"docs/spec.md"}, rawIssue.ContextFiles)
 }
 
 func TestMaterializeAndReturnQuiet_BasicRoundTrip(t *testing.T) {

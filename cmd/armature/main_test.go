@@ -22,6 +22,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type fakePendingPushTracker struct {
+	count       int
+	incremented int
+	resetCalls  int
+}
+
+func (f *fakePendingPushTracker) Increment() (int, error) {
+	f.incremented++
+	f.count++
+	return f.count, nil
+}
+
+func (f *fakePendingPushTracker) Reset() error {
+	f.resetCalls++
+	f.count = 0
+	return nil
+}
+
+func (f *fakePendingPushTracker) Count() (int, error) {
+	return f.count, nil
+}
+
 var runTrlsMu sync.Mutex
 
 // getTestStateDir returns the absolute path to the worker-specific state directory.
@@ -446,6 +468,31 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	out2, err := runTrls(t, repo, "render-context", "--issue", "TST-AT", "--at", sha2)
 	require.NoError(t, err)
 	assert.Contains(t, out2, "note added after sha1", "SHA2 should contain the note")
+}
+
+func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "TST-DB", "--title", "Dual branch render", "--type", "task")
+	require.NoError(t, err)
+
+	require.NotNil(t, appCtx)
+	require.NotEmpty(t, appCtx.WorktreePath)
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD")
+	shaOutBytes, err := shaCmd.CombinedOutput()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOutBytes))
+
+	out, err := runTrls(t, repo, "render-context", "--issue", "TST-DB", "--at", sha)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Dual branch render")
 }
 
 func TestValidateCommand(t *testing.T) {
@@ -2140,6 +2187,29 @@ func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 
 	ctx := &config.Context{IssuesDir: "/repo/.armature"}
 	assert.Equal(t, "/repo/.armature/state/worker-123~lane-a", stateDirFor(ctx, workerID))
+}
+
+func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testing.T) {
+	worktreePath := initTempRepo(t)
+	logPath := filepath.Join(worktreePath, ".armature", "ops", "worker.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
+
+	state := &executionState{
+		ctx: &config.Context{
+			WorktreePath: worktreePath,
+			Config:       config.Config{LowStakesPushThreshold: 1},
+		},
+		tracker: &fakePendingPushTracker{},
+	}
+
+	op := ops.Op{Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "w1", Payload: ops.Payload{Msg: "hello"}}
+	err := appendLowStakesOp(state, logPath, op)
+	require.NoError(t, err)
+
+	tracker, ok := state.tracker.(*fakePendingPushTracker)
+	require.True(t, ok)
+	assert.Equal(t, 1, tracker.incremented)
+	assert.Equal(t, 1, tracker.resetCalls)
 }
 
 // TestLogSlot_ReplayIncludesSlottedOps verifies that ops written to a slotted log

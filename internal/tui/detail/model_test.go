@@ -60,6 +60,18 @@ func TestDetailUpdateScrolling(t *testing.T) {
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 }
 
+func TestDetailUpdateCopiesIssueID(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{ID: "T1"}
+	m := detail.New()
+	m = m.SetSize(80, 24)
+	m = m.Open(issue)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	if !m.IsOpen() {
+		t.Error("c should not close the overlay")
+	}
+}
+
 func TestDetailSetSizeWhenOpen(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
