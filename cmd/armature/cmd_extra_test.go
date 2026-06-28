@@ -22,15 +22,50 @@ import (
 func TestConfirmCommand_Success(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
+	// Materialize so issues/task-01.json exists for ReadIssue.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
 	// Confirm an existing issue
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"confirm", "--repo", repo, "task-01"})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "confirmed task-01")
+}
+
+// TestConfirmCmd_DoesNotMaterialize verifies that arm confirm reads a single issue via
+// store.ReadIssue() and does not trigger rematerialization (store.Load()).
+//
+// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
+// advancing its mtime → mtime assertion fails.
+// GREEN with store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
+func TestConfirmCmd_DoesNotMaterialize(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Materialize first to create checkpoint.json and issues/task-01.json.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Capture checkpoint.json mtime before running confirm.
+	stateDir := getTestStateDir(t, repo)
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	stat, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
+	mtimeBefore := stat.ModTime()
+
+	// Run confirm — must use ReadIssue, not Load.
+	_, err = runTrls(t, repo, "confirm", "task-01")
+	require.NoError(t, err)
+
+	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
+	statAfter, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr)
+	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
+		"checkpoint.json must not be updated by arm confirm: store.ReadIssue must be used, not store.Load")
 }
 
 func TestConfirmCommand_NotFound(t *testing.T) {
@@ -442,6 +477,10 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"})
 	require.NoError(t, cmd.Execute())
 
+	// Materialize so issues/E6.json exists for ReadIssue in create --parent.
+	_, materializeErr := runTrls(t, repo, "materialize")
+	require.NoError(t, materializeErr)
+
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-child", "--parent", "E6"})
@@ -809,6 +848,10 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"})
 	require.NoError(t, cmd2.Execute())
+
+	// Materialize so issues/story-01.json exists for ReadIssue in create --parent.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
 
 	cmd3 := newRootCmd()
 	cmd3.SetOut(new(bytes.Buffer))
@@ -1494,6 +1537,10 @@ func TestCreateCommand_FeatureUnderEpic(t *testing.T) {
 
 	// Create an epic first
 	_, err := runTrls(t, repo, "create", "--title", "My Epic", "--type", "epic", "--id", "epic-01")
+	require.NoError(t, err)
+
+	// Materialize so issues/epic-01.json exists for ReadIssue in create --parent.
+	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	// Create a feature under the epic

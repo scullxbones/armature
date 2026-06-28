@@ -124,16 +124,11 @@ func newMergedCmd() *cobra.Command {
 			ctx := currentCtx(cmd)
 			singleBranch := ctx.Mode == "single-branch"
 
-			// Load snapshot to get current state
+			// Read index and issue directly from disk; no full rematerialization needed.
 			store := newSnapshotStore(ctx)
-			snap, err := store.Load(context.Background())
+			index, err := store.ReadIndex()
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-
-			index := snap.Index
-			if index == nil {
-				index = make(materialize.Index)
+				return fmt.Errorf("read index: %w", err)
 			}
 
 			entry, ok := index[issueID]
@@ -152,10 +147,10 @@ func newMergedCmd() *cobra.Command {
 				}
 			}
 
-			// Load the issue to get its type
-			issue := snap.State.Issues[issueID]
-			if issue == nil {
-				return fmt.Errorf("load issue %s: issue not found in snapshot", issueID)
+			// Read the issue to get its type and PR field.
+			issue, err := store.ReadIssue(issueID)
+			if err != nil {
+				return fmt.Errorf("load issue %s: %w", issueID, err)
 			}
 
 			// Record the merge op FIRST, before removing the worktree.

@@ -12,6 +12,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMergedCmd_DoesNotMaterialize verifies that arm merged reads the index and issue from
+// disk via store.ReadIndex()/store.ReadIssue() without triggering full rematerialization.
+//
+// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
+// advancing its mtime → mtime assertion fails.
+// GREEN with store.ReadIndex()+store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
+func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Materialize after creation.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Transition task-01 to done.
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force")
+	require.NoError(t, err)
+
+	// Materialize again to update index.json (done→merged in single-branch mode).
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Capture checkpoint.json mtime before running merged.
+	stateDir := getTestStateDir(t, repo)
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	stat, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
+	mtimeBefore := stat.ModTime()
+
+	// Run merged — must use ReadIndex+ReadIssue, not Load.
+	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
+	statAfter, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr)
+	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
+		"checkpoint.json must not be updated by arm merged: store.ReadIndex/ReadIssue must be used, not store.Load")
+}
+
 // TestMergedRemovesTaskWorktree verifies that merged removes a worktree for task-type issues.
 func TestMergedRemovesTaskWorktree(t *testing.T) {
 	repo := setupRepoWithTask(t)
@@ -31,6 +70,10 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
 
 	// Call merged command
 	mergedCmd := newRootCmd()
@@ -74,6 +117,10 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "bug-01", "--to", "done", "--outcome", "Fixed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, err2 := runTrls(t, repo, "materialize")
+	require.NoError(t, err2)
+
 	// Call merged command
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
@@ -107,6 +154,10 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json and issues/story-01.json exist before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
 
 	// Call merged command (no worktree was created for this story; command must handle gracefully)
 	mergedCmd := newRootCmd()
@@ -148,6 +199,10 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
 
 	// Call merged command
 	mergedCmd := newRootCmd()
@@ -192,6 +247,10 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--outcome", "Shipped", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
 	// Call merged command
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
@@ -223,6 +282,10 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--outcome", "Shipped", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json and issues/feature-01.json exist before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
 
 	// Call merged command (no worktree was created; should handle gracefully)
 	mergedCmd := newRootCmd()
@@ -264,6 +327,10 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
 	// Call merged command and capture stderr
 	mergedCmd := newRootCmd()
 	outBuf := new(bytes.Buffer)
@@ -300,6 +367,10 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat2 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat2)
+
 	// Call merged command and capture stderr
 	mergedCmd := newRootCmd()
 	outBuf := new(bytes.Buffer)
@@ -331,6 +402,10 @@ func TestMergedHandlesMissingWorktree(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition.
+	_, errMat3 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat3)
 
 	// Manually remove the worktree (simulating it being deleted before merged is called)
 	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
@@ -377,6 +452,10 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition.
+	_, errMat4 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat4)
 
 	// Remove the worktree before calling merged
 	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
@@ -435,6 +514,10 @@ func TestMergedRejectsSingleBranchModeWithoutMergedStatus(t *testing.T) {
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in-progress"})
 	require.NoError(t, transitionCmd.Execute())
 
+	// Materialize so the in-progress status is reflected in index.json before merged reads it.
+	_, errMat5 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat5)
+
 	// Call merged command — should fail because status is not merged/done in single-branch mode
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
@@ -471,6 +554,10 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 		require.NoError(t, transitionCmd.Execute())
 
+		// Materialize so index.json reflects the done→merged transition before calling merged.
+		_, errMat := runTrls(t, repo, "materialize")
+		require.NoError(t, errMat)
+
 		mergedCmd := newRootCmd()
 		mergedCmd.SetOut(new(bytes.Buffer))
 		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
@@ -481,9 +568,26 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 	})
 
 	t.Run("failure path: appendOp fails → worktree preserved", func(t *testing.T) {
-		repo := setupRepoWithTask(t)
-		worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+		// Use dual-branch mode so status=done after transition (not auto-advanced to merged),
+		// ensuring appendOp is called and the read-only test exercises the actual P2 invariant:
+		// removeWorktreeForIssue must not be called when appendOp fails.
+		repo := initTempRepo(t)
+		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
+		bootstrapCmd := newRootCmd()
+		bootstrapCmd.SetOut(new(bytes.Buffer))
+		bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+		require.NoError(t, bootstrapCmd.Execute())
+
+		_, err := runTrls(t, repo, "worker-init")
+		require.NoError(t, err)
+
+		createCmd := newRootCmd()
+		createCmd.SetOut(new(bytes.Buffer))
+		createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+		require.NoError(t, createCmd.Execute())
+
+		worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 		claimCmd := newRootCmd()
 		claimCmd.SetOut(new(bytes.Buffer))
 		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
@@ -495,20 +599,26 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 		require.NoError(t, transitionCmd.Execute())
 
+		// Materialize so index.json reflects status=done (dual-branch: done is NOT auto-advanced to merged).
+		// merged will read status=done → alreadyMerged=false → try appendOp → fails (read-only).
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+
 		// Make the ops log directory read-only so appendOp cannot write a new log entry.
 		// This simulates a disk-full or permission error during the op write.
-		opsDir := filepath.Join(repo, ".armature", "ops")
+		// In dual-branch mode, ops live in the .arm worktree: <repo>/.arm/.armature/ops/.
+		opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 		require.NoError(t, os.Chmod(opsDir, 0o444))
 		defer func() {
-			if err := os.Chmod(opsDir, 0o755); err != nil {
-				t.Logf("warning: failed to restore ops dir permissions: %v", err)
+			if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
+				t.Logf("warning: failed to restore ops dir permissions: %v", chmodErr)
 			}
 		}() // restore so cleanup works
 
 		mergedCmd := newRootCmd()
 		mergedCmd.SetOut(new(bytes.Buffer))
 		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
-		err := mergedCmd.Execute()
+		err = mergedCmd.Execute()
 		require.Error(t, err, "merged should fail when appendOp cannot write")
 
 		// The critical invariant: because the op write failed BEFORE removeWorktreeForIssue
@@ -637,6 +747,10 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
+	// Materialize so index.json and issues/task-01.json exist before calling merged.
+	_, errMat6 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat6)
+
 	// Call merged command and capture stderr to check for warning
 	mergedCmd := newRootCmd()
 	outBuf := new(bytes.Buffer)
@@ -689,6 +803,10 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat7 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat7)
 
 	// Call merged command
 	mergedCmd := newRootCmd()

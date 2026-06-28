@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -32,12 +31,8 @@ func newCreateCmd() *cobra.Command {
 			if parent != "" {
 				ctx := currentCtx(cmd)
 				store := newSnapshotStore(ctx)
-				snap, err := store.Load(context.Background())
+				parentIssue, err := store.ReadIssue(parent)
 				if err != nil {
-					return fmt.Errorf("load snapshot: %w", err)
-				}
-				parentIssue := snap.State.Issues[parent]
-				if parentIssue == nil {
 					return fmt.Errorf("parent %s not found", parent)
 				}
 				if !issuetype.IsLegalHierarchy(parentIssue.Type, nodeType) {

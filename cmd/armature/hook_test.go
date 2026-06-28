@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/stretchr/testify/assert"
@@ -310,8 +312,22 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 
 // TestHookDetectScopeChanges_WithExistingCheckpoint verifies that hookDetectScopeChanges
 // correctly uses ReadIndex (not Load) when checkpoint.json already exists.
-// This test ensures the fix for ARCHIMP-S14 works: Store.ReadIndex avoids
-// rematerializing all ops, which would re-apply non-idempotent ops and corrupt state.
+//
+// Mechanism: after materializing a real task, inject a fake entry directly into index.json.
+// This entry has no create op — Load() would overwrite index.json and lose it; ReadIndex()
+// reads the existing file and sees it.
+//
+// RED with store.Load() (old code): rematerializes from ops → fake entry lost → no
+//
+//	scope-rename op for "task-index-only" → assertion FAILS.
+//
+// GREEN with store.ReadIndex() (new code): reads existing index.json → sees fake entry
+//
+//	→ scope-rename op for "task-index-only" is emitted → assertion PASSES.
+//
+// This approach is immune to the installed arm binary triggering materialization via
+// git hooks (prepare-commit-msg calls arm show, which materializes), since we're not
+// relying on checkpoint.json mtime but rather on what entries hookDetectScopeChanges sees.
 func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
 
@@ -319,33 +335,52 @@ func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree", filepath.Join(t.TempDir(), "claim-checkpoint-wt"))
 	require.NoError(t, err)
 
-	// Add and commit the scoped file
+	// Add the scoped file, commit it, then rename it and commit again so that
+	// hookDetectScopeChanges sees a rename in HEAD~1..HEAD.
+	// All git commits are done BEFORE injecting the fake entry to ensure that the
+	// installed prepare-commit-msg hook (which calls arm show active-claim →
+	// snapshot.Load → materialization) cannot overwrite the fake entry.
 	writeFile(t, repo, "src/checkpoint.go", "package checkpoint")
 	run(t, repo, "git", "add", "src/checkpoint.go")
 	run(t, repo, "git", "commit", "-m", "add checkpoint.go")
-
-	// First post-commit to establish checkpoint.json (triggers materialization)
-	_, err = runTrls(t, repo, "hook", "run", "post-commit")
-	require.NoError(t, err)
-
-	// Verify checkpoint.json exists (evidence that materialization occurred)
-	stateDir := getTestStateDir(t, repo)
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-	_, err = os.Stat(checkpointPath)
-	require.NoError(t, err, "checkpoint.json should exist after materialization")
-
-	// Now rename the file and commit
 	run(t, repo, "git", "mv", "src/checkpoint.go", "src/checkpoint-renamed.go")
 	run(t, repo, "git", "commit", "-m", "rename checkpoint.go")
 
-	// Second post-commit with existing checkpoint.json should not error.
-	// hookDetectScopeChanges will be called.
-	// With the fix (using ReadIndex), it should emit scope-rename without corrupting state.
-	// With the old code (using Load), it would replay all ops and potentially corrupt state.
+	// Materialize so index.json exists with scope data for ReadIndex to read.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Inject a fake entry directly into index.json AFTER all git commits.
+	// This entry has no create op — store.Load() rematerializes from ops and loses it;
+	// store.ReadIndex() reads the file as-is and sees it.
+	// No further git commits will run, so the installed arm binary cannot overwrite this entry.
+	stateDir := getTestStateDir(t, repo)
+	indexPath := filepath.Join(stateDir, "index.json")
+	indexData, readErr := os.ReadFile(indexPath)
+	require.NoError(t, readErr)
+
+	var index materialize.Index
+	require.NoError(t, json.Unmarshal(indexData, &index))
+	index["task-index-only"] = materialize.IndexEntry{
+		Status: "open",
+		Scope:  []string{"src/checkpoint.go"},
+	}
+	newData, marshalErr := json.Marshal(index)
+	require.NoError(t, marshalErr)
+	require.NoError(t, os.WriteFile(indexPath, newData, 0o600))
+
+	// Run the post-commit hook. hookDetectScopeChanges will:
+	// - git diff HEAD~1..HEAD → finds rename src/checkpoint.go → src/checkpoint-renamed.go
+	// - store.ReadIndex() (correct) reads existing index.json, sees task-index-only
+	//   → emits scope-rename for both task-checkpoint-scope and task-index-only
+	// - store.Load() (old/wrong) rematerializes from ops, overwrites index.json,
+	//   loses task-index-only → only emits scope-rename for task-checkpoint-scope
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
 	assert.Contains(t, out, "scope-rename")
 	assert.Contains(t, out, "task-checkpoint-scope")
+	assert.Contains(t, out, "task-index-only",
+		"task-index-only must appear in output, proving store.ReadIndex was used (not store.Load)")
 }
 
 // setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.

@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -17,17 +15,9 @@ func newConfirmCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			nodeID := args[0]
-			// Load snapshot to get materialized state
+			// Read the issue directly from disk; no full rematerialization needed.
 			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			state := snap.State
-			if state == nil {
-				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
-			}
-			if _, ok := state.Issues[nodeID]; !ok {
+			if _, err := store.ReadIssue(nodeID); err != nil {
 				return fmt.Errorf("node %q not found", nodeID)
 			}
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
