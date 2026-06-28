@@ -124,7 +124,7 @@ func inferRepoRootByGit(stateDir string) string {
 	return strings.TrimSpace(out.String())
 }
 
-func buildContextFiles(issue *materialize.Issue, repoRoot string) Layer {
+func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
 	if len(issue.ContextFiles) == 0 {
 		return Layer{Name: "context_files", Priority: 2, Content: ""}
 	}

@@ -982,9 +982,7 @@ func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	graph := buildGraphFromState(state)
-
-	ctx, err := Assemble("TST-001", dir, state, graph)
+	ctx, err := Assemble("TST-001", state, &realFileReader{root: dir})
 	require.NoError(t, err)
 
 	var cfLayer *Layer
