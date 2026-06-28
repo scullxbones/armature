@@ -99,7 +99,7 @@ clean:
 
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o bin/arm ./cmd/armature
+	GOFLAGS=-buildvcs=false CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o bin/arm ./cmd/armature
 
 install: build
 	mkdir -p $(INSTALL_DIR)
