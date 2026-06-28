@@ -184,6 +184,46 @@ func TestGenerateSchema(t *testing.T) {
 	assert.Contains(t, schema, "payload")
 }
 
+func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
+	t.Parallel()
+	schema := GenerateSchema()
+	documentedTypes := SchemaDocumentedOpTypes()
+
+	// Convert to a set for fast lookup
+	documentedSet := make(map[string]bool, len(documentedTypes))
+	for _, opType := range documentedTypes {
+		documentedSet[opType] = true
+	}
+
+	// All registered op types must be documented in the schema
+	requiredOpTypes := []string{
+		OpCreate,
+		OpClaim,
+		OpHeartbeat,
+		OpTransition,
+		OpNote,
+		OpNoteDelete,
+		OpLink,
+		OpUnlink,
+		OpSourceLink,
+		OpSourceFingerprint,
+		OpDAGTransition,
+		OpDecision,
+		OpAssign,
+		OpAmend,
+		OpCitationAccepted,
+		OpScopeRename,
+		OpScopeDelete,
+		OpReparent,
+		OpAssessmentAttested,
+	}
+
+	for _, opType := range requiredOpTypes {
+		assert.True(t, documentedSet[opType], "op type %q must be documented in schema", opType)
+		assert.Contains(t, schema, opType, "op type %q must appear in generated schema", opType)
+	}
+}
+
 func TestHeartbeatRateLimiter(t *testing.T) {
 	t.Parallel()
 	rl := NewRateLimiter()
