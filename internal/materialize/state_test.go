@@ -47,3 +47,27 @@ func TestIndexRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "open", loaded["task-01"].Status)
 }
+
+func TestLoadIssueNormalization(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	issue := Issue{
+		ID:           "task-normalize",
+		Type:         "task",
+		Status:       "open",
+		Title:        "Fix normalization",
+		Scope:        []string{" ", "src/auth/**", "", "src/db/**, src/cache/**"},
+		ContextFiles: []string{"", "docs/plan.md", "   "},
+	}
+
+	require.NoError(t, WriteIssue(issuesDir, issue))
+
+	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-normalize.json"))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"src/auth/**", "src/db/**", "src/cache/**"}, loaded.Scope)
+	assert.Equal(t, []string{"docs/plan.md"}, loaded.ContextFiles)
+}

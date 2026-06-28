@@ -60,14 +60,7 @@ func newRenderContextCmd() *cobra.Command {
 			}
 
 			// Create an OSFileReader for file access
-			repoRoot := filepath.Dir(appCtx.StateDir)
-			if repoRoot == "." || repoRoot == "" {
-				var err error
-				repoRoot, err = os.Getwd()
-				if err != nil {
-					return fmt.Errorf("get current directory: %w", err)
-				}
-			}
+			repoRoot := context.InferRepoRoot(appCtx.StateDir)
 			reader := &context.OSFileReader{Root: repoRoot}
 
 			ctx, err := context.Assemble(rcIssue, state, reader)

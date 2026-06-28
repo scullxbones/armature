@@ -75,7 +75,7 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 	}, nil
 }
 
-func inferRepoRoot(stateDir string) string {
+func InferRepoRoot(stateDir string) string {
 	// Fast path: walk up looking for .arm/.armature directory name (no subprocess).
 	if root := inferRepoRootByPath(stateDir); root != "" {
 		return root
