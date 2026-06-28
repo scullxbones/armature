@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -170,16 +169,15 @@ This enforces branch + PR discipline.`,
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
-// It loads the materialized issue from the store. If the issue cannot be
-// loaded (e.g. not yet materialized), it returns false to avoid false positives.
+// It reads the materialized issue directly from disk without triggering rematerialization.
+// If the issue cannot be read (e.g. not yet materialized), it returns false to avoid false positives.
 func isIssueUncited(issueID string) bool {
 	store := newSnapshotStore(appCtx)
-	// A load error degrades gracefully: treat the issue as not uncited, matching the previous
-	// behavior of ignoring missing-file errors when the index or issue file was absent.
-	store.Load(context.Background()) //nolint:errcheck,gosec // missing issue treated as not uncited; access uses nil check
-	issue := store.Issue(issueID)
-	if issue == nil {
-		// Cannot load — graceful degradation, don't warn
+	// A read error degrades gracefully: treat the issue as not uncited, matching the previous
+	// behavior of ignoring missing-file errors when the issue file was absent.
+	issue, err := store.ReadIssue(issueID)
+	if err != nil || issue == nil {
+		// Cannot read — graceful degradation, don't warn
 		return false
 	}
 	return len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0

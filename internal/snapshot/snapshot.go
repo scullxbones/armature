@@ -110,6 +110,19 @@ func (s *Store) ReadIndex() (materialize.Index, error) {
 	return materialize.LoadIndex(s.IndexPath())
 }
 
+// ReadIssue reads a single issue directly from disk without triggering materialization and
+// without consulting the s.current cache. It does not call materialize.Materialize* or
+// write any state files. Use this instead of Issue() when you need a single issue from disk
+// without a full Load/Refresh cycle. Contrast with Issue(), which returns the cached data
+// from the most recent Load/Refresh call. Returns an error if the issue file does not exist.
+func (s *Store) ReadIssue(id string) (*materialize.Issue, error) {
+	issue, err := materialize.LoadIssue(s.IssuePath(id))
+	if err != nil {
+		return nil, err
+	}
+	return &issue, nil
+}
+
 // IssuePath returns the filesystem path where an issue with the given ID is stored.
 func (s *Store) IssuePath(id string) string {
 	issuesDir := filepath.Join(s.stateDir, "issues")
