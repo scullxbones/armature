@@ -1,1 +1,2 @@
 ["transition","QLTYCNTRL-S4-T1",1781407984,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~5",{"to":"done","outcome":"Created trace_report.py script that scans *_test.go files for Test*_REQ_* patterns and prints a traceability report. Added trace-report target to Makefile."}]
+["note","SMTC-S1-T5A",1782683415,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~5",{"msg":"Implementation complete: added OpAssessmentAttested const, Assessment field to Payload, schemaOpDocs entry, and TestGenerateSchema_DocumentsEveryRegisteredOpType test. All tests pass.","note_id":"note-1782683415675546754"}]
