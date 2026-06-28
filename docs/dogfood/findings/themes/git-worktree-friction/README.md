@@ -10,6 +10,7 @@ Using git worktrees for agent isolation (particularly when placed outside the pr
 - [LSP diagnostics bleed from /tmp worktree](../../raw/2026-06-27T0000Z-coordinator-tooling-worktree-lsp-bleed.md) - Diagnostics from active subagent work in `/tmp` bleed into the coordinator's main session context as false-positive warnings.
 - [gopls false-positive errors with worktrees in /tmp](../../raw/2026-06-27T2108Z-claude-tooling-worktree-gopls-false-positives.md) - Worktrees outside the project directory flood the IDE with false-positive diagnostics, causing cognitive overhead.
 - [Checked-out branch worktree failure](../../raw/2026-06-28T1700Z-claude-tooling-worktree-already-checked-out-branch.md) - Creating a git worktree directly from the currently checked-out branch fails, requiring workaround branches and subsequent cherry-picks.
+- [`arm claim --worktree` required but undocumented in coordinator skill](../../raw/2026-06-28T2200Z-claude-commands-arm-claim-worktree-required.md) - `arm claim` requires `--worktree` flag on every invocation; coordinator skill examples omit it, causing immediate failure on first wave dispatch. Placing worktrees under `.worktrees/` inside the project root still causes gopls stale-workspace diagnostics after worktree removal.
 
 ## Candidate Follow-Ups
 
