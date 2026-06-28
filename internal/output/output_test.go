@@ -8,6 +8,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/stretchr/testify/assert"
@@ -496,4 +497,130 @@ func TestRenderBoard_Empty(t *testing.T) {
 	err := RenderBoard(&buf, []BoardEntry{})
 	require.NoError(t, err)
 	assert.Empty(t, buf.String(), "empty entries should produce no output")
+}
+
+func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID:     "TASK-01",
+		Type:   "task",
+		Status: "done",
+		Title:  "Task with Review",
+		AssessmentAttestations: []review.AssessmentAttestation{
+			{
+				BundleID: "sha256:0123456789abcdef",
+				Rating:   review.Yellow,
+				HeadSHA:  "abc1234567890def",
+			},
+			{
+				BundleID:           "sha256:fedcba9876543210",
+				Rating:             review.Yellow,
+				HeadSHA:            "def4567890123abc",
+				SatisfiedCount:     1,
+				IndeterminateCount: 1,
+			},
+		},
+	}
+	var buf bytes.Buffer
+	err := RenderIssue(&buf, issue, false)
+	require.NoError(t, err)
+	output := buf.String()
+
+	// Should contain the issue basics
+	assert.Contains(t, output, "TASK-01")
+	assert.Contains(t, output, "Task with Review")
+
+	// Should contain Review line with latest attestation (the second one)
+	// Format: Review:    yellow (bundle sha256:fedcb...; 1 satisfied, 1 indeterminate)
+	assert.Contains(t, output, "Review:")
+	assert.Contains(t, output, "yellow")
+	assert.Contains(t, output, "fedcb")
+	assert.Contains(t, output, "1 satisfied")
+	assert.Contains(t, output, "1 indeterminate")
+}
+
+func TestRenderIssue_WithAssessmentAttestations_JSON(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID:     "TASK-01",
+		Type:   "task",
+		Status: "done",
+		Title:  "Task with Review",
+		AssessmentAttestations: []review.AssessmentAttestation{
+			{
+				BundleID:       "sha256:abc123def456",
+				Rating:         review.Green,
+				HeadSHA:        "abc1234567890def",
+				SatisfiedCount: 2,
+			},
+		},
+	}
+	var buf bytes.Buffer
+	err := RenderIssue(&buf, issue, true)
+	require.NoError(t, err)
+	output := buf.String()
+
+	var result map[string]interface{}
+	err = json.Unmarshal([]byte(output), &result)
+	require.NoError(t, err)
+
+	// Should have assessment_attestations field in JSON
+	attestations, ok := result["assessment_attestations"]
+	require.True(t, ok, "assessment_attestations field must be present in JSON output")
+	attestationSlice, ok := attestations.([]interface{})
+	require.True(t, ok)
+	assert.Len(t, attestationSlice, 1)
+}
+
+func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID:                     "TASK-01",
+		Type:                   "task",
+		Status:                 "open",
+		Title:                  "Task without Review",
+		AssessmentAttestations: []review.AssessmentAttestation{},
+	}
+	var buf bytes.Buffer
+	err := RenderIssue(&buf, issue, false)
+	require.NoError(t, err)
+	output := buf.String()
+
+	// Should not contain Review line when no attestations
+	assert.NotContains(t, output, "Review:")
+}
+
+func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID:     "TASK-01",
+		Type:   "task",
+		Status: "done",
+		Title:  "Task with Multiple Reviews",
+		AssessmentAttestations: []review.AssessmentAttestation{
+			{
+				BundleID:          "sha256:aaaaaabbbbbbccccccdddddd",
+				Rating:            review.Red,
+				SatisfiedCount:    0,
+				NotSatisfiedCount: 1,
+			},
+			{
+				BundleID:       "sha256:eeeeeeffffffffgggggghhhhh",
+				Rating:         review.Green,
+				SatisfiedCount: 2,
+			},
+		},
+	}
+	var buf bytes.Buffer
+	err := RenderIssue(&buf, issue, false)
+	require.NoError(t, err)
+	output := buf.String()
+
+	// Should only show the latest (second) attestation
+	assert.Contains(t, output, "Review:")
+	assert.Contains(t, output, "green")
+	// The bundle ID should be truncated to first 12 chars
+	assert.Contains(t, output, "sha256:eeeee")
+	// Should not show the first attestation
+	assert.NotContains(t, output, "sha256:aaaaaa")
 }

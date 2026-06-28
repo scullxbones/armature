@@ -33,21 +33,22 @@ func RenderIssue(w io.Writer, issue *materialize.Issue, asJSON bool) error {
 // IssueJSON is the canonical JSON representation of an issue.
 // All JSON serialization of issues must go through this struct to ensure schema consistency.
 type IssueJSON struct {
-	ID               string          `json:"id"`
-	Title            string          `json:"title"`
-	Type             string          `json:"type"`
-	Status           string          `json:"status"`
-	Parent           string          `json:"parent,omitempty"`
-	Priority         string          `json:"priority,omitempty"`
-	DefinitionOfDone string          `json:"definition_of_done,omitempty"`
-	Scope            []string        `json:"scope,omitempty"`
-	Outcome          string          `json:"outcome,omitempty"`
-	ClaimedBy        string          `json:"claimed_by,omitempty"`
-	AssignedWorker   string          `json:"assigned_worker,omitempty"`
-	BlockedBy        []string        `json:"blocked_by,omitempty"`
-	Blocks           []string        `json:"blocks,omitempty"`
-	Acceptance       json.RawMessage `json:"acceptance,omitempty"`
-	Notes            []string        `json:"notes,omitempty"`
+	ID                     string          `json:"id"`
+	Title                  string          `json:"title"`
+	Type                   string          `json:"type"`
+	Status                 string          `json:"status"`
+	Parent                 string          `json:"parent,omitempty"`
+	Priority               string          `json:"priority,omitempty"`
+	DefinitionOfDone       string          `json:"definition_of_done,omitempty"`
+	Scope                  []string        `json:"scope,omitempty"`
+	Outcome                string          `json:"outcome,omitempty"`
+	ClaimedBy              string          `json:"claimed_by,omitempty"`
+	AssignedWorker         string          `json:"assigned_worker,omitempty"`
+	BlockedBy              []string        `json:"blocked_by,omitempty"`
+	Blocks                 []string        `json:"blocks,omitempty"`
+	Acceptance             json.RawMessage `json:"acceptance,omitempty"`
+	Notes                  []string        `json:"notes,omitempty"`
+	AssessmentAttestations json.RawMessage `json:"assessment_attestations,omitempty"`
 }
 
 // MarshalIssue converts a materialize.Issue to the canonical IssueJSON representation.
@@ -58,22 +59,32 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 			noteTexts = append(noteTexts, n.Msg)
 		}
 	}
+
+	var attestationsJSON json.RawMessage
+	if len(issue.AssessmentAttestations) > 0 {
+		data, err := json.Marshal(issue.AssessmentAttestations)
+		if err == nil {
+			attestationsJSON = json.RawMessage(data)
+		}
+	}
+
 	return IssueJSON{
-		ID:               issue.ID,
-		Title:            issue.Title,
-		Type:             issue.Type,
-		Status:           issue.Status,
-		Parent:           issue.Parent,
-		Priority:         issue.Priority,
-		DefinitionOfDone: issue.DefinitionOfDone,
-		Scope:            issue.Scope,
-		Outcome:          issue.Outcome,
-		ClaimedBy:        issue.ClaimedBy,
-		AssignedWorker:   issue.AssignedWorker,
-		BlockedBy:        issue.BlockedBy,
-		Blocks:           issue.Blocks,
-		Acceptance:       issue.Acceptance,
-		Notes:            noteTexts,
+		ID:                     issue.ID,
+		Title:                  issue.Title,
+		Type:                   issue.Type,
+		Status:                 issue.Status,
+		Parent:                 issue.Parent,
+		Priority:               issue.Priority,
+		DefinitionOfDone:       issue.DefinitionOfDone,
+		Scope:                  issue.Scope,
+		Outcome:                issue.Outcome,
+		ClaimedBy:              issue.ClaimedBy,
+		AssignedWorker:         issue.AssignedWorker,
+		BlockedBy:              issue.BlockedBy,
+		Blocks:                 issue.Blocks,
+		Acceptance:             issue.Acceptance,
+		Notes:                  noteTexts,
+		AssessmentAttestations: attestationsJSON,
 	}
 }
 
@@ -102,6 +113,71 @@ func (ew *errWriter) printf(format string, args ...interface{}) {
 	_, ew.err = fmt.Fprintf(ew.w, format, args...)
 }
 
+// truncateBundleID returns the first 12 characters of the BundleID, or the full ID if shorter.
+func truncateBundleID(bundleID string) string {
+	if len(bundleID) <= 12 {
+		return bundleID
+	}
+	return bundleID[:12]
+}
+
+// formatLatestAttestationLine formats the latest assessment attestation from a slice.
+// Works with interface{} to avoid importing the review package.
+// Returns the formatted line and any error encountered.
+func formatLatestAttestationLine(attestations interface{}) (string, error) {
+	// Marshal the attestations to JSON, then unmarshal to a slice of maps
+	data, err := json.Marshal(attestations)
+	if err != nil {
+		return "", err
+	}
+
+	var attestationList []map[string]interface{}
+	if err := json.Unmarshal(data, &attestationList); err != nil {
+		return "", err
+	}
+
+	if len(attestationList) == 0 {
+		return "", nil
+	}
+
+	latest := attestationList[len(attestationList)-1]
+
+	// Extract fields from the latest attestation
+	bundleID, ok := latest["bundle_id"].(string)
+	if !ok {
+		bundleID = ""
+	}
+	rating, ok := latest["rating"].(float64) // Rating is marshaled as a number
+	ratingNames := []string{"green", "yellow", "red"}
+	var ratingStr string
+	if ok && rating >= 0 && rating < float64(len(ratingNames)) {
+		ratingStr = ratingNames[int(rating)]
+	}
+
+	bundleID = truncateBundleID(bundleID)
+
+	// Build counts string: only include counts that are > 0
+	var counts []string
+	if satisfied, ok := latest["satisfied_count"].(float64); ok && satisfied > 0 {
+		counts = append(counts, fmt.Sprintf("%d satisfied", int(satisfied)))
+	}
+	if partiallySatisfied, ok := latest["partially_satisfied_count"].(float64); ok && partiallySatisfied > 0 {
+		counts = append(counts, fmt.Sprintf("%d partially_satisfied", int(partiallySatisfied)))
+	}
+	if notSatisfied, ok := latest["not_satisfied_count"].(float64); ok && notSatisfied > 0 {
+		counts = append(counts, fmt.Sprintf("%d not_satisfied", int(notSatisfied)))
+	}
+	if indeterminate, ok := latest["indeterminate_count"].(float64); ok && indeterminate > 0 {
+		counts = append(counts, fmt.Sprintf("%d indeterminate", int(indeterminate)))
+	}
+
+	if len(counts) == 0 {
+		return fmt.Sprintf("Review:    %s (bundle %s)", ratingStr, bundleID), nil
+	}
+
+	return fmt.Sprintf("Review:    %s (bundle %s; %s)", ratingStr, bundleID, strings.Join(counts, ", ")), nil
+}
+
 func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
 	ew := &errWriter{w: w}
 
@@ -109,6 +185,13 @@ func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
 	ew.printf("Title:     %s\n", issue.Title)
 	ew.printf("Type:      %s\n", issue.Type)
 	ew.printf("Status:    %s\n", issue.Status)
+
+	// Render latest assessment attestation if present
+	if len(issue.AssessmentAttestations) > 0 {
+		if line, err := formatLatestAttestationLine(issue.AssessmentAttestations); err == nil && line != "" {
+			ew.printf("%s\n", line)
+		}
+	}
 
 	if issue.Parent != "" {
 		ew.printf("Parent:    %s\n", issue.Parent)
