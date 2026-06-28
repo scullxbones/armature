@@ -261,6 +261,10 @@ func newRootCmd() *cobra.Command {
 	harnessHookCmd.GroupID = "admin"
 	root.AddCommand(harnessHookCmd)
 
+	reviewCmd := newReviewCmd()
+	reviewCmd.GroupID = "admin"
+	root.AddCommand(reviewCmd)
+
 	return root
 }
 
