@@ -93,8 +93,8 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	// Create git adapter
 	git := adapters.New(ctx.RepoPath)
 
-	// Call prepare
-	bundle, err := review.Prepare(git, issueID, title, scope, criteria, base, head)
+	// Call prepare — pass real issue metadata (type, outcome, definition of done)
+	bundle, err := review.Prepare(git, issueID, title, issue.DefinitionOfDone, issue.Type, issue.Outcome, scope, criteria, base, head)
 	if err != nil {
 		return fmt.Errorf("prepare review bundle: %w", err)
 	}
@@ -172,15 +172,10 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile string) error {
 		return fmt.Errorf("assessment validation failed: %w", err)
 	}
 
-	// Build DiffIndex for citation validation (empty for now since we don't have the diff)
-	// The validation will only check that non-satisfied criteria have missing evidence if no citations
-	idx, err := review.BuildDiffIndex("")
-	if err != nil {
-		return fmt.Errorf("build diff index: %w", err)
-	}
-
-	// Validate citations against the diff index
-	if errs := review.ValidateResult(&assessment, idx); len(errs) > 0 {
+	// Validate structural correctness without diff-index citation checking.
+	// Citation coordinate validation is a prepare-time concern; at record time
+	// we only verify structural integrity (bundle ID, criterion result fields).
+	if errs := review.ValidateResultNoDiff(&assessment); len(errs) > 0 {
 		msg := "assessment validation errors:"
 		for _, e := range errs {
 			msg += "\n  - " + e

@@ -135,6 +135,7 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/materialize"
             - "github.com/scullxbones/armature/internal/ready"
+            - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/validate"
     errcheck:
       check-type-assertions: true

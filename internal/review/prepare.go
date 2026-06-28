@@ -17,7 +17,15 @@ type GitAdapter interface {
 // Prepare builds a ReviewBundle for an issue given its contract metadata and a git range.
 // It resolves the git revisions, computes the diff and changed files, and constructs
 // a complete ReviewBundle with fingerprints and bundle ID.
-func Prepare(git GitAdapter, issueID, title string, scope []string, criteria []string, base, head string) (*ReviewBundle, error) {
+//
+// issueType and issueOutcome are the issue's type (e.g. "task") and recorded outcome.
+// definitionOfDone is the primary contract criterion; scope is the file/area scope list.
+func Prepare(
+	git GitAdapter,
+	issueID, title, definitionOfDone, issueType, issueOutcome string,
+	scope []string, criteria []string,
+	base, head string,
+) (*ReviewBundle, error) {
 	// Resolve both revisions to full SHAs
 	baseSHA, err := git.ResolveRevision(base)
 	if err != nil {
@@ -43,7 +51,8 @@ func Prepare(git GitAdapter, issueID, title string, scope []string, criteria []s
 
 	// Build the contract
 	contract := Contract{
-		DefinitionOfDone: "",
+		DefinitionOfDone: definitionOfDone,
+		Scope:            scope,
 		Acceptance:       criteria,
 	}
 
@@ -63,9 +72,10 @@ func Prepare(git GitAdapter, issueID, title string, scope []string, criteria []s
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
 		Issue: IssueInfo{
-			ID:    issueID,
-			Type:  "task",
-			Title: title,
+			ID:      issueID,
+			Type:    issueType,
+			Title:   title,
+			Outcome: issueOutcome,
 		},
 		Contract: contract,
 		Delivery: delivery,

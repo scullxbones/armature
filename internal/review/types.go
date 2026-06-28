@@ -1,6 +1,7 @@
 package review
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -36,6 +37,27 @@ func (cs CriterionStatus) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+// MarshalJSON encodes CriterionStatus as its string name so JSON output produced
+// by this package uses human-readable values ("satisfied", "not_satisfied", …).
+func (cs CriterionStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(cs.String())
+}
+
+// UnmarshalJSON decodes CriterionStatus from its string name, matching the values
+// that the armature-reviewer skill emits ("satisfied", "partially_satisfied", …).
+func (cs *CriterionStatus) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	v, err := ParseCriterionStatus(s)
+	if err != nil {
+		return err
+	}
+	*cs = v
+	return nil
 }
 
 // ParseCriterionStatus parses a string into a CriterionStatus.
@@ -78,6 +100,27 @@ func (r Rating) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+// MarshalJSON encodes Rating as its string name so JSON output uses "green",
+// "yellow", or "red" rather than opaque integers.
+func (r Rating) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.String())
+}
+
+// UnmarshalJSON decodes Rating from its string name, accepting "green", "yellow",
+// or "red" as emitted by the armature-reviewer skill.
+func (r *Rating) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	v, err := ParseRating(s)
+	if err != nil {
+		return err
+	}
+	*r = v
+	return nil
 }
 
 // ParseRating parses a string into a Rating.
@@ -150,6 +193,8 @@ type IssueInfo struct {
 type Contract struct {
 	// DefinitionOfDone is the primary criterion.
 	DefinitionOfDone string `json:"definition_of_done"`
+	// Scope is the list of files or areas in scope for the delivery.
+	Scope []string `json:"scope,omitempty"`
 	// Acceptance is an ordered list of acceptance criteria.
 	Acceptance []string `json:"acceptance"`
 }
@@ -162,7 +207,7 @@ type Delivery struct {
 	HeadSHA string `json:"head_sha"`
 	// ChangedFiles lists the files modified in the delivery range.
 	ChangedFiles []string `json:"changed_files"`
-	// Diff is the unified diff (may be empty if oversized).
+	// Diff is the unified diff for the delivery range.
 	Diff string `json:"diff,omitempty"`
 }
 

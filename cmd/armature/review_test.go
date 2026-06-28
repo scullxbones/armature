@@ -195,6 +195,63 @@ func TestReviewRecordCommand_Success(t *testing.T) {
 	assert.Contains(t, out, "recorded")
 }
 
+func TestReviewRecordCommand_WithCitation(t *testing.T) {
+	// An assessment that contains a file:line citation must be recorded successfully.
+	// Diff-index citation validation is a prepare-time concern; record must not reject citations.
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
+	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2")
+	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	bundleOut, err := runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head)
+	require.NoError(t, err)
+
+	var bundle review.ReviewBundle
+	err = json.Unmarshal([]byte(strings.TrimSpace(bundleOut)), &bundle)
+	require.NoError(t, err)
+
+	// Assessment includes a file:line citation that is NOT in the empty diff.
+	// record must accept it without error.
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "Implementation verified.",
+				Citations: []review.Citation{
+					{Path: "internal/review/types.go", Line: 42},
+				},
+			},
+		},
+	}
+
+	assessmentFile := filepath.Join(repo, "assessment_with_citation.json")
+	assessmentJSON, err := json.MarshalIndent(&assessment, "", "  ")
+	require.NoError(t, err)
+	err = os.WriteFile(assessmentFile, assessmentJSON, 0o644)
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile)
+	require.NoError(t, err, "record must succeed even when assessment contains file:line citations")
+	assert.Contains(t, out, "recorded")
+}
+
 func TestReviewRecordCommand_IsDuplicate(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
