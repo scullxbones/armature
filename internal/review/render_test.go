@@ -1,0 +1,485 @@
+package review_test
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/scullxbones/armature/internal/review"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRenderMarkdown(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic assessment with all statuses", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-001",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Requirement met",
+					Citations: []review.Citation{
+						{Path: "src/main.go", Line: 10},
+					},
+				},
+				{
+					ID:              "criterion_2",
+					Status:          review.PartiallySatisfied,
+					Rationale:       "Partially complete",
+					MissingEvidence: "Test coverage incomplete",
+				},
+				{
+					ID:              "criterion_3",
+					Status:          review.NotSatisfied,
+					Rationale:       "Not implemented",
+					MissingEvidence: "No implementation found",
+				},
+				{
+					ID:              "criterion_4",
+					Status:          review.Indeterminate,
+					Rationale:       "Unclear from evidence",
+					MissingEvidence: "Ambiguous requirements",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Check for table header
+		assert.Contains(t, output, "| Criterion ID")
+		assert.Contains(t, output, "| Status")
+		assert.Contains(t, output, "| Rating")
+
+		// Check for criterion rows
+		assert.Contains(t, output, "criterion_1")
+		assert.Contains(t, output, "criterion_2")
+		assert.Contains(t, output, "criterion_3")
+		assert.Contains(t, output, "criterion_4")
+
+		// Check for status values
+		assert.Contains(t, output, "satisfied")
+		assert.Contains(t, output, "partially_satisfied")
+		assert.Contains(t, output, "not_satisfied")
+		assert.Contains(t, output, "indeterminate")
+
+		// Check for overall rating (Red because one not_satisfied)
+		assert.Contains(t, output, "red")
+
+		// Check for rationale section
+		assert.Contains(t, output, "Requirement met")
+		assert.Contains(t, output, "Partially complete")
+		assert.Contains(t, output, "Not implemented")
+	})
+
+	t.Run("html escaping in rationale", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-002",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Code includes <script> tags & special characters",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// HTML entities should be escaped
+		assert.Contains(t, output, "&lt;")
+		assert.Contains(t, output, "&gt;")
+		assert.Contains(t, output, "&amp;")
+		assert.NotContains(t, output, "<script>")
+	})
+
+	t.Run("table cell escaping for pipes", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-003",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion|with|pipes",
+					Status:    review.Satisfied,
+					Rationale: "Rationale | with | pipes",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Pipes in table cells must be escaped
+		assert.Contains(t, output, "criterion\\|with\\|pipes")
+		assert.Contains(t, output, "Rationale \\| with \\| pipes")
+	})
+
+	t.Run("table cell escaping for backticks", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-004",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion",
+					Status:    review.Satisfied,
+					Rationale: "Code with `backticks` in text",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Backticks in table cells must be escaped
+		assert.Contains(t, output, "\\`backticks\\`")
+	})
+
+	t.Run("table cell newline normalization", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-005",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion",
+					Status:    review.Satisfied,
+					Rationale: "Rationale with\nnewline\rand\r\nCRLF",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Newlines should be replaced with spaces in table cells
+		lines := strings.Split(output, "\n")
+		for _, line := range lines {
+			// Lines that are part of the table should not have embedded newlines
+			if strings.Contains(line, "Rationale") {
+				assert.NotContains(t, line, "\n")
+				assert.NotContains(t, line, "\r")
+			}
+		}
+	})
+
+	t.Run("citations included", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-006",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Requirement met",
+					Citations: []review.Citation{
+						{Path: "src/main.go", Line: 10},
+						{Path: "src/util.go", Line: 25},
+					},
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Citations should be included
+		assert.Contains(t, output, "src/main.go")
+		assert.Contains(t, output, "src/util.go")
+		assert.Contains(t, output, "10")
+		assert.Contains(t, output, "25")
+	})
+
+	t.Run("all green rating", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-007",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Met",
+				},
+				{
+					ID:        "criterion_2",
+					Status:    review.Satisfied,
+					Rationale: "Met",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Should have green rating when all satisfied
+		assert.Contains(t, output, "green")
+		assert.NotContains(t, output, "| red |")
+	})
+
+	t.Run("yellow rating", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-008",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Met",
+				},
+				{
+					ID:              "criterion_2",
+					Status:          review.PartiallySatisfied,
+					Rationale:       "Partial",
+					MissingEvidence: "Incomplete",
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Should have yellow rating when some partial but none not satisfied
+		assert.Contains(t, output, "yellow")
+	})
+}
+
+func TestRenderHuman(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic assessment", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-001",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Requirement met",
+					Citations: []review.Citation{
+						{Path: "src/main.go", Line: 10},
+					},
+				},
+				{
+					ID:              "criterion_2",
+					Status:          review.NotSatisfied,
+					Rationale:       "Not implemented",
+					MissingEvidence: "No code found",
+				},
+			},
+		}
+
+		output := review.RenderHuman(assessment)
+
+		// Should contain readable text representations
+		assert.Contains(t, output, "Bundle")
+		assert.Contains(t, output, "bundle-001")
+		assert.Contains(t, output, "criterion_1")
+		assert.Contains(t, output, "criterion_2")
+		assert.Contains(t, output, "satisfied")
+		assert.Contains(t, output, "not_satisfied")
+		assert.Contains(t, output, "Requirement met")
+		assert.Contains(t, output, "Not implemented")
+	})
+
+	t.Run("no markdown table in human output", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-002",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Met",
+				},
+			},
+		}
+
+		output := review.RenderHuman(assessment)
+
+		// Should not contain markdown table syntax
+		assert.NotContains(t, output, "|---|")
+		assert.NotContains(t, output, "| Criterion")
+	})
+
+	t.Run("citations in human output", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-003",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Requirement met",
+					Citations: []review.Citation{
+						{Path: "src/main.go", Line: 10},
+					},
+				},
+			},
+		}
+
+		output := review.RenderHuman(assessment)
+
+		// Citations should be readable
+		assert.Contains(t, output, "src/main.go")
+		assert.Contains(t, output, "10")
+	})
+}
+
+func TestRenderJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid json output", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-001",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Requirement met",
+					Citations: []review.Citation{
+						{Path: "src/main.go", Line: 10},
+					},
+				},
+			},
+		}
+
+		output, err := review.RenderJSON(assessment)
+		require.NoError(t, err)
+
+		// Should be valid JSON
+		var decoded review.ConformanceAssessment
+		err = json.Unmarshal([]byte(output), &decoded)
+		require.NoError(t, err)
+
+		// Should round-trip
+		assert.Equal(t, assessment.BundleID, decoded.BundleID)
+		assert.Equal(t, len(assessment.Results), len(decoded.Results))
+		assert.Equal(t, assessment.Results[0].ID, decoded.Results[0].ID)
+	})
+
+	t.Run("json is indented", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-001",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "criterion_1",
+					Status:    review.Satisfied,
+					Rationale: "Requirement met",
+				},
+			},
+		}
+
+		output, err := review.RenderJSON(assessment)
+		require.NoError(t, err)
+
+		// Should be indented (multiple lines with leading spaces)
+		assert.Contains(t, output, "\n")
+		assert.True(t, strings.Contains(output, "  ") || strings.Contains(output, "\t"),
+			"JSON should be indented")
+	})
+
+	t.Run("all statuses roundtrip", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-002",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "satisfied",
+					Status:    review.Satisfied,
+					Rationale: "Met",
+				},
+				{
+					ID:              "partial",
+					Status:          review.PartiallySatisfied,
+					Rationale:       "Partial",
+					MissingEvidence: "Incomplete",
+				},
+				{
+					ID:              "not_satisfied",
+					Status:          review.NotSatisfied,
+					Rationale:       "Not met",
+					MissingEvidence: "Missing",
+				},
+				{
+					ID:              "indeterminate",
+					Status:          review.Indeterminate,
+					Rationale:       "Unclear",
+					MissingEvidence: "Ambiguous",
+				},
+			},
+		}
+
+		output, err := review.RenderJSON(assessment)
+		require.NoError(t, err)
+
+		var decoded review.ConformanceAssessment
+		err = json.Unmarshal([]byte(output), &decoded)
+		require.NoError(t, err)
+
+		// All statuses should roundtrip correctly
+		assert.Equal(t, review.Satisfied, decoded.Results[0].Status)
+		assert.Equal(t, review.PartiallySatisfied, decoded.Results[1].Status)
+		assert.Equal(t, review.NotSatisfied, decoded.Results[2].Status)
+		assert.Equal(t, review.Indeterminate, decoded.Results[3].Status)
+	})
+
+	t.Run("empty results", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-003",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results:             []review.CriterionResult{},
+		}
+
+		output, err := review.RenderJSON(assessment)
+		require.NoError(t, err)
+
+		var decoded review.ConformanceAssessment
+		err = json.Unmarshal([]byte(output), &decoded)
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, len(decoded.Results))
+	})
+}
