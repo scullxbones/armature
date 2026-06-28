@@ -946,7 +946,7 @@ func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
 	stateDir := filepath.Join(repoDir, "state", "worker-abc")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	root := inferRepoRoot(stateDir)
+	root := InferRepoRoot(stateDir)
 	assert.Equal(t, repoDir, root, "inferRepoRoot must return git repo root when no .arm/.armature directory exists in path")
 }
 
@@ -958,7 +958,7 @@ func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {
 	stateDir := filepath.Join(armatureDir, "state", "worker-abc")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	root := inferRepoRoot(stateDir)
+	root := InferRepoRoot(stateDir)
 	assert.Equal(t, repoDir, root, "inferRepoRoot must find repo root from .armature directory in path")
 }
 

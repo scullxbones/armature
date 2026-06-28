@@ -112,7 +112,12 @@ func WriteIssue(issuesDir string, issue Issue) error {
 func LoadIssue(path string) (Issue, error) {
 	var issue Issue
 	err := adapters.LoadIssueJSON(path, &issue)
-	return issue, err
+	if err != nil {
+		return issue, err
+	}
+	issue.Scope = normalizeScopeEntries(issue.Scope)
+	issue.ContextFiles = normalizeScopeEntries(issue.ContextFiles)
+	return issue, nil
 }
 
 // LoadAllIssues loads all previously materialized issues from the given directory.
