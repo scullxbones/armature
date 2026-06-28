@@ -225,11 +225,10 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 
 	// Load current materialized index to discover which issues are affected.
 	store := newSnapshotStore(appCtx)
-	snap, err := store.Load(context.Background())
+	index, err := store.ReadIndex()
 	if err != nil {
 		return
 	}
-	index := snap.Index
 	if index == nil {
 		index = make(materialize.Index)
 	}

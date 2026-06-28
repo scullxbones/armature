@@ -308,6 +308,46 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 	assert.Empty(t, hookFindActiveClaimID(ctx))
 }
 
+// TestHookDetectScopeChanges_WithExistingCheckpoint verifies that hookDetectScopeChanges
+// correctly uses ReadIndex (not Load) when checkpoint.json already exists.
+// This test ensures the fix for ARCHIMP-S14 works: Store.ReadIndex avoids
+// rematerializing all ops, which would re-apply non-idempotent ops and corrupt state.
+func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
+	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
+
+	// Claim the task so there's an active claim and a log path for scope-rename ops.
+	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree", filepath.Join(t.TempDir(), "claim-checkpoint-wt"))
+	require.NoError(t, err)
+
+	// Add and commit the scoped file
+	writeFile(t, repo, "src/checkpoint.go", "package checkpoint")
+	run(t, repo, "git", "add", "src/checkpoint.go")
+	run(t, repo, "git", "commit", "-m", "add checkpoint.go")
+
+	// First post-commit to establish checkpoint.json (triggers materialization)
+	_, err = runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+
+	// Verify checkpoint.json exists (evidence that materialization occurred)
+	stateDir := getTestStateDir(t, repo)
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	_, err = os.Stat(checkpointPath)
+	require.NoError(t, err, "checkpoint.json should exist after materialization")
+
+	// Now rename the file and commit
+	run(t, repo, "git", "mv", "src/checkpoint.go", "src/checkpoint-renamed.go")
+	run(t, repo, "git", "commit", "-m", "rename checkpoint.go")
+
+	// Second post-commit with existing checkpoint.json should not error.
+	// hookDetectScopeChanges will be called.
+	// With the fix (using ReadIndex), it should emit scope-rename without corrupting state.
+	// With the old code (using Load), it would replay all ops and potentially corrupt state.
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope-rename")
+	assert.Contains(t, out, "task-checkpoint-scope")
+}
+
 // setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.
 func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	t.Helper()
