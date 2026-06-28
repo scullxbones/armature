@@ -556,6 +556,50 @@ Render assembled context for an issue.
 
 ---
 
+## review prepare
+
+Create a semantic review bundle for an issue from its issue contract and delivery diff.
+
+**Synopsis:**
+`arm review prepare [flags]`
+
+**Flags:**
+- `--issue string`: Issue ID (required).
+- `--base string`: Base git SHA (required); typically the commit at wave start.
+- `--head string`: Head git SHA (required); typically the commit after workers complete.
+- `--format string`: Output format: `json`, `agent` (default "json").
+
+**Description:**
+Captures the issue's acceptance criteria, scope, and the unified diff between `--base` and `--head`. Outputs a `ReviewBundle` JSON object containing the issue contract and delivery diff. This bundle is passed to the `armature-reviewer` skill for semantic conformance assessment.
+
+**Example:**
+```bash
+arm review prepare --issue TASK-001 --base abc123 --head def456
+```
+
+---
+
+## review record
+
+Record a semantic conformance assessment for a completed task.
+
+**Synopsis:**
+`arm review record [flags]`
+
+**Flags:**
+- `--issue string`: Issue ID (required).
+- `--assessment string`: Path to assessment JSON file (required).
+
+**Description:**
+Persists the output of semantic review (a `ConformanceAssessment`) to the issue's audit log. The assessment includes a structured rating (green/yellow/red) and detailed findings. This operation links the reviewer's judgment to the task and updates its review status.
+
+**Example:**
+```bash
+arm review record --issue TASK-001 --assessment assessment.json
+```
+
+---
+
 ## reopen
 
 Reopen a done or blocked issue.

@@ -307,6 +307,54 @@ arm show TASK-001 | jq '.source_links'
 
 ---
 
+## 9. Semantic Conformance Review
+
+**Concept:** After each task completes, semantic review validates that the delivered work conforms to its acceptance criteria and issue contract. A reviewer assesses code quality, scope adherence, and problem-solution fit. Assessments are recorded and must pass before story sign-off.
+
+**Pattern:** Prepare review bundle → dispatch reviewer agent → record assessment. Red ratings block progression until remediated.
+
+**How it works:**
+
+- **ReviewBundle:** Created by `arm review prepare --issue TASK-ID --base BASE-SHA --head HEAD-SHA`, this JSON object contains:
+  - The issue's acceptance criteria (what success looks like)
+  - Scope (which files are in-scope for the change)
+  - The unified diff between base and head commits
+  - Issue metadata (title, type, definition-of-done)
+
+- **Reviewer dispatch:** The coordinator passes the ReviewBundle to the `armature-reviewer` skill after each task completes. The reviewer:
+  - Reads the acceptance criteria and scope
+  - Examines the diff to understand what changed
+  - Assesses whether the delivery is complete, correct, and clean
+  - Returns a `ConformanceAssessment`
+
+- **ConformanceAssessment:** Structured reviewer output containing:
+  - **Rating:** `green` (passes all criteria), `yellow` (minor issues, minor remediation), or `red` (fails acceptance or scope)
+  - **Findings:** Concrete observations about code quality, completeness, and adherence to acceptance criteria
+  - **Remediation:** If red or yellow, specific actions required before unblocking downstream work
+  - **Timestamp:** When the review was performed
+
+- **Rating algebra:**
+  - `green`: All acceptance criteria met; no scope violations; code quality acceptable
+  - `yellow`: Non-blocking issues (e.g., minor style, incomplete test edge case); delivery is acceptable but improvements suggested
+  - `red`: Acceptance criteria not met; scope violated; code quality concerns that prevent merge; requires rework
+
+- **Recording and gating:** `arm review record --issue TASK-ID --assessment <assessment.json>` persists the assessment. Red ratings are escalated to the coordinator; yellow ratings surface to the auditor. Only green assessments auto-unblock dependent tasks.
+
+**Scope distinction:** The **Auditor** checks structural integrity (citations, repo health). The **Reviewer** checks semantic correctness (acceptance criteria, code quality). Both gates are required for story completion.
+
+**Command examples:**
+```bash
+# Coordinator creates the review bundle
+arm review prepare --issue TASK-001 --base abc123def --head def456ghi > bundle.json
+
+# Pass bundle to reviewer (dispatched as a skill, returns assessment.json)
+
+# Record the assessment
+arm review record --issue TASK-001 --assessment assessment.json
+```
+
+---
+
 ## Integration with Agents
 
 Armature ships bundled **skills** that agents use to execute these concepts:
