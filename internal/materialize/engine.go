@@ -620,6 +620,10 @@ func appendUnique(slice []string, item string) []string {
 func normalizeScopeEntries(scope []string) []string {
 	result := make([]string, 0, len(scope))
 	for _, entry := range scope {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
 		if strings.Contains(entry, ", ") {
 			for part := range strings.SplitSeq(entry, ", ") {
 				if part = strings.TrimSpace(part); part != "" {

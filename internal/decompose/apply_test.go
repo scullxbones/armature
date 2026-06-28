@@ -112,6 +112,31 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 		"injected clock timestamp should appear in written op")
 }
 
+func TestApplyPlanWithOptions_AppliesRootToTopLevelIssues(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	workerID := "worker-test"
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Rooted plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "Top-level task", Type: "task"},
+		},
+	}
+
+	state := materialize.NewState()
+	count, err := ApplyPlanWithOptions(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	logPath := filepath.Join(dir, workerID+".log")
+	readOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, readOps, 1)
+	assert.Equal(t, "EPIC-001", readOps[0].Payload.Parent)
+}
+
 func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
 	t.Parallel()
 

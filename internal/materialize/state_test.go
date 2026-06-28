@@ -32,6 +32,27 @@ func TestIssueStateRoundTrip(t *testing.T) {
 	assert.Equal(t, "Fix auth", loaded.Title)
 }
 
+func TestLoadIssue_NormalizesLegacyEmptyEntries(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	issuePath := filepath.Join(dir, "task-01.json")
+
+	raw := []byte(`{
+		"id": "task-01",
+		"type": "task",
+		"status": "open",
+		"title": "Fix auth",
+		"scope": ["src/auth/**", "", "src/session/**"],
+		"context_files": ["docs/design.md", "", "docs/adr.md"]
+	}`)
+	require.NoError(t, os.WriteFile(issuePath, raw, 0644))
+
+	loaded, err := LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src/auth/**", "src/session/**"}, loaded.Scope)
+	assert.Equal(t, []string{"docs/design.md", "docs/adr.md"}, loaded.ContextFiles)
+}
+
 func TestIndexRoundTrip(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

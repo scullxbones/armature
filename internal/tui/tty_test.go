@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"os"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 var ttyStateMu sync.Mutex
@@ -76,5 +79,31 @@ func TestIsInteractiveReturnsFalseWhenNotTTY(t *testing.T) {
 	SetFormat("human")
 	if IsInteractive() {
 		t.Error("expected IsInteractive() to return false when not a TTY")
+	}
+}
+
+func TestIsInteractiveReturnsFalseWhenGeminiCLISet(t *testing.T) {
+	t.Parallel()
+	lockTTYState(t)
+	require.NoError(t, os.Setenv("GEMINI_CLI", "1"))
+	t.Cleanup(func() {
+		require.NoError(t, os.Unsetenv("GEMINI_CLI"))
+	})
+	SetFormat("human")
+	if IsInteractive() {
+		t.Error("expected IsInteractive() to return false when GEMINI_CLI is set")
+	}
+}
+
+func TestIsInteractiveReturnsFalseWhenTermIsDumb(t *testing.T) {
+	t.Parallel()
+	lockTTYState(t)
+	require.NoError(t, os.Setenv("TERM", "dumb"))
+	t.Cleanup(func() {
+		require.NoError(t, os.Unsetenv("TERM"))
+	})
+	SetFormat("human")
+	if IsInteractive() {
+		t.Error("expected IsInteractive() to return false when TERM=dumb")
 	}
 }

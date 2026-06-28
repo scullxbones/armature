@@ -113,7 +113,7 @@ func LoadIssue(path string) (Issue, error) {
 	var issue Issue
 	err := adapters.LoadIssueJSON(path, &issue)
 	if err != nil {
-		return issue, err
+		return Issue{}, err
 	}
 	issue.Scope = normalizeScopeEntries(issue.Scope)
 	issue.ContextFiles = normalizeScopeEntries(issue.ContextFiles)
