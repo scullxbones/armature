@@ -34,6 +34,25 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 	return errs
 }
 
+// ValidateResultNoDiff checks a ConformanceAssessment for structural validity without
+// performing diff-index citation coordinate checking. This variant is appropriate at
+// record time when the diff is not available; coordinate checking is a prepare-time concern.
+func ValidateResultNoDiff(assessment *ConformanceAssessment) []string {
+	var errs []string
+
+	if assessment.BundleID == "" {
+		errs = append(errs, "bundle ID is empty")
+	}
+
+	for i, result := range assessment.Results {
+		if err := result.Valid(); err != nil {
+			errs = append(errs, fmt.Sprintf("criterion result %d: %v", i, err))
+		}
+	}
+
+	return errs
+}
+
 // NewAttestation creates an AssessmentAttestation from a validated ConformanceAssessment.
 func NewAttestation(assessment *ConformanceAssessment) *AssessmentAttestation {
 	// Derive rating and counts from results
@@ -59,13 +78,14 @@ func NewAttestation(assessment *ConformanceAssessment) *AssessmentAttestation {
 	return att
 }
 
-// IsDuplicate returns true if two attestations have the same BundleID and ReviewerID.
-// Since ReviewerID is not present in AssessmentAttestation, we check only BundleID.
+// IsDuplicate returns true if two attestations have the same ResultFingerprint,
+// indicating they represent identical review content. This allows the same bundle
+// to be re-assessed with a corrected result while remaining idempotent for identical content.
 func IsDuplicate(a, b *AssessmentAttestation) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.BundleID == b.BundleID
+	return a.ResultFingerprint == b.ResultFingerprint
 }
 
 // Applicable returns true if the attestation's BundleID matches the given bundle.

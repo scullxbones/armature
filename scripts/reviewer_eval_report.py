@@ -61,12 +61,9 @@ def compute_metrics(cases, results):
 
         # Get the result for this case
         if case_id not in results_by_case:
-            # Case not in results - treat as incorrect
+            # Case not in results - treat as incorrect; count each expected status once.
             total_ratings += 1
             total_statuses += len(expected_statuses)
-            for status in expected_statuses.values():
-                if status != 'satisfied':
-                    total_statuses += 1
             continue
 
         result = results_by_case[case_id]

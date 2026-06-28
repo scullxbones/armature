@@ -1,12 +1,79 @@
 package review_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestCriterionStatus_JSONRoundTrip verifies that CriterionStatus marshals as a string
+// and can be decoded from the string values that the armature-reviewer skill emits.
+func TestCriterionStatus_JSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	statuses := []review.CriterionStatus{
+		review.Satisfied, review.PartiallySatisfied, review.NotSatisfied, review.Indeterminate,
+	}
+	for _, status := range statuses {
+		t.Run(status.String(), func(t *testing.T) {
+			t.Parallel()
+			data, err := json.Marshal(status)
+			require.NoError(t, err)
+			// Must encode as a quoted string, not an integer.
+			assert.Equal(t, `"`+status.String()+`"`, string(data))
+			var decoded review.CriterionStatus
+			require.NoError(t, json.Unmarshal(data, &decoded))
+			assert.Equal(t, status, decoded)
+		})
+	}
+}
+
+// TestCriterionStatus_UnmarshalJSON_SkillOutput verifies that skill output strings
+// like {"status":"satisfied"} can be decoded.
+func TestCriterionStatus_UnmarshalJSON_SkillOutput(t *testing.T) {
+	t.Parallel()
+	input := `{"status":"satisfied"}`
+	var result struct {
+		Status review.CriterionStatus `json:"status"`
+	}
+	err := json.Unmarshal([]byte(input), &result)
+	require.NoError(t, err)
+	assert.Equal(t, review.Satisfied, result.Status)
+}
+
+// TestRating_JSONRoundTrip verifies that Rating marshals as a string and can be
+// decoded from the string values that the armature-reviewer skill emits.
+func TestRating_JSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	ratings := []review.Rating{review.Green, review.Yellow, review.Red}
+	for _, rating := range ratings {
+		t.Run(rating.String(), func(t *testing.T) {
+			t.Parallel()
+			data, err := json.Marshal(rating)
+			require.NoError(t, err)
+			// Must encode as a quoted string, not an integer.
+			assert.Equal(t, `"`+rating.String()+`"`, string(data))
+			var decoded review.Rating
+			require.NoError(t, json.Unmarshal(data, &decoded))
+			assert.Equal(t, rating, decoded)
+		})
+	}
+}
+
+// TestRating_UnmarshalJSON_SkillOutput verifies that skill output like {"rating":"green"}
+// can be decoded.
+func TestRating_UnmarshalJSON_SkillOutput(t *testing.T) {
+	t.Parallel()
+	input := `{"rating":"green"}`
+	var result struct {
+		Rating review.Rating `json:"rating"`
+	}
+	err := json.Unmarshal([]byte(input), &result)
+	require.NoError(t, err)
+	assert.Equal(t, review.Green, result.Rating)
+}
 
 func TestCriterionStatus_String(t *testing.T) {
 	t.Parallel()

@@ -619,8 +619,9 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	// Should only show the latest (second) attestation
 	assert.Contains(t, output, "Review:")
 	assert.Contains(t, output, "green")
-	// The bundle ID should be truncated to first 12 chars
-	assert.Contains(t, output, "sha256:eeeee")
-	// Should not show the first attestation
-	assert.NotContains(t, output, "sha256:aaaaaa")
+	// The bundle ID should display the first 12 hex chars (sha256: prefix stripped).
+	// "sha256:eeeeeeffffffffgggggghhhhh" → strip prefix → "eeeeeeffffffffgggggghhhhh" → first 12 → "eeeeeeffffff"
+	assert.Contains(t, output, "eeeeeeffffff")
+	// Should not show the first attestation's hash digits
+	assert.NotContains(t, output, "aaaaaabb")
 }

@@ -51,7 +51,10 @@ func TestPrepare_Success(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add git range helpers", []string{"file1", "file2"}, []string{"criteria1", "criteria2"}, "main", "HEAD")
+	bundle, err := review.Prepare(
+		git, "SMTC-S1-T2", "Add git range helpers", "dod", "task", "outcome",
+		[]string{"file1", "file2"}, []string{"criteria1", "criteria2"}, "main", "HEAD",
+	)
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
@@ -78,7 +81,7 @@ func TestPrepare_ResolveRevisionError(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve")
@@ -96,7 +99,7 @@ func TestPrepare_DiffRangeError(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to compute diff")
@@ -117,7 +120,7 @@ func TestPrepare_DiffNameOnlyRangeError(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get changed files")
@@ -145,10 +148,10 @@ func TestPrepare_BundleIDDeterministic(t *testing.T) {
 	}
 
 	// Call prepare twice with the same inputs
-	bundle1, err1 := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	bundle1, err1 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 	require.NoError(t, err1)
 
-	bundle2, err2 := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	bundle2, err2 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 	require.NoError(t, err2)
 
 	// The bundle IDs should be identical
@@ -182,7 +185,7 @@ func TestPrepare_WithCriteria(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", []string{}, criteria, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, criteria, "main", "HEAD")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
@@ -212,7 +215,7 @@ func TestPrepare_EmptyChangedFiles(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
@@ -242,7 +245,7 @@ func TestPrepare_IssueTitlePreserved(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", issueTitle, []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", issueTitle, "", "task", "", []string{}, []string{}, "main", "HEAD")
 
 	require.NoError(t, err)
 	assert.Equal(t, issueTitle, bundle.Issue.Title)
@@ -269,7 +272,7 @@ func TestPrepare_BundleValidation(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
 
 	require.NoError(t, err)
 	// Verify the bundle is valid

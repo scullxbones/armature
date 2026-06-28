@@ -224,46 +224,50 @@ func TestNewAttestation_AllGreen(t *testing.T) {
 	assert.Equal(t, 0, att.IndeterminateCount)
 }
 
-func TestIsDuplicate_Same(t *testing.T) {
+func TestIsDuplicate_SameResultFingerprint(t *testing.T) {
 	t.Parallel()
+	// Same ResultFingerprint → identical content → duplicate regardless of BundleID.
 	att1 := &review.AssessmentAttestation{
-		BundleID:     "sha256:bundle123",
-		SkillVersion: "v1.0.0",
+		BundleID:          "sha256:bundle123",
+		ResultFingerprint: "sha256:fingerprint123",
 	}
 	att2 := &review.AssessmentAttestation{
-		BundleID:     "sha256:bundle123",
-		SkillVersion: "v1.0.0",
+		BundleID:          "sha256:bundle123",
+		ResultFingerprint: "sha256:fingerprint123",
 	}
 
 	assert.True(t, review.IsDuplicate(att1, att2))
 }
 
-func TestIsDuplicate_Different(t *testing.T) {
+func TestIsDuplicate_DifferentResultFingerprint(t *testing.T) {
 	t.Parallel()
+	// Same bundle but different ResultFingerprint → corrected assessment → not a duplicate.
 	att1 := &review.AssessmentAttestation{
-		BundleID:     "sha256:bundle123",
-		SkillVersion: "v1.0.0",
+		BundleID:          "sha256:bundle123",
+		ResultFingerprint: "sha256:fingerprint123",
 	}
 	att2 := &review.AssessmentAttestation{
-		BundleID:     "sha256:bundle456",
-		SkillVersion: "v1.0.0",
+		BundleID:          "sha256:bundle123",
+		ResultFingerprint: "sha256:fingerprint456",
 	}
 
 	assert.False(t, review.IsDuplicate(att1, att2))
 }
 
-func TestIsDuplicate_DifferentSkillVersion(t *testing.T) {
+func TestIsDuplicate_SameFingerprintDifferentSkillVersion(t *testing.T) {
 	t.Parallel()
+	// Same ResultFingerprint with different SkillVersion → still identical content → duplicate.
 	att1 := &review.AssessmentAttestation{
-		BundleID:     "sha256:bundle123",
-		SkillVersion: "v1.0.0",
+		BundleID:          "sha256:bundle123",
+		SkillVersion:      "v1.0.0",
+		ResultFingerprint: "sha256:fingerprint123",
 	}
 	att2 := &review.AssessmentAttestation{
-		BundleID:     "sha256:bundle123",
-		SkillVersion: "v2.0.0",
+		BundleID:          "sha256:bundle123",
+		SkillVersion:      "v2.0.0",
+		ResultFingerprint: "sha256:fingerprint123",
 	}
 
-	// Duplicates are based on BundleID only (ReviewerID not in current struct)
 	assert.True(t, review.IsDuplicate(att1, att2))
 }
 
@@ -283,6 +287,57 @@ func TestApplicable_NonMatching(t *testing.T) {
 	}
 
 	assert.False(t, review.Applicable(att, "sha256:bundle456"))
+}
+
+func TestValidateResultNoDiff_Valid(t *testing.T) {
+	t.Parallel()
+	// An assessment with a file:line citation must succeed at record time (no diff available).
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "implementation complete",
+				Citations: []review.Citation{
+					{Path: "internal/review/types.go", Line: 42},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultNoDiff(assessment)
+	assert.Empty(t, errs, "citation with file/line must not be rejected at record time")
+}
+
+func TestValidateResultNoDiff_EmptyBundleID(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		BundleID: "",
+		Results: []review.CriterionResult{
+			{ID: "def", Status: review.Satisfied, Rationale: "ok"},
+		},
+	}
+
+	errs := review.ValidateResultNoDiff(assessment)
+	assert.NotEmpty(t, errs)
+	assert.True(t, containsError(errs, "bundle ID"))
+}
+
+func TestValidateResultNoDiff_InvalidResult(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		BundleID: "sha256:bundle123",
+		Results: []review.CriterionResult{
+			{ID: "", Status: review.Satisfied, Rationale: ""},
+		},
+	}
+
+	errs := review.ValidateResultNoDiff(assessment)
+	assert.NotEmpty(t, errs)
 }
 
 // Helper function to check if an error message contains a substring

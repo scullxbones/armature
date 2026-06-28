@@ -452,26 +452,30 @@ func (c *Client) ResolveRevision(rev string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// DiffRange returns the unified diff between base and head commits.
+// DiffRange returns the unified diff between base and head commits using three-dot
+// (merge-base) notation. The trailing "--" ensures revisions are not mis-parsed as flags.
 func (c *Client) DiffRange(base, head string) (string, error) {
-	cmd := c.cmd("diff", base+".."+head)
+	cmd := c.cmd("diff", base+"..."+head, "--")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to diff range %s..%s: %w", base, head, err)
+		return "", fmt.Errorf("failed to diff range %s...%s: %w", base, head, err)
 	}
 	return string(output), nil
 }
 
 // DiffNameOnlyRange returns the list of changed file names between base and head commits.
+// Uses -z (NUL-delimited output) to handle filenames that contain newlines or special
+// characters. Three-dot notation and a trailing "--" prevent flag mis-parsing.
 func (c *Client) DiffNameOnlyRange(base, head string) ([]string, error) {
-	cmd := c.cmd("diff", "--name-only", base+".."+head)
+	cmd := c.cmd("diff", "--name-only", "-z", base+"..."+head, "--")
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to diff --name-only %s..%s: %w", base, head, err)
+		return nil, fmt.Errorf("failed to diff --name-only %s...%s: %w", base, head, err)
 	}
-	raw := strings.TrimSpace(string(output))
+	// git -z outputs NUL-terminated entries; trim trailing NUL before splitting.
+	raw := strings.TrimRight(string(output), "\x00")
 	if raw == "" {
 		return []string{}, nil
 	}
-	return strings.Split(raw, "\n"), nil
+	return strings.Split(raw, "\x00"), nil
 }

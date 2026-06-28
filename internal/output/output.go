@@ -8,6 +8,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/scullxbones/armature/internal/validate"
 )
 
@@ -113,69 +114,47 @@ func (ew *errWriter) printf(format string, args ...interface{}) {
 	_, ew.err = fmt.Fprintf(ew.w, format, args...)
 }
 
-// truncateBundleID returns the first 12 characters of the BundleID, or the full ID if shorter.
+// truncateBundleID returns the first 12 hex characters of the BundleID hash,
+// stripping the "sha256:" prefix so only meaningful hash digits are shown.
 func truncateBundleID(bundleID string) string {
-	if len(bundleID) <= 12 {
-		return bundleID
+	id := strings.TrimPrefix(bundleID, "sha256:")
+	if len(id) <= 12 {
+		return id
 	}
-	return bundleID[:12]
+	return id[:12]
 }
 
-// formatLatestAttestationLine formats the latest assessment attestation from a slice.
-// Works with interface{} to avoid importing the review package.
-// Returns the formatted line and any error encountered.
-func formatLatestAttestationLine(attestations interface{}) (string, error) {
-	// Marshal the attestations to JSON, then unmarshal to a slice of maps
-	data, err := json.Marshal(attestations)
-	if err != nil {
-		return "", err
+// formatLatestAttestationLine formats the latest assessment attestation as a human-readable line.
+// Returns an empty string when there are no attestations.
+func formatLatestAttestationLine(attestations []review.AssessmentAttestation) string {
+	if len(attestations) == 0 {
+		return ""
 	}
 
-	var attestationList []map[string]interface{}
-	if err := json.Unmarshal(data, &attestationList); err != nil {
-		return "", err
-	}
-
-	if len(attestationList) == 0 {
-		return "", nil
-	}
-
-	latest := attestationList[len(attestationList)-1]
-
-	// Extract fields from the latest attestation
-	bundleID, ok := latest["bundle_id"].(string)
-	if !ok {
-		bundleID = ""
-	}
-	rating, ok := latest["rating"].(float64) // Rating is marshaled as a number
-	ratingNames := []string{"green", "yellow", "red"}
-	var ratingStr string
-	if ok && rating >= 0 && rating < float64(len(ratingNames)) {
-		ratingStr = ratingNames[int(rating)]
-	}
-
-	bundleID = truncateBundleID(bundleID)
+	att := attestations[len(attestations)-1]
+	bundleID := truncateBundleID(att.BundleID)
+	ratingStr := att.Rating.String()
 
 	// Build counts string: only include counts that are > 0
 	var counts []string
-	if satisfied, ok := latest["satisfied_count"].(float64); ok && satisfied > 0 {
-		counts = append(counts, fmt.Sprintf("%d satisfied", int(satisfied)))
+	if att.SatisfiedCount > 0 {
+		counts = append(counts, fmt.Sprintf("%d satisfied", att.SatisfiedCount))
 	}
-	if partiallySatisfied, ok := latest["partially_satisfied_count"].(float64); ok && partiallySatisfied > 0 {
-		counts = append(counts, fmt.Sprintf("%d partially_satisfied", int(partiallySatisfied)))
+	if att.PartiallySatisfiedCount > 0 {
+		counts = append(counts, fmt.Sprintf("%d partially_satisfied", att.PartiallySatisfiedCount))
 	}
-	if notSatisfied, ok := latest["not_satisfied_count"].(float64); ok && notSatisfied > 0 {
-		counts = append(counts, fmt.Sprintf("%d not_satisfied", int(notSatisfied)))
+	if att.NotSatisfiedCount > 0 {
+		counts = append(counts, fmt.Sprintf("%d not_satisfied", att.NotSatisfiedCount))
 	}
-	if indeterminate, ok := latest["indeterminate_count"].(float64); ok && indeterminate > 0 {
-		counts = append(counts, fmt.Sprintf("%d indeterminate", int(indeterminate)))
+	if att.IndeterminateCount > 0 {
+		counts = append(counts, fmt.Sprintf("%d indeterminate", att.IndeterminateCount))
 	}
 
 	if len(counts) == 0 {
-		return fmt.Sprintf("Review:    %s (bundle %s)", ratingStr, bundleID), nil
+		return fmt.Sprintf("Review:    %s (bundle %s)", ratingStr, bundleID)
 	}
 
-	return fmt.Sprintf("Review:    %s (bundle %s; %s)", ratingStr, bundleID, strings.Join(counts, ", ")), nil
+	return fmt.Sprintf("Review:    %s (bundle %s; %s)", ratingStr, bundleID, strings.Join(counts, ", "))
 }
 
 func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
@@ -187,10 +166,8 @@ func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
 	ew.printf("Status:    %s\n", issue.Status)
 
 	// Render latest assessment attestation if present
-	if len(issue.AssessmentAttestations) > 0 {
-		if line, err := formatLatestAttestationLine(issue.AssessmentAttestations); err == nil && line != "" {
-			ew.printf("%s\n", line)
-		}
+	if line := formatLatestAttestationLine(issue.AssessmentAttestations); line != "" {
+		ew.printf("%s\n", line)
 	}
 
 	if issue.Parent != "" {
