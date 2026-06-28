@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -979,4 +980,84 @@ func TestRun_EmitWarningsFalse_SuppressesStderr_REQ_ARCHIMP_S13(t *testing.T) { 
 
 	// Warnings must be suppressed from stderr when EmitWarnings=false
 	assert.Empty(t, string(stderrOutput), "stderr should be empty when EmitWarnings=false")
+}
+
+// TestMaterialize_AssessmentAttestedOp verifies that assessment-attested ops are properly materialized
+// into the issue's AssessmentAttestations field.
+func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
+
+	workerID := "worker-x"
+
+	// Create a minimal op stream: create issue, assessment-attested op
+	createOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: 100,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Title: "Test task", NodeType: "task"},
+	}
+
+	// Create assessment attestation with expected fields
+	att := review.AssessmentAttestation{
+		SchemaVersion:           1,
+		BundleID:                "bundle-test-01",
+		ContractFingerprint:     "cf-abc123",
+		DeliveryFingerprint:     "df-def456",
+		BaseSHA:                 "base-sha-123",
+		HeadSHA:                 "head-sha-456",
+		SkillVersion:            "1.0.0",
+		ModelIdentity:           "claude-opus",
+		Rating:                  review.Green,
+		ResultFingerprint:       "rf-ghi789",
+		SatisfiedCount:          2,
+		PartiallySatisfiedCount: 0,
+		NotSatisfiedCount:       0,
+		IndeterminateCount:      0,
+	}
+	assessmentJSON, err := json.Marshal(att)
+	require.NoError(t, err)
+
+	assessmentOp := ops.Op{
+		Type:      ops.OpAssessmentAttested,
+		TargetID:  "task-01",
+		Timestamp: 200,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Assessment: assessmentJSON},
+	}
+
+	allOps := []ops.Op{createOp, assessmentOp}
+
+	// Materialize the ops
+	state, result, err := MaterializeAndReturn(stateDir, allOps, false, nil)
+	require.NoError(t, err)
+
+	// Verify materialization results
+	assert.Equal(t, 1, result.IssueCount)
+	assert.Equal(t, 2, result.OpsProcessed)
+
+	// Verify the issue has the assessment attestation
+	issue, ok := state.Issues["task-01"]
+	require.True(t, ok, "issue task-01 should exist")
+	require.NotNil(t, issue.AssessmentAttestations)
+	require.Len(t, issue.AssessmentAttestations, 1)
+
+	// Verify attestation content
+	attestation := issue.AssessmentAttestations[0]
+	assert.Equal(t, "bundle-test-01", attestation.BundleID)
+	assert.Equal(t, "cf-abc123", attestation.ContractFingerprint)
+	assert.Equal(t, "df-def456", attestation.DeliveryFingerprint)
+	assert.Equal(t, "base-sha-123", attestation.BaseSHA)
+	assert.Equal(t, "head-sha-456", attestation.HeadSHA)
+	assert.Equal(t, "1.0.0", attestation.SkillVersion)
+	assert.Equal(t, "claude-opus", attestation.ModelIdentity)
+	assert.Equal(t, review.Green, attestation.Rating)
+	assert.Equal(t, "rf-ghi789", attestation.ResultFingerprint)
+	assert.Equal(t, 2, attestation.SatisfiedCount)
+	assert.Equal(t, 0, attestation.PartiallySatisfiedCount)
+	assert.Equal(t, 0, attestation.NotSatisfiedCount)
+	assert.Equal(t, 0, attestation.IndeterminateCount)
 }

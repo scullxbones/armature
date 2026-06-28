@@ -446,6 +446,22 @@ Potential extensions include:
 Automatic blocking is not the default destination. Any enforcement proposal
 requires a separate decision based on observed dogfood and customer evidence.
 
+## Implementation Status
+
+**Status:** Complete as of 2026-06-28
+
+The semantic conformance review design has been fully implemented. The implementation includes:
+
+- **Protocol Commands:** `arm review prepare` and `arm review record` commands with correct flag signatures
+- **Bundle Construction:** Review Bundle generation with canonical fingerprinting for contract and delivery metadata
+- **Result Validation:** Comprehensive schema and conformance validation for reviewer results
+- **Rating Derivation:** Deterministic green/yellow/red rating calculation from criterion results
+- **Assessment Attestation:** Compact durable op-based record with result fingerprint deduplication and idempotence
+- **Materialization:** Assessment attestations properly materialized into issue state and accessible via `arm show`
+- **End-to-End Testing:** Full single-branch lifecycle tests covering bootstrap→claim→deliver→prepare→record→rematerialize workflow
+
+All deterministic protocol tests pass, including bundle construction, delivery-range validation, result-schema validation, rating-derivation truth table, attestation creation with idempotence and staleness handling, and materialization replay.
+
 ## Success Criteria
 
 Phase one is successful when:
