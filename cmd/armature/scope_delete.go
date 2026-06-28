@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -40,24 +39,18 @@ func newScopeDeleteCmd() *cobra.Command {
 				return err
 			}
 
-			// Load snapshot to ensure state is current before scanning scope entries.
+			// Read index directly from disk to scan scope entries; no rematerialization needed.
 			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
+			index, err := store.ReadIndex()
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-
-			// Get issues from snapshot
-			issues := snap.State.Issues
-			if issues == nil {
-				issues = make(map[string]*materialize.Issue)
+				return fmt.Errorf("read index: %w", err)
 			}
 
 			// Find issues with an exact scope entry matching deletedPath.
 			var affected []string
-			for id, issue := range issues {
-				for _, entry := range issue.Scope {
-					if entry == deletedPath {
+			for id, idxEntry := range index {
+				for _, scopeEntry := range idxEntry.Scope {
+					if scopeEntry == deletedPath {
 						affected = append(affected, id)
 						break
 					}
@@ -91,16 +84,14 @@ func newScopeDeleteCmd() *cobra.Command {
 			}
 
 			// Refresh snapshot to apply the ops to state.
-			snap, err = store.Refresh(context.Background())
+			snap, err := store.Refresh(context.Background())
 			if err != nil {
 				return fmt.Errorf("refresh snapshot: %w", err)
 			}
 
 			// Warn about issues that now have an empty scope and are non-terminal.
+			// snap.State.Issues is always initialized after Refresh(); nil check is unnecessary.
 			updatedIssues := snap.State.Issues
-			if updatedIssues == nil {
-				updatedIssues = make(map[string]*materialize.Issue)
-			}
 			for _, id := range affected {
 				issue, ok := updatedIssues[id]
 				if !ok {

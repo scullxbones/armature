@@ -1599,8 +1599,11 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a story (parent) and a task (child)
+	// Create a story (parent) and a task (child).
+	// Materialize after story so issues/story-01.json exists for ReadIssue in create --parent.
 	_, err = runTrls(t, repo, "create", "--type", "story", "--title", "Parent Story", "--id", "story-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child Task", "--id", "task-01", "--parent", "story-01")
 	require.NoError(t, err)
@@ -1845,7 +1848,10 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a story as the parent, then two tasks under it (valid hierarchy: story→task).
+	// Materialize after parent-01 so issues/parent-01.json exists for ReadIssue in create --parent.
 	_, err = runTrls(t, repo, "create", "--type", "story", "--title", "Parent", "--id", "parent-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child A", "--id", "child-a", "--parent", "parent-01")
 	require.NoError(t, err)
@@ -3514,8 +3520,12 @@ func TestCreateCommand_BugTypeAccepted(t *testing.T) {
 func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
+	// Materialize so issues/task-01.json exists for ReadIssue in create --parent.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
 	// task-01 is a task; trying to create a bug under it must fail
-	_, err := runTrls(t, repo, "create",
+	_, err = runTrls(t, repo, "create",
 		"--title", "Bug under task",
 		"--type", "bug",
 		"--id", "bug-under-task",
@@ -3536,6 +3546,10 @@ func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--title", "My Story", "--type", "story", "--id", "story-01")
 	require.NoError(t, err)
 
+	// Materialize so issues/story-01.json exists for ReadIssue in create --parent.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
 	// Creating a bug under the story should succeed
 	_, err = runTrls(t, repo, "create",
 		"--title", "Bug in story",
@@ -3553,10 +3567,13 @@ func TestReparentCommand_HappyPath(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	// Create two stories and a task under story-01
+	// Create two stories and a task under story-01.
+	// Materialize after creating the stories so issues/story-01.json exists for ReadIssue.
 	_, err = runTrls(t, repo, "create", "--title", "Story One", "--type", "story", "--id", "story-01")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--title", "Story Two", "--type", "story", "--id", "story-02")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--title", "My Task", "--type", "task", "--id", "task-01", "--parent", "story-01")
 	require.NoError(t, err)
@@ -3611,6 +3628,44 @@ func TestReparentCommand_IssueNotFound(t *testing.T) {
 	_, err := runTrls(t, repo, "reparent", "--issue", "nonexistent-issue", "--parent", "task-01")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found", "reparent must fail when issue does not exist")
+}
+
+// TestCreateCmd_WithParent_DoesNotMaterialize verifies that arm create --parent uses
+// store.ReadIssue() to validate the parent without triggering full rematerialization.
+//
+// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
+// advancing its mtime → mtime assertion fails.
+// GREEN with store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
+func TestCreateCmd_WithParent_DoesNotMaterialize(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Create a story
+	_, err = runTrls(t, repo, "create", "--title", "Parent Story", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+
+	// Materialize to write checkpoint.json and issues/story-01.json.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Capture checkpoint.json mtime before running create --parent.
+	stateDir := getTestStateDir(t, repo)
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	stat, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
+	mtimeBefore := stat.ModTime()
+
+	// Run create --parent — must use ReadIssue, not Load.
+	_, err = runTrls(t, repo, "create", "--title", "Child Task", "--type", "task", "--id", "task-01", "--parent", "story-01")
+	require.NoError(t, err)
+
+	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
+	statAfter, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr)
+	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
+		"checkpoint.json must not be updated by arm create --parent: store.ReadIssue must be used, not store.Load")
 }
 
 // TestManagedExecutionCommandsAreNotRegistered verifies that arm orchestrate and

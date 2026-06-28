@@ -52,6 +52,10 @@ func setupRepoWithParentAndTask(t *testing.T) string {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "story-01"})
 	require.NoError(t, cmd2.Execute())
 
+	// Materialize so issues/story-01.json exists for ReadIssue in create --parent.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
 	// Create child task
 	cmd3 := newRootCmd()
 	cmd3.SetOut(new(bytes.Buffer))

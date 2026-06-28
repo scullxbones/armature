@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -35,24 +34,18 @@ func newScopeRenameCmd() *cobra.Command {
 				return err
 			}
 
-			// Load snapshot to ensure state is current before scanning scope entries.
+			// Read index directly from disk to scan scope entries; no rematerialization needed.
 			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
+			index, err := store.ReadIndex()
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-
-			// Get issues from snapshot
-			issues := snap.State.Issues
-			if issues == nil {
-				issues = make(map[string]*materialize.Issue)
+				return fmt.Errorf("read index: %w", err)
 			}
 
 			// Find issues with scope entries that contain oldPath as a substring.
 			var affected []string
-			for id, issue := range issues {
-				for _, entry := range issue.Scope {
-					if strings.Contains(entry, oldPath) {
+			for id, entry := range index {
+				for _, scopeEntry := range entry.Scope {
+					if strings.Contains(scopeEntry, oldPath) {
 						affected = append(affected, id)
 						break
 					}

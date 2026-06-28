@@ -68,6 +68,9 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 		"--confidence", "draft",
 	)
 	require.NoError(t, err)
+	// Materialize so issues/epic-draft-01.json exists for ReadIssue in create --parent.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create",
 		"--title", "Draft subtask",
 		"--type", "task",
