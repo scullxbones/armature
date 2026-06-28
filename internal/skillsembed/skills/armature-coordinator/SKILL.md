@@ -272,6 +272,31 @@ The recovery step:
 
 This is common when workers return from background dispatch without explicit handoff, or when TTL expiration causes a race with the heartbeat mechanism. Recovery is safe — `arm transition` is idempotent once an issue is already `done`.
 
+### a.2. Semantic Review (Reviewer Dispatch)
+
+For each task that completed in the wave, dispatch semantic conformance review:
+
+1. **Prepare the review bundle** — capture the issue contract and delivery diff:
+   ```bash
+   REVIEW_BUNDLE=$(arm review prepare --issue TASK-ID \
+     --base "$WAVE_BASE_SHA" --head HEAD)
+   ```
+   This creates a JSON bundle containing the issue's acceptance criteria, scope, and the diff of changed files.
+
+2. **Dispatch the armature-reviewer agent** — pass the bundle to a reviewer subagent:
+   ```
+   Dispatch armature-reviewer with input: $REVIEW_BUNDLE
+   ```
+   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). Returns a `ConformanceAssessment` with a structured rating (green/yellow/red).
+
+3. **Record the assessment** — persist the reviewer's findings:
+   ```bash
+   arm review record --issue TASK-ID --assessment <result.json>
+   ```
+   This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated.
+
+**Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
+
 ### b. Check for scope conflicts and merge conflicts
 
 If workers operated in separate git worktrees or branches, merge them into the
