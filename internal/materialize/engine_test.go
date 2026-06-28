@@ -11,6 +11,7 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +90,7 @@ func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
 		ops.OpNote, ops.OpNoteDelete, ops.OpLink, ops.OpUnlink,
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
-		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
+		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent, ops.OpAssessmentAttested,
 	}
 
 	for _, expected := range expectedTypes {
@@ -1461,4 +1462,148 @@ func TestNormalizeScopeEntries_FiltersEmptyStringsViaAmend(t *testing.T) {
 	}))
 	issue := state.Issues["task-01"]
 	assert.Empty(t, issue.ContextFiles, "empty string context_files from amend must be filtered out")
+}
+
+func TestApplyAssessmentAttested(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+
+	// Create an assessment attestation and marshal it
+	att := review.AssessmentAttestation{
+		SchemaVersion:           1,
+		BundleID:                "bundle-1",
+		ContractFingerprint:     "cf-hash",
+		DeliveryFingerprint:     "df-hash",
+		BaseSHA:                 "base-sha",
+		HeadSHA:                 "head-sha",
+		Rating:                  review.Green,
+		ResultFingerprint:       "result-fp-1",
+		SatisfiedCount:          3,
+		PartiallySatisfiedCount: 0,
+		NotSatisfiedCount:       0,
+		IndeterminateCount:      0,
+	}
+	assessmentJSON, err := json.Marshal(att)
+	require.NoError(t, err)
+
+	// Apply the assessment-attested op
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAssessmentAttested, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Assessment: assessmentJSON},
+	}))
+
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.AssessmentAttestations, 1)
+	assert.Equal(t, "bundle-1", issue.AssessmentAttestations[0].BundleID)
+	assert.Equal(t, "result-fp-1", issue.AssessmentAttestations[0].ResultFingerprint)
+	assert.Equal(t, int64(200), issue.Updated)
+}
+
+func TestApplyAssessmentAttested_DeduplicatesByResultFingerprint(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+
+	// Create an assessment attestation with fingerprint "result-fp-1"
+	att := review.AssessmentAttestation{
+		SchemaVersion:       1,
+		BundleID:            "bundle-1",
+		ContractFingerprint: "cf-hash",
+		DeliveryFingerprint: "df-hash",
+		BaseSHA:             "base-sha",
+		HeadSHA:             "head-sha",
+		Rating:              review.Green,
+		ResultFingerprint:   "result-fp-1",
+		SatisfiedCount:      3,
+	}
+	assessmentJSON, err := json.Marshal(att)
+	require.NoError(t, err)
+
+	// Apply the first assessment-attested op
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAssessmentAttested, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Assessment: assessmentJSON},
+	}))
+	require.Len(t, state.Issues["task-01"].AssessmentAttestations, 1)
+
+	// Apply the same assessment again (same fingerprint)
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAssessmentAttested, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w2", Payload: ops.Payload{Assessment: assessmentJSON},
+	}))
+
+	// Should still have only 1, not 2 (deduplicated)
+	require.Len(t, state.Issues["task-01"].AssessmentAttestations, 1)
+}
+
+func TestApplyAssessmentAttested_DifferentFingerprintAdded(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+
+	// First assessment
+	att1 := review.AssessmentAttestation{
+		SchemaVersion:     1,
+		BundleID:          "bundle-1",
+		ResultFingerprint: "result-fp-1",
+		SatisfiedCount:    3,
+	}
+	assessmentJSON1, err := json.Marshal(att1)
+	require.NoError(t, err)
+
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAssessmentAttested, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Assessment: assessmentJSON1},
+	}))
+
+	// Second assessment with different fingerprint
+	att2 := review.AssessmentAttestation{
+		SchemaVersion:     1,
+		BundleID:          "bundle-2",
+		ResultFingerprint: "result-fp-2",
+		SatisfiedCount:    2,
+	}
+	assessmentJSON2, err := json.Marshal(att2)
+	require.NoError(t, err)
+
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpAssessmentAttested, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w2", Payload: ops.Payload{Assessment: assessmentJSON2},
+	}))
+
+	// Should have 2 attestations
+	issue := state.Issues["task-01"]
+	require.Len(t, issue.AssessmentAttestations, 2)
+	assert.Equal(t, "result-fp-1", issue.AssessmentAttestations[0].ResultFingerprint)
+	assert.Equal(t, "result-fp-2", issue.AssessmentAttestations[1].ResultFingerprint)
+}
+
+func TestApplyAssessmentAttested_IssueNotFound(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+
+	att := review.AssessmentAttestation{
+		ResultFingerprint: "result-fp-1",
+	}
+	assessmentJSON, err := json.Marshal(att)
+	require.NoError(t, err)
+
+	// Apply op to non-existent issue
+	err = state.ApplyOp(ops.Op{
+		Type: ops.OpAssessmentAttested, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Assessment: assessmentJSON},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "issue task-01 not found")
 }
