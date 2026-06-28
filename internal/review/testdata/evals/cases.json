@@ -1,0 +1,199 @@
+[
+  {
+    "id": "case-001",
+    "description": "All criteria satisfied → green",
+    "bundle": {
+      "issue_id": "TEST-1",
+      "contract": {
+        "issue_id": "TEST-1",
+        "title": "Add foo function",
+        "scope": ["pkg/foo.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "foo() function exists and returns string"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-1",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+func foo() string {\n+\treturn \"hello\"\n+}",
+        "changed_files": ["pkg/foo.go"]
+      }
+    },
+    "expected_rating": "green",
+    "expected_statuses": {"AC1": "satisfied"}
+  },
+  {
+    "id": "case-002",
+    "description": "All criteria not_satisfied → red",
+    "bundle": {
+      "issue_id": "TEST-2",
+      "contract": {
+        "issue_id": "TEST-2",
+        "title": "Add bar function",
+        "scope": ["pkg/bar.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "bar() function exists and takes two int arguments"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-2",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+func unrelated() {\n+\t// not the required function\n+}",
+        "changed_files": ["pkg/bar.go"]
+      }
+    },
+    "expected_rating": "red",
+    "expected_statuses": {"AC1": "not_satisfied"}
+  },
+  {
+    "id": "case-003",
+    "description": "Mixed satisfied + not_satisfied → red",
+    "bundle": {
+      "issue_id": "TEST-3",
+      "contract": {
+        "issue_id": "TEST-3",
+        "title": "Add auth module",
+        "scope": ["pkg/auth.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "Login function exists"},
+          {"id": "AC2", "text": "Logout function exists"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-3",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+func Login(user string) error {\n+\treturn nil\n+}",
+        "changed_files": ["pkg/auth.go"]
+      }
+    },
+    "expected_rating": "red",
+    "expected_statuses": {"AC1": "satisfied", "AC2": "not_satisfied"}
+  },
+  {
+    "id": "case-004",
+    "description": "Partially satisfied criterion → yellow",
+    "bundle": {
+      "issue_id": "TEST-4",
+      "contract": {
+        "issue_id": "TEST-4",
+        "title": "Add math operations",
+        "scope": ["pkg/math.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "Add, Subtract, and Multiply functions all exist"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-4",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+func Add(a, b int) int {\n+\treturn a + b\n+}\n+func Subtract(a, b int) int {\n+\treturn a - b\n+}",
+        "changed_files": ["pkg/math.go"]
+      }
+    },
+    "expected_rating": "yellow",
+    "expected_statuses": {"AC1": "partially_satisfied"}
+  },
+  {
+    "id": "case-005",
+    "description": "Indeterminate (no diff for relevant criterion) → yellow",
+    "bundle": {
+      "issue_id": "TEST-5",
+      "contract": {
+        "issue_id": "TEST-5",
+        "title": "Update config file",
+        "scope": ["config.yaml", "cmd/main.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "config.yaml updated with new settings"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-5",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+func main() {\n+\t// implementation\n+}",
+        "changed_files": ["cmd/main.go"]
+      }
+    },
+    "expected_rating": "yellow",
+    "expected_statuses": {"AC1": "indeterminate"}
+  },
+  {
+    "id": "case-006",
+    "description": "Empty diff with criteria → red",
+    "bundle": {
+      "issue_id": "TEST-6",
+      "contract": {
+        "issue_id": "TEST-6",
+        "title": "Add validation function",
+        "scope": ["pkg/validate.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "Validate function exists"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-6",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "",
+        "changed_files": []
+      }
+    },
+    "expected_rating": "red",
+    "expected_statuses": {"AC1": "not_satisfied"}
+  },
+  {
+    "id": "case-007",
+    "description": "Multiple criteria, all satisfied → green",
+    "bundle": {
+      "issue_id": "TEST-7",
+      "contract": {
+        "issue_id": "TEST-7",
+        "title": "Add database connection pool",
+        "scope": ["pkg/db.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "Connection pool is initialized"},
+          {"id": "AC2", "text": "Pool has configurable size"},
+          {"id": "AC3", "text": "Get and Release methods exist"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-7",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+type Pool struct {\n+\tsize int\n+}\n+func (p *Pool) Get() (*Conn, error) { return nil, nil }\n+func (p *Pool) Release(c *Conn) error { return nil }",
+        "changed_files": ["pkg/db.go"]
+      }
+    },
+    "expected_rating": "green",
+    "expected_statuses": {"AC1": "satisfied", "AC2": "satisfied", "AC3": "satisfied"}
+  },
+  {
+    "id": "case-008",
+    "description": "Multiple criteria, one partially_satisfied rest satisfied → yellow",
+    "bundle": {
+      "issue_id": "TEST-8",
+      "contract": {
+        "issue_id": "TEST-8",
+        "title": "Add user management system",
+        "scope": ["pkg/user.go"],
+        "acceptance_criteria": [
+          {"id": "AC1", "text": "User struct with name, email, and role fields"},
+          {"id": "AC2", "text": "Create, Read, and Delete methods exist"},
+          {"id": "AC3", "text": "Input validation for email format"}
+        ]
+      },
+      "delivery": {
+        "issue_id": "TEST-8",
+        "git_base": "abc123",
+        "git_head": "def456",
+        "diff": "+type User struct {\n+\tName string\n+\tEmail string\n+\tRole string\n+}\n+func CreateUser(u *User) error { return nil }\n+func ReadUser(id string) (*User, error) { return nil, nil }",
+        "changed_files": ["pkg/user.go"]
+      }
+    },
+    "expected_rating": "yellow",
+    "expected_statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
+  }
+]
