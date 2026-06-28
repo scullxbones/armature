@@ -404,3 +404,82 @@ func TestStore_ReadIndex_ReadsFromDiskWithoutMaterialize(t *testing.T) {
 	}
 	// os.ReadDir returning an error means the directory doesn't exist, which is also acceptable.
 }
+
+// TestStore_ReadIssue_ReadsFromDiskWithoutMaterialize tests that Store.ReadIssue()
+// reads a single issue from disk without triggering materialization.
+func TestStore_ReadIssue_ReadsFromDiskWithoutMaterialize(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	stateDir := filepath.Join(tmpDir, "state")
+	issuesDir := filepath.Join(stateDir, "issues")
+
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	// Write a pre-made issue.json without materializing
+	issueContent := `{
+  "id": "task-1",
+  "type": "task",
+  "status": "open",
+  "title": "Test Issue",
+  "scope": ["file1.txt"],
+  "children": [],
+  "blocked_by": [],
+  "blocks": [],
+  "decision_refs": [],
+  "source_links": [],
+  "citation_acceptances": [],
+  "notes": [],
+  "decisions": [],
+  "provenance": {
+    "method": "test",
+    "confidence": "high",
+    "source_worker": "test-worker"
+  },
+  "updated": 1000
+}`
+	issuePath := filepath.Join(issuesDir, "task-1.json")
+	require.NoError(t, adapters.WriteFile(issuePath, []byte(issueContent), 0644))
+
+	// Create Store (note: no ops, so Load would fail or behave differently)
+	opsDir := filepath.Join(tmpDir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+
+	store := NewStore(opsDir, stateDir, false)
+
+	// Call ReadIssue without calling Load first
+	issue, err := store.ReadIssue("task-1")
+	require.NoError(t, err)
+
+	// Verify issue was read correctly from disk
+	assert.NotNil(t, issue)
+	assert.Equal(t, "task-1", issue.ID)
+	assert.Equal(t, "Test Issue", issue.Title)
+	assert.Equal(t, "open", issue.Status)
+	assert.Equal(t, "task", issue.Type)
+
+	// ReadIssue must not trigger materialization: checkpoint.json must be absent.
+	// If materialize.MaterializeAndReturn* had been called it would have written these paths.
+	assert.NoFileExists(t, filepath.Join(stateDir, "checkpoint.json"),
+		"ReadIssue must not write checkpoint.json (materialization must not occur)")
+}
+
+// TestStore_ReadIssue_NotFound tests that Store.ReadIssue returns an error for
+// non-existent issues.
+func TestStore_ReadIssue_NotFound(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	stateDir := filepath.Join(tmpDir, "state")
+	issuesDir := filepath.Join(stateDir, "issues")
+
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	// Create Store
+	opsDir := filepath.Join(tmpDir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+
+	store := NewStore(opsDir, stateDir, false)
+
+	// Try to read a non-existent issue
+	_, err := store.ReadIssue("nonexistent")
+	assert.Error(t, err, "ReadIssue should return error for non-existent issue")
+}
