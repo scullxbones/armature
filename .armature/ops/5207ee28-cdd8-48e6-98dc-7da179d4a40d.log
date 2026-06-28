@@ -1371,3 +1371,4 @@
 ["claim","SMTC-S1-T1",1782681402,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":180}]
 ["transition","SMTC-S1",1782681403,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["transition","SMTC-S1-T1",1782682002,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","SMTC-S1-T2",1782682132,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with SMTC-S1 detected at claim time"}]
