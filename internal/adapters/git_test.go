@@ -917,3 +917,130 @@ func TestCreateBranchFrom_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(out), newBranch)
 }
+
+func TestResolveRevision(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Get HEAD SHA for comparison
+	headCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	expectedSHA := strings.TrimSpace(string(headOut))
+
+	// Resolve HEAD
+	sha, err := c.ResolveRevision("HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, expectedSHA, sha)
+
+	// Create a tag and resolve it
+	gitRun("tag", "v1.0")
+	tagSHA, err := c.ResolveRevision("v1.0")
+	require.NoError(t, err)
+	assert.Equal(t, expectedSHA, tagSHA)
+}
+
+func TestResolveRevision_InvalidRevision(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	_, err := c.ResolveRevision("nonexistent-ref")
+	assert.Error(t, err)
+}
+
+func TestDiffRange(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Get the initial commit SHA
+	initCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	initOut, err := initCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(initOut))
+
+	// Create a new commit
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "test.txt"), []byte("hello\n"), 0644))
+	gitRun("add", "test.txt")
+	gitRun("commit", "-m", "add test file")
+
+	// Get the new commit SHA
+	newCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	newOut, err := newCmd.Output()
+	require.NoError(t, err)
+	headSHA := strings.TrimSpace(string(newOut))
+
+	// Diff the range
+	diff, err := c.DiffRange(baseSHA, headSHA)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "test.txt")
+	assert.Contains(t, diff, "hello")
+}
+
+func TestDiffNameOnlyRange(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	// Get the initial commit SHA
+	initCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	initOut, err := initCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(initOut))
+
+	// Create new commits with multiple files
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file1.txt"), []byte("a\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("b\n"), 0644))
+	gitRun("add", "file1.txt", "file2.txt")
+	gitRun("commit", "-m", "add files")
+
+	// Get the new commit SHA
+	newCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	newOut, err := newCmd.Output()
+	require.NoError(t, err)
+	headSHA := strings.TrimSpace(string(newOut))
+
+	// Get the name-only diff
+	files, err := c.DiffNameOnlyRange(baseSHA, headSHA)
+	require.NoError(t, err)
+	require.Len(t, files, 2)
+	assert.Contains(t, files, "file1.txt")
+	assert.Contains(t, files, "file2.txt")
+}
+
+func TestDiffNameOnlyRange_NoChanges(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	// Get HEAD SHA
+	headCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(headOut))
+
+	// Diff the same commit (no changes)
+	files, err := c.DiffNameOnlyRange(sha, sha)
+	require.NoError(t, err)
+	assert.Empty(t, files)
+}
