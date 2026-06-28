@@ -63,3 +63,12 @@ arm accept-citation --issue ID --rationale TEXT --ci
 arm scope-rename <old-path> <new-path>
 arm scope-delete <path>
 ```
+
+## Semantic Conformance Review
+
+```
+arm review prepare --issue ID --base BASE-SHA --head HEAD-SHA  # create review bundle
+arm review record --issue ID --assessment assessment.json      # record reviewer output
+```
+
+Semantic review validates that delivered work conforms to acceptance criteria and scope. Use the `armature-reviewer` skill with the bundle from `review prepare`; persist results with `review record`.

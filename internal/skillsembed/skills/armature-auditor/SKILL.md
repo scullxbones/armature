@@ -37,6 +37,8 @@ Workers complete tasks → Auditor runs → Story transitions to done → PR ope
 
 Do not approve a story transition until all audit checks pass. If any check fails, report the specific issues back to the workers for remediation before re-auditing.
 
+**Scope Clarification:** The Auditor checks **structural integrity** (citation coverage and repo health) but does NOT perform **semantic review** of code changes. Semantic conformance to acceptance criteria is handled by the `armature-reviewer` skill, which is dispatched by the coordinator after each task completes. Both gates must pass before story sign-off.
+
 ## The Audit Checklist
 
 Work through these steps in order. Each step must pass before proceeding to the next.
