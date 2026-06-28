@@ -24,6 +24,9 @@ const (
 
 	// OpReparent moves an issue to a new parent.
 	OpReparent = "reparent"
+
+	// OpAssessmentAttested records a conformance assessment attestation.
+	OpAssessmentAttested = "assessment-attested"
 )
 
 // Issue statuses.
@@ -135,4 +138,7 @@ type Payload struct {
 
 	// create — preferred model hint for the assigned agent
 	PreferredModel string `json:"preferred_model,omitempty"`
+
+	// assessment-attested
+	Assessment json.RawMessage `json:"assessment,omitempty"`
 }
