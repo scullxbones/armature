@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -224,6 +229,83 @@ func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
 
 	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
 	require.NoError(t, err)
+}
+
+func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, workerIdentityWithSlot(workerID))
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+
+	now := time.Now().Unix()
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: now - 30,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpHeartbeat,
+		TargetID:  "task-01",
+		Timestamp: now - 20,
+		WorkerID:  workerID,
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpHeartbeat,
+		TargetID:  "task-01",
+		Timestamp: now - 10,
+		WorkerID:  workerID,
+	}))
+
+	ctx := &config.Context{
+		RepoPath:  repo,
+		IssuesDir: issuesDir,
+		Mode:      "single-branch",
+		Config:    config.Config{DefaultTTL: 60},
+	}
+
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx))
+}
+
+func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, workerIdentityWithSlot(workerID))
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+
+	now := time.Now().Unix()
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: now - 30,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "task-01",
+		Timestamp: now - 5,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{To: ops.StatusDone},
+	}))
+
+	ctx := &config.Context{
+		RepoPath:  repo,
+		IssuesDir: issuesDir,
+		Mode:      "single-branch",
+		Config:    config.Config{DefaultTTL: 60},
+	}
+
+	assert.Empty(t, hookFindActiveClaimID(ctx))
 }
 
 // setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -292,6 +293,26 @@ func TestRenderValidation_AllFields(t *testing.T) {
 	assert.Contains(t, output, "ERROR: error 2")
 	assert.Contains(t, output, "WARNING: warning 1")
 	assert.Contains(t, output, "INFO: info 1")
+}
+
+func TestRenderValidation_AcceptedRiskCoverage(t *testing.T) {
+	t.Parallel()
+	result := validate.Result{
+		OK: true,
+		Coverage: &traceability.Coverage{
+			TotalNodes:        4,
+			CitedNodes:        3,
+			AcceptedRiskNodes: 1,
+		},
+	}
+
+	var buf bytes.Buffer
+	err := RenderValidation(&buf, result, false)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "COVERAGE: 4/4 cited")
+	assert.Contains(t, output, "accepted-risk")
 }
 
 func TestRenderIssue_MinimalIssue(t *testing.T) {
