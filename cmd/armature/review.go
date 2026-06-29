@@ -199,6 +199,16 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		bundleLoaded = true
 	}
 
+	// When the bundle is available, verify that the bundle was prepared for the correct issue.
+	// This prevents assessment results from one issue (e.g., TASK-A) from being recorded onto
+	// another issue (e.g., TASK-B) even if they share the same contract fingerprint.
+	if bundleLoaded {
+		if bundle.Issue.ID != issueID {
+			return fmt.Errorf("bundle was prepared for issue %s, not %s",
+				bundle.Issue.ID, issueID)
+		}
+	}
+
 	// When the bundle is available, verify that the assessment's bundle_id and delivery_fingerprint
 	// match the loaded bundle. This ensures the assessment was produced for this specific delivery
 	// and prevents mismatched assessments from being recorded.
