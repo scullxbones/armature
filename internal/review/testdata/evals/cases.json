@@ -172,7 +172,7 @@
   },
   {
     "id": "case-008",
-    "description": "Multiple criteria, one partially_satisfied rest satisfied → yellow",
+    "description": "Multiple criteria, one not_satisfied drives red regardless of other statuses → red",
     "bundle": {
       "issue_id": "TEST-8",
       "contract": {
@@ -193,7 +193,7 @@
         "changed_files": ["pkg/user.go"]
       }
     },
-    "expected_rating": "yellow",
+    "expected_rating": "red",
     "expected_statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
   }
 ]
