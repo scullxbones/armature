@@ -36,7 +36,7 @@
   },
   {
     "case_id": "case-008",
-    "rating": "yellow",
+    "rating": "red",
     "statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
   }
 ]

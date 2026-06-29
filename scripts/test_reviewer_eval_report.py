@@ -58,7 +58,7 @@ class TestEvaluatorMetrics(unittest.TestCase):
             },
             {
                 "id": "case-008",
-                "expected_rating": "yellow",
+                "expected_rating": "red",
                 "expected_statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
             }
         ]
@@ -102,7 +102,7 @@ class TestEvaluatorMetrics(unittest.TestCase):
             },
             {
                 "case_id": "case-008",
-                "rating": "yellow",
+                "rating": "red",
                 "statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
             }
         ]
@@ -131,17 +131,17 @@ class TestEvaluatorMetrics(unittest.TestCase):
     def test_false_red_rate_metric(self):
         """Test false_red_rate metric computation."""
         metrics = compute_metrics(self.cases, self.perfect_results)
-        # Cases expected green/yellow: case-001, case-004, case-005, case-007, case-008 (5 cases)
+        # Cases expected green/yellow: case-001, case-004, case-005, case-007 (4 cases)
         # Cases incorrectly rated red: 0
-        # false_red_rate: 0/5 = 0.0
+        # false_red_rate: 0/4 = 0.0
         self.assertEqual(metrics['false_red_rate'], 0.0)
 
     def test_false_green_rate_metric(self):
         """Test false_green_rate metric computation."""
         metrics = compute_metrics(self.cases, self.perfect_results)
-        # Cases expected red: case-002, case-003, case-006 (3 cases)
+        # Cases expected red: case-002, case-003, case-006, case-008 (4 cases)
         # Cases incorrectly rated green/yellow: 0
-        # false_green_rate: 0/3 = 0.0
+        # false_green_rate: 0/4 = 0.0
         self.assertEqual(metrics['false_green_rate'], 0.0)
 
     def test_partial_detection_rate_metric(self):
