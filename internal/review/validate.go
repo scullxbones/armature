@@ -53,8 +53,10 @@ func ValidateResultNoDiff(assessment *ConformanceAssessment) []string {
 	return errs
 }
 
-// NewAttestation creates an AssessmentAttestation from a validated ConformanceAssessment.
-func NewAttestation(assessment *ConformanceAssessment) *AssessmentAttestation {
+// NewAttestation creates an AssessmentAttestation from a validated ConformanceAssessment and
+// its corresponding Delivery. The delivery's BaseSHA and HeadSHA are recorded in the attestation
+// so the durable record captures the exact commit range that was reviewed.
+func NewAttestation(assessment *ConformanceAssessment, delivery Delivery) *AssessmentAttestation {
 	// Derive rating and counts from results
 	rating := DeriveRating(assessment.Results)
 	satisfied, partiallySatisfied, notSatisfied, indeterminate := CountCriteria(assessment.Results)
@@ -67,6 +69,8 @@ func NewAttestation(assessment *ConformanceAssessment) *AssessmentAttestation {
 		BundleID:                assessment.BundleID,
 		ContractFingerprint:     assessment.ContractFingerprint,
 		DeliveryFingerprint:     assessment.DeliveryFingerprint,
+		BaseSHA:                 delivery.BaseSHA,
+		HeadSHA:                 delivery.HeadSHA,
 		Rating:                  rating,
 		ResultFingerprint:       resultFingerprint,
 		SatisfiedCount:          satisfied,
@@ -94,4 +98,42 @@ func Applicable(att *AssessmentAttestation, bundleID string) bool {
 		return false
 	}
 	return att.BundleID == bundleID
+}
+
+// ValidateResultCoverage checks that a ConformanceAssessment covers all expected criterion IDs
+// from the contract and contains no duplicates. Returns a slice of validation error strings (empty = valid).
+func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract) []string {
+	var errs []string
+
+	// Build expected criterion IDs from contract
+	expectedIDs := make(map[string]bool)
+	if contract.DefinitionOfDone != "" {
+		expectedIDs["definition_of_done"] = true
+	}
+	for i := range contract.Acceptance {
+		expectedIDs[fmt.Sprintf("acceptance[%d]", i)] = true
+	}
+
+	// Track submitted IDs, check for duplicates, and flag unexpected IDs.
+	submittedIDs := make(map[string]bool)
+	for _, result := range assessment.Results {
+		if submittedIDs[result.ID] {
+			errs = append(errs, fmt.Sprintf("criterion result: duplicate ID %q", result.ID))
+		}
+		submittedIDs[result.ID] = true
+
+		// Flag IDs that are not in the expected set.
+		if !expectedIDs[result.ID] {
+			errs = append(errs, fmt.Sprintf("unexpected criterion ID %s: not in contract", result.ID))
+		}
+	}
+
+	// Check for missing expected IDs
+	for id := range expectedIDs {
+		if !submittedIDs[id] {
+			errs = append(errs, fmt.Sprintf("criterion result: missing expected ID %q", id))
+		}
+	}
+
+	return errs
 }

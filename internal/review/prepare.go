@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"strings"
 )
 
 // GitAdapter is an interface for git operations required by the Prepare function.
@@ -12,6 +13,86 @@ type GitAdapter interface {
 	DiffRange(base, head string) (string, error)
 	// DiffNameOnlyRange returns the list of changed file names between two revisions.
 	DiffNameOnlyRange(base, head string) ([]string, error)
+}
+
+// FilterDiff strips file sections from a unified diff whose paths match any of
+// the given excludePrefixes. A "file section" begins at a "diff --git a/..." line
+// and extends to the next such line or end of input. The returned string contains
+// only the sections whose paths do not match any excluded prefix.
+func FilterDiff(diff string, excludePrefixes []string) string {
+	if diff == "" || len(excludePrefixes) == 0 {
+		return diff
+	}
+
+	var out strings.Builder
+	var sectionBuf strings.Builder
+	excluded := false
+	inSection := false
+
+	// SplitAfter preserves the trailing newline on each line.
+	lines := strings.SplitAfter(diff, "\n")
+
+	for _, line := range lines {
+		bare := strings.TrimRight(line, "\n")
+		switch {
+		case strings.HasPrefix(bare, "diff --git "):
+			// Flush previous section if it was not excluded.
+			if inSection && !excluded {
+				out.WriteString(sectionBuf.String())
+			}
+			sectionBuf.Reset()
+			sectionBuf.WriteString(line)
+			inSection = true
+
+			// Extract the file path from "diff --git a/<path> b/<path>".
+			rest := strings.TrimPrefix(bare, "diff --git a/")
+			path := rest
+			if idx := strings.Index(rest, " b/"); idx >= 0 {
+				path = rest[:idx]
+			}
+
+			excluded = false
+			for _, prefix := range excludePrefixes {
+				if strings.HasPrefix(path, prefix) {
+					excluded = true
+					break
+				}
+			}
+		case inSection:
+			sectionBuf.WriteString(line)
+		default:
+			// Content before the first diff header (rare in practice).
+			out.WriteString(line)
+		}
+	}
+
+	// Flush the last section.
+	if inSection && !excluded {
+		out.WriteString(sectionBuf.String())
+	}
+
+	return out.String()
+}
+
+// filterExcludedPaths removes files matching exclusion prefixes from the list.
+func filterExcludedPaths(files []string, excludePrefixes []string) []string {
+	if len(files) == 0 || len(excludePrefixes) == 0 {
+		return files
+	}
+	filtered := make([]string, 0, len(files))
+	for _, file := range files {
+		excluded := false
+		for _, prefix := range excludePrefixes {
+			if strings.HasPrefix(file, prefix) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered
 }
 
 // Prepare builds a ReviewBundle for an issue given its contract metadata and a git range.
@@ -49,6 +130,21 @@ func Prepare(
 		return nil, fmt.Errorf("failed to get changed files: %w", err)
 	}
 
+	// Filter out armature coordination paths (.armature/** and .arm/**)
+	excludePrefixes := []string{".armature/", ".arm/"}
+	changedFiles = filterExcludedPaths(changedFiles, excludePrefixes)
+
+	// A delivery with no changed files is not reviewable — reject it regardless of
+	// whether the empty result came from filtering or from the git range itself.
+	if len(changedFiles) == 0 {
+		return nil, fmt.Errorf("delivery contains no changed files")
+	}
+
+	// Strip coordination-path sections from the unified diff so the reviewer
+	// never sees coordination hunks and DeliveryFingerprint stays stable across
+	// coordination-path churn.
+	filteredDiff := FilterDiff(diff, excludePrefixes)
+
 	// Build the contract
 	contract := Contract{
 		DefinitionOfDone: definitionOfDone,
@@ -61,7 +157,7 @@ func Prepare(
 		BaseSHA:      baseSHA,
 		HeadSHA:      headSHA,
 		ChangedFiles: changedFiles,
-		Diff:         diff,
+		Diff:         filteredDiff,
 	}
 
 	// Compute fingerprints

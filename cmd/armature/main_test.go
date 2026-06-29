@@ -285,6 +285,8 @@ func TestCreateCommand(t *testing.T) {
 }
 
 // setupRepoWithTask creates a temp repo, runs trls init, and creates a test task.
+// The task includes a definition_of_done so review assessments that cover
+// "definition_of_done" are accepted by ValidateResultCoverage.
 func setupRepoWithTask(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -297,7 +299,8 @@ func setupRepoWithTask(t *testing.T) string {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
+		"--dod", "Task implementation is complete and verified"})
 	require.NoError(t, cmd2.Execute())
 
 	return repo

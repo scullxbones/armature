@@ -39,7 +39,10 @@ func TestReviewPrepareCommand_Success(t *testing.T) {
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
 
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2")
+	// Add a file so the delivery is non-empty
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
 	// Get head SHA
 	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
@@ -110,14 +113,16 @@ func TestReviewPrepareCommand_OutputFile(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create commits
+	// Create commits with an actual file change
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
 	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	baseOut, err := baseCmd.Output()
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
 
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
 	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
@@ -145,14 +150,16 @@ func TestReviewRecordCommand_Success(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create and prepare a review bundle
+	// Create and prepare a review bundle with an actual file change
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
 	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	baseOut, err := baseCmd.Output()
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
 
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
 	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
@@ -196,8 +203,8 @@ func TestReviewRecordCommand_Success(t *testing.T) {
 }
 
 func TestReviewRecordCommand_WithCitation(t *testing.T) {
-	// An assessment that contains a file:line citation must be recorded successfully.
-	// Diff-index citation validation is a prepare-time concern; record must not reject citations.
+	// An assessment that contains a file:line citation must be recorded successfully
+	// when no --bundle flag is passed (diff-index citation checking is opt-in via --bundle).
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -209,7 +216,9 @@ func TestReviewRecordCommand_WithCitation(t *testing.T) {
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
 
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
 	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
@@ -259,14 +268,16 @@ func TestReviewRecordCommand_IsDuplicate(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create and prepare a review bundle
+	// Create and prepare a review bundle with an actual file change
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
 	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	baseOut, err := baseCmd.Output()
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
 
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
 	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
@@ -310,6 +321,131 @@ func TestReviewRecordCommand_IsDuplicate(t *testing.T) {
 
 	// Verify response indicates duplicate
 	assert.Contains(t, out, "duplicate")
+}
+
+func TestReviewRecordCommand_BundleValidatesCitationCoordinates(t *testing.T) {
+	// When --bundle is passed to record, invalid citation coordinates must be rejected.
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
+	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
+	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	// Prepare and save bundle to file.
+	bundleFile := filepath.Join(repo, "bundle.json")
+	_, err = runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head, "--output", bundleFile)
+	require.NoError(t, err)
+
+	bundleData, err := os.ReadFile(bundleFile)
+	require.NoError(t, err)
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal(bundleData, &bundle))
+
+	// Assessment with a citation that does NOT exist in the diff (line 9999 of impl.go).
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "Implementation verified.",
+				Citations: []review.Citation{
+					{Path: "impl.go", Line: 9999}, // does not exist in the diff
+				},
+			},
+		},
+	}
+
+	assessmentFile := filepath.Join(repo, "assessment_bad_cite.json")
+	assessmentJSON, err := json.MarshalIndent(&assessment, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
+
+	// Without --bundle, record should succeed (no diff-index check).
+	_, err = runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile)
+	require.NoError(t, err, "record without --bundle must not perform diff-index citation checking")
+
+	// With --bundle, invalid citation coordinates must be rejected.
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
+		"--assessment", assessmentFile, "--bundle", bundleFile})
+	err = cmd.Execute()
+	require.Error(t, err, "record with --bundle must reject citations not present in the diff")
+	assert.Contains(t, err.Error(), "citation")
+}
+
+func TestReviewRecordCommand_ContractFingerprintMismatch(t *testing.T) {
+	// If the assessment's ContractFingerprint doesn't match the issue's contract,
+	// record must reject the assessment with a clear error.
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
+	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
+	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	bundleOut, err := runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head)
+	require.NoError(t, err)
+
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(bundleOut)), &bundle))
+
+	// Use a deliberately wrong contract fingerprint.
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "All requirements met.",
+			},
+		},
+	}
+
+	assessmentFile := filepath.Join(repo, "assessment_bad_fp.json")
+	assessmentJSON, err := json.MarshalIndent(&assessment, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01", "--assessment", assessmentFile})
+
+	err = cmd.Execute()
+	require.Error(t, err, "record must reject assessment with mismatched contract fingerprint")
+	assert.Contains(t, err.Error(), "contract fingerprint")
 }
 
 func TestReviewRecordCommand_RequiresIssue(t *testing.T) {
@@ -409,14 +545,16 @@ func TestReview_SingleBranchLifecycle(t *testing.T) {
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "in-progress")
 	require.NoError(t, err)
 
-	// Create commits for the delivery range
+	// Create commits for the delivery range — must include an actual file change.
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
 	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	baseOut, err := baseCmd.Output()
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
 
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 2 — task-01 delivery")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — task-01 delivery")
 	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)

@@ -185,8 +185,12 @@ func TestNewAttestation(t *testing.T) {
 		ContractFingerprint: "sha256:contract123",
 		DeliveryFingerprint: "sha256:delivery123",
 	}
+	delivery := review.Delivery{
+		BaseSHA: "aaa000",
+		HeadSHA: "bbb111",
+	}
 
-	att := review.NewAttestation(assessment)
+	att := review.NewAttestation(assessment, delivery)
 
 	assert.NotNil(t, att)
 	assert.Equal(t, "sha256:test123", att.BundleID)
@@ -214,14 +218,38 @@ func TestNewAttestation_AllGreen(t *testing.T) {
 		ContractFingerprint: "sha256:contract456",
 		DeliveryFingerprint: "sha256:delivery456",
 	}
+	delivery := review.Delivery{}
 
-	att := review.NewAttestation(assessment)
+	att := review.NewAttestation(assessment, delivery)
 
 	assert.Equal(t, review.Green, att.Rating)
 	assert.Equal(t, 2, att.SatisfiedCount)
 	assert.Equal(t, 0, att.PartiallySatisfiedCount)
 	assert.Equal(t, 0, att.NotSatisfiedCount)
 	assert.Equal(t, 0, att.IndeterminateCount)
+}
+
+func TestNewAttestation_PopulatesSHAs(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test789",
+		Results: []review.CriterionResult{
+			{ID: "definition_of_done", Status: review.Satisfied, Rationale: "complete"},
+		},
+		ContractFingerprint: "sha256:contract789",
+		DeliveryFingerprint: "sha256:delivery789",
+	}
+	delivery := review.Delivery{
+		BaseSHA:      "abc123abc123abc123abc123abc123abc123abc1",
+		HeadSHA:      "def456def456def456def456def456def456def4",
+		ChangedFiles: []string{"main.go"},
+	}
+
+	att := review.NewAttestation(assessment, delivery)
+
+	assert.Equal(t, delivery.BaseSHA, att.BaseSHA, "BaseSHA must be populated from delivery")
+	assert.Equal(t, delivery.HeadSHA, att.HeadSHA, "HeadSHA must be populated from delivery")
 }
 
 func TestIsDuplicate_SameResultFingerprint(t *testing.T) {
@@ -373,4 +401,142 @@ func TestValidateResult_NoCitations_NotSatisfied(t *testing.T) {
 
 	errs := review.ValidateResult(assessment, idx)
 	assert.Len(t, errs, 0, "Expected no validation errors for NotSatisfied with MissingEvidence")
+}
+
+func TestValidateResultCoverage_Valid(t *testing.T) {
+	t.Parallel()
+	contract := review.Contract{
+		DefinitionOfDone: "Task must be complete",
+		Acceptance:       []string{"User can login", "User can logout"},
+	}
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[1]", Status: review.Satisfied, Rationale: "ok"},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultCoverage(assessment, contract)
+	assert.Empty(t, errs, "expected no validation errors for complete assessment")
+}
+
+func TestValidateResultCoverage_MissingAcceptance(t *testing.T) {
+	t.Parallel()
+	contract := review.Contract{
+		DefinitionOfDone: "Task must be complete",
+		Acceptance:       []string{"User can login", "User can logout"},
+	}
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultCoverage(assessment, contract)
+	assert.NotEmpty(t, errs, "expected validation errors for missing criterion")
+	assert.True(t, containsError(errs, "acceptance[1]"), "expected error about missing acceptance[1]")
+}
+
+func TestValidateResultCoverage_MissingDefinitionOfDone(t *testing.T) {
+	t.Parallel()
+	contract := review.Contract{
+		DefinitionOfDone: "Task must be complete",
+		Acceptance:       []string{"User can login"},
+	}
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultCoverage(assessment, contract)
+	assert.NotEmpty(t, errs, "expected validation errors for missing definition_of_done")
+	assert.True(t, containsError(errs, "definition_of_done"), "expected error about missing definition_of_done")
+}
+
+func TestValidateResultCoverage_DuplicateID(t *testing.T) {
+	t.Parallel()
+	contract := review.Contract{
+		DefinitionOfDone: "Task must be complete",
+		Acceptance:       []string{"User can login"},
+	}
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "duplicate"},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultCoverage(assessment, contract)
+	assert.NotEmpty(t, errs, "expected validation errors for duplicate ID")
+	assert.True(t, containsError(errs, "acceptance[0]") && containsError(errs, "duplicate"), "expected error about duplicate")
+}
+
+func TestValidateResultCoverage_UnexpectedCriterionID(t *testing.T) {
+	t.Parallel()
+	contract := review.Contract{
+		DefinitionOfDone: "Task must be complete",
+		Acceptance:       []string{"User can login"},
+	}
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
+			{ID: "acceptance[99]", Status: review.Satisfied, Rationale: "extra"}, // not in contract
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultCoverage(assessment, contract)
+	assert.NotEmpty(t, errs, "expected validation errors for unexpected criterion ID")
+	assert.True(t, containsError(errs, "acceptance[99]"), "expected error mentioning the unexpected ID")
+	assert.True(t, containsError(errs, "unexpected"), "expected error to say 'unexpected'")
+}
+
+func TestValidateResultCoverage_EmptyDefinitionOfDone(t *testing.T) {
+	t.Parallel()
+	contract := review.Contract{
+		DefinitionOfDone: "",
+		Acceptance:       []string{"User can login"},
+	}
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateResultCoverage(assessment, contract)
+	assert.Empty(t, errs, "expected no validation errors when definition_of_done is empty")
 }
