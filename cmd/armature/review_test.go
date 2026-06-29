@@ -635,6 +635,135 @@ func TestReviewRecordCommand_BundleContractFingerprintMismatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "contract_fingerprint")
 }
 
+func TestReviewRecordCommand_BundleIssueMismatch(t *testing.T) {
+	// When --bundle is passed, record must reject an assessment whose bundle was prepared
+	// for a different issue. This prevents cross-issue assessment recording.
+	repo := setupRepoWithTwoTasks(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
+	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
+	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	// Prepare bundle for task-01
+	bundleFile := filepath.Join(repo, "bundle.json")
+	_, err = runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head, "--output", bundleFile)
+	require.NoError(t, err)
+
+	bundleData, err := os.ReadFile(bundleFile)
+	require.NoError(t, err)
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal(bundleData, &bundle))
+
+	// Verify bundle was prepared for task-01
+	assert.Equal(t, "task-01", bundle.Issue.ID)
+
+	// Create assessment with task-01 bundle metadata
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "Implementation verified.",
+			},
+		},
+	}
+
+	assessmentFile := filepath.Join(repo, "assessment_task01.json")
+	assessmentJSON, err := json.MarshalIndent(&assessment, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
+
+	// Try to record assessment prepared for task-01 against task-02 with bundle verification.
+	// This must be rejected because bundle.Issue.ID (task-01) != --issue (task-02).
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-02",
+		"--assessment", assessmentFile, "--bundle", bundleFile})
+	err = cmd.Execute()
+	require.Error(t, err, "record must reject assessment with bundle prepared for different issue")
+	assert.Contains(t, err.Error(), "bundle was prepared for issue")
+	assert.Contains(t, err.Error(), "task-01")
+	assert.Contains(t, err.Error(), "task-02")
+}
+
+func TestReviewRecordCommand_BundleIssueMatch(t *testing.T) {
+	// When --bundle is passed, record must succeed if bundle.Issue.ID matches --issue.
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
+	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
+	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	// Prepare bundle for task-01
+	bundleFile := filepath.Join(repo, "bundle.json")
+	_, err = runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head, "--output", bundleFile)
+	require.NoError(t, err)
+
+	bundleData, err := os.ReadFile(bundleFile)
+	require.NoError(t, err)
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal(bundleData, &bundle))
+
+	// Create assessment with matching issue
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "Implementation verified.",
+			},
+		},
+	}
+
+	assessmentFile := filepath.Join(repo, "assessment_matched.json")
+	assessmentJSON, err := json.MarshalIndent(&assessment, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
+
+	// Record assessment with matching issue ID and bundle.
+	// This must succeed.
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
+		"--assessment", assessmentFile, "--bundle", bundleFile})
+	err = cmd.Execute()
+	require.NoError(t, err, "record must succeed when bundle.Issue.ID matches --issue")
+}
+
 func TestReviewRecordCommand_RequiresIssue(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
