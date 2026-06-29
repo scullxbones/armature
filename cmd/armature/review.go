@@ -83,11 +83,9 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	scope := issue.Scope
 
 	// Parse acceptance criteria from JSON
-	var criteria []string
-	if issue.Acceptance != nil {
-		if err := json.Unmarshal(issue.Acceptance, &criteria); err != nil {
-			return fmt.Errorf("failed to parse acceptance criteria: %w", err)
-		}
+	criteria, err := review.ParseAcceptanceCriteria(issue.Acceptance)
+	if err != nil {
+		return fmt.Errorf("failed to parse acceptance criteria: %w", err)
 	}
 
 	// Create git adapter
@@ -259,11 +257,9 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	issue := *issuePtr
 
 	// Build contract from issue for coverage validation and fingerprint check.
-	var criteria []string
-	if issue.Acceptance != nil {
-		if err := json.Unmarshal(issue.Acceptance, &criteria); err != nil {
-			return fmt.Errorf("failed to parse acceptance criteria: %w", err)
-		}
+	criteria, err := review.ParseAcceptanceCriteria(issue.Acceptance)
+	if err != nil {
+		return fmt.Errorf("failed to parse acceptance criteria: %w", err)
 	}
 	contract := review.Contract{
 		DefinitionOfDone: issue.DefinitionOfDone,
