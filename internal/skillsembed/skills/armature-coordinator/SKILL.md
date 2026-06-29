@@ -274,22 +274,68 @@ This is common when workers return from background dispatch without explicit han
 
 ### a.2. Semantic Review (Reviewer Dispatch)
 
-For each task that completed in the wave, dispatch semantic conformance review:
+For each task that completed in the wave, dispatch semantic conformance review using task-scoped delivery bundles:
 
-1. **Prepare the review bundle** — capture the issue contract and delivery diff:
+**Task-Scoped Semantic Review** — each task's review bundle must contain only that task's changes, not the cumulative wave diff. This ensures:
+- Scope violations are detected correctly (task didn't modify unrelated files)
+- Acceptance criteria are matched to the right task's delivery
+- Code quality assessment applies to the right code
+- Clear audit trail of which task changed what
+
+**Workflow:**
+
+1. **Capture per-task commit SHAs** — after all wave tasks have transitioned to done, build a mapping of task IDs to their commit ranges:
    ```bash
-   REVIEW_BUNDLE=$(arm review prepare --issue TASK-ID \
-     --base "$WAVE_BASE_SHA" --head HEAD)
+   # Before processing, define TASK_COMMITS as a bash associative array or JSON object
+   # Example for sequential tasks (each on top of the previous):
+   
+   # Start with wave base
+   TASK_BASE_SHA="$WAVE_BASE_SHA"
+   
+   # For each completed task in the wave (in order):
+   for TASK_ID in $WAVE_TASK_IDS; do
+     # Find this task's final commit using git log
+     # Commits are typically labeled with task ID in the message
+     TASK_HEAD_SHA=$(git log --oneline --grep="$TASK_ID" \
+       "$TASK_BASE_SHA"..HEAD --format='%H' | head -1)
+     
+     if [ -z "$TASK_HEAD_SHA" ]; then
+       # Fallback: use HEAD if only one task in wave
+       TASK_HEAD_SHA=$(git rev-parse HEAD)
+     fi
+     
+     # Store mapping for this task
+     # (implementation: export variable, write to temp file, or populate JSON object)
+     # TASK_COMMITS["$TASK_ID"]="$TASK_BASE_SHA..$TASK_HEAD_SHA"
+     
+     # Update base for next task
+     TASK_BASE_SHA="$TASK_HEAD_SHA"
+   done
    ```
-   This creates a JSON bundle containing the issue's acceptance criteria, scope, and the diff of changed files.
+   
+   **Note:** If workers commit with explicit task ID in the message (e.g., `git commit -m "feat(TASK-ID): ..."`), 
+   the grep pattern above will locate the exact commit. For more complex scenarios (e.g., multiple commits per task),
+   you may need custom logic to identify task boundaries.
 
-2. **Dispatch the armature-reviewer agent** — pass the bundle to a reviewer subagent:
+2. **Prepare per-task review bundles** — use task-specific commit ranges, not wave-combined ranges:
+   ```bash
+   # For each task, capture its delivery diff (task-scoped, not wave-scoped)
+   TASK_BASE="<task's base commit from step 1>"
+   TASK_HEAD="<task's head commit from step 1>"
+   
+   REVIEW_BUNDLE=$(arm review prepare --issue TASK-ID \
+     --base "$TASK_BASE" --head "$TASK_HEAD")
+   ```
+   
+   This creates a JSON bundle containing the issue's acceptance criteria, scope, and the diff of **only** that task's changed files.
+
+3. **Dispatch the armature-reviewer agent** — pass the task-scoped bundle to a reviewer subagent:
    ```
    Dispatch armature-reviewer with input: $REVIEW_BUNDLE
    ```
    The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). Returns a `ConformanceAssessment` with a structured rating (green/yellow/red).
 
-3. **Record the assessment** — persist the reviewer's findings:
+4. **Record the assessment** — persist the reviewer's findings:
    ```bash
    arm review record --issue TASK-ID --assessment <result.json>
    ```

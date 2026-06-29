@@ -945,3 +945,108 @@ func TestReview_SingleBranchLifecycle(t *testing.T) {
 	}
 	// If the directory doesn't exist, that's also correct
 }
+
+// TestReviewPrepare_CoordinatorWaveScope verifies that review bundles use task-specific
+// commit ranges, not wave-combined ranges. This is critical for the coordinator workflow:
+// when multiple tasks complete in a wave, each task's review should be scoped to only its own
+// changes, not the cumulative wave diff.
+//
+// Scenario:
+//
+//	Wave with 2 independent tasks (TASK-A, TASK-B)
+//	WAVE_BASE = commit 0
+//	TASK-A commits changes to file_a.go → SHA_A
+//	TASK-B commits changes to file_b.go → SHA_B (on top of SHA_A)
+//
+// OLD (broken): review prepare --base WAVE_BASE --head HEAD
+//
+//	→ TASK-A's bundle includes file_b.go (wrong scope)
+//	→ TASK-B's bundle includes file_a.go (wrong scope)
+//
+// NEW (correct): review prepare with task-specific range
+//
+//	→ TASK-A uses --base WAVE_BASE --head SHA_A → only file_a.go
+//	→ TASK-B uses --base SHA_A --head SHA_B → only file_b.go
+func TestReviewPrepare_CoordinatorWaveScope(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Initialize worker
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create TASK-B (parallel to TASK-A from setupRepoWithTask)
+	_, err = runTrls(t, repo, "create", "--title", "Task B", "--type", "task", "--id", "task-02",
+		"--dod", "Task B implementation complete")
+	require.NoError(t, err)
+
+	// Record wave base before any task commits
+	waveBaseSHACmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	waveBaseSHAOut, err := waveBaseSHACmd.Output()
+	require.NoError(t, err)
+	waveBaseSHA := strings.TrimSpace(string(waveBaseSHAOut))
+
+	// Simulate TASK-A worker: create commit for file_a.go
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file_a.go"), []byte("package main\n\nfunc A() {}\n"), 0o644))
+	run(t, repo, "git", "add", "file_a.go")
+	run(t, repo, "git", "commit", "-m", "feat(task-01): implement file_a.go")
+
+	taskASHACmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	taskASHAOut, err := taskASHACmd.Output()
+	require.NoError(t, err)
+	taskASHA := strings.TrimSpace(string(taskASHAOut))
+
+	// Simulate TASK-B worker: create commit for file_b.go (on top of TASK-A)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file_b.go"), []byte("package main\n\nfunc B() {}\n"), 0o644))
+	run(t, repo, "git", "add", "file_b.go")
+	run(t, repo, "git", "commit", "-m", "feat(task-02): implement file_b.go")
+
+	taskBSHACmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	taskBSHAOut, err := taskBSHACmd.Output()
+	require.NoError(t, err)
+	taskBSHA := strings.TrimSpace(string(taskBSHAOut))
+
+	// Verify commit ancestry: waveBase → taskA → taskB
+	assert.NotEqual(t, waveBaseSHA, taskASHA, "TASK-A should have created a new commit")
+	assert.NotEqual(t, taskASHA, taskBSHA, "TASK-B should have created a new commit")
+
+	// OLD APPROACH (broken): use WAVE_BASE..HEAD for all tasks
+	// This would show both file_a.go and file_b.go in each task's bundle
+	oldBundleA, err := runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", waveBaseSHA, "--head", taskBSHA)
+	require.NoError(t, err, "prepare bundle with wave range should succeed")
+
+	var bundleA review.ReviewBundle
+	err = json.Unmarshal([]byte(strings.TrimSpace(oldBundleA)), &bundleA)
+	require.NoError(t, err)
+
+	// In the broken approach, TASK-A's bundle spans waveBase..taskBSHA,
+	// so it includes changes from both TASK-A and TASK-B
+	assert.Equal(t, waveBaseSHA, bundleA.Delivery.BaseSHA, "bundle should use wave base as-is (broken behavior)")
+	assert.Equal(t, taskBSHA, bundleA.Delivery.HeadSHA, "bundle head is combined wave HEAD (broken behavior)")
+
+	// NEW APPROACH (correct): use task-specific ranges
+	// TASK-A should see only file_a.go (waveBase..taskA)
+	newBundleA, err := runTrls(t, repo, "review", "prepare", "--issue", "task-01", "--base", waveBaseSHA, "--head", taskASHA)
+	require.NoError(t, err)
+
+	var correctBundleA review.ReviewBundle
+	err = json.Unmarshal([]byte(strings.TrimSpace(newBundleA)), &correctBundleA)
+	require.NoError(t, err)
+
+	assert.Equal(t, waveBaseSHA, correctBundleA.Delivery.BaseSHA, "TASK-A bundle should use wave base")
+	assert.Equal(t, taskASHA, correctBundleA.Delivery.HeadSHA, "TASK-A bundle should use task-specific head")
+
+	// TASK-B should see only file_b.go (taskA..taskB)
+	newBundleB, err := runTrls(t, repo, "review", "prepare", "--issue", "task-02", "--base", taskASHA, "--head", taskBSHA)
+	require.NoError(t, err)
+
+	var correctBundleB review.ReviewBundle
+	err = json.Unmarshal([]byte(strings.TrimSpace(newBundleB)), &correctBundleB)
+	require.NoError(t, err)
+
+	assert.Equal(t, taskASHA, correctBundleB.Delivery.BaseSHA, "TASK-B bundle should use previous task's head as base")
+	assert.Equal(t, taskBSHA, correctBundleB.Delivery.HeadSHA, "TASK-B bundle should use task-specific head")
+
+	// Verify that the fingerprints differ (they encode the different diffs)
+	assert.NotEqual(t, bundleA.Fingerprints.Delivery, correctBundleA.Fingerprints.Delivery,
+		"delivery fingerprint should differ when using different commit ranges")
+}
