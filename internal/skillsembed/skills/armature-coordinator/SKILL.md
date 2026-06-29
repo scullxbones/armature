@@ -142,7 +142,7 @@ A wave is docs-skill-only only when every changed file is a `SKILL.md`,
 # Collect scope files from arm render-context output for each task in WAVE_TASK_IDS,
 # or use `git diff --name-only "$WAVE_BASE_SHA"..HEAD` after workers return.
 # Example: auto-promote based on task scope fields before dispatch:
-WAVE_SCOPE_FILES=$(arm ready --parent STORY-ID | python3 -c "import sys,json; [print(f) for t in json.load(sys.stdin) for f in t.get('scope',[])]")
+WAVE_SCOPE_FILES=$(arm ready --parent STORY-ID --format json | python3 -c "import sys,json; [print(f) for t in json.load(sys.stdin) for f in t.get('scope',[])]")
 
 if echo "$WAVE_SCOPE_FILES" | grep -E '\.(go|mod|sum)$' | grep -q . || \
    echo "$WAVE_SCOPE_FILES" | grep -E '^(Makefile|cmd/|internal/)' | grep -qvE 'internal/skillsembed'; then
@@ -286,36 +286,81 @@ For each task that completed in the wave, dispatch semantic conformance review u
 
 1. **Capture per-task commit SHAs** — after all wave tasks have transitioned to done, build a mapping of task IDs to their commit ranges:
    ```bash
-   # Before processing, define TASK_COMMITS as a bash associative array or JSON object
-   # Example for sequential tasks (each on top of the previous):
+   # CRITICAL: Commits may land in git history in a different order than dispatch order.
+   # Iterating in dispatch order causes stale search ranges and contaminated review bundles.
+   # FIX: Collect all commits first, then process tasks in actual git history order.
    
-   # Start with wave base
+   # Step 1: Collect all commits in the range, ordered by git history (oldest first)
+   COMMITS_IN_RANGE=$(git rev-list --reverse "$WAVE_BASE_SHA"..HEAD)
+   
+   # Step 2: Scan all commits to identify task appearances and track task order
+   # Process commits in chronological order (oldest to newest) to determine actual task sequence
+   declare -A TASK_LAST_COMMIT      # last commit SHA for each task
+   declare -a TASK_ORDER_BY_APPEARANCE  # tasks in order of first appearance in git history
+   
+   for COMMIT in $COMMITS_IN_RANGE; do
+     COMMIT_MSG=$(git log -1 --format='%B' "$COMMIT")
+     
+     # Find which task this commit belongs to
+     # Use anchored pattern to avoid matching task IDs with shared prefixes (e.g., TASK-1 vs TASK-10)
+     FOUND_TASK=""
+     for TASK_ID in $WAVE_TASK_IDS; do
+       if echo "$COMMIT_MSG" | grep -qE "^[a-z]+\($TASK_ID\):"; then
+         FOUND_TASK="$TASK_ID"
+         break
+       fi
+     done
+     
+     if [ -n "$FOUND_TASK" ]; then
+       # Record this task's last commit (will be updated if more commits follow)
+       TASK_LAST_COMMIT["$FOUND_TASK"]="$COMMIT"
+       
+       # Record the first time we see this task (determines task order)
+       if ! [[ " ${TASK_ORDER_BY_APPEARANCE[@]} " =~ " ${FOUND_TASK} " ]]; then
+         TASK_ORDER_BY_APPEARANCE+=("$FOUND_TASK")
+       fi
+     fi
+   done
+   
+   # Step 3: Reconciliation pass — check every wave task against what was found in history.
+   # TASK_ORDER_BY_APPEARANCE only contains tasks that appeared in commits; tasks with no
+   # matching commit are silently absent. Detect them here before building ranges.
+   WAVE_TASK_COUNT=$(echo "$WAVE_TASK_IDS" | wc -w | tr -d ' ')
+   
+   for TASK_ID in $WAVE_TASK_IDS; do
+     if ! [[ " ${TASK_ORDER_BY_APPEARANCE[@]} " =~ " ${TASK_ID} " ]]; then
+       if [ "$WAVE_TASK_COUNT" -gt 1 ]; then
+         echo "ERROR: No commit found for task $TASK_ID in the wave commit range." >&2
+         echo "       Verify that the worker committed using a conventional-commit message" >&2
+         echo "       containing the task ID, e.g. feat($TASK_ID): ..., fix($TASK_ID): ..." >&2
+         exit 1
+       else
+         echo "WARNING: No commit found for task $TASK_ID; falling back to git rev-parse HEAD." >&2
+         TASK_LAST_COMMIT["$TASK_ID"]=$(git rev-parse HEAD)
+         TASK_ORDER_BY_APPEARANCE+=("$TASK_ID")
+       fi
+     fi
+   done
+   
+   # Step 4: Build per-task ranges based on actual git history order
+   # (not dispatch order). Process tasks in the order they first appear.
    TASK_BASE_SHA="$WAVE_BASE_SHA"
    
-   # For each completed task in the wave (in order):
-   for TASK_ID in $WAVE_TASK_IDS; do
-     # Find this task's final commit using git log
-     # Commits are typically labeled with task ID in the message
-     TASK_HEAD_SHA=$(git log --oneline --grep="$TASK_ID" \
-       "$TASK_BASE_SHA"..HEAD --format='%H' | head -1)
-     
-     if [ -z "$TASK_HEAD_SHA" ]; then
-       # Fallback: use HEAD if only one task in wave
-       TASK_HEAD_SHA=$(git rev-parse HEAD)
-     fi
+   for TASK_ID in "${TASK_ORDER_BY_APPEARANCE[@]}"; do
+     # Use the task's actual last commit from history scan (guaranteed present after reconciliation)
+     TASK_HEAD_SHA="${TASK_LAST_COMMIT[$TASK_ID]}"
      
      # Store mapping for this task
      # (implementation: export variable, write to temp file, or populate JSON object)
      # TASK_COMMITS["$TASK_ID"]="$TASK_BASE_SHA..$TASK_HEAD_SHA"
      
-     # Update base for next task
+     # Update base for next task (in history order, not dispatch order)
      TASK_BASE_SHA="$TASK_HEAD_SHA"
    done
    ```
    
-   **Note:** If workers commit with explicit task ID in the message (e.g., `git commit -m "feat(TASK-ID): ..."`), 
-   the grep pattern above will locate the exact commit. For more complex scenarios (e.g., multiple commits per task),
-   you may need custom logic to identify task boundaries.
+   **Note:** The grep pattern matches any conventional-commit type, e.g. `feat(TASK-ID):`, `fix(TASK-ID):`, `refactor(TASK-ID):`, `docs(TASK-ID):`, `test(TASK-ID):` — any lowercase type prefix followed by the task ID in parentheses. See reconciliation pass below for what happens when no matching commit is found.
+   For more complex scenarios (e.g., multiple commits per task, alternative commit formats), you may need custom logic to identify task boundaries.
 
 2. **Prepare per-task review bundles** — use task-specific commit ranges, not wave-combined ranges:
    ```bash
@@ -335,10 +380,13 @@ For each task that completed in the wave, dispatch semantic conformance review u
    ```
    Dispatch armature-reviewer with bundle file: $BUNDLE_FILE (pass this path; the reviewer reads the bundle from the file)
    ```
-   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). It returns a `ConformanceAssessment` JSON — capture it into a temp file:
+   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). It is a subagent whose final text output is the `ConformanceAssessment` JSON. After the subagent returns, write its output text to a temp file:
    ```bash
    RESULT_FILE=$(mktemp)
-   # capture the ConformanceAssessment JSON returned by the reviewer into $RESULT_FILE
+   # The reviewer subagent's returned text IS the ConformanceAssessment JSON.
+   # Write it directly to $RESULT_FILE, e.g.:
+   #   echo "$REVIEWER_OUTPUT" > "$RESULT_FILE"
+   # where $REVIEWER_OUTPUT is the text returned by the reviewer subagent.
    ```
 
 4. **Record the assessment** — persist the reviewer's findings:
@@ -354,21 +402,14 @@ For each task that completed in the wave, dispatch semantic conformance review u
 If workers operated in separate git worktrees or branches, merge them into the
 story feature branch now. Resolve any conflicts before proceeding.
 
-### c. Mark completed tasks merged
-
-For every task that finished in the wave, run:
-
-```bash
-arm merged --issue TASK-ID
-```
-
-This promotes each completed task from `done` to `merged` so dependent work can
-unblock cleanly before the next wave begins.
-
-### d. Wave Verification Gate
+### c. Wave Verification Gate
 
 After confirming all wave tasks are `done`, run the verification gate against the
 wave manifest recorded in step 3 before dispatch.
+
+**Do not run `arm merged` until this gate passes.** If the gate fails, tasks must
+remain in `done` (not `merged`) so the coordinator retains visibility into which
+tasks need remediation.
 
 **Terminal sanity check:**
 ```bash
@@ -427,6 +468,16 @@ the code profile and re-run.
 
 Do not proceed to the next wave or story transition if the gate is red after
 2 remediation attempts.
+
+### d. Mark completed tasks merged
+
+Once the verification gate passes, promote all completed wave tasks from `done` to `merged`:
+
+```bash
+arm merged --issue TASK-ID
+```
+
+This allows dependent work to unblock cleanly before the next wave begins.
 
 ### e. Check citation coverage
 ```bash
