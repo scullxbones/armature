@@ -119,7 +119,7 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 }
 
 func newReviewRecordCmd() *cobra.Command {
-	var issueID, assessmentFile string
+	var issueID, assessmentFile, bundleFile string
 
 	cmd := &cobra.Command{
 		Use:   "record",
@@ -129,19 +129,24 @@ from a JSON file and writing an assessment-attested operation.
 
 The assessment file should contain a valid ConformanceAssessment JSON object.
 If the assessment is a duplicate of an existing one (same bundle ID), the command
-is idempotent and returns success without writing a duplicate operation.`,
+is idempotent and returns success without writing a duplicate operation.
+
+When --bundle is provided, the command additionally validates that all assessment
+citation coordinates reference lines present in the delivery diff, and that the
+assessment contract fingerprint matches the bundle contract fingerprint.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReviewRecord(cmd, issueID, assessmentFile)
+			return runReviewRecord(cmd, issueID, assessmentFile, bundleFile)
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID (required)")
 	cmd.Flags().StringVar(&assessmentFile, "assessment", "", "assessment file path or '-' for stdin (required)")
+	cmd.Flags().StringVar(&bundleFile, "bundle", "", "review bundle file path (optional; enables diff-index citation validation)")
 
 	return cmd
 }
 
-func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile string) error {
+func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile string) error {
 	if issueID == "" {
 		return fmt.Errorf("--issue is required")
 	}
@@ -173,8 +178,7 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile string) error {
 	}
 
 	// Validate structural correctness without diff-index citation checking.
-	// Citation coordinate validation is a prepare-time concern; at record time
-	// we only verify structural integrity (bundle ID, criterion result fields).
+	// When --bundle is provided, full diff-index citation validation is performed below.
 	if errs := review.ValidateResultNoDiff(&assessment); len(errs) > 0 {
 		msg := "assessment validation errors:"
 		for _, e := range errs {
@@ -183,8 +187,42 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile string) error {
 		return fmt.Errorf("%s", msg)
 	}
 
-	// Create attestation
-	att := review.NewAttestation(&assessment)
+	// Optionally load the review bundle for fingerprint verification and diff-index validation.
+	var bundle review.ReviewBundle
+	var bundleLoaded bool
+	if bundleFile != "" {
+		bundleData, err := os.ReadFile(filepath.Clean(bundleFile))
+		if err != nil {
+			return fmt.Errorf("read bundle file: %w", err)
+		}
+		if err := json.Unmarshal(bundleData, &bundle); err != nil {
+			return fmt.Errorf("parse bundle JSON: %w", err)
+		}
+		bundleLoaded = true
+	}
+
+	// When the bundle is available, perform diff-index citation coordinate validation.
+	// This ensures every citation references a line that actually appears in the delivery diff.
+	if bundleLoaded {
+		idx, err := review.BuildDiffIndex(bundle.Delivery.Diff)
+		if err != nil {
+			return fmt.Errorf("build diff index: %w", err)
+		}
+		if errs := review.ValidateResult(&assessment, idx); len(errs) > 0 {
+			msg := "assessment citation validation errors:"
+			for _, e := range errs {
+				msg += "\n  - " + e
+			}
+			return fmt.Errorf("%s", msg)
+		}
+	}
+
+	// Create attestation, populating BaseSHA/HeadSHA from the bundle delivery when available.
+	var delivery review.Delivery
+	if bundleLoaded {
+		delivery = bundle.Delivery
+	}
+	att := review.NewAttestation(&assessment, delivery)
 
 	// Load snapshot to check for duplicates
 	ctx := currentCtx(cmd)
@@ -201,6 +239,37 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile string) error {
 		return fmt.Errorf("issue %q not found", issueID)
 	}
 	issue := *issuePtr
+
+	// Build contract from issue for coverage validation and fingerprint check.
+	var criteria []string
+	if issue.Acceptance != nil {
+		if err := json.Unmarshal(issue.Acceptance, &criteria); err != nil {
+			return fmt.Errorf("failed to parse acceptance criteria: %w", err)
+		}
+	}
+	contract := review.Contract{
+		DefinitionOfDone: issue.DefinitionOfDone,
+		Scope:            issue.Scope,
+		Acceptance:       criteria,
+	}
+
+	// Verify the assessment's contract fingerprint matches the issue's contract.
+	// A mismatch indicates the assessment was produced against a different (possibly stale
+	// or fabricated) contract and must be rejected.
+	issueContractFP := review.FingerprintContract(contract)
+	if assessment.ContractFingerprint != issueContractFP {
+		return fmt.Errorf("assessment contract fingerprint %s does not match issue contract fingerprint %s",
+			assessment.ContractFingerprint, issueContractFP)
+	}
+
+	// Validate that assessment covers all expected criteria
+	if errs := review.ValidateResultCoverage(&assessment, contract); len(errs) > 0 {
+		msg := "assessment coverage validation errors:"
+		for _, e := range errs {
+			msg += "\n  - " + e
+		}
+		return fmt.Errorf("%s", msg)
+	}
 
 	// Check for duplicate attestations
 	for _, existingAtt := range issue.AssessmentAttestations {
