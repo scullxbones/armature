@@ -192,9 +192,63 @@ func TestBuildDiffIndex_BinaryFile(t *testing.T) {
 	idx, err := review.BuildDiffIndex(diff)
 	require.NoError(t, err)
 
-	// Should skip binary files
+	// Binary files should be indexed at the path level
+	assert.True(t, idx.ContainsFile("image.png"))
+	// But should not have line-level changes
 	assert.False(t, idx.ContainsLine("image.png", 1))
+	// Text file should still work normally
 	assert.True(t, idx.ContainsLine("text.go", 2))
+}
+
+func TestBuildDiffIndex_BinaryOnlyDelivery(t *testing.T) {
+	t.Parallel()
+	diff := `Binary files a/logo.svg and b/logo.svg differ
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// Binary file should be indexed
+	assert.True(t, idx.ContainsFile("logo.svg"))
+	// Should appear in the files list
+	files := idx.Files()
+	assert.Len(t, files, 1)
+	assert.Contains(t, files, "logo.svg")
+	// But should not have line-level changes
+	assert.False(t, idx.ContainsLine("logo.svg", 1))
+}
+
+func TestBuildDiffIndex_MixedBinaryAndText(t *testing.T) {
+	t.Parallel()
+	diff := `Binary files a/image.png and b/image.png differ
+Binary files a/data.bin and b/data.bin differ
+--- a/main.go
++++ b/main.go
+@@ -1,3 +1,4 @@
+ package main
++new import
+ import "fmt"
+ func main() {
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// Both binary files should be indexed
+	assert.True(t, idx.ContainsFile("image.png"))
+	assert.True(t, idx.ContainsFile("data.bin"))
+	assert.True(t, idx.ContainsFile("main.go"))
+
+	// Binary files should not have line changes
+	assert.False(t, idx.ContainsLine("image.png", 1))
+	assert.False(t, idx.ContainsLine("data.bin", 1))
+
+	// Text file should have line changes
+	assert.True(t, idx.ContainsLine("main.go", 2))
+
+	files := idx.Files()
+	assert.Len(t, files, 3)
+	assert.Equal(t, []string{"data.bin", "image.png", "main.go"}, files)
 }
 
 func TestContainsLine_NonexistentFile(t *testing.T) {
@@ -273,4 +327,100 @@ func TestDiffIndexContainsFile_EmptyDiff(t *testing.T) {
 
 	// No files in empty diff
 	assert.False(t, idx.ContainsFile("any_file.go"))
+}
+
+func TestBuildDiffIndex_DeletedFile(t *testing.T) {
+	t.Parallel()
+	// Diff showing an entire file being deleted
+	diff := `--- a/deleted_file.go
++++ /dev/null
+@@ -1,5 +1,0 @@
+-line 1
+-line 2
+-line 3
+-line 4
+-line 5
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// The deleted file should be in the index
+	assert.True(t, idx.ContainsFile("deleted_file.go"))
+
+	// Files list should contain the deleted file
+	files := idx.Files()
+	assert.Contains(t, files, "deleted_file.go")
+}
+
+func TestBuildDiffIndex_BinaryFileDeleted(t *testing.T) {
+	t.Parallel()
+	// Diff showing a binary file being deleted
+	diff := `Binary files a/image.png and /dev/null differ
+--- a/image.png
++++ /dev/null
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// The deleted binary file should be in the index
+	assert.True(t, idx.ContainsFile("image.png"))
+}
+
+func TestBuildDiffIndex_MixedAdditionAndDeletion(t *testing.T) {
+	t.Parallel()
+	// Diff with both file addition and deletion
+	diff := `--- a/deleted.go
++++ /dev/null
+@@ -1,3 +1,0 @@
+-old line 1
+-old line 2
+-old line 3
+--- a/new.go
++++ b/new.go
+@@ -0,0 +1,2 @@
++new line 1
++new line 2
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// Both files should be in the index
+	assert.True(t, idx.ContainsFile("deleted.go"))
+	assert.True(t, idx.ContainsFile("new.go"))
+
+	files := idx.Files()
+	assert.Len(t, files, 2)
+	assert.Equal(t, []string{"deleted.go", "new.go"}, files)
+
+	// The new file should have line markers for added lines
+	assert.True(t, idx.ContainsLine("new.go", 1))
+	assert.True(t, idx.ContainsLine("new.go", 2))
+}
+
+func TestBuildDiffIndex_DeletedFileWithContext(t *testing.T) {
+	t.Parallel()
+	// This is unusual but valid - deleted file with lines shown
+	diff := `--- a/partial.go
++++ /dev/null
+@@ -1,10 +1,0 @@
+-package main
+-
+-func main() {
+-	fmt.Println("hello")
+-}
+-
+-func helper() {
+-	// helper
+-}
+-
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// The deleted file should be in the index
+	assert.True(t, idx.ContainsFile("partial.go"))
 }
