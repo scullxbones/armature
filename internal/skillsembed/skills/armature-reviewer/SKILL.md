@@ -121,10 +121,16 @@ assigning status.
   "rationale": "Explain why this status was assigned",
   "citations": [
     {"path": "pkg/parser/parser.go", "line": 42},
-    {"path": "pkg/parser/parser_test.go", "line": 120}
+    {"path": "pkg/parser/parser_test.go", "line": 120},
+    {"path": "pkg/parser/types.go"}
   ],
   "missing_evidence": "Only if status is not_satisfied, partially_satisfied, or indeterminate AND no citations present"
 }
+```
+
+> **Note:** `line` is optional. Omitting it (or setting it to `0`) creates a **path-level citation** that validates against file presence in the diff rather than a specific line number. Use path-level citations when the evidence spans an entire file or no specific line is more relevant than another.
+
+```json
 ```
 
 ### 3. Evaluate Each Acceptance Criterion
