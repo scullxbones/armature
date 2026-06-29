@@ -100,6 +100,12 @@ func (d *DiffIndex) ContainsLine(file string, line int) bool {
 	return fileLines[line]
 }
 
+// ContainsFile returns true if the given file path appears in the diff index.
+func (d *DiffIndex) ContainsFile(file string) bool {
+	_, exists := d.fileLines[file]
+	return exists
+}
+
 // Files returns the list of files present in the diff index, sorted alphabetically.
 func (d *DiffIndex) Files() []string {
 	files := make([]string, 0, len(d.fileLines))

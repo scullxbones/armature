@@ -236,3 +236,41 @@ func TestFiles_Sorted(t *testing.T) {
 	// Files should be returned in sorted order
 	assert.Equal(t, []string{"a.go", "m.go", "z.go"}, files)
 }
+
+func TestDiffIndexContainsFile(t *testing.T) {
+	t.Parallel()
+	diff := `--- a/file1.go
++++ b/file1.go
+@@ -1,3 +1,4 @@
++new line
+ line 1
+ line 2
+ line 3
+--- a/file2.go
++++ b/file2.go
+@@ -5,3 +5,4 @@
+ context
++added line
+ more context
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	// Files that are in the diff should return true
+	assert.True(t, idx.ContainsFile("file1.go"))
+	assert.True(t, idx.ContainsFile("file2.go"))
+
+	// Files that are not in the diff should return false
+	assert.False(t, idx.ContainsFile("file3.go"))
+	assert.False(t, idx.ContainsFile("nonexistent.go"))
+}
+
+func TestDiffIndexContainsFile_EmptyDiff(t *testing.T) {
+	t.Parallel()
+	idx, err := review.BuildDiffIndex("")
+	require.NoError(t, err)
+
+	// No files in empty diff
+	assert.False(t, idx.ContainsFile("any_file.go"))
+}

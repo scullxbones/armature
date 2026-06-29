@@ -328,6 +328,16 @@ func TestReviewBundle_Valid(t *testing.T) {
 	}
 }
 
+func TestCriterionResult_MissingStatus(t *testing.T) {
+	t.Parallel()
+	// Test that JSON with missing "status" key is rejected.
+	input := `{"id":"definition_of_done","rationale":"test"}`
+	var result review.CriterionResult
+	err := json.Unmarshal([]byte(input), &result)
+	assert.Error(t, err, "expected error when status key is missing")
+	assert.Contains(t, err.Error(), "missing required field")
+}
+
 func TestConformanceAssessment_Valid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

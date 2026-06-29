@@ -161,6 +161,27 @@ type CriterionResult struct {
 	MissingEvidence string `json:"missing_evidence,omitempty"`
 }
 
+// UnmarshalJSON detects a missing "status" key and returns an error. This prevents
+// silent acceptance of malformed results where the status field is omitted entirely.
+func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
+	// detect absent key via raw map
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["status"]; !ok {
+		return fmt.Errorf("criterion result: missing required field \"status\"")
+	}
+	// use type alias to avoid infinite recursion
+	type Alias CriterionResult
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*cr = CriterionResult(alias)
+	return nil
+}
+
 // Valid validates that the CriterionResult is well-formed.
 func (cr CriterionResult) Valid() error {
 	if cr.ID == "" {

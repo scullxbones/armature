@@ -540,3 +540,80 @@ func TestValidateResultCoverage_EmptyDefinitionOfDone(t *testing.T) {
 	errs := review.ValidateResultCoverage(assessment, contract)
 	assert.Empty(t, errs, "expected no validation errors when definition_of_done is empty")
 }
+
+func TestValidateResult_PathOnlyCitation_FileInDiff(t *testing.T) {
+	t.Parallel()
+	// A citation with only a Path (Line==0, omitted from JSON) should validate successfully
+	// if the file is in the diff
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "file was modified",
+				Citations: []review.Citation{
+					{Path: "internal/review/test.go", Line: 0}, // Path-only citation
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	diff := `--- a/internal/review/test.go
++++ b/internal/review/test.go
+@@ -5,7 +5,7 @@ package review
+ func TestFunc() {
+ 	x := 1
+-	y := 2
++	y := 3
+ 	return x + y
+ }
+ extra line
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	errs := review.ValidateResult(assessment, idx)
+	assert.Len(t, errs, 0, "Expected no validation errors for path-only citation with file in diff")
+}
+
+func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
+	t.Parallel()
+	// A citation with only a Path (Line==0) should fail validation
+	// if the file is not in the diff
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "file was modified",
+				Citations: []review.Citation{
+					{Path: "nonexistent.go", Line: 0}, // Path-only citation for file not in diff
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	diff := `--- a/internal/review/test.go
++++ b/internal/review/test.go
+@@ -1,2 +1,3 @@
++new line
+ line 1
+ line 2
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	errs := review.ValidateResult(assessment, idx)
+	assert.True(t, len(errs) > 0, "Expected validation errors for path-only citation with file not in diff")
+	assert.True(t, containsError(errs, "nonexistent.go"), "Expected file reference in error message")
+}
