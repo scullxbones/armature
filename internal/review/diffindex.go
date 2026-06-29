@@ -15,6 +15,7 @@ type DiffIndex struct {
 
 // BuildDiffIndex parses a unified diff string into a DiffIndex.
 // It tracks which lines in each file were added or modified (lines with + prefix in output).
+// It also tracks deleted files (where +++ /dev/null appears).
 func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 	idx := &DiffIndex{
 		fileLines: make(map[string]map[int]bool),
@@ -28,28 +29,72 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 	var currentFile string
 	var currentLineNum int // Current line number in the new file
 	var inHunk bool
+	var lastOldFile string // Track the last --- a/path for deleted files
 
-	// Pattern to match file headers: "--- a/path" and "+++ b/path"
-	fileHeaderRegex := regexp.MustCompile(`^\+\+\+ b/(.+)$`)
+	// Pattern to match old file header: "--- a/path"
+	oldFileHeaderRegex := regexp.MustCompile(`^--- a/(.+)$`)
+	// Pattern to match new file header: "+++ b/path" or "+++ /dev/null" (for deletions)
+	newFileHeaderRegex := regexp.MustCompile(`^\+\+\+ (?:b/(.+)|/dev/null)$`)
+	// Pattern to match binary file lines: "Binary files a/path and b/path differ"
+	// Handles: modified (a/path and b/path), deleted (a/path and /dev/null), added (/dev/null and b/path)
+	binaryFileRegex := regexp.MustCompile(`^Binary files (.+) and (.+) differ$`)
 	// Pattern to match hunk headers: "@@ -old_start,old_count +new_start,new_count @@"
 	hunkHeaderRegex := regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Check for file header
-		if fileHeaderMatch := fileHeaderRegex.FindStringSubmatch(line); fileHeaderMatch != nil {
-			currentFile = fileHeaderMatch[1]
+		// Check for old file header (--- a/path)
+		if oldFileHeaderMatch := oldFileHeaderRegex.FindStringSubmatch(line); oldFileHeaderMatch != nil {
+			lastOldFile = oldFileHeaderMatch[1]
+			continue
+		}
+
+		// Check for binary file line
+		if binaryFileMatch := binaryFileRegex.FindStringSubmatch(line); binaryFileMatch != nil {
+			// Extract the file path from "Binary files a/path and b/path differ"
+			// Handle modified (a/path and b/path), deleted (a/path and /dev/null), added (/dev/null and b/path)
+			firstPath := binaryFileMatch[1]
+			secondPath := binaryFileMatch[2]
+
+			var binaryFilePath string
+			// Determine which path to use based on prefixes
+			switch {
+			case strings.HasPrefix(secondPath, "b/"):
+				// For modified files: use b/ path
+				binaryFilePath = strings.TrimPrefix(secondPath, "b/")
+			case strings.HasPrefix(firstPath, "a/"):
+				// For deleted or added files: use a/ path if available
+				binaryFilePath = strings.TrimPrefix(firstPath, "a/")
+			case secondPath != "/dev/null":
+				// For added files: use b/ path
+				binaryFilePath = strings.TrimPrefix(secondPath, "b/")
+			}
+
+			if binaryFilePath != "" {
+				inHunk = false
+				// Initialize the file's line set if not already present
+				if _, exists := idx.fileLines[binaryFilePath]; !exists {
+					idx.fileLines[binaryFilePath] = make(map[int]bool)
+				}
+			}
+			continue
+		}
+
+		// Check for new file header (file addition, modification, or deletion)
+		if newFileHeaderMatch := newFileHeaderRegex.FindStringSubmatch(line); newFileHeaderMatch != nil {
+			if newFileHeaderMatch[1] != "" {
+				// +++ b/path (addition or modification)
+				currentFile = newFileHeaderMatch[1]
+			} else {
+				// +++ /dev/null (deletion - use the old filename)
+				currentFile = lastOldFile
+			}
 			inHunk = false
 			// Initialize the file's line set if not already present
 			if _, exists := idx.fileLines[currentFile]; !exists {
 				idx.fileLines[currentFile] = make(map[int]bool)
 			}
-			continue
-		}
-
-		// Skip binary file lines
-		if strings.HasPrefix(line, "Binary files") {
 			continue
 		}
 
