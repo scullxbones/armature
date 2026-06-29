@@ -66,9 +66,6 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 			case strings.HasPrefix(firstPath, "a/"):
 				// For deleted or added files: use a/ path if available
 				binaryFilePath = strings.TrimPrefix(firstPath, "a/")
-			case secondPath != "/dev/null":
-				// For added files: use b/ path
-				binaryFilePath = strings.TrimPrefix(secondPath, "b/")
 			}
 
 			if binaryFilePath != "" {

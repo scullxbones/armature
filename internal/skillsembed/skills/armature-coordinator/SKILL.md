@@ -337,9 +337,9 @@ For each task that completed in the wave, dispatch semantic conformance review u
 
 4. **Record the assessment** — persist the reviewer's findings:
    ```bash
-   arm review record --issue TASK-ID --assessment <result.json>
+   arm review record --issue TASK-ID --assessment <result.json> --bundle "$REVIEW_BUNDLE"
    ```
-   This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated.
+   This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass `--bundle "$REVIEW_BUNDLE"` so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
 
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 
