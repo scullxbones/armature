@@ -201,6 +201,24 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		bundleLoaded = true
 	}
 
+	// When the bundle is available, verify that the assessment's bundle_id and delivery_fingerprint
+	// match the loaded bundle. This ensures the assessment was produced for this specific delivery
+	// and prevents mismatched assessments from being recorded.
+	if bundleLoaded {
+		if assessment.BundleID != bundle.BundleID {
+			return fmt.Errorf("assessment bundle_id %s does not match bundle bundle_id %s",
+				assessment.BundleID, bundle.BundleID)
+		}
+		if assessment.DeliveryFingerprint != bundle.Fingerprints.Delivery {
+			return fmt.Errorf("assessment delivery_fingerprint %s does not match bundle delivery_fingerprint %s",
+				assessment.DeliveryFingerprint, bundle.Fingerprints.Delivery)
+		}
+		if assessment.ContractFingerprint != bundle.Fingerprints.Contract {
+			return fmt.Errorf("assessment contract_fingerprint %s does not match bundle contract_fingerprint %s",
+				assessment.ContractFingerprint, bundle.Fingerprints.Contract)
+		}
+	}
+
 	// When the bundle is available, perform diff-index citation coordinate validation.
 	// This ensures every citation references a line that actually appears in the delivery diff.
 	if bundleLoaded {

@@ -25,8 +25,16 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 
 		// Validate citations reference lines present in the diff
 		for _, citation := range result.Citations {
-			if !idx.ContainsLine(citation.Path, citation.Line) {
-				errs = append(errs, fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path, citation.Line))
+			// If Line is omitted (0), validate that the file is in the diff
+			if citation.Line == 0 {
+				if !idx.ContainsFile(citation.Path) {
+					errs = append(errs, fmt.Sprintf("criterion result %s: citation references %s which is not in diff", result.ID, citation.Path))
+				}
+			} else {
+				// If Line is specified, validate the specific line
+				if !idx.ContainsLine(citation.Path, citation.Line) {
+					errs = append(errs, fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path, citation.Line))
+				}
 			}
 		}
 	}
