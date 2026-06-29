@@ -323,23 +323,29 @@ For each task that completed in the wave, dispatch semantic conformance review u
    TASK_BASE="<task's base commit from step 1>"
    TASK_HEAD="<task's head commit from step 1>"
    
-   REVIEW_BUNDLE=$(arm review prepare --issue TASK-ID \
-     --base "$TASK_BASE" --head "$TASK_HEAD")
+   BUNDLE_FILE=$(mktemp)
+   arm review prepare --issue TASK-ID \
+     --base "$TASK_BASE" --head "$TASK_HEAD" \
+     --output "$BUNDLE_FILE"
    ```
    
-   This creates a JSON bundle containing the issue's acceptance criteria, scope, and the diff of **only** that task's changed files.
+   This creates a JSON bundle file containing the issue's acceptance criteria, scope, and the diff of **only** that task's changed files. The bundle is written to `$BUNDLE_FILE` for later use in both the reviewer dispatch and assessment recording steps.
 
-3. **Dispatch the armature-reviewer agent** — pass the task-scoped bundle to a reviewer subagent:
+3. **Dispatch the armature-reviewer agent** — pass the task-scoped bundle file path to a reviewer subagent:
    ```
-   Dispatch armature-reviewer with input: $REVIEW_BUNDLE
+   Dispatch armature-reviewer with bundle file: $BUNDLE_FILE (pass this path; the reviewer reads the bundle from the file)
    ```
-   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). Returns a `ConformanceAssessment` with a structured rating (green/yellow/red).
+   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). It returns a `ConformanceAssessment` JSON — capture it into a temp file:
+   ```bash
+   RESULT_FILE=$(mktemp)
+   # capture the ConformanceAssessment JSON returned by the reviewer into $RESULT_FILE
+   ```
 
 4. **Record the assessment** — persist the reviewer's findings:
    ```bash
-   arm review record --issue TASK-ID --assessment <result.json> --bundle "$REVIEW_BUNDLE"
+   arm review record --issue TASK-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
    ```
-   This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass `--bundle "$REVIEW_BUNDLE"` so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
+   This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass `--bundle "$BUNDLE_FILE"` (the file path, not JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
 
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 

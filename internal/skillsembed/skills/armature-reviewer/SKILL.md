@@ -3,8 +3,8 @@ name: armature-reviewer
 description: >
   Use when receiving a ReviewBundle from arm review prepare and producing a
   ConformanceAssessment JSON. Evaluates each criterion from the contract against
-  the delivery diff, records evidence as citations, and calls arm review record
-  to persist results.
+  the delivery diff, records evidence as citations, and returns the assessment
+  JSON to the coordinator (which records it via arm review record).
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -12,7 +12,8 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 
 The Reviewer evaluates a prepared ReviewBundle against the contract requirements
 and delivery diff. It produces a ConformanceAssessment JSON with criterion-level
-results, citations, and ratings, then records the assessment durably via `arm review record`.
+results, citations, and ratings, then returns the JSON to the coordinator.
+The coordinator is responsible for recording the assessment via `arm review record`.
 
 ## Prerequisites
 
@@ -26,7 +27,7 @@ by the Coordinator or harness via `arm review prepare`.
 ## The Review Workflow
 
 ```
-ReviewBundle (JSON)
+ReviewBundle file path (from coordinator)
     ↓
 Evaluate each criterion against delivery
     ↓
@@ -36,7 +37,9 @@ Assign status (satisfied, partially_satisfied, not_satisfied, indeterminate)
     ↓
 Produce ConformanceAssessment JSON
     ↓
-arm review record --issue ISSUE-ID --assessment assessment.json
+Return assessment JSON to coordinator
+    ↓
+Coordinator: arm review record --issue ISSUE-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
     ↓
 AssessmentAttestation (durable record)
 ```
@@ -194,19 +197,14 @@ Assemble all criterion results into a ConformanceAssessment:
 - `results` must include one result per criterion (definition_of_done + all acceptance criteria)
 - Each result must pass `CriterionResult.Valid()` — see `references/rubric.md` for details
 
-### 6. Record the Assessment
+### 6. Return the ConformanceAssessment
 
-Write the ConformanceAssessment JSON to a file (e.g., `assessment.json`), then record it:
+Output the ConformanceAssessment JSON to stdout (or return it to the coordinator). Do **not** call `arm review record` — recording is the coordinator's responsibility. The coordinator passes the assessment to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"` after receiving it, so the fingerprint validation is bound to the exact bundle it dispatched.
 
 ```bash
-arm review record --issue TASK-42 --assessment assessment.json
+# Output the assessment JSON so the coordinator can capture it:
+cat assessment.json
 ```
-
-This command:
-- Validates the ConformanceAssessment structure
-- Computes the rating (Green/Yellow/Red)
-- Persists the assessment as an AssessmentAttestation in `.armature/review/`
-- Returns the rating for logging or downstream use
 
 ---
 
@@ -260,30 +258,24 @@ See `references/rubric.md` for detailed guidance on:
 
 ---
 
-## Recording Results
+## Returning Results to the Coordinator
 
-After producing the ConformanceAssessment JSON, record it:
-
-```bash
-arm review record --issue TASK-42 --assessment assessment.json
-```
+After producing the ConformanceAssessment JSON, return it to the coordinator. Do **not** call `arm review record` — that is the coordinator's responsibility. The coordinator records the assessment with `--bundle "$BUNDLE_FILE"` so fingerprint validation is bound to the exact bundle it prepared.
 
 **Example Workflow:**
 
 ```bash
-# 1. Receive ReviewBundle (from coordinator or harness)
-cat bundle.json | jq .
+# 1. Receive ReviewBundle file path (from coordinator)
+# The coordinator passes: $BUNDLE_FILE
 
-# 2. Review and evaluate (manual or AI-driven)
+# 2. Review and evaluate
 # ... create assessment.json ...
 
-# 3. Record the assessment
-arm review record --issue TASK-42 --assessment assessment.json
+# 3. Output the assessment JSON for the coordinator to capture
+cat assessment.json
 
-# Output:
-# rating: green
-# bundle_id: bundle-abc123
-# results_fingerprint: sha256-results-hash
+# The coordinator then runs:
+# arm review record --issue TASK-42 --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
 ```
 
 The recorded assessment is durable and can be queried later:
@@ -341,14 +333,14 @@ arm review show TASK-42
 ## Command Reference
 
 ```bash
-# Prepare a bundle (usually done by coordinator, not reviewer)
+# Prepare a bundle (done by coordinator, not reviewer)
 arm review prepare --issue TASK-42 --title "Implement feature X" \
   --scope "pkg/feature.go" "pkg/feature_test.go" \
   --criteria "Feature must compile" "All tests pass" \
   --base abc123 --head def456
 
-# Record an assessment
-arm review record --issue TASK-42 --assessment assessment.json
+# Record an assessment (done by coordinator, not reviewer)
+arm review record --issue TASK-42 --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
 
 # Display recorded assessment
 arm review show TASK-42
