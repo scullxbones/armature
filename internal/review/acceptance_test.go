@@ -69,9 +69,50 @@ func TestParseAcceptanceCriteria_NotAnArray(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestParseAcceptanceCriteria_StructuredObjectMissingDescriptionAndText(t *testing.T) {
+func TestParseAcceptanceCriteria_TypeOnly(t *testing.T) {
 	t.Parallel()
 	input := json.RawMessage(`[{"type":"test_passes"}]`)
-	_, err := review.ParseAcceptanceCriteria(input)
-	require.Error(t, err)
+	criteria, err := review.ParseAcceptanceCriteria(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test_passes"}, criteria)
+}
+
+func TestParseAcceptanceCriteria_TypePatternObject(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`[{"type":"test_passes","pattern":"*.go"}]`)
+	criteria, err := review.ParseAcceptanceCriteria(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test_passes: *.go"}, criteria)
+}
+
+func TestParseAcceptanceCriteria_TypeCmdObject(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`[{"type":"test_passes","cmd":"make check"}]`)
+	criteria, err := review.ParseAcceptanceCriteria(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test_passes: make check"}, criteria)
+}
+
+func TestParseAcceptanceCriteria_TypePathObject(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`[{"type":"no_regression","path":"tests/auth/**"}]`)
+	criteria, err := review.ParseAcceptanceCriteria(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"no_regression: tests/auth/**"}, criteria)
+}
+
+func TestParseAcceptanceCriteria_TypeOtherFields(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`[{"type":"function_exists","file":"src/auth/callback.ts","name":"handleCallback"}]`)
+	criteria, err := review.ParseAcceptanceCriteria(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"function_exists: src/auth/callback.ts, handleCallback"}, criteria)
+}
+
+func TestParseAcceptanceCriteria_NoRecognizableFields(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`[{"foo":"bar"}]`)
+	criteria, err := review.ParseAcceptanceCriteria(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{`{"foo":"bar"}`}, criteria)
 }

@@ -3,6 +3,8 @@ package review
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 // ParseAcceptanceCriteria normalizes acceptance criteria from either plain strings
@@ -12,8 +14,9 @@ import (
 // 2. Structured objects: [{"description":"test 1"}, {"text":"test 2"}]
 //
 // For structured objects, it extracts the "description" field first, then falls back
-// to "text" field if "description" is not present. At least one of these fields
-// must be present and non-empty.
+// to "text" field if "description" is not present. If neither is present, it renders
+// the canonical type-based acceptance forms documented in docs/design/architecture.md,
+// e.g. {"type":"test_passes","pattern":"*.go"} -> "test_passes: *.go".
 func ParseAcceptanceCriteria(input json.RawMessage) ([]string, error) {
 	// Handle nil or empty input
 	if len(input) == 0 {
@@ -53,16 +56,56 @@ func ParseAcceptanceCriteria(input json.RawMessage) ([]string, error) {
 			}
 		}
 
-		// Error if neither field exists or both are empty
+		// Fall back to rendering a canonical type-based acceptance object,
+		// e.g. {"type":"test_passes","pattern":"*.go"} -> "test_passes: *.go".
 		if text == "" {
-			return nil, fmt.Errorf(
-				"acceptance criteria object at index %d must have non-empty 'description' or 'text' field",
-				i,
-			)
+			text = renderTypedCriterion(obj, i)
 		}
 
 		criteria = append(criteria, text)
 	}
 
 	return criteria, nil
+}
+
+// renderTypedCriterion renders an acceptance object that uses the canonical
+// type-based form (see docs/design/architecture.md), e.g.
+// {"type":"test_passes","pattern":"tests/auth/callback.test.ts"}. It produces
+// "<type>: <field values>" with non-type field values sorted by key, or just
+// "<type>" when no other fields are present. If the object has no usable "type"
+// field, it falls back to the compact JSON encoding of the object.
+func renderTypedCriterion(obj map[string]interface{}, index int) string {
+	typeStr := ""
+	if t, ok := obj["type"].(string); ok {
+		typeStr = t
+	}
+
+	// Collect non-type field values in deterministic (alphabetical) key order.
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		if k == "type" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	values := make([]string, 0, len(keys))
+	for _, k := range keys {
+		values = append(values, fmt.Sprintf("%v", obj[k]))
+	}
+
+	switch {
+	case typeStr != "" && len(values) > 0:
+		return typeStr + ": " + strings.Join(values, ", ")
+	case typeStr != "":
+		return typeStr
+	default:
+		// No recognizable fields: fall back to the JSON encoding so the
+		// criterion is still surfaced rather than dropped.
+		if encoded, err := json.Marshal(obj); err == nil {
+			return string(encoded)
+		}
+		return fmt.Sprintf("acceptance criterion at index %d", index)
+	}
 }
