@@ -1,13 +1,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/scullxbones/armature/internal/adapters"
-	ctxpkg "github.com/scullxbones/armature/internal/context"
+	"github.com/scullxbones/armature/internal/context"
+	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
@@ -32,6 +32,8 @@ func newRenderContextCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
+			issuesDir := appCtx.IssuesDir
+
 			var state *materialize.State
 			if rcAt != "" {
 				// Time-travel: replay ops as they existed at the given commit SHA.
@@ -39,7 +41,7 @@ func newRenderContextCmd() *cobra.Command {
 				if appCtx.Mode == "dual-branch" && appCtx.WorktreePath != "" {
 					opsRepoPath = appCtx.WorktreePath
 				}
-				gc := adapters.New(opsRepoPath)
+				gc := git.New(opsRepoPath)
 				opsPrefix := filepath.Join(".armature", "ops")
 				var err error
 				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix)
@@ -47,38 +49,34 @@ func newRenderContextCmd() *cobra.Command {
 					return fmt.Errorf("materialize at %s: %w", rcAt, err)
 				}
 			} else {
-				snap, snapErr := newSnapshotStore(appCtx).Load(context.Background())
-				if snapErr != nil {
-					return fmt.Errorf("load snapshot: %w", snapErr)
+				_, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch")
+				if err != nil {
+					return fmt.Errorf("materialize: %w", err)
 				}
-				for _, w := range snap.Warnings {
-					_, _ = fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+				state, err = loadStateFromStateDir(appCtx.StateDir)
+				if err != nil {
+					return fmt.Errorf("load state: %w", err)
 				}
-				state = snap.State
 			}
 
-			// Create an OSFileReader for file access
-			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
-			reader := &ctxpkg.OSFileReader{Root: repoRoot}
-
-			ctx, err := ctxpkg.Assemble(rcIssue, state, reader)
+			ctx, err := context.Assemble(rcIssue, appCtx.StateDir, state)
 			if err != nil {
 				return fmt.Errorf("assemble context: %w", err)
 			}
 
 			if !rcRaw {
-				ctx = ctxpkg.Truncate(ctx, rcBudget)
+				ctx = context.Truncate(ctx, rcBudget)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				out, err := ctxpkg.RenderAgent(ctx)
+				out, err := context.RenderAgent(ctx)
 				if err != nil {
 					return err
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), out)
 			} else {
-				_, _ = fmt.Fprint(cmd.OutOrStdout(), ctxpkg.RenderHuman(ctx))
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), context.RenderHuman(ctx))
 			}
 
 			return nil
@@ -90,4 +88,33 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
 	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
 	return cmd
+}
+
+// loadStateFromStateDir reads all materialized issue JSON files and builds a State.
+func loadStateFromStateDir(stateDir string) (*materialize.State, error) {
+	stateIssuesDir := filepath.Join(stateDir, "issues")
+	state := materialize.NewState()
+
+	entries, err := os.ReadDir(stateIssuesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return state, nil
+		}
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(stateIssuesDir, entry.Name())
+		issue, err := materialize.LoadIssue(path)
+		if err != nil {
+			continue
+		}
+		issueCopy := issue
+		state.Issues[issue.ID] = &issueCopy
+	}
+
+	return state, nil
 }

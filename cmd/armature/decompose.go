@@ -1,15 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/decompose"
-	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
@@ -83,7 +80,7 @@ plan, or --schema to view the JSON schema.`,
 									},
 									"type": map[string]any{
 										"type":        "string",
-										"enum":        issuetype.All(),
+										"enum":        []string{"epic", "story", "task"},
 										"description": "Issue type",
 									},
 									"parent": map[string]any{
@@ -93,12 +90,6 @@ plan, or --schema to view the JSON schema.`,
 									"scope": map[string]any{
 										"type":        "string",
 										"description": "Comma-separated file paths this issue is scoped to — stored as a single string, not an array",
-									},
-									"context_files": map[string]any{
-										"type":        "array",
-										"description": "Stable reference files to render before work; does not expand write scope",
-										"items":       map[string]any{"type": "string"},
-										"nullable":    true,
 									},
 									"acceptance": map[string]any{
 										"type":        "array",
@@ -149,18 +140,15 @@ plan, or --schema to view the JSON schema.`,
 							ID:    "STORY-001",
 							Title: "User authentication story",
 							Type:  "story",
-							Notes: []string{},
 						},
 						{
-							ID:           "TASK-001",
-							Title:        "Implement login endpoint",
-							Type:         "task",
-							Parent:       "STORY-001",
-							ContextFiles: []string{"docs/auth-architecture.md"},
-							Priority:     "high",
-							DoD:          "Login endpoint returns JWT on valid credentials",
-							BlockedBy:    []string{},
-							Notes:        []string{},
+							ID:        "TASK-001",
+							Title:     "Implement login endpoint",
+							Type:      "task",
+							Parent:    "STORY-001",
+							Priority:  "high",
+							DoD:       "Login endpoint returns JWT on valid credentials",
+							BlockedBy: []string{},
 						},
 						{
 							ID:        "TASK-002",
@@ -170,7 +158,6 @@ plan, or --schema to view the JSON schema.`,
 							Priority:  "medium",
 							DoD:       "Integration tests cover happy path and error cases",
 							BlockedBy: []string{"TASK-001"},
-							Notes:     []string{},
 						},
 					},
 				}
@@ -193,15 +180,9 @@ plan, or --schema to view the JSON schema.`,
 				return err
 			}
 
-			// Load snapshot to get materialized state
-			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			state := snap.State
-			if state == nil {
-				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
+				return err
 			}
 
 			applyOpts := decompose.ApplyOptions{
@@ -228,7 +209,7 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.ApplyPlanWithOptions(plan, opsDir, workerID, state, applyOpts, clock.System)
+			count, err := decompose.ApplyPlanWithOptions(plan, opsDir, workerID, state, applyOpts)
 			if err != nil {
 				return err
 			}
@@ -263,15 +244,9 @@ func newDecomposeRevertCmd() *cobra.Command {
 				return err
 			}
 
-			// Load snapshot to get materialized state
-			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			state := snap.State
-			if state == nil {
-				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
+				return err
 			}
 
 			if dryRunFlag {
@@ -292,7 +267,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.RevertPlanWithOptions(plan, opsDir, workerID, state, clock.System)
+			count, err := decompose.RevertPlan(plan, opsDir, workerID, state)
 			if err != nil {
 				return err
 			}
@@ -366,7 +341,7 @@ func newDecomposeContextCmd() *cobra.Command {
 			}
 
 			if outputFlag != "" {
-				return os.WriteFile(outputFlag, out, 0o600)
+				return os.WriteFile(outputFlag, out, 0o644)
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 			return nil

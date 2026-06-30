@@ -1,10 +1,8 @@
 package context
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,25 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// emptyFileReader is a test FileReader that returns an error for all files.
-type emptyFileReader struct{}
-
-func (f *emptyFileReader) ReadFile(relPath string) ([]byte, error) {
-	return nil, fmt.Errorf("file not found: %s", relPath)
-}
-
-// realFileReader reads files from the filesystem.
-type realFileReader struct {
-	root string
-}
-
-func (r *realFileReader) ReadFile(relPath string) ([]byte, error) {
-	fullPath := filepath.Join(r.root, relPath)
-	return os.ReadFile(fullPath)
-}
+const stateDir = "/tmp/fake"
 
 func TestAssembleContext_CoreSpec(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:               "TST-001",
@@ -48,7 +30,7 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 		DecisionRefs:     []string{},
 	}
 
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 	require.NotEmpty(t, ctx.Layers)
 
@@ -63,7 +45,6 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 }
 
 func TestAssembleContext_BlockerOutcomes(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-B"] = &materialize.Issue{
 		ID:           "TST-B",
@@ -87,7 +68,7 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-A", stateDir, state)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -102,7 +83,6 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 }
 
 func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-B"] = &materialize.Issue{
 		ID:           "TST-B",
@@ -126,7 +106,7 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-A", stateDir, state)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -143,7 +123,6 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 }
 
 func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-B"] = &materialize.Issue{
 		ID:           "TST-B",
@@ -167,7 +146,7 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-A", stateDir, state)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -186,7 +165,6 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 }
 
 func TestAssembleContext_ParentChain(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-P"] = &materialize.Issue{
 		ID:           "TST-P",
@@ -210,7 +188,7 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-C", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-C", stateDir, state)
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -225,7 +203,6 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 }
 
 func TestAssembleContext_Truncation(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -250,15 +227,13 @@ func TestAssembleContext_Truncation(t *testing.T) {
 // TC-003: Tests for buildSnippets, buildDecisions, buildNotes, buildSiblingOutcomes
 
 func TestAssembleContext_UnknownIssue(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
-	_, err := Assemble("MISSING-001", state, &emptyFileReader{})
+	_, err := Assemble("MISSING-001", stateDir, state)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "MISSING-001")
 }
 
 func TestBuildSnippets_WithContext(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:           "TST-001",
@@ -271,7 +246,8 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var snippetsLayer *Layer
@@ -286,109 +262,7 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 	assert.Contains(t, snippetsLayer.Content, "value")
 }
 
-func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte("# Guide\nuse this"), 0644))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "docs"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "docs", "design.md"), []byte("design context"), 0644))
-
-	state := materialize.NewState()
-	state.Issues["TST-001"] = &materialize.Issue{
-		ID:           "TST-001",
-		Title:        "Test",
-		Type:         "task",
-		Status:       "open",
-		ContextFiles: []string{"guide.md", "docs/design.md"},
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-	ctx, err := Assemble("TST-001", state, &realFileReader{root: dir})
-	require.NoError(t, err)
-
-	var contextFilesLayer *Layer
-	for i := range ctx.Layers {
-		if ctx.Layers[i].Name == "context_files" {
-			contextFilesLayer = &ctx.Layers[i]
-			break
-		}
-	}
-	require.NotNil(t, contextFilesLayer)
-	assert.Contains(t, contextFilesLayer.Content, "## Context Files")
-	assert.Contains(t, contextFilesLayer.Content, "guide.md")
-	assert.Contains(t, contextFilesLayer.Content, "# Guide")
-	assert.Contains(t, contextFilesLayer.Content, "docs/design.md")
-	assert.Contains(t, contextFilesLayer.Content, "design context")
-	assert.NotContains(t, ctx.Layers[0].Content, "guide.md", "context files must stay separate from write scope")
-}
-
-func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	state := materialize.NewState()
-	state.Issues["TST-001"] = &materialize.Issue{
-		ID:           "TST-001",
-		Title:        "Test",
-		Type:         "task",
-		Status:       "open",
-		ContextFiles: []string{"docs/missing.md"},
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-
-	ctx, err := Assemble("TST-001", state, &realFileReader{root: dir})
-	require.NoError(t, err)
-
-	for _, l := range ctx.Layers {
-		if l.Name == "context_files" {
-			assert.Contains(t, l.Content, "docs/missing.md")
-			assert.Contains(t, l.Content, "(missing:")
-		}
-	}
-}
-
-func TestAssemble_ResolvesRepoRootFromNestedStateDir(t *testing.T) {
-	t.Parallel()
-	repoRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, ".armature", "state", "worker-1"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, "guide.md"), []byte("repo-root context"), 0644))
-
-	state := materialize.NewState()
-	state.Issues["TST-001"] = &materialize.Issue{
-		ID:           "TST-001",
-		Title:        "Test",
-		Type:         "task",
-		Status:       "open",
-		ContextFiles: []string{"guide.md"},
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-	stateDir := filepath.Join(repoRoot, ".armature", "state", "worker-1")
-	inferredRoot := InferRepoRoot(stateDir)
-	reader := &OSFileReader{Root: inferredRoot}
-
-	ctx, err := Assemble("TST-001", state, reader)
-	require.NoError(t, err)
-
-	var contextFilesLayer *Layer
-	for i := range ctx.Layers {
-		if ctx.Layers[i].Name == "context_files" {
-			contextFilesLayer = &ctx.Layers[i]
-			break
-		}
-	}
-	require.NotNil(t, contextFilesLayer)
-	assert.Contains(t, contextFilesLayer.Content, "repo-root context")
-}
-
 func TestBuildSnippets_InvalidJSON(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:           "TST-001",
@@ -401,7 +275,8 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -412,7 +287,6 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 }
 
 func TestBuildDecisions(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:     "TST-001",
@@ -428,7 +302,7 @@ func TestBuildDecisions(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var decLayer *Layer
@@ -445,7 +319,6 @@ func TestBuildDecisions(t *testing.T) {
 }
 
 func TestBuildNotes_WithNotes(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:     "TST-001",
@@ -462,7 +335,7 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -478,7 +351,6 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 }
 
 func TestBuildNotes_TruncatesAtFive(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	notes := make([]materialize.Note, 7)
 	for i := range notes {
@@ -496,7 +368,7 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	var notesLayer *Layer
@@ -513,41 +385,7 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 	assert.NotContains(t, notesLayer.Content, "note-1")
 }
 
-func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
-	t.Parallel()
-	state := materialize.NewState()
-	state.Issues["TST-001"] = &materialize.Issue{
-		ID:     "TST-001",
-		Title:  "Test",
-		Type:   "task",
-		Status: "open",
-		Notes: []materialize.Note{
-			{ID: "note-1", WorkerID: "w1", Msg: "visible note", Timestamp: 1000},
-			{ID: "note-2", WorkerID: "w1", Msg: "deleted note", Timestamp: 2000, Deleted: true},
-		},
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
-	require.NoError(t, err)
-
-	var notesLayer *Layer
-	for i := range ctx.Layers {
-		if ctx.Layers[i].Name == "notes" {
-			notesLayer = &ctx.Layers[i]
-			break
-		}
-	}
-	require.NotNil(t, notesLayer)
-	assert.Contains(t, notesLayer.Content, "visible note")
-	assert.NotContains(t, notesLayer.Content, "deleted note")
-}
-
 func TestBuildSiblingOutcomes(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-P"] = &materialize.Issue{
 		ID:           "TST-P",
@@ -583,7 +421,7 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-B", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-B", stateDir, state)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -600,7 +438,6 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 }
 
 func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
-	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["TST-001"] = &materialize.Issue{
 		ID:           "TST-001",
@@ -613,7 +450,7 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-001", stateDir, state)
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -623,21 +460,16 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 	}
 }
 
-func TestBuildBlockerOutcomes_FromState(t *testing.T) {
-	t.Parallel()
-	// Blocker must be in state (no more disk fallback)
+func TestBuildBlockerOutcomes_LoadsFromDisk(t *testing.T) {
+	// Blocker is NOT in the in-memory state — it must be loaded from disk (assemble.go:119-123)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	blockerJSON := `{"id":"TST-BLK","type":"task","status":"done","title":"Blocker","outcome":"unblocked successfully","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-BLK.json"), []byte(blockerJSON), 0644))
+
 	state := materialize.NewState()
-	state.Issues["TST-BLK"] = &materialize.Issue{
-		ID:           "TST-BLK",
-		Type:         "task",
-		Status:       "done",
-		Title:        "Blocker",
-		Outcome:      "unblocked successfully",
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{"TST-X"},
-		DecisionRefs: []string{},
-	}
 	state.Issues["TST-X"] = &materialize.Issue{
 		ID:           "TST-X",
 		Title:        "Needs blocker",
@@ -648,8 +480,9 @@ func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	// TST-BLK is intentionally absent from state — must load from disk
 
-	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-X", dir, state)
 	require.NoError(t, err)
 
 	var blockerLayer *Layer
@@ -664,20 +497,16 @@ func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 	assert.Contains(t, blockerLayer.Content, "unblocked successfully")
 }
 
-func TestBuildParentChain_FromState(t *testing.T) {
-	t.Parallel()
-	// Parent must be in state (no more disk fallback)
+func TestBuildParentChain_LoadsFromDisk(t *testing.T) {
+	// Parent is NOT in the in-memory state — must be loaded from disk (assemble.go:151-155)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	parentJSON := `{"id":"TST-PAR","type":"story","status":"in-progress","title":"Parent Story","children":["TST-X"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR.json"), []byte(parentJSON), 0644))
+
 	state := materialize.NewState()
-	state.Issues["TST-PAR"] = &materialize.Issue{
-		ID:           "TST-PAR",
-		Type:         "story",
-		Status:       "in-progress",
-		Title:        "Parent Story",
-		Children:     []string{"TST-X"},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
 	state.Issues["TST-X"] = &materialize.Issue{
 		ID:           "TST-X",
 		Title:        "Child task",
@@ -689,8 +518,9 @@ func TestBuildParentChain_FromState(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
+	// TST-PAR absent from state — must load from disk
 
-	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-X", dir, state)
 	require.NoError(t, err)
 
 	var parentLayer *Layer
@@ -705,65 +535,16 @@ func TestBuildParentChain_FromState(t *testing.T) {
 	assert.Contains(t, parentLayer.Content, "Parent Story")
 }
 
-func TestBuildParentChain_WithGrandparent(t *testing.T) {
-	t.Parallel()
-	// Parent and grandparent are both in state
-	// This tests the fix for the bug where grandparents were silently dropped
-	state := materialize.NewState()
-	state.Issues["TST-GRP"] = &materialize.Issue{
-		ID:           "TST-GRP",
-		Type:         "epic",
-		Status:       "in-progress",
-		Title:        "Grandparent Epic",
-		Children:     []string{"TST-PAR"},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-	state.Issues["TST-PAR"] = &materialize.Issue{
-		ID:           "TST-PAR",
-		Type:         "story",
-		Status:       "in-progress",
-		Title:        "Parent Story",
-		Parent:       "TST-GRP",
-		Children:     []string{"TST-X"},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-	state.Issues["TST-X"] = &materialize.Issue{
-		ID:           "TST-X",
-		Title:        "Child task",
-		Type:         "task",
-		Status:       "open",
-		Parent:       "TST-PAR",
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
+func TestBuildSiblingOutcomes_LoadsSiblingFromDisk(t *testing.T) {
+	// Sibling is NOT in state — must load from disk (assemble.go:224-226)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 
-	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
-	require.NoError(t, err)
+	// Parent is in state but sibling is on disk
+	siblingJSON := `{"id":"TST-SIB","type":"task","status":"done","title":"Sibling","outcome":"sibling outcome from disk","parent":"TST-PAR","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-SIB.json"), []byte(siblingJSON), 0644))
 
-	var parentLayer *Layer
-	for i := range ctx.Layers {
-		if ctx.Layers[i].Name == "parent_chain" {
-			parentLayer = &ctx.Layers[i]
-			break
-		}
-	}
-	require.NotNil(t, parentLayer)
-	// Both parent and grandparent should be present
-	assert.Contains(t, parentLayer.Content, "TST-PAR")
-	assert.Contains(t, parentLayer.Content, "Parent Story")
-	assert.Contains(t, parentLayer.Content, "TST-GRP")
-	assert.Contains(t, parentLayer.Content, "Grandparent Epic")
-}
-
-func TestBuildSiblingOutcomes_FromState(t *testing.T) {
-	t.Parallel()
-	// Sibling must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-PAR"] = &materialize.Issue{
 		ID:           "TST-PAR",
@@ -786,20 +567,9 @@ func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	state.Issues["TST-SIB"] = &materialize.Issue{
-		ID:           "TST-SIB",
-		Type:         "task",
-		Status:       "done",
-		Title:        "Sibling",
-		Outcome:      "sibling outcome from state",
-		Parent:       "TST-PAR",
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
+	// TST-SIB is absent from state — must load from disk
 
-	ctx, err := Assemble("TST-X", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-X", dir, state)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -811,23 +581,21 @@ func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 	}
 	require.NotNil(t, sibLayer)
 	assert.Contains(t, sibLayer.Content, "TST-SIB")
-	assert.Contains(t, sibLayer.Content, "sibling outcome from state")
+	assert.Contains(t, sibLayer.Content, "sibling outcome from disk")
 }
 
-func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
-	t.Parallel()
-	// Parent and siblings are all in state
+func TestBuildSiblingOutcomes_ParentLoadedFromDisk(t *testing.T) {
+	// Parent is NOT in state — load parent from disk, then load siblings from disk (assemble.go:208-210)
+	dir := t.TempDir()
+	issuesDir := filepath.Join(dir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+
+	parentJSON := `{"id":"TST-PAR2","type":"story","status":"in-progress","title":"Parent2","children":["TST-X2","TST-SIB2"],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-PAR2.json"), []byte(parentJSON), 0644))
+	siblingJSON := `{"id":"TST-SIB2","type":"task","status":"done","title":"Sibling2","outcome":"disk sibling outcome","parent":"TST-PAR2","children":[],"blocked_by":[],"blocks":[],"scope":[],"provenance":{},"decision_refs":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "TST-SIB2.json"), []byte(siblingJSON), 0644))
+
 	state := materialize.NewState()
-	state.Issues["TST-PAR2"] = &materialize.Issue{
-		ID:           "TST-PAR2",
-		Type:         "story",
-		Status:       "in-progress",
-		Title:        "Parent2",
-		Children:     []string{"TST-X2", "TST-SIB2"},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
 	state.Issues["TST-X2"] = &materialize.Issue{
 		ID:           "TST-X2",
 		Title:        "Current task",
@@ -839,20 +607,9 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	state.Issues["TST-SIB2"] = &materialize.Issue{
-		ID:           "TST-SIB2",
-		Type:         "task",
-		Status:       "done",
-		Title:        "Sibling2",
-		Outcome:      "state sibling outcome",
-		Parent:       "TST-PAR2",
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
+	// Both TST-PAR2 and TST-SIB2 absent from state — loaded from disk
 
-	ctx, err := Assemble("TST-X2", state, &emptyFileReader{})
+	ctx, err := Assemble("TST-X2", dir, state)
 	require.NoError(t, err)
 
 	var sibLayer *Layer
@@ -864,13 +621,12 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 	}
 	require.NotNil(t, sibLayer)
 	assert.Contains(t, sibLayer.Content, "TST-SIB2")
-	assert.Contains(t, sibLayer.Content, "state sibling outcome")
+	assert.Contains(t, sibLayer.Content, "disk sibling outcome")
 }
 
 // TC-004: Tests for RenderAgent and RenderHuman
 
 func TestRenderAgent(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -887,7 +643,6 @@ func TestRenderAgent(t *testing.T) {
 }
 
 func TestRenderHuman(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -906,7 +661,6 @@ func TestRenderHuman(t *testing.T) {
 // TC-005: Truncate boundary condition tests
 
 func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -920,7 +674,6 @@ func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
 }
 
 func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -934,7 +687,6 @@ func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
 }
 
 func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -948,7 +700,6 @@ func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
 }
 
 func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
-	t.Parallel()
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
@@ -967,70 +718,4 @@ func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "core_spec (priority 1) must survive truncation")
-}
-
-// Fix B1: inferRepoRoot must fall back to git in worktree mode.
-func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
-	t.Parallel()
-	// Create a git repo without .arm/.armature directory; simulates a worktree layout.
-	repoDir := t.TempDir()
-	initCmd := exec.CommandContext(context.Background(), "git", "init")
-	initCmd.Dir = repoDir
-	require.NoError(t, initCmd.Run(), "git init must succeed")
-
-	// stateDir is a subdirectory with no .arm/.armature in the path hierarchy.
-	stateDir := filepath.Join(repoDir, "state", "worker-abc")
-	require.NoError(t, os.MkdirAll(stateDir, 0755))
-
-	root := InferRepoRoot(stateDir)
-	assert.Equal(t, repoDir, root, "inferRepoRoot must return git repo root when no .arm/.armature directory exists in path")
-}
-
-// Fix B1: inferRepoRoot still uses the fast path when .armature is in the hierarchy.
-func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {
-	t.Parallel()
-	repoDir := t.TempDir()
-	armatureDir := filepath.Join(repoDir, ".armature")
-	stateDir := filepath.Join(armatureDir, "state", "worker-abc")
-	require.NoError(t, os.MkdirAll(stateDir, 0755))
-
-	root := InferRepoRoot(stateDir)
-	assert.Equal(t, repoDir, root, "inferRepoRoot must find repo root from .armature directory in path")
-}
-
-// Fix W1: buildContextFiles must use a longer fence when file content contains triple backticks.
-func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	// Content containing a triple-backtick code fence.
-	mdContent := "# Guide\n```go\nfmt.Println(\"hello\")\n```\n"
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte(mdContent), 0644))
-
-	state := materialize.NewState()
-	state.Issues["TST-001"] = &materialize.Issue{
-		ID:           "TST-001",
-		Title:        "Test",
-		Type:         "task",
-		Status:       "open",
-		ContextFiles: []string{"guide.md"},
-		Children:     []string{},
-		BlockedBy:    []string{},
-		Blocks:       []string{},
-		DecisionRefs: []string{},
-	}
-	ctx, err := Assemble("TST-001", state, &realFileReader{root: dir})
-	require.NoError(t, err)
-
-	var cfLayer *Layer
-	for i := range ctx.Layers {
-		if ctx.Layers[i].Name == "context_files" {
-			cfLayer = &ctx.Layers[i]
-			break
-		}
-	}
-	require.NotNil(t, cfLayer)
-	// The wrapper fence must be at least 4 backticks (longer than the content's 3).
-	assert.Contains(t, cfLayer.Content, "````", "wrapper fence must be longer than content's triple-backtick fence")
-	// The content itself must still be present.
-	assert.Contains(t, cfLayer.Content, "fmt.Println")
 }

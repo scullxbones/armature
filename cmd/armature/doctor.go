@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/spf13/cobra"
@@ -20,7 +19,7 @@ func newDoctorCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			repoPath := appCtx.RepoPath
 
-			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, verbose, time.Now())
+			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, verbose)
 			if err != nil {
 				return err
 			}
@@ -28,7 +27,7 @@ func newDoctorCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if format == "json" {
-				data, _ := json.MarshalIndent(report, "", "  ") //nolint:errcheck // report struct contains only serializable values
+				data, _ := json.MarshalIndent(report, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				for _, f := range report.Checks {

@@ -1,4 +1,3 @@
-// Package ready provides the bubbletea TUI model for the arm ready command.
 package ready
 
 import (
@@ -40,7 +39,8 @@ func (m Model) Init() tea.Cmd { return nil }
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
 			if m.cursor < len(m.entries)-1 {

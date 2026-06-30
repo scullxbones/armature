@@ -3,8 +3,7 @@ package sources
 import (
 	"context"
 	"fmt"
-
-	"github.com/scullxbones/armature/internal/adapters"
+	"os"
 )
 
 // FilesystemProvider implements Provider for local filesystem paths.
@@ -26,7 +25,7 @@ func (p *FilesystemProvider) Type() string {
 // The SHA-256 fingerprint of the content is computed via Fingerprint(content).
 // Version ID is empty for local files (no remote versioning).
 func (p *FilesystemProvider) Fetch(_ context.Context, entry SourceEntry) ([]byte, error) {
-	data, err := adapters.ReadFile(entry.URL)
+	data, err := os.ReadFile(entry.URL)
 	if err != nil {
 		return nil, fmt.Errorf("filesystem provider: read %q: %w", entry.URL, err)
 	}

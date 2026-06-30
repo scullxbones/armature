@@ -3,49 +3,46 @@ package materialize
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
-
-	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/review"
+	"strings"
 )
 
 // Issue represents the full materialized state of a single work item.
 type Issue struct {
-	ID                     string                         `json:"id"`
-	Type                   string                         `json:"type"`
-	Status                 string                         `json:"status"`
-	Title                  string                         `json:"title"`
-	Parent                 string                         `json:"parent,omitempty"`
-	Children               []string                       `json:"children"`
-	BlockedBy              []string                       `json:"blocked_by"`
-	Blocks                 []string                       `json:"blocks"`
-	Assignee               string                         `json:"assignee,omitempty"`
-	Priority               string                         `json:"priority,omitempty"`
-	EstComplexity          string                         `json:"estimated_complexity,omitempty"`
-	DefinitionOfDone       string                         `json:"definition_of_done,omitempty"`
-	Scope                  []string                       `json:"scope"`
-	ContextFiles           []string                       `json:"context_files,omitempty"`
-	Acceptance             json.RawMessage                `json:"acceptance,omitempty"`
-	Context                json.RawMessage                `json:"context,omitempty"`
-	SourceCitation         json.RawMessage                `json:"source_citation,omitempty"`
-	Provenance             Provenance                     `json:"provenance"`
-	DecisionRefs           []string                       `json:"decision_refs"`
-	Outcome                string                         `json:"outcome,omitempty"`
-	PriorOutcomes          []string                       `json:"prior_outcomes,omitempty"`
-	Notes                  []Note                         `json:"notes,omitempty"`
-	Decisions              []Decision                     `json:"decisions,omitempty"`
-	SourceLinks            []SourceLink                   `json:"source_links,omitempty"`
-	CitationAcceptances    []CitationAcceptance           `json:"citation_acceptances,omitempty"`
-	AssessmentAttestations []review.AssessmentAttestation `json:"assessment_attestations,omitempty"`
-	ClaimedBy              string                         `json:"claimed_by,omitempty"`
-	ClaimedAt              int64                          `json:"claimed_at,omitempty"`
-	ClaimTTL               int                            `json:"claim_ttl,omitempty"`
-	LastHeartbeat          int64                          `json:"last_heartbeat,omitempty"`
-	Branch                 string                         `json:"branch,omitempty"`
-	PR                     string                         `json:"pr,omitempty"`
-	AssignedWorker         string                         `json:"assigned_worker,omitempty"`
-	PreferredModel         string                         `json:"preferred_model,omitempty"`
-	Updated                int64                          `json:"updated"`
+	ID                  string               `json:"id"`
+	Type                string               `json:"type"`
+	Status              string               `json:"status"`
+	Title               string               `json:"title"`
+	Parent              string               `json:"parent,omitempty"`
+	Children            []string             `json:"children"`
+	BlockedBy           []string             `json:"blocked_by"`
+	Blocks              []string             `json:"blocks"`
+	Assignee            string               `json:"assignee,omitempty"`
+	Priority            string               `json:"priority,omitempty"`
+	EstComplexity       string               `json:"estimated_complexity,omitempty"`
+	DefinitionOfDone    string               `json:"definition_of_done,omitempty"`
+	Scope               []string             `json:"scope"`
+	ContextFiles        []string             `json:"context_files,omitempty"`
+	Acceptance          json.RawMessage      `json:"acceptance,omitempty"`
+	Context             json.RawMessage      `json:"context,omitempty"`
+	SourceCitation      json.RawMessage      `json:"source_citation,omitempty"`
+	Provenance          Provenance           `json:"provenance"`
+	DecisionRefs        []string             `json:"decision_refs"`
+	Outcome             string               `json:"outcome,omitempty"`
+	PriorOutcomes       []string             `json:"prior_outcomes,omitempty"`
+	Notes               []Note               `json:"notes,omitempty"`
+	Decisions           []Decision           `json:"decisions,omitempty"`
+	SourceLinks         []SourceLink         `json:"source_links,omitempty"`
+	CitationAcceptances []CitationAcceptance `json:"citation_acceptances,omitempty"`
+	ClaimedBy           string               `json:"claimed_by,omitempty"`
+	ClaimedAt           int64                `json:"claimed_at,omitempty"`
+	ClaimTTL            int                  `json:"claim_ttl,omitempty"`
+	LastHeartbeat       int64                `json:"last_heartbeat,omitempty"`
+	Branch              string               `json:"branch,omitempty"`
+	PR                  string               `json:"pr,omitempty"`
+	AssignedWorker      string               `json:"assigned_worker,omitempty"`
+	Updated             int64                `json:"updated"`
 }
 
 type Provenance struct {
@@ -63,11 +60,9 @@ type SourceLink struct {
 }
 
 type Note struct {
-	ID        string `json:"id,omitempty"`
 	WorkerID  string `json:"worker_id"`
 	Timestamp int64  `json:"timestamp"`
 	Msg       string `json:"msg"`
-	Deleted   bool   `json:"deleted,omitempty"`
 }
 
 type Decision struct {
@@ -84,7 +79,6 @@ type CitationAcceptance struct {
 	WorkerID                  string `json:"worker_id"`
 	Timestamp                 int64  `json:"timestamp"`
 	ConfirmedNoninteractively bool   `json:"confirmed_noninteractively,omitempty"`
-	SourceEntryID             string `json:"source_entry_id,omitempty"`
 }
 
 // IndexEntry is the denormalized summary stored in index.json.
@@ -108,18 +102,21 @@ type IndexEntry struct {
 type Index map[string]IndexEntry
 
 func WriteIssue(issuesDir string, issue Issue) error {
-	return adapters.WriteIssueJSON(issuesDir, issue.ID, issue)
+	data, err := json.MarshalIndent(issue, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal issue: %w", err)
+	}
+	path := filepath.Join(issuesDir, issue.ID+".json")
+	return os.WriteFile(path, data, 0644)
 }
 
 func LoadIssue(path string) (Issue, error) {
-	var issue Issue
-	err := adapters.LoadIssueJSON(path, &issue)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return Issue{}, err
 	}
-	issue.Scope = normalizeScopeEntries(issue.Scope)
-	issue.ContextFiles = normalizeScopeEntries(issue.ContextFiles)
-	return issue, nil
+	var issue Issue
+	return issue, json.Unmarshal(data, &issue)
 }
 
 // LoadAllIssues loads all previously materialized issues from the given directory.
@@ -127,13 +124,20 @@ func LoadIssue(path string) (Issue, error) {
 func LoadAllIssues(issuesDir string) (map[string]*Issue, error) {
 	issues := make(map[string]*Issue)
 
-	issueIDs, err := adapters.ReadIssuesDir(issuesDir)
+	entries, err := os.ReadDir(issuesDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return issues, nil
+		}
 		return nil, err
 	}
 
-	for _, issueID := range issueIDs {
-		issuePath := filepath.Join(issuesDir, issueID+".json")
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		issueID := strings.TrimSuffix(entry.Name(), ".json")
+		issuePath := filepath.Join(issuesDir, entry.Name())
 		issue, err := LoadIssue(issuePath)
 		if err != nil {
 			return nil, fmt.Errorf("load issue %s: %w", issueID, err)
@@ -145,16 +149,21 @@ func LoadAllIssues(issuesDir string) (map[string]*Issue, error) {
 }
 
 func WriteIndex(path string, index Index) error {
-	return adapters.WriteCheckpointJSON(path, index)
+	data, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal index: %w", err)
+	}
+	return os.WriteFile(path, data, 0644)
 }
 
 func LoadIndex(path string) (Index, error) {
-	var index Index
-	if err := adapters.LoadCheckpointJSON(path, &index); err != nil {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(Index), nil
+		}
 		return nil, err
 	}
-	if index == nil {
-		index = make(Index)
-	}
-	return index, nil
+	var index Index
+	return index, json.Unmarshal(data, &index)
 }

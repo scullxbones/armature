@@ -12,7 +12,6 @@ import (
 )
 
 func TestInitialScreenIsDAGTree(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 	if m.CurrentScreen() != app.ScreenDAGTree {
 		t.Errorf("initial screen = %v, want ScreenDAGTree", m.CurrentScreen())
@@ -20,7 +19,6 @@ func TestInitialScreenIsDAGTree(t *testing.T) {
 }
 
 func TestScreenSwitchByNumber(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 	for key, want := range map[string]app.ScreenID{
 		"1": app.ScreenDAGTree,
@@ -29,7 +27,7 @@ func TestScreenSwitchByNumber(t *testing.T) {
 		"4": app.ScreenSources,
 	} {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-		got := updated.(app.Model).CurrentScreen() //nolint:errcheck // panic on failed type assertion is acceptable in tests
+		got := updated.(app.Model).CurrentScreen()
 		if got != want {
 			t.Errorf("key %q: screen = %v, want %v", key, got, want)
 		}
@@ -37,7 +35,6 @@ func TestScreenSwitchByNumber(t *testing.T) {
 }
 
 func TestSetStatePropagates(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 	state := &materialize.State{Issues: map[string]*materialize.Issue{
 		"T1": {ID: "T1", Status: "open"},
@@ -51,7 +48,6 @@ func TestSetStatePropagates(t *testing.T) {
 }
 
 func TestNavBarShowsValidateBadgeWhenErrors(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 	state := &materialize.State{Issues: map[string]*materialize.Issue{
 		"T1": {ID: "T1", Status: "open"},
@@ -64,7 +60,6 @@ func TestNavBarShowsValidateBadgeWhenErrors(t *testing.T) {
 }
 
 func TestQuitKey(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
@@ -73,7 +68,6 @@ func TestQuitKey(t *testing.T) {
 }
 
 func TestInitIncludesInitialRefresh(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 	cmd := m.Init()
 	if cmd == nil {
@@ -111,18 +105,17 @@ func TestInitIncludesInitialRefresh(t *testing.T) {
 }
 
 func TestLiveModeRefreshMsgRestartsListener(t *testing.T) {
-	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")
 
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		t.Skip("fsnotify not available:", err)
 	}
-	defer func() { _ = w.Close() }() //nolint:errcheck // close error in test defer not actionable
+	defer func() { _ = w.Close() }()
 
 	// Put model in live mode by sending WatcherReadyMsg
 	updated, _ := m.Update(app.WatcherReadyMsg{Watcher: w})
-	m = updated.(app.Model) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+	m = updated.(app.Model)
 
 	// RefreshMsg in live mode must return a batch: doRefresh + restarted listener
 	_, cmd := m.Update(app.RefreshMsg{})

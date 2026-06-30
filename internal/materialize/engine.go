@@ -1,14 +1,10 @@
 package materialize
 
 import (
-	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 
-	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 )
 
 // State holds the complete materialized state built from op replay.
@@ -23,46 +19,44 @@ func NewState() *State {
 	}
 }
 
-// opHandlers maps op type strings to their handler functions.
-var opHandlers = map[string]func(*State, ops.Op) error{
-	ops.OpCreate:             (*State).applyCreate,
-	ops.OpClaim:              (*State).applyClaim,
-	ops.OpHeartbeat:          (*State).applyHeartbeat,
-	ops.OpTransition:         (*State).applyTransition,
-	ops.OpNote:               (*State).applyNote,
-	ops.OpNoteDelete:         (*State).applyNoteDelete,
-	ops.OpLink:               (*State).applyLink,
-	ops.OpUnlink:             (*State).applyUnlink,
-	ops.OpDecision:           (*State).applyDecision,
-	ops.OpAssign:             (*State).applyAssign,
-	ops.OpAmend:              (*State).applyAmend,
-	ops.OpSourceLink:         (*State).applySourceLink,
-	ops.OpSourceFingerprint:  func(_ *State, _ ops.Op) error { return nil },
-	ops.OpCitationAccepted:   (*State).applyCitationAccepted,
-	ops.OpDAGTransition:      (*State).applyDAGTransition,
-	ops.OpScopeRename:        (*State).applyScopeRename,
-	ops.OpScopeDelete:        (*State).applyScopeDelete,
-	ops.OpReparent:           (*State).applyReparent,
-	ops.OpAssessmentAttested: (*State).applyAssessmentAttested,
-}
-
-// RegisteredOpTypes returns the set of supported op type strings.
-func RegisteredOpTypes() []string {
-	types := make([]string, 0, len(opHandlers))
-	for opType := range opHandlers {
-		types = append(types, opType)
-	}
-	return types
-}
-
-// ApplyOp applies a single op to the materialized state by dispatching
-// through the registered handler table. Unknown op types return an error.
+// ApplyOp applies a single op to the materialized state.
 func (s *State) ApplyOp(op ops.Op) error {
-	handler, exists := opHandlers[op.Type]
-	if !exists {
+	switch op.Type {
+	case ops.OpCreate:
+		return s.applyCreate(op)
+	case ops.OpClaim:
+		return s.applyClaim(op)
+	case ops.OpHeartbeat:
+		return s.applyHeartbeat(op)
+	case ops.OpTransition:
+		return s.applyTransition(op)
+	case ops.OpNote:
+		return s.applyNote(op)
+	case ops.OpLink:
+		return s.applyLink(op)
+	case ops.OpUnlink:
+		return s.applyUnlink(op)
+	case ops.OpDecision:
+		return s.applyDecision(op)
+	case ops.OpAssign:
+		return s.applyAssign(op)
+	case ops.OpAmend:
+		return s.applyAmend(op)
+	case ops.OpSourceLink:
+		return s.applySourceLink(op)
+	case ops.OpSourceFingerprint:
+		return nil
+	case ops.OpCitationAccepted:
+		return s.applyCitationAccepted(op)
+	case ops.OpDAGTransition:
+		return s.applyDAGTransition(op)
+	case ops.OpScopeRename:
+		return s.applyScopeRename(op)
+	case ops.OpScopeDelete:
+		return s.applyScopeDelete(op)
+	default:
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
-	return handler(s, op)
 }
 
 func (s *State) applyCreate(op ops.Op) error {
@@ -76,14 +70,12 @@ func (s *State) applyCreate(op ops.Op) error {
 		Title:            op.Payload.Title,
 		Parent:           op.Payload.Parent,
 		Scope:            normalizeScopeEntries(op.Payload.Scope),
-		ContextFiles:     normalizeScopeEntries(op.Payload.ContextFiles),
 		Priority:         op.Payload.Priority,
 		EstComplexity:    op.Payload.EstComplexity,
 		DefinitionOfDone: op.Payload.DefinitionOfDone,
 		Acceptance:       op.Payload.Acceptance,
 		Context:          op.Payload.Context,
 		SourceCitation:   op.Payload.SourceCitation,
-		PreferredModel:   op.Payload.PreferredModel,
 		Provenance: Provenance{
 			Method:       "decomposed",
 			Confidence:   confidenceOrDefault(op.Payload.Confidence),
@@ -108,17 +100,6 @@ func (s *State) applyClaim(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
 		return fmt.Errorf("claim: issue %s not found", op.TargetID)
-	}
-	if (issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress) &&
-		issue.ClaimedBy != "" && issue.ClaimedBy != op.WorkerID {
-		ttl := issue.ClaimTTL
-		if ttl <= 0 {
-			ttl = 60
-		}
-		if !claimpkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, ttl, op.Timestamp) {
-			// Keep existing active owner; this claim loses the race.
-			return nil
-		}
 	}
 	issue.Status = ops.StatusClaimed
 	issue.ClaimedBy = op.WorkerID
@@ -146,13 +127,13 @@ func (s *State) applyTransition(op ops.Op) error {
 		return fmt.Errorf("transition: issue %s not found", op.TargetID)
 	}
 	newStatus := op.Payload.To
-	if newStatus == ops.StatusOpen {
-		issue.ClaimedBy = ""
-		issue.ClaimedAt = 0
-		if issue.Status == ops.StatusDone && issue.Outcome != "" {
+	if newStatus == ops.StatusOpen && issue.Status == ops.StatusDone {
+		if issue.Outcome != "" {
 			issue.PriorOutcomes = append(issue.PriorOutcomes, issue.Outcome)
 			issue.Outcome = ""
 		}
+		issue.ClaimedBy = ""
+		issue.ClaimedAt = 0
 	}
 	issue.Status = newStatus
 	issue.Updated = op.Timestamp
@@ -176,68 +157,13 @@ func (s *State) applyNote(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	if hasAppliedNote(issue.Notes, op) {
-		return nil
-	}
 	issue.Notes = append(issue.Notes, Note{
-		ID:        resolveNoteID(issue, op),
 		WorkerID:  op.WorkerID,
 		Timestamp: op.Timestamp,
 		Msg:       op.Payload.Msg,
 	})
 	issue.Updated = op.Timestamp
 	return nil
-}
-
-func hasAppliedNote(notes []Note, op ops.Op) bool {
-	for _, note := range notes {
-		if note.WorkerID != op.WorkerID || note.Timestamp != op.Timestamp || note.Msg != op.Payload.Msg {
-			continue
-		}
-		if op.Payload.NoteID == "" || note.ID == op.Payload.NoteID {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *State) applyNoteDelete(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
-	for i := range issue.Notes {
-		if issue.Notes[i].ID == op.Payload.NoteID {
-			issue.Notes[i].Deleted = true
-			issue.Updated = op.Timestamp
-			break
-		}
-	}
-	return nil
-}
-
-func resolveNoteID(issue *Issue, op ops.Op) string {
-	if op.Payload.NoteID != "" {
-		return op.Payload.NoteID
-	}
-
-	base := fmt.Sprintf("note-%d-%s", op.Timestamp, op.WorkerID)
-	id := base
-	suffix := 2
-	for noteIDExists(issue.Notes, id) {
-		id = fmt.Sprintf("%s-%d", base, suffix)
-		suffix++
-	}
-	return id
-}
-
-func noteIDExists(notes []Note, id string) bool {
-	for _, note := range notes {
-		if note.ID == id {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *State) applyLink(op ops.Op) error {
@@ -286,36 +212,16 @@ func (s *State) applyDecision(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	decision := Decision{
+	issue.Decisions = append(issue.Decisions, Decision{
 		Topic:     op.Payload.Topic,
 		Choice:    op.Payload.Choice,
 		Rationale: op.Payload.Rationale,
 		Affects:   op.Payload.Affects,
 		WorkerID:  op.WorkerID,
 		Timestamp: op.Timestamp,
-	}
-	if hasDecision(issue.Decisions, decision) {
-		return nil
-	}
-	issue.Decisions = append(issue.Decisions, decision)
+	})
 	issue.Updated = op.Timestamp
 	return nil
-}
-
-func hasDecision(decisions []Decision, want Decision) bool {
-	for _, decision := range decisions {
-		if decision.Topic != want.Topic ||
-			decision.Choice != want.Choice ||
-			decision.Rationale != want.Rationale ||
-			decision.WorkerID != want.WorkerID ||
-			decision.Timestamp != want.Timestamp {
-			continue
-		}
-		if slices.Equal(decision.Affects, want.Affects) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *State) applyAmend(op ops.Op) error {
@@ -328,12 +234,6 @@ func (s *State) applyAmend(op ops.Op) error {
 	}
 	if len(op.Payload.Scope) > 0 {
 		issue.Scope = normalizeScopeEntries(op.Payload.Scope)
-	}
-	if op.Payload.ClearContextFiles {
-		issue.ContextFiles = []string{}
-	}
-	if op.Payload.ContextFiles != nil {
-		issue.ContextFiles = normalizeScopeEntries(op.Payload.ContextFiles)
 	}
 	if len(op.Payload.Acceptance) > 0 && string(op.Payload.Acceptance) != "null" {
 		issue.Acceptance = op.Payload.Acceptance
@@ -350,15 +250,11 @@ func (s *State) applySourceLink(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	link := SourceLink{
+	issue.SourceLinks = append(issue.SourceLinks, SourceLink{
 		SourceEntryID: op.Payload.SourceID,
 		SourceURL:     op.Payload.SourceURL,
 		Title:         op.Payload.Title,
-	}
-	if slices.Contains(issue.SourceLinks, link) {
-		return nil
-	}
-	issue.SourceLinks = append(issue.SourceLinks, link)
+	})
 	issue.Updated = op.Timestamp
 	return nil
 }
@@ -368,16 +264,11 @@ func (s *State) applyCitationAccepted(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	acceptance := CitationAcceptance{
+	issue.CitationAcceptances = append(issue.CitationAcceptances, CitationAcceptance{
 		WorkerID:                  op.WorkerID,
 		Timestamp:                 op.Timestamp,
 		ConfirmedNoninteractively: op.Payload.ConfirmedNoninteractively,
-		SourceEntryID:             op.Payload.SourceEntryID,
-	}
-	if slices.Contains(issue.CitationAcceptances, acceptance) {
-		return nil
-	}
-	issue.CitationAcceptances = append(issue.CitationAcceptances, acceptance)
+	})
 	issue.Updated = op.Timestamp
 	return nil
 }
@@ -434,65 +325,6 @@ func (s *State) applyScopeDelete(op ops.Op) error {
 		issue.Scope = result
 		issue.Updated = op.Timestamp
 	}
-	return nil
-}
-
-// applyReparent moves an issue to a new parent, updating the children lists
-// of both the old parent (removing the issue) and the new parent (adding it).
-func (s *State) applyReparent(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
-	oldParentID := issue.Parent
-	newParentID := op.Payload.Parent
-
-	// Remove from old parent's children list.
-	if oldParentID != "" {
-		if oldParent, ok := s.Issues[oldParentID]; ok {
-			oldParent.Children = removeString(oldParent.Children, op.TargetID)
-			oldParent.Updated = op.Timestamp
-		}
-	}
-
-	// Add to new parent's children list.
-	if newParentID != "" {
-		if newParent, ok := s.Issues[newParentID]; ok {
-			newParent.Children = appendUnique(newParent.Children, op.TargetID)
-			newParent.Updated = op.Timestamp
-		}
-	}
-
-	issue.Parent = newParentID
-	issue.Updated = op.Timestamp
-	return nil
-}
-
-// applyAssessmentAttested replays an assessment attestation op by unmarshaling
-// the assessment, deduplicating by ResultFingerprint, and appending to the issue's
-// assessment attestations list.
-func (s *State) applyAssessmentAttested(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return fmt.Errorf("assessment-attested: issue %s not found", op.TargetID)
-	}
-
-	// Unmarshal the assessment attestation from op.Payload.Assessment
-	var att review.AssessmentAttestation
-	if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {
-		return fmt.Errorf("unmarshal assessment attestation: %w", err)
-	}
-
-	// Deduplicate by ResultFingerprint
-	for _, existing := range issue.AssessmentAttestations {
-		if existing.ResultFingerprint == att.ResultFingerprint {
-			return nil // duplicate, skip
-		}
-	}
-
-	// Append the attestation
-	issue.AssessmentAttestations = append(issue.AssessmentAttestations, att)
-	issue.Updated = op.Timestamp
 	return nil
 }
 
@@ -639,8 +471,10 @@ func confidenceOrDefault(confidence string) string {
 }
 
 func appendUnique(slice []string, item string) []string {
-	if slices.Contains(slice, item) {
-		return slice
+	for _, s := range slice {
+		if s == item {
+			return slice
+		}
 	}
 	return append(slice, item)
 }
@@ -651,17 +485,13 @@ func appendUnique(slice []string, item string) []string {
 func normalizeScopeEntries(scope []string) []string {
 	result := make([]string, 0, len(scope))
 	for _, entry := range scope {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
 		if strings.Contains(entry, ", ") {
 			for part := range strings.SplitSeq(entry, ", ") {
 				if part = strings.TrimSpace(part); part != "" {
 					result = append(result, part)
 				}
 			}
-		} else if entry = strings.TrimSpace(entry); entry != "" {
+		} else {
 			result = append(result, entry)
 		}
 	}

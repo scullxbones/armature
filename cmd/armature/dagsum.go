@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,27 +40,20 @@ mode (agents) to auto-approve all pending draft items.`,
   # Auto-approve all draft items in agent mode
   $ arm dag-summary --approve-all --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			execState := mustState(cmd)
-			appCtx := execState.ctx
+			issuesDir := appCtx.IssuesDir
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			// Load snapshot to get materialized state
-			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			state := snap.State
-			if state == nil {
-				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
+				return err
 			}
 
-			tracePath := store.StatePath("traceability.json")
-			cov, _ := traceability.Read(tracePath) //nolint:errcheck // best-effort read of derived traceability state
+			tracePath := filepath.Join(appCtx.StateDir, "traceability.json")
+			cov, _ := traceability.Read(tracePath)
 
 			// Build a set of uncited IDs for fast lookup.
 			uncitedSet := make(map[string]struct{}, len(cov.Uncited))
@@ -87,7 +79,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			if len(draftIssues) == 0 {
 				format, _ := cmd.Flags().GetString("format")
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
-					data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
+					data, _ := json.MarshalIndent(map[string]interface{}{
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
 						"approve_all":              approveAll,
@@ -118,7 +110,7 @@ mode (agents) to auto-approve all pending draft items.`,
 								To:      "verified",
 							},
 						}
-						if err := appendLowStakesOp(execState, logPath, o); err != nil {
+						if err := appendLowStakesOp(logPath, o); err != nil {
 							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
 						}
 					}
@@ -140,7 +132,7 @@ mode (agents) to auto-approve all pending draft items.`,
 						Status:  issue.Status,
 					})
 				}
-				data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
+				data, _ := json.MarshalIndent(map[string]interface{}{
 					"pending_dag_confirmation": pending,
 					"count":                    len(pending),
 					"approve_all":              approveAll,
@@ -189,7 +181,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			if err != nil {
 				return fmt.Errorf("dag-summary TUI: %w", err)
 			}
-			final := finalModel.(dagsummary.Model) //nolint:errcheck // type invariant: dagsummary always returns its own Model
+			final := finalModel.(dagsummary.Model)
 
 			// Only emit ops if sign-off was confirmed.
 			if !final.Done() {
@@ -208,7 +200,7 @@ mode (agents) to auto-approve all pending draft items.`,
 						To:      "verified",
 					},
 				}
-				if err := appendLowStakesOp(execState, logPath, o); err != nil {
+				if err := appendLowStakesOp(logPath, o); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
 				}
 			}
@@ -275,8 +267,8 @@ func writeDAGSummaryArtifact(stateDir string, reviewed []*materialize.Issue,
 	}
 
 	path := filepath.Join(stateDir, "dag-summary.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(sb.String()), 0o600)
+	return os.WriteFile(path, []byte(sb.String()), 0644)
 }

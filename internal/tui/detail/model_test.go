@@ -10,7 +10,6 @@ import (
 )
 
 func TestDetailIsOpen(t *testing.T) {
-	t.Parallel()
 	m := detail.New()
 	if m.IsOpen() {
 		t.Error("new model should not be open")
@@ -27,7 +26,6 @@ func TestDetailIsOpen(t *testing.T) {
 }
 
 func TestDetailUpdateCloseOnEsc(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
 	m := detail.New()
 	m = m.SetSize(80, 24)
@@ -39,7 +37,6 @@ func TestDetailUpdateCloseOnEsc(t *testing.T) {
 }
 
 func TestDetailUpdateCloseOnQ(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
 	m := detail.New()
 	m = m.SetSize(80, 24)
@@ -51,7 +48,6 @@ func TestDetailUpdateCloseOnQ(t *testing.T) {
 }
 
 func TestDetailUpdateScrolling(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{ID: "T1", Title: strings.Repeat("line\n", 20)}
 	m := detail.New()
 	m = m.SetSize(80, 24)
@@ -60,20 +56,7 @@ func TestDetailUpdateScrolling(t *testing.T) {
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 }
 
-func TestDetailUpdateCopiesIssueID(t *testing.T) {
-	t.Parallel()
-	issue := &materialize.Issue{ID: "T1"}
-	m := detail.New()
-	m = m.SetSize(80, 24)
-	m = m.Open(issue)
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
-	if !m.IsOpen() {
-		t.Error("c should not close the overlay")
-	}
-}
-
 func TestDetailSetSizeWhenOpen(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{ID: "T1"}
 	m := detail.New()
 	m = m.Open(issue)
@@ -81,7 +64,6 @@ func TestDetailSetSizeWhenOpen(t *testing.T) {
 }
 
 func TestDetailBuildContentWithDefinitionOfDone(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{
 		ID:               "T1",
 		Title:            "Task",
@@ -97,7 +79,6 @@ func TestDetailBuildContentWithDefinitionOfDone(t *testing.T) {
 }
 
 func TestDetailBuildContentWithOutcome(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{
 		ID:      "T1",
 		Title:   "Task",
@@ -113,7 +94,6 @@ func TestDetailBuildContentWithOutcome(t *testing.T) {
 }
 
 func TestDetailUpdateWhenClosed(t *testing.T) {
-	t.Parallel()
 	m := detail.New()
 	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if m2.IsOpen() {
@@ -125,7 +105,6 @@ func TestDetailUpdateWhenClosed(t *testing.T) {
 }
 
 func TestDetailViewRendersTitle(t *testing.T) {
-	t.Parallel()
 	issue := &materialize.Issue{
 		ID:    "TASK-14",
 		Title: "Build detail overlay model",
@@ -143,7 +122,6 @@ func TestDetailViewRendersTitle(t *testing.T) {
 }
 
 func TestDetailViewHidden(t *testing.T) {
-	t.Parallel()
 	// Case 1: Issue is nil
 	m := detail.New()
 	m = m.Open(nil)

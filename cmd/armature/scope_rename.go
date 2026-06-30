@@ -1,12 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -27,25 +28,29 @@ func newScopeRenameCmd() *cobra.Command {
 				return fmt.Errorf("old-path and new-path are identical: %q", oldPath)
 			}
 
-			state := mustState(cmd)
-			appCtx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
 
-			// Read index directly from disk to scan scope entries; no rematerialization needed.
-			store := newSnapshotStore(appCtx)
-			index, err := store.ReadIndex()
+			// Materialize to ensure state is current before scanning scope entries.
+			singleBranch := appCtx.Mode == "single-branch"
+			if _, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, singleBranch); err != nil {
+				return fmt.Errorf("materialize: %w", err)
+			}
+
+			// Load materialized issues to find which ones have matching scope entries.
+			issuesStateDir := filepath.Join(appCtx.StateDir, "issues")
+			issues, err := materialize.LoadAllIssues(issuesStateDir)
 			if err != nil {
-				return fmt.Errorf("read index: %w", err)
+				return fmt.Errorf("load issues: %w", err)
 			}
 
 			// Find issues with scope entries that contain oldPath as a substring.
 			var affected []string
-			for id, entry := range index {
-				for _, scopeEntry := range entry.Scope {
-					if strings.Contains(scopeEntry, oldPath) {
+			for id, issue := range issues {
+				for _, entry := range issue.Scope {
+					if strings.Contains(entry, oldPath) {
 						affected = append(affected, id)
 						break
 					}
@@ -74,14 +79,14 @@ func newScopeRenameCmd() *cobra.Command {
 						NewPath: newPath,
 					},
 				}
-				if err := appendLowStakesOp(state, logPath, op); err != nil {
+				if err := appendLowStakesOp(logPath, op); err != nil {
 					return fmt.Errorf("append op for %s: %w", id, err)
 				}
 			}
 
-			// Refresh snapshot to apply the ops to state.
-			if _, err := store.Refresh(context.Background()); err != nil {
-				return fmt.Errorf("refresh snapshot: %w", err)
+			// Rematerialize to apply the ops to state.
+			if _, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, singleBranch); err != nil {
+				return fmt.Errorf("rematerialize: %w", err)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -92,7 +97,7 @@ func newScopeRenameCmd() *cobra.Command {
 					"affected_count": len(affected),
 					"affected":       affected,
 				}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed scope %q -> %q in %d issue(s): %s\n",

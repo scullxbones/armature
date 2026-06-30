@@ -45,9 +45,7 @@ func newAcceptCitationCmd() *cobra.Command {
 				}
 			}
 
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -64,7 +62,7 @@ func newAcceptCitationCmd() *cobra.Command {
 						ConfirmedNoninteractively: skipPrompt,
 					},
 				}
-				if err := appendLowStakesOp(state, logPath, op); err != nil {
+				if err := appendLowStakesOp(logPath, op); err != nil {
 					return err
 				}
 
@@ -73,7 +71,7 @@ func newAcceptCitationCmd() *cobra.Command {
 					"rationale":                  rationale,
 					"confirmed_noninteractively": skipPrompt,
 				}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			}
 			return nil

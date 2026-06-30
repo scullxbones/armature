@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +15,7 @@ func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	run := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
@@ -61,7 +60,7 @@ func TestResolveContext_DualBranch(t *testing.T) {
 
 	// Set git config keys
 	runGit := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
@@ -80,7 +79,7 @@ func TestResolveContext_DualBranch_MissingWorktreePath(t *testing.T) {
 	repo := initTestRepo(t)
 
 	// Set dual-branch mode but do NOT set ops-worktree-path
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode", "dual-branch")
+	cmd := exec.Command("git", "-C", repo, "config", "armature.mode", "dual-branch")
 	require.NoError(t, cmd.Run())
 
 	_, err := ResolveContext(repo)
@@ -92,7 +91,7 @@ func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode", "single-branch")
+	cmd := exec.Command("git", "-C", repo, "config", "armature.mode", "single-branch")
 	require.NoError(t, cmd.Run())
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -116,7 +115,7 @@ func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
 	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
 
 	runGit := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}

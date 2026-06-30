@@ -67,7 +67,8 @@ func (m Model) ApprovedIDs() []string {
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
 		k := msg.String()
 
 		// Global quit

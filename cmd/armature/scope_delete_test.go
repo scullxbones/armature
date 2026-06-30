@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +24,7 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	cmd.SetArgs([]string{"init", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -45,10 +44,6 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	// task-03: no matching scope entry (different path)
 	_, err = runTrls(t, repo, "create", "--id", "task-03", "--title", "Task 3", "--type", "task",
 		"--scope", "src/other/qux.go")
-	require.NoError(t, err)
-
-	// Materialize so index.json exists with scope data before scope-delete reads it via ReadIndex.
-	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	return repo
@@ -177,73 +172,4 @@ func TestScopeDeleteCmd_JSONOutput(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
 	assert.Equal(t, "src/old/foo.go", result["deleted_path"])
 	assert.EqualValues(t, 2, result["affected_count"])
-}
-
-// TestScopeDeleteCmd_UsesIndexForScan proves that scope-delete reads from index.json via
-// store.ReadIndex() rather than rematerializing from ops via store.Load().
-//
-// Mechanism: after materializing a real task, inject a fake entry directly into index.json.
-// This entry has no create op — Load() would overwrite index.json and lose it; ReadIndex()
-// reads the existing file and sees it.
-//
-// RED with store.Load(): rematerializes from ops → fake entry lost → output lacks
-//
-//	"task-index-only" → assertion FAILS.
-//
-// GREEN with store.ReadIndex(): reads existing index.json → sees fake entry → output
-//
-//	contains "task-index-only" → assertion PASSES.
-func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
-
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	// Create a real task with the scope path we'll delete.
-	_, err = runTrls(t, repo, "create", "--id", "task-real", "--title", "Real task", "--type", "task",
-		"--scope", "src/old/foo.go")
-	require.NoError(t, err)
-
-	// Materialize to write index.json containing task-real.
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-
-	// Inject a fake entry directly into index.json.
-	// This entry has no create op — store.Load() rematerializes and loses it;
-	// store.ReadIndex() reads the file as-is and sees it.
-	stateDir := getTestStateDir(t, repo)
-	indexPath := filepath.Join(stateDir, "index.json")
-
-	indexData, readErr := os.ReadFile(indexPath)
-	require.NoError(t, readErr)
-
-	var index materialize.Index
-	require.NoError(t, json.Unmarshal(indexData, &index))
-
-	index["task-index-only"] = materialize.IndexEntry{
-		Status: "open",
-		Scope:  []string{"src/old/foo.go"},
-	}
-
-	newData, marshalErr := json.Marshal(index)
-	require.NoError(t, marshalErr)
-	require.NoError(t, os.WriteFile(indexPath, newData, 0o644))
-
-	// Run scope-delete.
-	// With store.Load() (old code): rematerializes from ops, overwrites index.json,
-	//   loses task-index-only → output lacks it → assertion below FAILS (RED).
-	// With store.ReadIndex() (new code): reads existing index.json, sees task-index-only
-	//   → output includes it → assertion PASSES (GREEN).
-	out, err := runTrls(t, repo, "scope-delete", "src/old/foo.go")
-	require.NoError(t, err)
-
-	assert.Contains(t, out, "task-real", "real task must appear in output")
-	assert.Contains(t, out, "task-index-only",
-		"task-index-only must appear in output, proving store.ReadIndex was used (not store.Load)")
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -21,10 +20,9 @@ func newStaleReviewCmd() *cobra.Command {
 		Use:   "stale-review",
 		Short: "Review sources whose cached content has changed since last sync",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			execState := mustState(cmd)
-			appCtx := execState.ctx
+			issuesDir := appCtx.IssuesDir
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -34,15 +32,9 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("read manifest: %w", err)
 			}
 
-			// Load snapshot to get materialized state
-			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(context.Background())
+			state, _, err := materialize.MaterializeAndReturn(issuesDir, appCtx.StateDir, true)
 			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			state := snap.State
-			if state == nil {
-				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
+				return fmt.Errorf("materialize: %w", err)
 			}
 
 			// Detect stale entries.
@@ -112,7 +104,7 @@ func newStaleReviewCmd() *cobra.Command {
 						CitedIssues:   ids,
 					})
 				}
-				data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map of serializable values
+				data, _ := json.MarshalIndent(map[string]interface{}{
 					"stale_sources": staleSources,
 					"count":         len(staleSources),
 				}, "", "  ")
@@ -139,7 +131,7 @@ func newStaleReviewCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("stale-review TUI: %w", err)
 			}
-			final := finalModel.(stalereview.Model) //nolint:errcheck // map of serializable values
+			final := finalModel.(stalereview.Model)
 
 			decisions := final.Decisions()
 			items := final.Items()
@@ -162,7 +154,7 @@ func newStaleReviewCmd() *cobra.Command {
 						WorkerID:  workerID,
 						Payload:   ops.Payload{Msg: noteMsg},
 					}
-					if err := appendLowStakesOp(execState, logPath, o); err != nil {
+					if err := appendLowStakesOp(logPath, o); err != nil {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 							"warning: emit note for %s: %v\n", issue.ID, err)
 					}

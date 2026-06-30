@@ -6,7 +6,6 @@ import (
 )
 
 func TestManifestGetByURL(t *testing.T) {
-	t.Parallel()
 	entry := SourceEntry{
 		ID:           "src-abc",
 		URL:          "https://example.com/doc",
@@ -41,7 +40,6 @@ func TestManifestGetByURL(t *testing.T) {
 }
 
 func TestManifestRoundTrip(t *testing.T) {
-	t.Parallel()
 	entry := SourceEntry{
 		ID:           "src-001",
 		URL:          "https://example.com/doc",

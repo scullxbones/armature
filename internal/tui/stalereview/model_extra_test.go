@@ -25,7 +25,6 @@ func makeItems() []stalereview.ReviewItem {
 }
 
 func TestDecisions_InitiallyAllPending(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	for i, d := range m.Decisions() {
 		if d != 0 {
@@ -35,7 +34,6 @@ func TestDecisions_InitiallyAllPending(t *testing.T) {
 }
 
 func TestItems_ReturnsAll(t *testing.T) {
-	t.Parallel()
 	items := makeItems()
 	m := stalereview.New(items, "w1")
 	assert.Equal(t, len(items), len(m.Items()))
@@ -43,62 +41,53 @@ func TestItems_ReturnsAll(t *testing.T) {
 }
 
 func TestInit_ReturnsNil(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	assert.Nil(t, m.Init())
 }
 
 func TestUpdate_FlagMsg(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	m2, _ := m.Update(stalereview.FlagMsg{})
-	updated := m2.(stalereview.Model) //nolint:errcheck // panic on failed type assertion is an acceptable test outcome
+	updated := m2.(stalereview.Model)
 	assert.Equal(t, 0, updated.ConfirmedCount())
 }
 
 func TestUpdate_SkipMsg(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	m2, _ := m.Update(stalereview.SkipMsg{})
-	updated := m2.(stalereview.Model) //nolint:errcheck // panic on failed type assertion is an acceptable test outcome
+	updated := m2.(stalereview.Model)
 	assert.Equal(t, 0, updated.ConfirmedCount())
 }
 
 func TestUpdate_QuitKey(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	assert.NotNil(t, cmd)
 }
 
 func TestUpdate_FlagKey(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
 }
 
 func TestUpdate_SkipKey(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 }
 
 func TestView_ContainsSourceID(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	view := m.View()
 	assert.Contains(t, view, "prd")
 }
 
 func TestView_Complete_WhenNoItems(t *testing.T) {
-	t.Parallel()
 	m := stalereview.New([]stalereview.ReviewItem{}, "w1")
 	view := m.View()
 	assert.Contains(t, view, "complete")
 }
 
 func TestAllDecided_Quits(t *testing.T) {
-	t.Parallel()
 	items := []stalereview.ReviewItem{
 		{SourceID: "s1", CitedIssues: []*materialize.Issue{{ID: "T1"}}},
 	}

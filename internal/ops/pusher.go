@@ -19,7 +19,6 @@ type Pusher interface {
 // NoPusher is a no-op Pusher for single-branch mode or when push is disabled.
 type NoPusher struct{}
 
-// Push appends and commits the op without pushing to a remote.
 func (NoPusher) Push(logPath, worktreePath string, op Op, gc GitCommitter) error {
 	return AppendAndCommit(logPath, worktreePath, op, gc)
 }
@@ -33,7 +32,6 @@ type AppendCommitAndPush struct {
 	Backoff []time.Duration // override for testing; defaults to [1s, 2s, 4s]
 }
 
-// Push appends and commits the op, then pushes with exponential-backoff retry.
 func (a *AppendCommitAndPush) Push(logPath, worktreePath string, op Op, gc GitCommitter) error {
 	if err := AppendAndCommit(logPath, worktreePath, op, gc); err != nil {
 		return err
@@ -51,9 +49,10 @@ func (a *AppendCommitAndPush) Push(logPath, worktreePath string, op Op, gc GitCo
 
 	// First attempt — no backoff needed.
 	var lastErr error
-	lastErr = a.Pusher.Push(a.Branch)
-	if lastErr == nil {
+	if err := a.Pusher.Push(a.Branch); err == nil {
 		return nil
+	} else {
+		lastErr = err
 	}
 
 	// Retries: fetch+rebase, sleep, push.
@@ -62,8 +61,10 @@ func (a *AppendCommitAndPush) Push(logPath, worktreePath string, op Op, gc GitCo
 			return fmt.Errorf("fetch+rebase before push attempt %d: %w", attempt+2, err)
 		}
 		time.Sleep(delay)
-		if lastErr = a.Pusher.Push(a.Branch); lastErr == nil {
+		if err := a.Pusher.Push(a.Branch); err == nil {
 			return nil
+		} else {
+			lastErr = err
 		}
 	}
 

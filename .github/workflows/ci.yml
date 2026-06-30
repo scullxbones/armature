@@ -23,20 +23,5 @@ jobs:
       - name: Install gremlins
         run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
 
-      - name: Lint
-        run: make lint
-
-      - name: Test
-        run: make test
-
-      - name: Coverage
-        run: make coverage-check
-
-      - name: Mutation
-        run: make mutate
-
-      - name: Validate skills
-        run: make validate-skills
-
-      - name: Build
-        run: make build
+      - name: Run make check
+        run: make check

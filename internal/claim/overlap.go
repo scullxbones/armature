@@ -18,10 +18,10 @@ func ScopesOverlap(scopeA, scopeB []string) bool {
 }
 
 func globOverlaps(a, b string) bool {
-	if matched, _ := filepath.Match(a, b); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+	if matched, _ := filepath.Match(a, b); matched {
 		return true
 	}
-	if matched, _ := filepath.Match(b, a); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+	if matched, _ := filepath.Match(b, a); matched {
 		return true
 	}
 	dirA := extractDir(a)

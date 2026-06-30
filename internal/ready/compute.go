@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
-	"github.com/scullxbones/armature/internal/dag"
-	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -31,16 +30,13 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 	var currentTime int64
 	if len(now) > 0 {
 		currentTime = now[0]
+	} else {
+		currentTime = time.Now().Unix()
 	}
-
-	// Build a Graph projection for depth calculations during sorting.
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
 	var ready []ReadyEntry
 
 	for id, entry := range index {
-		if !issuetype.IsReadyEligible(entry.Type) {
+		if entry.Type != "task" && entry.Type != "feature" && entry.Type != "story" {
 			continue
 		}
 		if entry.Status != ops.StatusOpen {
@@ -84,23 +80,17 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		ready = append(ready, re)
 	}
 
-	sortReady(ready, index, graph, workerID)
+	sortReady(ready, index, workerID)
 	return ready
 }
 
 // ExplainNotReady returns a map of issue ID to exclusion reason for every open
 // unclaimed task that is NOT in the ready queue. Keys are sorted deterministically.
 // The reason string identifies which gate excluded the issue.
-// Pass variadic now parameter to inject deterministic time (for testing).
-func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue, now ...int64) map[string]string {
-	var currentTime int64
-	if len(now) > 0 {
-		currentTime = now[0]
-	}
-
+func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue) map[string]string {
 	result := make(map[string]string)
 	for id, entry := range index {
-		if !issuetype.IsReadyEligible(entry.Type) {
+		if entry.Type != "task" && entry.Type != "feature" && entry.Type != "story" {
 			continue
 		}
 		if entry.Status != ops.StatusOpen {
@@ -114,7 +104,7 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 		}
 		// Skip issues that are actively claimed (not stale).
 		if issue != nil && issue.ClaimedBy != "" {
-			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, currentTime) {
+			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, time.Now().Unix()) {
 				continue
 			}
 		}
@@ -210,7 +200,7 @@ func assignmentTier(issueID, workerID string, index materialize.Index) int {
 	return 2
 }
 
-func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, workerID string) {
+func sortReady(entries []ReadyEntry, index materialize.Index, workerID string) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		// Assignment tier first
 		ai := assignmentTier(entries[i].Issue, workerID, index)
@@ -223,9 +213,8 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 		if pi != pj {
 			return pi < pj
 		}
-		// Use graph projection for depth calculation
-		di := graph.Depth(entries[i].Issue)
-		dj := graph.Depth(entries[j].Issue)
+		di := depth(entries[i].Issue, index)
+		dj := depth(entries[j].Issue, index)
 		if di != dj {
 			return di > dj
 		}
@@ -238,36 +227,17 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 	})
 }
 
-// CollectDescendants returns the set of all descendant IDs of root (not including root itself).
-func CollectDescendants(root string, index materialize.Index) map[string]bool {
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-	descendants := graph.Descendants(root)
-
-	result := make(map[string]bool)
-	for _, id := range descendants {
-		result[id] = true
-	}
-	return result
-}
-
-// materializeIndexToNodeIndex converts a materialize.Index to a map suitable for dag.FromIndex.
-func materializeIndexToNodeIndex(index materialize.Index) map[string]*dag.Node {
-	nodeIndex := make(map[string]*dag.Node)
-	for id, entry := range index {
-		node := &dag.Node{
-			ID:        id,
-			Title:     entry.Title,
-			Type:      entry.Type,
-			Parent:    entry.Parent,
-			Children:  make([]string, len(entry.Children)),
-			BlockedBy: make([]string, len(entry.BlockedBy)),
-			Blocks:    make([]string, len(entry.Blocks)),
+func depth(id string, index materialize.Index) int {
+	d := 0
+	for {
+		entry, ok := index[id]
+		if !ok || entry.Parent == "" {
+			return d
 		}
-		copy(node.Children, entry.Children)
-		copy(node.BlockedBy, entry.BlockedBy)
-		copy(node.Blocks, entry.Blocks)
-		nodeIndex[id] = node
+		id = entry.Parent
+		d++
+		if d > 20 {
+			return d
+		}
 	}
-	return nodeIndex
 }

@@ -1,18 +1,13 @@
 package context
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 )
 
@@ -29,41 +24,35 @@ type Context struct {
 	Layers  []Layer `json:"layers"` // ordered by priority ascending
 }
 
-// Assemble builds a layered context for the given issue from state.
-func Assemble(issueID string, state *materialize.State, reader FileReader) (*Context, error) {
+// Assemble builds a 7-layer context for the given issue from state.
+func Assemble(issueID string, stateDir string, state *materialize.State) (*Context, error) {
 	issue, ok := state.Issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
 	}
-
-	// Derive graph internally from state
-	graph := graphFromState(state)
 
 	var layers []Layer
 
 	// Layer 1: core_spec
 	layers = append(layers, buildCoreSpec(issue))
 
-	// Layer 2: context_files
-	layers = append(layers, buildContextFiles(issue, reader))
-
-	// Layer 3: snippets
+	// Layer 2: snippets
 	layers = append(layers, buildSnippets(issue))
 
-	// Layer 4: blocker_outcomes
-	layers = append(layers, buildBlockerOutcomes(issue, state))
+	// Layer 3: blocker_outcomes
+	layers = append(layers, buildBlockerOutcomes(issue, stateDir, state))
 
-	// Layer 5: parent_chain
-	layers = append(layers, buildParentChain(issue, graph, state))
+	// Layer 4: parent_chain
+	layers = append(layers, buildParentChain(issue, stateDir, state))
 
-	// Layer 6: decisions
+	// Layer 5: decisions
 	layers = append(layers, buildDecisions(issue))
 
-	// Layer 7: notes
+	// Layer 6: notes
 	layers = append(layers, buildNotes(issue))
 
-	// Layer 8: sibling_outcomes
-	layers = append(layers, buildSiblingOutcomes(issue, graph, state))
+	// Layer 7: sibling_outcomes
+	layers = append(layers, buildSiblingOutcomes(issue, stateDir, state))
 
 	sort.Slice(layers, func(i, j int) bool {
 		return layers[i].Priority < layers[j].Priority
@@ -73,101 +62,6 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 		IssueID: issueID,
 		Layers:  layers,
 	}, nil
-}
-
-func InferRepoRoot(stateDir string) string {
-	// Fast path: walk up looking for .arm/.armature directory name (no subprocess).
-	if root := inferRepoRootByPath(stateDir); root != "" {
-		return root
-	}
-	// Fallback: ask git, handles worktree layouts where .arm/.armature is not in stateDir's path.
-	if root := inferRepoRootByGit(stateDir); root != "" {
-		return root
-	}
-	return filepath.Clean(stateDir)
-}
-
-// inferRepoRootByPath walks up from stateDir looking for a directory component
-// named ".arm" or ".armature" and returns its parent (the project root).
-func inferRepoRootByPath(stateDir string) string {
-	clean := filepath.Clean(stateDir)
-	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		base := filepath.Base(dir)
-		if base == ".arm" || base == ".armature" {
-			return filepath.Dir(dir)
-		}
-	}
-	return ""
-}
-
-// inferRepoRootByGit runs "git rev-parse --show-toplevel" from stateDir (or
-// the nearest existing ancestor) to locate the repo root in worktree layouts.
-func inferRepoRootByGit(stateDir string) string {
-	// Walk up to find an existing directory to run git from.
-	dir := filepath.Clean(stateDir)
-	for dir != "." && dir != string(filepath.Separator) {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			break
-		}
-		dir = filepath.Dir(dir)
-	}
-	if dir == "." || dir == string(filepath.Separator) {
-		return ""
-	}
-	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
-	cmd.Dir = dir
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(out.String())
-}
-
-func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
-	if len(issue.ContextFiles) == 0 {
-		return Layer{Name: "context_files", Priority: 2, Content: ""}
-	}
-	var sections []string
-	for _, relPath := range issue.ContextFiles {
-		data, err := reader.ReadFile(relPath)
-		if err != nil {
-			sections = append(sections, fmt.Sprintf("### %s\n(missing: %v)", relPath, err))
-			continue
-		}
-		content := strings.TrimRight(string(data), "\n")
-		fence := codeBlockFence(content)
-		sections = append(sections, fmt.Sprintf("### %s\n%stext\n%s\n%s", relPath, fence, content, fence))
-	}
-	return Layer{
-		Name:     "context_files",
-		Priority: 2,
-		Content:  "## Context Files\n" + strings.Join(sections, "\n\n"),
-	}
-}
-
-// codeBlockFence returns a backtick fence string long enough that it cannot
-// be closed prematurely by any backtick sequence in content.  The returned
-// fence is at least three backticks and always one longer than the longest
-// consecutive run of backticks found in content.
-func codeBlockFence(content string) string {
-	maxRun := 0
-	cur := 0
-	for _, ch := range content {
-		if ch == '`' {
-			cur++
-			if cur > maxRun {
-				maxRun = cur
-			}
-		} else {
-			cur = 0
-		}
-	}
-	fenceLen := maxRun + 1
-	if fenceLen < 3 { //nolint:mnd // 3 is the minimum valid Markdown code-fence length
-		fenceLen = 3
-	}
-	return strings.Repeat("`", fenceLen)
 }
 
 func buildCoreSpec(issue *materialize.Issue) Layer {
@@ -190,24 +84,24 @@ func buildCoreSpec(issue *materialize.Issue) Layer {
 
 func buildSnippets(issue *materialize.Issue) Layer {
 	if issue.Context == nil {
-		return Layer{Name: "snippets", Priority: 3, Content: ""}
+		return Layer{Name: "snippets", Priority: 2, Content: ""}
 	}
-	var ctxMap map[string]any
+	var ctxMap map[string]interface{}
 	if err := json.Unmarshal(issue.Context, &ctxMap); err != nil {
-		return Layer{Name: "snippets", Priority: 3, Content: ""}
+		return Layer{Name: "snippets", Priority: 2, Content: ""}
 	}
 	if len(ctxMap) == 0 {
-		return Layer{Name: "snippets", Priority: 3, Content: ""}
+		return Layer{Name: "snippets", Priority: 2, Content: ""}
 	}
 	var lines []string
 	for k, v := range ctxMap {
 		lines = append(lines, fmt.Sprintf("%s: %v", k, v))
 	}
 	sort.Strings(lines)
-	return Layer{Name: "snippets", Priority: 3, Content: strings.Join(lines, "\n")}
+	return Layer{Name: "snippets", Priority: 2, Content: strings.Join(lines, "\n")}
 }
 
-func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) Layer {
+func buildBlockerOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	if len(issue.BlockedBy) == 0 {
 		return Layer{Name: "blocker_outcomes", Priority: 3, Content: ""}
 	}
@@ -220,6 +114,15 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 			if blocker.Outcome != "" {
 				outcome = blocker.Outcome
 			}
+		} else {
+			// Try loading from disk
+			path := filepath.Join(stateDir, "issues", blockerID+".json")
+			if b, err := materialize.LoadIssue(path); err == nil {
+				status = b.Status
+				if b.Outcome != "" {
+					outcome = b.Outcome
+				}
+			}
 		}
 		// Include status alongside outcome for unambiguous signal
 		if outcome == "outcome unknown" && status != "" {
@@ -228,61 +131,59 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 		lines = append(lines, fmt.Sprintf("- %s: %s", blockerID, outcome))
 	}
 	content := "## Blocking Issue Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "blocker_outcomes", Priority: 4, Content: content}
+	return Layer{Name: "blocker_outcomes", Priority: 3, Content: content}
 }
 
-func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
+func buildParentChain(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	var lines []string
-
-	// Get all ancestors up the hierarchy
-	ancestors := graph.Ancestry(issue.ID)
-	for _, parentID := range ancestors {
-		// Ancestors come from graph.Ancestry, which only includes parents
-		// We need to cap at 3 levels for display
-		if len(lines) >= 3 {
+	currentParentID := issue.Parent
+	for range 3 {
+		if currentParentID == "" {
 			break
 		}
-		parentIssue, ok := state.Issues[parentID]
-		if !ok {
-			// Parent not in state; this shouldn't happen with a valid graph
-			continue
+		parentID := currentParentID
+		var parentTitle, parentStatus, nextParentID string
+		if parent, ok := state.Issues[parentID]; ok {
+			parentTitle = parent.Title
+			parentStatus = parent.Status
+			nextParentID = parent.Parent
+		} else {
+			path := filepath.Join(stateDir, "issues", parentID+".json")
+			if p, err := materialize.LoadIssue(path); err == nil {
+				parentTitle = p.Title
+				parentStatus = p.Status
+				nextParentID = p.Parent
+			} else {
+				break
+			}
 		}
-		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", parentID, parentIssue.Title, parentIssue.Status))
+		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", parentID, parentTitle, parentStatus))
+		currentParentID = nextParentID
 	}
-
 	if len(lines) == 0 {
-		return Layer{Name: "parent_chain", Priority: 5, Content: ""}
+		return Layer{Name: "parent_chain", Priority: 4, Content: ""}
 	}
 	content := "## Parent Chain\n" + strings.Join(lines, "\n")
-	return Layer{Name: "parent_chain", Priority: 5, Content: content}
+	return Layer{Name: "parent_chain", Priority: 4, Content: content}
 }
 
 func buildDecisions(issue *materialize.Issue) Layer {
 	if len(issue.Decisions) == 0 {
-		return Layer{Name: "decisions", Priority: 6, Content: ""}
+		return Layer{Name: "decisions", Priority: 5, Content: ""}
 	}
 	var lines []string
 	for _, d := range issue.Decisions {
 		lines = append(lines, fmt.Sprintf("- %s: %s — %s", d.Topic, d.Choice, d.Rationale))
 	}
 	content := "## Decisions\n" + strings.Join(lines, "\n")
-	return Layer{Name: "decisions", Priority: 6, Content: content}
+	return Layer{Name: "decisions", Priority: 5, Content: content}
 }
 
 func buildNotes(issue *materialize.Issue) Layer {
 	if len(issue.Notes) == 0 {
-		return Layer{Name: "notes", Priority: 7, Content: ""}
+		return Layer{Name: "notes", Priority: 6, Content: ""}
 	}
-	notes := make([]materialize.Note, 0, len(issue.Notes))
-	for _, note := range issue.Notes {
-		if note.Deleted {
-			continue
-		}
-		notes = append(notes, note)
-	}
-	if len(notes) == 0 {
-		return Layer{Name: "notes", Priority: 7, Content: ""}
-	}
+	notes := issue.Notes
 	// Take most recent 5
 	if len(notes) > 5 {
 		notes = notes[len(notes)-5:]
@@ -293,30 +194,41 @@ func buildNotes(issue *materialize.Issue) Layer {
 		lines = append(lines, fmt.Sprintf("- [%s] %s", ts, n.Msg))
 	}
 	content := "## Notes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "notes", Priority: 7, Content: content}
+	return Layer{Name: "notes", Priority: 6, Content: content}
 }
 
-func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
-	// Get the parent ID from the current issue
+func buildSiblingOutcomes(issue *materialize.Issue, stateDir string, state *materialize.State) Layer {
 	if issue.Parent == "" {
-		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
+		return Layer{Name: "sibling_outcomes", Priority: 7, Content: ""}
 	}
-
-	// Use graph.Hierarchy to get the parent's children
-	_, children := graph.Hierarchy(issue.Parent)
+	var children []string
+	if parent, ok := state.Issues[issue.Parent]; ok {
+		children = parent.Children
+	} else {
+		path := filepath.Join(stateDir, "issues", issue.Parent+".json")
+		if p, err := materialize.LoadIssue(path); err == nil {
+			children = p.Children
+		}
+	}
 
 	var lines []string
 	for _, sibID := range children {
 		if sibID == issue.ID {
 			continue
 		}
-		sib, ok := state.Issues[sibID]
-		if !ok {
-			// Sibling not in state; this shouldn't happen with a valid graph
-			continue
+		var sibStatus, sibOutcome string
+		if sib, ok := state.Issues[sibID]; ok {
+			sibStatus = sib.Status
+			sibOutcome = sib.Outcome
+		} else {
+			path := filepath.Join(stateDir, "issues", sibID+".json")
+			if s, err := materialize.LoadIssue(path); err == nil {
+				sibStatus = s.Status
+				sibOutcome = s.Outcome
+			}
 		}
-		if sib.Status == "done" || sib.Status == "merged" {
-			outcome := sib.Outcome
+		if sibStatus == "done" || sibStatus == "merged" {
+			outcome := sibOutcome
 			if outcome == "" {
 				outcome = "(none)"
 			}
@@ -324,27 +236,8 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 		}
 	}
 	if len(lines) == 0 {
-		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
+		return Layer{Name: "sibling_outcomes", Priority: 7, Content: ""}
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "sibling_outcomes", Priority: 8, Content: content}
-}
-
-// graphFromState constructs a dag.Graph from a materialize.State.
-// This is the canonical way to build a graph for context assembly and other operations
-// that need to traverse the issue hierarchy and dependencies.
-func graphFromState(state *materialize.State) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
-	for id, issue := range state.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        issue.ID,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  append([]string(nil), issue.Children...),
-			BlockedBy: append([]string(nil), issue.BlockedBy...),
-			Blocks:    append([]string(nil), issue.Blocks...),
-		}
-	}
-	return dag.BuildGraph(nodeIndex)
+	return Layer{Name: "sibling_outcomes", Priority: 7, Content: content}
 }

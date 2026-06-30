@@ -21,21 +21,19 @@ This removes erroneous dependency links that were previously created with the li
 		Example: `  # Remove blocked_by dependency
   $ arm unlink --source E6-S4-T2 --dep E6-S4-T1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
 			op := ops.Op{Type: ops.OpUnlink, TargetID: sourceID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{Dep: dep, Rel: "blocked_by"}}
-			if err := appendOp(ctx, logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"source": sourceID, "dep": dep}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Unlinked %s from %s\n", sourceID, dep)

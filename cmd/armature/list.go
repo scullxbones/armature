@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -51,16 +50,15 @@ func newListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List issues with optional --type, --parent, and --status filters",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := currentCtx(cmd)
-			store := newSnapshotStore(ctx)
-			snap, err := store.Load(context.Background())
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
+			issuesDir := appCtx.IssuesDir
+			singleBranch := appCtx.Mode == "single-branch"
+			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
+				return err
 			}
 
-			index := snap.Index
-			if index == nil {
-				index = make(materialize.Index)
+			index, err := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
+			if err != nil {
+				return err
 			}
 
 			var ids []string
@@ -94,13 +92,13 @@ func newListCmd() *cobra.Command {
 						Title:   e.Title,
 						Outcome: e.Outcome,
 					}
-					issue := snap.State.Issues[id]
-					if issue != nil {
+					issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", id+".json"))
+					if err == nil {
 						le.ClaimedBy = issue.ClaimedBy
 					}
 					entries = append(entries, le)
 				}
-				data, _ := json.MarshalIndent(entries, "", "  ") //nolint:errcheck // slice of serializable structs
+				data, _ := json.MarshalIndent(entries, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
@@ -128,7 +126,7 @@ func newListCmd() *cobra.Command {
 				})
 				for _, status := range statuses {
 					label := status
-					if status == ops.StatusDone && ctx.Mode != "single-branch" {
+					if status == ops.StatusDone && appCtx.Mode != "single-branch" {
 						label = "done (awaiting merge)"
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
@@ -136,7 +134,7 @@ func newListCmd() *cobra.Command {
 					for _, id := range groups[status] {
 						e := index[id]
 						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
-						if status == ops.StatusDone && ctx.Mode != "single-branch" && e.Branch != "" {
+						if status == ops.StatusDone && appCtx.Mode != "single-branch" && e.Branch != "" {
 							line += fmt.Sprintf("  [branch: %s", e.Branch)
 							if e.PR != "" {
 								line += fmt.Sprintf(", PR: #%s", e.PR)
@@ -153,39 +151,29 @@ func newListCmd() *cobra.Command {
 				if len(ids) == 0 {
 					return nil
 				}
-				// Story Board view: migrate to output.RenderBoard for a single table renderer
-				boardEntries := make([]output.BoardEntry, 0, len(ids))
+				// Story Board view (table format)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE")
 				for _, id := range ids {
 					e := index[id]
 					claimed := ""
-					issue := snap.State.Issues[id]
-					if issue != nil {
+					issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", id+".json"))
+					if err == nil {
 						claimed = issue.ClaimedBy
 					}
-					boardEntries = append(boardEntries, output.BoardEntry{
-						Issue:   id,
-						Status:  e.Status,
-						Claimed: claimed,
-						Outcome: e.Outcome,
-						Title:   e.Title,
-					})
+					outcome := e.Outcome
+					if len(outcome) > 30 {
+						outcome = outcome[:27] + "..."
+					}
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-12s %-12s %-38s %-30s %s\n", id, e.Status, claimed, outcome, e.Title)
 				}
-				return output.RenderBoard(cmd.OutOrStdout(), boardEntries)
+				return nil
 			}
 
-			// Use output.RenderList for simple list view
-			entries := make([]output.ListEntry, 0, len(ids))
 			for _, id := range ids {
-				e := index[id]
-				le := output.ListEntry{
-					Issue:      id,
-					Status:     e.Status,
-					Title:      e.Title,
-					AssignedTo: e.AssignedWorker,
-				}
-				entries = append(entries, le)
+				entry := index[id]
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-12s  %-14s  %s\n", id, entry.Status, entry.Title)
 			}
-			return output.RenderList(cmd.OutOrStdout(), entries)
+			return nil
 		},
 	}
 

@@ -40,9 +40,8 @@ func newWorkersCmd() *cobra.Command {
 			}
 
 			statuses := make([]WorkerStatus, 0, len(workers))
-			winners := claimWinnersByIssue(workers)
 			for workerID, allOps := range workers {
-				s := buildWorkerStatus(workerID, allOps, defaultTTL, now, winners)
+				s := buildWorkerStatus(workerID, allOps, defaultTTL, now)
 				statuses = append(statuses, s)
 			}
 
@@ -54,7 +53,7 @@ func newWorkersCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if jsonOut || format == "json" || format == "agent" {
 				for _, s := range statuses {
-					data, _ := json.Marshal(s) //nolint:errcheck // result struct contains only serializable values
+					data, _ := json.Marshal(s)
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				}
 				return nil
@@ -108,7 +107,7 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 //   - active: has a live (non-stale) claim
 //   - stale: had claims but all are stale
 //   - idle: last op was within 2*defaultTTL minutes window (no active claim)
-func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64, winners map[string]string) WorkerStatus {
+func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64) WorkerStatus {
 	lastOp := lastOpTimestampFromLog(allOps)
 
 	// Find active claims: look for claims not yet overtaken by a transition to done/merged
@@ -137,9 +136,6 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 
 	// Check each claimed issue
 	for issueID, ca := range claimedAt {
-		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
-			continue
-		}
 		if transitioned[issueID] {
 			continue
 		}
@@ -157,17 +153,8 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		}
 	}
 
-	// Check if any winner claim was made by this worker (all stale).
-	// Losing race claims should not classify a worker as stale.
-	hasWinnerClaim := false
-	for issueID := range claimedAt {
-		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
-			continue
-		}
-		hasWinnerClaim = true
-		break
-	}
-	if hasWinnerClaim {
+	// Check if any claim was made (all stale)
+	if len(claimedAt) > 0 {
 		return WorkerStatus{
 			WorkerID:   workerID,
 			Status:     "stale",
@@ -190,87 +177,6 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		Status:     "idle",
 		LastOpTime: lastOp,
 	}
-}
-
-func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
-	type issueState struct {
-		claimedAt     int64
-		lastHeartbeat int64
-		ttl           int
-		transitioned  bool
-	}
-	claimsByIssue := make(map[string][]ops.Op)
-	opsByIssue := make(map[string][]ops.Op)
-	for _, allOps := range workers {
-		for _, op := range allOps {
-			opsByIssue[op.TargetID] = append(opsByIssue[op.TargetID], op)
-			if op.Type == ops.OpClaim {
-				claimsByIssue[op.TargetID] = append(claimsByIssue[op.TargetID], op)
-			}
-		}
-	}
-	winners := make(map[string]string, len(claimsByIssue))
-	for issueID, issueOps := range opsByIssue {
-		sort.Slice(issueOps, func(i, j int) bool {
-			if issueOps[i].Timestamp != issueOps[j].Timestamp {
-				return issueOps[i].Timestamp < issueOps[j].Timestamp
-			}
-			if issueOps[i].WorkerID != issueOps[j].WorkerID {
-				return issueOps[i].WorkerID < issueOps[j].WorkerID
-			}
-			return issueOps[i].Type < issueOps[j].Type
-		})
-		stateByWorker := make(map[string]*issueState)
-		var activeWorker string
-		for _, op := range issueOps {
-			staleAt := func(workerID string, now int64) bool {
-				s := stateByWorker[workerID]
-				if s == nil {
-					return true
-				}
-				ttl := s.ttl
-				if ttl <= 0 {
-					ttl = 60
-				}
-				return claim.IsClaimStale(s.claimedAt, s.lastHeartbeat, ttl, now)
-			}
-			switch op.Type {
-			case ops.OpClaim:
-				if staleAt(activeWorker, op.Timestamp) {
-					activeWorker = op.WorkerID
-					stateByWorker[op.WorkerID] = &issueState{
-						claimedAt:     op.Timestamp,
-						lastHeartbeat: op.Timestamp,
-						ttl:           op.Payload.TTL,
-					}
-				}
-			case ops.OpHeartbeat:
-				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastHeartbeat {
-					s.lastHeartbeat = op.Timestamp
-				}
-			case ops.OpTransition:
-				if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged || op.Payload.To == ops.StatusCancelled {
-					if s := stateByWorker[op.WorkerID]; s != nil {
-						s.transitioned = true
-					}
-					activeWorker = ""
-				}
-			}
-		}
-		if activeWorker != "" {
-			if s := stateByWorker[activeWorker]; s != nil && !s.transitioned {
-				winners[issueID] = baseWorkerIdentity(activeWorker)
-				continue
-			}
-		}
-		claims := claimsByIssue[issueID]
-		if len(claims) == 0 {
-			continue
-		}
-		winner := claim.ResolveClaim(claims)
-		winners[issueID] = baseWorkerIdentity(winner.WorkerID)
-	}
-	return winners
 }
 
 // lastOpTimestampFromLog returns the timestamp of the most recent op in the list.

@@ -9,7 +9,6 @@ import (
 )
 
 func TestWriteAndRead_RoundTrip(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "traceability.json")
 
@@ -40,7 +39,6 @@ func TestWriteAndRead_RoundTrip(t *testing.T) {
 }
 
 func TestRead_MissingFile_ReturnsZero(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nonexistent.json")
 
@@ -54,7 +52,6 @@ func TestRead_MissingFile_ReturnsZero(t *testing.T) {
 }
 
 func TestRead_InvalidJSON_ReturnsError(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.json")
 

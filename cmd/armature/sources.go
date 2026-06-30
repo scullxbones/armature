@@ -8,21 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 )
 
-func sourcesDir(args ...*config.Context) string {
-	ctx := appCtx
-	if len(args) > 0 && args[0] != nil {
-		ctx = args[0]
-	}
-	if ctx == nil {
-		return filepath.Join(".", "sources")
-	}
-	return filepath.Join(ctx.IssuesDir, "sources")
+func sourcesDir() string {
+	return filepath.Join(appCtx.IssuesDir, "sources")
 }
 
 func newSourcesCmd() *cobra.Command {
@@ -45,8 +37,7 @@ func newSourcesAddCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Add a new source to the manifest",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
-			dir := sourcesDir(appCtx)
+			dir := sourcesDir()
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)
@@ -62,8 +53,7 @@ func newSourcesAddCmd() *cobra.Command {
 			// Warn if filesystem path is relative.
 			if providerType == "filesystem" && !filepath.IsAbs(url) {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-					"warning: relative filesystem path %q will be resolved from working directory at sync time; "+
-						"safe when arm sync is always run from the repo root; use an absolute path to avoid this dependency\n", url)
+					"warning: relative filesystem path %q will be resolved from working directory at sync time\n", url)
 			}
 
 			manifest.Upsert(entry)
@@ -91,8 +81,7 @@ func newSourcesSyncCmd() *cobra.Command {
 		Use:   "sync",
 		Short: "Fetch and cache content for all sources",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
-			dir := sourcesDir(appCtx)
+			dir := sourcesDir()
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)
@@ -103,7 +92,7 @@ func newSourcesSyncCmd() *cobra.Command {
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -116,8 +105,6 @@ func newSourcesSyncCmd() *cobra.Command {
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "skip %s: %v\n", id, err)
 					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
-					entry.SyncFailed = true
-					manifest.Upsert(entry)
 					continue
 				}
 
@@ -125,21 +112,16 @@ func newSourcesSyncCmd() *cobra.Command {
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "fetch %s: %v\n", id, err)
 					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
-					entry.SyncFailed = true
-					manifest.Upsert(entry)
 					continue
 				}
 
 				entry.Fingerprint = sources.Fingerprint(data)
 				entry.LastSynced = time.Now().UTC()
-				entry.SyncFailed = false
 				manifest.Upsert(entry)
 
 				if err := sources.WriteCache(dir, id, data); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "write cache %s: %v\n", id, err)
 					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
-					entry.SyncFailed = true
-					manifest.Upsert(entry)
 					continue
 				}
 
@@ -153,7 +135,7 @@ func newSourcesSyncCmd() *cobra.Command {
 						Provider: entry.ProviderType,
 					},
 				}
-				if err := appendLowStakesOp(mustState(cmd), logPath, o); err != nil {
+				if err := appendLowStakesOp(logPath, o); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", id, err)
 				}
 
@@ -180,8 +162,7 @@ func newSourcesVerifyCmd() *cobra.Command {
 		Use:   "verify",
 		Short: "Verify cached content matches stored fingerprints",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
-			dir := sourcesDir(appCtx)
+			dir := sourcesDir()
 			manifest, err := sources.ReadManifest(dir)
 			if err != nil {
 				return fmt.Errorf("read manifest: %w", err)
@@ -194,13 +175,6 @@ func newSourcesVerifyCmd() *cobra.Command {
 
 			allOK := true
 			for id, entry := range manifest.Entries {
-				// Check if the last sync attempt failed
-				if entry.SyncFailed {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  STALE  (cached content exists but last sync failed)\n", id)
-					allOK = false
-					continue
-				}
-
 				data, err := sources.ReadCache(dir, id)
 				if err != nil {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  ERROR  %v\n", id, err)

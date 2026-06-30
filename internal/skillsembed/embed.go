@@ -6,8 +6,8 @@ import (
 	"io/fs"
 )
 
-//go:embed skills plugin.json
+//go:embed skills
 var skillsFS embed.FS
 
-// SkillsFS is the embedded filesystem containing all bundled skills and plugin configuration.
+// SkillsFS is the embedded filesystem containing all bundled skills.
 var SkillsFS fs.FS = skillsFS
