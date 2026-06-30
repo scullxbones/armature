@@ -9,6 +9,7 @@ import (
 )
 
 func TestValidateInit(t *testing.T) {
+	t.Parallel()
 	m := tuivalidate.New()
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init should return nil")
@@ -16,11 +17,13 @@ func TestValidateInit(t *testing.T) {
 }
 
 func TestValidateSetSize(t *testing.T) {
+	t.Parallel()
 	m := tuivalidate.New()
 	m.SetSize(80, 24) // must not panic
 }
 
 func TestValidateHelpBar(t *testing.T) {
+	t.Parallel()
 	m := tuivalidate.New()
 	h := m.HelpBar()
 	if !strings.Contains(h, "q quit") {
@@ -29,6 +32,7 @@ func TestValidateHelpBar(t *testing.T) {
 }
 
 func TestValidateUpdate(t *testing.T) {
+	t.Parallel()
 	m := tuivalidate.New()
 	screen, cmd := m.Update(nil)
 	if screen == nil {
@@ -40,6 +44,7 @@ func TestValidateUpdate(t *testing.T) {
 }
 
 func TestValidateNilStateView(t *testing.T) {
+	t.Parallel()
 	m := tuivalidate.New()
 	v := m.View()
 	if !strings.Contains(v, "No state available") {
@@ -48,6 +53,7 @@ func TestValidateNilStateView(t *testing.T) {
 }
 
 func TestValidateScreenRendersIssues(t *testing.T) {
+	t.Parallel()
 	m := tuivalidate.New()
 	state := materialize.NewState()
 	// No issues -> should show OK.

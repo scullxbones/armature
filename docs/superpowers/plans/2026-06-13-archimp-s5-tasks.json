@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "title": "ARCHIMP-S5 RepoSnapshot Module tasks",
+  "issues": [
+    {
+      "id": "T1",
+      "title": "Create snapshot package with Load function (TDD)",
+      "type": "task",
+      "parent": "",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "TDD: write 4 failing tests (empty dir, single issue, worker-ID mismatch warning, state+issues agreement), then implement snapshot.Load(opsDir, stateDir, singleBranch) so all 4 pass. make check green.",
+      "scope": "internal/snapshot/snapshot.go (new), internal/snapshot/snapshot_test.go (new)",
+      "acceptance": [
+        "go test ./internal/snapshot/... -v: 4 tests pass",
+        "make check green",
+        "snapshot package imports only ops and materialize (no cmd or tui)"
+      ],
+      "notes": [
+        "Snapshot struct: State *materialize.State, Index materialize.Index, Issues map[string]*materialize.Issue, Warnings []string",
+        "Load calls ops.LoadFromDirWithOffsetsValidated, materialize.MaterializeAndReturn, materialize.LoadIndex, materialize.LoadAllIssues",
+        "Returns non-nil Snapshot on nil error even for empty opsDir"
+      ]
+    },
+    {
+      "id": "T2",
+      "title": "Migrate ready, show, and validate commands to snapshot.Load",
+      "type": "task",
+      "parent": "",
+      "priority": "high",
+      "blocked_by": ["T1"],
+      "dod": "Replace the 3-step ops-read + Materialize + LoadIndex/LoadIssue pattern in ready.go, show.go, and validate.go with a single snapshot.Load call. Warnings emitted to stderr. Unused materialize imports removed. go build ./cmd/armature/... and make test pass.",
+      "scope": "cmd/armature/ready.go, cmd/armature/show.go, cmd/armature/validate.go",
+      "acceptance": [
+        "go build ./cmd/armature/... succeeds",
+        "make test passes",
+        "each command uses snap.Index / snap.Issues / snap.State (no direct materialize.LoadIssue calls remaining)"
+      ],
+      "notes": [
+        "validate.go uses snap.State in place of the state returned by MaterializeAndReturn",
+        "show.go: replace remaining materialize.LoadIssue calls with snap.Issues[id] lookups",
+        "Add os import if missing for stderr warning emission"
+      ]
+    },
+    {
+      "id": "T3",
+      "title": "Migrate render-context normal path and TUI doRefresh to snapshot.Load",
+      "type": "task",
+      "parent": "",
+      "priority": "high",
+      "blocked_by": ["T1"],
+      "dod": "render_context.go else-branch uses snapshot.Load; loadStateFromStateDir helper removed. TUI model.go doRefresh uses snapshot.Load; local readAllOpsFromDirWithOffsets helper removed. go build ./... and make test pass.",
+      "scope": "cmd/armature/render_context.go, internal/tui/app/model.go",
+      "acceptance": [
+        "go build ./... succeeds",
+        "make test passes",
+        "readAllOpsFromDirWithOffsets no longer exists in model.go",
+        "loadStateFromStateDir no longer exists in render_context.go"
+      ],
+      "notes": [
+        "render_context.go --at (time-travel) path retains MaterializeAtSHA call unchanged",
+        "TUI doRefresh: if err != nil || snap.State == nil return nil"
+      ]
+    }
+  ]
+}

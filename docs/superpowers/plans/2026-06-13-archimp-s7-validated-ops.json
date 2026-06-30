@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "title": "ARCHIMP-S7 Validated Op Evidence in doctor",
+  "issues": [
+    {
+      "id": "S7",
+      "title": "Fix doctor to use validated op stream so D3 and materialization agree",
+      "type": "story",
+      "parent": "",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "doctor.Run uses ops.LoadFromDirWithOffsetsValidated; worker-ID mismatches are excluded. Old raw-reading helpers removed. TDD test proves mismatch exclusion. Integration verification: arm validate, arm doctor, arm ready all exit 0. make check green.",
+      "scope": "internal/doctor/doctor.go, internal/doctor/doctor_test.go",
+      "acceptance": [
+        "TestRun_ValidatedOpsExcludesMismatches passes",
+        "readAllOpsFromOpsDir and readAllOpsFromOpsDirWithLocations no longer exist in doctor.go",
+        "make check green",
+        "arm validate --ci exits 0",
+        "arm doctor exits 0",
+        "arm ready --format json exits 0"
+      ],
+      "notes": []
+    },
+    {
+      "id": "S7-T1",
+      "title": "Replace raw op log reading in doctor with validated op stream (TDD)",
+      "type": "task",
+      "parent": "S7",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "TDD: write TestRun_ValidatedOpsExcludesMismatches proving GHOST-99 (worker-ID mismatch) not in D3 output. Implement by replacing readAllOpsFromOpsDir with ops.LoadFromDirWithOffsetsValidated in doctor.Run. Remove both raw-reader helpers. buildLocationMap derives location map from OpItem metadata. go test ./internal/doctor/... passes.",
+      "scope": "internal/doctor/doctor.go, internal/doctor/doctor_test.go",
+      "acceptance": [
+        "go test ./internal/doctor/... -v: all tests pass including new mismatch test",
+        "readAllOpsFromOpsDir and readAllOpsFromOpsDirWithLocations absent from doctor.go",
+        "buildLocationMap counts per-file line numbers (1-based), not global"
+      ],
+      "notes": [
+        "writeOp test helper is local to doctor_test.go (unexported; each package keeps its own copy)",
+        "Warnings from validation left unused for now (assign to _)",
+        "verbose path: buildLocationMap(items) where items = []ops.OpItem from validated load"
+      ]
+    },
+    {
+      "id": "S7-T2",
+      "title": "Integration verification: all commands consistent after architecture deepening",
+      "type": "task",
+      "parent": "S7",
+      "priority": "medium",
+      "blocked_by": ["S7-T1"],
+      "dod": "arm validate --ci, arm doctor, arm ready --format json, arm render-context (if issues exist), and make check all exit 0. No regressions. All three seams (snapshot, graph facts, validated ops) share one canonical path through the codebase.",
+      "scope": "",
+      "acceptance": [
+        "make check green (lint + test + coverage ≥80% + mutate + validate-skills + build)",
+        "arm validate --ci exits 0",
+        "arm doctor exits 0",
+        "arm ready --format json exits 0"
+      ],
+      "notes": [
+        "No code changes expected in this task; it is a verification gate only",
+        "If any check fails, fix in the relevant story task and re-run"
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import (
 )
 
 func TestResolveClaimRace_FirstTimestampWins(t *testing.T) {
+	t.Parallel()
 	claims := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-b"},
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
@@ -22,6 +23,7 @@ func TestResolveClaimRace_FirstTimestampWins(t *testing.T) {
 }
 
 func TestResolveClaimRace_LexicographicTiebreaker(t *testing.T) {
+	t.Parallel()
 	claims := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b"},
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
@@ -31,6 +33,7 @@ func TestResolveClaimRace_LexicographicTiebreaker(t *testing.T) {
 }
 
 func TestIsClaimStale(t *testing.T) {
+	t.Parallel()
 	// TTL=1 minute = 60 seconds; claimedAt=100, now=161 => stale (100+60=160 < 161)
 	assert.True(t, IsClaimStale(100, 0, 1, 161))
 	// now=159 => not stale (100+60=160 > 159)
@@ -44,6 +47,7 @@ func TestIsClaimStale(t *testing.T) {
 }
 
 func TestScopeOverlap(t *testing.T) {
+	t.Parallel()
 	assert.True(t, ScopesOverlap([]string{"src/auth/**"}, []string{"src/auth/login.go"}))
 	assert.False(t, ScopesOverlap([]string{"src/auth/**"}, []string{"src/api/handler.go"}))
 	assert.True(t, ScopesOverlap([]string{"src/**"}, []string{"src/auth/login.go"}))
@@ -52,7 +56,7 @@ func TestScopeOverlap(t *testing.T) {
 
 // genOp creates an arbitrary ops.Op with a random timestamp and workerID.
 func genOp() gopter.Gen {
-	return gen.Struct(reflect.TypeOf(ops.Op{}), map[string]gopter.Gen{
+	return gen.Struct(reflect.TypeFor[ops.Op](), map[string]gopter.Gen{
 		"Type":      gen.Const(ops.OpClaim),
 		"TargetID":  gen.Const("task-01"),
 		"Timestamp": gen.Int64Range(0, 1000),
@@ -71,6 +75,7 @@ func shuffle(claims []ops.Op, rng *rand.Rand) []ops.Op {
 // TestPropertyClaimRaceWinnerDeterminism verifies that ResolveClaim always
 // picks the same winner regardless of the order in which claims are presented.
 func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 200
 	properties := gopter.NewProperties(parameters)
@@ -82,8 +87,8 @@ func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 			}
 			expected := ResolveClaim(claims)
 			// Try a few different shuffles and confirm the winner never changes.
-			rng := rand.New(rand.NewSource(42)) // deterministic seed for test reproducibility
-			for i := 0; i < 5; i++ {
+			rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic seed intentional for test reproducibility
+			for range 5 {
 				shuffled := shuffle(claims, rng)
 				got := ResolveClaim(shuffled)
 				if got.WorkerID != expected.WorkerID || got.Timestamp != expected.Timestamp {
@@ -101,6 +106,7 @@ func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 // TestPropertyResolveClaimNoPanic verifies that ResolveClaim never panics
 // on arbitrary claim sets including empty slices and single-element slices.
 func TestPropertyResolveClaimNoPanic(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 300
 	properties := gopter.NewProperties(parameters)
@@ -125,6 +131,7 @@ func TestPropertyResolveClaimNoPanic(t *testing.T) {
 // the minimum timestamp (or lexicographically smallest workerID at equal timestamps),
 // which is the key invariant of the race resolution algorithm.
 func TestPropertyClaimWinnerMinimality(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 200
 	properties := gopter.NewProperties(parameters)
@@ -147,12 +154,12 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 			return true
 		},
 		// Use SliceOfN to guarantee at least 1 element, then append arbitrary extras.
-		gen.SliceOfN(1, genOp()).FlatMap(func(v interface{}) gopter.Gen {
-			base := v.([]ops.Op)
+		gen.SliceOfN(1, genOp()).FlatMap(func(v any) gopter.Gen {
+			base := v.([]ops.Op) //nolint:errcheck // panic on failed type assertion is acceptable in tests
 			return gen.SliceOf(genOp()).Map(func(extra []ops.Op) []ops.Op {
 				return append(base, extra...)
 			})
-		}, reflect.TypeOf([]ops.Op{})),
+		}, reflect.TypeFor[[]ops.Op]()),
 	))
 
 	properties.TestingRun(t)
@@ -161,6 +168,7 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 // TestPropertyIsClaimStaleMonotone verifies that once a claim is stale at time T,
 // it remains stale at any time T' >= T (monotonicity).
 func TestPropertyIsClaimStaleMonotone(t *testing.T) {
+	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 200
 	properties := gopter.NewProperties(parameters)
@@ -185,4 +193,52 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 	))
 
 	properties.TestingRun(t)
+}
+
+func TestHasOverlapDismissalNote_NotFound(t *testing.T) {
+	t.Parallel()
+	ops := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Some other note"}},
+	}
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.False(t, found)
+}
+
+func TestHasOverlapDismissalNote_Found(t *testing.T) {
+	t.Parallel()
+	ops := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+	}
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.True(t, found)
+}
+
+func TestHasOverlapDismissalNote_FoundAmongMultiple(t *testing.T) {
+	t.Parallel()
+	ops := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Some other note"}},
+		{Type: ops.OpNote, TargetID: "task-03", Timestamp: 102, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 103, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
+	}
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.True(t, found)
+}
+
+func TestHasOverlapDismissalNote_NotFoundDifferentTarget(t *testing.T) {
+	t.Parallel()
+	ops := []ops.Op{
+		{Type: ops.OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a",
+			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-02 (same worker, dismissed)"}},
+	}
+	// Looking for note on task-02 about task-01, but we have note on task-01 about task-02
+	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	assert.False(t, found)
 }

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
 	readytui "github.com/scullxbones/armature/internal/tui/ready"
 	"github.com/spf13/cobra"
@@ -36,37 +37,34 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
   # Show ready tasks filtered for a specific worker
   $ arm ready --worker alice-worker
 
+  # Show ready tasks scoped to a specific story subtree
+  $ arm ready --parent STORY-ID
+
   # Show ready tasks in JSON format (suitable for agents)
   $ arm ready --format json
 
   # Diagnose why open tasks are not in the ready queue
   $ arm ready --explain`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issuesDir := appCtx.IssuesDir
+			ctx := currentCtx(cmd)
+			issuesDir := ctx.IssuesDir
 
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, appCtx.Mode == "single-branch"); err != nil {
-				return fmt.Errorf("materialize: %w", err)
-			}
-
-			index, err := materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, ctx.Mode == "single-branch")
 			if err != nil {
-				return err
+				return fmt.Errorf("load snapshot: %w", err)
 			}
-
-			issues := make(map[string]*materialize.Issue)
-			for id := range index {
-				issue, err := materialize.LoadIssue(filepath.Join(appCtx.StateDir, "issues", id+".json"))
-				if err == nil {
-					issues[id] = &issue
-				}
+			for _, w := range snap.Warnings {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
+			index := snap.Index
+			issues := snap.Issues
 
 			// --explain: print why each open unclaimed task is not ready, then return.
 			if explain {
-				notReady := ready.ExplainNotReady(index, issues)
+				notReady := ready.ExplainNotReady(index, issues, nowEpoch())
 				format, _ := cmd.Flags().GetString("format")
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
-					data, _ := json.MarshalIndent(notReady, "", "  ")
+					data, _ := json.MarshalIndent(notReady, "", "  ") //nolint:errcheck // slice of serializable structs
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				} else {
 					ids := make([]string, 0, len(notReady))
@@ -81,14 +79,14 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				return nil
 			}
 
-			entries := ready.ComputeReady(index, issues, workerID)
+			entries := ready.ComputeReady(index, issues, workerID, nowEpoch())
 
 			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
 
 			// Apply --parent filter: keep only descendants of the given issue.
 			if filterParent != "" {
-				descendants := collectDescendants(filterParent, index)
+				descendants := ready.CollectDescendants(filterParent, index)
 				filtered := entries[:0]
 				for _, e := range entries {
 					if descendants[e.Issue] {
@@ -99,10 +97,12 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			}
 
 			format, _ := cmd.Flags().GetString("format")
-			if format == "json" || format == "agent" || tui.IsNonInteractive() {
-				data, _ := json.MarshalIndent(entries, "", "  ")
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else if tui.IsInteractive() {
+			switch {
+			case format == "json" || format == "agent" || tui.IsNonInteractive():
+				if err := output.RenderReady(cmd.OutOrStdout(), entries, true); err != nil {
+					return err
+				}
+			case tui.IsInteractive():
 				m := readytui.New(entries)
 				p := tea.NewProgram(m)
 				finalModel, err := p.Run()
@@ -114,7 +114,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					return fmt.Errorf("unexpected model type from TUI")
 				}
 				if final.Selected() != "" {
-					workerID, logPath, err := resolveWorkerAndLog()
+					state := mustState(cmd)
+					ctx := state.ctx
+					workerID, logPath, err := resolveWorkerAndLog(ctx)
 					if err != nil {
 						return err
 					}
@@ -125,13 +127,13 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 						WorkerID:  workerID,
 						Payload:   ops.Payload{TTL: 60},
 					}
-					if err := appendHighStakesOp(logPath, op); err != nil {
+					if err := appendHighStakesOp(state, logPath, op); err != nil {
 						return err
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed: %s\n", final.Selected())
 				}
 				return nil
-			} else {
+			default:
 				if len(entries) == 0 {
 					stale := ready.StaleClaims(issues, time.Now())
 					if len(stale) > 0 {
@@ -148,13 +150,8 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
 					return nil
 				}
-				for _, e := range entries {
-					conf := ""
-					if e.RequiresConfirmation {
-						conf = " [requires confirmation]"
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s  (%s)%s\n", e.Issue, e.Title, e.Priority, conf)
-				}
+				// Use output.RenderReady for human-readable output
+				return output.RenderReady(cmd.OutOrStdout(), entries, false)
 			}
 			return nil
 		},
@@ -165,25 +162,4 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "filter to tasks assigned to this worker ID")
 	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
 	return cmd
-}
-
-// collectDescendants returns the set of all descendant IDs of root (not including root itself).
-func collectDescendants(root string, index materialize.Index) map[string]bool {
-	result := make(map[string]bool)
-	queue := []string{root}
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		entry, ok := index[current]
-		if !ok {
-			continue
-		}
-		for _, child := range entry.Children {
-			if !result[child] {
-				result[child] = true
-				queue = append(queue, child)
-			}
-		}
-	}
-	return result
 }

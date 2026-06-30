@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "title": "Documentation Clarity for Agents and Operators",
+  "issues": [
+    {
+      "id": "DOCS",
+      "title": "Documentation Clarity for Agents and Operators",
+      "type": "epic",
+      "scope": "",
+      "priority": "high",
+      "dod": "",
+      "parent": "",
+      "blocked_by": null,
+      "notes": null
+    },
+    {
+      "id": "DOCS-S1",
+      "title": "Fix Critical Accuracy Bugs in User-Facing Docs and Skills",
+      "type": "story",
+      "scope": "",
+      "priority": "critical",
+      "dod": "",
+      "parent": "DOCS",
+      "blocked_by": null,
+      "notes": ["Contains correctness bugs — commands that do not work as documented or flags that do not exist. An agent following the current docs will fail at these points."]
+    },
+    {
+      "id": "DOCS-S1-T1",
+      "title": "Fix README.md quickstart accuracy bugs",
+      "type": "task",
+      "scope": "README.md",
+      "priority": "critical",
+      "dod": "Fix five issues in the 5-Minute Quickstart section: (1) Step 2: replace `arm sources add docs/armature-prd.md` with `arm sources add --url docs/armature-prd.md --type filesystem` — the positional path form is not accepted by the binary; (2) Add `arm worker-init --check || arm worker-init` as a new step immediately after `arm init` in Step 1, with a one-line note that this registers worker identity in local git config once per clone; (3) Add `arm install-skills` as a step immediately after worker-init, with a note that this deploys bundled agent skills to .claude/skills/, .gemini/skills/, and .codex/skills/; (4) Step 3: replace `arm decompose-context --sources src-001` with `arm decompose-context --sources all` — sources are assigned UUIDs not user-chosen IDs; (5) Remove Step 5 entirely — it duplicates the `arm transition` call already shown in Step 4 with inconsistent syntax. The result is a 4-step quickstart with no duplicate commands.",
+      "parent": "DOCS-S1",
+      "blocked_by": null,
+      "acceptance": [
+        "arm sources add in quickstart uses --url and --type flags, no bare path argument",
+        "arm worker-init step present in quickstart",
+        "arm install-skills step present in quickstart",
+        "no --sources src-001 anywhere in README.md",
+        "arm transition appears exactly once in the quickstart with --to done syntax"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S1-T2",
+      "title": "Add arm worker-init and arm install-skills to docs/getting-started.md",
+      "type": "task",
+      "scope": "docs/getting-started.md",
+      "priority": "critical",
+      "dod": "In Section 2 (Initialize Armature), add two steps after `arm init`: (1) `arm worker-init --check || arm worker-init` with explanation: registers a unique worker UUID in local git config; required once per clone; the `--check` form is a no-op if already registered; (2) `arm install-skills` with explanation: deploys bundled skills (armature, armature-coordinator, armature-worker, armature-planner, armature-auditor) to the current agent platform's skills directory. Both steps must appear before the Sources section.",
+      "parent": "DOCS-S1",
+      "blocked_by": null,
+      "acceptance": [
+        "arm worker-init step present in Section 2 with explanation of purpose",
+        "arm install-skills step present in Section 2 with explanation of what it deploys",
+        "Both steps appear before the Register Knowledge Sources section"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S1-T3",
+      "title": "Fix docs/use-cases.md P4 Wrangler: remove fictitious --repair flag and correct config schema",
+      "type": "task",
+      "scope": "docs/use-cases.md",
+      "priority": "critical",
+      "dod": "Fix two accuracy bugs in the P4 Wrangler section: (1) Remove the `arm init --repair` command — this flag does not exist. Replace with accurate guidance: to recover from corrupted Armature state, delete `.armature/` from the ops branch and re-run `arm init`, or consult `arm doctor` to identify specific structural issues; (2) Replace the config.json schema block and settings table entirely. The documented fields `ttl_seconds`, `stale_threshold_seconds`, and `verification_commands` do not exist, and `hooks` has the wrong format. Replace with the actual schema: `mode` (string, set by arm init), `project_type` (string, auto-detected), `default_ttl` (integer, minutes not seconds, default 60), `token_budget` (integer, default 1600), `low_stakes_push_threshold` (integer ops, default 5), `hooks` (array of objects with fields `name` (string), `command` (string array), `required` (boolean)). Update both the JSON example block and the key settings table to match.",
+      "parent": "DOCS-S1",
+      "blocked_by": null,
+      "acceptance": [
+        "No reference to arm init --repair in use-cases.md",
+        "Config JSON example uses actual field names: mode, default_ttl, token_budget, low_stakes_push_threshold, hooks",
+        "Hooks documented as array of objects with name/command/required, not a string-keyed map",
+        "default_ttl described as minutes not seconds",
+        "Key settings table updated to reflect actual fields"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S1-T4",
+      "title": "Fix armature-planner skill flow diagram: remove non-existent --apply flag",
+      "type": "task",
+      "scope": "internal/skillsembed/skills/armature-planner/SKILL.md",
+      "priority": "critical",
+      "dod": "In the Planner Loop digraph in SKILL.md, change the node labeled `decompose-apply --apply` to `decompose-apply --plan plan.json`. The `--apply` flag does not exist; applying the plan is the default behavior when `--dry-run` is not passed. The Quick Reference section at the bottom of the skill already shows the correct form and does not need to change. After editing, run `make validate-skills` and confirm it exits 0.",
+      "parent": "DOCS-S1",
+      "blocked_by": null,
+      "acceptance": [
+        "SKILL.md digraph no longer contains --apply",
+        "Digraph node shows decompose-apply --plan plan.json",
+        "make validate-skills exits 0"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S2",
+      "title": "Add Missing Reference Documentation for Agents",
+      "type": "story",
+      "scope": "",
+      "priority": "high",
+      "dod": "",
+      "parent": "DOCS",
+      "blocked_by": null,
+      "notes": ["These are gaps — information agents need that exists in source code but nowhere in operator-facing docs. Without them, agents must read source code to self-diagnose errors from arm validate and arm doctor."]
+    },
+    {
+      "id": "DOCS-S2-T1",
+      "title": "Write docs/validation-codes.md with all error, warning, and doctor codes",
+      "type": "task",
+      "scope": "docs/validation-codes.md (new), docs/commands.md",
+      "priority": "high",
+      "dod": "Write docs/validation-codes.md documenting all output codes from `arm validate` and `arm doctor`. Format each entry as: code, one-line trigger description, and fix. Document errors (prefix E): E2 unresolved parent link (parent ID not found in state), E3 unresolved blocked_by link target, E4 dependency cycle detected in DAG, E5 invalid type hierarchy (valid: epic can parent story/task/bug; story can parent task/bug; task and bug cannot parent anything), E6 task missing required field — scope, acceptance, or definition_of_done required for non-terminal tasks, E7 uncited node (no source-link or accept-citation), E8 unknown source UUID in citation (UUID not in manifest — re-run sources sync), E9 definition_of_done exceeds 500 characters, E10 invalid glob pattern in scope field, E12 citation referencing unknown source. Document warnings (prefix W): W1 scope overlap between sibling tasks (resolve with arm link to set dependency), W2 acceptance criteria has no test_passes or manual_review typed entry, W3 estimated token budget exceeded (title + DoD + context exceeds 4000 tokens), W4 broad scope (**, **/* or . covers entire tree), W5 task scope spans 3+ directories without context_files set, W6 complexity mismatch (small task with >5 scope files, or large task with <2), W7 vague DoD (contains: properly/correctly/good/well/appropriate/suitable), W8 conflicting decisions (same topic, multiple choices on one issue), W10 phantom scope (literal path in scope not found on disk; glob patterns and (new) suffix entries exempt), W11 vague outcome (too short or contains: done/completed/finished/ok/fixed). Document doctor codes (prefix D): D1 git/armature divergence (commits reference issue IDs not in done/merged/cancelled state), D2 stale claims (claimed issue TTL expired), D3 orphaned ops (ops log references issue IDs absent from index), D4 broken parent refs, D5 dependency cycles in DAG, D6 uncited issues. Also: add --quiet flag to docs/commands.md validate section (suppresses INFO lines, still prints COVERAGE and OK); add --verbose flag to docs/commands.md doctor section (emits file paths for D3 violations and names uncited issue IDs for D6). Add cross-reference link from both commands.md sections to docs/validation-codes.md.",
+      "parent": "DOCS-S2",
+      "blocked_by": null,
+      "acceptance": [
+        "docs/validation-codes.md exists",
+        "E2 through E10 and E12 documented (10 codes)",
+        "W1 through W8, W10, W11 documented (10 codes)",
+        "D1 through D6 documented (6 codes)",
+        "Each code has trigger description and fix guidance",
+        "docs/commands.md validate section has --quiet flag and link to validation-codes.md",
+        "docs/commands.md doctor section has --verbose flag and link to validation-codes.md"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S2-T2",
+      "title": "Document ARM_LOG_SLOT environment variable in docs/commands.md",
+      "type": "task",
+      "scope": "docs/commands.md",
+      "priority": "high",
+      "dod": "Add an 'Environment Variables' section at the end of docs/commands.md. Document ARM_LOG_SLOT: type (string), behavior (when set, appends ~<slot> to the worker UUID to form the log file name — e.g. worker `abc123` with ARM_LOG_SLOT=2 writes to `.armature/ops/abc123~2.log`; without it, writes to `.armature/ops/abc123.log`), purpose (parallel agent dispatch: multiple processes sharing the same worker UUID must use distinct slots to preserve the single-writer-per-log invariant), how to use (set `export ARM_LOG_SLOT=<n>` before any `arm` command in each agent process; use sequential integers 1, 2, 3... for each concurrent agent). Include a two-agent example showing distinct slot assignments.",
+      "parent": "DOCS-S2",
+      "blocked_by": null,
+      "acceptance": [
+        "Environment Variables section present at end of docs/commands.md",
+        "ARM_LOG_SLOT documented with type, behavior explanation, and purpose",
+        "Example shows two parallel agents using slot 1 and slot 2"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S2-T3",
+      "title": "Write docs/configuration.md with accurate .armature/config.json reference",
+      "type": "task",
+      "scope": "docs/configuration.md (new), docs/getting-started.md",
+      "priority": "high",
+      "dod": "Write docs/configuration.md documenting .armature/config.json. Include a note that most fields are managed by `arm init` and should not be edited manually except `token_budget` and `hooks`. Document each field: `mode` (string, values: single-branch|dual-branch, set by arm init based on branch protection detection or --dual-branch flag), `project_type` (string, auto-detected from repo marker files: go/node/python/rust/make/unknown), `default_ttl` (integer, unit: minutes, default 60, controls how long a claim is valid before arm doctor flags it as stale), `token_budget` (integer, default 1600, controls token budget for arm render-context context assembly), `low_stakes_push_threshold` (integer, default 5, number of ops to accumulate before triggering automatic push to the ops branch), `hooks` (array of HookConfig objects, default empty array). Document HookConfig: `name` (string, descriptive label), `command` (array of strings, command plus arguments), `required` (boolean, if true a non-zero exit from the command blocks the transition). Include a complete example config.json. Add a link to docs/configuration.md from docs/getting-started.md.",
+      "parent": "DOCS-S2",
+      "blocked_by": null,
+      "acceptance": [
+        "docs/configuration.md exists",
+        "All 6 top-level fields documented with key name, type, default, and description",
+        "HookConfig sub-object documented with all 3 fields",
+        "Complete example config.json block present",
+        "mode documented as set by arm init, not manual",
+        "default_ttl documented in minutes",
+        "docs/getting-started.md links to docs/configuration.md"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S3",
+      "title": "Add Integration and Concepts Guides",
+      "type": "story",
+      "scope": "",
+      "priority": "medium",
+      "dod": "",
+      "parent": "DOCS",
+      "blocked_by": null,
+      "notes": null
+    },
+    {
+      "id": "DOCS-S3-T1",
+      "title": "Write docs/harness-hook.md integration guide",
+      "type": "task",
+      "scope": "docs/harness-hook.md (new), docs/commands.md",
+      "priority": "medium",
+      "dod": "Write docs/harness-hook.md explaining the end-to-end harness-hook integration. Cover: (1) What it does — intercepts agent tool calls (PreToolUse events for Edit, Write, MultiEdit, Bash) and stop events; checks them against the active task's scope and acceptance criteria; returns allow or block decisions; (2) Required runtime env vars — ARMATURE_TASK_ID (the issue ID of the active task, set before launching each agent) and ARMATURE_HOOK_PLATFORM (one of: claude, codex, devin); (3) Claude Code setup — no installer command exists; manually add to .claude/settings.json the hooks block shown below (exact JSON must be in the guide): PreToolUse with matcher Edit|Write|MultiEdit|Bash calling arm harness-hook, and Stop calling arm harness-hook; (4) Codex setup — manually add to codex.toml the [hooks] section with pre_tool_use = \"arm harness-hook\" and stop = \"arm harness-hook\" (exact TOML must be in the guide); (5) Devin setup — note that Devin uses a structured hook event format; consult internal/harnesshook/platform_devin.go for the current config format since no installer command exists; (6) Testing — verify the hook is active by running `echo '{\"hook_event_name\":\"Stop\",\"stop_hook_active\":true}' | ARMATURE_TASK_ID=<issue-id> ARMATURE_HOOK_PLATFORM=claude arm harness-hook` and confirming a JSON decision response. Update docs/commands.md harness-hook section to link to this guide.",
+      "parent": "DOCS-S3",
+      "blocked_by": null,
+      "acceptance": [
+        "docs/harness-hook.md exists",
+        "What-it-does section explains scope and acceptance enforcement",
+        "Required env vars ARMATURE_TASK_ID and ARMATURE_HOOK_PLATFORM documented",
+        "Claude Code .claude/settings.json hooks JSON block present and exact",
+        "Codex codex.toml hooks TOML block present and exact",
+        "Test command for verifying hook integration present",
+        "docs/commands.md harness-hook section links to guide"
+      ],
+      "notes": null
+    },
+    {
+      "id": "DOCS-S3-T2",
+      "title": "Write docs/concepts.md agent reference for core system model",
+      "type": "task",
+      "scope": "docs/concepts.md (new), README.md",
+      "priority": "medium",
+      "dod": "Write docs/concepts.md as a reference for agents that need to understand the Armature system model to make correct decisions in edge cases. State each concept as operational rules, not narrative. Cover 8 concepts: (1) Ops log and materialization — each worker appends to its own JSONL file at .armature/ops/<worker-id>.log; state files under .armature/state/ are derived caches rebuilt by replay and are never source of truth; never edit ops files directly; (2) Worker identity — registered via `arm worker-init`, stored in git config key armature.worker-id, unique UUID per clone; re-running without --check generates a new UUID; use `arm worker-init --check || arm worker-init` idiom; (3) Claim lifecycle — claim via `arm claim`; default TTL 60 minutes; send `arm heartbeat <id>` (max 1/min) to keep alive; a claim is lost if TTL expires without heartbeat; in dual-branch mode downstream tasks require merged not done to unblock; (4) DAG hierarchy — valid parent-child types: epic can parent story, task, bug; story can parent task, bug; task and bug cannot parent anything; this is enforced by E5 validation; (5) Citations and validation — every issue must have a citation before `arm validate` passes; two paths: `arm source-link` (links to a registered source document) or `arm accept-citation` (self-certifies with rationale); `arm validate --ci` exits non-zero on any error; (6) Confidence levels — `decompose-apply` creates issues in draft state; draft issues are invisible to the ready queue; promote with `arm dag-transition --issue <root-id>` before workers can claim; (7) Single vs dual-branch — single-branch: .armature/ lives on main branch, tasks go directly done→complete; dual-branch: .armature/ on orphan _armature branch, .arm/ worktree for ops writes, downstream tasks require merged not done; (8) Source documents and decomposition — register sources via `arm sources add`; `arm decompose-context --sources all` packages source content for an AI agent to analyze; `arm decompose-apply --plan plan.json` loads the resulting task DAG. Add a Documentation section to README.md listing the docs/ files including a link to docs/concepts.md.",
+      "parent": "DOCS-S3",
+      "blocked_by": null,
+      "acceptance": [
+        "docs/concepts.md exists",
+        "All 8 concepts present",
+        "Each concept contains at least one concrete command or rule agents can act on",
+        "README.md Documentation section links to docs/concepts.md"
+      ],
+      "notes": null
+    }
+  ]
+}

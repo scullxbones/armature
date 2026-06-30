@@ -14,6 +14,7 @@ type SourceEntry struct {
 	Fingerprint  string    `json:"fingerprint"`
 	LastSynced   time.Time `json:"last_synced"`
 	ProviderType string    `json:"provider_type"`
+	SyncFailed   bool      `json:"sync_failed"`
 }
 
 // Manifest holds a collection of SourceEntries keyed by ID.

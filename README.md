@@ -28,6 +28,34 @@ All state lives in git. No database, no server, no daemon. A single Go binary (`
 
 - **Workflow Skills Included**: Ships skills in the agentskills.io format for every workflow role — planner, coordinator, worker, and auditor — usable by any compatible tool. No custom prompt engineering required to wire your agents in.
 
+## Runtime Architecture
+
+```mermaid
+flowchart LR
+    U[Coordinator] --> R[arm ready]
+    R --> CL[arm claim]
+    CL --> CTX[arm render-context]
+    CTX --> W[Worker agent]
+    W --> OP[(append-only ops log)]
+    OP --> M[materialize state]
+    M --> V[ready/list/show/validate views]
+    V --> U
+```
+
+## Coordinator Flow
+
+```mermaid
+flowchart TD
+    S([survey story DAG]) --> R[arm ready]
+    R -->|none ready| V[arm validate]
+    R -->|ready tasks| C[arm claim + render-context]
+    C --> D[dispatch worker agents]
+    D --> I[wait + integrate]
+    I --> R
+    V --> T[arm transition story done]
+    T --> PR[push + open PR]
+```
+
 ## Installation
 
 ### Prerequisites
@@ -54,54 +82,82 @@ This will build the `arm` binary and install it to `~/.local/bin/arm`. Ensure `~
 From your project root, run:
 
 ```bash
-arm init
+arm bootstrap
 ```
 
 Armature will detect if your repository has branch protection and set up either a dual-branch (`_armature` orphan branch) or single-branch mode accordingly.
 
-### 2. Add Requirements
+### 2. Register Worker (Once Per Clone)
+
+Initialize the worker coordination system. Run this once per clone before decomposing tasks:
+
+```bash
+arm worker-init
+```
+
+This registers your worker identity and sets up log coordination.
+
+### 3. Install Skills
+
+Deploy workflow skills for all agent roles:
+
+```bash
+arm bootstrap
+```
+
+(This step is already included in step 1 if you ran `arm bootstrap` — the bootstrap command both initializes the repository and deploys skills.)
+
+### 4. Add Requirements
 
 Register source documents (PRDs, architecture docs) that define your project's work:
 
 ```bash
-arm sources add docs/armature-prd.md
+arm sources add --url docs/armature-prd.md --type filesystem
 arm sources sync
+arm sources verify   # note the UUID shown — you'll need it in the next step
 ```
 
-### 3. Decompose into Tasks (via AI)
+### 5. Decompose into Tasks (via AI)
 
 Generate a decomposition context for your AI agent to break down requirements into a task DAG:
 
 ```bash
-arm decompose-context --sources src-001 > context.json
+arm decompose-context --sources <uuid-from-sources-verify> > context.json
 # Feed context.json to your AI agent to produce plan.json
 arm decompose-apply plan.json
 ```
 
-### 4. Claim and Execute Work
+### 6. Dispatch Work
 
-Find the next ready task, claim it, and start working:
+Find ready tasks and dispatch a worker agent for each one:
 
 ```bash
-# See ready tasks
-arm ready
-
-# Claim the highest priority task
-arm claim <issue-id>
-
-# Get the task context
-arm render-context <issue-id>
+arm ready                                      # list unblocked tasks
+arm claim <issue-id>                           # claim a task
+arm render-context <issue-id> --format agent   # get task context for the agent
+# dispatch agent with render-context output
+arm transition <issue-id> --to done --outcome "what was done"
 ```
 
-### 5. Complete and Verify
+### 7. Complete and Verify
 
 Once you've finished the code changes, transition the task to `done`:
 
 ```bash
-arm transition <issue-id> done --outcome "Brief summary of work"
+arm transition <issue-id> --to done --outcome "Brief summary of work"
 ```
 
 Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
+
+## Documentation
+
+- **[Core Concepts](docs/concepts.md)** — Agent reference for the 8 operational concepts: ops log & materialization, worker identity, claim lifecycle, DAG hierarchy, citations, confidence levels, branch modes, and decomposition
+- **[Getting Started](docs/getting-started.md)** — Setup workflow and first task
+- **[Commands Reference](docs/commands.md)** — Complete command documentation
+- **[Configuration Reference](docs/configuration.md)** — TTL, token budgets, hooks, and mode settings
+- **[Use Cases](docs/use-cases.md)** — Persona-based workflow walkthroughs (lone wolf, gatekeeper, team coordinator, etc.)
+- **[Validation Codes](docs/validation-codes.md)** — Error and warning reference (E1–E12, W1–W11)
+- **[Provider Smoke Tests](docs/provider-smoke-tests.md)** — Testing source document providers
 
 ---
 

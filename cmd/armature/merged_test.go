@@ -1,0 +1,900 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestMergedCmd_DoesNotMaterialize verifies that arm merged reads the index and issue from
+// disk via store.ReadIndex()/store.ReadIssue() without triggering full rematerialization.
+//
+// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
+// advancing its mtime → mtime assertion fails.
+// GREEN with store.ReadIndex()+store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
+func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Materialize after creation.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Transition task-01 to done.
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force")
+	require.NoError(t, err)
+
+	// Materialize again to update index.json (done→merged in single-branch mode).
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Capture checkpoint.json mtime before running merged.
+	stateDir := getTestStateDir(t, repo)
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	stat, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
+	mtimeBefore := stat.ModTime()
+
+	// Run merged — must use ReadIndex+ReadIssue, not Load.
+	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
+	require.NoError(t, err)
+
+	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
+	statAfter, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr)
+	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
+		"checkpoint.json must not be updated by arm merged: store.ReadIndex/ReadIssue must be used, not store.Load")
+}
+
+// TestMergedRemovesTaskWorktree verifies that merged removes a worktree for task-type issues.
+func TestMergedRemovesTaskWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Verify worktree is removed
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
+}
+
+// TestMergedRemovesBugWorktree verifies that merged removes a worktree for bug-type issues.
+func TestMergedRemovesBugWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test bug", "--type", "bug", "--id", "bug-01"})
+	require.NoError(t, cmd2.Execute())
+
+	worktreePath := filepath.Join(t.TempDir(), "bug-worktree")
+
+	// Claim the bug to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "bug-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	// Transition bug to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "bug-01", "--to", "done", "--outcome", "Fixed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, err2 := runTrls(t, repo, "materialize")
+	require.NoError(t, err2)
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "bug-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Verify worktree is removed
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
+}
+
+// TestMergedHandlesStoryWithNoActiveWorktree verifies that merged handles gracefully
+// a story-type issue when no worktree was created for it (e.g. no --worktree used at claim time).
+// Stories now map to feat/<id> via deriveBranchName, so merged will attempt worktree removal,
+// but must not fail when no matching worktree exists.
+func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"})
+	require.NoError(t, cmd2.Execute())
+
+	// Transition story to done before calling merged
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json and issues/story-01.json exist before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command (no worktree was created for this story; command must handle gracefully)
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
+	require.NoError(t, mergedCmd.Execute())
+}
+
+// TestMergedRemovesStoryWorktree verifies that merged removes the worktree for a story-type
+// issue when one was created via claim. Stories map to feat/<id> via deriveBranchName, so
+// merged must tear down the story worktree just like task/bug/feature worktrees.
+func TestMergedRemovesStoryWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"})
+	require.NoError(t, cmd2.Execute())
+
+	worktreePath := filepath.Join(t.TempDir(), "story-worktree")
+
+	// Claim the story to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "story-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	// Transition story to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Verify worktree is removed
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
+}
+
+// TestMergedRemovesFeatureWorktree verifies that merged removes a worktree for feature-type issues
+// (F2: deriveBranchName maps feature → feat/, and merged must tear down every type that claim creates).
+func TestMergedRemovesFeatureWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test feature", "--type", "feature", "--id", "feature-01"})
+	require.NoError(t, cmd2.Execute())
+
+	worktreePath := filepath.Join(t.TempDir(), "feature-worktree")
+
+	// Claim the feature to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "feature-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	// Transition feature to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--outcome", "Shipped", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Verify worktree is removed
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
+}
+
+// TestMergedHandlesFeatureWithNoWorktree verifies that merged gracefully handles
+// a feature-type issue with no associated worktree (e.g., not created via --worktree).
+func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test feature", "--type", "feature", "--id", "feature-01"})
+	require.NoError(t, cmd2.Execute())
+
+	// Transition feature to done before calling merged
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--outcome", "Shipped", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json and issues/feature-01.json exist before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command (no worktree was created; should handle gracefully)
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01"})
+	require.NoError(t, mergedCmd.Execute())
+}
+
+// TestMergedWarnsOnPassThroughEntries verifies that merged warns to stderr when armature-hook.log contains pass-through entries.
+func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Create armature-hook.log with pass-through entries
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	gitDirLine := string(gitFileContent)
+
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
+	hookLogContent := "pass-through: no task binding found\npass-through: stale binding\n"
+	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
+	require.NoError(t, err)
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command and capture stderr
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify warning is printed to stderr
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "pass-through", "should warn about pass-through entries in stderr")
+	assert.Contains(t, errOutput, "task-01", "warning should mention the issue ID")
+}
+
+// TestMergedNoWarningWithoutPassThroughEntries verifies that merged does not warn when hook.log has no pass-through entries.
+func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Optionally create armature-hook.log without pass-through entries (or don't create it at all)
+	// Either way, no warning should be printed
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat2 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat2)
+
+	// Call merged command and capture stderr
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err := mergedCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify no warning is printed (or only success message)
+	errOutput := errBuf.String()
+	assert.NotContains(t, errOutput, "pass-through", "should not warn about pass-through when none exist")
+}
+
+// TestMergedHandlesMissingWorktree verifies that merged handles the case where a worktree was already deleted.
+func TestMergedHandlesMissingWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition.
+	_, errMat3 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat3)
+
+	// Manually remove the worktree (simulating it being deleted before merged is called)
+	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
+
+	// Call merged command (should not fail even though worktree is gone)
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err := mergedCmd.Execute()
+	// Should succeed gracefully or at least not crash
+	require.NoError(t, err)
+}
+
+// TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved verifies that when the worktree has
+// already been deleted before `arm merged` is called, no pass-through warning is emitted
+// (because the warning requires the worktree to be present to read its hook log), and
+// that the command does not error or panic. Emitting the warning when the worktree is
+// already gone requires persisting the git-dir path separately (future work, F6).
+func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Read the actual git dir from the worktree so we can write the hook log.
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
+	err = os.WriteFile(hookLogPath, []byte("pass-through: no task binding found\n"), 0o600) //nolint:gosec // test path
+	require.NoError(t, err)
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition.
+	_, errMat4 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat4)
+
+	// Remove the worktree before calling merged
+	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
+
+	// Call merged command and capture stderr
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+	require.NoError(t, err)
+
+	// The implementation can only check hook log entries when the worktree is still
+	// present (because it needs to find it via git worktree list). After the worktree
+	// is removed, git worktree list no longer reports it, so the hook log path cannot
+	// be resolved and no warning is emitted. This is correct current behavior.
+	// TODO(F6): emit warning even when worktree is already gone (requires persisting git-dir).
+	assert.NotContains(t, errBuf.String(), "pass-through", "no warning expected when worktree is already gone")
+}
+
+// TestMergedRejectsSingleBranchModeWithoutMergedStatus verifies that merged requires
+// status=merged (or status=done) in single-branch mode. Currently, in single-branch mode,
+// the status guard is skipped, allowing arm merged to be called on in-progress tasks,
+// which deletes the worktree and any uncommitted worker state (P2 bug).
+func TestMergedRejectsSingleBranchModeWithoutMergedStatus(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap in single-branch mode (default, no --dual-branch flag)
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, cmd2.Execute())
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	// Transition to in-progress (NOT to done)
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in-progress"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so the in-progress status is reflected in index.json before merged reads it.
+	_, errMat5 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat5)
+
+	// Call merged command — should fail because status is not merged/done in single-branch mode
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err := mergedCmd.Execute()
+	require.Error(t, err, "merged should reject in-progress status in single-branch mode")
+	assert.Contains(t, err.Error(), "status=merged", "error message should indicate merged status required")
+	assert.Contains(t, err.Error(), "single-branch", "error message should mention single-branch mode")
+
+	// Verify worktree still exists (should not be deleted on error)
+	assert.DirExists(t, worktreePath, "worktree should NOT be removed when merged fails")
+}
+
+// TestMergedRecordsOpBeforeRemovingWorktree verifies the P2 bug fix.
+// The bug (pre-fix): removeWorktreeForIssue is called BEFORE appendOp (lines 152-154 in buggy code),
+// so if appendOp fails, the worktree is already deleted and recovery is impossible.
+// The fix: move removeWorktreeForIssue to AFTER appendOp succeeds, so on failure the worktree is preserved.
+//
+// Happy path: merged command executes successfully → worktree is removed.
+// Failure path: ops dir made read-only so appendOp fails → worktree is NOT removed (recovery possible).
+func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
+	t.Run("happy path: op recorded and worktree removed", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+		claimCmd := newRootCmd()
+		claimCmd.SetOut(new(bytes.Buffer))
+		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		require.NoError(t, claimCmd.Execute())
+		assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+		transitionCmd := newRootCmd()
+		transitionCmd.SetOut(new(bytes.Buffer))
+		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+		require.NoError(t, transitionCmd.Execute())
+
+		// Materialize so index.json reflects the done→merged transition before calling merged.
+		_, errMat := runTrls(t, repo, "materialize")
+		require.NoError(t, errMat)
+
+		mergedCmd := newRootCmd()
+		mergedCmd.SetOut(new(bytes.Buffer))
+		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+		require.NoError(t, mergedCmd.Execute())
+
+		// Op succeeded → worktree should be removed
+		assert.NoDirExists(t, worktreePath, "worktree should be removed after successful merged")
+	})
+
+	t.Run("failure path: appendOp fails → worktree preserved", func(t *testing.T) {
+		// Use dual-branch mode so status=done after transition (not auto-advanced to merged),
+		// ensuring appendOp is called and the read-only test exercises the actual P2 invariant:
+		// removeWorktreeForIssue must not be called when appendOp fails.
+		repo := initTempRepo(t)
+		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+		bootstrapCmd := newRootCmd()
+		bootstrapCmd.SetOut(new(bytes.Buffer))
+		bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+		require.NoError(t, bootstrapCmd.Execute())
+
+		_, err := runTrls(t, repo, "worker-init")
+		require.NoError(t, err)
+
+		createCmd := newRootCmd()
+		createCmd.SetOut(new(bytes.Buffer))
+		createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+		require.NoError(t, createCmd.Execute())
+
+		worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+		claimCmd := newRootCmd()
+		claimCmd.SetOut(new(bytes.Buffer))
+		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		require.NoError(t, claimCmd.Execute())
+		assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+		transitionCmd := newRootCmd()
+		transitionCmd.SetOut(new(bytes.Buffer))
+		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+		require.NoError(t, transitionCmd.Execute())
+
+		// Materialize so index.json reflects status=done (dual-branch: done is NOT auto-advanced to merged).
+		// merged will read status=done → alreadyMerged=false → try appendOp → fails (read-only).
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+
+		// Make the ops log directory read-only so appendOp cannot write a new log entry.
+		// This simulates a disk-full or permission error during the op write.
+		// In dual-branch mode, ops live in the .arm worktree: <repo>/.arm/.armature/ops/.
+		opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+		require.NoError(t, os.Chmod(opsDir, 0o444))
+		defer func() {
+			if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
+				t.Logf("warning: failed to restore ops dir permissions: %v", chmodErr)
+			}
+		}() // restore so cleanup works
+
+		mergedCmd := newRootCmd()
+		mergedCmd.SetOut(new(bytes.Buffer))
+		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+		err = mergedCmd.Execute()
+		require.Error(t, err, "merged should fail when appendOp cannot write")
+
+		// The critical invariant: because the op write failed BEFORE removeWorktreeForIssue
+		// was called, the worktree must still be present and recovery is possible.
+		assert.DirExists(t, worktreePath, "worktree must NOT be removed when appendOp fails")
+	})
+}
+
+// TestMergedRecordsPRInSingleBranchModeOnRetry tests the P2 bug fix: when a new --pr flag
+// is provided with a different PR number, the merge op must be recorded even if the issue
+// is already in 'merged' status. This ensures that `arm merged --issue <id> --pr 123` in
+// single-branch mode captures the PR reference and doesn't silently discard it.
+//
+// The bug: the idempotent skip (entry.Status == ops.StatusMerged) unconditionally skips
+// re-recording, so the PR field stays empty even when --pr is provided.
+//
+// The fix: only skip op re-recording if there is no new PR to attach OR if the issue
+// already has the same PR recorded.
+func TestMergedRecordsPRInSingleBranchModeOnRetry(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap in single-branch mode (default, no --dual-branch flag)
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(new(bytes.Buffer))
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, bootstrapCmd.Execute())
+
+	workerCmd := newRootCmd()
+	workerCmd.SetOut(new(bytes.Buffer))
+	workerCmd.SetArgs([]string{"worker-init", "--repo", repo})
+	require.NoError(t, workerCmd.Execute())
+
+	// Create a task
+	createCmd := newRootCmd()
+	createCmd.SetOut(new(bytes.Buffer))
+	createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, createCmd.Execute())
+
+	// Materialize to initialize state
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Materialize to update status
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Transition to done (auto-advances to merged in single-branch mode)
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize to finalize the transition to merged
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Now the issue is in 'merged' status. Call merged again with a new PR.
+	// The fix requires this to record the PR, not skip it.
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "456"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// Materialize to apply the new PR op
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Load the issue and verify the PR field is set
+	stateDir := getTestStateDir(t, repo)
+	issue, err := materialize.LoadIssue(filepath.Join(stateDir, "issues", "task-01.json"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "456", issue.PR, "issue PR field should equal the new PR number provided via --pr flag")
+}
+
+// TestMergedSkipsUnboundWorktree tests the P2 bug fix: if a worktree exists on the
+// correct branch but has no (or wrong) armature-task-id binding, the worktree must
+// NOT be removed. This prevents arm merged from deleting user-created worktrees
+// that happen to match the branch name.
+//
+// Scenario: user manually runs `git worktree add /tmp/foo -b task/task-01` for their
+// own purposes (not via `arm claim`). Then `arm merged --issue task-01` must:
+// 1. Find the worktree by branch name
+// 2. Check the binding in <gitDir>/armature-task-id
+// 3. Skip removal and log a warning if binding is missing or wrong
+// 4. Still mark the issue as merged (don't fail on binding mismatch)
+//
+// The test:
+// 1. Set up repo with task-01
+// 2. Manually create a git worktree on task/task-01 WITHOUT running `arm claim`
+// 3. Transition task to done
+// 4. Run `arm merged --issue task-01`
+// 5. Assert command succeeds (issue marked merged)
+// 6. Assert worktree still exists (was not removed)
+// 7. Assert warning was logged about the unbound worktree
+func TestMergedSkipsUnboundWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	unboundWorktreePath := filepath.Join(t.TempDir(), "unbound-worktree")
+
+	// Manually create a git worktree on the task branch WITHOUT running `arm claim`.
+	// This simulates a user worktree that happens to match the expected branch name.
+	run(t, repo, "git", "worktree", "add", unboundWorktreePath, "-b", "task/task-01")
+
+	// Verify the worktree exists
+	assert.DirExists(t, unboundWorktreePath, "manually-created worktree should exist")
+
+	// Verify there is NO armature-task-id binding file in the git dir.
+	// This is the key difference: a real claimed worktree would have this file.
+	gitDir, err := resolveWorktreeGitDir(unboundWorktreePath)
+	require.NoError(t, err)
+	bindingPath := filepath.Join(gitDir, "armature-task-id")
+	assert.NoFileExists(t, bindingPath, "unbound worktree should have no armature-task-id file")
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json and issues/task-01.json exist before calling merged.
+	_, errMat6 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat6)
+
+	// Call merged command and capture stderr to check for warning
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+
+	// Command must succeed (issue is marked merged)
+	require.NoError(t, err, "merged should succeed even with unbound worktree")
+
+	// The unbound worktree must NOT be removed
+	assert.DirExists(t, unboundWorktreePath, "unbound worktree should NOT be removed (P2 bug fix)")
+
+	// A warning should be logged to stderr about the binding mismatch
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "Warning:", "should warn about unbound worktree")
+	assert.Contains(t, errOutput, "task-01", "warning should mention the issue ID")
+	assert.Contains(t, errOutput, "not bound", "warning should mention binding mismatch")
+}
+
+// TestMergedRemovesBoundWorktree verifies that if a worktree IS properly bound
+// (has the correct armature-task-id file), it will be removed during merged.
+// This ensures the binding check doesn't break the normal flow of removing
+// properly claimed worktrees.
+func TestMergedRemovesBoundWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "bound-worktree")
+
+	// Claim the task to create a properly bound worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Verify worktree exists and IS bound
+	assert.DirExists(t, worktreePath, "claimed worktree should exist")
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+	bindingPath := filepath.Join(gitDir, "armature-task-id")
+	assert.FileExists(t, bindingPath, "claimed worktree should have armature-task-id file")
+	bindingBytes, err := os.ReadFile(bindingPath)
+	require.NoError(t, err)
+	binding := strings.TrimSpace(string(bindingBytes))
+	assert.Equal(t, "task-01", binding, "binding should be task-01")
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat7 := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat7)
+
+	// Call merged command
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+
+	// Command must succeed
+	require.NoError(t, err, "merged should succeed for bound worktree")
+
+	// The bound worktree MUST be removed
+	assert.NoDirExists(t, worktreePath, "bound worktree should be removed normally")
+
+	// No warning should be logged for a properly bound worktree
+	errOutput := errBuf.String()
+	assert.NotContains(t, errOutput, "not bound", "should not warn for properly bound worktree")
+}
+
+// TestMergedAllowsRetryAfterWorktreeRemovalFails tests the P2 bug fix in dual-branch mode:
+// If removeWorktreeForIssue fails after the merge op is recorded, the issue's status
+// becomes 'merged'. On retry, the dual-branch guard (the `else` branch in merged.go)
+// must accept 'merged' status (in addition to 'done'), and the command should skip
+// re-recording the op and just attempt worktree cleanup. This test runs in dual-branch
+// mode so that it actually exercises the dual-branch guard at merged.go:141 rather than
+// the single-branch guard.
+func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap in dual-branch mode so the dual-branch guard (else branch) is exercised.
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(new(bytes.Buffer))
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+	require.NoError(t, bootstrapCmd.Execute())
+
+	workerCmd := newRootCmd()
+	workerCmd.SetOut(new(bytes.Buffer))
+	workerCmd.SetArgs([]string{"worker-init", "--repo", repo})
+	require.NoError(t, workerCmd.Execute())
+
+	createCmd := newRootCmd()
+	createCmd.SetOut(new(bytes.Buffer))
+	createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	require.NoError(t, createCmd.Execute())
+
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+	assert.DirExists(t, worktreePath, "worktree should exist after claim")
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// First merged call: records the op and removes the worktree (happy path).
+	// In dual-branch mode the status check goes through the else branch at merged.go:141.
+	mergedCmd1 := newRootCmd()
+	mergedCmd1.SetOut(new(bytes.Buffer))
+	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
+	require.NoError(t, mergedCmd1.Execute())
+	assert.NoDirExists(t, worktreePath, "worktree should be removed after first merged call")
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Second merged call: status is now 'merged'. Before the fix, the dual-branch guard
+	// (entry.Status != ops.StatusDone) would reject this with "requires status=done".
+	// After the fix, the guard accepts status=merged and skips re-recording the op,
+	// then just attempts worktree cleanup (which is a no-op since it's already gone).
+	mergedCmd2 := newRootCmd()
+	outBuf2 := new(bytes.Buffer)
+	mergedCmd2.SetOut(outBuf2)
+	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
+	err = mergedCmd2.Execute()
+	require.NoError(t, err, "merged must succeed on retry when status is already merged in dual-branch mode (P2 bug fix)")
+}

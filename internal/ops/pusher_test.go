@@ -16,6 +16,7 @@ type fakePusher struct {
 	pushCalls    int
 	rebaseCalls  int
 	pushErr      error
+	fetchErr     error
 	pushErrAfter int // return error for first N calls
 }
 
@@ -29,10 +30,11 @@ func (f *fakePusher) Push(branch string) error {
 
 func (f *fakePusher) FetchAndRebase(branch string) error {
 	f.rebaseCalls++
-	return nil
+	return f.fetchErr
 }
 
 func TestNoPusher_SingleBranch_SkipsPush(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
@@ -45,18 +47,20 @@ func TestNoPusher_SingleBranch_SkipsPush(t *testing.T) {
 	err := pusher.Push(logPath, "", op, nil)
 	require.NoError(t, err)
 
-	data, _ := os.ReadFile(logPath)
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
 	assert.Contains(t, string(data), "note")
 }
 
 func TestAppendCommitAndPush_DualBranch_PushesAndResetsTracker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	worktreePath := dir
 	logPath := filepath.Join(worktreePath, "worker.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
 
 	fp := &fakePusher{}
-	fc := &fakeCommitter{}
+	fc := &FakeCommitter{}
 	pusher := &ops.AppendCommitAndPush{
 		Pusher:  fp,
 		Branch:  "_armature",
@@ -72,6 +76,7 @@ func TestAppendCommitAndPush_DualBranch_PushesAndResetsTracker(t *testing.T) {
 }
 
 func TestAppendCommitAndPush_AllAttemptsFail_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	worktreePath := dir
 	logPath := filepath.Join(worktreePath, "worker.log")
@@ -81,7 +86,7 @@ func TestAppendCommitAndPush_AllAttemptsFail_ReturnsError(t *testing.T) {
 		pushErr:      errors.New("rejected"),
 		pushErrAfter: 10, // always fail
 	}
-	fc := &fakeCommitter{}
+	fc := &FakeCommitter{}
 	pusher := &ops.AppendCommitAndPush{
 		Pusher:  fp,
 		Branch:  "_armature",
@@ -94,4 +99,54 @@ func TestAppendCommitAndPush_AllAttemptsFail_ReturnsError(t *testing.T) {
 	err := pusher.Push(logPath, worktreePath, op, fc)
 	assert.Error(t, err)
 	assert.Equal(t, 4, fp.pushCalls) // 1 initial + 3 retries
+}
+
+func TestAppendCommitAndPush_DefaultBackoffUsesFallbackAttempts(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	worktreePath := dir
+	logPath := filepath.Join(worktreePath, "worker.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
+
+	fp := &fakePusher{}
+	fc := &FakeCommitter{}
+	pusher := &ops.AppendCommitAndPush{
+		Pusher: fp,
+		Branch: "_armature",
+	}
+
+	op := ops.Op{Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Msg: "hello"}}
+
+	err := pusher.Push(logPath, worktreePath, op, fc)
+	require.NoError(t, err)
+	assert.Equal(t, 1, fp.pushCalls)
+	assert.Equal(t, 0, fp.rebaseCalls)
+}
+
+func TestAppendCommitAndPush_FetchAndRebaseFailureSurfaces(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	worktreePath := dir
+	logPath := filepath.Join(worktreePath, "worker.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
+
+	fp := &fakePusher{
+		pushErr:      errors.New("rejected"),
+		pushErrAfter: 10,
+	}
+	fp.fetchErr = errors.New("fetch failed")
+	fc := &FakeCommitter{}
+	pusher := &ops.AppendCommitAndPush{
+		Pusher:  fp,
+		Branch:  "_armature",
+		Backoff: []time.Duration{0},
+	}
+
+	op := ops.Op{Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Msg: "hello"}}
+
+	err := pusher.Push(logPath, worktreePath, op, fc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetch+rebase before push attempt 2")
 }

@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "title": "Deepen the orchestration run contract",
+  "issues": [
+    {
+      "id": "ORCRUN",
+      "title": "Deepen the orchestration run contract",
+      "type": "epic",
+      "scope": "",
+      "priority": "high",
+      "dod": "Armature has a strict orchestration run contract in internal/orchestrate and cmd/armature only acts as a thin imperative shell for orchestration commands.",
+      "parent": "",
+      "blocked_by": [],
+      "acceptance": [
+        "go test ./internal/orchestrate ./cmd/armature passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "ORCRUN-S1",
+      "title": "Move orchestration wiring behind a strict internal contract",
+      "type": "story",
+      "scope": "",
+      "priority": "high",
+      "dod": "The orchestration run module owns task truth loading, claim/scope gating, harness setup, dry-run parity, preflight, and lifecycle outcome reporting.",
+      "parent": "ORCRUN",
+      "blocked_by": [],
+      "acceptance": [
+        "go test ./internal/orchestrate ./cmd/armature passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "ORCRUN-T01",
+      "title": "Define orchestration run and preflight contracts",
+      "type": "task",
+      "scope": "internal/orchestrate/run.go (new), internal/orchestrate/preflight.go, internal/orchestrate/types.go, internal/orchestrate/types_test.go",
+      "priority": "high",
+      "dod": "internal/orchestrate exposes caller-facing RunRequest, RunResult, PreflightRequest, and PreflightResult contracts. OrchestrateState remains an implementation detail for op-derived state rather than the command/runtime result surface.",
+      "parent": "ORCRUN-S1",
+      "blocked_by": [],
+      "acceptance": [
+        "RunRequest and RunResult types exist in internal/orchestrate",
+        "PreflightRequest and PreflightResult types exist in internal/orchestrate",
+        "go test ./internal/orchestrate passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "ORCRUN-T02",
+      "title": "Implement repo-backed orchestration run preparation",
+      "type": "task",
+      "scope": "internal/orchestrate/run.go (new), internal/orchestrate/preflight.go, internal/orchestrate/engine.go, internal/orchestrate/service.go, internal/orchestrate/verify.go",
+      "priority": "high",
+      "dod": "Repo-backed orchestration run loads and materializes task truth, resolves model and auth, creates harness/git/op-log adapters, renders task context, claims if needed, verifies ownership, evaluates active scope conflicts after claim verification, and preserves dry-run path parity up to explicit side-effect gates.",
+      "parent": "ORCRUN-S1",
+      "blocked_by": [
+        "ORCRUN-T01"
+      ],
+      "acceptance": [
+        "dry-run and mutating run share preparation-path tests",
+        "claim-if-needed behavior is covered by tests",
+        "scope conflict after claim verification is covered by tests",
+        "go test ./internal/orchestrate passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "ORCRUN-T03",
+      "title": "Thin cmd orchestration shells over strict contracts",
+      "type": "task",
+      "scope": "cmd/armature/orchestrate.go, cmd/armature/worker_run.go, cmd/armature/orchestrate_test.go, cmd/armature/worker_run_test.go, internal/workerruntime/runtime.go, internal/workerruntime/runtime_test.go",
+      "priority": "high",
+      "dod": "arm orchestrate and arm worker run call the same internal orchestration run contract. Command code parses flags, resolves the invoking worker identity, calls run or preflight, and formats results without duplicating harness config, active scope, op-log, git, or rendered context wiring.",
+      "parent": "ORCRUN-S1",
+      "blocked_by": [
+        "ORCRUN-T02"
+      ],
+      "acceptance": [
+        "arm orchestrate dry-run output is driven by RunResult",
+        "arm worker run execution uses the same orchestration run contract",
+        "go test ./cmd/armature ./internal/workerruntime passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "ORCRUN-T04",
+      "title": "Record explicit lifecycle outcomes for complete runs",
+      "type": "task",
+      "scope": "internal/orchestrate/engine.go, internal/orchestrate/run.go (new), internal/orchestrate/engine_test.go, internal/orchestrate/core_service_test.go, cmd/armature/orchestrate_test.go",
+      "priority": "high",
+      "dod": "A complete orchestration phase always reports and records an explicit task lifecycle outcome. No committed changes default to a blocked lifecycle outcome unless verification proves the task was already satisfied.",
+      "parent": "ORCRUN-S1",
+      "blocked_by": [
+        "ORCRUN-T02"
+      ],
+      "acceptance": [
+        "complete run result includes LifecycleOutcome",
+        "no-commit run records a blocked or otherwise explicit lifecycle outcome",
+        "phase complete without lifecycle outcome is covered by a failing regression test",
+        "go test ./internal/orchestrate ./cmd/armature passes",
+        "make check green"
+      ]
+    }
+  ]
+}

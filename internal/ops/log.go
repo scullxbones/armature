@@ -1,11 +1,7 @@
 package ops
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // AppendOp appends a single op to the log file as a JSONL line.
@@ -24,16 +20,7 @@ func AppendOps(logPath string, ops []Op) error {
 		buf = append(buf, line...)
 		buf = append(buf, '\n')
 	}
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("open log %s: %w", logPath, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	if _, err := f.Write(buf); err != nil {
-		return fmt.Errorf("write to log %s: %w", logPath, err)
-	}
-	return nil
+	return adapters.AppendRawLines(logPath, buf)
 }
 
 // ReadLog reads all ops from a log file.
@@ -43,26 +30,13 @@ func ReadLog(logPath string) ([]Op, error) {
 
 // ReadLogFromOffset reads ops starting from a byte offset.
 func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
-	f, err := os.Open(logPath)
+	lines, err := adapters.ReadLogFromOffset(logPath, offset)
 	if err != nil {
-		return nil, fmt.Errorf("open log %s: %w", logPath, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	if offset > 0 {
-		if _, err := f.Seek(offset, 0); err != nil {
-			return nil, fmt.Errorf("seek in log %s: %w", logPath, err)
-		}
+		return nil, err
 	}
 
-	ops := make([]Op, 0, 64)
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
+	ops := make([]Op, 0, len(lines))
+	for _, line := range lines {
 		op, err := ParseLine(line)
 		if err != nil {
 			// Skip corrupt lines per spec — log warning
@@ -70,7 +44,7 @@ func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
 		}
 		ops = append(ops, op)
 	}
-	return ops, scanner.Err()
+	return ops, nil
 }
 
 // ReadLogValidated reads ops and filters out those with mismatched worker IDs.
@@ -92,10 +66,5 @@ func ReadLogValidated(logPath string, expectedWorkerID string) ([]Op, error) {
 // Plain log:   "3357fe85.log"   -> "3357fe85"
 // Slotted log: "3357fe85~a.log" -> "3357fe85"  (slot suffix stripped)
 func WorkerIDFromFilename(logPath string) string {
-	base := filepath.Base(logPath)
-	name := strings.TrimSuffix(base, ".log")
-	if idx := strings.Index(name, "~"); idx >= 0 {
-		name = name[:idx]
-	}
-	return name
+	return adapters.WorkerIDFromFilename(logPath)
 }

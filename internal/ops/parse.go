@@ -7,6 +7,11 @@ import (
 
 // ParseLine parses a single JSONL line in positional array format:
 // [op_type, target_id, timestamp, worker_id, payload_object]
+//
+// ParseLine is intentionally permissive about op type values: it accepts any string
+// to support forward-compatibility with op types introduced in later versions of the
+// software. Unknown op types are surfaced as errors when the op is applied via
+// State.ApplyOp, not at parse time.
 func ParseLine(line []byte) (Op, error) {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(line, &raw); err != nil {
@@ -20,9 +25,6 @@ func ParseLine(line []byte) (Op, error) {
 
 	if err := json.Unmarshal(raw[0], &op.Type); err != nil {
 		return Op{}, fmt.Errorf("invalid op type: %w", err)
-	}
-	if !ValidOpTypes[op.Type] {
-		return Op{}, fmt.Errorf("unknown op type: %s", op.Type)
 	}
 
 	if err := json.Unmarshal(raw[1], &op.TargetID); err != nil {

@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
-	"github.com/scullxbones/armature/internal/git"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -35,13 +37,17 @@ preview changes without committing them.`,
 			issuesDir := appCtx.IssuesDir
 			singleBranch := appCtx.Mode == "single-branch"
 
-			// Materialize to ensure state files are up to date
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
-				return fmt.Errorf("materialize: %w", err)
+			// Load snapshot to ensure state is up to date
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
+			if err != nil {
+				return fmt.Errorf("load snapshot: %w", err)
+			}
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			if targetBranch == "" {
-				gc := git.New(appCtx.RepoPath)
+				gc := adapters.New(appCtx.RepoPath)
 				branch, err := gc.CurrentBranch()
 				if err != nil {
 					return fmt.Errorf("detect current branch: %w", err)
@@ -49,8 +55,14 @@ preview changes without committing them.`,
 				targetBranch = branch
 			}
 
-			gc := git.New(appCtx.RepoPath)
-			mergedIDs, err := armsync.DetectMerges(issuesDir, appCtx.StateDir, targetBranch, gc)
+			// Convert snapshot issues to slice for DetectMerges
+			issues := make([]materialize.Issue, 0, len(snap.Issues))
+			for _, issue := range snap.Issues {
+				issues = append(issues, *issue)
+			}
+
+			gc := adapters.New(appCtx.RepoPath)
+			mergedIDs, err := armsync.DetectMerges(issues, targetBranch, gc)
 			if err != nil {
 				return fmt.Errorf("detect merges: %w", err)
 			}
@@ -68,7 +80,9 @@ preview changes without committing them.`,
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err
 			}
@@ -84,16 +98,20 @@ preview changes without committing them.`,
 						Outcome: "auto-detected merge into " + targetBranch,
 					},
 				}
-				if err := appendOp(logPath, op); err != nil {
+				if err := appendOp(ctx, logPath, op); err != nil {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
 					continue
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 			}
 
-			// Re-materialize so state files reflect the new merged status
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
-				return fmt.Errorf("re-materialize: %w", err)
+			// Re-load snapshot so state files reflect the new merged status
+			snap, err = snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
+			if err != nil {
+				return fmt.Errorf("load snapshot: %w", err)
+			}
+			for _, w := range snap.Warnings {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			return nil

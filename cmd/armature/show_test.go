@@ -9,12 +9,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestShowOmitsTombstonedNotes(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "note-task", "--title", "Note task", "--type", "task")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "note", "--issue", "note-task", "--msg", "visible note")
+	require.NoError(t, err)
+
+	out2, err := runTrls(t, repo, "note", "--issue", "note-task", "--msg", "deleted note")
+	require.NoError(t, err)
+	var noteResult map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out2)), &noteResult))
+	deletedID, _ := noteResult["note_id"].(string) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+	require.NotEmpty(t, deletedID)
+
+	_, err = runTrls(t, repo, "note", "delete", "--issue", "note-task", "--note-id", deletedID)
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "show", "--format", "json", "note-task")
+	require.NoError(t, err)
+	var showResult map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &showResult))
+	notes, _ := showResult["notes"].([]any) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+	assert.Len(t, notes, 1, "deleted note should be hidden from show output")
+	if len(notes) > 0 {
+		assert.Equal(t, "visible note", notes[0])
+	}
+}
+
 // TestShow_BlockedBy verifies that arm show displays blocked_by and blocks lists
 // when they are non-empty, in both human-readable and JSON formats.
 func TestShow_BlockedBy(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -90,7 +125,7 @@ func TestShow_BlockedBy(t *testing.T) {
 func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -130,4 +165,29 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	blockedByList, ok := entry2["blocked_by"].([]any)
 	require.True(t, ok, "mblk-2 blocked_by field should be an array")
 	assert.Equal(t, []any{"mblk-1"}, blockedByList)
+}
+
+// TestShow_JSON_IncludesPriorityField verifies that the priority field is present in
+// JSON output when set. This is a non-regression test: the move from the old inline
+// showJSON struct to output.IssueJSON added the priority field to the JSON schema.
+func TestShow_JSON_IncludesPriorityField(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a task with an explicit priority
+	_, err = runTrls(t, repo, "create", "--id", "pri-task", "--title", "Priority task", "--type", "task", "--priority", "high")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "show", "--format", "json", "pri-task")
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	priority, ok := result["priority"]
+	require.True(t, ok, "JSON output from arm show must include the priority field")
+	assert.Equal(t, "high", priority, "priority field must reflect the value set at create time")
 }

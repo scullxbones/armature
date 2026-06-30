@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,15 +22,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type fakePendingPushTracker struct {
+	count       int
+	incremented int
+	resetCalls  int
+}
+
+func (f *fakePendingPushTracker) Increment() (int, error) {
+	f.incremented++
+	f.count++
+	return f.count, nil
+}
+
+func (f *fakePendingPushTracker) Reset() error {
+	f.resetCalls++
+	f.count = 0
+	return nil
+}
+
+func (f *fakePendingPushTracker) Count() (int, error) {
+	return f.count, nil
+}
+
+var runTrlsMu sync.Mutex
+
 // getTestStateDir returns the absolute path to the worker-specific state directory.
 // In dual-branch mode, state lives at the worktree root (.arm/state/); in single-branch,
 // it lives inside .armature/state/.
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
-	workerID, _ := worker.GetWorkerID(repo)
+	workerID, _ := worker.GetWorkerID(repo) //nolint:errcheck // best-effort in test setup
 	if workerID == "" {
 		workerID = "default"
 	}
+	// Apply the slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
+	workerID = workerIdentityWithSlot(workerID)
 	if _, err := os.Stat(filepath.Join(repo, ".arm", ".armature", "config.json")); err == nil {
 		return filepath.Join(repo, ".arm", "state", workerID)
 	}
@@ -36,7 +64,6 @@ func getTestStateDir(t *testing.T, repo string) string {
 }
 
 func TestStateDirFor(t *testing.T) {
-	t.Parallel()
 	ctx := &config.Context{IssuesDir: "/repo/.armature", WorktreePath: ""}
 	assert.Equal(t, "/repo/.armature/state/w1", stateDirFor(ctx, "w1"))
 
@@ -47,6 +74,8 @@ func TestStateDirFor(t *testing.T) {
 // runTrls invokes the armature cobra command tree with --repo injected and returns stdout + error.
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()
@@ -60,6 +89,8 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 // runTrlsWithStderr invokes the armature cobra command tree and returns stdout, stderr, and error.
 func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) {
 	t.Helper()
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()
@@ -91,9 +122,9 @@ func initTempRepo(t *testing.T) string {
 	return dir
 }
 
-func run(t *testing.T, dir string, name string, args ...string) {
+func run(t *testing.T, dir string, name string, args ...string) { //nolint:unparam // name is "git" in all current callers but helper is intentionally general
 	t.Helper()
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v failed: %s", name, args, out)
@@ -130,7 +161,7 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"worker-init", "--repo", repo})
-	_ = cmd1.Execute()
+	require.NoError(t, cmd1.Execute())
 
 	// Then check
 	buf := new(bytes.Buffer)
@@ -155,7 +186,7 @@ func TestInitCommand_SingleBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "human"})
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -175,7 +206,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
@@ -193,7 +224,7 @@ func TestInitCommand_Idempotent(t *testing.T) {
 	for range 2 {
 		cmd := newRootCmd()
 		cmd.SetOut(new(bytes.Buffer))
-		cmd.SetArgs([]string{"init", "--repo", repo})
+		cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 		assert.NoError(t, cmd.Execute())
 	}
 }
@@ -204,7 +235,7 @@ func TestMaterializeCommand(t *testing.T) {
 
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
-	cmd1.SetArgs([]string{"init", "--repo", repo})
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	buf := new(bytes.Buffer)
@@ -222,7 +253,7 @@ func TestReadyCommand_EmptyRepo(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	buf := new(bytes.Buffer)
@@ -240,7 +271,7 @@ func TestCreateCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	buf := new(bytes.Buffer)
@@ -254,6 +285,8 @@ func TestCreateCommand(t *testing.T) {
 }
 
 // setupRepoWithTask creates a temp repo, runs trls init, and creates a test task.
+// The task includes a definition_of_done so review assessments that cover
+// "definition_of_done" are accepted by ValidateResultCoverage.
 func setupRepoWithTask(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -261,12 +294,13 @@ func setupRepoWithTask(t *testing.T) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
+		"--dod", "Task implementation is complete and verified"})
 	require.NoError(t, cmd2.Execute())
 
 	return repo
@@ -364,7 +398,8 @@ func TestClaimCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01"})
+	worktreePath := filepath.Join(t.TempDir(), "claim-worktree")
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -377,7 +412,7 @@ func TestRenderContextCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -401,7 +436,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -413,7 +448,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	// Commit ops so SHA1 captures state after create (issue exists, no notes)
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "add create op")
-	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
@@ -423,7 +458,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	// Commit so HEAD captures the note
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "add note op")
-	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -438,13 +473,38 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	assert.Contains(t, out2, "note added after sha1", "SHA2 should contain the note")
 }
 
+func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "TST-DB", "--title", "Dual branch render", "--type", "task")
+	require.NoError(t, err)
+
+	require.NotNil(t, appCtx)
+	require.NotEmpty(t, appCtx.WorktreePath)
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD")
+	shaOutBytes, err := shaCmd.CombinedOutput()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOutBytes))
+
+	out, err := runTrls(t, repo, "render-context", "--issue", "TST-DB", "--at", sha)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Dual branch render")
+}
+
 func TestValidateCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -472,7 +532,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Init worker so decompose-apply can get a worker ID
@@ -504,7 +564,7 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"init", "--dual-branch", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo, "--format", "human"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -520,13 +580,13 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	assert.Contains(t, string(data), "dual-branch")
 
 	// Git config should have mode set
-	modeCmd := exec.Command("git", "-C", repo, "config", "armature.mode")
+	modeCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode")
 	modeOut, err := modeCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, "dual-branch\n", string(modeOut))
 
 	// Git config should have worktree path set
-	wtCmd := exec.Command("git", "-C", repo, "config", "armature.ops-worktree-path")
+	wtCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(wtOut), ".arm")
@@ -539,7 +599,7 @@ func TestMaterialize_SingleBranchMode_AfterModeRefactor(t *testing.T) {
 	// Init repo
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
-	cmd1.SetArgs([]string{"init", "--repo", repo})
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	// Materialize should still work
@@ -570,7 +630,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -589,13 +649,13 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 
 	// Verify the commit appeared on _armature branch (inside the worktree)
 	worktreePath := filepath.Join(repo, ".arm")
-	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-3")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "log", "--oneline", "-3")
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "ops: note")
 
 	// Verify the main repo's log does NOT contain the ops commit
-	mainCmd := exec.Command("git", "-C", repo, "log", "--oneline", "-5")
+	mainCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "log", "--oneline", "-5")
 	mainOut, err := mainCmd.Output()
 	require.NoError(t, err)
 	assert.NotContains(t, string(mainOut), "ops: note")
@@ -606,7 +666,7 @@ func TestNote_SingleBranch_ViaAppendOp(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Init and set up a task
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -625,7 +685,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -633,7 +693,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -646,7 +706,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and merge the feature branch in the git repo
-	currentBranchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(currentBranchOut))
@@ -674,7 +734,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -682,7 +742,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -695,7 +755,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and merge the feature branch
-	currentBranchCmd := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(currentBranchOut))
@@ -710,7 +770,8 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
-	statBefore, _ := os.Stat(logPath)
+	statBefore, err := os.Stat(logPath)
+	require.NoError(t, err)
 
 	// Run sync --dry-run: should print plan and exit 0
 	out, err := runTrls(t, repo, "sync", "--dry-run")
@@ -726,7 +787,8 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	assert.Equal(t, "done", index["T-001"].Status)
 
 	// Verify ops log was not grown (no ops written)
-	statAfter, _ := os.Stat(logPath)
+	statAfter, err := os.Stat(logPath)
+	require.NoError(t, err)
 	if statBefore != nil && statAfter != nil {
 		assert.Equal(t, statBefore.Size(), statAfter.Size(), "ops log should not grow with --dry-run")
 	}
@@ -741,7 +803,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -797,7 +859,7 @@ func TestStatus_ShowsInProgressIssue(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -805,7 +867,7 @@ func TestStatus_ShowsInProgressIssue(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -825,7 +887,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Use dual-branch mode so done != merged
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -833,7 +895,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -857,7 +919,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	hookPath := filepath.Join(repo, ".armature", "hooks", "post-merge.sh.template")
@@ -870,7 +932,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	hookPath := filepath.Join(repo, ".armature", "hooks", "post-commit.sh.template")
@@ -885,7 +947,7 @@ func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	hookPath := filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template")
@@ -900,7 +962,7 @@ func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Check that all three hook templates are installed to .git/hooks/
@@ -930,7 +992,7 @@ func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 
 	// Check that hooks are installed to .git/hooks/
@@ -949,7 +1011,7 @@ func TestInit_HooksAreBranchAware(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Check that post-commit hook contains branch awareness logic
@@ -971,7 +1033,7 @@ func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -990,7 +1052,7 @@ func TestMerged_AcceptsDoneIssue_SingleBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -998,8 +1060,18 @@ func TestMerged_AcceptsDoneIssue_SingleBranch(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--force", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
 
-	// In single-branch mode the validation is skipped — any issue can be passed to merged
+	// In single-branch mode, merged accepts status=done (which auto-advances to merged)
 	out, err := runTrls(t, repo, "merged", "--issue", "T-001", "--pr", "123")
 	require.NoError(t, err)
 	assert.Contains(t, out, "T-001")
@@ -1009,7 +1081,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1017,7 +1089,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001")
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1041,7 +1113,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1049,7 +1121,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "F-001")
+	_, err = runTrls(t, repo, "claim", "--issue", "F-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1095,7 +1167,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Init armature (which also inits worker ID)
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Case 1: No worker ID set (manually unset it)
@@ -1139,7 +1211,7 @@ func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 10}}, // TTL 10 min = 600 sec; 900+600=1500 > now(1000) → active
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "active", status.Status)
 	assert.Equal(t, "T-001", status.ActiveIssue)
 	assert.Equal(t, "worker-a", status.WorkerID)
@@ -1151,7 +1223,7 @@ func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 1}}, // TTL 1 min = 60 sec; 100+60=160 < now(10000) → stale
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
@@ -1162,7 +1234,7 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
 	}
 	// No claims, but recent op — idle within 2*TTL window
-	status := buildWorkerStatus("worker-a", allOps, 1, now) // 2*1min=120s; 1000-900=100 < 120 → idle
+	status := buildWorkerStatus("worker-a", allOps, 1, now, map[string]string{}) // 2*1min=120s; 1000-900=100 < 120 → idle
 	assert.Equal(t, "idle", status.Status)
 	assert.Equal(t, int64(900), status.LastOpTime)
 }
@@ -1175,7 +1247,7 @@ func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a",
 			Payload: ops.Payload{To: "done"}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1190,16 +1262,48 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 	}
 	// With the last heartbeat at 9500 and TTL 1 min = 60s: 9500+60=9560 < 10000 → still stale by expiry
 	// But lastHeartbeat should be 9500, not 200
-	status := buildWorkerStatus("worker-a", allOps, 60, now)
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	// The claim expired and even the heartbeat didn't extend it far enough — check that the heartbeat was tracked
 	assert.NotEqual(t, "active", status.Status)
+}
+
+func TestClaimWinnersByIssue_StaleClaimTakeoverPrefersCurrentOwner(t *testing.T) {
+	workers := map[string][]ops.Op{
+		"worker-a": {
+			{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 100, WorkerID: "worker-a", Payload: ops.Payload{TTL: 1}},
+		},
+		"worker-b": {
+			{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 200, WorkerID: "worker-b", Payload: ops.Payload{TTL: 10}},
+		},
+	}
+	winners := claimWinnersByIssue(workers)
+	assert.Equal(t, "worker-b", winners["task-1"])
+}
+
+func TestBuildWorkerStatus_SlottedWinnerMatchesBaseWorker(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a~slot-1"})
+	assert.Equal(t, "active", status.Status)
+	assert.Equal(t, "task-1", status.ActiveIssue)
+}
+
+func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 980, WorkerID: "worker-a", Payload: ops.Payload{TTL: 60}},
+	}
+	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-b"})
+	assert.Equal(t, "idle", status.Status)
 }
 
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
@@ -1282,7 +1386,7 @@ func TestHeartbeatCommand(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01")
@@ -1294,7 +1398,7 @@ func TestDecisionCommand(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "decision", "--issue", "task-01",
@@ -1306,7 +1410,7 @@ func TestDecisionCommand(t *testing.T) {
 func TestLinkCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1324,7 +1428,7 @@ func TestReopenCommand(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force", "--outcome", "done")
 	require.NoError(t, err)
@@ -1339,7 +1443,7 @@ func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1359,7 +1463,7 @@ func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1379,7 +1483,7 @@ func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1399,7 +1503,7 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1434,7 +1538,7 @@ func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1447,7 +1551,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	// Setup: repo with two issues and a worker
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1514,7 +1618,7 @@ func TestTransitionToOpen(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "in-progress")
 	require.NoError(t, err)
@@ -1540,13 +1644,16 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a story (parent) and a task (child)
+	// Create a story (parent) and a task (child).
+	// Materialize after story so issues/story-01.json exists for ReadIssue in create --parent.
 	_, err = runTrls(t, repo, "create", "--type", "story", "--title", "Parent Story", "--id", "story-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child Task", "--id", "task-01", "--parent", "story-01")
 	require.NoError(t, err)
@@ -1561,7 +1668,7 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	require.Equal(t, "open", index["story-01"].Status, "story should start as open")
 
 	// Claim the child task — this should auto-advance the parent story to in-progress
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Check the ops log for an explicit transition op targeting story-01 with to=in-progress.
@@ -1597,7 +1704,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1605,7 +1712,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	// Create a task and claim it (puts it in "claimed" status)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Unassign Test Task", "--id", "task-01")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Materialize and verify it's "claimed"
@@ -1656,7 +1763,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -1668,7 +1775,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	// Commit ops so SHA1 captures creation
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: create TST-HIST")
-	sha1Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
@@ -1678,7 +1785,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	// Commit ops so SHA2 captures note
 	run(t, repo, "git", "add", ".armature/")
 	run(t, repo, "git", "commit", "-m", "ops: note TST-HIST")
-	sha2Out, err2 := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -1694,7 +1801,7 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -1713,11 +1820,11 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// First init --dual-branch should succeed
-	_, err := runTrls(t, repo, "init", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err, "first dual-branch init should succeed")
 
 	// Second init --dual-branch should also succeed (idempotent)
-	_, err = runTrls(t, repo, "init", "--dual-branch")
+	_, err = runTrls(t, repo, "bootstrap", "--dual-branch")
 	require.NoError(t, err, "second dual-branch init should succeed (idempotent)")
 
 	// The stored worktree path should be absolute (not relative).
@@ -1731,14 +1838,14 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(repo))
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	t.Cleanup(func() { _ = os.Chdir(origDir) }) //nolint:errcheck // cleanup chdir error not actionable
 
 	// Re-init using "." as repo path — simulates running trls init --dual-branch in the repo root
-	dotCmd.SetArgs([]string{"init", "--dual-branch", "--repo", "."})
+	dotCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", "."})
 	err = dotCmd.Execute()
 	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")
 
-	wtCmd := exec.Command("git", "-C", repo, "config", "armature.ops-worktree-path")
+	wtCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
 	storedPath := strings.TrimSpace(string(wtOut))
@@ -1785,13 +1892,16 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create parent and two children
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Parent", "--id", "parent-01")
+	// Create a story as the parent, then two tasks under it (valid hierarchy: story→task).
+	// Materialize after parent-01 so issues/parent-01.json exists for ReadIssue in create --parent.
+	_, err = runTrls(t, repo, "create", "--type", "story", "--title", "Parent", "--id", "parent-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child A", "--id", "child-a", "--parent", "parent-01")
 	require.NoError(t, err)
@@ -1811,7 +1921,7 @@ func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1884,7 +1994,7 @@ func TestHeartbeatCommand_HumanOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01", "--format", "human")
@@ -1898,7 +2008,7 @@ func TestHeartbeatCommand_JSONOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "heartbeat", "--issue", "task-01", "--format", "json")
@@ -1928,7 +2038,33 @@ func TestNoteCommand_JSONOutput(t *testing.T) {
 	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"note"`)
+	assert.Contains(t, out, `"note_id"`)
 	assert.Contains(t, out, "task-01")
+}
+
+func TestNoteDeleteCommand_JSONOutput(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "progress update", "--format", "json")
+	require.NoError(t, err)
+
+	var result struct {
+		Issue  string `json:"issue"`
+		NoteID string `json:"note_id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &result))
+	require.NotEmpty(t, result.NoteID)
+
+	deleteOut, err := runTrls(t, repo, "note", "delete", "--issue", "task-01", "--note-id", result.NoteID, "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, deleteOut, `"note":"deleted"`)
+	assert.Contains(t, deleteOut, result.NoteID)
+
+	ctxOut, err := runTrls(t, repo, "render-context", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.NotContains(t, ctxOut, "progress update")
 }
 
 // UX: transition should emit plain text in human mode, not JSON
@@ -1960,21 +2096,21 @@ func TestInitCommand_AlreadyInitialized(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "init")
+	out, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	assert.Contains(t, out, "already")
 }
 
-// TestLogSlot_EnvVar verifies that TRLS_LOG_SLOT routes ops to a slotted log file.
+// TestLogSlot_EnvVar verifies that ARM_LOG_SLOT routes ops to a slotted log file.
 func TestLogSlot_EnvVar(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "beta")
+	t.Setenv("ARM_LOG_SLOT", "beta")
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "slotted note")
 	require.NoError(t, err)
@@ -2000,19 +2136,20 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	assert.Contains(t, string(slottedContent), "slotted note")
 
 	if plainFile != "" {
-		plainContent, _ := os.ReadFile(plainFile)
+		plainContent, err := os.ReadFile(plainFile)
+		require.NoError(t, err)
 		assert.NotContains(t, string(plainContent), "slotted note",
 			"plain log must not contain the slotted note")
 	}
 }
 
-// TestLogSlot_Empty_UsesPlainLog verifies that an empty TRLS_LOG_SLOT uses the normal log path.
+// TestLogSlot_Empty_UsesPlainLog verifies that an empty ARM_LOG_SLOT uses the normal log path.
 func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "") // explicitly empty
+	t.Setenv("ARM_LOG_SLOT", "") // explicitly empty
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
@@ -2023,8 +2160,59 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 
 	for _, e := range entries {
 		assert.NotContains(t, e.Name(), "~",
-			"no slotted file should exist when TRLS_LOG_SLOT is empty")
+			"no slotted file should exist when ARM_LOG_SLOT is empty")
 	}
+}
+
+func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	t.Setenv("TRLS_LOG_SLOT", "legacy")
+	t.Setenv("ARM_LOG_SLOT", "")
+
+	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), "~legacy", "legacy TRLS_LOG_SLOT must be ignored")
+	}
+}
+
+func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
+	t.Setenv("ARM_LOG_SLOT", "lane-a")
+	workerID := workerIdentityWithSlot("worker-123")
+	assert.Equal(t, "worker-123~lane-a", workerID)
+
+	ctx := &config.Context{IssuesDir: "/repo/.armature"}
+	assert.Equal(t, "/repo/.armature/state/worker-123~lane-a", stateDirFor(ctx, workerID))
+}
+
+func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testing.T) {
+	worktreePath := initTempRepo(t)
+	logPath := filepath.Join(worktreePath, ".armature", "ops", "worker.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
+
+	state := &executionState{
+		ctx: &config.Context{
+			WorktreePath: worktreePath,
+			Config:       config.Config{LowStakesPushThreshold: 1},
+		},
+		tracker: &fakePendingPushTracker{},
+	}
+
+	op := ops.Op{Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "w1", Payload: ops.Payload{Msg: "hello"}}
+	err := appendLowStakesOp(state, logPath, op)
+	require.NoError(t, err)
+
+	tracker, ok := state.tracker.(*fakePendingPushTracker)
+	require.True(t, ok)
+	assert.Equal(t, 1, tracker.incremented)
+	assert.Equal(t, 1, tracker.resetCalls)
 }
 
 // TestLogSlot_ReplayIncludesSlottedOps verifies that ops written to a slotted log
@@ -2032,7 +2220,7 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2042,21 +2230,21 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Slot "one" transitions task-a to done
-	t.Setenv("TRLS_LOG_SLOT", "one")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-a")
+	t.Setenv("ARM_LOG_SLOT", "one")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-a", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--force", "--outcome", "slot one")
 	require.NoError(t, err)
 
 	// Slot "two" transitions task-b to done
-	t.Setenv("TRLS_LOG_SLOT", "two")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-b")
+	t.Setenv("ARM_LOG_SLOT", "two")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-b", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--force", "--outcome", "slot two")
 	require.NoError(t, err)
 
 	// Unset slot so materialize uses the main context
-	t.Setenv("TRLS_LOG_SLOT", "")
+	t.Setenv("ARM_LOG_SLOT", "")
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -2076,7 +2264,7 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 func TestCreateCommand_HumanOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "create", "--format", "human", "--type", "task", "--title", "Human task", "--id", "human-01")
@@ -2089,7 +2277,7 @@ func TestCreateCommand_HumanOutput(t *testing.T) {
 func TestCreateCommand_JSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "create", "--format", "json", "--type", "task", "--title", "JSON task", "--id", "json-01")
@@ -2106,7 +2294,8 @@ func TestClaimCommand_HumanOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "claim", "--format", "human", "--issue", "task-01")
+	worktreePath := filepath.Join(t.TempDir(), "claim-worktree")
+	out, err := runTrls(t, repo, "claim", "--format", "human", "--issue", "task-01", "--worktree", worktreePath)
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, `"claimed_by"`, "human format should not be JSON")
@@ -2118,7 +2307,8 @@ func TestClaimCommand_JSONOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "claim", "--format", "json", "--issue", "task-01")
+	worktreePath := filepath.Join(t.TempDir(), "claim-worktree")
+	out, err := runTrls(t, repo, "claim", "--format", "json", "--issue", "task-01", "--worktree", worktreePath)
 	require.NoError(t, err)
 	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
@@ -2131,7 +2321,7 @@ func TestDecisionCommand_HumanOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "decision", "--format", "human", "--issue", "task-01",
@@ -2146,7 +2336,7 @@ func TestDecisionCommand_JSONOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "decision", "--format", "json", "--issue", "task-01",
@@ -2163,7 +2353,7 @@ func TestDecisionCommand_JSONOutput(t *testing.T) {
 func TestLinkCommand_HumanOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2182,7 +2372,7 @@ func TestLinkCommand_HumanOutput(t *testing.T) {
 func TestLinkCommand_JSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2203,7 +2393,7 @@ func TestLinkCommand_JSONOutput(t *testing.T) {
 func TestUnlinkCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2235,7 +2425,7 @@ func TestUnlinkCommand(t *testing.T) {
 func TestUnlinkCommand_JSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2343,7 +2533,7 @@ func TestWorkersCommand_HumanOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "workers", "--format", "human")
@@ -2356,7 +2546,7 @@ func TestWorkersCommand_FormatJSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "workers", "--format", "json")
@@ -2375,7 +2565,7 @@ func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "workers", "--json")
@@ -2392,7 +2582,7 @@ func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
 func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2400,14 +2590,14 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write an op via the plain log (claim)
-	_, err = runTrls(t, repo, "claim", "--issue", "slot-task")
+	_, err = runTrls(t, repo, "claim", "--issue", "slot-task", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Write an op via a slotted log (transition done)
-	t.Setenv("TRLS_LOG_SLOT", "w")
+	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
-	t.Setenv("TRLS_LOG_SLOT", "")
+	t.Setenv("ARM_LOG_SLOT", "")
 
 	// The workers output must show the worker as active/idle (not missing)
 	// and must reflect ops from both log files
@@ -2430,7 +2620,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	// Initialize armature
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Initialize our worker (worker-A).
@@ -2447,7 +2637,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 
 	// Claim task-01 as a *different* worker by temporarily overriding the git config.
 	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 	// Restore worker-A by re-running worker-init (generates a new UUID for worker-A).
 	_, err = runTrls(t, repo, "worker-init")
@@ -2459,7 +2649,8 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
+	worktreePath2 := filepath.Join(t.TempDir(), "claim-worktree-2")
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo, "--worktree", worktreePath2})
 
 	err = root.Execute()
 	assert.Error(t, err, "claim should fail when a different worker's task overlaps without --force")
@@ -2475,7 +2666,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	// Initialize armature
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Initialize worker
@@ -2491,11 +2682,11 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the first task
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Claim the second task with --force should succeed despite overlap
-	out, err := runTrls(t, repo, "claim", "--issue", "task-02", "--force")
+	out, err := runTrls(t, repo, "claim", "--issue", "task-02", "--force", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	assert.NoError(t, err, "claim --force should succeed despite scope overlap")
 	assert.Contains(t, out, "task-02", "output should contain the claimed issue ID")
 }
@@ -2508,7 +2699,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -2521,7 +2712,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Same worker claims task-01 first.
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Same worker claims task-02 without --force: should succeed (serial same-worker work).
@@ -2529,11 +2720,149 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
-	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo})
+	worktreePath2 := filepath.Join(t.TempDir(), "claim-worktree-2")
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo, "--worktree", worktreePath2})
 
 	err = root.Execute()
 	assert.NoError(t, err, "same-worker overlap should not require --force")
 	assert.NotContains(t, errBuf.String(), "Error:", "no error should be emitted to stderr")
+}
+
+// TestClaimCommand_SameWorkerOverlapDeduplicatesNotes verifies that when the same worker
+// claims a task with an existing overlap and the note already exists, it is not written again.
+// This ensures notes are written at most once per issue-pair per claim session.
+func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create two tasks with overlapping scopes
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	// Same worker claims task-01
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
+	require.NoError(t, err)
+
+	// Same worker claims task-02 (overlaps with task-01) - writes first dismissal note
+	claimTask02Path := filepath.Join(t.TempDir(), "claim-task-02-wt")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-02", "--worktree", claimTask02Path)
+	require.NoError(t, err)
+
+	// Load ops and count dismissal notes for task-02
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
+	require.NoError(t, err)
+
+	// Count notes on task-02 that mention serial overlap with task-01
+	countBefore := 0
+	for _, op := range allOps {
+		if op.Type == ops.OpNote && op.TargetID == "task-02" && strings.Contains(op.Payload.Msg, "Serial claim: scope overlap with task-01") {
+			countBefore++
+		}
+	}
+	assert.Equal(t, 1, countBefore, "task-02 should have exactly 1 note about task-01 overlap after first claim")
+
+	// Now simulate claiming task-02 again in the same worktree (e.g., heartbeat/refresh)
+	// This should update the task ID file without creating a new worktree
+
+	// Claim task-02 again with the same worktree path - should not create a duplicate note
+	_, err = runTrls(t, repo, "claim", "--issue", "task-02", "--worktree", claimTask02Path)
+	require.NoError(t, err)
+
+	// Load ops again and count dismissal notes
+	allOps, _, err = readAllOpsFromDirWithOffsets(opsDir)
+	require.NoError(t, err)
+
+	// Count notes on task-02 that mention serial overlap with task-01
+	countAfter := 0
+	for _, op := range allOps {
+		if op.Type == ops.OpNote && op.TargetID == "task-02" && strings.Contains(op.Payload.Msg, "Serial claim: scope overlap with task-01") {
+			countAfter++
+		}
+	}
+	assert.Equal(t, 1, countAfter, "task-02 should still have only 1 note about task-01 overlap after reclaiming (deduplication should prevent writing it again)")
+}
+
+func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "A")
+	worktreePath1 := filepath.Join(t.TempDir(), "claim-worktree-1")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath1)
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "B")
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(errBuf)
+	worktreePath2 := filepath.Join(t.TempDir(), "claim-worktree-2")
+	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo, "--worktree", worktreePath2})
+	err = root.Execute()
+	assert.Error(t, err, "same worker but different slots should be treated as different claim owners")
+	assert.Contains(t, errBuf.String(), "overlap")
+}
+
+func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt-1"))
+	require.NoError(t, err)
+
+	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
+	// Worktree setup is now deferred past claim validation: the second worker loses the
+	// race (original worker claimed first) and gets a "Claim lost" result, not an error.
+	// The worktree branch conflict is never reached because the race is lost before setup.
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt-2"))
+	require.NoError(t, err, "claim lost is a normal outcome, not an error")
+	// Output indicates claim loss in either human ("Claim lost") or JSON ("lost_claim_race") format.
+	assert.True(t,
+		strings.Contains(claimOut, "Claim lost") || strings.Contains(claimOut, "lost_claim_race"),
+		"output should report claim loss, got: %s", claimOut)
+
+	showOut, err := runTrls(t, repo, "show", "--issue", "task-01")
+	require.NoError(t, err)
+	assert.NotContains(t, showOut, "other-worker-abc")
+
+	workersOut, err := runTrls(t, repo, "workers", "--format", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, workersOut, `"worker_id":"other-worker-abc","status":"active"`)
 }
 
 // TestUnassignHelp verifies unassign --help mentions auto-transition side effect
@@ -2599,7 +2928,10 @@ func TestCommandGroups(t *testing.T) {
 	workflowExpected := []string{"ready", "claim", "transition", "unassign", "reopen", "heartbeat", "note", "decision", "amend", "confirm", "assign"}
 	dagExpected := []string{"dag-summary", "dag-transition", "link"}
 	syncExpected := []string{"sync", "merged", "materialize", "import", "stale-review"}
-	adminExpected := []string{"worker-init", "workers", "init", "create", "validate", "doctor", "version", "show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history"}
+	adminExpected := []string{
+		"worker-init", "workers", "bootstrap", "create", "validate", "doctor", "version",
+		"show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history",
+	}
 
 	for groupID, expectedCmds := range map[string][]string{
 		"workflow": workflowExpected,
@@ -2623,11 +2955,11 @@ func TestCommandGroups(t *testing.T) {
 func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	defaultBranchOut, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	require.NoError(t, err)
 	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
-	_, err = runTrls(t, repo, "init")
+	_, err = runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2637,7 +2969,7 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task
-	_, err = runTrls(t, repo, "claim", "task-01")
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Ensure we're on the default branch (main or master depending on git config)
@@ -2654,11 +2986,11 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	defaultBranchOut, err := exec.Command("git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	require.NoError(t, err)
 	defaultBranch := strings.TrimSpace(string(defaultBranchOut))
 
-	_, err = runTrls(t, repo, "init")
+	_, err = runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2667,7 +2999,7 @@ func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "task-01b", "--title", "Test task", "--type", "task")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "claim", "task-01b")
+	_, err = runTrls(t, repo, "claim", "task-01b", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Ensure we're on the default branch (main or master depending on git config)
@@ -2684,7 +3016,7 @@ func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2693,7 +3025,7 @@ func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "task-01c", "--title", "Test task", "--type", "task")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "claim", "task-01c")
+	_, err = runTrls(t, repo, "claim", "task-01c", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
 
 	// Create and checkout a feature branch
@@ -2710,7 +3042,7 @@ func SKIP_TestTransitionToDone_ParentStoryWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2755,7 +3087,7 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -2835,7 +3167,7 @@ func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
 func TestShowCommand_MultipleIDs(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Create two tasks
@@ -2860,7 +3192,7 @@ func TestShowCommand_MultipleIDs(t *testing.T) {
 func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "create", "--id", "show-j1", "--title", "JSON Task 1", "--type", "task")
@@ -2874,7 +3206,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	var results []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &results))
 	require.Len(t, results, 2)
-	ids := []string{results[0]["id"].(string), results[1]["id"].(string)}
+	ids := []string{results[0]["id"].(string), results[1]["id"].(string)} //nolint:errcheck // test helper; error checked via output assertions
 	assert.Contains(t, ids, "show-j1")
 	assert.Contains(t, ids, "show-j2")
 }
@@ -2884,7 +3216,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	acceptanceJSON := `[{"type":"test_passes","description":"all tests green"}]`
@@ -2913,6 +3245,67 @@ func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 	assert.Equal(t, "test_passes", criteria[0]["type"])
 }
 
+func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--title", "Feature with context",
+		"--type", "task",
+		"--id", "ctx-01",
+		"--context-file", "docs/adr.md",
+		"--context-file", "docs/design.md",
+	)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "ctx-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docs/adr.md", "docs/design.md"}, issue.ContextFiles)
+}
+
+func TestAmendCommand_ReplacesAndClearsContextFiles(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--title", "Feature with context",
+		"--type", "task",
+		"--id", "ctx-amend-01",
+		"--context-file", "docs/original.md",
+	)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "amend",
+		"--issue", "ctx-amend-01",
+		"--context-file", "docs/replaced.md",
+		"--context-file", "docs/extra.md",
+	)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issuePath := filepath.Join(getTestStateDir(t, repo), "issues", "ctx-amend-01.json")
+	issue, err := materialize.LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docs/replaced.md", "docs/extra.md"}, issue.ContextFiles)
+
+	_, err = runTrls(t, repo, "amend", "--issue", "ctx-amend-01", "--clear-context-files")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err = materialize.LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.Empty(t, issue.ContextFiles)
+}
+
 // TestTransitionCommand_WithFieldFlag verifies that --field extracts a single field
 // from transition output without needing post-processing.
 func TestTransitionCommand_WithFieldFlag(t *testing.T) {
@@ -2934,7 +3327,7 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 func TestCreateCommand_WithSourceFlag(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3011,7 +3404,7 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3038,7 +3431,7 @@ func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3063,7 +3456,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3092,7 +3485,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3137,7 +3530,7 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	_, err := runTrls(t, repo, "init")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3164,4 +3557,206 @@ func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 	validateOut, err := runTrls(t, repo, "validate")
 	require.NoError(t, err)
 	assert.NotContains(t, validateOut, "uncited node: sl-01")
+}
+
+// TestCreateCommand_InvalidType verifies that arm create rejects unrecognized types
+// with an explicit error listing valid types.
+func TestCreateCommand_InvalidType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "create", "--title", "Bad type", "--type", "bogustype", "--id", "bad-01")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogustype", "error must name the invalid type")
+	assert.Contains(t, err.Error(), "valid types", "error must list valid types")
+}
+
+// TestCreateCommand_HelpIncludesFeatureType verifies the create help text reflects the
+// canonical issue type list.
+func TestCreateCommand_HelpIncludesFeatureType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "create", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "feature", "help text should list feature as an accepted type")
+}
+
+// TestCreateCommand_BugTypeAccepted verifies that arm create accepts the bug type.
+func TestCreateCommand_BugTypeAccepted(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "create", "--title", "Bug report", "--type", "bug", "--id", "bug-01")
+	require.NoError(t, err, "bug type must be accepted as a valid type")
+}
+
+// TestCreateCommand_InvalidParentTypeCombo verifies that arm create rejects
+// a bug issued under a task (which is an invalid hierarchy).
+func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Materialize so issues/task-01.json exists for ReadIssue in create --parent.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// task-01 is a task; trying to create a bug under it must fail
+	_, err = runTrls(t, repo, "create",
+		"--title", "Bug under task",
+		"--type", "bug",
+		"--id", "bug-under-task",
+		"--parent", "task-01",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parent", "error must indicate invalid parent/type combo")
+}
+
+// TestCreateCommand_ValidParentTypeCombo verifies that a bug under a story is accepted.
+func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Create a story first
+	_, err = runTrls(t, repo, "create", "--title", "My Story", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+
+	// Materialize so issues/story-01.json exists for ReadIssue in create --parent.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Creating a bug under the story should succeed
+	_, err = runTrls(t, repo, "create",
+		"--title", "Bug in story",
+		"--type", "bug",
+		"--id", "bug-01",
+		"--parent", "story-01",
+	)
+	require.NoError(t, err, "bug under story must be accepted")
+}
+
+// TestReparentCommand_HappyPath verifies that arm reparent moves an issue to a new parent.
+func TestReparentCommand_HappyPath(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Create two stories and a task under story-01.
+	// Materialize after creating the stories so issues/story-01.json exists for ReadIssue.
+	_, err = runTrls(t, repo, "create", "--title", "Story One", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Story Two", "--type", "story", "--id", "story-02")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "My Task", "--type", "task", "--id", "task-01", "--parent", "story-01")
+	require.NoError(t, err)
+
+	// Reparent task-01 from story-01 to story-02
+	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "story-02")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task-01")
+	assert.Contains(t, out, "story-02")
+
+	// Materialize and verify the parent changed
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
+	require.NoError(t, err)
+	entry, ok := index["task-01"]
+	require.True(t, ok, "task-01 must exist")
+	assert.Equal(t, "story-02", entry.Parent, "task-01 should now have parent=story-02")
+}
+
+// TestReparentCommand_InvalidCombo verifies that arm reparent rejects an invalid
+// parent/type combination.
+func TestReparentCommand_InvalidCombo(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a second task to use as (invalid) parent
+	_, err := runTrls(t, repo, "create", "--title", "Parent task", "--type", "task", "--id", "task-parent")
+	require.NoError(t, err)
+
+	// task cannot parent task
+	_, err = runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "task-parent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid parent", "reparent must reject invalid parent/type combos")
+}
+
+// TestReparentCommand_ParentNotFound verifies that arm reparent returns an error
+// when the target parent does not exist.
+func TestReparentCommand_ParentNotFound(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "nonexistent-parent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found", "reparent must fail when parent does not exist")
+}
+
+// TestReparentCommand_IssueNotFound verifies that arm reparent returns an error
+// when the issue being reparented does not exist.
+func TestReparentCommand_IssueNotFound(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	_, err := runTrls(t, repo, "reparent", "--issue", "nonexistent-issue", "--parent", "task-01")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found", "reparent must fail when issue does not exist")
+}
+
+// TestCreateCmd_WithParent_DoesNotMaterialize verifies that arm create --parent uses
+// store.ReadIssue() to validate the parent without triggering full rematerialization.
+//
+// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
+// advancing its mtime → mtime assertion fails.
+// GREEN with store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
+func TestCreateCmd_WithParent_DoesNotMaterialize(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Create a story
+	_, err = runTrls(t, repo, "create", "--title", "Parent Story", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+
+	// Materialize to write checkpoint.json and issues/story-01.json.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Capture checkpoint.json mtime before running create --parent.
+	stateDir := getTestStateDir(t, repo)
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	stat, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
+	mtimeBefore := stat.ModTime()
+
+	// Run create --parent — must use ReadIssue, not Load.
+	_, err = runTrls(t, repo, "create", "--title", "Child Task", "--type", "task", "--id", "task-01", "--parent", "story-01")
+	require.NoError(t, err)
+
+	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
+	statAfter, statErr := os.Stat(checkpointPath)
+	require.NoError(t, statErr)
+	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
+		"checkpoint.json must not be updated by arm create --parent: store.ReadIssue must be used, not store.Load")
+}
+
+// TestManagedExecutionCommandsAreNotRegistered verifies that arm orchestrate and
+// arm worker run return unknown-command errors, and that worker-init --check still works.
+func TestManagedExecutionCommandsAreNotRegistered(t *testing.T) {
+	repo := t.TempDir()
+
+	_, err := runTrls(t, repo, "orchestrate")
+	require.Error(t, err, "arm orchestrate must return an error")
+	assert.Contains(t, err.Error(), "unknown command", "arm orchestrate must return unknown-command error")
+
+	_, err = runTrls(t, repo, "worker", "run")
+	require.Error(t, err, "arm worker run must return an error")
+	assert.Contains(t, err.Error(), "unknown command", "arm worker run must return unknown-command error")
+
+	// worker-init --check must still execute (may fail if no worker ID, but must not be unknown command)
+	_, err = runTrls(t, repo, "worker-init", "--check")
+	if err != nil {
+		assert.NotContains(t, err.Error(), "unknown command", "worker-init must still be registered")
+	}
 }

@@ -1,9 +1,10 @@
 ---
 name: armature-worker
 description: >
-  Use when starting work in an armature-managed repository — picks up ready
-  issues, claims them, assembles context, and drives implementation. Enforces
-  per-task commits and story-level push/PR strategy.
+  Use for task execution in an armature-managed repository. A worker receives
+  a pre-claimed task from the Coordinator, implements it, records progress, and
+  transitions the task to `done`. Enforces per-task commits and story-level
+  push/PR strategy.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -27,8 +28,23 @@ arm worker-init --check || arm worker-init
 `--check` generates a new UUID, which is almost never what you want.
 
 > Workers receive task context from the Coordinator at dispatch time.
-> For finding work, claiming issues, dispatching workers, and story-level PR:
-> see the **armature-coordinator** skill.
+> For story-level coordination and PR flow, see the **armature-coordinator** skill.
+
+## DAG Hygiene Mandate
+
+**`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+
+Before transitioning any task to `done` and after completing your work, run:
+```bash
+arm validate       # zero ERRORs; all issues cited
+arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+```
+
+If either exits non-zero, fix the reported issues before transitioning. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+
+Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before completing your task. DAG health is cumulative.
+
+---
 
 ## Step-by-Step
 
@@ -80,7 +96,29 @@ arm accept-citation --issue ISSUE-ID --ci               # if no source exists
 
 Do not leave issues uncited.
 
-### 5. Complete and Commit
+### 5. Pre-Transition Verification (mandatory)
+
+Before transitioning any task to `done`, you **must** run the following checks.
+Do NOT transition if either fails — fix the errors first.
+
+```bash
+go build ./...   # must exit zero; stops transition if compilation fails
+make check       # lint + test + coverage-check + mutate + validate-skills + build
+```
+
+If `make check` is unavailable (e.g., the repo has no Makefile), fall back to:
+
+```bash
+go run ./cmd/armature --help   # confirms the binary at least compiles
+```
+
+**Completion order (never deviate):**
+1. Run `go build ./...` — fix any compile errors.
+2. Run `make check` — fix any lint/test/coverage failures.
+3. `arm transition ISSUE-ID --to done --outcome "..."` — only after both pass.
+4. Immediately stage scoped files and commit — do not leave the transition uncommitted before moving to step 6.
+
+### 6. Complete and Commit
 
 ```
 arm transition ISSUE-ID --to done --outcome "what was accomplished"

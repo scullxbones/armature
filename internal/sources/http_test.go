@@ -2,31 +2,44 @@ package sources
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
+type fakeHTTPClient struct {
+	do func(*http.Request) (*http.Response, error)
+}
+
+func (c fakeHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	return c.do(req)
+}
+
+func testResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
 func TestFetchHTTP_BearerToken(t *testing.T) {
+	t.Parallel()
 	const wantBody = `{"data":"hello"}`
 	const token = "my-bearer-token"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+token {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("Authorization") != "Bearer "+token {
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer srv.Close()
+		return testResponse(http.StatusOK, wantBody), nil
+	}}
 
-	creds := Credentials{Token: token}
-	client := &http.Client{}
-
-	got, err := fetchHTTP(context.Background(), client, srv.URL+"/", creds)
+	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "", "", token)
 	if err != nil {
-		t.Fatalf("fetchHTTP returned unexpected error: %v", err)
+		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
 	if string(got) != wantBody {
 		t.Errorf("body mismatch: got %q, want %q", string(got), wantBody)
@@ -34,25 +47,20 @@ func TestFetchHTTP_BearerToken(t *testing.T) {
 }
 
 func TestFetchHTTP_BasicAuth(t *testing.T) {
+	t.Parallel()
 	const wantBody = `{"result":"ok"}`
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, pass, ok := r.BasicAuth()
+	client := fakeHTTPClient{do: func(req *http.Request) (*http.Response, error) {
+		user, pass, ok := req.BasicAuth()
 		if !ok || user != "alice" || pass != "secret" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+			return testResponse(http.StatusUnauthorized, "unauthorized"), nil
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer srv.Close()
+		return testResponse(http.StatusOK, wantBody), nil
+	}}
 
-	creds := Credentials{Username: "alice", Password: "secret"}
-	client := &http.Client{}
-
-	got, err := fetchHTTP(context.Background(), client, srv.URL+"/", creds)
+	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "alice", "secret", "")
 	if err != nil {
-		t.Fatalf("fetchHTTP returned unexpected error: %v", err)
+		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
 	if string(got) != wantBody {
 		t.Errorf("body mismatch: got %q, want %q", string(got), wantBody)
@@ -60,33 +68,28 @@ func TestFetchHTTP_BasicAuth(t *testing.T) {
 }
 
 func TestFetchHTTP_ErrorStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer srv.Close()
+	t.Parallel()
+	client := fakeHTTPClient{do: func(_ *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusNotFound, "not found"), nil
+	}}
 
-	client := &http.Client{}
-
-	_, err := fetchHTTP(context.Background(), client, srv.URL+"/missing", Credentials{})
+	_, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/missing", "", "", "")
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
 }
 
 func TestFetchHTTP_NoAuth(t *testing.T) {
+	t.Parallel()
 	const wantBody = `{"public":"data"}`
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer srv.Close()
+	client := fakeHTTPClient{do: func(_ *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusOK, wantBody), nil
+	}}
 
-	client := &http.Client{}
-
-	got, err := fetchHTTP(context.Background(), client, srv.URL+"/", Credentials{})
+	got, err := adapters.FetchHTTP(context.Background(), client, "https://example.test/", "", "", "")
 	if err != nil {
-		t.Fatalf("fetchHTTP returned unexpected error: %v", err)
+		t.Fatalf("FetchHTTP returned unexpected error: %v", err)
 	}
 	if string(got) != wantBody {
 		t.Errorf("body mismatch: got %q, want %q", string(got), wantBody)

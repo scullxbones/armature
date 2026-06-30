@@ -79,16 +79,16 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 
 ### Single-Branch Fallback
 
-If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Detection is automatic at `arm init` time. This preserves viability for solo developers and non-enterprise setups.
+If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Single-branch mode is the default when `--dual-branch` is not passed. This preserves viability for solo developers and non-enterprise setups.
 
 ### Worktree Lifecycle
 
 | Event | Action |
 |---|---|
-| `arm init` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| `arm init --repair` | Re-creates worktree if stale or missing, re-installs hooks |
+| `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
+| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .arm --force`, then re-run `arm bootstrap --dual-branch` |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
-| Worktree corruption | `arm init --repair` deletes and recreates the worktree from remote |
+| Worktree corruption | Manually remove the stale worktree (`git worktree remove .arm --force`), then re-run `arm bootstrap --dual-branch` to recreate it from remote |
 
 ### Directory Structure (within `.arm/` worktree)
 
@@ -1179,7 +1179,7 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 ### Hook Catalog
 
-`arm init` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
+`arm bootstrap` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
 
 **Important distinction:** Git hooks (this section) are convenience automation for heartbeats, commit-message stamping, and merge promotion. Pre-transition verification hooks (section 12) configured as `required: true` in `.armature/config.json` are **enforcement** — the CLI refuses to emit a `done` transition if a required verification hook fails, regardless of whether git hooks are installed. These are separate mechanisms with different trust models.
 
@@ -1193,9 +1193,9 @@ The `post-commit` hook is the highest-leverage automation: every code commit bec
 
 ### Installation and Bypass
 
-- `arm init` installs hooks from version-controlled templates in `.armature/hooks/`
-- `arm init --no-hooks` skips hook installation
-- `arm init --repair` re-installs if hooks were removed or corrupted
+- `arm bootstrap` installs git hooks from version-controlled templates in `.armature/hooks/` (always, by default)
+- `arm bootstrap --repo <path>` specifies a repository path
+- `arm bootstrap --with-hooks` installs harness hook configuration in `.claude/settings.json` (disabled by default; enable only when harness integration is desired)
 - Standard `--no-verify` on git commands bypasses hooks
 - Hooks fail silently (stderr redirected) — system is correct without them
 
@@ -1213,44 +1213,40 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
 
 ```json
 {
-  "pre_transition_hooks": [
+  "hooks": [
     {
-      "cmd": "npm test -- --testPathPattern={scope}",
-      "label": "tests",
-      "required": true,
-      "exit_codes": {
-        "0": "pass",
-        "1": "test_failure",
-        "*": "environment_error"
-      }
-    },
-    {
-      "cmd": "npx tsc --noEmit",
-      "label": "typecheck",
+      "name": "tests",
+      "command": ["npm", "test", "--", "--testPathPattern={scope}"],
       "required": true
     },
     {
-      "cmd": "npx eslint {scope}",
-      "label": "lint",
+      "name": "typecheck",
+      "command": ["npx", "tsc", "--noEmit"],
+      "required": true
+    },
+    {
+      "name": "lint",
+      "command": ["npx", "eslint", "{scope}"],
       "required": false
     }
   ]
 }
 ```
 
-### Auto-Detection at Init Time
+### Project Type Detection
 
-`arm init` checks for well-known files and proposes defaults:
+`arm bootstrap` automatically detects the project type by checking for well-known marker files:
 
-| Detected File | Proposed test_cmd | Proposed lint_cmd |
-|---|---|---|
-| `package.json` | `npm test` | `npx eslint {scope}` |
-| `go.mod` | `go test ./...` | `golangci-lint run {scope}` |
-| `pyproject.toml` | `pytest` | `ruff check {scope}` |
-| `Cargo.toml` | `cargo test` | `cargo clippy -- {scope}` |
-| `Makefile` (with test target) | `make test` | (none) |
+| Marker File | Detected Type |
+|---|---|
+| `package.json` | `node` |
+| `go.mod` | `go` |
+| `pyproject.toml` | `python` |
+| `Cargo.toml` | `rust` |
+| `Makefile` | `make` |
+| (none found) | `unknown` |
 
-The developer confirms or overrides. If nothing is detected, the CLI prompts for manual entry.
+The detected project type is recorded in `.armature/config.json` as `project_type`. However, **no pre-transition hooks are auto-configured** — bootstrap creates an empty `hooks` array. If you want to add pre-transition verification (tests, linting, typechecking), manually edit `.armature/config.json` and add hook entries to the `hooks` field. See the "Hook Configuration" section above for the JSON structure and examples.
 
 ### `{scope}` Interpolation
 
@@ -1330,41 +1326,39 @@ Output:
 
 Exit codes:
   0  success (or already current)
-  1  ops branch not found (run arm init)
+  1  ops branch not found (run arm bootstrap)
   2  network error (offline — local state is stale)
 ```
 
 Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting, and batch operations.
 
-#### `arm init`
+#### `arm bootstrap`
 
 ```
-arm init [flags]
+arm bootstrap [flags]
 
 Behavior:
   1. Detect branch protection (can push to main directly?)
   2. If protected: create _armature orphan branch (if needed), set up ops worktree
   3. If not protected: use single-branch mode
-  4. Auto-detect project type, propose verification hooks
+  4. Auto-detect project type
   5. Write .armature/config.json
-  6. Install git hooks (unless --no-hooks)
-  7. Run worker-init (generate UUID, store in git config)
+  6. Install git hooks from templates
+  7. Deploy bundled skills to .claude/skills/ (or ~/.claude/skills/ with --global)
+  8. Optionally deploy harness hook config (with --with-hooks)
 
 Flags:
-  --no-hooks       Skip hook installation
-  --repair         Re-create worktree, re-install hooks
-  --single-branch  Force single-branch mode regardless of protection
+  --dual-branch    Force dual-branch mode (create _armature branch)
+  --global         Deploy skills to ~/.claude/skills/ instead of .claude/
+  --platform       Restrict to specific platform(s) (repeatable)
+  --repo           Repository path (default: current directory)
+  --with-hooks     Write harness hook configuration
 
 Output:
-  Detected: package.json (Node.js)
-  Proposed test command: npm test
-  Proposed lint command: npx eslint {scope}
-  Accept? [Y/n/edit]
-
-  ✓ Config written to .armature/config.json
-  ✓ Hooks installed to .git/hooks/
-  ✓ Worker ID: a1b2c3d4
-  ✓ Ops worktree created at .arm/
+  Initialized Armature in dual-branch mode at .armature
+  Deployed skills to ./.claude/skills/ for claude
+  Deployed harness hook config for claude
+  Bootstrap complete.
 ```
 
 #### `arm merged`
@@ -1409,7 +1403,7 @@ Exit codes:
 
 ### Worker-Init
 
-`arm worker-init` (also run as part of `arm init`) generates a UUID and writes it to repo-local git config:
+`arm worker-init` (also run as part of `arm bootstrap`) generates a UUID and writes it to repo-local git config:
 
 ```
 git config --local armature.worker-id <uuid>
@@ -1607,9 +1601,9 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 
 | Error | Cause | Hint |
 |---|---|---|
-| `ops branch not found` | `_armature` branch missing | `run arm init` |
-| `ops worktree desync` | Local ops worktree is behind or corrupted | `run arm sync` or `arm init --repair` |
-| `stale worktree` | Worktree path exists but points to wrong branch | `run arm init --repair` |
+| `ops branch not found` | `_armature` branch missing | `run arm bootstrap` |
+| `ops worktree desync` | Local ops worktree is behind or corrupted | `run arm sync` or `arm bootstrap` |
+| `stale worktree` | Worktree path exists but points to wrong branch | `run arm bootstrap` |
 | `materialization failed` | Corrupt log line or unexpected state | Skip unparseable lines + warn; `--debug` shows details |
 
 ---
@@ -1630,7 +1624,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Transition-code desync (done before code reviewed) | Downstream premature start | Two-phase done/merged model; downstream requires `merged` |
 | Ops branch force-push or deletion | Loss of coordination state | Configure force-push protection separately from PR requirements; local worktrees retain full history for recovery |
 | Squash-merge breaks commit ancestry checks | Merge detection miss | Commit-message scan (not ancestry) as primary detection; branch-name and explicit fallbacks |
-| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; `--repair` flag for stale state |
+| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .arm --force` then re-run `arm bootstrap --dual-branch` |
 | Verify phase reads code worktree, record phase writes ops worktree | Cross-worktree corruption | Strict phase separation: verify(code) then record(ops); no cross-worktree operations within a phase |
 | Task stuck at done if PR abandoned | Downstream permanently blocked | Staleness check (no merge within N days of done); surfaced via `arm status` |
 | Manual commits to ops branch | Unexpected state | CLI ignores non-.armature/ files; contributing guide documents convention |
@@ -1778,11 +1772,11 @@ auth_method = "device_flow"
 
 ### Multi-Repo Strategy
 
-**v1: Separate instances per repo (Option A).** Each repo has its own `arm init`, its own ops branch, its own DAG. Cross-repo dependencies are tracked manually (notes on tasks). The CLI has no awareness of other repos.
+**v1: Separate instances per repo (Option A).** Each repo has its own `arm bootstrap`, its own ops branch, its own DAG. Cross-repo dependencies are tracked manually (notes on tasks). The CLI has no awareness of other repos.
 
 **Future: Hub-repo topology (Option B, designed-for but not implemented).** A dedicated coordination repository (e.g., `acme/armature-ops`) contains all armature ops for the project. Individual code repos reference this hub. Workers in any code repo push ops to the hub.
 
-Implementation path: `arm init --ops-repo=acme/armature-ops` configures the ops worktree to point at the external hub repo. All CLI commands operate against the hub. The code worktree is the current repo.
+Implementation path: `arm bootstrap --ops-repo=acme/armature-ops` configures the ops worktree to point at the external hub repo. All CLI commands operate against the hub. The code worktree is the current repo.
 
 **Design-for signals in v1:**
 

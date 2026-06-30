@@ -16,7 +16,9 @@ func newDAGTransitionCmd() *cobra.Command {
 		Use:   "dag-transition",
 		Short: "Promote all draft nodes in a subtree to verified",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			workerID, logPath, err := resolveWorkerAndLog()
+			state := mustState(cmd)
+			ctx := state.ctx
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -36,12 +38,12 @@ func newDAGTransitionCmd() *cobra.Command {
 					To:      targetConfidence,
 				},
 			}
-			if err := appendOp(logPath, op); err != nil {
+			if err := appendOp(ctx, logPath, op); err != nil {
 				return err
 			}
 
 			result := map[string]string{"issue": issueID, "promoted_to": targetConfidence}
-			data, _ := json.Marshal(result)
+			data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},

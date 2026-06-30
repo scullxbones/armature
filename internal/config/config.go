@@ -1,10 +1,9 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
 	"path/filepath"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type Config struct {
@@ -17,27 +16,19 @@ type Config struct {
 }
 
 type HookConfig struct {
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-	Required bool   `json:"required"`
+	Name     string   `json:"name"`
+	Command  []string `json:"command"`
+	Required bool     `json:"required"`
 }
 
 func WriteConfig(path string, cfg Config) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	return os.WriteFile(path, data, 0644)
+	return adapters.WriteConfigFile(path, cfg)
 }
 
 func LoadConfig(path string) (Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Config{}, fmt.Errorf("read config: %w", err)
-	}
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config: %w", err)
+	if err := adapters.LoadConfigFile(path, &cfg); err != nil {
+		return Config{}, err
 	}
 	return cfg, nil
 }
@@ -55,7 +46,7 @@ func DetectProjectType(repoPath string) string {
 		{"Makefile", "make"},
 	}
 	for _, m := range markers {
-		if _, err := os.Stat(filepath.Join(repoPath, m.file)); err == nil {
+		if adapters.StatFile(filepath.Join(repoPath, m.file)) {
 			return m.projType
 		}
 	}

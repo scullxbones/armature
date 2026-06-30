@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "title": "ARCHIMP-S6 GraphFacts Seam Completion",
+  "issues": [
+    {
+      "id": "S6",
+      "title": "Promote dag.Graph as canonical owner of graph facts",
+      "type": "story",
+      "parent": "",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "dag.FromIndex and dag.IsLegalHierarchy added and tested. ready/compute.go, context/assemble.go, and doctor D5 all delegate graph walks to dag.Graph instead of manual index traversal. make check green.",
+      "scope": "internal/dag/dag.go, internal/dag/dag_test.go, internal/ready/compute.go, internal/context/assemble.go, internal/context/context_test.go, cmd/armature/render_context.go, internal/doctor/doctor.go",
+      "acceptance": [
+        "go test ./internal/dag/... passes with FromIndex and IsLegalHierarchy tests",
+        "make check green",
+        "arm validate --ci exits 0",
+        "arm doctor exits 0"
+      ],
+      "notes": []
+    },
+    {
+      "id": "S6-T1",
+      "title": "Add dag.FromIndex factory and dag.IsLegalHierarchy helper (TDD)",
+      "type": "task",
+      "parent": "S6",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "TDD: write 3 failing tests (FromIndex basic structure with Ancestry/Descendants, FromIndex empty, IsLegalHierarchy table), then implement both functions. All dag tests pass. make check green.",
+      "scope": "internal/dag/dag.go, internal/dag/dag_test.go",
+      "acceptance": [
+        "go test ./internal/dag/... -v -run 'TestFromIndex|TestIsLegal': 3 tests pass",
+        "make check green",
+        "dag.go imports materialize package for FromIndex",
+        "IsLegalHierarchy: epic→{story,task,feature}, story→{task,feature}, feature→{task}, task→{}, root→all"
+      ],
+      "notes": [
+        "FromIndex constructs a *DAG via New(), iterates index entries, calls AddNode for each",
+        "legalChildren is an unexported package-level var map[string]map[string]bool"
+      ]
+    },
+    {
+      "id": "S6-T2",
+      "title": "Migrate ready package to use dag.FromIndex and dag.Graph.Descendants",
+      "type": "task",
+      "parent": "S6",
+      "priority": "high",
+      "blocked_by": ["S6-T1"],
+      "dod": "Remove buildDAGFromIndex from ready/compute.go; replace call site with dag.NewGraph(dag.FromIndex(index)). Rewrite CollectDescendants to delegate to dag.Graph.Descendants. go test ./internal/ready/... passes.",
+      "scope": "internal/ready/compute.go",
+      "acceptance": [
+        "go test ./internal/ready/... -v: all pass",
+        "buildDAGFromIndex no longer exists in ready/compute.go",
+        "CollectDescendants body is 4 lines delegating to g.Descendants"
+      ],
+      "notes": [
+        "Behavior is identical post-migration; this is pure structural de-duplication"
+      ]
+    },
+    {
+      "id": "S6-T3",
+      "title": "Migrate context assembler to use dag.Graph for ancestry and sibling queries",
+      "type": "task",
+      "parent": "S6",
+      "priority": "high",
+      "blocked_by": ["S6-T1"],
+      "dod": "Assemble signature adds graph *dag.Graph parameter. buildParentChain uses graph.Ancestry. buildSiblingOutcomes uses graph.Hierarchy. buildBlockerOutcomes reads from state.Issues only (no disk fallback). Disk-fallback os/filepath imports removed. render_context.go caller updated. context_test.go updated. go build ./... and make test pass.",
+      "scope": "internal/context/assemble.go, internal/context/context_test.go, cmd/armature/render_context.go",
+      "acceptance": [
+        "go build ./... succeeds",
+        "make test passes",
+        "Assemble signature: func Assemble(issueID, stateDir string, state *materialize.State, graph *dag.Graph) (*Context, error)",
+        "no os.Open or filepath.Join(stateDir, 'issues') calls remain in assemble.go"
+      ],
+      "notes": [
+        "render_context.go --at path: build index via state.BuildIndex(), then dag.NewGraph(dag.FromIndex(index))",
+        "render_context.go normal path: use snap.Index from snapshot.Load (Story ARCHIMP-S5 must be complete)",
+        "stateDir parameter kept in Assemble for inferRepoRoot"
+      ]
+    },
+    {
+      "id": "S6-T4",
+      "title": "Migrate doctor D5 cycle detection to dag.Graph.HasCycle",
+      "type": "task",
+      "parent": "S6",
+      "priority": "medium",
+      "blocked_by": ["S6-T1"],
+      "dod": "checkD5DependencyCycles replaced: use dag.NewGraph(dag.FromIndex(index)).HasCycle() as the fast cycle gate; keep a simplified blocked_by-only DFS only for collecting cycle-edge diagnostics. go test ./internal/doctor/... passes.",
+      "scope": "internal/doctor/doctor.go",
+      "acceptance": [
+        "go test ./internal/doctor/... -v: all pass",
+        "dag import added to doctor.go",
+        "old color-state DFS (three-color) removed; replaced with HasCycle gate + minimal edge collector"
+      ],
+      "notes": [
+        "D5 message stays: 'Dependency cycles detected in blocked_by chains'",
+        "HasCycle detects cycles in both parent-child and blocker edges; if tests diverge, keep blocker-only DFS inline"
+      ]
+    }
+  ]
+}

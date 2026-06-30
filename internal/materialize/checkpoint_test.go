@@ -9,6 +9,7 @@ import (
 )
 
 func TestCheckpointRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "checkpoint.json")
 
@@ -26,6 +27,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 }
 
 func TestLoadCheckpoint_Missing(t *testing.T) {
+	t.Parallel()
 	cp, err := LoadCheckpoint("/nonexistent/checkpoint.json")
 	require.NoError(t, err) // missing checkpoint = fresh start
 	assert.Equal(t, "", cp.LastCommitSHA)

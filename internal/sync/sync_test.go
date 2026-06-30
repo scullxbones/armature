@@ -1,8 +1,6 @@
 package sync_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -11,19 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeMergeChecker struct {
-	merged map[string]bool
-}
-
-func (f *fakeMergeChecker) BranchMergedInto(branch, target string) (bool, error) {
-	return f.merged[branch], nil
-}
-
 func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
-	dir := t.TempDir()
-	issuesStateDir := filepath.Join(dir, "state", "issues")
-	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
-
+	t.Parallel()
 	// done + merged branch
 	issue1 := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "feature/merged-work", Type: "task",
@@ -39,63 +26,50 @@ func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 		ID: "T-003", Status: "in-progress", Branch: "feature/wip", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
-	require.NoError(t, materialize.WriteIssue(issuesStateDir, issue1))
-	require.NoError(t, materialize.WriteIssue(issuesStateDir, issue2))
-	require.NoError(t, materialize.WriteIssue(issuesStateDir, issue3))
 
-	mc := &fakeMergeChecker{merged: map[string]bool{
+	mc := NewFakeMergeChecker(map[string]bool{
 		"feature/merged-work": true,
-	}}
+	})
 
-	ids, err := armsync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
+	ids, err := armsync.DetectMerges([]materialize.Issue{issue1, issue2, issue3}, "main", mc)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"T-001"}, ids)
 }
 
 func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
-	dir := t.TempDir()
-	issuesStateDir := filepath.Join(dir, "state", "issues")
-	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
-
+	t.Parallel()
 	issue := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
-	require.NoError(t, materialize.WriteIssue(issuesStateDir, issue))
 
-	mc := &fakeMergeChecker{merged: map[string]bool{}}
+	mc := NewFakeMergeChecker(map[string]bool{})
 
-	ids, err := armsync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
+	ids, err := armsync.DetectMerges([]materialize.Issue{issue}, "main", mc)
 	require.NoError(t, err)
 	assert.Empty(t, ids)
 }
 
 func TestDetectMerges_EmptyDir(t *testing.T) {
-	dir := t.TempDir()
-	// No state/issues dir — should return nil, nil
-
-	mc := &fakeMergeChecker{merged: map[string]bool{}}
-	ids, err := armsync.DetectMerges("unused-issues-dir", filepath.Join(dir, "state"), "main", mc)
+	t.Parallel()
+	// No issues provided
+	mc := NewFakeMergeChecker(map[string]bool{})
+	ids, err := armsync.DetectMerges([]materialize.Issue{}, "main", mc)
 	assert.NoError(t, err)
 	assert.Empty(t, ids)
 }
 
-func TestSyncDetectMergesUsesStateDir(t *testing.T) {
-	dir := t.TempDir()
-	stateDir := filepath.Join(dir, "specific-state")
-	issuesStateDir := filepath.Join(stateDir, "issues")
-	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
-
+func TestSyncDetectMergesChecksAllIssues(t *testing.T) {
+	t.Parallel()
 	issue := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "feature/merged", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
-	require.NoError(t, materialize.WriteIssue(issuesStateDir, issue))
 
-	mc := &fakeMergeChecker{merged: map[string]bool{"feature/merged": true}}
+	mc := NewFakeMergeChecker(map[string]bool{"feature/merged": true})
 
-	// If it was hardcoded to something else, this would fail.
-	ids, err := armsync.DetectMerges("unused", stateDir, "main", mc)
+	// DetectMerges should check all provided issues
+	ids, err := armsync.DetectMerges([]materialize.Issue{issue}, "main", mc)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"T-001"}, ids)
 }

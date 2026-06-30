@@ -1,3 +1,4 @@
+// Package app provides the top-level bubbletea TUI model that manages screen routing.
 package app
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/detail"
 )
@@ -17,11 +19,12 @@ import (
 // ScreenID identifies one of the four main screens.
 type ScreenID int
 
+// Screen identifiers for the four main views.
 const (
-	ScreenDAGTree  ScreenID = iota // 1
-	ScreenWorkers                  // 2
-	ScreenValidate                 // 3
-	ScreenSources                  // 4
+	ScreenDAGTree ScreenID = iota
+	ScreenWorkers
+	ScreenValidate
+	ScreenSources
 )
 
 // RefreshMsg triggers a re-materialisation.
@@ -117,7 +120,7 @@ func (m Model) startWatcher() tea.Cmd {
 		}
 		opsDir := filepath.Join(m.issuesDir, "ops")
 		if err := w.Add(opsDir); err != nil {
-			_ = w.Close()
+			_ = w.Close() //nolint:errcheck // close during error-path cleanup not actionable
 			return pollTickMsg(time.Now())
 		}
 		return WatcherReadyMsg{Watcher: w}
@@ -125,7 +128,7 @@ func (m Model) startWatcher() tea.Cmd {
 }
 
 func (m Model) scheduleFetch() tea.Cmd {
-	return tea.Tick(30*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(30*time.Second, func(_ time.Time) tea.Msg {
 		return fetchMsg{}
 	})
 }
@@ -156,9 +159,7 @@ func (m Model) NavBar() string {
 	left := strings.Join(parts, "  ")
 	right := "trls tui · " + m.workerID + " · " + indicator
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
-	}
+	gap = max(gap, 1)
 	return left + strings.Repeat(" ", gap) + right
 }
 
@@ -243,11 +244,11 @@ func (m Model) doRefresh() tea.Cmd {
 	issuesDir := m.issuesDir
 	stateDir := m.stateDir
 	return func() tea.Msg {
-		state, _, err := materialize.MaterializeAndReturn(issuesDir, stateDir, true)
-		if err != nil || state == nil {
+		snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), stateDir, true)
+		if err != nil || snap.State == nil {
 			return nil
 		}
-		return stateUpdatedMsg{state: state}
+		return stateUpdatedMsg{state: snap.State}
 	}
 }
 

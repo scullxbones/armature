@@ -9,6 +9,7 @@ const (
 	OpHeartbeat         = "heartbeat"
 	OpTransition        = "transition"
 	OpNote              = "note"
+	OpNoteDelete        = "note-delete"
 	OpLink              = "link"
 	OpUnlink            = "unlink"
 	OpSourceLink        = "source-link"
@@ -20,22 +21,17 @@ const (
 	OpCitationAccepted  = "citation-accepted"
 	OpScopeRename       = "scope-rename"
 	OpScopeDelete       = "scope-delete"
+
+	// OpReparent moves an issue to a new parent.
+	OpReparent = "reparent"
+
+	// OpAssessmentAttested records a conformance assessment attestation.
+	OpAssessmentAttested = "assessment-attested"
 )
 
-// ValidOpTypes for validation.
-var ValidOpTypes = map[string]bool{
-	OpCreate: true, OpClaim: true, OpHeartbeat: true,
-	OpTransition: true, OpNote: true, OpLink: true, OpUnlink: true,
-	OpSourceLink: true, OpSourceFingerprint: true,
-	OpDAGTransition: true, OpDecision: true,
-	OpAssign:           true,
-	OpAmend:            true,
-	OpCitationAccepted: true,
-	OpScopeRename:      true,
-	OpScopeDelete:      true,
-}
-
 // Issue statuses.
+// Note: the op type handler registry (mapping op type string to handler function)
+// lives in materialize.RegisteredOpTypes() — see internal/materialize/engine.go.
 const (
 	StatusOpen       = "open"
 	StatusClaimed    = "claimed"
@@ -69,16 +65,18 @@ type Op struct {
 // Only relevant fields are populated for each op type.
 type Payload struct {
 	// create
-	Title            string          `json:"title,omitempty"`
-	Parent           string          `json:"parent,omitempty"`
-	NodeType         string          `json:"type,omitempty"`
-	Scope            []string        `json:"scope,omitempty"`
-	Acceptance       json.RawMessage `json:"acceptance,omitempty"`
-	DefinitionOfDone string          `json:"definition_of_done,omitempty"`
-	Context          json.RawMessage `json:"context,omitempty"`
-	SourceCitation   json.RawMessage `json:"source_citation,omitempty"`
-	Priority         string          `json:"priority,omitempty"`
-	EstComplexity    string          `json:"estimated_complexity,omitempty"`
+	Title             string          `json:"title,omitempty"`
+	Parent            string          `json:"parent,omitempty"`
+	NodeType          string          `json:"type,omitempty"`
+	Scope             []string        `json:"scope,omitempty"`
+	Acceptance        json.RawMessage `json:"acceptance,omitempty"`
+	DefinitionOfDone  string          `json:"definition_of_done,omitempty"`
+	ContextFiles      []string        `json:"context_files,omitempty"`
+	ClearContextFiles bool            `json:"clear_context_files,omitempty"`
+	Context           json.RawMessage `json:"context,omitempty"`
+	SourceCitation    json.RawMessage `json:"source_citation,omitempty"`
+	Priority          string          `json:"priority,omitempty"`
+	EstComplexity     string          `json:"estimated_complexity,omitempty"`
 
 	// claim
 	TTL int `json:"ttl,omitempty"`
@@ -90,7 +88,8 @@ type Payload struct {
 	PR      string `json:"pr,omitempty"`
 
 	// note
-	Msg string `json:"msg,omitempty"`
+	Msg    string `json:"msg,omitempty"`
+	NoteID string `json:"note_id,omitempty"`
 
 	// link
 	Dep string `json:"dep,omitempty"`
@@ -132,4 +131,14 @@ type Payload struct {
 
 	// scope-delete
 	DeletedPath string `json:"deleted_path,omitempty"`
+
+	// citation-accepted — source entry ID from the accept-citation command
+	// (populated when --source is passed to arm accept-citation)
+	SourceEntryID string `json:"source_entry_id,omitempty"`
+
+	// create — preferred model hint for the assigned agent
+	PreferredModel string `json:"preferred_model,omitempty"`
+
+	// assessment-attested
+	Assessment json.RawMessage `json:"assessment,omitempty"`
 }

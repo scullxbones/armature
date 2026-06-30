@@ -59,8 +59,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.open {
 		return m, nil
 	}
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "esc", "q":
 			return m.Close(), nil
@@ -70,7 +69,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.viewport.LineUp(1)
 		case "c":
 			if m.issue != nil {
-				_ = clipboard.WriteAll(m.issue.ID)
+				_ = clipboard.WriteAll(m.issue.ID) //nolint:errcheck // clipboard write is best-effort UI action
 			}
 		}
 	}

@@ -1,10 +1,6 @@
 package sync
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -14,28 +10,12 @@ type MergeChecker interface {
 	BranchMergedInto(branch, target string) (bool, error)
 }
 
-// DetectMerges scans all issues in stateDir/issues/ and returns the IDs
+// DetectMerges accepts a pre-enumerated list of issues and returns the IDs
 // of done issues whose Branch has been merged into targetBranch.
-// issuesDir is currently unused but included for signature consistency.
-func DetectMerges(issuesDir, stateDir, targetBranch string, mc MergeChecker) ([]string, error) {
-	issuesStateDir := filepath.Join(stateDir, "issues")
-	entries, err := os.ReadDir(issuesStateDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
+// issues is a slice of materialized Issue objects.
+func DetectMerges(issues []materialize.Issue, targetBranch string, mc MergeChecker) ([]string, error) {
 	var merged []string
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		issue, err := materialize.LoadIssue(filepath.Join(issuesStateDir, entry.Name()))
-		if err != nil {
-			continue
-		}
+	for _, issue := range issues {
 		if issue.Status != ops.StatusDone {
 			continue
 		}

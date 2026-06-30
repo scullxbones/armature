@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -16,6 +17,7 @@ import (
 // --- Task 26: ApplyPlan tests ---
 
 func TestApplyPlan_CreatesOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -41,6 +43,7 @@ func TestApplyPlan_CreatesOps(t *testing.T) {
 }
 
 func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -64,7 +67,33 @@ func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
 	assert.Equal(t, "draft", readOps[0].Payload.Confidence, "decompose-apply must emit confidence=draft on all created nodes")
 }
 
+func TestApplyPlan_PreservesContextFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	workerID := "worker-test"
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "First issue", Type: "task", ContextFiles: []string{"docs/adr.md", "docs/design.md"}},
+		},
+	}
+
+	state := materialize.NewState()
+
+	_, err := ApplyPlan(plan, dir, workerID, state)
+	require.NoError(t, err)
+
+	logPath := filepath.Join(dir, workerID+".log")
+	readOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, readOps, 1)
+	assert.Equal(t, []string{"docs/adr.md", "docs/design.md"}, readOps[0].Payload.ContextFiles)
+}
+
 func TestApplyPlan_SkipsExisting(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -88,6 +117,7 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 // --- Task 27: RevertPlan tests ---
 
 func TestRevertPlan_CancelsOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -110,6 +140,7 @@ func TestRevertPlan_CancelsOpen(t *testing.T) {
 }
 
 func TestRevertPlan_SkipsNonOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -131,9 +162,42 @@ func TestRevertPlan_SkipsNonOpen(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
+// --- QLTYCNTRL-S2-T3: Clock injection for RevertPlan ---
+
+func TestRevertPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	workerID := "worker-test"
+	fixedTimestamp := int64(1234567890)
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "Issue with injected clock", Type: "task"},
+		},
+	}
+
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
+	fixedClock := clock.Fixed(fixedTimestamp)
+
+	count, err := RevertPlanWithOptions(plan, dir, workerID, state, fixedClock)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	logPath := filepath.Join(dir, workerID+".log")
+	readOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, readOps, 1)
+	assert.Equal(t, fixedTimestamp, readOps[0].Timestamp,
+		"injected clock timestamp should appear in written op")
+}
+
 // --- E6-S3-T3: DryRunRevertPlan tests ---
 
 func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
@@ -156,6 +220,7 @@ func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
 }
 
 func TestDryRunRevertPlan_SkipsNonOpen(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
@@ -176,6 +241,7 @@ func TestDryRunRevertPlan_SkipsNonOpen(t *testing.T) {
 }
 
 func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	plan := &Plan{
@@ -199,6 +265,7 @@ func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
 // --- Task 27: PlanContext tests ---
 
 func TestPlanContext(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{
 		Version: 1,
 		Title:   "My Plan",
@@ -215,6 +282,7 @@ func TestPlanContext(t *testing.T) {
 }
 
 func TestDecomposeContextNoSources(t *testing.T) {
+	t.Parallel()
 	plan := &Plan{Title: "Plan", Issues: []PlanIssue{}}
 	ctx, err := BuildContext(ContextParams{Plan: plan})
 	require.NoError(t, err)
@@ -223,6 +291,7 @@ func TestDecomposeContextNoSources(t *testing.T) {
 }
 
 func TestDecomposeContextWithSources(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sourcesDir := filepath.Join(dir, "sources")
 	content := []byte("# PRD\n\nProduct requirements.")
@@ -247,6 +316,7 @@ func TestDecomposeContextWithSources(t *testing.T) {
 // --- E6-S6-T1: acceptance field tests ---
 
 func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 
@@ -278,6 +348,7 @@ func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
 }
 
 func TestApplyPlan_HandlesEmptyAcceptance(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
 

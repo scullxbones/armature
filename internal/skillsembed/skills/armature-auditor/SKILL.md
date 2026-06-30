@@ -11,6 +11,22 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 
 The Auditor verifies that completed work is honest and traceable before story sign-off. Every issue must have a valid cited source, every decision must be recorded, and outcomes must satisfy acceptance criteria.
 
+## DAG Hygiene Mandate
+
+**`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+
+Before running any audit and after completing your checks, confirm:
+```bash
+arm validate       # zero ERRORs; all issues cited
+arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+```
+
+If either exits non-zero, do not approve the story. Report the specific issues back to workers for remediation. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+
+Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before auditing. DAG health is cumulative.
+
+---
+
 ## When to Run
 
 The Auditor runs **after** workers report tasks done and **before** story transition and PR. It is a gate, not a monitor.
@@ -20,6 +36,8 @@ Workers complete tasks → Auditor runs → Story transitions to done → PR ope
 ```
 
 Do not approve a story transition until all audit checks pass. If any check fails, report the specific issues back to the workers for remediation before re-auditing.
+
+**Scope Clarification:** The Auditor checks **structural integrity** (citation coverage and repo health) but does NOT perform **semantic review** of code changes. Semantic conformance to acceptance criteria is handled by the `armature-reviewer` skill, which is dispatched by the coordinator after each task completes. Both gates must pass before story sign-off.
 
 ## The Audit Checklist
 

@@ -2,10 +2,11 @@ package ops
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // PendingPushTracker tracks how many low-stakes ops are pending a push.
@@ -39,9 +40,9 @@ func NewFilePushTracker(stateDir string) *FilePushTracker {
 }
 
 func (f *FilePushTracker) Count() (int, error) {
-	data, err := os.ReadFile(f.Path)
+	data, err := adapters.ReadFile(f.Path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if data == nil {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("read pending-push-count: %w", err)
@@ -70,8 +71,8 @@ func (f *FilePushTracker) Reset() error {
 }
 
 func (f *FilePushTracker) write(n int) error {
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0755); err != nil {
+	if err := adapters.MkdirAll(filepath.Dir(f.Path), 0755); err != nil {
 		return fmt.Errorf("mkdir pending-push-count: %w", err)
 	}
-	return os.WriteFile(f.Path, []byte(strconv.Itoa(n)), 0644)
+	return adapters.WriteFile(f.Path, []byte(strconv.Itoa(n)), 0644)
 }

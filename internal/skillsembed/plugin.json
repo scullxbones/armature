@@ -1,0 +1,14 @@
+{
+  "name": "armature",
+  "description": "Armature coordination system skills: quick reference, worker, coordinator, auditor, and planner guidance for managing arm repositories",
+  "version": "1.0.0",
+  "author": {
+    "name": "Brian Scully",
+    "email": "scullduggery@gmail.com"
+  },
+  "homepage": "https://github.com/scullxbones/armature",
+  "repository": "https://github.com/scullxbones/armature",
+  "license": "MIT",
+  "keywords": ["armature", "task-management", "coordination", "workers", "planning"],
+  "skills": "../../skills"
+}

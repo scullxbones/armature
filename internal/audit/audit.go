@@ -1,7 +1,6 @@
 package audit
 
 import (
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -22,24 +21,23 @@ type Filter struct {
 	Since    time.Time // if non-zero, only entries with Timestamp >= Since.Unix()
 }
 
-// Load walks opsDir (the ops/ subdirectory of issuesDir), reads all *.log files,
+// Load accepts a slice of pre-loaded log content strings, parses them into ops,
 // merges all ops sorted by timestamp (then worker ID for stable order), applies
 // the filter, and marks any losing claim ops as LostRace.
-func Load(opsDir string, f Filter) ([]Entry, error) {
-	logFiles, err := filepath.Glob(filepath.Join(opsDir, "*.log"))
-	if err != nil {
-		return nil, err
-	}
-
-	// Collect all ops from all workers
+// logContents should be a slice of JSONL log lines (one op per line).
+func Load(logContents []string, f Filter) ([]Entry, error) {
+	// Parse all log contents into ops
 	var allOps []ops.Op
-	for _, logPath := range logFiles {
-		logOps, err := ops.ReadLog(logPath)
-		if err != nil {
-			// Skip unreadable logs
+	for _, line := range logContents {
+		if len(line) == 0 {
 			continue
 		}
-		allOps = append(allOps, logOps...)
+		op, err := ops.ParseLine([]byte(line))
+		if err != nil {
+			// Skip corrupt lines per spec — log warning
+			continue
+		}
+		allOps = append(allOps, op)
 	}
 
 	// Sort by timestamp, then worker ID for stability

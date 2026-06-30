@@ -23,6 +23,22 @@ issues ready for workers to claim.
   create must be citable. If no source exists yet, write one first or be
   prepared to use `arm accept-citation` with a clear rationale.
 
+## DAG Hygiene Mandate
+
+**`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+
+Before releasing any plan to the Coordinator and after every decomposition, run:
+```bash
+arm validate       # zero ERRORs; all issues cited
+arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+```
+
+If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+
+Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before planning your work. DAG health is cumulative.
+
+---
+
 ## The Planner Loop
 
 ```dot
@@ -33,7 +49,7 @@ digraph planner_loop {
     "Write plan.json" [shape=box];
     "decompose-apply --dry-run" [shape=box];
     "OK?" [shape=diamond];
-    "decompose-apply --apply" [shape=box];
+    "decompose-apply --plan plan.json" [shape=box];
     "dag-transition" [shape=box];
     "sources add/sync/verify" [shape=box];
     "source-link / accept-citation" [shape=box];
@@ -49,8 +65,8 @@ digraph planner_loop {
     "Write plan.json" -> "decompose-apply --dry-run";
     "decompose-apply --dry-run" -> "OK?" ;
     "OK?" -> "Write plan.json" [label="fix errors"];
-    "OK?" -> "decompose-apply --apply" [label="yes"];
-    "decompose-apply --apply" -> "dag-transition";
+    "OK?" -> "decompose-apply --plan plan.json" [label="yes"];
+    "decompose-apply --plan plan.json" -> "dag-transition";
     "dag-transition" -> "sources add/sync/verify";
     "sources add/sync/verify" -> "source-link / accept-citation";
     "source-link / accept-citation" -> "arm link (deps)";
@@ -146,11 +162,14 @@ This section is critical. **Every task in the plan MUST have `dod`, `scope`, and
 **`dod` — Definition of Done**
 
 Describes what "complete" looks like. Must be concrete and verifiable by the
-worker without asking the Planner.
+worker without asking the Planner. **Limited to 500 characters** (E9 validation error
+if exceeded). Summarize the outcome in the DoD; place extended requirements in
+the `notes` array instead.
 
 - Good: `"The parser handles all five token types defined in spec §3.2 and returns typed AST nodes. All existing tests pass and new unit tests cover the added branches."`
 - Bad: `"Done when it works"` — vague, not verifiable
 - Bad: `"Implement the feature"` — restates the title, adds no information
+- Bad: Long DoD over 500 chars — summarize and move details to `notes`
 
 **`scope` — Files Affected**
 
@@ -166,9 +185,27 @@ that do not yet exist. Use precise paths, not vague descriptions.
 JSON array of specific criteria the worker can verify mechanically. Each entry
 should name a test, a command output, or an observable behavior.
 
-- Good: `["TestParseTokenTypes passes", "make check green", "arm validate exits 0"]`
+**Spec traceability:** Name new tests using `Test<Description>_REQ_<RequirementID>`,
+where `RequirementID` is the story or task ID (e.g. `STORY-T1`). This makes the
+test visible to `make trace-report` and ties it back to the requirement that
+motivated it. Use this pattern for every acceptance criterion that corresponds to
+a new test function.
+
+- Good: `["TestParseTokenTypes_REQ_STORY_T1 passes", "make check green", "arm validate exits 0"]`
+- Bad: `["TestParseTokenTypes passes"]` — test name won't appear in `make trace-report`
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
+
+**`notes` — Optional Free-Text Notes**
+
+JSON array of strings (`[]string`) containing optional extended notes or guidance
+for the worker. Use `notes` to provide context that does not fit in `dod` or
+`acceptance`, or to reference external docs. Initialize as `[]` (empty array)
+if not needed.
+
+- Good: `["See RFC-2019-auth for security requirements", "Coordinate with infra team on deployment"]`
+- Good: `[]` — empty array if no additional notes
+- Bad: Using `notes` to store what should be in `dod` or `acceptance`
 
 ### Complete Well-Formed Task Example
 
@@ -183,8 +220,8 @@ should name a test, a command output, or an observable behavior.
   "dod": "Parser handles all five token types from spec §3.2. Returns typed AST nodes. All existing tests pass; new tests cover added branches.",
   "scope": "cmd/parse/main.go, internal/ast/node.go (new), internal/ast/node_test.go (new)",
   "acceptance": [
-    "TestParseTokenTypes passes",
-    "TestParseEdgeCases passes",
+    "TestParseTokenTypes_REQ_STORY_T1 passes",
+    "TestParseEdgeCases_REQ_STORY_T1 passes",
     "make check green",
     "no new lint errors"
   ]
@@ -200,6 +237,7 @@ should name a test, a command output, or an observable behavior.
 | `"acceptance": []` | No pass/fail signal | Name at least one test or command |
 | `"scope": "internal/"` | Too broad, causes overlaps | Name the specific files |
 | Missing `acceptance` field entirely | `arm validate` ERRORs | Add the field, even if `--example` omits it |
+| `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
 
 > **Note:** `arm decompose-apply --example` omits `acceptance` in its output.
 > Always add it manually to every task in your plan JSON.
@@ -282,7 +320,15 @@ Run this checklist before handing work off to the Coordinator.
 6. **Priorities set** — review `arm list --group` to confirm priorities reflect
    intended execution order
 
-Do not release until all six checks pass.
+7. **Spec traceability check** — confirm acceptance criteria use `_REQ_` naming
+   ```bash
+   make trace-report   # lists which requirements have tagged tests; gaps mean missing _REQ_ names
+   ```
+   If a task's acceptance criterion names a test function, that function should
+   appear in the `make trace-report` output once the worker delivers it. If it
+   does not, the acceptance criterion name is missing the `_REQ_` suffix.
+
+Do not release until all seven checks pass.
 
 ---
 

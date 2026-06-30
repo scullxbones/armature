@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -13,8 +15,6 @@ import (
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
-
-var appCtx *config.Context
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -45,13 +45,23 @@ func newRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			workerID, _ := worker.GetWorkerID(repoPath)
+			workerID, _ := worker.GetWorkerID(repoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
 			if workerID == "" {
 				workerID = "default"
 			}
+			workerID = workerIdentityWithSlot(workerID)
 			ctx.StateDir = stateDirFor(ctx, workerID)
 			appCtx = ctx
-			initPushDeps()
+
+			state := &executionState{ctx: ctx}
+			state.pusher, state.tracker = initPushDeps(ctx)
+			appPusher = state.pusher
+			appTracker = state.tracker
+			baseCtx := cmd.Context()
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 			return nil
 		},
 	}
@@ -76,9 +86,9 @@ func newRootCmd() *cobra.Command {
 	workerInitCmd.GroupID = "admin"
 	root.AddCommand(workerInitCmd)
 
-	initCmd := newInitCmd()
-	initCmd.GroupID = "admin"
-	root.AddCommand(initCmd)
+	bootstrapCmd := newBootstrapCmd()
+	bootstrapCmd.GroupID = "admin"
+	root.AddCommand(bootstrapCmd)
 
 	readyCmd := newReadyCmd()
 	readyCmd.GroupID = "workflow"
@@ -179,6 +189,10 @@ func newRootCmd() *cobra.Command {
 	createCmd.GroupID = "admin"
 	root.AddCommand(createCmd)
 
+	reparentCmd := newReparentCmd()
+	reparentCmd.GroupID = "admin"
+	root.AddCommand(reparentCmd)
+
 	validateCmd := newValidateCmd()
 	validateCmd.GroupID = "admin"
 	root.AddCommand(validateCmd)
@@ -227,10 +241,6 @@ func newRootCmd() *cobra.Command {
 	doctorCmd.GroupID = "admin"
 	root.AddCommand(doctorCmd)
 
-	installSkillsCmd := newInstallSkillsCmd()
-	installSkillsCmd.GroupID = "admin"
-	root.AddCommand(installSkillsCmd)
-
 	completionCmd := newCompletionCmd()
 	completionCmd.GroupID = "admin"
 	root.AddCommand(completionCmd)
@@ -247,12 +257,25 @@ func newRootCmd() *cobra.Command {
 	contextHistoryCmd.GroupID = "admin"
 	root.AddCommand(contextHistoryCmd)
 
+	harnessHookCmd := newHarnessHookCmd()
+	harnessHookCmd.GroupID = "admin"
+	root.AddCommand(harnessHookCmd)
+
+	reviewCmd := newReviewCmd()
+	reviewCmd.GroupID = "admin"
+	root.AddCommand(reviewCmd)
+
 	return root
 }
 
 func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
+		// Check if this is an adapter exit error (platform-specific exit code)
+		if ace, ok := errors.AsType[adapterExitError](err); ok {
+			os.Exit(ace.code)
+		}
+
 		code := classifyError(err)
 		format, _ := root.PersistentFlags().GetString("format")
 		if format == "json" || format == "agent" {

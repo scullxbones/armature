@@ -54,8 +54,7 @@ func (m *Model) HelpBar() string {
 
 // Update handles messages and returns the updated screen.
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "j", "down":
 			if m.cursor < len(m.workers)-1 {
@@ -65,7 +64,6 @@ func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
-
 		}
 	}
 	return m, nil

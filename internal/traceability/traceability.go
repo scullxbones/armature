@@ -1,10 +1,11 @@
+// Package traceability validates that DAG issues are properly cited in git history.
 package traceability
 
 import (
 	"encoding/json"
-	"errors"
-	"os"
 	"sort"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // IssueRef is a minimal description of an issue used for coverage computation.
@@ -71,27 +72,18 @@ func Compute(refs []IssueRef) Coverage {
 
 // Write serializes a Coverage value to the given path as JSON (atomic write via temp file).
 func Write(path string, c Coverage) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return adapters.WriteCoverageFile(path, c)
 }
 
 // Read deserializes a Coverage value from the given path.
 // If the file does not exist, a zero Coverage is returned with no error.
 func Read(path string) (Coverage, error) {
-	data, err := os.ReadFile(path)
+	data, err := adapters.ReadCoverageFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Coverage{}, nil
-		}
 		return Coverage{}, err
+	}
+	if data == nil {
+		return Coverage{}, nil
 	}
 	var c Coverage
 	if err := json.Unmarshal(data, &c); err != nil {

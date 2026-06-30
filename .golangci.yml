@@ -3,20 +3,198 @@ version: "2"
 linters:
   default: none
   enable:
+    # --- Architectural Structure ---
+    - forbidigo
+    - depguard
+
+    # --- Critical Input & Host Security ---
+    - gosec
     - govet
-    - errcheck
-    - ineffassign
+
+    # --- Context & Execution Control ---
+    - contextcheck
+    - containedctx
+    - bodyclose
+    - noctx
+
+    # --- Concurrency & Test Robustness ---
+    - copyloopvar
+    - tparallel
+    - paralleltest
     - staticcheck
+    - errcheck
+
+    # --- Hygiene ---
+    - unparam
+    - gocritic
+    - revive
+    - lll
+    - ineffassign
     - misspell
     - unconvert
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-issues:
-  exclude-use-default-excludes: false
+    - nolintlint
+  settings:
+    depguard:
+      rules:
+        # internal packages must never import cmd — cmd is the entry point, not a library
+        internal-no-cmd:
+          list-mode: lax
+          files:
+            - "**/internal/**/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/cmd"
+              desc: "internal packages must not import cmd packages"
+        # dag is pure graph logic; any internal import would couple it to infrastructure
+        dag-pure:
+          list-mode: lax
+          files:
+            - "**/internal/dag/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "dag is a pure graph package and must not import other internal packages"
+        # issuetype is a pure vocabulary package; no internal imports allowed
+        issuetype-pure:
+          list-mode: lax
+          files:
+            - "**/internal/issuetype/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "issuetype is a pure vocabulary package and must not import other internal packages"
+        # ops uses adapters as its I/O port; all other internal imports are forbidden
+        ops-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/ops/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+        # claim uses ops as its natural sub-domain; all other internal imports are forbidden
+        claim-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/claim/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/ops"
+        # traceability uses adapters as its I/O port; all other internal imports are forbidden
+        traceability-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/traceability/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+        # materialize owns the replay pipeline; its allow list is its complete sub-domain
+        materialize-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/materialize/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/claim"
+            - "github.com/scullxbones/armature/internal/dag"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/review"
+            - "github.com/scullxbones/armature/internal/traceability"
+        # sources (functional core) is a pure registry; only adapters for file I/O allowed.
+        # Provider implementations (Confluence, SharePoint, Filesystem) live in cmd/.
+        sources-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/sources/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+        # validate may only import the deep domain core below it
+        validate-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/validate/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/dag"
+            - "github.com/scullxbones/armature/internal/issuetype"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/sources"
+            - "github.com/scullxbones/armature/internal/traceability"
+        # output may only import the domain layer beneath it; orchestration packages are forbidden
+        output-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/output/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ready"
+            - "github.com/scullxbones/armature/internal/review"
+            - "github.com/scullxbones/armature/internal/validate"
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*github.com/spf13/pflag.FlagSet).GetBool
+        - (*github.com/spf13/pflag.FlagSet).GetInt
+        - (*github.com/spf13/pflag.FlagSet).GetString
+        - (*github.com/spf13/pflag.FlagSet).GetStringSlice
+        - (*github.com/spf13/pflag.FlagSet).Set
+        - (*github.com/spf13/cobra.Command).MarkFlagRequired
+    forbidigo:
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: 'use injected clock parameters instead of time.Now()'
+    revive:
+      rules:
+        - name: exported
+          arguments:
+          - checkPrivateReceivers: true
+          disabled: true
+        - name: package-comments
+          disabled: true
+    lll:
+      line-length: 160
+  exclusions:
+    rules:
+      - linters:
+          - forbidigo
+        path: 'cmd/'
+      - linters:
+          - forbidigo
+        path: '_test\.go$'
+      - linters:
+          - forbidigo
+        path: 'internal/clock/'
+      - linters:
+          - forbidigo
+        path: 'internal/tui/'
+      # G204: subprocess launched with variable — inherent to git/shell adapter
+      # G301/G302: directory/file permissions in tests use 0755 for git repo traversal
+      - linters:
+          - gosec
+        path: '_test\.go$'
+        text: 'G104|G204|G301|G302|G304|G306'
+      # G115: uintptr→int for terminal fd — well-established pattern, value bounded by OS
+      - linters:
+          - gosec
+        text: 'G115'
+      # cmd/ integration tests invoke cobra in-process (newRootCmd().Execute()), which shares
+      # process-global state: env vars (t.Setenv), os.Args, and cobra initialization. Each test
+      # has its own t.TempDir() so on-disk state is isolated and production code has no races;
+      # the constraint is the in-process execution model, not the production code itself.
+      - linters:
+          - paralleltest
+        path: 'cmd/'
 
 formatters:
   enable:

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 
-	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -29,73 +29,45 @@ func newShowCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			issuesDir := appCtx.IssuesDir
-			singleBranch := appCtx.Mode == "single-branch"
+			ctx := currentCtx(cmd)
+			issuesDir := ctx.IssuesDir
+			singleBranch := ctx.Mode == "single-branch"
 
-			if _, err := materialize.Materialize(issuesDir, appCtx.StateDir, singleBranch); err != nil {
-				return err
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, singleBranch)
+			if err != nil {
+				return fmt.Errorf("load snapshot: %w", err)
+			}
+			for _, w := range snap.Warnings {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-			// Multi-issue JSON: emit a JSON array
+			// Multi-issue JSON: emit a JSON array using the canonical output.IssueJSON schema
 			if format == "json" && len(ids) > 1 {
-				type showJSON struct {
-					ID         string          `json:"id"`
-					Title      string          `json:"title"`
-					Type       string          `json:"type"`
-					Status     string          `json:"status"`
-					Parent     string          `json:"parent,omitempty"`
-					ClaimedBy  string          `json:"claimed_by,omitempty"`
-					DoD        string          `json:"definition_of_done,omitempty"`
-					Acceptance json.RawMessage `json:"acceptance,omitempty"`
-					Scope      []string        `json:"scope,omitempty"`
-					Notes      []string        `json:"notes,omitempty"`
-					Outcome    string          `json:"outcome,omitempty"`
-					AssignedTo string          `json:"assigned_worker,omitempty"`
-					BlockedBy  []string        `json:"blocked_by,omitempty"`
-					Blocks     []string        `json:"blocks,omitempty"`
-				}
-				results := make([]showJSON, 0, len(ids))
+				results := make([]output.IssueJSON, 0, len(ids))
 				for _, id := range ids {
-					issuePath := filepath.Join(appCtx.StateDir, "issues", id+".json")
-					issue, err := materialize.LoadIssue(issuePath)
-					if err != nil {
+					issuePtr, ok := snap.Issues[id]
+					if !ok || issuePtr == nil {
 						return fmt.Errorf("issue %q not found", id)
 					}
-					noteTexts := make([]string, 0, len(issue.Notes))
-					for _, n := range issue.Notes {
-						noteTexts = append(noteTexts, n.Msg)
-					}
-					results = append(results, showJSON{
-						ID:         issue.ID,
-						Title:      issue.Title,
-						Type:       issue.Type,
-						Status:     issue.Status,
-						Parent:     issue.Parent,
-						ClaimedBy:  issue.ClaimedBy,
-						DoD:        issue.DefinitionOfDone,
-						Acceptance: issue.Acceptance,
-						Scope:      issue.Scope,
-						Notes:      noteTexts,
-						Outcome:    issue.Outcome,
-						AssignedTo: issue.AssignedWorker,
-						BlockedBy:  issue.BlockedBy,
-						Blocks:     issue.Blocks,
-					})
+					results = append(results, output.MarshalIssue(issuePtr))
 				}
-				data, _ := json.MarshalIndent(results, "", "  ")
+				data, err := json.MarshalIndent(results, "", "  ")
+				if err != nil {
+					return fmt.Errorf("marshal issues JSON: %w", err)
+				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
 
 			// Single or multi-issue non-JSON: iterate and print each, separated by "---"
 			for i, id := range ids {
-				issuePath := filepath.Join(appCtx.StateDir, "issues", id+".json")
-				issue, err := materialize.LoadIssue(issuePath)
-				if err != nil {
+				issuePtr, ok := snap.Issues[id]
+				if !ok || issuePtr == nil {
 					return fmt.Errorf("issue %q not found", id)
 				}
+				issue := *issuePtr
 
 				if i > 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "---")
@@ -111,88 +83,16 @@ func newShowCmd() *cobra.Command {
 				}
 
 				if format == "json" {
-					type showJSON struct {
-						ID         string          `json:"id"`
-						Title      string          `json:"title"`
-						Type       string          `json:"type"`
-						Status     string          `json:"status"`
-						Parent     string          `json:"parent,omitempty"`
-						ClaimedBy  string          `json:"claimed_by,omitempty"`
-						DoD        string          `json:"definition_of_done,omitempty"`
-						Acceptance json.RawMessage `json:"acceptance,omitempty"`
-						Scope      []string        `json:"scope,omitempty"`
-						Notes      []string        `json:"notes,omitempty"`
-						Outcome    string          `json:"outcome,omitempty"`
-						AssignedTo string          `json:"assigned_worker,omitempty"`
-						BlockedBy  []string        `json:"blocked_by,omitempty"`
-						Blocks     []string        `json:"blocks,omitempty"`
+					// Route single-issue JSON through the canonical output package schema
+					if err := output.RenderIssue(cmd.OutOrStdout(), &issue, true); err != nil {
+						return err
 					}
-					noteTexts := make([]string, 0, len(issue.Notes))
-					for _, n := range issue.Notes {
-						noteTexts = append(noteTexts, n.Msg)
-					}
-					out := showJSON{
-						ID:         issue.ID,
-						Title:      issue.Title,
-						Type:       issue.Type,
-						Status:     issue.Status,
-						Parent:     issue.Parent,
-						ClaimedBy:  issue.ClaimedBy,
-						DoD:        issue.DefinitionOfDone,
-						Acceptance: issue.Acceptance,
-						Scope:      issue.Scope,
-						Notes:      noteTexts,
-						Outcome:    issue.Outcome,
-						AssignedTo: issue.AssignedWorker,
-						BlockedBy:  issue.BlockedBy,
-						Blocks:     issue.Blocks,
-					}
-					data, _ := json.MarshalIndent(out, "", "  ")
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 					continue
 				}
 
-				// Human-readable output
-				w := cmd.OutOrStdout()
-				_, _ = fmt.Fprintf(w, "ID:        %s\n", issue.ID)
-				_, _ = fmt.Fprintf(w, "Title:     %s\n", issue.Title)
-				_, _ = fmt.Fprintf(w, "Type:      %s\n", issue.Type)
-				_, _ = fmt.Fprintf(w, "Status:    %s\n", issue.Status)
-				if issue.Parent != "" {
-					_, _ = fmt.Fprintf(w, "Parent:    %s\n", issue.Parent)
-				}
-				if issue.ClaimedBy != "" {
-					_, _ = fmt.Fprintf(w, "ClaimedBy: %s\n", issue.ClaimedBy)
-				}
-				if issue.AssignedWorker != "" {
-					_, _ = fmt.Fprintf(w, "Assigned:  %s\n", issue.AssignedWorker)
-				}
-				if issue.DefinitionOfDone != "" {
-					_, _ = fmt.Fprintf(w, "DoD:       %s\n", issue.DefinitionOfDone)
-				}
-				if len(issue.Acceptance) > 0 && string(issue.Acceptance) != "null" {
-					compact, err := json.Marshal(issue.Acceptance)
-					if err == nil {
-						_, _ = fmt.Fprintf(w, "Acceptance: %s\n", string(compact))
-					}
-				}
-				if len(issue.Scope) > 0 {
-					_, _ = fmt.Fprintf(w, "Scope:     %s\n", strings.Join(issue.Scope, ", "))
-				}
-				if issue.Outcome != "" {
-					_, _ = fmt.Fprintf(w, "Outcome:   %s\n", issue.Outcome)
-				}
-				if len(issue.BlockedBy) > 0 {
-					_, _ = fmt.Fprintf(w, "BlockedBy: %s\n", strings.Join(issue.BlockedBy, ", "))
-				}
-				if len(issue.Blocks) > 0 {
-					_, _ = fmt.Fprintf(w, "Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
-				}
-				if len(issue.Notes) > 0 {
-					_, _ = fmt.Fprintf(w, "Notes:\n")
-					for _, n := range issue.Notes {
-						_, _ = fmt.Fprintf(w, "  - %s\n", n.Msg)
-					}
+				// Use output.RenderIssue for human-readable output
+				if err := output.RenderIssue(cmd.OutOrStdout(), &issue, false); err != nil {
+					return err
 				}
 			}
 			return nil

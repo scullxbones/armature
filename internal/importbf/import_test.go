@@ -14,6 +14,7 @@ TSK-X2,Second import,task,,"internal/bar/*.go,internal/baz/*.go"
 `
 
 func TestParseCSV(t *testing.T) {
+	t.Parallel()
 	items, err := importbf.ParseCSV([]byte(sampleCSV))
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
@@ -28,6 +29,7 @@ var sampleJSON = `[
 ]`
 
 func TestParseJSON(t *testing.T) {
+	t.Parallel()
 	items, err := importbf.ParseJSON([]byte(sampleJSON))
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
@@ -36,7 +38,9 @@ func TestParseJSON(t *testing.T) {
 }
 
 func TestImportedItemsHaveCorrectProvenance(t *testing.T) {
-	items, _ := importbf.ParseCSV([]byte(sampleCSV))
+	t.Parallel()
+	items, err := importbf.ParseCSV([]byte(sampleCSV))
+	require.NoError(t, err)
 	for _, item := range items {
 		assert.Equal(t, "imported", item.Provenance.Method)
 		assert.Equal(t, "inferred", item.Provenance.Confidence)

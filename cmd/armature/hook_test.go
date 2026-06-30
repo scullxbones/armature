@@ -2,10 +2,17 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +59,7 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Claim the task first
-	_, err := runTrls(t, repo, "claim", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -91,7 +98,7 @@ func TestHookRunPrepareCommitMsg_WithActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Claim the task
-	_, err := runTrls(t, repo, "claim", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
 	require.NoError(t, err)
 
 	// Write a commit message file
@@ -113,7 +120,7 @@ func TestHookRunPrepareCommitMsg_MissingFile(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Claim the task
-	_, err := runTrls(t, repo, "claim", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "hook", "run", "prepare-commit-msg", "/nonexistent/COMMIT_EDITMSG")
@@ -127,7 +134,7 @@ func TestHookSubcommandHelp(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"hook", "--help"})
-	_ = cmd.Execute()
+	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "hook")
 }
 
@@ -141,7 +148,7 @@ func TestHookPostCommit_InitialCommit(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	// Create a task with scope so detection has something to work with.
@@ -149,7 +156,7 @@ func TestHookPostCommit_InitialCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim it.
-	_, err = runTrls(t, repo, "claim", "task-scope-01")
+	_, err = runTrls(t, repo, "claim", "task-scope-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-scope-01-wt"))
 	require.NoError(t, err)
 
 	// Now run post-commit on the very first real commit (HEAD~1 absent for the init commit).
@@ -172,7 +179,7 @@ func TestHookPostCommit_ScopeRename(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "rename src/old.go -> src/new.go")
 
 	// Claim the task so there's an active claim and a log path.
-	_, err := runTrls(t, repo, "claim", "task-rename-01")
+	_, err := runTrls(t, repo, "claim", "task-rename-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-rename-01-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -195,13 +202,185 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "delete src/gone.go")
 
 	// Claim the task so there's an active claim and a log path.
-	_, err := runTrls(t, repo, "claim", "task-delete-01")
+	_, err := runTrls(t, repo, "claim", "task-delete-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-delete-01-wt"))
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
 	assert.Contains(t, out, "scope-delete")
 	assert.Contains(t, out, "task-delete-01")
+}
+
+// TestHookRunPreCommit_NoStagedFiles verifies that pre-commit succeeds when no
+// files are staged.
+func TestHookRunPreCommit_NoStagedFiles(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	run(t, repo, "git", "reset", "HEAD")
+
+	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
+	require.NoError(t, err)
+}
+
+// TestHookRunPreCommit_StagedNonOpsFile verifies that staging a non-ops file is allowed.
+func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	writeFile(t, repo, "src/main.go", "package main")
+	run(t, repo, "git", "add", filepath.Join("src", "main.go"))
+
+	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
+	require.NoError(t, err)
+}
+
+func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, workerIdentityWithSlot(workerID))
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+
+	now := time.Now().Unix()
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: now - 30,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpHeartbeat,
+		TargetID:  "task-01",
+		Timestamp: now - 20,
+		WorkerID:  workerID,
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpHeartbeat,
+		TargetID:  "task-01",
+		Timestamp: now - 10,
+		WorkerID:  workerID,
+	}))
+
+	ctx := &config.Context{
+		RepoPath:  repo,
+		IssuesDir: issuesDir,
+		Mode:      "single-branch",
+		Config:    config.Config{DefaultTTL: 60},
+	}
+
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx))
+}
+
+func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, workerIdentityWithSlot(workerID))
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+
+	now := time.Now().Unix()
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: now - 30,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "task-01",
+		Timestamp: now - 5,
+		WorkerID:  workerID,
+		Payload:   ops.Payload{To: ops.StatusDone},
+	}))
+
+	ctx := &config.Context{
+		RepoPath:  repo,
+		IssuesDir: issuesDir,
+		Mode:      "single-branch",
+		Config:    config.Config{DefaultTTL: 60},
+	}
+
+	assert.Empty(t, hookFindActiveClaimID(ctx))
+}
+
+// TestHookDetectScopeChanges_WithExistingCheckpoint verifies that hookDetectScopeChanges
+// correctly uses ReadIndex (not Load) when checkpoint.json already exists.
+//
+// Mechanism: after materializing a real task, inject a fake entry directly into index.json.
+// This entry has no create op — Load() would overwrite index.json and lose it; ReadIndex()
+// reads the existing file and sees it.
+//
+// RED with store.Load() (old code): rematerializes from ops → fake entry lost → no
+//
+//	scope-rename op for "task-index-only" → assertion FAILS.
+//
+// GREEN with store.ReadIndex() (new code): reads existing index.json → sees fake entry
+//
+//	→ scope-rename op for "task-index-only" is emitted → assertion PASSES.
+//
+// This approach is immune to the installed arm binary triggering materialization via
+// git hooks (prepare-commit-msg calls arm show, which materializes), since we're not
+// relying on checkpoint.json mtime but rather on what entries hookDetectScopeChanges sees.
+func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
+	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
+
+	// Claim the task so there's an active claim and a log path for scope-rename ops.
+	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree", filepath.Join(t.TempDir(), "claim-checkpoint-wt"))
+	require.NoError(t, err)
+
+	// Add the scoped file, commit it, then rename it and commit again so that
+	// hookDetectScopeChanges sees a rename in HEAD~1..HEAD.
+	// All git commits are done BEFORE injecting the fake entry to ensure that the
+	// installed prepare-commit-msg hook (which calls arm show active-claim →
+	// snapshot.Load → materialization) cannot overwrite the fake entry.
+	writeFile(t, repo, "src/checkpoint.go", "package checkpoint")
+	run(t, repo, "git", "add", "src/checkpoint.go")
+	run(t, repo, "git", "commit", "-m", "add checkpoint.go")
+	run(t, repo, "git", "mv", "src/checkpoint.go", "src/checkpoint-renamed.go")
+	run(t, repo, "git", "commit", "-m", "rename checkpoint.go")
+
+	// Materialize so index.json exists with scope data for ReadIndex to read.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Inject a fake entry directly into index.json AFTER all git commits.
+	// This entry has no create op — store.Load() rematerializes from ops and loses it;
+	// store.ReadIndex() reads the file as-is and sees it.
+	// No further git commits will run, so the installed arm binary cannot overwrite this entry.
+	stateDir := getTestStateDir(t, repo)
+	indexPath := filepath.Join(stateDir, "index.json")
+	indexData, readErr := os.ReadFile(indexPath)
+	require.NoError(t, readErr)
+
+	var index materialize.Index
+	require.NoError(t, json.Unmarshal(indexData, &index))
+	index["task-index-only"] = materialize.IndexEntry{
+		Status: "open",
+		Scope:  []string{"src/checkpoint.go"},
+	}
+	newData, marshalErr := json.Marshal(index)
+	require.NoError(t, marshalErr)
+	require.NoError(t, os.WriteFile(indexPath, newData, 0o600))
+
+	// Run the post-commit hook. hookDetectScopeChanges will:
+	// - git diff HEAD~1..HEAD → finds rename src/checkpoint.go → src/checkpoint-renamed.go
+	// - store.ReadIndex() (correct) reads existing index.json, sees task-index-only
+	//   → emits scope-rename for both task-checkpoint-scope and task-index-only
+	// - store.Load() (old/wrong) rematerializes from ops, overwrites index.json,
+	//   loses task-index-only → only emits scope-rename for task-checkpoint-scope
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope-rename")
+	assert.Contains(t, out, "task-checkpoint-scope")
+	assert.Contains(t, out, "task-index-only",
+		"task-index-only must appear in output, proving store.ReadIndex was used (not store.Load)")
 }
 
 // setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.
@@ -212,7 +391,7 @@ func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"init", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "create", "--title", "Scoped task", "--type", "task", "--id", taskID, "--scope", scopePath)

@@ -52,3 +52,21 @@ func TestDetectProjectTypePriority(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644))
 	assert.Equal(t, "go", DetectProjectType(dir))
 }
+
+func TestDefaultConfigHasNoOrchestratorSection(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+
+	cfg := DefaultConfig("go")
+	require.NoError(t, WriteConfig(configPath, cfg))
+
+	raw, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "orchestrator", "default config must not contain orchestrator section")
+
+	loaded, err := LoadConfig(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "single-branch", loaded.Mode)
+	assert.Equal(t, "go", loaded.ProjectType)
+}

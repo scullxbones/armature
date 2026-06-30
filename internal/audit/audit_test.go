@@ -21,7 +21,31 @@ func writeLog(t *testing.T, opsDir, workerID string, entries []ops.Op) {
 	}
 }
 
+func readLogContents(t *testing.T, opsDir string) []string {
+	t.Helper()
+	var logContents []string
+
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".log" {
+			logPath := filepath.Join(opsDir, entry.Name())
+			logOps, err := ops.ReadLog(logPath)
+			require.NoError(t, err)
+			for _, op := range logOps {
+				line, err := ops.MarshalOp(op)
+				require.NoError(t, err)
+				logContents = append(logContents, string(line))
+			}
+		}
+	}
+
+	return logContents
+}
+
 func TestLoad_AllOps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -35,7 +59,8 @@ func TestLoad_AllOps(t *testing.T) {
 			Payload: ops.Payload{Msg: "from b"}},
 	})
 
-	entries, err := audit.Load(opsDir, audit.Filter{})
+	logContents := readLogContents(t, opsDir)
+	entries, err := audit.Load(logContents, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 3)
 	// Sorted by timestamp
@@ -45,6 +70,7 @@ func TestLoad_AllOps(t *testing.T) {
 }
 
 func TestLoad_SortsTiesByWorkerID(t *testing.T) {
+	t.Parallel()
 	// Two ops with identical timestamps — must be sorted by WorkerID for determinism (audit.go:50)
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
@@ -57,7 +83,8 @@ func TestLoad_SortsTiesByWorkerID(t *testing.T) {
 			Payload: ops.Payload{Msg: "from a"}},
 	})
 
-	entries, err := audit.Load(opsDir, audit.Filter{})
+	logContents := readLogContents(t, opsDir)
+	entries, err := audit.Load(logContents, audit.Filter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	// worker-a sorts before worker-b lexicographically
@@ -66,6 +93,7 @@ func TestLoad_SortsTiesByWorkerID(t *testing.T) {
 }
 
 func TestLoad_FilterByIssue(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -77,7 +105,8 @@ func TestLoad_FilterByIssue(t *testing.T) {
 			Payload: ops.Payload{Msg: "about T1"}},
 	})
 
-	entries, err := audit.Load(opsDir, audit.Filter{IssueID: "T1"})
+	logContents := readLogContents(t, opsDir)
+	entries, err := audit.Load(logContents, audit.Filter{IssueID: "T1"})
 	require.NoError(t, err)
 	assert.Len(t, entries, 2)
 	for _, e := range entries {
@@ -86,6 +115,7 @@ func TestLoad_FilterByIssue(t *testing.T) {
 }
 
 func TestLoad_FilterByWorker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -97,13 +127,15 @@ func TestLoad_FilterByWorker(t *testing.T) {
 			Payload: ops.Payload{Msg: "from b"}},
 	})
 
-	entries, err := audit.Load(opsDir, audit.Filter{WorkerID: "worker-b"})
+	logContents := readLogContents(t, opsDir)
+	entries, err := audit.Load(logContents, audit.Filter{WorkerID: "worker-b"})
 	require.NoError(t, err)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "worker-b", entries[0].WorkerID)
 }
 
 func TestLoad_FilterBySince(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-a", []ops.Op{
@@ -115,8 +147,9 @@ func TestLoad_FilterBySince(t *testing.T) {
 			Payload: ops.Payload{Msg: "newer"}},
 	})
 
+	logContents := readLogContents(t, opsDir)
 	since := time.Unix(200, 0)
-	entries, err := audit.Load(opsDir, audit.Filter{Since: since})
+	entries, err := audit.Load(logContents, audit.Filter{Since: since})
 	require.NoError(t, err)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, int64(200), entries[0].Timestamp)
@@ -124,6 +157,7 @@ func TestLoad_FilterBySince(t *testing.T) {
 }
 
 func TestLoad_LostRace(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 
@@ -137,7 +171,8 @@ func TestLoad_LostRace(t *testing.T) {
 			Payload: ops.Payload{TTL: 60}},
 	})
 
-	entries, err := audit.Load(opsDir, audit.Filter{})
+	logContents := readLogContents(t, opsDir)
+	entries, err := audit.Load(logContents, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 2)
 
@@ -155,17 +190,15 @@ func TestLoad_LostRace(t *testing.T) {
 }
 
 func TestLoad_EmptyDir(t *testing.T) {
-	dir := t.TempDir()
-	opsDir := filepath.Join(dir, "ops")
-	require.NoError(t, os.MkdirAll(opsDir, 0755))
-
-	entries, err := audit.Load(opsDir, audit.Filter{})
+	t.Parallel()
+	entries, err := audit.Load([]string{}, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 0)
 }
 
 func TestLoad_NonExistentDir(t *testing.T) {
-	entries, err := audit.Load("/nonexistent/ops", audit.Filter{})
+	t.Parallel()
+	entries, err := audit.Load([]string{}, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 0)
 }

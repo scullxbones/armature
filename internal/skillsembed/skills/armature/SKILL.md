@@ -2,8 +2,8 @@
 name: armature
 description: >
   Quick reference for arm command syntax — use when working in an
-  armature-managed repo to find actionable work, claim issues, record
-  progress, and complete work with transition.
+  armature-managed repo to find actionable work, claim issues, and manage
+  issue state.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -12,8 +12,8 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ## Setup
 
 ```
+arm bootstrap                                           # initialize repo and deploy bundled skills
 arm worker-init --check || arm worker-init              # register once per clone
-arm install-skills                                      # deploy bundled skills to .claude/skills/
 ```
 
 ## Finding and Starting Work
@@ -21,7 +21,7 @@ arm install-skills                                      # deploy bundled skills 
 ```
 arm ready                                               # list actionable issues
 arm claim --issue ID [--ttl 3600]                       # claim an issue
-arm render-context --issue ID [--budget 4000]           # assemble task context
+arm render-context --issue ID [--budget 4000]           # get task context
 ```
 
 ## During Work
@@ -63,3 +63,12 @@ arm accept-citation --issue ID --rationale TEXT --ci
 arm scope-rename <old-path> <new-path>
 arm scope-delete <path>
 ```
+
+## Semantic Conformance Review
+
+```
+arm review prepare --issue ID --base BASE-SHA --head HEAD-SHA  # create review bundle
+arm review record --issue ID --assessment assessment.json      # record reviewer output
+```
+
+Semantic review validates that delivered work conforms to acceptance criteria and scope. Use the `armature-reviewer` skill with the bundle from `review prepare`; persist results with `review record`.

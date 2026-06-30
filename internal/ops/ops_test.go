@@ -13,6 +13,7 @@ import (
 )
 
 func TestParseCreateOp(t *testing.T) {
+	t.Parallel()
 	line := `["create","task-01",1740700800,"worker-a1",{"title":"Fix auth","parent":"epic-1","type":"task","scope":["src/auth/**"],"acceptance":[]}]`
 
 	op, err := ParseLine([]byte(line))
@@ -26,6 +27,7 @@ func TestParseCreateOp(t *testing.T) {
 }
 
 func TestParseClaimOp(t *testing.T) {
+	t.Parallel()
 	line := `["claim","task-01",1740700801,"worker-a1",{"ttl":60}]`
 
 	op, err := ParseLine([]byte(line))
@@ -35,6 +37,7 @@ func TestParseClaimOp(t *testing.T) {
 }
 
 func TestMarshalOp(t *testing.T) {
+	t.Parallel()
 	op := Op{
 		Type:      OpCreate,
 		TargetID:  "task-01",
@@ -60,14 +63,17 @@ func TestMarshalOp(t *testing.T) {
 }
 
 func TestParseInvalidLine(t *testing.T) {
+	t.Parallel()
 	_, err := ParseLine([]byte(`not json`))
 	assert.Error(t, err)
 
+	// Unknown op types are now allowed at parse time; the engine validates them.
 	_, err = ParseLine([]byte(`["unknown","x",0,"w",{}]`))
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestPropOpRoundTrip(t *testing.T) {
+	t.Parallel()
 	params := gopter.DefaultTestParameters()
 	params.MinSuccessfulTests = 200
 
@@ -110,6 +116,7 @@ func TestPropOpRoundTrip(t *testing.T) {
 }
 
 func TestLogAppendAndRead(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -129,6 +136,7 @@ func TestLogAppendAndRead(t *testing.T) {
 }
 
 func TestReadLogFromOffset(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -137,7 +145,8 @@ func TestReadLogFromOffset(t *testing.T) {
 	require.NoError(t, AppendOp(logPath, op1))
 
 	// Get current offset
-	info, _ := os.Stat(logPath)
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
 	offset := info.Size()
 
 	op2 := Op{Type: OpNote, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a1",
@@ -151,6 +160,7 @@ func TestReadLogFromOffset(t *testing.T) {
 }
 
 func TestValidateWorkerIDInLog(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
@@ -165,6 +175,7 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 }
 
 func TestGenerateSchema(t *testing.T) {
+	t.Parallel()
 	schema := GenerateSchema()
 	assert.Contains(t, schema, "op_type")
 	assert.Contains(t, schema, "target_id")
@@ -173,7 +184,48 @@ func TestGenerateSchema(t *testing.T) {
 	assert.Contains(t, schema, "payload")
 }
 
+func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
+	t.Parallel()
+	schema := GenerateSchema()
+	documentedTypes := SchemaDocumentedOpTypes()
+
+	// Convert to a set for fast lookup
+	documentedSet := make(map[string]bool, len(documentedTypes))
+	for _, opType := range documentedTypes {
+		documentedSet[opType] = true
+	}
+
+	// All registered op types must be documented in the schema
+	requiredOpTypes := []string{
+		OpCreate,
+		OpClaim,
+		OpHeartbeat,
+		OpTransition,
+		OpNote,
+		OpNoteDelete,
+		OpLink,
+		OpUnlink,
+		OpSourceLink,
+		OpSourceFingerprint,
+		OpDAGTransition,
+		OpDecision,
+		OpAssign,
+		OpAmend,
+		OpCitationAccepted,
+		OpScopeRename,
+		OpScopeDelete,
+		OpReparent,
+		OpAssessmentAttested,
+	}
+
+	for _, opType := range requiredOpTypes {
+		assert.True(t, documentedSet[opType], "op type %q must be documented in schema", opType)
+		assert.Contains(t, schema, opType, "op type %q must appear in generated schema", opType)
+	}
+}
+
 func TestHeartbeatRateLimiter(t *testing.T) {
+	t.Parallel()
 	rl := NewRateLimiter()
 
 	// First heartbeat should be allowed
@@ -190,6 +242,7 @@ func TestHeartbeatRateLimiter(t *testing.T) {
 }
 
 func TestCreateRateLimiter(t *testing.T) {
+	t.Parallel()
 	rl := NewRateLimiter()
 
 	for i := 0; i < 500; i++ {
@@ -204,6 +257,7 @@ func TestCreateRateLimiter(t *testing.T) {
 // TestReadLogFromOffset_ManyOps verifies that ReadLogFromOffset correctly reads
 // a log containing many ops. This also exercises the pre-allocated slice path.
 func TestReadLogFromOffset_ManyOps(t *testing.T) {
+	t.Parallel()
 	const count = 200
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-many.log")
@@ -225,15 +279,18 @@ func TestReadLogFromOffset_ManyOps(t *testing.T) {
 }
 
 func TestWorkerIDFromFilename_PlainLog(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85.log"))
 }
 
 func TestWorkerIDFromFilename_SlottedLog(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85~a.log"))
 	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85~slot-99.log"))
 }
 
 func TestWorkerIDFromFilename_BasenameOnly(t *testing.T) {
+	t.Parallel()
 	// no directory prefix
 	assert.Equal(t, "worker-x", WorkerIDFromFilename("worker-x.log"))
 	assert.Equal(t, "worker-x", WorkerIDFromFilename("worker-x~b.log"))
