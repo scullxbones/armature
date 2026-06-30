@@ -7,7 +7,6 @@ import (
 )
 
 func TestArmatureError_Error(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		name        string
 		err         *ArmatureError
@@ -42,7 +41,6 @@ func TestArmatureError_Error(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			s := tt.err.Error()
 			if !strings.Contains(s, tt.wantCode) {
 				t.Errorf("Error() = %q, want to contain code %q", s, tt.wantCode)
@@ -55,7 +53,6 @@ func TestArmatureError_Error(t *testing.T) {
 }
 
 func TestArmatureError_Unwrap(t *testing.T) {
-	t.Parallel()
 	cause := stderrors.New("underlying io error")
 	err := IOError("write", cause)
 

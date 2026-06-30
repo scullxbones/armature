@@ -3,17 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/scullxbones/armature/internal/config"
-	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,50 +17,15 @@ import (
 func TestConfirmCommand_Success(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Materialize so issues/task-01.json exists for ReadIssue.
-	_, err := runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-
 	// Confirm an existing issue
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"confirm", "--repo", repo, "task-01"})
 
-	err = cmd.Execute()
+	err := cmd.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "confirmed task-01")
-}
-
-// TestConfirmCmd_DoesNotMaterialize verifies that arm confirm reads a single issue via
-// store.ReadIssue() and does not trigger rematerialization (store.Load()).
-//
-// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
-// advancing its mtime → mtime assertion fails.
-// GREEN with store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
-func TestConfirmCmd_DoesNotMaterialize(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Materialize first to create checkpoint.json and issues/task-01.json.
-	_, err := runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-
-	// Capture checkpoint.json mtime before running confirm.
-	stateDir := getTestStateDir(t, repo)
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-	stat, statErr := os.Stat(checkpointPath)
-	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
-	mtimeBefore := stat.ModTime()
-
-	// Run confirm — must use ReadIssue, not Load.
-	_, err = runTrls(t, repo, "confirm", "task-01")
-	require.NoError(t, err)
-
-	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
-	statAfter, statErr := os.Stat(checkpointPath)
-	require.NoError(t, statErr)
-	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
-		"checkpoint.json must not be updated by arm confirm: store.ReadIssue must be used, not store.Load")
 }
 
 func TestConfirmCommand_NotFound(t *testing.T) {
@@ -197,20 +157,6 @@ func TestImportCommand_ActualImport(t *testing.T) {
 	assert.Contains(t, out, "imported 1 items")
 }
 
-// TestImportCommand_WithSource verifies that --source links each imported item to a source.
-func TestImportCommand_WithSource(t *testing.T) {
-	repo := setupRepoWithTask(t)
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	csvFile := filepath.Join(t.TempDir(), "issues.csv")
-	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nwith-src-1,With Source Task,task\n"), 0644))
-
-	out, err := runTrls(t, repo, "import", "--source", "src-import-01", csvFile)
-	require.NoError(t, err)
-	assert.Contains(t, out, "imported 1 items")
-}
-
 func TestStaleReviewCommand_NoStale(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -226,7 +172,7 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -250,7 +196,7 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -401,16 +347,6 @@ func TestExtractFieldsFromIssue_MixedKnownAndUnknown(t *testing.T) {
 	assert.Equal(t, []string{"open", "", "Test task"}, fields)
 }
 
-func TestExtractFieldsFromIssue_BlockedByAbsent(t *testing.T) {
-	issue := &materialize.Issue{
-		ID:    "task-01",
-		Title: "Test task",
-	}
-
-	fields := extractFieldsFromIssue(issue, "blocked_by")
-	assert.Equal(t, []string{"[]"}, fields)
-}
-
 // Test trls show --field flag
 func TestShowCommand_WithFieldFlag_SingleField(t *testing.T) {
 	repo := setupRepoWithTask(t)
@@ -429,14 +365,6 @@ func TestShowCommand_WithFieldFlag_MultipleFields(t *testing.T) {
 	assert.Equal(t, 2, len(lines))
 	assert.Equal(t, "open", lines[0])
 	assert.Equal(t, "Test task", lines[1])
-}
-
-func TestShowCommand_WithFieldFlag_BlockedByAbsent(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	out, err := runTrls(t, repo, "show", "task-01", "--field", "blocked_by")
-	require.NoError(t, err)
-	assert.Equal(t, "[]\n", out)
 }
 
 // Test trls status --status filter
@@ -460,7 +388,7 @@ func TestListCmd_Group_WithStatusFilter(t *testing.T) {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02", "--worktree", filepath.Join(t.TempDir(), "claim-task-02-wt")})
+	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02"})
 	require.NoError(t, cmd2.Execute())
 
 	out, err := runTrls(t, repo, "--format", "human", "list", "--group", "--status", "open")
@@ -476,10 +404,6 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"})
 	require.NoError(t, cmd.Execute())
-
-	// Materialize so issues/E6.json exists for ReadIssue in create --parent.
-	_, materializeErr := runTrls(t, repo, "materialize")
-	require.NoError(t, materializeErr)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -514,7 +438,7 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
 	require.NoError(t, err)
 
-	out, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
+	out, _ := runTrls(t, repo, "validate")
 	assert.Contains(t, out, "INFO: phantom scope", "phantom scope should appear as INFO")
 	assert.NotContains(t, out, "WARNING: phantom scope", "phantom scope should not appear as WARNING")
 }
@@ -586,7 +510,7 @@ func TestAmendCmd_PatchesAcceptance(t *testing.T) {
 	// Re-materialize and check validate no longer reports missing acceptance
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
+	validateOut, _ := runTrls(t, repo, "validate")
 	// After amendment the task should not report missing acceptance
 	assert.NotContains(t, validateOut, "missing required field: acceptance on task task-01")
 }
@@ -596,17 +520,6 @@ func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
 
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01")
 	assert.Error(t, err)
-}
-
-// Fix W3: passing both --clear-context-files and --context-file must be a hard error.
-func TestAmendCmd_ClearContextFilesAndContextFileConflict_ReturnsError(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
-		"--clear-context-files",
-		"--context-file", "docs/guide.md")
-	require.Error(t, err, "using --clear-context-files together with --context-file must return an error")
-	assert.Contains(t, err.Error(), "--clear-context-files")
 }
 
 // setupRepoWithSource creates a repo with a task and a source entry in the manifest,
@@ -788,17 +701,26 @@ func setupRepoWithTwoTasks(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"init", "--repo", repo})
+	require.NoError(t, cmd.Execute())
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Task one", "--type", "task", "--id", "task-01"})
+	require.NoError(t, cmd2.Execute())
+
+	cmd3 := newRootCmd()
+	cmd3.SetOut(new(bytes.Buffer))
+	cmd3.SetArgs([]string{"create", "--repo", repo, "--title", "Task two", "--type", "task", "--id", "task-02"})
+	require.NoError(t, cmd3.Execute())
 
 	return repo
 }
 
 func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -814,12 +736,9 @@ func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
-
-	_, err := runTrls(t, repo, "create", "--title", "Task three", "--type", "task", "--id", "task-03")
-	require.NoError(t, err)
-
-	_, err = runTrls(t, repo, "worker-init")
+	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "accept-citation",
@@ -841,17 +760,13 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	cmd.SetArgs([]string{"init", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"})
 	require.NoError(t, cmd2.Execute())
-
-	// Materialize so issues/story-01.json exists for ReadIssue in create --parent.
-	_, err := runTrls(t, repo, "materialize")
-	require.NoError(t, err)
 
 	cmd3 := newRootCmd()
 	cmd3.SetOut(new(bytes.Buffer))
@@ -944,7 +859,7 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -998,7 +913,7 @@ func TestListCmd_StatusFilter(t *testing.T) {
 	// Transition task-01 to done so we have two distinct statuses
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
+	_, err = runTrls(t, repo, "claim", "task-01")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done", "--outcome", "completed", "--force")
 	require.NoError(t, err)
@@ -1048,7 +963,7 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1067,7 +982,7 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	// With --strict, the same plan applied to a fresh repo should fail.
 	repo2 := initTempRepo(t)
 	run(t, repo2, "git", "commit", "--allow-empty", "-m", "init")
-	_, err = runTrls(t, repo2, "bootstrap")
+	_, err = runTrls(t, repo2, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo2, "worker-init")
 	require.NoError(t, err)
@@ -1082,7 +997,7 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1120,7 +1035,7 @@ func TestDecomposeApplyRoot(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1246,33 +1161,20 @@ func TestDoctorCmd_JSONFormat(t *testing.T) {
 }
 
 // TestDoctorCmd_BrokenParentRef verifies D4 detects broken parent references.
-// Since arm create now validates parent existence, we inject the broken op directly
-// into the ops log to simulate a task with a non-existent parent.
 func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Directly inject a create op with a non-existent parent into the ops log,
-	// bypassing the arm create validation layer.
-	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
-	logPath := filepath.Join(repo, ".armature", "ops", workerID+".log")
-	brokenOp := ops.Op{
-		Type:      ops.OpCreate,
-		TargetID:  "orphan-01",
-		Timestamp: time.Now().Unix(),
-		WorkerID:  workerID,
-		Payload: ops.Payload{
-			Title:    "Orphan task",
-			NodeType: "task",
-			Parent:   "nonexistent-parent",
-		},
-	}
-	require.NoError(t, ops.AppendOp(logPath, brokenOp), "injecting broken op must succeed")
+	// Create a task with a non-existent parent.
+	_, err = runTrls(t, repo, "create",
+		"--title", "Orphan task", "--type", "task", "--id", "orphan-01",
+		"--parent", "nonexistent-parent")
+	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "doctor")
 	assert.Error(t, err, "doctor should fail on broken parent ref (D4 error)")
@@ -1363,7 +1265,7 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -1413,13 +1315,13 @@ func TestListTerminal(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition task-cancel to cancelled.
-	_, err = runTrls(t, repo, "claim", "task-cancel", "--worktree", filepath.Join(t.TempDir(), "claim-task-cancel-wt"))
+	_, err = runTrls(t, repo, "claim", "task-cancel")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-cancel", "--to", "cancelled", "--outcome", "not needed", "--force")
 	require.NoError(t, err)
 
 	// Transition task-done to done; on a repo with git history this becomes merged.
-	_, err = runTrls(t, repo, "claim", "task-done", "--worktree", filepath.Join(t.TempDir(), "claim-task-done-wt"))
+	_, err = runTrls(t, repo, "claim", "task-done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-done", "--to", "done", "--outcome", "completed", "--force")
 	require.NoError(t, err)
@@ -1453,7 +1355,7 @@ func TestReadyExplain(t *testing.T) {
 	_, err = runTrls(t, repo, "link", "--source", "task-blocked", "--dep", "task-blocker")
 	require.NoError(t, err)
 	// Claim task-blocker so it is in-progress (not merged) — task-blocked remains not ready.
-	_, err = runTrls(t, repo, "claim", "task-blocker", "--worktree", filepath.Join(t.TempDir(), "claim-task-blocker-wt"))
+	_, err = runTrls(t, repo, "claim", "task-blocker")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "ready", "--explain")
@@ -1491,244 +1393,4 @@ func TestCommandLongAndExampleFields(t *testing.T) {
 			assert.NotEmpty(t, tt.cmd.Example, "%s command must have non-empty Example field", tt.name)
 		})
 	}
-}
-
-// Fix 1: TestCreateCommand_FeatureType verifies that arm create --type feature succeeds.
-func TestCreateCommand_FeatureType(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	out, err := runTrls(t, repo, "create", "--title", "my feature", "--type", "feature", "--id", "feature-01")
-	require.NoError(t, err, "arm create --type feature should succeed")
-	assert.Contains(t, out, "feature-01", "output should include the created ID")
-}
-
-// Fix 1: TestCreateCommand_FeatureTypeInvalidMsg verifies that invalid type error includes "feature".
-func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
-	// Verify that the valid types list includes "feature" in the error message
-	// by attempting to create with a totally invalid type.
-	repo := setupRepoWithTask(t)
-
-	_, err := runTrls(t, repo, "create", "--title", "my widget", "--type", "invalid-type", "--id", "widget-01")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "feature", "error message should list 'feature' as a valid type")
-}
-
-// Fix 1: TestValidParentChildTypes_EpicCanContainFeature verifies hierarchy rules for feature type.
-func TestValidParentChildTypes_EpicCanContainFeature(t *testing.T) {
-	assert.True(t, issuetype.IsLegalHierarchy("epic", "feature"),
-		"epic should be able to contain feature")
-}
-
-// Fix 1: TestValidParentChildTypes_FeatureCanContainTask verifies feature can contain task.
-func TestValidParentChildTypes_FeatureCanContainTask(t *testing.T) {
-	assert.True(t, issuetype.IsLegalHierarchy("feature", "task"),
-		"feature should be able to contain task")
-}
-
-// Fix 1: TestValidParentChildTypes_FeatureCanContainBug verifies feature can contain bug.
-func TestValidParentChildTypes_FeatureCanContainBug(t *testing.T) {
-	assert.True(t, issuetype.IsLegalHierarchy("feature", "bug"),
-		"feature should be able to contain bug")
-}
-
-// Fix 1: TestCreateCommand_FeatureUnderEpic verifies feature can be created under an epic.
-func TestCreateCommand_FeatureUnderEpic(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Create an epic first
-	_, err := runTrls(t, repo, "create", "--title", "My Epic", "--type", "epic", "--id", "epic-01")
-	require.NoError(t, err)
-
-	// Materialize so issues/epic-01.json exists for ReadIssue in create --parent.
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-
-	// Create a feature under the epic
-	out, err := runTrls(t, repo, "create", "--title", "My Feature", "--type", "feature", "--id", "feature-02", "--parent", "epic-01")
-	require.NoError(t, err, "arm create --type feature --parent epic-01 should succeed")
-	assert.Contains(t, out, "feature-02")
-}
-
-// Fix 3: TestReparentCommand_EmptyParentMakesTopLevel verifies that --parent ""
-// makes an issue top-level (removes its parent).
-func TestReparentCommand_EmptyParentMakesTopLevel(t *testing.T) {
-	repo := setupRepoWithStoryAndTask(t)
-
-	// task-01 has parent story-01; reparent with --parent "" should make it top-level.
-	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "")
-	require.NoError(t, err, "arm reparent --parent '' should succeed")
-	assert.Contains(t, out, "task-01", "output should include issue ID")
-}
-
-// TestAcceptCitationCmd_Interactive_Confirm sends "y" to stdin and verifies success.
-func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
-	repo := setupRepoWithTask(t)
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	outBuf := new(bytes.Buffer)
-	stdin := strings.NewReader("y\n")
-	root := newRootCmd()
-	root.SetOut(outBuf)
-	root.SetIn(stdin)
-	root.SetArgs([]string{"accept-citation", "--repo", repo,
-		"--issue", "task-01",
-		"--rationale", "cited because it matches",
-	})
-	require.NoError(t, root.Execute())
-	assert.Contains(t, outBuf.String(), "task-01")
-}
-
-// TestAcceptCitationCmd_PositionalIssueID verifies that the positional argument is accepted.
-func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
-	repo := setupRepoWithTask(t)
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	out, err := runTrls(t, repo, "accept-citation",
-		"task-01",
-		"--rationale", "cited because it matches here",
-		"--ci",
-	)
-	require.NoError(t, err)
-	assert.Contains(t, out, "task-01")
-}
-
-// TestWorkersCommand_WithCancelledTransition verifies workers handles cancelled status ops.
-func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	// Claim the task, then cancel it so an OpTransition with StatusCancelled is recorded.
-	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "wt-01"))
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled")
-	require.NoError(t, err)
-
-	out, err := runTrls(t, repo, "workers", "--repo", repo)
-	require.NoError(t, err)
-	_ = out
-}
-
-// TestListCmd_Group_MultipleStatusGroups verifies the sort comparator runs with 2+ status groups.
-func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Create a second task and claim it so we get two status groups: open and claimed.
-	_, err := runTrls(t, repo, "create",
-		"--title", "Task two",
-		"--type", "task",
-		"--id", "task-02",
-	)
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "task-02",
-		"--worktree", filepath.Join(t.TempDir(), "wt-task-02"),
-	)
-	require.NoError(t, err)
-
-	buf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	root.SetArgs([]string{"--format", "human", "--repo", repo, "list", "--group"})
-	require.NoError(t, root.Execute())
-
-	out := buf.String()
-	// Both status groups should appear.
-	assert.Contains(t, out, "task-01")
-	assert.Contains(t, out, "task-02")
-}
-
-// TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus verifies the parent story
-// status check is called when transitioning a task with a parent to done.
-func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
-	repo := setupRepoWithStoryAndTask(t)
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	// Claim task-01 (child of story-01) then transition it to done.
-	_, err = runTrls(t, repo, "claim", "task-01",
-		"--worktree", filepath.Join(t.TempDir(), "wt-task-01"),
-	)
-	require.NoError(t, err)
-
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force")
-	require.NoError(t, err)
-	assert.Contains(t, out, "task-01")
-}
-
-// TestDecomposeContextCmd_BasicOutput verifies that decompose-context outputs a template.
-func TestDecomposeContextCmd_BasicOutput(t *testing.T) {
-	buf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	root.SetArgs([]string{"decompose-context"})
-	require.NoError(t, root.Execute())
-	// Should output the default prompt template (non-empty).
-	assert.NotEmpty(t, buf.String())
-}
-
-// TestDecomposeContextCmd_JSONFormat verifies --format json output.
-func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
-	buf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	root.SetArgs([]string{"decompose-context", "--format", "json"})
-	require.NoError(t, root.Execute())
-
-	var result map[string]any
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
-}
-
-// TestDecomposeContextCmd_WithSources verifies --sources flag parses and filters empty segments.
-func TestDecomposeContextCmd_WithSources(t *testing.T) {
-	buf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	// Pass comma-separated sources with an empty segment to exercise the `if s != "" {` guard.
-	root.SetArgs([]string{"decompose-context", "--format", "json", "--sources", "src-01,,src-02"})
-	require.NoError(t, root.Execute())
-
-	var result map[string]any
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
-}
-
-// TestNewSnapshotStore_UsesContextPaths verifies that newSnapshotStore wires
-// opsDir from IssuesDir/ops, stateDir from StateDir, and singleBranch from Mode.
-func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
-	t.Parallel()
-
-	// Single-branch mode
-	ctx := &config.Context{
-		IssuesDir: "/repo/.armature",
-		StateDir:  "/repo/.armature/state/worker-1",
-		Mode:      "single-branch",
-	}
-	store := newSnapshotStore(ctx)
-	require.NotNil(t, store)
-
-	// Verify stateDir is wired correctly by checking IndexPath
-	expectedIndexPath := filepath.Join(ctx.StateDir, "index.json")
-	assert.Equal(t, expectedIndexPath, store.IndexPath())
-
-	// Verify IssuePath also uses StateDir
-	expectedIssuePath := filepath.Join(ctx.StateDir, "issues", "test-id.json")
-	assert.Equal(t, expectedIssuePath, store.IssuePath("test-id"))
-
-	// Dual-branch mode (Mode != "single-branch")
-	ctx2 := &config.Context{
-		IssuesDir: "/repo/.arm/.armature",
-		StateDir:  "/repo/.arm/state/worker-1",
-		Mode:      "dual-branch",
-	}
-	store2 := newSnapshotStore(ctx2)
-	require.NotNil(t, store2)
-
-	// Verify paths for dual-branch
-	expectedIndexPath2 := filepath.Join(ctx2.StateDir, "index.json")
-	assert.Equal(t, expectedIndexPath2, store2.IndexPath())
-
-	expectedIssuePath2 := filepath.Join(ctx2.StateDir, "issues", "test-id.json")
-	assert.Equal(t, expectedIssuePath2, store2.IssuePath("test-id"))
 }

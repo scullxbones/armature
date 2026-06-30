@@ -1,12 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -32,25 +33,29 @@ func newScopeDeleteCmd() *cobra.Command {
 				return fmt.Errorf("path must not be empty")
 			}
 
-			state := mustState(cmd)
-			appCtx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
 
-			// Read index directly from disk to scan scope entries; no rematerialization needed.
-			store := newSnapshotStore(appCtx)
-			index, err := store.ReadIndex()
+			// Materialize to ensure state is current before scanning scope entries.
+			singleBranch := appCtx.Mode == "single-branch"
+			if _, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, singleBranch); err != nil {
+				return fmt.Errorf("materialize: %w", err)
+			}
+
+			// Load materialized issues to find which ones have an exact match.
+			issuesStateDir := filepath.Join(appCtx.StateDir, "issues")
+			issues, err := materialize.LoadAllIssues(issuesStateDir)
 			if err != nil {
-				return fmt.Errorf("read index: %w", err)
+				return fmt.Errorf("load issues: %w", err)
 			}
 
 			// Find issues with an exact scope entry matching deletedPath.
 			var affected []string
-			for id, idxEntry := range index {
-				for _, scopeEntry := range idxEntry.Scope {
-					if scopeEntry == deletedPath {
+			for id, issue := range issues {
+				for _, entry := range issue.Scope {
+					if entry == deletedPath {
 						affected = append(affected, id)
 						break
 					}
@@ -78,20 +83,21 @@ func newScopeDeleteCmd() *cobra.Command {
 						DeletedPath: deletedPath,
 					},
 				}
-				if err := appendLowStakesOp(state, logPath, op); err != nil {
+				if err := appendLowStakesOp(logPath, op); err != nil {
 					return fmt.Errorf("append op for %s: %w", id, err)
 				}
 			}
 
-			// Refresh snapshot to apply the ops to state.
-			snap, err := store.Refresh(context.Background())
-			if err != nil {
-				return fmt.Errorf("refresh snapshot: %w", err)
+			// Rematerialize to apply the ops to state.
+			if _, err := materialize.Materialize(appCtx.IssuesDir, appCtx.StateDir, singleBranch); err != nil {
+				return fmt.Errorf("rematerialize: %w", err)
 			}
 
 			// Warn about issues that now have an empty scope and are non-terminal.
-			// snap.State.Issues is always initialized after Refresh(); nil check is unnecessary.
-			updatedIssues := snap.State.Issues
+			updatedIssues, err := materialize.LoadAllIssues(issuesStateDir)
+			if err != nil {
+				return fmt.Errorf("load updated issues: %w", err)
+			}
 			for _, id := range affected {
 				issue, ok := updatedIssues[id]
 				if !ok {
@@ -110,7 +116,7 @@ func newScopeDeleteCmd() *cobra.Command {
 					"affected_count": len(affected),
 					"affected":       affected,
 				}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deleted scope %q from %d issue(s): %s\n",

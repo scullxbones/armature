@@ -1,4 +1,0 @@
-sandbox_mode = "workspace-write"
-approval_policy = "never"
-[permissions.default.filesystem]
-writable_roots = ["internal/harnesspolicy/scope.go (new)", "internal/harnesspolicy/scope_test.go (new)"]

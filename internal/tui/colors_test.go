@@ -9,9 +9,7 @@ import (
 // TestSemanticPalette verifies that every semantic style variable has the
 // correct color values and attributes as defined in the spec.
 func TestSemanticPalette(t *testing.T) {
-	t.Parallel()
 	t.Run("Warning", func(t *testing.T) {
-		t.Parallel()
 		// Warning = xterm 214, bold
 		wantFG := lipgloss.Color("214")
 		if Warning.GetForeground() != wantFG {
@@ -23,7 +21,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("Advisory", func(t *testing.T) {
-		t.Parallel()
 		// Advisory = xterm 226, no bold
 		wantFG := lipgloss.Color("226")
 		if Advisory.GetForeground() != wantFG {
@@ -35,7 +32,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("Info", func(t *testing.T) {
-		t.Parallel()
 		// Info = xterm 39, no bold
 		wantFG := lipgloss.Color("39")
 		if Info.GetForeground() != wantFG {
@@ -47,7 +43,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("ActionRequired", func(t *testing.T) {
-		t.Parallel()
 		// ActionRequired = bold white foreground on xterm 196 background
 		wantFG := lipgloss.Color("15") // white
 		wantBG := lipgloss.Color("196")
@@ -63,7 +58,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("MyClaim", func(t *testing.T) {
-		t.Parallel()
 		// MyClaim must have a foreground color set (distinct color for current worker)
 		empty := lipgloss.NewStyle()
 		if MyClaim.GetForeground() == empty.GetForeground() {
@@ -72,7 +66,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("TheirClaim", func(t *testing.T) {
-		t.Parallel()
 		// TheirClaim must have a foreground color set (distinct color for other worker)
 		empty := lipgloss.NewStyle()
 		if TheirClaim.GetForeground() == empty.GetForeground() {
@@ -81,7 +74,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("MyClaim_TheirClaim_distinct", func(t *testing.T) {
-		t.Parallel()
 		// MyClaim and TheirClaim must use different colors
 		if MyClaim.GetForeground() == TheirClaim.GetForeground() {
 			t.Error("MyClaim and TheirClaim should use distinct foreground colors")
@@ -90,7 +82,6 @@ func TestSemanticPalette(t *testing.T) {
 
 	// Verify pre-existing styles still have foreground colors set
 	t.Run("Critical", func(t *testing.T) {
-		t.Parallel()
 		empty := lipgloss.NewStyle()
 		if Critical.GetForeground() == empty.GetForeground() {
 			t.Error("Critical: expected a foreground color to be set, but it was not")
@@ -98,7 +89,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("OK", func(t *testing.T) {
-		t.Parallel()
 		empty := lipgloss.NewStyle()
 		if OK.GetForeground() == empty.GetForeground() {
 			t.Error("OK: expected a foreground color to be set, but it was not")
@@ -106,7 +96,6 @@ func TestSemanticPalette(t *testing.T) {
 	})
 
 	t.Run("Muted", func(t *testing.T) {
-		t.Parallel()
 		empty := lipgloss.NewStyle()
 		if Muted.GetForeground() == empty.GetForeground() {
 			t.Error("Muted: expected a foreground color to be set, but it was not")

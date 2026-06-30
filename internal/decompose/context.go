@@ -94,12 +94,12 @@ func buildDAGBlock(params ContextParams) string {
 }
 
 func planSchemaBlock() string {
-	data, _ := json.MarshalIndent(defaultPlanSchema(), "", "  ") //nolint:errcheck // static schemas cannot contain non-serializable types
+	data, _ := json.MarshalIndent(defaultPlanSchema(), "", "  ")
 	return string(data)
 }
 
 func constraintsBlock() string {
-	data, _ := json.MarshalIndent(defaultConstraints(), "", "  ") //nolint:errcheck // static schemas cannot contain non-serializable types
+	data, _ := json.MarshalIndent(defaultConstraints(), "", "  ")
 	return string(data)
 }
 

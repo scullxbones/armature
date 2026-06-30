@@ -29,21 +29,19 @@ the DAG structure and help identify blocking dependencies.`,
   # Informational relationship
   $ arm link --source E6-S4-T2 --dep E5-S2-T1 --rel relates-to`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
 			op := ops.Op{Type: ops.OpLink, TargetID: sourceID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{Dep: dep, Rel: rel}}
-			if err := appendOp(ctx, logPath, op); err != nil {
+			if err := appendOp(logPath, op); err != nil {
 				return err
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"source": sourceID, "dep": dep, "rel": rel}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Linked %s → %s (%s)\n", sourceID, dep, rel)

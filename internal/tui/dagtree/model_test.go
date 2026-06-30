@@ -19,7 +19,6 @@ func makeState(issues ...*materialize.Issue) *materialize.State {
 }
 
 func TestDAGTreeInit(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init should return nil")
@@ -27,7 +26,6 @@ func TestDAGTreeInit(t *testing.T) {
 }
 
 func TestDAGTreeNilStateView(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	v := m.View()
@@ -37,7 +35,6 @@ func TestDAGTreeNilStateView(t *testing.T) {
 }
 
 func TestDAGTreeGlyphInProgress(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(&materialize.Issue{ID: "T1", Status: "in-progress", Title: "Active"}))
@@ -48,7 +45,6 @@ func TestDAGTreeGlyphInProgress(t *testing.T) {
 }
 
 func TestDAGTreeGlyphCancelled(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(&materialize.Issue{ID: "T1", Status: "cancelled", Title: "Cancelled"}))
@@ -59,7 +55,6 @@ func TestDAGTreeGlyphCancelled(t *testing.T) {
 }
 
 func TestDAGTreeGlyphDefault(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(&materialize.Issue{ID: "T1", Status: "open", Title: "Open task"}))
@@ -70,7 +65,6 @@ func TestDAGTreeGlyphDefault(t *testing.T) {
 }
 
 func TestDAGTreeUpdate_CursorNavigation(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(
@@ -89,7 +83,6 @@ func TestDAGTreeUpdate_CursorNavigation(t *testing.T) {
 }
 
 func TestDAGTreeUpdate_OpenDetail(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(&materialize.Issue{ID: "E1", Status: "open", Title: "Epic"}))
@@ -97,7 +90,6 @@ func TestDAGTreeUpdate_OpenDetail(t *testing.T) {
 }
 
 func TestViewContainsIssueIDs(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(
@@ -114,7 +106,6 @@ func TestViewContainsIssueIDs(t *testing.T) {
 }
 
 func TestMergedNodeShowsCheckGlyph(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(&materialize.Issue{ID: "T1", Type: "task", Status: "merged", Title: "Done task"}))
@@ -125,7 +116,6 @@ func TestMergedNodeShowsCheckGlyph(t *testing.T) {
 }
 
 func TestBlockedNodeShowsXGlyph(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(&materialize.Issue{ID: "T1", Type: "task", Status: "blocked", Title: "Blocked"}))
@@ -136,7 +126,6 @@ func TestBlockedNodeShowsXGlyph(t *testing.T) {
 }
 
 func TestFilterHidesNonMatchingNodes(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	m.SetState(makeState(
@@ -155,7 +144,6 @@ func TestFilterHidesNonMatchingNodes(t *testing.T) {
 }
 
 func TestHelpBarContainsKeyHints(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 40)
 	h := m.HelpBar()
@@ -165,7 +153,6 @@ func TestHelpBarContainsKeyHints(t *testing.T) {
 }
 
 func TestDAGTreeViewClipsToHeight(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 4)
 	m.SetState(makeState(
@@ -184,7 +171,6 @@ func TestDAGTreeViewClipsToHeight(t *testing.T) {
 }
 
 func TestDAGTreeViewScrollsToKeepCursorVisible(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 3)
 	m.SetState(makeState(
@@ -208,7 +194,6 @@ func TestDAGTreeViewScrollsToKeepCursorVisible(t *testing.T) {
 }
 
 func TestDAGTreeViewScrollsBackUpWithCursor(t *testing.T) {
-	t.Parallel()
 	m := dagtree.New()
 	m.SetSize(120, 3)
 	m.SetState(makeState(

@@ -22,9 +22,7 @@ func newReopenCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -32,7 +30,7 @@ func newReopenCmd() *cobra.Command {
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{To: ops.StatusOpen},
 			}
-			return appendOp(ctx, logPath, op)
+			return appendOp(logPath, op)
 		},
 	}
 

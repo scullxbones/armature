@@ -69,7 +69,8 @@ func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 		return m, cmd
 	}
 
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
 			if m.cursor < len(m.visible)-1 {

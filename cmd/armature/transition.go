@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 
-	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -56,7 +57,7 @@ This enforces branch + PR discipline.`,
 			// Check branch discipline when transitioning to done (unless --force)
 			if to == "done" && !force {
 				repoPath := appCtx.RepoPath
-				gc := adapters.New(repoPath)
+				gc := git.New(repoPath)
 				currentBranch, err := gc.CurrentBranch()
 				if err == nil {
 					// Only reject if we successfully detected we're on main/master
@@ -79,23 +80,16 @@ This enforces branch + PR discipline.`,
 				}
 			}
 
-			state := mustState(cmd)
-			appCtx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
 
+			issuesDir := appCtx.IssuesDir
 			cfg := appCtx.Config
 
 			// Get current issue status from materialized index and load index entries for all issues
-			store := newSnapshotStore(state.ctx)
-			// A load error degrades gracefully to an empty index, matching the previous
-			// behavior of silently ignoring missing-file errors from LoadIndex.
-			index, _ := store.ReadIndex() //nolint:errcheck // missing index treated as empty; access uses ok-check
-			if index == nil {
-				index = make(materialize.Index)
-			}
+			index, _ := materialize.LoadIndex(filepath.Join(issuesDir, "index.json"))
 			currentStatus := ""
 			var currentEntry *materialize.IndexEntry
 			if entry, ok := index[issueID]; ok {
@@ -103,7 +97,7 @@ This enforces branch + PR discipline.`,
 				currentEntry = &entry
 			}
 
-			hookInput := adapters.HookInput{
+			hookInput := hooks.HookInput{
 				IssueID:    issueID,
 				FromStatus: currentStatus,
 				ToStatus:   to,
@@ -118,7 +112,7 @@ This enforces branch + PR discipline.`,
 				WorkerID: workerID,
 				Payload:  ops.Payload{To: to, Outcome: outcome, Branch: branch, PR: pr},
 			}
-			if err := appendHighStakesOp(state, logPath, op); err != nil {
+			if err := appendHighStakesOp(logPath, op); err != nil {
 				return err
 			}
 
@@ -148,7 +142,7 @@ This enforces branch + PR discipline.`,
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
 				result := map[string]string{"issue": issueID, "status": to}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s → %s\n", issueID, to)
@@ -169,15 +163,13 @@ This enforces branch + PR discipline.`,
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
-// It reads the materialized issue directly from disk without triggering rematerialization.
-// If the issue cannot be read (e.g. not yet materialized), it returns false to avoid false positives.
+// It loads the materialized issue from the state directory. If the issue cannot be
+// loaded (e.g. not yet materialized), it returns false to avoid false positives.
 func isIssueUncited(issueID string) bool {
-	store := newSnapshotStore(appCtx)
-	// A read error degrades gracefully: treat the issue as not uncited, matching the previous
-	// behavior of ignoring missing-file errors when the issue file was absent.
-	issue, err := store.ReadIssue(issueID)
-	if err != nil || issue == nil {
-		// Cannot read — graceful degradation, don't warn
+	issuePath := filepath.Join(appCtx.StateDir, "issues", issueID+".json")
+	issue, err := materialize.LoadIssue(issuePath)
+	if err != nil {
+		// Cannot load — graceful degradation, don't warn
 		return false
 	}
 	return len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0

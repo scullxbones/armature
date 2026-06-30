@@ -21,43 +21,15 @@ The binary will be installed to `~/.local/bin/arm`. Ensure this directory is in 
 
 ## 2. Initialize Armature
 
-Run `arm bootstrap` in your project root to set up Armature.
+Run `arm init` in your project root to set up Armature.
 
 ```bash
-arm bootstrap
+arm init
 ```
 
 ### Solo vs Dual-Branch Modes
 - **Solo Mode (Single-Branch):** If your repository doesn't have branch protection on `main`, Armature stores all data in a `.armature/` folder on your `main` branch.
 - **Dual-Branch Mode:** If `main` is protected (e.g., GitHub/GitLab PR workflow), Armature creates an orphan `_armature` branch for coordination data. It also creates a secondary worktree at `.arm/` so you can work on code and coordination state simultaneously without conflicts.
-
-For detailed configuration options (TTL, token budget, hooks), see [Configuration Reference](configuration.md).
-
-### Initialize Worker
-
-Register the current clone as a worker in Armature's coordination system.
-
-```bash
-arm worker-init --check || arm worker-init
-```
-
-This command registers a unique worker UUID in your git config. It only needs to run once per clone—subsequent invocations will detect the existing registration and skip initialization.
-
-### Deploy Bundled Skills
-
-The `arm bootstrap` command deploys bundled skills to `.claude/skills/` by default. To refresh skills in your project:
-
-```bash
-arm bootstrap
-```
-
-To make bundled skills available globally to Claude Code agents, use `--global`:
-
-```bash
-arm bootstrap --global
-```
-
-This deploys the bundled skills (`armature`, `coordinator`, `worker`, `planner`, `auditor`) to `~/.claude/skills/`. For other agent platforms, copy the skill files manually to the appropriate skills directory.
 
 ## 3. Register Knowledge Sources
 
@@ -86,47 +58,41 @@ arm decompose-context --sources all > context.json
 arm decompose-apply plan.json
 ```
 
-## 5. Dispatch Work
+## 5. Your First Agent Task
 
-The coordinator loop: find ready tasks, claim each one, render context, dispatch a worker agent, and repeat until the story is done.
+Now your AI agent can pick up work.
 
 ### Find Ready Tasks
 ```bash
 arm ready
-# TASK-001  Write authentication middleware   [ready]
-# TASK-002  Add user profile endpoint         [ready]
 ```
 
-### Claim and Dispatch
+### Claim a Task
 ```bash
-arm claim TASK-001
-arm render-context TASK-001 --format agent
-# Pass the render-context output to your AI agent as its task spec
+arm claim <issue-id>
 ```
 
-### Create a Feature Branch and Complete
+### Get Task Context
+The `render-context` command provides the agent with exactly what it needs to know, minimizing token usage.
 ```bash
-git checkout -b feature/TASK-001
-arm note TASK-001 --msg "Started implementation"
-arm transition TASK-001 --to done --outcome "Implemented auth middleware with JWT support"
+arm render-context <issue-id>
 ```
 
-> `arm transition --to done` rejects transitions on `main`/`master` to enforce
-> the PR workflow. Create a feature branch first, or pass `--force` to override
-> in single-branch repos.
-
-### Loop Until Done
+### Complete the Task
+Once the code changes are made and verified:
 ```bash
-arm ready   # check for the next wave of unblocked tasks
+arm transition --issue <issue-id> --to done --outcome "Implemented the feature X in Y."
 ```
+
+In dual-branch mode, Armature will automatically detect when your PR is merged to promote the task to `merged`.
 
 ## Summary of Commands
 | Command | Purpose |
 | --- | --- |
-| `arm bootstrap` | Initialize Armature and deploy skills in a repo |
+| `arm init` | Initialize Armature in a repo |
 | `arm sources add` | Register a source document |
 | `arm ready` | List tasks ready for work |
-| `arm claim` | Claim a task |
-| `arm render-context` | Assemble task context for an agent |
-| `arm transition` | Record task completion or status change |
+| `arm claim` | Start working on a task |
+| `arm render-context` | Get task-specific context |
+| `arm transition` | Move task to a new status |
 | `arm list --group` | Show project overview grouped by status |

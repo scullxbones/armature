@@ -2,13 +2,12 @@ package validate
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
-	"github.com/scullxbones/armature/internal/dag"
-	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -16,14 +15,11 @@ import (
 )
 
 type Options struct {
-	ScopeID      string
-	ParentID     string
-	Strict       bool
-	ManifestData []byte                 // Pre-read manifest bytes (may be nil/empty if citations not available)
-	Coverage     *traceability.Coverage // Pre-loaded traceability coverage
-	// PreExpandedScopes maps issue ID to pre-expanded file paths (for W10 phantom scope check)
-	// If nil, W10 phantom scope checks are skipped
-	PreExpandedScopes map[string][]string
+	ScopeID   string
+	Strict    bool
+	IssuesDir string
+	StateDir  string
+	RepoPath  string
 }
 
 type Result struct {
@@ -34,24 +30,21 @@ type Result struct {
 	Coverage *traceability.Coverage
 }
 
-func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
+func Validate(state *materialize.State, opts Options) Result {
 	var errors, warnings, infos []string
 
-	targets := issueSubset(state, opts.ScopeID, graph)
-	if opts.ParentID != "" {
-		targets = parentFilter(targets, opts.ParentID)
-	}
+	targets := issueSubset(state, opts.ScopeID)
 
 	errors = append(errors, checkE2E3ParentLinks(targets, state)...)
-	errors = append(errors, checkE4Cycles(targets, graph)...)
+	errors = append(errors, checkE4Cycles(targets, state)...)
 	errors = append(errors, checkE5TypeHierarchy(targets, state)...)
 	errors = append(errors, checkE6RequiredFields(targets)...)
 	errors = append(errors, checkE9DoDLength(targets)...)
 	errors = append(errors, checkE10ScopeGlobs(targets)...)
 	// TODO(E4-S3): E11 check not yet implemented — spec definition pending.
 
-	if len(opts.ManifestData) > 0 {
-		errors = append(errors, checkE7E8E12Citations(targets, opts.ManifestData)...)
+	if opts.IssuesDir != "" {
+		errors = append(errors, checkE7E8E12Citations(targets, opts.IssuesDir)...)
 	}
 
 	warnings = append(warnings, checkW1ScopeOverlap(targets, state)...)
@@ -66,8 +59,17 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	// should warn when a claimed issue's last heartbeat exceeds its ClaimTTL.
 	warnings = append(warnings, checkW11VagueOutcomes(targets)...)
 
-	if opts.PreExpandedScopes != nil {
-		infos = append(infos, checkW10PhantomScope(targets, opts.PreExpandedScopes)...)
+	if opts.RepoPath != "" {
+		infos = append(infos, checkW10PhantomScope(targets, opts.RepoPath)...)
+	}
+
+	var cov *traceability.Coverage
+	if opts.StateDir != "" {
+		tracePath := filepath.Join(opts.StateDir, "traceability.json")
+		c, err := traceability.Read(tracePath)
+		if err == nil {
+			cov = &c
+		}
 	}
 
 	if opts.Strict {
@@ -75,35 +77,27 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 		warnings = nil
 	}
 
-	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
+	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: cov}
 }
 
-func issueSubset(state *materialize.State, scopeID string, graph *dag.Graph) map[string]*materialize.Issue {
+func issueSubset(state *materialize.State, scopeID string) map[string]*materialize.Issue {
 	if scopeID == "" {
 		return state.Issues
 	}
 	subset := make(map[string]*materialize.Issue)
-	// Include the root issue and all its descendants
-	if issue, ok := state.Issues[scopeID]; ok {
-		subset[scopeID] = issue
-	}
-	descendants := graph.Descendants(scopeID)
-	for _, descID := range descendants {
-		if desc, ok := state.Issues[descID]; ok {
-			subset[descID] = desc
-		}
-	}
+	collectSubtree(scopeID, state, subset)
 	return subset
 }
 
-func parentFilter(issues map[string]*materialize.Issue, parentID string) map[string]*materialize.Issue {
-	subset := make(map[string]*materialize.Issue)
-	for id, issue := range issues {
-		if issue.Parent == parentID {
-			subset[id] = issue
-		}
+func collectSubtree(id string, state *materialize.State, out map[string]*materialize.Issue) {
+	issue, ok := state.Issues[id]
+	if !ok {
+		return
 	}
-	return subset
+	out[id] = issue
+	for _, child := range issue.Children {
+		collectSubtree(child, state, out)
+	}
 }
 
 func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materialize.State) []string {
@@ -123,43 +117,53 @@ func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materiali
 	return errs
 }
 
-func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []string {
+func checkE4Cycles(issues map[string]*materialize.Issue, state *materialize.State) []string {
 	var errs []string
-
-	// Convert issues map to scope map for graph.ScopedHasCycle
-	scope := make(map[string]bool)
 	for id := range issues {
-		scope[id] = true
-	}
-
-	// Check for cycles restricted to the scoped issue set (not the entire DAG).
-	// This prevents false positives when a cycle exists elsewhere in the graph.
-	for id := range issues {
-		if graph.ScopedHasCycle(id, scope) {
-			errs = append(errs, fmt.Sprintf("cycle detected: %s", id))
-			break // Report only once to avoid redundant messages
+		if hasCycle(id, state) {
+			errs = append(errs, fmt.Sprintf("cycle detected: %s → ... → %s", id, id))
 		}
 	}
-
 	return errs
+}
+
+func hasCycle(startID string, state *materialize.State) bool {
+	visited := make(map[string]bool)
+	return dfs(startID, startID, visited, state, true)
+}
+
+func dfs(startID, currentID string, visited map[string]bool, state *materialize.State, first bool) bool {
+	if !first && currentID == startID {
+		return true
+	}
+	if visited[currentID] {
+		return false
+	}
+	visited[currentID] = true
+	issue, ok := state.Issues[currentID]
+	if !ok {
+		return false
+	}
+	for _, b := range issue.BlockedBy {
+		if b == startID {
+			return true
+		}
+		if dfs(startID, b, visited, state, false) {
+			return true
+		}
+	}
+	return false
 }
 
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []string {
 	var errs []string
 	for id, issue := range issues {
-		// Terminal issues have already been delivered; skip hierarchy checks for them.
-		if isTerminalStatus(issue.Status) {
-			continue
-		}
 		for _, childID := range issue.Children {
 			child, ok := state.Issues[childID]
 			if !ok {
 				continue
 			}
-			if isTerminalStatus(child.Status) {
-				continue
-			}
-			if !issuetype.IsLegalHierarchy(issue.Type, child.Type) {
+			if !validHierarchy(issue.Type, child.Type) {
 				errs = append(errs, fmt.Sprintf("invalid hierarchy: %s %s cannot parent %s %s",
 					issue.Type, id, child.Type, childID))
 			}
@@ -168,43 +172,52 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 	return errs
 }
 
-// checkE6RequiredFields checks that each issue has the required fields for its type.
+func validHierarchy(parentType, childType string) bool {
+	switch parentType {
+	case "epic":
+		return childType == "story" || childType == "task"
+	case "story":
+		return childType == "task"
+	case "task":
+		return false
+	}
+	return true
+}
+
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []string {
 	var errs []string
 	for id, issue := range issues {
-		// Terminal-status issues have already been delivered; skip required-field checks.
+		if issue.Type != "task" {
+			continue
+		}
+		// Terminal-status tasks have already been delivered; skip required-field checks.
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}
-		for _, field := range issuetype.RequiredFields(issue.Type) {
-			switch field {
-			case "scope":
-				if len(issue.Scope) == 0 {
-					errs = append(errs, fmt.Sprintf("missing required field: scope on %s %s", issue.Type, id))
-				}
-			case "acceptance":
-				if len(issue.Acceptance) == 0 || string(issue.Acceptance) == "null" {
-					errs = append(errs, fmt.Sprintf("missing required field: acceptance on %s %s", issue.Type, id))
-				}
-			case "definition_of_done":
-				if issue.DefinitionOfDone == "" {
-					errs = append(errs, fmt.Sprintf("missing required field: definition_of_done on %s %s", issue.Type, id))
-				}
-			}
+		if len(issue.Scope) == 0 {
+			errs = append(errs, fmt.Sprintf("missing required field: scope on task %s", id))
+		}
+		if len(issue.Acceptance) == 0 || string(issue.Acceptance) == "null" {
+			errs = append(errs, fmt.Sprintf("missing required field: acceptance on task %s", id))
+		}
+		if issue.DefinitionOfDone == "" {
+			errs = append(errs, fmt.Sprintf("missing required field: definition_of_done on task %s", id))
 		}
 	}
 	return errs
 }
 
-func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []byte) []string {
+func checkE7E8E12Citations(issues map[string]*materialize.Issue, issuesDir string) []string {
 	var errs []string
-
-	manifest, err := parseManifestData(manifestData)
+	manifest, err := readManifestForValidate(issuesDir)
 	if err != nil {
-		errs = append(errs, fmt.Sprintf("citation check skipped: cannot parse source manifest: %v", err))
+		// Manifest absent or unreadable — citation checks skipped.
+		// Run `trls sources add` to register sources before validating citations.
+		if !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Sprintf("citation check skipped: cannot read source manifest: %v", err))
+		}
 		return errs
 	}
-
 	for id, issue := range issues {
 		if len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0 {
 			errs = append(errs, fmt.Sprintf("uncited node: %s", id))
@@ -219,10 +232,19 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []
 	return errs
 }
 
-func parseManifestData(manifestData []byte) (map[string]struct{}, error) {
-	m := sources.Manifest{}
-	if err := json.Unmarshal(manifestData, &m); err != nil {
+func readManifestForValidate(issuesDir string) (map[string]struct{}, error) {
+	sourcesPath := filepath.Join(issuesDir, "sources")
+	m, err := sources.ReadManifest(sourcesPath)
+	if err != nil {
 		return nil, err
+	}
+	// ReadManifest returns empty Manifest (not error) when file is absent;
+	// propagate a synthetic ErrNotExist so the caller skips citation checks.
+	if len(m.Entries) == 0 {
+		// Check whether the file actually exists to distinguish absent from empty.
+		if _, statErr := os.Stat(filepath.Join(sourcesPath, "manifest.json")); os.IsNotExist(statErr) {
+			return nil, os.ErrNotExist
+		}
 	}
 	result := make(map[string]struct{}, len(m.Entries))
 	for id := range m.Entries {
@@ -259,9 +281,6 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	var warns []string
 	byParent := make(map[string][]*materialize.Issue)
 	for _, issue := range issues {
-		if issue.Type != "task" || isTerminalStatus(issue.Status) {
-			continue
-		}
 		byParent[issue.Parent] = append(byParent[issue.Parent], issue)
 	}
 	for _, siblings := range byParent {
@@ -286,7 +305,17 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 // hasSerialDependency returns true if a blocks b or b blocks a,
 // meaning the two tasks execute serially and a shared scope is intentional.
 func hasSerialDependency(a, b *materialize.Issue) bool {
-	return slices.Contains(a.Blocks, b.ID) || slices.Contains(b.Blocks, a.ID)
+	for _, id := range a.Blocks {
+		if id == b.ID {
+			return true
+		}
+	}
+	for _, id := range b.Blocks {
+		if id == a.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func scopeIntersection(a, b []string) []string {
@@ -376,9 +405,7 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 			dirs[filepath.Dir(glob)] = struct{}{}
 		}
 		if len(dirs) >= 3 {
-			warns = append(warns, fmt.Sprintf(
-				"missing context_files on %s with broad scope — split the task into smaller pieces or narrow scope via: arm amend %s --scope <glob>",
-				id, id))
+			warns = append(warns, fmt.Sprintf("missing context_files on %s with broad scope — split the task into smaller pieces or narrow scope via: arm amend %s --scope <glob>", id, id))
 		}
 	}
 	return warns
@@ -425,21 +452,8 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []string 
 	var warns []string
 	for id, issue := range issues {
 		byTopic := make(map[string][]string)
-		seenByTopic := make(map[string]map[string]struct{})
 		for _, d := range issue.Decisions {
-			topic := strings.TrimSpace(d.Topic)
-			choice := strings.TrimSpace(d.Choice)
-			if topic == "" || choice == "" {
-				continue
-			}
-			if seenByTopic[topic] == nil {
-				seenByTopic[topic] = make(map[string]struct{})
-			}
-			if _, seen := seenByTopic[topic][choice]; seen {
-				continue
-			}
-			seenByTopic[topic][choice] = struct{}{}
-			byTopic[topic] = append(byTopic[topic], choice)
+			byTopic[d.Topic] = append(byTopic[d.Topic], d.Choice)
 		}
 		for topic, choices := range byTopic {
 			if len(choices) > 1 {
@@ -451,70 +465,28 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []string 
 	return warns
 }
 
-func isTerminalStatus(status string) bool {
-	return status == ops.StatusMerged || status == ops.StatusDone || status == ops.StatusCancelled
-}
-
-func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string) []string {
+func checkW10PhantomScope(issues map[string]*materialize.Issue, repoPath string) []string {
 	var warns []string
 	for id, issue := range issues {
 		// Terminal-status issues have already been delivered; their scope no longer needs to exist.
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}
-		expandedFiles, ok := preExpandedScopes[id]
-		if !ok {
-			// No pre-expanded data for this issue; skip check
-			continue
-		}
-
-		// If expandedFiles is not empty, at least some globs matched files
-		// If it's empty, no globs matched any files
-		hasMatches := len(expandedFiles) > 0
-
-		// Check each scope entry against the expanded files
 		for _, entry := range issue.Scope {
 			// Legacy ops may store multiple comma-separated paths as one entry; check each individually.
-			for _, path := range splitSeq(entry, ", ") {
-				path = strings.TrimSpace(path) // trim whitespace
+			for path := range strings.SplitSeq(entry, ", ") {
 				// "(new)" entries are planned files not yet created; skip them.
-				if hasNewSuffix(path) {
+				if strings.HasSuffix(path, " (new)") {
 					continue
 				}
-				// Determine if this path is phantom
-				isPhantom := false
-				if !hasMatches {
-					// No files matched any globs — this entry is phantom
-					isPhantom = true
-				} else if !isGlobPattern(path) && !slices.Contains(expandedFiles, path) {
-					// This is a literal path and it doesn't appear in the expanded files
-					isPhantom = true
-				}
-				// If it's a glob pattern and we have matches, assume it matched (can't validate further without the glob)
-
-				if isPhantom {
+				matches, err := filepath.Glob(filepath.Join(repoPath, path))
+				if err != nil || len(matches) == 0 {
 					warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id))
 				}
 			}
 		}
 	}
 	return warns
-}
-
-// isGlobPattern checks if a string contains glob characters
-func isGlobPattern(s string) bool {
-	return strings.ContainsAny(s, "*?[]")
-}
-
-// splitSeq is a helper that splits a string on a separator using strings.Split.
-func splitSeq(s, sep string) []string {
-	return strings.Split(s, sep)
-}
-
-// hasNewSuffix checks if a string ends with " (new)".
-func hasNewSuffix(s string) bool {
-	const newSuffix = " (new)"
-	return len(s) >= len(newSuffix) && s[len(s)-len(newSuffix):] == newSuffix
 }
 
 const minOutcomeLength = 20
@@ -532,8 +504,11 @@ func checkW11VagueOutcomes(issues map[string]*materialize.Issue) []string {
 			warns = append(warns, fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)))
 			continue
 		}
-		if slices.Contains(vagueOutcomes, lower) {
-			warns = append(warns, fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)))
+		for _, vague := range vagueOutcomes {
+			if lower == vague {
+				warns = append(warns, fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)))
+				break
+			}
 		}
 	}
 	return warns

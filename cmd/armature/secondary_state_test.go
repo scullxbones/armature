@@ -14,7 +14,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// 1. Initialize armature and worker
-	_, err := runTrls(t, repo, "bootstrap")
+	_, err := runTrls(t, repo, "init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -42,11 +42,11 @@ func TestSecondaryStatePaths(t *testing.T) {
 	require.NoError(t, err)
 	for _, entry := range entries {
 		if entry.Name() != workerID {
-			_ = os.RemoveAll(filepath.Join(repo, ".armature", "state", entry.Name())) //nolint:errcheck // test cleanup; error not actionable
+			_ = os.RemoveAll(filepath.Join(repo, ".armature", "state", entry.Name()))
 		}
 	}
 	// Also ensure no index.json in .armature directly (though it shouldn't be there anyway)
-	_ = os.Remove(filepath.Join(repo, ".armature", "index.json")) //nolint:errcheck // test cleanup; error not actionable
+	_ = os.Remove(filepath.Join(repo, ".armature", "index.json"))
 
 	// 4. Verify secondary commands work using ONLY the worker-specific state
 

@@ -7,7 +7,6 @@ import (
 )
 
 func TestWriteAndReadCache(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	data := []byte("cached content")
 
@@ -25,7 +24,6 @@ func TestWriteAndReadCache(t *testing.T) {
 }
 
 func TestReadCache_Missing_ReturnsNil(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 
 	got, err := sources.ReadCache(dir, "nonexistent")
@@ -38,7 +36,6 @@ func TestReadCache_Missing_ReturnsNil(t *testing.T) {
 }
 
 func TestManifestGet_NilEntries_ReturnsFalse(t *testing.T) {
-	t.Parallel()
 	var m sources.Manifest
 	_, ok := m.Get("any")
 	if ok {
@@ -47,7 +44,6 @@ func TestManifestGet_NilEntries_ReturnsFalse(t *testing.T) {
 }
 
 func TestManifestGet_NotFound_ReturnsFalse(t *testing.T) {
-	t.Parallel()
 	m := sources.Manifest{}
 	m.Upsert(sources.SourceEntry{ID: "a", URL: "/a"})
 
@@ -58,7 +54,6 @@ func TestManifestGet_NotFound_ReturnsFalse(t *testing.T) {
 }
 
 func TestManifestGet_Found_ReturnsEntry(t *testing.T) {
-	t.Parallel()
 	m := sources.Manifest{}
 	m.Upsert(sources.SourceEntry{ID: "a", URL: "/a", Title: "Alpha"})
 
@@ -72,7 +67,6 @@ func TestManifestGet_Found_ReturnsEntry(t *testing.T) {
 }
 
 func TestWriteManifest_RoundTrip(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	m := sources.Manifest{}
 	m.Upsert(sources.SourceEntry{ID: "doc-1", URL: "/docs/1", Title: "Doc One"})

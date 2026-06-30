@@ -2,17 +2,15 @@
 package doctor
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
@@ -69,12 +67,11 @@ var issueIDPattern = regexp.MustCompile(`\b([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+
 // or git (D1). It accepts pre-loaded data, making it testable without I/O.
 // Pass nil for allIssues and opsLog to skip those checks.
 // repoPath is used for D1; pass "" to skip D1.
-// now is used for D2 stale claim detection.
-func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string, now time.Time) Report {
+func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string) Report {
 	var checks []Finding
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
-	checks = append(checks, checkD2StaleClaims(allIssues, now))
+	checks = append(checks, checkD2StaleClaims(allIssues))
 	checks = append(checks, checkD3OrphanedOpsFromList(index, opsTargetIDs))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
@@ -85,21 +82,10 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 
 // Run executes all health checks and returns a Report.
 // verbose=true adds file path and line context to D3 violations via VerboseItems.
-// now is used for D2 stale claim detection.
-func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now time.Time) (Report, error) {
+func Run(issuesDir string, stateDir string, repoPath string, verbose bool) (Report, error) {
 	singleBranch := true // single-branch is the default for doctor
 
-	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
-	opsDir := filepath.Join(issuesDir, "ops")
-	opItems, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
-	if err != nil {
-		return Report{}, fmt.Errorf("read ops: %w", err)
-	}
-
-	// Extract ops from OpItems
-	allOps := ops.ExtractOps(opItems)
-
-	if _, err := materialize.Materialize(stateDir, allOps, singleBranch, nil); err != nil {
+	if _, err := materialize.Materialize(issuesDir, stateDir, singleBranch); err != nil {
 		return Report{}, fmt.Errorf("materialize: %w", err)
 	}
 
@@ -114,31 +100,14 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 		return Report{}, fmt.Errorf("load issues: %w", err)
 	}
 
-	// Extract target IDs from ops for D3 check
-	opsTargetIDs := make([]string, 0, len(allOps))
-	for _, op := range allOps {
-		if op.Type != ops.OpSourceFingerprint && op.TargetID != "" {
-			opsTargetIDs = append(opsTargetIDs, op.TargetID)
-		}
-	}
-
-	// Build verbose context from OpItems metadata
-	var verboseD3Context map[string][]opLocation
-	if verbose {
-		verboseD3Context = buildLocationMapFromOpItems(opItems)
-	} else {
-		verboseD3Context = make(map[string][]opLocation)
-	}
-
 	var checks []Finding
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
-	checks = append(checks, checkD2StaleClaims(allIssues, now))
-	checks = append(checks, checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, verboseD3Context))
+	checks = append(checks, checkD2StaleClaims(allIssues))
+	checks = append(checks, checkD3OrphanedOps(issuesDir, index, verbose))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
-	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
 
 	return Report{Checks: checks}, nil
 }
@@ -149,7 +118,7 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 		path := filepath.Join(stateDir, "issues", id+".json")
 		issue, err := materialize.LoadIssue(path)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
+			if os.IsNotExist(err) {
 				continue
 			}
 			return nil, fmt.Errorf("load issue %s: %w", id, err)
@@ -163,38 +132,32 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 // D1: git/armature divergence — scan git log for issue IDs referenced in commits
 // that are not in done/merged state.
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
-	out, err := adapters.GitLog(repoPath, "--oneline", "--no-merges", "--pretty=%s")
-	if err != nil {
-		return Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
-	}
-
-	lines := strings.Split(out, "\n")
-	statuses := make(map[string]string, len(index))
-	for id, entry := range index {
-		statuses[id] = entry.Status
-	}
-	return EvaluateD1GitDivergence(lines, statuses)
-}
-
-// EvaluateD1GitDivergence evaluates already-collected git subjects and issue statuses.
-func EvaluateD1GitDivergence(commitSubjects []string, statuses map[string]string) Finding {
 	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
+
+	cmd := exec.Command("git", "-C", repoPath, "log", "--oneline", "--no-merges", "--pretty=%s")
+	out, err := cmd.Output()
+	if err != nil {
+		// Not a git repo or no commits — skip
+		return f
+	}
+
+	lines := strings.Split(string(out), "\n")
 	seen := make(map[string]bool)
 	var diverged []string
 
-	for _, line := range commitSubjects {
+	for _, line := range lines {
 		matches := issueIDPattern.FindAllString(line, -1)
 		for _, id := range matches {
 			if seen[id] {
 				continue
 			}
 			seen[id] = true
-			status, ok := statuses[id]
+			entry, ok := index[id]
 			if !ok {
 				continue
 			}
-			if status != "done" && status != "merged" {
-				diverged = append(diverged, fmt.Sprintf("%s (%s)", id, status))
+			if entry.Status != "done" && entry.Status != "merged" {
+				diverged = append(diverged, fmt.Sprintf("%s (%s)", id, entry.Status))
 			}
 		}
 	}
@@ -209,10 +172,10 @@ func EvaluateD1GitDivergence(commitSubjects []string, statuses map[string]string
 }
 
 // D2: stale claims — issues in claimed state with expired TTL.
-func checkD2StaleClaims(allIssues map[string]*materialize.Issue, now time.Time) Finding {
+func checkD2StaleClaims(allIssues map[string]*materialize.Issue) Finding {
 	f := Finding{Check: "D2", Severity: SeverityOK, Message: "No stale claims"}
 
-	stale := ready.StaleClaims(allIssues, now)
+	stale := ready.StaleClaims(allIssues, time.Now())
 	if len(stale) > 0 {
 		f.Severity = SeverityWarning
 		f.Message = "Claimed issues with expired TTL"
@@ -227,36 +190,54 @@ type opLocation struct {
 	line int
 }
 
-// buildLocationMapFromOpItems builds a location map from OpItem metadata.
-// Each OpItem contains the physical line number in its source log file.
-// We use this directly for D3 verbose output.
-func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
-	result := make(map[string][]opLocation)
-
-	// Group by target ID
-	targetToLocs := make(map[string][]opLocation)
-	for _, item := range items {
-		targetID := item.Op.TargetID
-		logName := filepath.Base(item.LogFilename)
-		loc := opLocation{file: logName, line: item.LineNumber}
-		targetToLocs[targetID] = append(targetToLocs[targetID], loc)
-	}
-
-	// Copy to result, removing duplicates and sorting
-	for targetID, locs := range targetToLocs {
-		if len(locs) > 0 {
-			result[targetID] = locs
+// D3: orphaned ops — op files referencing issue IDs not in the graph.
+// When verbose=true, VerboseItems is populated with "id (file:line, ...)" context.
+func checkD3OrphanedOps(issuesDir string, index materialize.Index, verbose bool) Finding {
+	opsDir := filepath.Join(issuesDir, "ops")
+	entries, err := os.ReadDir(opsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Finding{Check: "D3", Severity: SeverityOK, Message: "No orphaned ops"}
+		}
+		return Finding{
+			Check:    "D3",
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("Cannot read ops directory: %v", err),
 		}
 	}
-	return result
-}
 
-// checkD3OrphanedOpsFromListWithContext checks for orphaned ops given a flat list of target IDs
-// and optional verbose context (file:line locations).
-func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []string, locations map[string][]opLocation) Finding {
+	var targetIDs []string
+	// locations maps targetID -> list of op log file:line references (verbose mode only).
+	locations := make(map[string][]opLocation)
+
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		logPath := filepath.Join(opsDir, entry.Name())
+		logOps, err := ops.ReadLog(logPath)
+		if err != nil {
+			continue
+		}
+		for lineNum, op := range logOps {
+			if op.Type == ops.OpSourceFingerprint {
+				continue
+			}
+			if op.TargetID != "" {
+				targetIDs = append(targetIDs, op.TargetID)
+				if verbose {
+					locations[op.TargetID] = append(locations[op.TargetID], opLocation{
+						file: entry.Name(),
+						line: lineNum + 1,
+					})
+				}
+			}
+		}
+	}
+
 	f := checkD3OrphanedOpsFromList(index, targetIDs)
 
-	if f.Severity == SeverityError && len(f.Items) > 0 && len(locations) > 0 {
+	if verbose && f.Severity == SeverityError && len(f.Items) > 0 {
 		orphanedSet := make(map[string]bool, len(f.Items))
 		for _, id := range f.Items {
 			orphanedSet[id] = true
@@ -330,45 +311,17 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 	return f
 }
 
-// indexToDagNodes converts a materialize.Index to a map of dag.Node pointers.
-// Only blocked_by edges are converted; parent-child hierarchy is preserved.
-// Children is set to nil to ensure HasCycle() only traverses blocked_by edges.
-func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
-	nodes := make(map[string]*dag.Node)
-	for id, entry := range index {
-		// Defensive copy of BlockedBy slice
-		blockedBy := make([]string, len(entry.BlockedBy))
-		copy(blockedBy, entry.BlockedBy)
-		nodes[id] = &dag.Node{
-			ID:        id,
-			Title:     entry.Title,
-			Type:      entry.Type,
-			Parent:    entry.Parent,
-			Children:  nil,
-			BlockedBy: blockedBy,
-			Blocks:    entry.Blocks,
-		}
-	}
-	return nodes
-}
-
 // D5: dependency cycles — blocked_by chains that form a cycle.
 func checkD5DependencyCycles(index materialize.Index) Finding {
 	f := Finding{Check: "D5", Severity: SeverityOK, Message: "No dependency cycles"}
 
-	// Use dag.Graph.HasCycle() for fast cycle detection.
-	dagNodes := indexToDagNodes(index)
-	graphIndex := dag.FromIndex(dagNodes)
-	if !graphIndex.HasCycle() {
-		return f
-	}
-
-	// Cycle detected. Collect cycle edges using simplified blocked_by-only DFS.
+	// Build adjacency list from blocked_by.
 	adj := make(map[string][]string)
 	for id, entry := range index {
 		adj[id] = entry.BlockedBy
 	}
 
+	// DFS cycle detection.
 	const (
 		colorWhite = 0
 		colorGray  = 1
@@ -429,29 +382,6 @@ func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 		f.Severity = SeverityWarning
 		f.Message = "Issues without source-link or accept-citation"
 		f.Items = uncited
-	}
-	return f
-}
-
-func filterMismatchWarnings(warnings []string) []string {
-	var out []string
-	for _, w := range warnings {
-		if strings.HasPrefix(w, "worker ID mismatch") {
-			out = append(out, w)
-		}
-	}
-	return out
-}
-
-// D7: worker-ID mismatches — ops that were excluded from the validated stream due to worker-ID mismatches.
-func checkD7WorkerIDMismatches(warnings []string) Finding {
-	f := Finding{Check: "D7", Severity: SeverityOK, Message: "No worker-ID mismatches detected"}
-
-	if len(warnings) > 0 {
-		sort.Strings(warnings)
-		f.Severity = SeverityWarning
-		f.Message = "Worker-ID mismatched ops detected"
-		f.Items = warnings
 	}
 	return f
 }

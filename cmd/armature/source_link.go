@@ -37,9 +37,7 @@ func newSourceLinkCmd() *cobra.Command {
 				return fmt.Errorf("source-id %q not found in manifest", sourceID)
 			}
 
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -55,12 +53,12 @@ func newSourceLinkCmd() *cobra.Command {
 						SourceURL: entry.URL,
 					},
 				}
-				if err := appendLowStakesOp(state, logPath, op); err != nil {
+				if err := appendLowStakesOp(logPath, op); err != nil {
 					return err
 				}
 
 				result := map[string]string{"issue": issueID, "source_id": sourceID, "source_url": entry.URL}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+				data, _ := json.Marshal(result)
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			}
 			return nil

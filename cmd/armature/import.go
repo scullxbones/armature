@@ -23,7 +23,7 @@ func newImportCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filePath := args[0]
 
-			data, err := os.ReadFile(filePath) //nolint:gosec // G304: filePath is a user-supplied import file argument
+			data, err := os.ReadFile(filePath)
 			if err != nil {
 				return fmt.Errorf("read file: %w", err)
 			}
@@ -49,7 +49,7 @@ func newImportCmd() *cobra.Command {
 					for i, item := range items {
 						ids[i] = item.ID
 					}
-					out, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck // map contains only serializable values
+					out, _ := json.Marshal(map[string]interface{}{
 						"created":   len(items),
 						"issue_ids": ids,
 						"dry_run":   true,
@@ -61,9 +61,7 @@ func newImportCmd() *cobra.Command {
 				return nil
 			}
 
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLog()
 			if err != nil {
 				return err
 			}
@@ -82,7 +80,7 @@ func newImportCmd() *cobra.Command {
 						Scope:    item.Scope,
 					},
 				}
-				if err := appendLowStakesOp(state, logPath, createOp); err != nil {
+				if err := appendLowStakesOp(logPath, createOp); err != nil {
 					return fmt.Errorf("emit create op for %s: %w", item.ID, err)
 				}
 				createdIDs = append(createdIDs, item.ID)
@@ -97,7 +95,7 @@ func newImportCmd() *cobra.Command {
 							SourceID: source,
 						},
 					}
-					if err := appendLowStakesOp(state, logPath, sourceLinkOp); err != nil {
+					if err := appendLowStakesOp(logPath, sourceLinkOp); err != nil {
 						return fmt.Errorf("emit source-link op for %s: %w", item.ID, err)
 					}
 				}
@@ -105,7 +103,7 @@ func newImportCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
-				out, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck // map contains only serializable values
+				out, _ := json.Marshal(map[string]interface{}{
 					"created":   len(createdIDs),
 					"issue_ids": createdIDs,
 				})

@@ -3,8 +3,8 @@ package decompose
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
-	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -34,11 +34,6 @@ func DryRunRevertPlan(plan *Plan, state *materialize.State) (*DryRunRevertResult
 // RevertPlan appends cancel ops for each issue in the plan that exists in state with status "open".
 // Returns count of issues cancelled.
 func RevertPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State) (int, error) {
-	return RevertPlanWithOptions(plan, issuesDir, workerID, state, clock.System)
-}
-
-// RevertPlanWithOptions is like RevertPlan but accepts a clock.Clock parameter.
-func RevertPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *materialize.State, clk clock.Clock) (int, error) {
 	logPath := filepath.Join(issuesDir, workerID+".log")
 	count := 0
 
@@ -54,7 +49,7 @@ func RevertPlanWithOptions(plan *Plan, issuesDir string, workerID string, state 
 		op := ops.Op{
 			Type:      ops.OpTransition,
 			TargetID:  issue.ID,
-			Timestamp: clk(),
+			Timestamp: time.Now().Unix(),
 			WorkerID:  workerID,
 			Payload: ops.Payload{
 				To: ops.StatusCancelled,

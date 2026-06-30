@@ -4,17 +4,17 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"path/filepath"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
 // MaterializeAtSHA replays all op log files at the given commit SHA and returns
 // the resulting materialized state. opsPrefix is the path within the git tree
 // where log files are stored (e.g., "ops" or ".armature/ops").
-func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*State, error) {
-	files, err := history.ListFilesAtCommit(sha)
+func MaterializeAtSHA(gc *git.Client, sha string, opsPrefix string) (*State, error) {
+	files, err := gc.ListFilesAtCommit(sha)
 	if err != nil {
 		return nil, fmt.Errorf("list files at %s: %w", sha, err)
 	}
@@ -30,13 +30,9 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 			continue
 		}
 
-		expectedWorkerID := strings.TrimSuffix(filepath.Base(f), ".log")
-		legacyWorkerID := expectedWorkerID
-		if i := strings.Index(expectedWorkerID, "~"); i >= 0 {
-			legacyWorkerID = expectedWorkerID[:i]
-		}
+		workerID := ops.WorkerIDFromFilename(f)
 
-		content, err := history.ShowFileAtCommit(sha, f)
+		content, err := gc.ShowFileAtCommit(sha, f)
 		if err != nil {
 			return nil, fmt.Errorf("show file %s at %s: %w", f, sha, err)
 		}
@@ -53,7 +49,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 				// Skip corrupt lines
 				continue
 			}
-			if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+			if op.WorkerID != workerID {
 				continue
 			}
 			allOps = append(allOps, op)

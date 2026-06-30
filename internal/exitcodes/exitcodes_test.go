@@ -7,7 +7,6 @@ import (
 )
 
 func TestExitCodeValues(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		name     string
 		code     exitcodes.Code
@@ -24,7 +23,6 @@ func TestExitCodeValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			if int(tt.code) != tt.expected {
 				t.Errorf("expected %s = %d, got %d", tt.name, tt.expected, int(tt.code))
 			}
@@ -33,7 +31,6 @@ func TestExitCodeValues(t *testing.T) {
 }
 
 func TestExitCodeDistinct(t *testing.T) {
-	t.Parallel()
 	seen := map[int]exitcodes.Code{}
 	all := []exitcodes.Code{
 		exitcodes.ExitSuccess,
@@ -54,7 +51,6 @@ func TestExitCodeDistinct(t *testing.T) {
 }
 
 func TestExitCodeInt(t *testing.T) {
-	t.Parallel()
 	// Verify Code.Int() returns the integer value.
 	if exitcodes.ExitSuccess.Int() != 0 {
 		t.Errorf("ExitSuccess.Int() expected 0, got %d", exitcodes.ExitSuccess.Int())
@@ -68,7 +64,6 @@ func TestExitCodeInt(t *testing.T) {
 }
 
 func TestExitCodeString(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		code exitcodes.Code
 		want string
@@ -83,7 +78,6 @@ func TestExitCodeString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			t.Parallel()
 			if tt.code.String() != tt.want {
 				t.Errorf("expected String() = %q, got %q", tt.want, tt.code.String())
 			}

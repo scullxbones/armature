@@ -12,7 +12,6 @@ import (
 )
 
 func TestParsePlan_Valid(t *testing.T) {
-	t.Parallel()
 	plan := Plan{
 		Version: 1,
 		Title:   "Test Plan",
@@ -36,7 +35,6 @@ func TestParsePlan_Valid(t *testing.T) {
 }
 
 func TestParsePlan_InvalidVersion(t *testing.T) {
-	t.Parallel()
 	plan := Plan{
 		Version: 2,
 		Title:   "Bad Plan",
@@ -54,14 +52,12 @@ func TestParsePlan_InvalidVersion(t *testing.T) {
 }
 
 func TestParsePlan_MissingFile(t *testing.T) {
-	t.Parallel()
 	tmpDir := t.TempDir()
 	_, err := ParsePlan(filepath.Join(tmpDir, "nonexistent.json"))
 	require.Error(t, err)
 }
 
 func TestParsePlan_InvalidJSON(t *testing.T) {
-	t.Parallel()
 	tmpFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte("{invalid json"), 0644))
 

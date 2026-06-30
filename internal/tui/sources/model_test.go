@@ -9,7 +9,6 @@ import (
 )
 
 func TestSourcesInit(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init should return nil")
@@ -17,13 +16,11 @@ func TestSourcesInit(t *testing.T) {
 }
 
 func TestSourcesSetSize(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	m.SetSize(80, 24) // must not panic
 }
 
 func TestSourcesHelpBar(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	h := m.HelpBar()
 	if !strings.Contains(h, "q quit") {
@@ -32,7 +29,6 @@ func TestSourcesHelpBar(t *testing.T) {
 }
 
 func TestSourcesUpdate(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	screen, cmd := m.Update(nil)
 	if screen == nil {
@@ -44,7 +40,6 @@ func TestSourcesUpdate(t *testing.T) {
 }
 
 func TestSourcesNilStateView(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	v := m.View()
 	if !strings.Contains(v, "No state available") {
@@ -53,7 +48,6 @@ func TestSourcesNilStateView(t *testing.T) {
 }
 
 func TestSourcesEmptySourcesView(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	m.SetState(materialize.NewState())
 	v := m.View()
@@ -63,7 +57,6 @@ func TestSourcesEmptySourcesView(t *testing.T) {
 }
 
 func TestSourcesScreen(t *testing.T) {
-	t.Parallel()
 	m := sources.New()
 	state := materialize.NewState()
 	state.Issues["T1"] = &materialize.Issue{ID: "T1", Type: "task", SourceLinks: []materialize.SourceLink{{SourceEntryID: "SRC-1"}}}

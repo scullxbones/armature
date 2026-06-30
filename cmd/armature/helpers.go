@@ -9,26 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
+	"github.com/scullxbones/armature/internal/git"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
-	"github.com/spf13/cobra"
 )
-
-// adapterExitError represents a hook exit code from the platform adapter.
-// Exit-status-based blocking platforms return non-zero codes to signal blocking
-// to the platform's process exit mechanism.
-type adapterExitError struct {
-	code int
-}
-
-func (e adapterExitError) Error() string {
-	return fmt.Sprintf("hook blocked with exit code %d", e.code)
-}
 
 // jsonErrorPayload is the structured JSON error format emitted to stderr when
 // --format=json or --format=agent is active.
@@ -46,8 +33,8 @@ func writeJSONError(w io.Writer, msg string, code exitcodes.Code) {
 		Code:     code.String(),
 		ExitCode: code.Int(),
 	}
-	b, _ := json.Marshal(payload) //nolint:errcheck // payload contains only serializable values
-	fmt.Fprintln(w, string(b))
+	b, _ := json.Marshal(payload)
+	fmt.Fprintln(w, string(b)) //nolint:errcheck // writing to stderr; nothing useful to do on failure
 }
 
 // classifyError maps a Go error to the most specific exitcodes.Code.
@@ -80,46 +67,11 @@ func classifyError(err error) exitcodes.Code {
 	}
 }
 
-type executionState struct {
-	ctx     *config.Context
-	pusher  ops.Pusher
-	tracker ops.PendingPushTracker
-}
-
-type executionStateKey struct{}
-
+// pushDeps holds push-related dependencies set up by initPushDeps.
 var (
-	appCtx     *config.Context
 	appPusher  ops.Pusher
 	appTracker ops.PendingPushTracker
 )
-
-func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
-	if cmd == nil {
-		return nil, fmt.Errorf("command context unavailable")
-	}
-	raw := cmd.Context()
-	if raw == nil {
-		return nil, fmt.Errorf("command context unavailable")
-	}
-	state, _ := raw.Value(executionStateKey{}).(*executionState) //nolint:errcheck // comma-ok form; nil check follows immediately
-	if state == nil || state.ctx == nil {
-		return nil, fmt.Errorf("command execution state unavailable")
-	}
-	return state, nil
-}
-
-func mustState(cmd *cobra.Command) *executionState {
-	state, err := stateFromCmd(cmd)
-	if err != nil {
-		panic(err)
-	}
-	return state
-}
-
-func currentCtx(cmd *cobra.Command) *config.Context {
-	return mustState(cmd).ctx
-}
 
 // stateDirFor returns the worker-specific state directory.
 // In dual-branch mode, state lives at the worktree root (not inside .armature/).
@@ -130,32 +82,17 @@ func stateDirFor(ctx *config.Context, workerID string) string {
 	return filepath.Join(ctx.IssuesDir, "state", workerID)
 }
 
-func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
-	if ctx == nil {
-		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
-	}
-	workerID, err := worker.GetWorkerID(ctx.RepoPath)
+func resolveWorkerAndLog() (string, string, error) {
+	workerID, err := worker.GetWorkerID(appCtx.RepoPath)
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
-	ownerID := workerIdentityWithSlot(workerID)
-	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, ownerID)
-	return ownerID, logPath, nil
-}
-
-func workerIdentityWithSlot(workerID string) string {
-	if slot := os.Getenv("ARM_LOG_SLOT"); slot != "" {
-		return workerID + "~" + slot
+	logName := workerID
+	if slot := os.Getenv("TRLS_LOG_SLOT"); slot != "" {
+		logName = workerID + "~" + slot
 	}
-	return workerID
-}
-
-func baseWorkerIdentity(workerID string) string {
-	before, _, found := strings.Cut(workerID, "~")
-	if found {
-		return before
-	}
-	return workerID
+	logPath := fmt.Sprintf("%s/ops/%s.log", appCtx.IssuesDir, logName)
+	return workerID, logPath, nil
 }
 
 func nowEpoch() int64 {
@@ -165,95 +102,86 @@ func nowEpoch() int64 {
 // initPushDeps wires up the pusher and tracker based on the current context.
 // In single-branch mode: NoPusher + NoTracker.
 // In dual-branch mode: AppendCommitAndPush with FilePushTracker.
-func initPushDeps(ctx *config.Context) (ops.Pusher, ops.PendingPushTracker) {
-	if ctx.WorktreePath == "" {
-		return ops.NoPusher{}, ops.NoTracker{}
+func initPushDeps() {
+	if appCtx.WorktreePath == "" {
+		// single-branch: no push needed
+		appPusher = ops.NoPusher{}
+		appTracker = ops.NoTracker{}
+		return
 	}
-	gc := adapters.New(ctx.WorktreePath)
-	return &ops.AppendCommitAndPush{
+	gc := git.New(appCtx.WorktreePath)
+	appPusher = &ops.AppendCommitAndPush{
 		Pusher:  gc,
 		Branch:  "_armature",
 		Backoff: nil, // use defaults: 1s, 2s, 4s
-	}, ops.NewFilePushTracker(ctx.StateDir)
+	}
+	appTracker = ops.NewFilePushTracker(appCtx.StateDir)
 }
 
 // appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.
-func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
-	if ctx == nil {
-		return fmt.Errorf("appendOp: command context unavailable")
-	}
+func appendOp(logPath string, op ops.Op) error {
 	var gc ops.GitCommitter
-	if ctx.WorktreePath != "" {
-		gc = adapters.New(ctx.WorktreePath)
+	if appCtx.WorktreePath != "" {
+		gc = git.New(appCtx.WorktreePath)
 	}
-	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc)
+	return ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc)
 }
 
 // appendHighStakesOp appends an op, commits it (dual-branch), and attempts to push.
 // Push errors are best-effort — the op is still committed locally.
 // Used for claim, transition, assign, unassign — ops that must not be delayed.
-func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
-	if state == nil || state.ctx == nil {
-		return fmt.Errorf("appendHighStakesOp: command context unavailable")
-	}
-	ctx := state.ctx
-	tracker := state.tracker
+func appendHighStakesOp(logPath string, op ops.Op) error {
 	var gc ops.GitCommitter
-	if ctx.WorktreePath != "" {
-		gc = adapters.New(ctx.WorktreePath)
+	if appCtx.WorktreePath != "" {
+		gc = git.New(appCtx.WorktreePath)
 	}
 	// Append and commit — this is not best-effort
-	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
+	if err := ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc); err != nil {
 		return err
 	}
 	// Push is best-effort: push via the pusher (which handles retries) but ignore errors
-	if ctx.WorktreePath != "" {
+	if appCtx.WorktreePath != "" {
 		// Use the underlying git client for push attempts
-		gc2 := adapters.New(ctx.WorktreePath)
+		gc2 := git.New(appCtx.WorktreePath)
 		if err := gc2.Push("_armature"); err != nil {
 			// Best-effort: attempt fetch+rebase and retry once
 			if rbErr := gc2.FetchAndRebase("_armature"); rbErr == nil {
-				gc2.Push("_armature") //nolint:errcheck,gosec
+				gc2.Push("_armature") //nolint:errcheck
 			}
 		}
-		tracker.Reset() //nolint:errcheck,gosec
+		appTracker.Reset() //nolint:errcheck
 	}
 	return nil
 }
 
 // appendLowStakesOp appends an op, increments the pending counter, and only
 // pushes when the threshold is reached.
-func appendLowStakesOp(state *executionState, logPath string, op ops.Op) error {
-	if state == nil || state.ctx == nil {
-		return fmt.Errorf("appendLowStakesOp: command context unavailable")
-	}
-	ctx := state.ctx
-	tracker := state.tracker
+func appendLowStakesOp(logPath string, op ops.Op) error {
 	var gc ops.GitCommitter
-	if ctx.WorktreePath != "" {
-		gc = adapters.New(ctx.WorktreePath)
+	if appCtx.WorktreePath != "" {
+		gc = git.New(appCtx.WorktreePath)
 	}
-	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
+	if err := ops.AppendAndCommit(logPath, appCtx.WorktreePath, op, gc); err != nil {
 		return err
 	}
 
-	threshold := ctx.Config.LowStakesPushThreshold
+	threshold := appCtx.Config.LowStakesPushThreshold
 	if threshold <= 0 {
 		threshold = 5
 	}
 
-	n, err := tracker.Increment()
+	n, err := appTracker.Increment()
 	if err != nil {
 		return err
 	}
 
 	if n >= threshold {
 		// Push now and reset counter
-		if ctx.WorktreePath != "" {
-			pushGC := adapters.New(ctx.WorktreePath)
+		if appCtx.WorktreePath != "" {
+			pushGC := git.New(appCtx.WorktreePath)
 			_ = pushGC // push happens via AppendCommitAndPush on next high-stakes op
 		}
-		tracker.Reset() //nolint:errcheck,gosec
+		appTracker.Reset() //nolint:errcheck
 	}
 	return nil
 }
@@ -293,10 +221,6 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 			value = issue.AssignedWorker
 		case "claimed_by":
 			value = issue.ClaimedBy
-		case "blocked_by":
-			value = renderStringSlice(issue.BlockedBy)
-		case "blocks":
-			value = renderStringSlice(issue.Blocks)
 		default:
 			value = ""
 		}
@@ -304,59 +228,4 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 	}
 
 	return result
-}
-
-func renderStringSlice(values []string) string {
-	if len(values) == 0 {
-		return "[]"
-	}
-	rendered, err := json.Marshal(values)
-	if err != nil {
-		return "[]"
-	}
-	return string(rendered)
-}
-
-// readAllOpsFromDir reads all ops from a directory of .log files using validated loading.
-// Returns empty slice if directory doesn't exist.
-// Logs warnings for any validation failures (mismatched worker IDs, corrupt lines).
-func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	items, warnings, err := ops.LoadFromDirValidated(opsDir)
-	if err != nil {
-		return nil, err
-	}
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-	return ops.ExtractOps(items), nil
-}
-
-// readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
-// Returns ops slice and a map of log filename -> byte offset (end position).
-// Validates that each op's worker ID matches its filename's worker ID.
-// Logs warnings for any validation failures.
-func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-	return ops.ExtractOps(items), offsets, nil
-}
-
-// newSnapshotStore creates a snapshot.Store from the given config context.
-// It wires opsDir from IssuesDir/ops, stateDir from StateDir, and
-// singleBranch from the context mode.
-//
-// Note: the Store always derives singleBranch from ctx.Mode == "single-branch".
-// Several handlers previously passed a hardcoded true to MaterializeAndReturn,
-// creating an inconsistency between their read path and the write path. The Store
-// corrects this by consistently reading singleBranch from ctx.Mode.
-func newSnapshotStore(ctx *config.Context) *snapshot.Store {
-	opsDir := filepath.Join(ctx.IssuesDir, "ops")
-	stateDir := ctx.StateDir
-	singleBranch := ctx.Mode == "single-branch"
-	return snapshot.NewStore(opsDir, stateDir, singleBranch)
 }
