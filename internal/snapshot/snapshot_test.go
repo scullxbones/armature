@@ -21,7 +21,7 @@ func TestLoad_EmptyDir(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap)
@@ -49,7 +49,7 @@ func TestLoad_SingleIssue(t *testing.T) {
 	opLine := `["create","issue-1",1000,"test-worker",{"title":"Test Issue","type":"task","scope":[],"context_files":[]}]`
 	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap)
@@ -74,7 +74,7 @@ func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
 	opLine := `["create","issue-1",1000,"bob",{"title":"Test Issue","type":"task","scope":[],"context_files":[]}]`
 	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	// The op should be rejected due to worker ID mismatch, resulting in a warning
@@ -106,7 +106,7 @@ func TestLoad_UnknownOpWarningIncluded(t *testing.T) {
 		`["unknown_future_type","issue-1",1001,"worker-x",{}]` + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap)
@@ -140,7 +140,7 @@ func TestLoad_StateAndIssuesAgreement(t *testing.T) {
 	content := op1 + "\n" + op2 + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, len(snap.Issues))
@@ -179,7 +179,7 @@ func TestLoad_IndexPopulated(t *testing.T) {
 	content := op1 + "\n" + op2 + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap.Index)
@@ -206,7 +206,7 @@ func TestLoad_StateIndexConsistency(t *testing.T) {
 	op := `["create","issue-1",1000,"worker1",{"title":"Test Issue","type":"task","scope":["file1.txt"],"context_files":["file2.txt"]}]`
 	require.NoError(t, adapters.WriteFile(logPath, []byte(op+"\n"), 0644))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	stateIssue := snap.State.Issues["issue-1"]
@@ -230,7 +230,7 @@ func TestLoad_AllFieldsPopulated(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	snap, err := Load(opsDir, stateDir, false)
+	snap, err := Load(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap, "Snapshot should not be nil")
@@ -271,7 +271,7 @@ func TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1(t *testing.T) {
 	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
 
 	// Create Store and load
-	store := NewStore(opsDir, stateDir, false)
+	store := NewStore(opsDir, stateDir)
 	ctx := context.Background()
 
 	snap, err := store.Load(ctx)
@@ -307,7 +307,7 @@ func TestStore_IssueNotFound_REQ_ARCHIMP_S14_T1(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	store := NewStore(opsDir, stateDir, false)
+	store := NewStore(opsDir, stateDir)
 	ctx := context.Background()
 
 	// Before load, Issue should return nil
@@ -330,7 +330,7 @@ func TestStore_Paths_REQ_ARCHIMP_S14_T1(t *testing.T) {
 	opsDir := filepath.Join(tmpDir, "ops")
 	stateDir := filepath.Join(tmpDir, "state")
 
-	store := NewStore(opsDir, stateDir, false)
+	store := NewStore(opsDir, stateDir)
 
 	// Test IssuePath
 	issuePath := store.IssuePath("issue-1")
@@ -374,7 +374,7 @@ func TestStore_ReadIndex_ReadsFromDiskWithoutMaterialize(t *testing.T) {
 	opsDir := filepath.Join(tmpDir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 
-	store := NewStore(opsDir, stateDir, false)
+	store := NewStore(opsDir, stateDir)
 
 	// Call ReadIndex without calling Load first
 	index, err := store.ReadIndex()
@@ -444,7 +444,7 @@ func TestStore_ReadIssue_ReadsFromDiskWithoutMaterialize(t *testing.T) {
 	opsDir := filepath.Join(tmpDir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 
-	store := NewStore(opsDir, stateDir, false)
+	store := NewStore(opsDir, stateDir)
 
 	// Call ReadIssue without calling Load first
 	issue, err := store.ReadIssue("task-1")
@@ -477,7 +477,7 @@ func TestStore_ReadIssue_NotFound(t *testing.T) {
 	opsDir := filepath.Join(tmpDir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 
-	store := NewStore(opsDir, stateDir, false)
+	store := NewStore(opsDir, stateDir)
 
 	// Try to read a non-existent issue
 	_, err := store.ReadIssue("nonexistent")

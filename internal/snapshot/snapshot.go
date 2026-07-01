@@ -19,7 +19,7 @@ type Snapshot struct {
 
 // Load materializes state from opsDir and stateDir, returning a populated Snapshot.
 // Returns a non-nil Snapshot with empty collections when opsDir is empty.
-func Load(opsDir, stateDir string, singleBranch bool) (*Snapshot, error) {
+func Load(opsDir, stateDir string) (*Snapshot, error) {
 	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return nil, fmt.Errorf("load ops: %w", err)
@@ -27,7 +27,7 @@ func Load(opsDir, stateDir string, singleBranch bool) (*Snapshot, error) {
 
 	allOps := ops.ExtractOps(items)
 
-	state, result, err := materialize.MaterializeAndReturnQuiet(stateDir, allOps, singleBranch, offsets)
+	state, result, err := materialize.MaterializeAndReturnQuiet(stateDir, allOps, offsets)
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
 	}
@@ -54,24 +54,22 @@ func Load(opsDir, stateDir string, singleBranch bool) (*Snapshot, error) {
 // Store is not safe for concurrent use. It is designed for sequential, per-command usage
 // where Load/Refresh/Issue/Index are called from a single goroutine.
 type Store struct {
-	opsDir       string
-	stateDir     string
-	singleBranch bool
-	current      *Snapshot
+	opsDir   string
+	stateDir string
+	current  *Snapshot
 }
 
 // NewStore creates a new Store for loading snapshots from the given directories.
-func NewStore(opsDir, stateDir string, singleBranch bool) *Store {
+func NewStore(opsDir, stateDir string) *Store {
 	return &Store{
-		opsDir:       opsDir,
-		stateDir:     stateDir,
-		singleBranch: singleBranch,
+		opsDir:   opsDir,
+		stateDir: stateDir,
 	}
 }
 
 // Load loads the snapshot from disk and caches it.
 func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
-	snap, err := Load(s.opsDir, s.stateDir, s.singleBranch)
+	snap, err := Load(s.opsDir, s.stateDir)
 	if err != nil {
 		return nil, err
 	}
