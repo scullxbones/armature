@@ -35,10 +35,9 @@ preview changes without committing them.`,
   $ arm sync --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
-			singleBranch := appCtx.Mode == "single-branch"
 
 			// Load snapshot to ensure state is up to date
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir)
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
@@ -106,7 +105,7 @@ preview changes without committing them.`,
 			}
 
 			// Re-load snapshot so state files reflect the new merged status
-			snap, err = snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir, singleBranch)
+			snap, err = snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir)
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

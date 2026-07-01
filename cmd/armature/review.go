@@ -64,10 +64,9 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 
 	ctx := currentCtx(cmd)
 	issuesDir := ctx.IssuesDir
-	singleBranch := ctx.Mode == "single-branch"
 
 	// Load snapshot to get issue metadata
-	snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, singleBranch)
+	snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
@@ -253,9 +252,8 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	// Load snapshot to check for duplicates
 	ctx := currentCtx(cmd)
 	issuesDir := ctx.IssuesDir
-	singleBranch := ctx.Mode == "single-branch"
 
-	snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, singleBranch)
+	snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}

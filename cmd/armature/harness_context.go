@@ -20,7 +20,7 @@ func buildHarnessStructuredContext(appCtx *config.Context, issueID string) (stri
 		stateDir = stateDirFor(appCtx, workerID)
 	}
 
-	snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), stateDir, appCtx.Mode == "single-branch")
+	snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), stateDir)
 	if err != nil {
 		return "", fmt.Errorf("load snapshot: %w", err)
 	}
