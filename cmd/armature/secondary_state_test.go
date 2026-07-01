@@ -32,7 +32,9 @@ func TestSecondaryStatePaths(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	stateDir := filepath.Join(repo, ".armature", "state", workerID)
+	// Apply slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
+	workerIDWithSlot := workerIdentityWithSlot(workerID)
+	stateDir := filepath.Join(repo, ".armature", "state", workerIDWithSlot)
 	require.DirExists(t, stateDir)
 	require.FileExists(t, filepath.Join(stateDir, "index.json"))
 
@@ -41,7 +43,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(repo, ".armature", "state"))
 	require.NoError(t, err)
 	for _, entry := range entries {
-		if entry.Name() != workerID {
+		if entry.Name() != workerIDWithSlot {
 			_ = os.RemoveAll(filepath.Join(repo, ".armature", "state", entry.Name())) //nolint:errcheck // test cleanup; error not actionable
 		}
 	}

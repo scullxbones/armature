@@ -209,21 +209,29 @@ if not needed.
 
 ### Complete Well-Formed Task Example
 
+> **WARNING:** The plan JSON must be wrapped in the required `{ "version": 1, "title": "...", "issues": [...] }` top-level structure. Omitting the wrapper or using an unsupported plan version will cause `arm decompose-apply` to fail with a validation error.
+
 ```json
 {
-  "id": "STORY-T1",
-  "title": "Add token parser",
-  "type": "task",
-  "parent": "STORY-ID",
-  "priority": "high",
-  "blocked_by": [],
-  "dod": "Parser handles all five token types from spec §3.2. Returns typed AST nodes. All existing tests pass; new tests cover added branches.",
-  "scope": "cmd/parse/main.go, internal/ast/node.go (new), internal/ast/node_test.go (new)",
-  "acceptance": [
-    "TestParseTokenTypes_REQ_STORY_T1 passes",
-    "TestParseEdgeCases_REQ_STORY_T1 passes",
-    "make check green",
-    "no new lint errors"
+  "version": 1,
+  "title": "Parser implementation plan",
+  "issues": [
+    {
+      "id": "STORY-T1",
+      "title": "Add token parser",
+      "type": "task",
+      "parent": "STORY-ID",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "Parser handles all five token types from spec §3.2. Returns typed AST nodes. All existing tests pass; new tests cover added branches.",
+      "scope": "cmd/parse/main.go, internal/ast/node.go (new), internal/ast/node_test.go (new)",
+      "acceptance": [
+        "TestParseTokenTypes_REQ_STORY_T1 passes",
+        "TestParseEdgeCases_REQ_STORY_T1 passes",
+        "make check green",
+        "no new lint errors"
+      ]
+    }
   ]
 }
 ```
@@ -237,6 +245,7 @@ if not needed.
 | `"acceptance": []` | No pass/fail signal | Name at least one test or command |
 | `"scope": "internal/"` | Too broad, causes overlaps | Name the specific files |
 | Missing `acceptance` field entirely | `arm validate` ERRORs | Add the field, even if `--example` omits it |
+| Plan without `version: 1, title, issues` wrapper | `arm decompose-apply` fails validation; bare task objects not accepted | Wrap all issues in `{ "version": 1, "title": "...", "issues": [...] }` |
 | `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
 
 > **Note:** `arm decompose-apply --example` omits `acceptance` in its output.
