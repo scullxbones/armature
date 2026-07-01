@@ -95,10 +95,14 @@ Identify which tasks are `open` and which have `blocked_by` dependencies. Group
 tasks into waves — tasks within the same wave have no dependencies on each other
 and can run in parallel. Tasks in different waves must run sequentially.
 
-**Create the feature branch before dispatching any worker.** All workers commit
-to this branch. If workers are dispatched without a branch, they default to
-whatever branch the repo is on — typically `main` — and the story cannot be
-reviewed via PR.
+**Create the feature branch before dispatching any worker.** This is the shared
+story branch, but workers do not commit to it directly: each worker commits to
+its own per-task branch (`task/TASK-ID`) in an isolated worktree created by
+`arm claim --worktree` (see Dispatch Protocol steps 4-5). The coordinator later
+merges each completed task branch into `feat/STORY-ID` (see "After Workers
+Return", section b). If the story branch does not exist before dispatch, there
+is nothing for the coordinator to merge task branches into, and the story
+cannot be reviewed via PR.
 
 ### 2. Find Ready Work
 
@@ -222,14 +226,17 @@ Each worker's context package must contain:
    ```
 
 4. **Repository location:**
+   Use the isolated git worktree created for this task by `arm claim --worktree`, not the main repository:
    ```
-   Working directory: /path/to/repo
+   Working directory: /tmp/arm-task-TASK-ID
    ```
 
-5. **Branch** — pass the story feature branch name so the worker checks it out
-   before making any commits:
+5. **Task-specific branch:**
+   The task-specific branch was created and is already checked out by `arm claim --worktree`.
+   Do NOT run `git checkout feat/STORY-ID` (the shared story branch) — this causes collisions with parallel workers.
+   Commit directly to the current branch:
    ```
-   Working branch: feat/STORY-ID  — run `git checkout feat/STORY-ID` before committing.
+   Working branch: (task-specific branch from render-context)  — do not run `git checkout feat/STORY-ID`
    ```
 
 6. **Commit instruction** — instruct the worker to stage files explicitly using
@@ -291,83 +298,29 @@ For each task that completed in the wave, dispatch semantic conformance review u
 
 **Workflow:**
 
-1. **Capture per-task commit SHAs** — after all wave tasks have transitioned to done, build a mapping of task IDs to their commit ranges:
+1. **Capture per-task commit ranges** — each task was completed in its own isolated
+   worktree on branch `task/TASK-ID` (Dispatch Protocol steps 4-5), so the task's
+   commit range is simply that branch relative to the wave's base commit. No
+   commit-message scanning or git-history reconciliation is required, because each
+   task's commits already live on their own branch rather than interleaved on a
+   shared one:
    ```bash
-   # CRITICAL: Commits may land in git history in a different order than dispatch order.
-   # Iterating in dispatch order causes stale search ranges and contaminated review bundles.
-   # FIX: Collect all commits first, then process tasks in actual git history order.
-   
-   # Step 1: Collect all commits in the range, ordered by git history (oldest first)
-   COMMITS_IN_RANGE=$(git rev-list --reverse "$WAVE_BASE_SHA"..HEAD)
-   
-   # Step 2: Scan all commits to identify task appearances and track task order
-   # Process commits in chronological order (oldest to newest) to determine actual task sequence
-   declare -A TASK_LAST_COMMIT      # last commit SHA for each task
-   declare -a TASK_ORDER_BY_APPEARANCE  # tasks in order of first appearance in git history
-   
-   for COMMIT in $COMMITS_IN_RANGE; do
-     COMMIT_MSG=$(git log -1 --format='%B' "$COMMIT")
-     
-     # Find which task this commit belongs to
-     # Use anchored pattern to avoid matching task IDs with shared prefixes (e.g., TASK-1 vs TASK-10)
-     FOUND_TASK=""
-     for TASK_ID in $WAVE_TASK_IDS; do
-       if echo "$COMMIT_MSG" | grep -qE "^[a-z]+\($TASK_ID\):"; then
-         FOUND_TASK="$TASK_ID"
-         break
-       fi
-     done
-     
-     if [ -n "$FOUND_TASK" ]; then
-       # Record this task's last commit (will be updated if more commits follow)
-       TASK_LAST_COMMIT["$FOUND_TASK"]="$COMMIT"
-       
-       # Record the first time we see this task (determines task order)
-       if ! [[ " ${TASK_ORDER_BY_APPEARANCE[@]} " =~ " ${FOUND_TASK} " ]]; then
-         TASK_ORDER_BY_APPEARANCE+=("$FOUND_TASK")
-       fi
-     fi
-   done
-   
-   # Step 3: Reconciliation pass — check every wave task against what was found in history.
-   # TASK_ORDER_BY_APPEARANCE only contains tasks that appeared in commits; tasks with no
-   # matching commit are silently absent. Detect them here before building ranges.
-   WAVE_TASK_COUNT=$(echo "$WAVE_TASK_IDS" | wc -w | tr -d ' ')
-   
+   declare -A TASK_COMMITS   # TASK_ID -> "$WAVE_BASE_SHA..task/TASK-ID"
+
    for TASK_ID in $WAVE_TASK_IDS; do
-     if ! [[ " ${TASK_ORDER_BY_APPEARANCE[@]} " =~ " ${TASK_ID} " ]]; then
-       if [ "$WAVE_TASK_COUNT" -gt 1 ]; then
-         echo "ERROR: No commit found for task $TASK_ID in the wave commit range." >&2
-         echo "       Verify that the worker committed using a conventional-commit message" >&2
-         echo "       containing the task ID, e.g. feat($TASK_ID): ..., fix($TASK_ID): ..." >&2
-         exit 1
-       else
-         echo "WARNING: No commit found for task $TASK_ID; falling back to git rev-parse HEAD." >&2
-         TASK_LAST_COMMIT["$TASK_ID"]=$(git rev-parse HEAD)
-         TASK_ORDER_BY_APPEARANCE+=("$TASK_ID")
-       fi
+     if ! git rev-parse --verify "task/$TASK_ID" >/dev/null 2>&1; then
+       echo "ERROR: branch task/$TASK_ID not found. Did the worker commit before returning?" >&2
+       exit 1
      fi
-   done
-   
-   # Step 4: Build per-task ranges based on actual git history order
-   # (not dispatch order). Process tasks in the order they first appear.
-   TASK_BASE_SHA="$WAVE_BASE_SHA"
-   
-   for TASK_ID in "${TASK_ORDER_BY_APPEARANCE[@]}"; do
-     # Use the task's actual last commit from history scan (guaranteed present after reconciliation)
-     TASK_HEAD_SHA="${TASK_LAST_COMMIT[$TASK_ID]}"
-     
-     # Store mapping for this task
-     # (implementation: export variable, write to temp file, or populate JSON object)
-     # TASK_COMMITS["$TASK_ID"]="$TASK_BASE_SHA..$TASK_HEAD_SHA"
-     
-     # Update base for next task (in history order, not dispatch order)
-     TASK_BASE_SHA="$TASK_HEAD_SHA"
+     TASK_COMMITS["$TASK_ID"]="$WAVE_BASE_SHA..task/$TASK_ID"
    done
    ```
-   
-   **Note:** The grep pattern matches any conventional-commit type, e.g. `feat(TASK-ID):`, `fix(TASK-ID):`, `refactor(TASK-ID):`, `docs(TASK-ID):`, `test(TASK-ID):` — any lowercase type prefix followed by the task ID in parentheses. See reconciliation pass below for what happens when no matching commit is found.
-   For more complex scenarios (e.g., multiple commits per task, alternative commit formats), you may need custom logic to identify task boundaries.
+
+   **Important — ordering:** at this point the task branches have **not** yet been
+   merged into the story branch (that happens in step (b) below, which runs after
+   this semantic review and the overlap audit in a.3). Do not substitute `HEAD` or
+   `feat/STORY-ID` for `task/$TASK_ID` here — until the merge in step (b), those
+   refs do not contain the task's commits.
 
 2. **Prepare per-task review bundles** — use task-specific commit ranges, not wave-combined ranges:
    ```bash
@@ -422,8 +375,11 @@ for TASK_ID in $WAVE_TASK_IDS; do
 done
 
 # Find overlaps: files touched by >1 task
+# NOTE: use the union of each task's own file list, not "$WAVE_BASE_SHA"..HEAD —
+# task branches are not yet merged into HEAD at this point (merge happens in step b).
 OVERLAPPING_FILES=""
-for FILE in $(git diff --name-only "$WAVE_BASE_SHA"..HEAD | sort -u); do
+ALL_CHANGED_FILES=$(for TASK_ID in $WAVE_TASK_IDS; do echo "${TASK_FILES[$TASK_ID]}"; done | sort -u)
+for FILE in $ALL_CHANGED_FILES; do
   TASK_COUNT=0
   for TASK_ID in $WAVE_TASK_IDS; do
     if echo "${TASK_FILES[$TASK_ID]}" | grep -q "^$FILE$"; then
@@ -452,8 +408,10 @@ For each overlapping file, manually review the diffs from each task to confirm:
 
 ### b. Check for scope conflicts and merge conflicts
 
-If workers operated in separate git worktrees or branches, merge them into the
-story feature branch now. Resolve any conflicts before proceeding.
+Now that semantic review (a.2) and the overlap audit (a.3) are complete, merge
+each task's branch (`task/TASK-ID`) into the story feature branch. Resolve any
+conflicts before proceeding. Only after this merge do the task branches' commits
+become reachable from `feat/STORY-ID`'s `HEAD`.
 
 ### c. Wave Verification Gate
 

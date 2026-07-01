@@ -202,7 +202,7 @@ for a complete verbatim template.
 - `contract_fingerprint` and `delivery_fingerprint` must match the input fingerprints exactly
 - `results` must include one result per criterion (definition_of_done + all acceptance criteria)
 - Each result must pass `CriterionResult.Valid()` — see `references/rubric.md` for details
-- **Every citation must correspond to a specific line in a diff hunk** in the delivery.
+- **Every citation must correspond to a specific added/modified (`+`) line in a diff hunk** in the delivery.
   See `references/field-rules.md` for mandatory line-citation validation rules.
 
 ### 5a. Self-Check: Validate Citations Against Diff Hunks (Mandatory)
@@ -211,7 +211,7 @@ Before returning the assessment, verify that every citation is valid:
 
 1. **For each citation in every result:**
    - Confirm the file path matches a file in `delivery.changed_files`
-   - If a line number is specified, verify it exists in that file's diff hunk
+   - If a line number is specified, verify it is an added/modified (`+`) line in that file's diff hunk — unchanged context lines do not count
    - Path-level citations (line omitted or 0) are valid only if the file is in `changed_files`
 
 2. **For each result with non-satisfied status:**
