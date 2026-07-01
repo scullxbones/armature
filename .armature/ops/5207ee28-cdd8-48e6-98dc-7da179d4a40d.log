@@ -1588,3 +1588,4 @@
 ["amend","task-1782866629",1782866665,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"definition_of_done":"The plan-example JSON block in armature-planner/SKILL.md is wrapped in the required {\"version\": 1, \"title\": ..., \"issues\": [...]} top-level shape, with an explicit warning above it and a new Anti-Patterns table row covering the unsupported plan version: 0 failure."}]
 ["amend","DF-S5-T1",1782866753,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/skillsembed/skills/armature-coordinator/SKILL.md"]}]
 ["amend","DF-S5-T2",1782866753,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/skillsembed/skills/armature-coordinator/SKILL.md"]}]
+["amend","DF-S5-T3",1782866753,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/skillsembed/skills/armature-coordinator/SKILL.md"]}]
