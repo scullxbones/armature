@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "bundle_id": "bundle-abc123",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "Explain why this status was assigned. Reference specific code, tests, or documentation that demonstrates fulfillment or identifies gaps.",
+      "citations": [
+        {
+          "path": "pkg/parser/parser.go",
+          "line": 42
+        },
+        {
+          "path": "pkg/parser/parser_test.go",
+          "line": 120
+        }
+      ]
+    },
+    {
+      "id": "acceptance[0]",
+      "status": "satisfied",
+      "rationale": "Explain the assessment. For 'satisfied', confirm all aspects of the criterion are met. For 'partially_satisfied', list what was done and what remains. For 'not_satisfied', explain why the criterion is not met.",
+      "citations": [
+        {
+          "path": "pkg/parser/parser.go",
+          "line": 50
+        }
+      ]
+    },
+    {
+      "id": "acceptance[1]",
+      "status": "partially_satisfied",
+      "rationale": "Some aspects are addressed, but gaps remain. Cite the evidence of what was done; use 'missing_evidence' to document what is missing.",
+      "citations": [
+        {
+          "path": "pkg/config/flags.go",
+          "line": 142
+        }
+      ],
+      "missing_evidence": "Describe what evidence is absent. Example: 'Flag documentation incomplete; error messages for invalid values not yet added.'"
+    },
+    {
+      "id": "acceptance[2]",
+      "status": "not_satisfied",
+      "rationale": "Criterion is not met or actively violated. If evidence exists in the diff (e.g., failing test), cite it. Otherwise, use 'missing_evidence' to explain.",
+      "missing_evidence": "Example: 'TokenParser.Parse() method not implemented; only stub remains. Outcome: \"deferred to next phase\".'"
+    },
+    {
+      "id": "acceptance[3]",
+      "status": "indeterminate",
+      "rationale": "Evidence is insufficient or ambiguous. Reviewer cannot confidently assess the criterion. Include what partial evidence exists and explain why status cannot be determined.",
+      "citations": [
+        {
+          "path": "pkg/parser/parser.go"
+        }
+      ],
+      "missing_evidence": "Example: 'Diff truncated after 1000 lines; cannot verify test coverage completely. Outcome states \"tests added\" but full test file not visible.'"
+    }
+  ],
+  "contract_fingerprint": "sha256-contract-hash",
+  "delivery_fingerprint": "sha256-delivery-hash"
+}

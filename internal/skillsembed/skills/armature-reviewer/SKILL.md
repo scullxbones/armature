@@ -166,7 +166,8 @@ The rating is computed automatically by `arm review record` from the results.
 
 ### 5. Produce ConformanceAssessment JSON
 
-Assemble all criterion results into a ConformanceAssessment:
+Assemble all criterion results into a ConformanceAssessment. See `templates/conformance-assessment.json`
+for a complete verbatim template.
 
 ```json
 {
@@ -196,10 +197,40 @@ Assemble all criterion results into a ConformanceAssessment:
 - `contract_fingerprint` and `delivery_fingerprint` must match the input fingerprints exactly
 - `results` must include one result per criterion (definition_of_done + all acceptance criteria)
 - Each result must pass `CriterionResult.Valid()` — see `references/rubric.md` for details
+- **Every citation must correspond to a specific line in a diff hunk** in the delivery.
+  See `references/field-rules.md` for mandatory line-citation validation rules.
+
+### 5a. Self-Check: Validate Citations Against Diff Hunks (Mandatory)
+
+Before returning the assessment, verify that every citation is valid:
+
+1. **For each citation in every result:**
+   - Confirm the file path matches a file in `delivery.changed_files`
+   - If a line number is specified, verify it exists in that file's diff hunk
+   - Path-level citations (line omitted or 0) are valid only if the file is in `changed_files`
+
+2. **For each result with non-satisfied status:**
+   - Confirm `missing_evidence` is present and explains what evidence is absent
+   - If citations exist, they must point to the evidence for *why* the criterion is not/partially satisfied
+
+3. **JSON schema validation:**
+   - All required fields are present (`id`, `status`, `rationale`, and citations/missing_evidence as needed)
+   - No typos in status values (must be `satisfied`, `partially_satisfied`, `not_satisfied`, or `indeterminate`)
+   - `bundle_id`, `contract_fingerprint`, `delivery_fingerprint` match the input exactly
+   - Citations array is valid JSON with `path` and optional `line`/`column` fields
+
+4. **Idempotence check:**
+   - If you reviewed this bundle before, fingerprints will match previous results
+   - Ensure the current assessment is identical to any prior assessment for the same bundle
+
+**If any check fails, fix the assessment JSON and repeat 5a before proceeding to step 6.**
 
 ### 6. Return the ConformanceAssessment
 
-Output the ConformanceAssessment JSON to stdout (or return it to the coordinator). Do **not** call `arm review record` — recording is the coordinator's responsibility. The coordinator passes the assessment to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"` after receiving it, so the fingerprint validation is bound to the exact bundle it dispatched.
+After completing Step 5a self-check, output the ConformanceAssessment JSON to stdout (or return it to the coordinator).
+Do **not** call `arm review record` — recording is the coordinator's responsibility. The coordinator passes the
+assessment to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"` after receiving it, so the
+fingerprint validation is bound to the exact bundle it dispatched.
 
 ```bash
 # Output the assessment JSON so the coordinator can capture it:
