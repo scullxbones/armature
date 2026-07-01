@@ -393,7 +393,7 @@ arm sync
 
 const postCommitHookTemplate = `#!/bin/sh
 # armature:managed
-# Armature post-commit hook: emit heartbeat and push ops in dual-branch mode.
+# Armature post-commit hook: emit heartbeat and push ops.
 # Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
 
@@ -406,10 +406,8 @@ fi
 # Send heartbeat for active claim (if any)
 arm heartbeat 2>/dev/null
 
-# In dual-branch mode, push ops logs after each commit
-if grep -q '"mode".*"dual-branch"' .armature/config.json 2>/dev/null; then
-  arm push-ops 2>/dev/null
-fi
+# Push ops logs after each commit
+arm push-ops 2>/dev/null
 `
 
 const prepareCommitMsgHookTemplate = `#!/bin/sh
@@ -437,8 +435,8 @@ fi
 
 const preCommitHookTemplate = `#!/bin/sh
 # armature:managed
-# Armature pre-commit hook: block ops log commits on code branches in dual-branch mode.
-# In dual-branch mode, ops live on _armature — never on a code branch.
+# Armature pre-commit hook: block ops log commits on code branches.
+# Ops live on _armature — never on a code branch.
 # To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
 # This is defense-in-depth; .armature/.gitignore also blocks ops/ from being staged.
@@ -449,17 +447,10 @@ if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
 
-# Only block in dual-branch mode; check if config says dual-branch
-if ! grep -q '"mode".*"dual-branch"' .armature/config.json 2>/dev/null; then
-  # Single-branch mode allows ops/ commits
-  exit 0
-fi
-
 # Only block additions/modifications — deletions are allowed (cleanup commits).
 if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; then
   echo "ERROR: Refusing to commit .armature/ops/ changes on a code branch."
-  echo "In dual-branch mode, ops are written directly to the _armature branch."
-  echo "If you are migrating to dual-branch mode, run: arm bootstrap --dual-branch"
+  echo "Ops are written directly to the _armature branch."
   exit 1
 fi
 `
