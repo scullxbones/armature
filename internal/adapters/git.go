@@ -68,13 +68,53 @@ func (c *Client) IsCommitOnBranch(sha, branch string) (bool, error) {
 	return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, branch, err)
 }
 
+// IsWorkingTreeDirty checks if the working tree has uncommitted changes to tracked files.
+// Returns true if there are modified tracked files or staged changes, false if clean.
+// Untracked files are ignored (only tracked file changes count as "dirty").
+func (c *Client) IsWorkingTreeDirty() (bool, error) {
+	// Check for modified/staged tracked files using git status.
+	// The --porcelain output includes lines starting with the status codes:
+	// - First char: index status (M, D, A, etc. or space if no staged change)
+	// - Second char: working tree status (M, D, etc. or space if no modification)
+	// - Lines starting with ??: untracked (ignored, not dirty)
+	// Any line NOT starting with ?? means a tracked file change
+	cmd := c.cmd("status", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git status: %w", err)
+	}
+
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		// Skip untracked files (start with ??)
+		if strings.HasPrefix(line, "??") {
+			continue
+		}
+		// Any other output means tracked files have changes
+		return true, nil
+	}
+	return false, nil
+}
+
 // CreateOrphanBranch creates an orphan branch (no parent commits) with a single empty commit.
 // If the branch already exists, this is a no-op. Always returns to the original branch.
+// Fails with an error if the working tree is dirty (has uncommitted changes).
 func (c *Client) CreateOrphanBranch(branch string) error {
 	// Check if branch already exists — idempotent fast-path
 	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err == nil {
 		return nil
+	}
+
+	// Check if working tree is dirty before doing anything destructive
+	dirty, err := c.IsWorkingTreeDirty()
+	if err != nil {
+		return fmt.Errorf("check working tree: %w", err)
+	}
+	if dirty {
+		return fmt.Errorf("working tree is dirty (contains uncommitted changes): please commit or stash your changes before running bootstrap")
 	}
 
 	// Capture current branch name so we can return to it explicitly
@@ -405,6 +445,40 @@ func (c *Client) AddPaths(paths []string) error {
 		return fmt.Errorf("git add paths: %w\n%s", err, out)
 	}
 	return nil
+}
+
+// RemoveFromIndex removes a path from the git index using "git rm --cached".
+// This is used to mark tracked files/directories for deletion without deleting
+// the working tree files. Returns nil if the path is not tracked.
+func (c *Client) RemoveFromIndex(path string) error {
+	cmd := c.cmd("rm", "-r", "--cached", "--quiet", path)
+	_ = cmd.Run() //nolint:errcheck // path might not be tracked in git
+	return nil
+}
+
+// IsTracked checks if a path is tracked by git (exists in the index).
+// Returns true if the path is tracked, false otherwise.
+func (c *Client) IsTracked(path string) bool {
+	cmd := c.cmd("ls-files", path)
+	out, err := cmd.Output()
+	return err == nil && len(out) > 0
+}
+
+// CommitPaths creates a commit scoped to the given pathspecs, so it structurally cannot
+// sweep in unrelated staged changes outside those paths. If there is nothing staged for
+// the given paths, this is a no-op (returns nil) rather than an error. Any other commit
+// failure (hook rejection, missing git identity, etc.) is returned as an error.
+func (c *Client) CommitPaths(message string, paths ...string) error {
+	args := append([]string{"commit", "-m", message, "--"}, paths...)
+	cmd := c.cmd(args...)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(string(out), "nothing to commit") {
+		return nil
+	}
+	return fmt.Errorf("git commit: %w\n%s", err, out)
 }
 
 // CommitWithMessage creates a commit with the given message. Returns an error

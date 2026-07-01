@@ -543,8 +543,26 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 	timestamp := time.Now().Format("20060102150405")
 	backupDir := filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s", timestamp))
 
+	// Before renaming, check if .armature is tracked in git
+	gitClient := adapters.New(repoPath)
+	isTracked := gitClient.IsTracked(".armature")
+
+	// If tracked, remove from index to avoid leaving a dirty working tree after rename
+	if isTracked {
+		_ = gitClient.RemoveFromIndex(".armature") //nolint:errcheck // path might not be tracked
+	}
+
 	if err := os.Rename(legacyArmatureDir, backupDir); err != nil {
 		return false, "", fmt.Errorf("backup legacy .armature directory: %w", err)
+	}
+
+	// If .armature was tracked, commit the removal to keep the working tree clean.
+	// Scoped to the .armature path so it structurally cannot sweep in unrelated staged
+	// changes; a real commit failure (not "nothing to commit") is propagated as an error.
+	if isTracked {
+		if err := gitClient.CommitPaths("chore: migrate legacy .armature to dual-branch layout", ".armature"); err != nil {
+			return false, "", fmt.Errorf("commit legacy .armature removal: %w", err)
+		}
 	}
 
 	return true, backupDir, nil
@@ -630,6 +648,20 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	repoPath = absRepoPath
 
 	gitClient := adapters.New(repoPath)
+
+	// Pre-flight: refuse to touch anything if the working tree is dirty. This makes
+	// bootstrap atomic with respect to this check — either the tree is clean at the
+	// start (so migration below cannot sweep in unrelated staged changes) or bootstrap
+	// refuses before doing anything, including renaming a legacy .armature directory.
+	dirty, err := gitClient.IsWorkingTreeDirty()
+	if err != nil {
+		return RepoSetupResult{}, fmt.Errorf("check working tree: %w", err)
+	}
+	if dirty {
+		return RepoSetupResult{}, fmt.Errorf(
+			"working tree is dirty (contains uncommitted changes): please commit or stash your changes before running bootstrap",
+		)
+	}
 
 	// Attempt to migrate legacy single-branch layout if it exists
 	migrated, backupDir, err := migrateLegacySingleBranchOps(repoPath)
@@ -732,8 +764,25 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// Detect project type and write config
 	configPath := filepath.Join(issuesDir, "config.json")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		projectType := config.DetectProjectType(repoPath)
-		cfg := config.DefaultConfig(projectType)
+		var cfg config.Config
+
+		// If migration happened, try to load legacy config from backup
+		if migrated && backupDir != "" {
+			legacyConfigPath := filepath.Join(backupDir, "config.json")
+			if legacyConfig, err := config.LoadConfig(legacyConfigPath); err == nil {
+				// Legacy config loaded successfully, use it
+				cfg = legacyConfig
+			} else {
+				// Legacy config not found or unreadable, use defaults
+				projectType := config.DetectProjectType(repoPath)
+				cfg = config.DefaultConfig(projectType)
+			}
+		} else {
+			// No migration, detect project type and use defaults
+			projectType := config.DetectProjectType(repoPath)
+			cfg = config.DefaultConfig(projectType)
+		}
+
 		if err := config.WriteConfig(configPath, cfg); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
 		}
