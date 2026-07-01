@@ -1818,3 +1818,4 @@
 ["transition","SB-T4",1782904895,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["claim","SB-T6",1782904900,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","SB-T6",1782905155,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["claim","SB-T7",1782905186,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90}]
