@@ -186,13 +186,15 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 
 2. **If a line number is specified, it must exist in that file's diff hunk**
    - Line numbers are 1-indexed
-   - The line must appear in the diff output for that file
-   - If the file was added (new file), any line ≤ file length is valid
-   - If the file was deleted, citations are not valid (reject assessment)
+   - The line must have been added or modified in the diff (marked with + in the unified diff)
+   - Context lines (unchanged lines shown for readability in the diff) cannot be cited by line number; use path-level citations instead (see item 3 below)
+   - If the file was added (new file), all lines in the file were added, so any line ≤ file length is valid
+   - If the file was deleted, line-number citations are not valid (reject assessment) — see item 3 for path-level citations to deleted files
 
 3. **Path-level citations (line omitted or 0) are valid if**
    - The file is in changed_files
    - The entire file is the relevant evidence (e.g., "this test file demonstrates the criterion")
+   - Note: unlike line-number citations, a path-level citation to a **deleted** file is still valid (the file's entry is present in changed_files) — use it only to cite the deletion itself, not remaining file content
 
 4. **Citation array may be empty only if:**
    - Status is `"satisfied"` and evidence is self-evident in the outcome
