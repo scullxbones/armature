@@ -12,13 +12,13 @@ The coordinator loop is the standard execution path: find ready tasks with `arm 
 
 ### Setup
 
-Initialize Armature. Because `main` is not protected, `arm bootstrap` picks up single-branch (solo) mode automatically.
+Initialize Armature in your project repository.
 
 ```bash
 cd my-project
 arm bootstrap
-# Armature detects: no branch protection → solo mode
-# Creates .armature/ on main branch
+# Creates _armature orphan branch and .arm/ ops worktree
+# Initializes coordination data
 ```
 
 Register your requirements document as a source and generate your task plan.
@@ -59,7 +59,7 @@ arm list --group
 
 ### Notes for Lone Wolf
 
-- No branch protection means there is no PR step. Tasks move directly from `done` to complete.
+- As a solo developer, you can push directly to `main` if your repo permits. Tasks tracked by Armature remain independent of your branching strategy.
 - Keep the workflow lightweight: `ready` → `claim` → `render-context` → agent → `transition done` → repeat.
 - If you need to pause and come back, `arm list --group` shows exactly where everything stands.
 
@@ -71,12 +71,11 @@ arm list --group
 
 ### Setup
 
-Initialize Armature. Branch protection is detected and dual-branch mode is activated automatically.
+Initialize Armature to set up the ops-branch architecture.
 
 ```bash
 cd my-project
 arm bootstrap
-# Armature detects: main is protected → dual-branch mode
 # Creates orphan branch _armature for coordination data
 # Creates worktree at .arm/ for simultaneous access
 ```
@@ -85,7 +84,7 @@ The orphan `_armature` branch stores all `.armature/` data. Your `main` branch s
 
 ### Two-Phase Completion
 
-In dual-branch mode, a task goes through two completion phases:
+A task goes through two completion phases:
 
 1. **done** — orchestration completed successfully and task acceptance gates passed.
 2. **merged** — Armature auto-detects that the PR landed on `main`.
@@ -103,7 +102,7 @@ arm render-context <task-id> --format agent    # get task spec for agent
 
 Open and merge PRs using your normal team workflow after each task is done.
 
-In dual-branch workflows, dependent tasks unblock at `merged`, not merely `done`.
+Dependent tasks unblock at `merged`, not merely `done`.
 
 ### Notes for Gatekeeper
 
@@ -119,7 +118,7 @@ In dual-branch workflows, dependent tasks unblock at `merged`, not merely `done`
 
 ### Setup
 
-Initialize in dual-branch mode (typical for team repos with protected `main`).
+Initialize Armature to set up the ops-branch architecture.
 
 ```bash
 cd team-project
@@ -216,26 +215,11 @@ arm doctor
 # Shows diagnostics for D1–D6 checks (config, ops logs, state files, hooks, worktree)
 ```
 
-In **dual-branch mode**, the ops logs (source of truth for the issue DAG) live on the `_armature` git branch, not in the local `.arm/.armature/` directory. If the worktree checkout is corrupted, you can safely remove it and re-initialize — the history is preserved on the branch:
+The ops logs (source of truth for the issue DAG) live on the `_armature` git branch, not in the local `.arm/.armature/` directory. If the worktree checkout is corrupted, you can safely remove it and re-initialize — the history is preserved on the branch:
 
 ```bash
-rm -rf .arm/.armature    # dual-branch mode only — ops are on _armature branch
+rm -rf .arm/.armature    # ops are on _armature branch
 arm bootstrap
-```
-
-In **single-branch mode**, `.armature/ops/` contains the append-only ops logs that are the source of truth. Deleting this directory permanently destroys all issue history. Do not delete it without first backing up the ops logs:
-
-```bash
-cp -r .armature/ops /tmp/armature-ops-backup
-rm -rf .armature
-arm bootstrap
-```
-
-Alternatively, use `arm doctor` to diagnose structural issues before repairing:
-
-```bash
-arm doctor
-# Shows diagnostics for D1–D6 checks (config, ops logs, state files, hooks, worktree)
 ```
 
 ### Configuring Defaults
@@ -244,7 +228,6 @@ Armature reads configuration from `.armature/config.json`. Edit this file to set
 
 ```json
 {
-  "mode": "dual-branch",
   "project_type": "go",
   "default_ttl": 60,
   "token_budget": 1600,
@@ -268,7 +251,6 @@ Key settings:
 
 | Setting | What it controls |
 |---|---|
-| `mode` | Informational label only — does not switch coordination mode at runtime. Active mode is set by `arm bootstrap` via git config (`armature.mode`). |
 | `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
 | `default_ttl` | TTL written to claim ops by some coordinator paths (minutes). Note: `arm claim --ttl` defaults to 60 min independently; this setting does not override that CLI default. |
 | `token_budget` | Context token budget used by the harness context path. Note: standalone `arm render-context` uses its own `--budget` flag (default: 4000) and does not read this config value. |
@@ -323,7 +305,7 @@ arm transition --issue TASK-055 --to ready \
 
 ### Notes for Wrangler
 
-- If state becomes corrupted, delete `.armature/` (single-branch) or `.arm/.armature/` (dual-branch) and run `arm bootstrap` to reinitialize. Use `arm doctor` first to diagnose issues.
+- If state becomes corrupted, delete `.arm/.armature/` and run `arm bootstrap` to reinitialize. Use `arm doctor` first to diagnose issues.
 - Keep `default_ttl` generous enough that slow tasks do not get falsely flagged as stale.
 - Hooks with `required: true` will block operations if they fail; use sparingly for critical integrations.
 
@@ -417,7 +399,7 @@ Armature uses a Merge-CRDT (MRDT) approach where each agent appends to its own l
 | Persona | Key Commands |
 |---|---|
 | P1 Lone Wolf | `arm bootstrap`, `arm ready`, `arm claim`, `arm render-context`, `arm transition` |
-| P2 Gatekeeper | same as P1, plus dual-branch PR detection for `merged` promotion |
+| P2 Gatekeeper | same as P1, plus commit-message scan for `merged` promotion |
 | P3 Conductor | `arm sources add/sync`, `arm decompose-context`, `arm decompose-apply`, `arm dag-summary`, `arm validate`, `arm stale-review` |
 | P4 Wrangler | `arm bootstrap`, config editing, `arm validate`, `arm stale-review` |
 | P5 Agent Fleet | `arm ready`, `arm claim`, `arm render-context`, `arm merged`, `arm list --group` |

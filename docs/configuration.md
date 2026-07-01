@@ -4,18 +4,16 @@ The `.armature/config.json` file stores Armature's configuration for your reposi
 
 ## Configuration File Location
 
-- **Single-branch mode:** `.armature/config.json` (on `main`)
-- **Dual-branch mode:** `.arm/.armature/config.json` (on `_armature` branch, accessible via the `.arm/` worktree)
+The `.armature/config.json` file is stored on the `_armature` branch and accessed via the `.arm/` ops worktree at `.arm/.armature/config.json`.
 
 ## Configuration Fields
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `mode` | string | `single-branch` | Deployment mode: `single-branch` (all data on `main`) or `dual-branch` (coordination on `_armature` via `.arm/` worktree). Set by `arm bootstrap` and `arm bootstrap --dual-branch`. |
 | `project_type` | string | auto-detected | Project type, auto-detected from repo markers. Possible values: `go`, `node`, `python`, `rust`, `make`, `unknown`. |
 | `default_ttl` | integer | `60` | Default task time-to-live in minutes. Tasks without an explicit `ttl` use this value. After TTL expires, task status is flagged as stale. |
 | `token_budget` | integer | `1600` | Token budget for context assembly. `arm render-context` respects this budget (approximately `chars / 4`) when truncating large context layers. |
-| `low_stakes_push_threshold` | integer | `5` | Number of ops to accumulate before auto-pushing in dual-branch mode. Once this threshold is hit, ops are automatically committed and pushed to `_armature`. Lower values = more frequent pushes; higher values = fewer pushes but larger batches. |
+| `low_stakes_push_threshold` | integer | `5` | Number of ops to accumulate before auto-pushing to the ops branch. Once this threshold is hit, ops are automatically committed and pushed to `_armature`. Lower values = more frequent pushes; higher values = fewer pushes but larger batches. |
 | `hooks` | array | `[]` | Array of pre-transition hook configurations (see [Hooks](#hooks) below). |
 
 ### Project Type Detection
@@ -52,7 +50,7 @@ Each hook in the `hooks` array has this structure:
 - **Execution:** Hooks run sequentially in array order before the transition is materialized.
 - **Required hooks:** If a required hook exits with non-zero status, the transition is rejected and the op is not appended.
 - **Optional hooks:** If an optional hook fails, a warning is logged but the transition proceeds.
-- **Environment:** Hooks run in the context of the repo's main directory (or ops worktree in dual-branch mode).
+- **Environment:** Hooks run in the context of the ops worktree (`.arm/`).
 
 ### Example: Require Tests Before Done
 
@@ -74,7 +72,6 @@ This rejects any `transition --to done` unless `make test` passes.
 
 ```json
 {
-  "mode": "dual-branch",
   "project_type": "go",
   "default_ttl": 60,
   "token_budget": 1600,
@@ -97,16 +94,6 @@ This rejects any `transition --to done` unless `make test` passes.
 ## Modifying Configuration
 
 Edit `.armature/config.json` directly with a text editor. Changes take effect immediately on the next `arm` command.
-
-### Mode Migration
-
-To migrate from single-branch to dual-branch mode:
-
-```bash
-arm bootstrap --dual-branch
-```
-
-This creates the `_armature` branch, sets up the `.arm/` worktree, and updates the config. Existing ops are preserved.
 
 ## Interaction with Context Assembly
 
@@ -131,4 +118,4 @@ Update `default_ttl` to adjust when tasks are flagged stale. See `arm list` for 
 
 - [Getting Started](getting-started.md) — Setup workflow
 - [Commands Reference](commands.md) — Full `arm` command documentation
-- [Dual-Branch Architecture](../CLAUDE.md#dual-branch-model) — Implementation details
+- [Architecture](design/architecture.md) — Implementation details

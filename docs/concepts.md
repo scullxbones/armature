@@ -197,52 +197,36 @@ arm show TASK-001 | jq '.provenance.confidence'
 
 ---
 
-## 7. Single-Branch vs. Dual-Branch Modes
+## 7. Ops Branch and Worktree Architecture
 
-**Concept:** Armature adapts to your repository's branch protection policy. Unprotected repos use single-branch mode (all state on `main`). Protected repos use dual-branch mode (code on `main`, coordination on `_armature`).
-
-**Pattern:** Use `--dual-branch` flag with `arm bootstrap` for protected-main repos. Without it, single-branch mode is used. Code changes and coordination changes never mix within a single phase.
+**Concept:** Armature separates coordination state from code by storing all `.armature/` data on a dedicated `_armature` orphan branch, accessed through a `.arm/` ops worktree. This ensures that code and coordination state never conflict, and enables reliable multi-agent coordination.
 
 **How it works:**
+- **`main`:** Code and feature branches only; orchestration state never lives here
+- **`_armature`:** Orphan branch for all coordination data (`.armature/` directory); created by `arm bootstrap` and used by all workers
+- **`.arm/` worktree:** Secondary worktree checked out on `_armature`, accessible at `.arm/.armature/`. This allows safe separation — workers modify ops state without conflicts while code work proceeds on `main`
 
-### Single-Branch Mode (Unprotected Repos)
-- All `.armature/` state lives on `main`
-- No separate coordination branch
-- Workers commit ops directly to `main`
-- Tasks move directly from `done` to complete (no merge phase)
-- Simpler but no separation of concerns
+**Two-phase completion:**
+- `done` = orchestration complete; code change pushed to a feature branch as a PR
+- `merged` = Armature detects that the PR landed on main; tasks now unblock downstream
 
-### Dual-Branch Mode (Protected Repos)
-- **`main`:** Code and feature branches only; direct push disabled
-- **`_armature`:** Orphan branch for `.armature/` coordination data; direct push allowed by all workers
-- **`.arm/` worktree:** Secondary worktree checked out on `_armature`, accessible at `.arm/.armature/`
-- **Two-phase completion:**
-  - `done` = orchestration complete; code change pushed to a feature branch as a PR
-  - `merged` = Armature detects that the PR landed on main; tasks now unblock downstream
-- **Op phases:** 
-  - Phase 1: Worker appends op to ops log on `_armature` branch
-  - Phase 2: Worker pushes op batch to remote
-  - Phase 3: Code worktree (main) continues independently
+**Op phases:**
+- Phase 1: Worker appends op to ops log on `_armature` branch
+- Phase 2: Worker pushes op batch to remote
+- Phase 3: Code worktree (main) continues independently
 
 **Initialization:**
 ```bash
-# Auto-detect and initialize
+# Initialize Armature (creates _armature branch and .arm worktree)
 arm bootstrap
 
-# Force dual-branch mode (even if main is unprotected)
-arm bootstrap --dual-branch
-
-# Check current mode
-cat .armature/config.json | jq '.mode'
+# Check current status
+git worktree list
+git branch | grep _armature
 ```
 
-**Command examples:**
+**Workflow example:**
 ```bash
-# Single-branch workflow (code and state on main)
-arm claim TASK-001
-arm transition TASK-001 --to done
-
-# Dual-branch workflow (state on _armature, code on main)
 git checkout -b feature/TASK-001
 arm claim TASK-001
 arm transition TASK-001 --to done      # goes to "done"

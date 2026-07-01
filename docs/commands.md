@@ -343,14 +343,12 @@ Initializes a repository for Armature coordination and optionally deploys harnes
 (skills, plugin metadata, harness hook configs).
 
 By default, artifacts deploy to `.claude/` (local). Use `--global` to deploy to `~/.claude/` instead.
-Use `--dual-branch` to initialize in dual-branch mode (issues stored on separate `_armature` branch).
 Use `--with-hooks` to also write harness hook configuration (both require `--platform` support).
 Use `--platform` to restrict bootstrap to specific platforms (can be repeated); default is all verified platforms.
 
 The command is idempotent: running it multiple times has the same effect as running it once.
 
 **Flags:**
-- `--dual-branch`: Initialize in dual-branch mode (issues stored on separate `_armature` branch).
 - `--global`: Deploy to `~/.claude/` instead of `.claude/` (local).
 - `--platform string`: Restrict to specific platform(s) (can be repeated; default: all verified platforms).
 - `--with-hooks`: Also write harness hook configuration.
@@ -362,11 +360,8 @@ git hooks, worker identity) and deploys bundled skills to `.claude/skills/` loca
 
 **Examples:**
 ```bash
-# Basic setup in single-branch mode
+# Initialize Armature in the current repo
 arm bootstrap
-
-# Initialize in dual-branch mode
-arm bootstrap --dual-branch
 
 # Deploy skills globally
 arm bootstrap --global
