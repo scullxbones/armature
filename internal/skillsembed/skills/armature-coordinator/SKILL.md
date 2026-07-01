@@ -405,6 +405,52 @@ For each task that completed in the wave, dispatch semantic conformance review u
 
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 
+### a.3. Parallel Branch Overlap Audit
+
+When multiple tasks run in parallel (same wave), there is a risk of **semantic revert**: one task may undo, contradict, or invalidate changes from another task in files they both touched.
+
+**Identify overlapping files:**
+
+After all parallel wave tasks have transitioned to `done`, audit for files modified by multiple tasks in the same wave:
+
+```bash
+# Build a list of files changed by each task
+declare -A TASK_FILES
+for TASK_ID in $WAVE_TASK_IDS; do
+  TASK_BASE="${TASK_COMMITS[$TASK_ID]%%\.\.*}"   # extract base from range
+  TASK_HEAD="${TASK_COMMITS[$TASK_ID]##*\.\.}"   # extract head from range
+  TASK_FILES["$TASK_ID"]=$(git diff --name-only "$TASK_BASE".."$TASK_HEAD")
+done
+
+# Find overlaps: files touched by >1 task
+OVERLAPPING_FILES=""
+for FILE in $(git diff --name-only "$WAVE_BASE_SHA"..HEAD | sort -u); do
+  TASK_COUNT=0
+  for TASK_ID in $WAVE_TASK_IDS; do
+    if echo "${TASK_FILES[$TASK_ID]}" | grep -q "^$FILE$"; then
+      ((TASK_COUNT++))
+    fi
+  done
+  if [ "$TASK_COUNT" -gt 1 ]; then
+    OVERLAPPING_FILES="$OVERLAPPING_FILES $FILE"
+  fi
+done
+
+if [ -n "$OVERLAPPING_FILES" ]; then
+  echo "WARNING: Files modified by multiple parallel tasks in wave $WAVE_TASK_IDS:"
+  echo "$OVERLAPPING_FILES" | tr ' ' '\n' | sort -u
+fi
+```
+
+**Audit semantic compatibility:**
+
+For each overlapping file, manually review the diffs from each task to confirm:
+- Changes are **additive**, not contradictory (e.g., both tasks add to a list, not delete the same item)
+- The combined effect preserves intended semantics (e.g., a refactoring in task A doesn't invalidate a bug fix in task B)
+- Test coverage is sufficient to catch regressions (integration tests should exercise the overlapped file in multiple contexts)
+
+**Failure mode:** If any overlapping file shows contradictory changes (e.g., task A sets a flag to false, task B sets it to true), the semantic revert risk is **HIGH**. Escalate to reviewer dispatch with explicit test evidence before marking tasks `merged`.
+
 ### b. Check for scope conflicts and merge conflicts
 
 If workers operated in separate git worktrees or branches, merge them into the
@@ -571,5 +617,6 @@ git push -u origin HEAD
 |---|---|---|
 | Parallel agents share one log, attribution lost | Forgot to embed `ARM_LOG_SLOT` in each agent's prompt | Include `export ARM_LOG_SLOT=<slot>` as the first instruction in each agent's prompt before dispatch |
 | Build breaks after merging parallel branches | Skipped integration verification | After each wave, run `make check` before claiming the next wave |
+| Semantic revert when merging parallel task branches | Multiple parallel tasks touched the same file; merge did not account for interdependencies | After each parallel wave, run the Parallel Branch Overlap Audit (section a.3); review semantic compatibility of overlapping files before marking tasks `merged`; add integration tests if needed to exercise combined changes |
 | `arm transition STORY-ID --to done` errors with uncited nodes | Story transitioned before all issues were cited | Run `arm validate`; for each `uncited node: ID`, run `arm source-link` or `arm accept-citation --ci`; then retry transition |
 | Armature ops not committed | Forgot mop-up commit before push | After story transition, run `git status`; if `.armature/` has changes, commit them (single-branch mode only) |
