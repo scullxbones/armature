@@ -76,11 +76,6 @@ func hookCurrentBranch(repoPath string) string {
 	return branch
 }
 
-// hookIsDualBranch reports whether the repo is in dual-branch mode.
-func hookIsDualBranch(ctx *config.Context) bool {
-	return ctx.Mode == "dual-branch"
-}
-
 // hookFindActiveClaimID returns the active claim ID for the current worker, or empty string if none.
 func hookFindActiveClaimID(ctx *config.Context) string {
 	workerID, err := worker.GetWorkerID(ctx.RepoPath)
@@ -139,17 +134,12 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 }
 
 // runPreCommitHook implements the pre-commit hook logic natively.
-// In dual-branch mode, it blocks additions/modifications to .armature/ops/ on non-_armature branches.
+// Unconditionally blocks additions/modifications to .armature/ops/ on non-_armature branches.
 func runPreCommitHook(cmd *cobra.Command) error {
 	appCtx := currentCtx(cmd)
 	// Allow all commits on _armature branch
 	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
-		return nil
-	}
-
-	// Single-branch mode: allow ops/ commits
-	if !hookIsDualBranch(appCtx) {
 		return nil
 	}
 
@@ -164,9 +154,9 @@ func runPreCommitHook(cmd *cobra.Command) error {
 	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if strings.Contains(line, ".armature/ops/") {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ERROR: Refusing to commit .armature/ops/ changes on a code branch.")
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "In dual-branch mode, ops are written directly to the _armature branch.")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ops are written directly to the _armature branch.")
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "If you are migrating to dual-branch mode, run: arm bootstrap --dual-branch")
-			return fmt.Errorf("refusing to commit .armature/ops/ on branch %q in dual-branch mode", branch)
+			return fmt.Errorf("refusing to commit .armature/ops/ on branch %q", branch)
 		}
 	}
 	return nil
