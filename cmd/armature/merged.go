@@ -122,7 +122,6 @@ func newMergedCmd() *cobra.Command {
 		Short: "Mark a done issue as merged after its branch/PR is merged",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
-			singleBranch := ctx.Mode == "single-branch"
 
 			// Read index and issue directly from disk; no full rematerialization needed.
 			store := newSnapshotStore(ctx)
@@ -136,15 +135,9 @@ func newMergedCmd() *cobra.Command {
 				return fmt.Errorf("issue %s not found", issueID)
 			}
 
-			// Require status=done (dual-branch) or status=merged (single-branch, where done auto-advances)
-			if singleBranch {
-				if entry.Status != ops.StatusMerged && entry.Status != ops.StatusDone {
-					return fmt.Errorf("issue %s is in status %q; arm merged in single-branch mode requires status=merged (or done)", issueID, entry.Status)
-				}
-			} else {
-				if entry.Status != ops.StatusDone && entry.Status != ops.StatusMerged {
-					return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
-				}
+			// Require status=done or status=merged
+			if entry.Status != ops.StatusDone && entry.Status != ops.StatusMerged {
+				return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
 			}
 
 			// Read the issue to get its type and PR field.
@@ -188,19 +181,11 @@ func newMergedCmd() *cobra.Command {
 				return err
 			}
 
-			if singleBranch {
-				if entry.Status == ops.StatusMerged {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %s already merged. Worktree cleaned up.\n", issueID)
-				} else {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: in single-branch mode, done→merged is automatic. Op recorded for %s.\n", issueID)
-				}
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
-				if pr != "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
-				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout())
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
+			if pr != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
 			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			return nil
 		},
 	}

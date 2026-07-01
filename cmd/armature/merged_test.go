@@ -478,18 +478,17 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	assert.NotContains(t, errBuf.String(), "pass-through", "no warning expected when worktree is already gone")
 }
 
-// TestMergedRejectsSingleBranchModeWithoutMergedStatus verifies that merged requires
-// status=merged (or status=done) in single-branch mode. Currently, in single-branch mode,
-// the status guard is skipped, allowing arm merged to be called on in-progress tasks,
-// which deletes the worktree and any uncommitted worker state (P2 bug).
-func TestMergedRejectsSingleBranchModeWithoutMergedStatus(t *testing.T) {
+// TestMergedRejectsNonDoneStatus verifies that merged requires status=done or status=merged.
+// It rejects issues in other statuses (e.g., in-progress, open) to prevent accidental
+// worktree cleanup of incomplete work.
+func TestMergedRejectsNonDoneStatus(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Bootstrap in single-branch mode (default, no --dual-branch flag)
+	// Bootstrap in dual-branch mode
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -515,17 +514,16 @@ func TestMergedRejectsSingleBranchModeWithoutMergedStatus(t *testing.T) {
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so the in-progress status is reflected in index.json before merged reads it.
-	_, errMat5 := runTrls(t, repo, "materialize")
-	require.NoError(t, errMat5)
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
 
-	// Call merged command — should fail because status is not merged/done in single-branch mode
+	// Call merged command — should fail because status is not done/merged
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err := mergedCmd.Execute()
-	require.Error(t, err, "merged should reject in-progress status in single-branch mode")
-	assert.Contains(t, err.Error(), "status=merged", "error message should indicate merged status required")
-	assert.Contains(t, err.Error(), "single-branch", "error message should mention single-branch mode")
+	require.Error(t, err, "merged should reject in-progress status")
+	assert.Contains(t, err.Error(), "status=done", "error message should indicate done status required")
 
 	// Verify worktree still exists (should not be deleted on error)
 	assert.DirExists(t, worktreePath, "worktree should NOT be removed when merged fails")
@@ -627,24 +625,24 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 	})
 }
 
-// TestMergedRecordsPRInSingleBranchModeOnRetry tests the P2 bug fix: when a new --pr flag
-// is provided with a different PR number, the merge op must be recorded even if the issue
-// is already in 'merged' status. This ensures that `arm merged --issue <id> --pr 123` in
-// single-branch mode captures the PR reference and doesn't silently discard it.
+// TestMergedRecordsPROnRetry tests the P2 bug fix: when a new --pr flag is provided
+// with a different PR number, the merge op must be recorded even if the issue is
+// already in 'merged' status. This ensures merged captures the PR reference without
+// silently discarding it.
 //
 // The bug: the idempotent skip (entry.Status == ops.StatusMerged) unconditionally skips
 // re-recording, so the PR field stays empty even when --pr is provided.
 //
 // The fix: only skip op re-recording if there is no new PR to attach OR if the issue
 // already has the same PR recorded.
-func TestMergedRecordsPRInSingleBranchModeOnRetry(t *testing.T) {
+func TestMergedRecordsPROnRetry(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Bootstrap in single-branch mode (default, no --dual-branch flag)
+	// Bootstrap in dual-branch mode
 	bootstrapCmd := newRootCmd()
 	bootstrapCmd.SetOut(new(bytes.Buffer))
-	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
 
 	workerCmd := newRootCmd()
@@ -674,33 +672,43 @@ func TestMergedRecordsPRInSingleBranchModeOnRetry(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Transition to done (auto-advances to merged in single-branch mode)
+	// Transition to done (stays as done in dual-branch mode, not auto-advanced to merged)
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
-	// Materialize to finalize the transition to merged
+	// Materialize to finalize the transition
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Now the issue is in 'merged' status. Call merged again with a new PR.
-	// The fix requires this to record the PR, not skip it.
-	mergedCmd := newRootCmd()
-	mergedCmd.SetOut(new(bytes.Buffer))
-	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "456"})
-	require.NoError(t, mergedCmd.Execute())
+	// First merged call with PR 123: transitions status to merged and records PR
+	mergedCmd1 := newRootCmd()
+	mergedCmd1.SetOut(new(bytes.Buffer))
+	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "123"})
+	require.NoError(t, mergedCmd1.Execute())
+
+	// Materialize to apply the first PR op
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Now the issue is in 'merged' status with PR 123. Call merged again with a different PR.
+	// The fix requires this to record the new PR, not skip it.
+	mergedCmd2 := newRootCmd()
+	mergedCmd2.SetOut(new(bytes.Buffer))
+	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "456"})
+	require.NoError(t, mergedCmd2.Execute())
 
 	// Materialize to apply the new PR op
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Load the issue and verify the PR field is set
+	// Load the issue and verify the PR field was updated to the new PR
 	stateDir := getTestStateDir(t, repo)
 	issue, err := materialize.LoadIssue(filepath.Join(stateDir, "issues", "task-01.json"))
 	require.NoError(t, err)
 
-	assert.Equal(t, "456", issue.PR, "issue PR field should equal the new PR number provided via --pr flag")
+	assert.Equal(t, "456", issue.PR, "issue PR field should equal the new PR number from the retry call")
 }
 
 // TestMergedSkipsUnboundWorktree tests the P2 bug fix: if a worktree exists on the

@@ -36,7 +36,7 @@ func newRenderContextCmd() *cobra.Command {
 			if rcAt != "" {
 				// Time-travel: replay ops as they existed at the given commit SHA.
 				opsRepoPath := appCtx.RepoPath
-				if appCtx.Mode == "dual-branch" && appCtx.WorktreePath != "" {
+				if appCtx.WorktreePath != "" {
 					opsRepoPath = appCtx.WorktreePath
 				}
 				gc := adapters.New(opsRepoPath)
