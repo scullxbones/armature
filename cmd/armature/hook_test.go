@@ -233,6 +233,19 @@ func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestHookRunPreCommit_BlocksStagedOpsFile verifies that a staged .armature/ops/ file on a non-_armature branch is blocked unconditionally.
+func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Stage a file in .armature/ops/
+	writeFile(t, repo, ".armature/ops/test.log", "test ops content")
+	run(t, repo, "git", "add", filepath.Join(".armature", "ops", "test.log"))
+
+	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "refusing to commit .armature/ops/")
+}
+
 func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -267,7 +280,6 @@ func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
 	ctx := &config.Context{
 		RepoPath:  repo,
 		IssuesDir: issuesDir,
-		Mode:      "single-branch",
 		Config:    config.Config{DefaultTTL: 60},
 	}
 
@@ -303,7 +315,6 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 	ctx := &config.Context{
 		RepoPath:  repo,
 		IssuesDir: issuesDir,
-		Mode:      "single-branch",
 		Config:    config.Config{DefaultTTL: 60},
 	}
 
