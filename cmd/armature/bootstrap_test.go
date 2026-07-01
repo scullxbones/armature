@@ -15,6 +15,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/bootstrap"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1505,4 +1506,200 @@ func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
 		assert.NotContains(t, errMsg, "armature.ops-worktree-path must be set",
 			"doctor error should not be about missing git config")
 	}
+}
+
+// TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1 verifies that after creating the .arm worktree,
+// .arm/ is added to .git/info/exclude so it won't show up as untracked in `git status` or be staged by `git add .`.
+func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify .git/info/exclude contains .arm/
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	content, readErr := os.ReadFile(excludePath)
+	require.NoError(t, readErr, ".git/info/exclude should exist and be readable")
+
+	excludeContent := string(content)
+	assert.Contains(t, excludeContent, ".arm/", ".git/info/exclude should contain .arm/")
+
+	// Verify the .arm/ entry is not duplicated on a second run (idempotent)
+	// Count occurrences of .arm/ in the exclude file
+	firstCount := strings.Count(excludeContent, ".arm/")
+	assert.Equal(t, 1, firstCount, "should have exactly one .arm/ entry")
+
+	// Run bootstrap again
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(strings.Builder))
+	_, err = runRepoSetup(cmd2, repo)
+	require.NoError(t, err)
+
+	// Verify still exactly one .arm/ entry (not duplicated)
+	content2, readErr2 := os.ReadFile(excludePath)
+	require.NoError(t, readErr2)
+	excludeContent2 := string(content2)
+	secondCount := strings.Count(excludeContent2, ".arm/")
+	assert.Equal(t, 1, secondCount, "should still have exactly one .arm/ entry after second run (idempotent)")
+}
+
+// TestCopyRecursiveDoesNotOverwriteExistingFiles_P2 verifies that copyRecursive does not overwrite
+// files that already exist at the destination, instead skipping them.
+func TestCopyRecursiveDoesNotOverwriteExistingFiles_P2(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	// Create a source file with content
+	srcFile := filepath.Join(srcDir, "test.txt")
+	srcContent := []byte("source content")
+	require.NoError(t, os.WriteFile(srcFile, srcContent, 0o600))
+
+	// Create a destination file with different content
+	dstFile := filepath.Join(dstDir, "test.txt")
+	dstContent := []byte("destination content (should not be overwritten)")
+	require.NoError(t, os.WriteFile(dstFile, dstContent, 0o600))
+
+	// Copy the source to destination
+	skipped, err := copyRecursive(srcFile, dstFile)
+	require.NoError(t, err)
+	assert.Equal(t, 1, skipped, "copyRecursive should report 1 skipped file")
+
+	// Verify the destination file was NOT overwritten (still has original content)
+	result, readErr := os.ReadFile(dstFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, dstContent, result, "destination file should not be overwritten by copyRecursive")
+}
+
+// TestPushOpsRunEEmitsNoStderrOnFailure_P2 verifies that push-ops's own RunE writes NOTHING
+// to stderr on failure. main.go's single top-level error handler owns rendering the error
+// (in whatever format was requested), so push_ops must not also emit its own error output —
+// otherwise --format json would produce two JSON objects on stderr instead of one.
+//
+// This test drives push-ops directly via runTrlsWithStderr, which calls root.Execute() and
+// does NOT go through main()'s top-level handler. That means it cannot observe main()'s
+// output at all — it can only observe what push_ops's RunE itself writes. This is exactly
+// the right lens for asserting push_ops emits no error output of its own.
+func TestPushOpsRunEEmitsNoStderrOnFailure_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runRepoSetup(&cobra.Command{}, repo)
+	require.NoError(t, err)
+
+	// Run push-ops with no remote configured (will fail)
+	out, errOutput, pushErr := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
+
+	// Expect an error since there's no remote
+	require.Error(t, pushErr, "push-ops should fail when no remote is configured")
+
+	assert.Equal(t, "", errOutput, "push-ops RunE should write nothing to stderr; only main()'s top-level handler should render the error")
+	assert.Equal(t, "", out, "stdout should be empty when push-ops fails")
+}
+
+// TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2 verifies that when writing
+// .git/info/exclude fails (a cosmetic nicety, not essential functionality), bootstrap
+// still succeeds overall and prints a warning instead of aborting.
+func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: permission bits are not enforced, cannot simulate write failure")
+	}
+
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// `git init` already creates .git/info/exclude, so making the containing directory
+	// read-only wouldn't block a write to the existing file (only creation/deletion
+	// requires directory write permission). Instead, make the exclude file itself
+	// read-only so os.WriteFile's in-place rewrite fails.
+	infoDir := filepath.Join(repo, ".git", "info")
+	require.NoError(t, os.MkdirAll(infoDir, 0o750))
+	// `git init` already created this file (likely 0644), and os.WriteFile's mode
+	// argument is only applied when creating a new file, so an explicit os.Chmod is
+	// required to actually make the existing file read-only.
+	excludePath := filepath.Join(infoDir, "exclude")
+	require.NoError(t, os.WriteFile(excludePath, []byte("# existing\n"), 0o400))
+	require.NoError(t, os.Chmod(excludePath, 0o400))
+	t.Cleanup(func() {
+		if err := os.Chmod(excludePath, 0o600); err != nil {
+			t.Logf("cleanup: failed to restore exclude file permissions: %v", err)
+		}
+	})
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	result, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err, "bootstrap should succeed even when .git/info/exclude cannot be written")
+	assert.NotEmpty(t, result.Status)
+
+	assert.Contains(t, buf.String(), "Warning", "bootstrap should print a warning when the exclude write fails")
+}
+
+// TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3 verifies that when a destination
+// file already exists during legacy ops migration, the skipped count is surfaced to the
+// caller rather than being silently dropped.
+func TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3(t *testing.T) {
+	backupDir := t.TempDir()
+	newOpsDir := t.TempDir()
+
+	legacyOpsDir := filepath.Join(backupDir, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsDir, 0o750))
+
+	// One file that collides with an existing destination file, one that doesn't.
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsDir, "existing.json"), []byte("legacy"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsDir, "new.json"), []byte("legacy"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(newOpsDir, "existing.json"), []byte("already here"), 0o600))
+
+	skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, newOpsDir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, skippedCount, "exactly one file should have been skipped due to a destination collision")
+
+	// The colliding file should not have been overwritten.
+	content, readErr := os.ReadFile(filepath.Join(newOpsDir, "existing.json"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "already here", string(content))
+
+	// The non-colliding file should have been copied.
+	content, readErr = os.ReadFile(filepath.Join(newOpsDir, "new.json"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "legacy", string(content))
+}
+
+// TestExcludeArmWorktreeFromGitExactLineMatch_P3 verifies that the idempotency check for
+// .arm/ in .git/info/exclude uses exact line matching, not substring containment. A
+// pre-existing similar-but-different line (e.g. "vendor.arm/") must not suppress the
+// real ".arm/" entry from being appended.
+func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
+	repo := t.TempDir()
+	infoDir := filepath.Join(repo, ".git", "info")
+	require.NoError(t, os.MkdirAll(infoDir, 0o750))
+	excludePath := filepath.Join(infoDir, "exclude")
+
+	require.NoError(t, os.WriteFile(excludePath, []byte("vendor.arm/\n"), 0o600))
+
+	require.NoError(t, excludeArmWorktreeFromGit(repo))
+
+	content, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	assert.Contains(t, lines, "vendor.arm/", "pre-existing unrelated line should be preserved")
+	assert.Contains(t, lines, ".arm/", "the real .arm/ exclude entry should be appended despite the similar existing line")
+
+	// Running again should not duplicate the exact ".arm/" line.
+	require.NoError(t, excludeArmWorktreeFromGit(repo))
+	content2, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	count := 0
+	for _, line := range strings.Split(string(content2), "\n") {
+		if strings.TrimSpace(line) == ".arm/" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, ".arm/ should not be duplicated on repeated calls")
 }

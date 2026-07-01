@@ -572,68 +572,131 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 
 // copyLegacyOpsToNewWorktree copies the ops directory contents from the backup (created during migration)
 // to the new worktree's .armature/ops directory. This preserves legacy issue data.
-func copyLegacyOpsToNewWorktree(backupDir string, newOpsDir string) error {
+// Returns the count of destination files that already existed and were therefore skipped
+// (not overwritten), so callers can surface a summary to the user.
+func copyLegacyOpsToNewWorktree(backupDir string, newOpsDir string) (int, error) {
 	legacyOpsDir := filepath.Join(backupDir, "ops")
 
 	// Read the legacy ops directory
 	entries, err := os.ReadDir(legacyOpsDir)
 	if err != nil {
-		return fmt.Errorf("read legacy ops directory from backup: %w", err)
+		return 0, fmt.Errorf("read legacy ops directory from backup: %w", err)
 	}
 
 	// Recursively copy all entries from legacy ops to new ops directory
+	skippedCount := 0
 	for _, entry := range entries {
 		srcPath := filepath.Join(legacyOpsDir, entry.Name())
 		dstPath := filepath.Join(newOpsDir, entry.Name())
 
-		if err := copyRecursive(srcPath, dstPath); err != nil {
-			return fmt.Errorf("copy legacy ops file %s: %w", entry.Name(), err)
+		skipped, err := copyRecursive(srcPath, dstPath)
+		if err != nil {
+			return skippedCount, fmt.Errorf("copy legacy ops file %s: %w", entry.Name(), err)
 		}
+		skippedCount += skipped
 	}
 
-	return nil
+	return skippedCount, nil
 }
 
 // copyRecursive recursively copies a file or directory from src to dst.
+// If a file already exists at the destination, it is NOT overwritten (skip it).
+// This preserves any newer or hand-crafted files at the destination.
 // Note: uses os.Stat (follows symlinks) rather than os.Lstat, so symlinks in
 // the source tree are copied as their target's contents rather than being
 // preserved as symlinks. Legacy .armature/ops is not expected to contain
 // symlinks in practice.
-func copyRecursive(src string, dst string) error {
+// Returns the count of files skipped because a destination file already existed.
+func copyRecursive(src string, dst string) (int, error) {
 	info, err := os.Stat(src)
 	if err != nil {
-		return fmt.Errorf("stat source: %w", err)
+		return 0, fmt.Errorf("stat source: %w", err)
 	}
 
 	if info.IsDir() {
 		// Create destination directory
 		if err := os.MkdirAll(dst, info.Mode()); err != nil {
-			return fmt.Errorf("create directory: %w", err)
+			return 0, fmt.Errorf("create directory: %w", err)
 		}
 
 		// Recursively copy directory contents
 		entries, err := os.ReadDir(src)
 		if err != nil {
-			return fmt.Errorf("read directory: %w", err)
+			return 0, fmt.Errorf("read directory: %w", err)
 		}
 
+		skippedCount := 0
 		for _, entry := range entries {
 			srcPath := filepath.Join(src, entry.Name())
 			dstPath := filepath.Join(dst, entry.Name())
-			if err := copyRecursive(srcPath, dstPath); err != nil {
-				return err
+			skipped, err := copyRecursive(srcPath, dstPath)
+			if err != nil {
+				return skippedCount, err
 			}
+			skippedCount += skipped
 		}
-	} else {
-		// Copy file
-		content, err := os.ReadFile(src) //nolint:gosec // G304: src is constructed from legacyOpsDir
-		if err != nil {
-			return fmt.Errorf("read file: %w", err)
-		}
+		return skippedCount, nil
+	}
 
-		if err := os.WriteFile(dst, content, info.Mode()); err != nil { //nolint:gosec // dst is constructed from newOpsDir
-			return fmt.Errorf("write file: %w", err)
+	// Check if destination file already exists
+	if _, err := os.Stat(dst); err == nil {
+		// File exists at destination, skip it (don't overwrite)
+		return 1, nil
+	} else if !os.IsNotExist(err) {
+		// Some other error checking the destination
+		return 0, fmt.Errorf("stat destination: %w", err)
+	}
+
+	// Destination file does not exist, safe to copy
+	content, err := os.ReadFile(src) //nolint:gosec // G304: src is constructed from legacyOpsDir
+	if err != nil {
+		return 0, fmt.Errorf("read file: %w", err)
+	}
+
+	if err := os.WriteFile(dst, content, info.Mode()); err != nil { //nolint:gosec // dst is constructed from newOpsDir
+		return 0, fmt.Errorf("write file: %w", err)
+	}
+
+	return 0, nil
+}
+
+// excludeArmWorktreeFromGit adds .arm/ to .git/info/exclude so the worktree is not tracked by git.
+// This is idempotent: if .arm/ is already in the exclude file, it won't be duplicated.
+func excludeArmWorktreeFromGit(repoPath string) error {
+	excludePath := filepath.Join(repoPath, ".git", "info", "exclude")
+
+	// Create the info directory if it doesn't exist
+	infoDir := filepath.Dir(excludePath)
+	if err := os.MkdirAll(infoDir, 0o750); err != nil {
+		return fmt.Errorf("create .git/info directory: %w", err)
+	}
+
+	// Read the current exclude file (it may not exist yet)
+	var currentContent string
+	if data, err := os.ReadFile(excludePath); err == nil { //nolint:gosec // G304: path is constructed from repo/.git/info/exclude
+		currentContent = string(data)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read .git/info/exclude: %w", err)
+	}
+
+	// Check if .arm/ is already in the exclude file as an exact line match (not a
+	// substring match, which would false-positive on e.g. "vendor.arm/" or false-negative
+	// on a commented-out "#.arm/").
+	for _, line := range strings.Split(currentContent, "\n") {
+		if strings.TrimSpace(line) == ".arm/" {
+			return nil // Already excluded, idempotent
 		}
+	}
+
+	// Append .arm/ to the exclude file
+	newContent := currentContent
+	if len(newContent) > 0 && !strings.HasSuffix(newContent, "\n") {
+		newContent += "\n"
+	}
+	newContent += ".arm/\n"
+
+	if err := os.WriteFile(excludePath, []byte(newContent), 0o600); err != nil { //nolint:gosec // G703: path is constructed from repo/.git/info/exclude
+		return fmt.Errorf("write .git/info/exclude: %w", err)
 	}
 
 	return nil
@@ -686,6 +749,14 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w", err)
 	}
 
+	// Exclude .arm/ from git tracking to prevent it from showing up in `git status`
+	// or being staged by `git add .`. Use .git/info/exclude (local-only, doesn't require
+	// committing a change to the repo's .gitignore). This is a cosmetic nicety, not
+	// essential functionality, so a failure here should not abort bootstrap.
+	if err := excludeArmWorktreeFromGit(repoPath); err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
+	}
+
 	// Set git config keys for dual-branch mode
 	if err := gitClient.SetGitConfig("armature.mode", "dual-branch"); err != nil {
 		return RepoSetupResult{}, fmt.Errorf("set armature.mode: %w", err)
@@ -720,8 +791,12 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	// Copy legacy ops data from backup if migration happened
 	if migrated && backupDir != "" {
-		if err := copyLegacyOpsToNewWorktree(backupDir, opsDir); err != nil {
+		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, opsDir)
+		if err != nil {
 			return RepoSetupResult{}, fmt.Errorf("copy legacy ops data: %w", err)
+		}
+		if skippedCount > 0 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%d legacy ops file(s) already present in new worktree, not overwritten\n", skippedCount)
 		}
 
 		// Commit the migrated ops files to the _armature branch so they're preserved for other clones.

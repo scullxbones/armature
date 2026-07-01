@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +17,12 @@ func newPushOpsCmd() *cobra.Command {
 		Long: `Push the _armature branch (which contains ops logs) to the remote repository.
 This ensures that ops data is shared with other clones and collaborators.
 Called by the post-commit hook after each commit.`,
+		// SilenceErrors prevents cobra itself from printing "Error: ..." to stderr when
+		// RunE returns an error. Without this, cobra's own default error printing would
+		// run in addition to main()'s top-level handler, reintroducing duplicate error
+		// output (this time cobra's plain-text line plus main()'s JSON/plain-text line)
+		// even though push-ops's own RunE no longer emits anything itself.
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
 			if repoPath == "" {
@@ -37,12 +42,11 @@ Called by the post-commit hook after each commit.`,
 			// exit status when deciding whether a commit succeeded, and the hook
 			// invokes this command as `arm push-ops 2>/dev/null || true`, so a
 			// failed push never blocks or breaks a commit.
+			//
+			// Do NOT emit error output here (neither JSON nor plain-text); let main()'s
+			// top-level error handler emit exactly one error message in the configured
+			// format. This prevents duplicate JSON objects on stderr.
 			if err := gitClient.Push("_armature"); err != nil {
-				if format == "json" || format == "agent" {
-					writeJSONError(cmd.ErrOrStderr(), fmt.Sprintf("push-ops: push failed: %v", err), exitcodes.ExitIOError)
-				} else {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "push-ops: push failed: %v\n", err)
-				}
 				return fmt.Errorf("push-ops: push failed: %w", err)
 			}
 
