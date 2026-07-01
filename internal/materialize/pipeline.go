@@ -153,10 +153,8 @@ func runFullPipeline(stateDir string, allOps []ops.Op, singleBranch bool,
 		}
 		state = NewState()
 		state.Issues = loadedIssues
-		state.SingleBranchMode = singleBranch
 	} else {
 		state = NewState()
-		state.SingleBranchMode = singleBranch
 	}
 
 	sortOpsByTimestamp(allOps)
@@ -233,7 +231,6 @@ func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, singleBranch bool
 	sortOpsByTimestamp(filteredOps)
 
 	state := NewState()
-	state.SingleBranchMode = singleBranch
 
 	unhandledOps, err := applyOpsWithTolerance(state, filteredOps, toleratedMissingTargetIDs)
 	if err != nil {

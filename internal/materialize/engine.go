@@ -13,8 +13,7 @@ import (
 
 // State holds the complete materialized state built from op replay.
 type State struct {
-	Issues           map[string]*Issue
-	SingleBranchMode bool
+	Issues map[string]*Issue
 }
 
 func NewState() *State {
@@ -164,9 +163,6 @@ func (s *State) applyTransition(op ops.Op) error {
 	}
 	if op.Payload.PR != "" {
 		issue.PR = op.Payload.PR
-	}
-	if s.SingleBranchMode && newStatus == ops.StatusDone {
-		issue.Status = ops.StatusMerged
 	}
 	return nil
 }
