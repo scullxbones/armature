@@ -171,6 +171,25 @@ given but do not assign slots to others.
 
 For tasks spanning 10+ files, see `references/batch-strategy.md`.
 
+## Test Naming and Traceability
+
+Test functions that verify acceptance criteria must follow the naming convention:
+
+```
+Test<Description>_REQ_<ISSUE-ID>
+```
+
+Where `<ISSUE-ID>` is the task or story ID (e.g., `DF-S5-T5`). This pattern makes
+the test visible to `make trace-report` and ties it back to the requirement that
+motivated it.
+
+Examples:
+- `TestParseTokenTypes_REQ_STORY_T1`
+- `TestEdgeCases_REQ_DF_S5_T5`
+
+For the full rationale and context on acceptance criteria, see the **Test Naming
+and Traceability** section in `armature-planner/SKILL.md`.
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -190,3 +209,4 @@ For tasks spanning 10+ files, see `references/batch-strategy.md`.
 | Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |
 | Scope overlap WARNING on `arm validate` | Add `arm link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
 | MISSING entries in `arm sources verify` | Run `arm sources sync` to fetch and fingerprint; re-run `arm sources verify` until all show OK |
+| Test function named `TestFoo` instead of `TestFoo_REQ_ID` | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_ISSUE_ID`; see Test Naming and Traceability section |
