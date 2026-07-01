@@ -272,7 +272,7 @@ func TestMaterializePipeline(t *testing.T) {
 	// Read ops from disk
 	allOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	result, err := Materialize(filepath.Join(dir, "state"), allOps, true, nil)
+	result, err := Materialize(filepath.Join(dir, "state"), allOps, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.IssueCount)
 
@@ -554,7 +554,7 @@ func TestMaterializeAndReturn_BasicPipeline(t *testing.T) {
 	// Read ops from disk
 	allOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), allOps, true, nil)
+	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), allOps, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	require.NotNil(t, state)
@@ -566,7 +566,7 @@ func TestMaterializeAndReturn_EmptyDir(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	// No ops dir — should return empty state
-	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), []ops.Op{}, false, nil)
+	state, result, err := MaterializeAndReturn(filepath.Join(dir, "state"), []ops.Op{}, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.IssueCount)

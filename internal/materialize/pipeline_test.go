@@ -33,7 +33,7 @@ func TestMaterialize_IncrementalReplayNormalizesLoadedIssues(t *testing.T) {
 		ByteOffsets: map[string]int64{"worker-1.log": 123},
 	}))
 
-	_, err := Materialize(stateDir, nil, false, nil)
+	_, err := Materialize(stateDir, nil, nil)
 	require.NoError(t, err)
 
 	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-01.json"))
@@ -64,7 +64,7 @@ func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
 
 	stateDir := filepath.Join(readOnlyDir, "state")
 
-	_, err := Materialize(stateDir, []ops.Op{}, false, nil)
+	_, err := Materialize(stateDir, []ops.Op{}, nil)
 	if err == nil {
 		t.Fatal("expected error when MkdirAll fails, got nil")
 	}
@@ -91,7 +91,7 @@ func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
 
 	stateDir := filepath.Join(readOnlyDir, "state")
 
-	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{}, false, nil)
+	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{}, nil)
 	if err == nil {
 		t.Fatal("expected error when MkdirAll fails, got nil")
 	}
@@ -133,7 +133,7 @@ func TestMaterialize_SlottedLogsIncluded(t *testing.T) {
 	require.NoError(t, err)
 	allOps = append(allOps, slottedOps...)
 
-	result, err := Materialize(filepath.Join(dir, "state"), allOps, true, nil)
+	result, err := Materialize(filepath.Join(dir, "state"), allOps, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	assert.Equal(t, 3, result.OpsProcessed)
@@ -180,7 +180,7 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 	allOps := append(append(opsA, opsASlot...), opsB...)
 
 	// Exclude worker-a: task-01 should not appear as done (or at all)
-	state, result, err := MaterializeExcludeWorker(allOps, workerA, true)
+	state, result, err := MaterializeExcludeWorker(allOps, workerA)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount, "only worker-b's issue should be present")
 	_, hasTaskOne := state.Issues["task-01"]
@@ -220,7 +220,7 @@ func TestMaterializeExcludeWorker_ToleratesMissingTargetsFromExcludedCreates(t *
 
 	allOps := []ops.Op{validCreate, missingTargetClaim, excludedCreate}
 
-	state, result, err := MaterializeExcludeWorker(allOps, workerA, false)
+	state, result, err := MaterializeExcludeWorker(allOps, workerA)
 	require.NoError(t, err, "exclude-worker replay should tolerate missing targets from filtered creates")
 	assert.Equal(t, 1, result.IssueCount)
 	assert.Equal(t, 2, result.OpsProcessed)
@@ -261,7 +261,7 @@ func TestMaterializeExcludeWorker_DoesNotSuppressUnrelatedMissingTargets(t *test
 		Payload:   ops.Payload{Title: "Task ninety-nine", NodeType: "task"},
 	}
 
-	_, _, err := MaterializeExcludeWorker([]ops.Op{validCreate, missingTargetClaim, unrelatedExcludedCreate}, workerA, false)
+	_, _, err := MaterializeExcludeWorker([]ops.Op{validCreate, missingTargetClaim, unrelatedExcludedCreate}, workerA)
 	require.Error(t, err, "unrelated missing-target replay errors should still surface")
 	assert.Contains(t, err.Error(), "task-01")
 }
@@ -297,7 +297,7 @@ func TestMaterialize_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	allOps := []ops.Op{validOp, unknownOp}
 
 	// Materialize with unknown op type
-	result, err := Materialize(stateDir, allOps, false, nil)
+	result, err := Materialize(stateDir, allOps, nil)
 	require.NoError(t, err, "Materialize should not error, but should capture unknown ops")
 
 	// Verify the op was captured in UnhandledOps (not returned as an error)
@@ -333,7 +333,7 @@ func TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced(t *testing.T) {
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	_, result, err := MaterializeAndReturn(stateDir, allOps, false, nil)
+	_, result, err := MaterializeAndReturn(stateDir, allOps, nil)
 	require.NoError(t, err, "MaterializeAndReturn should not error, but should capture unknown ops")
 
 	// Verify unknown op is captured
@@ -368,7 +368,7 @@ func TestMaterializeAndReturn_HandlerErrorSurfaced(t *testing.T) {
 		Payload:   ops.Payload{TTL: 60},
 	}
 
-	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{validOp, handlerErrOp}, false, nil)
+	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{validOp, handlerErrOp}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "claim: issue task-02 not found")
 
@@ -401,7 +401,7 @@ func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	_, result, err := MaterializeExcludeWorker(allOps, "worker-c", false)
+	_, result, err := MaterializeExcludeWorker(allOps, "worker-c")
 	require.NoError(t, err, "MaterializeExcludeWorker should not error, but should capture unknown ops")
 
 	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
@@ -448,7 +448,7 @@ func TestMaterialize_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralle
 	os.Stderr = w
 
 	// Run Materialize
-	result, materializeErr := Materialize(stateDir, allOps, false, nil)
+	result, materializeErr := Materialize(stateDir, allOps, nil)
 
 	// Restore stderr
 	require.NoError(t, w.Close())
@@ -500,7 +500,7 @@ func TestMaterializeAndReturn_UnhandledOpsWarningEmitted(t *testing.T) { //nolin
 	os.Stderr = w
 
 	// Run MaterializeAndReturn
-	_, result, funcErr := MaterializeAndReturn(stateDir, allOps, false, nil)
+	_, result, funcErr := MaterializeAndReturn(stateDir, allOps, nil)
 
 	// Restore stderr immediately and close the write end
 	os.Stderr = oldStderr
@@ -550,7 +550,7 @@ func TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted(t *testing.T) { //n
 	os.Stderr = w
 
 	// Run MaterializeExcludeWorker
-	_, result, funcErr := MaterializeExcludeWorker(allOps, "worker-c", false)
+	_, result, funcErr := MaterializeExcludeWorker(allOps, "worker-c")
 
 	// Restore stderr
 	os.Stderr = oldStderr
@@ -615,7 +615,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offsets := map[string]int64{filepath.Base(logPath): info.Size()}
-	baselineState, baselineResult, err := MaterializeAndReturn(stateDir, opsInitial, false, offsets)
+	baselineState, baselineResult, err := MaterializeAndReturn(stateDir, opsInitial, offsets)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(baselineState.Issues))
 	assert.Equal(t, 6, baselineResult.OpsProcessed)
@@ -643,7 +643,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	info2, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offsets2 := map[string]int64{filepath.Base(logPath): info2.Size()}
-	incrementalState, incrementalResult, err := MaterializeAndReturn(stateDir, opsAll, false, offsets2)
+	incrementalState, incrementalResult, err := MaterializeAndReturn(stateDir, opsAll, offsets2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(incrementalState.Issues))
 	assert.Equal(t, 8, incrementalResult.OpsProcessed, "should have processed all 8 ops")
@@ -693,7 +693,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	// Run fresh full replay with all ops
 	opsAll2, err := ops.ReadLog(logPath2)
 	require.NoError(t, err)
-	fullReplayState, fullReplayResult, err := MaterializeAndReturn(stateDir2, opsAll2, false, nil)
+	fullReplayState, fullReplayResult, err := MaterializeAndReturn(stateDir2, opsAll2, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(fullReplayState.Issues))
 	assert.Equal(t, 8, fullReplayResult.OpsProcessed)
@@ -743,7 +743,7 @@ func TestIncremental_ReplayRepairsStaleIssueState(t *testing.T) {
 		ByteOffsets: map[string]int64{"worker-a.log": 128},
 	}))
 
-	state, result, err := MaterializeAndReturn(stateDir, nil, false, map[string]int64{"worker-a.log": 128})
+	state, result, err := MaterializeAndReturn(stateDir, nil, map[string]int64{"worker-a.log": 128})
 	require.NoError(t, err)
 	assert.False(t, result.FullReplay, "checkpointed replay should take the incremental path")
 
@@ -770,7 +770,7 @@ func TestMaterializeAndReturnQuiet_BasicRoundTrip(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
 
-	state, result, err := MaterializeAndReturnQuiet(stateDir, []ops.Op{}, true, nil)
+	state, result, err := MaterializeAndReturnQuiet(stateDir, []ops.Op{}, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.OpsProcessed)
@@ -1032,7 +1032,7 @@ func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
 	allOps := []ops.Op{createOp, assessmentOp}
 
 	// Materialize the ops
-	state, result, err := MaterializeAndReturn(stateDir, allOps, false, nil)
+	state, result, err := MaterializeAndReturn(stateDir, allOps, nil)
 	require.NoError(t, err)
 
 	// Verify materialization results
