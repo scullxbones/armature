@@ -87,8 +87,6 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 // verbose=true adds file path and line context to D3 violations via VerboseItems.
 // now is used for D2 stale claim detection.
 func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now time.Time) (Report, error) {
-	singleBranch := true // single-branch is the default for doctor
-
 	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
 	opsDir := filepath.Join(issuesDir, "ops")
 	opItems, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
@@ -99,7 +97,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	// Extract ops from OpItems
 	allOps := ops.ExtractOps(opItems)
 
-	if _, err := materialize.Materialize(stateDir, allOps, singleBranch, nil); err != nil {
+	if _, err := materialize.Materialize(stateDir, allOps, nil); err != nil {
 		return Report{}, fmt.Errorf("materialize: %w", err)
 	}
 
