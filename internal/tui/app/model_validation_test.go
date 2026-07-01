@@ -85,7 +85,7 @@ func TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps(t *testing.T) {
 
 	// Materialize state
 	allOpsForMat := ops.ExtractOps(items)
-	state, _, err := materialize.MaterializeAndReturn(stateDir, allOpsForMat, true, offsets)
+	state, _, err := materialize.MaterializeAndReturn(stateDir, allOpsForMat, offsets)
 	require.NoError(t, err)
 
 	// Verify materialized state only includes the valid task
@@ -210,7 +210,7 @@ func TestTUIModel_MixedValidityLoadingCorrectly(t *testing.T) {
 
 	// Materialize and verify
 	allOps := ops.ExtractOps(items)
-	state, _, err := materialize.MaterializeAndReturn(stateDir, allOps, true, offsets)
+	state, _, err := materialize.MaterializeAndReturn(stateDir, allOps, offsets)
 	require.NoError(t, err)
 
 	assert.Contains(t, state.Issues, "valid-task", "valid-task should be in state")
