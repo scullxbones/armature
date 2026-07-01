@@ -168,6 +168,10 @@ func newRootCmd() *cobra.Command {
 	syncCmd.GroupID = "sync"
 	root.AddCommand(syncCmd)
 
+	pushOpsCmd := newPushOpsCmd()
+	pushOpsCmd.GroupID = "sync"
+	root.AddCommand(pushOpsCmd)
+
 	mergedCmd := newMergedCmd()
 	mergedCmd.GroupID = "sync"
 	root.AddCommand(mergedCmd)

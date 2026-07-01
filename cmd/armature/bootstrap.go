@@ -406,8 +406,10 @@ fi
 # Send heartbeat for active claim (if any)
 arm heartbeat 2>/dev/null
 
-# Push ops logs after each commit
-arm push-ops 2>/dev/null
+# Push ops logs after each commit. A failed push (no network, no remote,
+# permission denied) must never block or break the commit that already
+# happened, so its exit status is explicitly ignored here.
+arm push-ops 2>/dev/null || true
 `
 
 const prepareCommitMsgHookTemplate = `#!/bin/sh
@@ -720,6 +722,23 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	if migrated && backupDir != "" {
 		if err := copyLegacyOpsToNewWorktree(backupDir, opsDir); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("copy legacy ops data: %w", err)
+		}
+
+		// Commit the migrated ops files to the _armature branch so they're preserved for other clones.
+		// Use a gitClient scoped to the worktree to commit within that working tree.
+		worktreeGitClient := adapters.New(worktreePath)
+
+		// Stage the copied ops files
+		if err := worktreeGitClient.AddPaths([]string{".armature/ops"}); err != nil {
+			return RepoSetupResult{}, fmt.Errorf("stage migrated ops data: %w", err)
+		}
+
+		// Commit the staged files
+		if err := worktreeGitClient.CommitPaths(
+			"chore: commit migrated legacy ops from single-branch layout",
+			".armature/ops",
+		); err != nil {
+			return RepoSetupResult{}, fmt.Errorf("commit migrated ops data to _armature branch: %w", err)
 		}
 	}
 
