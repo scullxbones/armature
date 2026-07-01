@@ -145,6 +145,14 @@ _Avoid_: Ops branch, state branch
 The local worktree used to operate on the ops branch and its `.armature/` data. The ops worktree is the local working surface for coordination state, not the main code editing surface.
 _Avoid_: Code worktree, repo root
 
+**Single-Branch Mode**:
+The operating mode where Armature's coordination data lives on the same branch as code. In single-branch mode, the system does not separate code history from coordination history by branch.
+_Avoid_: Dual-branch mode, ops branch mode
+
+**Dual-Branch Mode**:
+The operating mode where Armature's coordination data lives on a dedicated ops branch separate from code branches. In dual-branch mode, coordination state and code changes follow distinct branch flows.
+_Avoid_: Single-branch mode, main-only mode
+
 **Op**:
 An append-only recorded action in Armature's operational history. Ops are the atomic facts from which Armature derives current issue state.
 _Avoid_: State row, record update
