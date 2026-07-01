@@ -7,6 +7,7 @@ Tests metric computation with deterministic fixtures.
 import unittest
 import sys
 import os
+import json
 
 # Add scripts directory to path so we can import reviewer_eval_report
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -15,97 +16,31 @@ from reviewer_eval_report import compute_metrics
 
 
 class TestEvaluatorMetrics(unittest.TestCase):
-    """Tests for evaluator metric computation."""
+    """Tests for evaluator metric computation.
+
+    Test fixtures are loaded from canonical JSON files:
+    - cases.json: internal/review/testdata/evals/cases.json
+    - reviewer_eval_results.json: scripts/testdata/reviewer_eval_results.json
+
+    This ensures test data is not duplicated and stays synchronized with the
+    canonical source of truth.
+    """
 
     def setUp(self):
-        """Set up test fixtures."""
-        # Synthetic cases with known expected values
-        self.cases = [
-            {
-                "id": "case-001",
-                "expected_rating": "green",
-                "expected_statuses": {"AC1": "satisfied"}
-            },
-            {
-                "id": "case-002",
-                "expected_rating": "red",
-                "expected_statuses": {"AC1": "not_satisfied"}
-            },
-            {
-                "id": "case-003",
-                "expected_rating": "red",
-                "expected_statuses": {"AC1": "satisfied", "AC2": "not_satisfied"}
-            },
-            {
-                "id": "case-004",
-                "expected_rating": "yellow",
-                "expected_statuses": {"AC1": "partially_satisfied"}
-            },
-            {
-                "id": "case-005",
-                "expected_rating": "yellow",
-                "expected_statuses": {"AC1": "indeterminate"}
-            },
-            {
-                "id": "case-006",
-                "expected_rating": "red",
-                "expected_statuses": {"AC1": "not_satisfied"}
-            },
-            {
-                "id": "case-007",
-                "expected_rating": "green",
-                "expected_statuses": {"AC1": "satisfied", "AC2": "satisfied", "AC3": "satisfied"}
-            },
-            {
-                "id": "case-008",
-                "expected_rating": "red",
-                "expected_statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
-            }
-        ]
+        """Load test fixtures from canonical JSON files."""
+        # Get the absolute path to the fixture files
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_root = os.path.dirname(script_dir)
 
-        # Synthetic results that perfectly match expected values
-        self.perfect_results = [
-            {
-                "case_id": "case-001",
-                "rating": "green",
-                "statuses": {"AC1": "satisfied"}
-            },
-            {
-                "case_id": "case-002",
-                "rating": "red",
-                "statuses": {"AC1": "not_satisfied"}
-            },
-            {
-                "case_id": "case-003",
-                "rating": "red",
-                "statuses": {"AC1": "satisfied", "AC2": "not_satisfied"}
-            },
-            {
-                "case_id": "case-004",
-                "rating": "yellow",
-                "statuses": {"AC1": "partially_satisfied"}
-            },
-            {
-                "case_id": "case-005",
-                "rating": "yellow",
-                "statuses": {"AC1": "indeterminate"}
-            },
-            {
-                "case_id": "case-006",
-                "rating": "red",
-                "statuses": {"AC1": "not_satisfied"}
-            },
-            {
-                "case_id": "case-007",
-                "rating": "green",
-                "statuses": {"AC1": "satisfied", "AC2": "satisfied", "AC3": "satisfied"}
-            },
-            {
-                "case_id": "case-008",
-                "rating": "red",
-                "statuses": {"AC1": "satisfied", "AC2": "partially_satisfied", "AC3": "not_satisfied"}
-            }
-        ]
+        # Load cases from canonical fixture file
+        cases_path = os.path.join(repo_root, "internal/review/testdata/evals/cases.json")
+        with open(cases_path, 'r') as f:
+            self.cases = json.load(f)
+
+        # Load perfect results from canonical fixture file
+        results_path = os.path.join(script_dir, "testdata/reviewer_eval_results.json")
+        with open(results_path, 'r') as f:
+            self.perfect_results = json.load(f)
 
     def test_rating_accuracy_metric(self):
         """Test rating_accuracy metric computation."""
