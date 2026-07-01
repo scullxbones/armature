@@ -208,9 +208,6 @@ Examples:
 - `TestParseTokenTypes_REQ_STORY_T1`
 - `TestEdgeCases_REQ_DF_S5_T5`
 
-For the full rationale and context on acceptance criteria, see the **Test Naming
-and Traceability** section in `armature-planner/SKILL.md`.
-
 ## Common Mistakes
 
 | Mistake | Fix |

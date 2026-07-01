@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from reviewer_eval_report import compute_metrics
 
 
-class TestEvaluatorMetrics(unittest.TestCase):
+class TestEvalReport_CanonicalFixtures_REQ_DF_S5_T9(unittest.TestCase):
     """Tests for evaluator metric computation.
 
     Test fixtures are loaded from canonical JSON files:
