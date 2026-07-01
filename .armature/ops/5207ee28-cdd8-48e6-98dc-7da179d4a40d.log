@@ -1807,3 +1807,4 @@
 ["transition","SB-ELIM",1782904161,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["claim","SB-T5",1782904161,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90}]
 ["transition","SB-T1",1782904475,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","SB-T5",1782904476,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
