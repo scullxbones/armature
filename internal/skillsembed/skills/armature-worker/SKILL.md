@@ -143,7 +143,7 @@ to your specific types and fields.
 
 ```
 arm transition ISSUE-ID --to done --outcome "what was accomplished"
-git add <each file from the task scope> .armature/
+git add <each file from the task scope>
 git commit -m "feat(ISSUE-ID): brief description of what was implemented"
 ```
 
@@ -151,14 +151,19 @@ Stage files **explicitly by name or path** — taken directly from the task's `s
 Do **not** use `git commit -am`: the `-a` flag only auto-stages already-tracked files and
 silently skips new files and directories created by the task.
 
+**Do not stage `.armature/`** — ops are automatically committed to the `_armature` branch
+and will be delivered separately.
+
 Record a concrete outcome. Commit immediately after the task — small focused commits
 are easier to review.
 
-**Always stage `.armature/` alongside code files.** Every `arm` command (note,
-decision, heartbeat, transition) writes ops to `.armature/`. If you omit `.armature/`
-from the commit, those ops are left behind and will not be delivered with the code.
+**Do NOT stage `.armature/` in code commits.** Armature automatically commits ops to
+the separate `_armature` ops branch after each command. The `.armature/` directory
+in your code worktree is stale — including it in code commits will cause pre-commit
+checks to fail. Ops are already persisted on the `_armature` branch and will be
+delivered separately.
 
-If using dual-branch mode, see `references/dual-branch.md` before committing.
+Stage only the scoped code files (those listed in the task's `scope` field):
 
 **Commit message format:** `<type>(<ISSUE-ID>): <description>`
 Types: `feat`, `fix`, `refactor`, `test`, `docs`
@@ -221,7 +226,7 @@ Examples:
 | Skipping heartbeat on long tasks | Claim expires after TTL; other workers can steal it |
 | Skipping commit after task | Small commits make review and revert tractable |
 | Using `git commit -am` | `-a` only stages tracked files — new files and directories are silently skipped; always use explicit `git add <scope files>` |
-| Omitting `.armature/` from `git add` | Ops left behind, not delivered with code; always include `.armature/` in every commit (see `references/dual-branch.md` for dual-branch mode exception) |
+| Including `.armature/` in `git add` | Stages stale data; ops are already on `_armature` branch — omit `.armature/` from code commits |
 | Leave issues uncited | Run `arm source-link` or `arm accept-citation --ci` before returning |
 | Repeating `transition` then `commit` manually | Use a bundled command: `arm transition ID ... && git add . .armature/ && git commit -m ...` |
 | Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |

@@ -1695,15 +1695,14 @@ func TestDecomposeContextCmd_WithSources(t *testing.T) {
 }
 
 // TestNewSnapshotStore_UsesContextPaths verifies that newSnapshotStore wires
-// opsDir from IssuesDir/ops, stateDir from StateDir, and singleBranch from Mode.
+// opsDir from IssuesDir/ops and stateDir from StateDir.
 func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
 	t.Parallel()
 
-	// Single-branch mode
+	// Dual-branch mode (unconditional)
 	ctx := &config.Context{
-		IssuesDir: "/repo/.armature",
-		StateDir:  "/repo/.armature/state/worker-1",
-		Mode:      "single-branch",
+		IssuesDir: "/repo/.arm/.armature",
+		StateDir:  "/repo/.arm/state/worker-1",
 	}
 	store := newSnapshotStore(ctx)
 	require.NotNil(t, store)
@@ -1715,20 +1714,4 @@ func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
 	// Verify IssuePath also uses StateDir
 	expectedIssuePath := filepath.Join(ctx.StateDir, "issues", "test-id.json")
 	assert.Equal(t, expectedIssuePath, store.IssuePath("test-id"))
-
-	// Dual-branch mode (Mode != "single-branch")
-	ctx2 := &config.Context{
-		IssuesDir: "/repo/.arm/.armature",
-		StateDir:  "/repo/.arm/state/worker-1",
-		Mode:      "dual-branch",
-	}
-	store2 := newSnapshotStore(ctx2)
-	require.NotNil(t, store2)
-
-	// Verify paths for dual-branch
-	expectedIndexPath2 := filepath.Join(ctx2.StateDir, "index.json")
-	assert.Equal(t, expectedIndexPath2, store2.IndexPath())
-
-	expectedIssuePath2 := filepath.Join(ctx2.StateDir, "issues", "test-id.json")
-	assert.Equal(t, expectedIssuePath2, store2.IssuePath("test-id"))
 }

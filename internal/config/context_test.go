@@ -75,9 +75,6 @@ func TestResolveContext_ErrorWhenOpsWorktreePathNotSet_REQ_SB_T5(t *testing.T) {
 	assert.Contains(t, err.Error(), "armature.ops-worktree-path")
 }
 
-
-
-
 func TestContextStateDir(t *testing.T) {
 	t.Parallel()
 	ctx := &Context{
