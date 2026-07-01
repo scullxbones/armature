@@ -769,6 +769,8 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
+	// Apply slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
+	workerID = workerIdentityWithSlot(workerID)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
 	statBefore, err := os.Stat(logPath)
 	require.NoError(t, err)
@@ -1175,7 +1177,9 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
-	expectedDefault := filepath.Join(repo, ".armature", "state", "default")
+	defaultID := "default"
+	defaultID = workerIdentityWithSlot(defaultID) // Apply slot suffix if ARM_LOG_SLOT is set
+	expectedDefault := filepath.Join(repo, ".armature", "state", defaultID)
 	assert.Equal(t, expectedDefault, appCtx.StateDir)
 
 	// Case 2: Worker ID set
@@ -1187,6 +1191,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
+	workerID = workerIdentityWithSlot(workerID) // Apply slot suffix if ARM_LOG_SLOT is set
 	expectedWorker := filepath.Join(repo, ".armature", "state", workerID)
 	assert.Equal(t, expectedWorker, appCtx.StateDir)
 }
@@ -2146,16 +2151,27 @@ func TestLogSlot_EnvVar(t *testing.T) {
 // TestLogSlot_Empty_UsesPlainLog verifies that an empty ARM_LOG_SLOT uses the normal log path.
 func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "") // explicitly empty
+	// Clear the ops directory that was created with the global ARM_LOG_SLOT setting
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		if !e.IsDir() {
+			os.Remove(filepath.Join(opsDir, e.Name())) //nolint:errcheck // best-effort cleanup
+		}
+	}
+
+	// Set ARM_LOG_SLOT to empty before worker-init to ensure all operations use plain logs
+	t.Setenv("ARM_LOG_SLOT", "")
+
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
 
-	opsDir := filepath.Join(repo, ".armature", "ops")
-	entries, err := os.ReadDir(opsDir)
+	entries, err = os.ReadDir(opsDir)
 	require.NoError(t, err)
 
 	for _, e := range entries {
