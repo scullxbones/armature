@@ -124,9 +124,16 @@ arm show ISSUE-ID      # shows outcome and acceptance criteria side by side
 **Vague outcome examples (flag these):**
 > "Done" / "Fixed" / "Implemented as requested" / "Completed"
 
-### Step 4 — Scope Overlap Resolution
+### Step 4 — Validation Warnings and --strict
 
-`arm validate` may report `WARNING: scope overlap` lines. These are not errors by default, but **must be resolved before sign-off**.
+`arm validate` may report `WARNING` lines in two categories:
+
+1. **Scope Overlap** — Two or more tasks touch the same file(s)
+2. **Context Files** — A task's context_files array references files that do not match its scope
+
+These warnings are not errors by default, but **must be resolved before sign-off**.
+
+#### Scope Overlap Resolution
 
 ```bash
 # Make overlapping tasks serial
@@ -137,6 +144,31 @@ arm validate --strict
 ```
 
 If two tasks genuinely do not overlap despite the warning, document the rationale with `arm decision` on one of the issues before proceeding.
+
+#### Context Files Resolution
+
+Context file mismatches occur when a task declares supporting files in `context_files` that fall outside its declared `scope`. These files are informational references, not target files, but must be declared accurately.
+
+```bash
+# View context_files mismatches
+arm validate
+
+# Remediate by adding context files to the declaration
+arm amend --context-file <issue-id> <file-path>
+
+# Or confirm they should not be tracked and remove them from context_files
+arm amend --issue <issue-id>  # manually edit context_files array
+```
+
+#### Using --strict
+
+The `--strict` flag promotes all warnings to errors, including both scope overlap and context_files warnings:
+
+```bash
+arm validate --strict
+```
+
+This is useful in CI or pre-merge gates to ensure no warnings are missed. Scope overlap and context_files warnings are distinct categories and must be resolved separately — linking issues for scope overlap does not resolve context_files mismatches.
 
 ### Step 5 — Repo Health
 
@@ -172,7 +204,7 @@ Before approving the story transition, all five checks must be green:
 | Citation integrity | `arm validate` | Zero ERRORs, `COVERAGE: N/N cited` |
 | Source freshness | `arm sources verify` | Zero MISSING |
 | Outcome quality | `arm render-context --issue ID` for each done task | All outcomes concrete, all acceptance criteria addressed |
-| Scope overlap | `arm validate --strict` | Zero scope overlap warnings |
+| Validation warnings | `arm validate --strict` | Zero scope overlap warnings, zero context_files mismatches |
 | Repo health | `arm doctor --strict` | Exit zero (zero ERRORs, zero WARNINGs) |
 
 Only after all five pass should you approve the story for transition and PR.
