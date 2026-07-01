@@ -70,6 +70,58 @@ func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 	assert.NotEqual(t, "_armature\n", string(branchOut))
 }
 
+func TestCreateOrphanBranch_DirtyWorkingTree_Fails(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+
+	// Capture the current branch name (might be master or main)
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchOut, err := currentBranchCmd.Output()
+	require.NoError(t, err)
+	originalBranch := strings.TrimSpace(string(currentBranchOut))
+
+	// Create a tracked file and commit it
+	testFile := filepath.Join(repo, "tracked.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("original content"), 0644))
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("add", "tracked.txt")
+	gitRun("commit", "-m", "add tracked file")
+
+	// Modify the tracked file without committing (dirty working tree)
+	require.NoError(t, os.WriteFile(testFile, []byte("modified content"), 0644))
+
+	// Verify the file is modified and not staged
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "status", "--porcelain")
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "tracked.txt", "file should show as modified")
+
+	// Now try to create orphan branch - this should fail with dirty working tree error
+	c := adapters.New(repo)
+	err = c.CreateOrphanBranch("_armature")
+
+	// Must fail with a clear error about dirty working tree
+	require.Error(t, err, "CreateOrphanBranch should fail when working tree is dirty")
+	assert.Contains(t, err.Error(), "dirty", "error should mention dirty working tree")
+
+	// Most importantly: verify that the uncommitted change is still there (not destroyed)
+	content, readErr := os.ReadFile(testFile)
+	require.NoError(t, readErr, "file should still exist")
+	assert.Equal(t, "modified content", string(content), "uncommitted changes must be preserved")
+
+	// Verify we're still on the original branch
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, originalBranch, strings.TrimSpace(string(branchOut)), "should still be on original branch after error")
+}
+
 func TestAddWorktree(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

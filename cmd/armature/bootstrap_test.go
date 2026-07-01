@@ -12,7 +12,9 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/bootstrap"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1207,6 +1209,122 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 		}
 	}
 	assert.True(t, foundBackup, "should have .armature.migrated-<timestamp> backup directory")
+}
+
+// TestRunRepoSetupMigratesLegacyConfig_P2 verifies that when migrating a legacy single-branch layout,
+// the legacy config.json (if present) is loaded from the backup and written to the new location,
+// preserving user settings like custom TTL, token budget, and push threshold.
+func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout with a custom config
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a legacy config with non-default values
+	legacyConfigPath := filepath.Join(legacyArmaturePath, "config.json")
+	legacyConfig := config.Config{
+		ProjectType:            "go",
+		DefaultTTL:             120,  // non-default
+		TokenBudget:            3200, // non-default
+		LowStakesPushThreshold: 10,   // non-default
+		Hooks:                  []config.HookConfig{},
+	}
+	require.NoError(t, config.WriteConfig(legacyConfigPath, legacyConfig))
+
+	// Create a test ops file to simulate legacy repo state
+	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
+	require.NoError(t, os.WriteFile(testOpsFile, []byte(`{"id":"001"}`), 0o600))
+
+	// Commit the legacy state (in a real migration, this would have been committed in the past)
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy armature setup")
+
+	// Run bootstrap, which should migrate the legacy layout including config
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify the migration happened
+	output := buf.String()
+	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
+
+	// Verify new dual-branch layout was created
+	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"), ".armature should be in worktree")
+
+	// CRITICAL: Verify that the legacy config was migrated (not reset to defaults)
+	newConfigPath := filepath.Join(repo, ".arm", ".armature", "config.json")
+	migratedConfig, err := config.LoadConfig(newConfigPath)
+	require.NoError(t, err, "config should be loadable from new location")
+
+	assert.Equal(t, "go", migratedConfig.ProjectType, "ProjectType should be preserved")
+	assert.Equal(t, 120, migratedConfig.DefaultTTL, "custom DefaultTTL should be preserved from legacy config (not reset to 60)")
+	assert.Equal(t, 3200, migratedConfig.TokenBudget, "custom TokenBudget should be preserved from legacy config (not reset to 1600)")
+	assert.Equal(t, 10, migratedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be preserved from legacy config (not reset to 5)")
+
+	// The whole point of untracking + committing the legacy .armature removal is to leave
+	// the working tree clean after migration. Verify that explicitly.
+	gitClient := adapters.New(repo)
+	dirty, err := gitClient.IsWorkingTreeDirty()
+	require.NoError(t, err)
+	assert.False(t, dirty, "working tree should be clean after a successful legacy migration")
+}
+
+// TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges verifies that unrelated
+// staged changes present when a legacy repo is migrated are NOT folded into the
+// migration's "chore: migrate..." commit. Previously the migration commit was ungated
+// and un-scoped, so any staged content at the time of migration got swept in.
+func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout, committed (as a real legacy repo would be).
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
+	require.NoError(t, os.WriteFile(testOpsFile, []byte(`{"id":"001"}`), 0o600))
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy armature setup")
+
+	// Stage an unrelated file change right before running bootstrap.
+	unrelatedFile := filepath.Join(repo, "unrelated.txt")
+	require.NoError(t, os.WriteFile(unrelatedFile, []byte("unrelated work in progress"), 0o600))
+	run(t, repo, "git", "add", "unrelated.txt")
+
+	// With the pre-flight dirty check in place, bootstrap must refuse to run at all,
+	// since the working tree (index) is dirty due to the staged unrelated file.
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err, "bootstrap should refuse to run when the working tree has unrelated staged changes")
+	assert.Contains(t, err.Error(), "dirty", "error should mention the dirty working tree")
+
+	// Nothing should have been touched: no migration backup dir, no committing of the
+	// unrelated staged file, and the unrelated change should still be staged/uncommitted.
+	entries, err := os.ReadDir(repo)
+	require.NoError(t, err)
+	for _, entry := range entries {
+		assert.False(t, strings.HasPrefix(entry.Name(), ".armature.migrated-"),
+			"no migration backup dir should be created when bootstrap refuses due to a dirty tree")
+	}
+
+	gitClient := adapters.New(repo)
+	dirty, err := gitClient.IsWorkingTreeDirty()
+	require.NoError(t, err)
+	assert.True(t, dirty, "unrelated staged change should remain uncommitted after the refused bootstrap")
+
+	statusCmd := exec.CommandContext(context.Background(), "git", "status", "--porcelain")
+	statusCmd.Dir = repo
+	statusOut, statusErr := statusCmd.Output()
+	require.NoError(t, statusErr)
+	assert.Contains(t, string(statusOut), "unrelated.txt", "unrelated staged file should still be present in git status")
 }
 
 // TestDoctorCommandRunsOnLegacyRepo_P2 verifies that `arm doctor` can run on a legacy repo
