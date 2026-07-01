@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +19,47 @@ func newDoctorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Run repo health checks (D1-D6)",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Fall through to root PersistentPreRunE for normal config loading.
+			// This correctly sets appCtx, StateDir, pusher, tracker, etc. — the
+			// same as every other command — with no duplicated logic here.
+			rootErr := cmd.Root().PersistentPreRunE(cmd, args)
+			if rootErr == nil {
+				return nil
+			}
+
+			// Root context resolution failed; check if this is a legacy
+			// single-branch layout by looking for .armature/ops in the repo root.
+			repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
+			if repoPath == "" {
+				repoPath = "."
+			}
+
+			absRepoPath, pathErr := filepath.Abs(repoPath)
+			if pathErr != nil {
+				return pathErr
+			}
+
+			legacyArmaturePath := filepath.Join(absRepoPath, ".armature")
+			legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+
+			// Check if legacy layout exists
+			info, statErr := os.Stat(legacyOpsPath)
+			if statErr == nil && info.IsDir() {
+				// Legacy layout detected: set up minimal context to allow doctor to run
+				appCtx = &config.Context{
+					RepoPath:  absRepoPath,
+					IssuesDir: legacyArmaturePath,
+					StateDir:  filepath.Join(legacyArmaturePath, "state"),
+					// Note: WorktreePath is empty for legacy repos, which is expected
+				}
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "legacy single-branch layout detected at %s; run `arm bootstrap` to migrate to dual-branch.\n", legacyOpsPath)
+				return nil
+			}
+
+			// Neither modern nor legacy layout found; return the original context error
+			return rootErr
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issuesDir := appCtx.IssuesDir
 			repoPath := appCtx.RepoPath

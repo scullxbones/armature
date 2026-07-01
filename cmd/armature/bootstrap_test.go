@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1120,4 +1122,142 @@ func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
 	content, err := os.ReadFile(backupOpsFile)
 	require.NoError(t, err, "backup data should be preserved")
 	assert.Equal(t, testContent, content, "backup should still contain original data")
+}
+
+// TestRunRepoSetupMigrationCopiesLegacyOpsData_P1 verifies that when migrating a legacy single-branch layout,
+// the ops data from the legacy .armature/ops is COPIED to the new worktree's .armature/ops,
+// not just backed up. This ensures existing issues remain accessible after migration.
+func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout with multiple files
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create test ops files to verify data is preserved and copied
+	testFile1 := filepath.Join(legacyOpsPath, "issue001.json")
+	testContent1 := []byte(`{"id": "001", "title": "Legacy issue 1"}`)
+	require.NoError(t, os.WriteFile(testFile1, testContent1, 0o600))
+
+	testFile2 := filepath.Join(legacyOpsPath, "issue002.json")
+	testContent2 := []byte(`{"id": "002", "title": "Legacy issue 2"}`)
+	require.NoError(t, os.WriteFile(testFile2, testContent2, 0o600))
+
+	// Also create a subdirectory with content to test recursive copy
+	legacyLogsDir := filepath.Join(legacyOpsPath, "logs")
+	require.NoError(t, os.MkdirAll(legacyLogsDir, 0o750))
+	testLog := filepath.Join(legacyLogsDir, "claim.log")
+	logContent := []byte("claim: worker1")
+	require.NoError(t, os.WriteFile(testLog, logContent, 0o600))
+
+	// Run bootstrap, which should detect and migrate the legacy layout
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify the migration happened
+	output := buf.String()
+	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
+
+	// Verify new dual-branch layout was created
+	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"), ".armature should be in worktree")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature", "ops"), "new ops should be in worktree")
+
+	// CRITICAL: Verify that legacy ops files are COPIED to the new worktree ops, not just in backup
+	newWorktreeOpsPath := filepath.Join(repo, ".arm", ".armature", "ops")
+
+	// Check that the first issue file was copied to the new worktree
+	newFile1 := filepath.Join(newWorktreeOpsPath, "issue001.json")
+	content1, err := os.ReadFile(newFile1)
+	require.NoError(t, err, "legacy ops file issue001.json should be copied to new worktree")
+	assert.Equal(t, testContent1, content1, "copied file should have same content as original")
+
+	// Check that the second issue file was copied to the new worktree
+	newFile2 := filepath.Join(newWorktreeOpsPath, "issue002.json")
+	content2, err := os.ReadFile(newFile2)
+	require.NoError(t, err, "legacy ops file issue002.json should be copied to new worktree")
+	assert.Equal(t, testContent2, content2, "copied file should have same content as original")
+
+	// Check that subdirectories were copied (recursive copy)
+	newLogsDir := filepath.Join(newWorktreeOpsPath, "logs")
+	newLogFile := filepath.Join(newLogsDir, "claim.log")
+	newLogContent, err := os.ReadFile(newLogFile)
+	require.NoError(t, err, "legacy ops subdirectory should be copied to new worktree")
+	assert.Equal(t, logContent, newLogContent, "copied subdirectory content should match original")
+
+	// Also verify old .armature directory was moved to timestamped backup
+	entries, err := os.ReadDir(repo)
+	require.NoError(t, err)
+
+	var foundBackup bool
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
+			foundBackup = true
+			// Verify the backup contains the original test files
+			backupOpsFile1 := filepath.Join(repo, entry.Name(), "ops", "issue001.json")
+			backupContent1, readErr := os.ReadFile(backupOpsFile1)
+			require.NoError(t, readErr, "original ops file should be in backup")
+			assert.Equal(t, testContent1, backupContent1, "backup should preserve original data")
+			break
+		}
+	}
+	assert.True(t, foundBackup, "should have .armature.migrated-<timestamp> backup directory")
+}
+
+// TestDoctorCommandRunsOnLegacyRepo_P2 verifies that `arm doctor` can run on a legacy repo
+// (one with .armature/ops but no armature.ops-worktree-path git config) without failing
+// with "armature.ops-worktree-path must be set". The doctor command should either succeed
+// or provide a clear diagnostic about the legacy layout, not crash in PersistentPreRunE.
+func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout WITHOUT running bootstrap
+	// (i.e., no git config set, no worktree created)
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a test ops file to simulate legacy repo state
+	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
+	testContent := []byte(`{"id": "issue-001", "title": "Legacy issue"}`)
+	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
+
+	// Verify that git config is NOT set (legacy state)
+	gitCmd := exec.CommandContext(context.Background(), "git", "config", "armature.ops-worktree-path")
+	gitCmd.Dir = repo
+	err := gitCmd.Run()
+	assert.Error(t, err, "legacy repo should NOT have armature.ops-worktree-path git config")
+
+	// Now try to run `arm doctor` on the legacy repo
+	// This should NOT fail with "armature.ops-worktree-path must be set" in PersistentPreRunE
+	buf := new(strings.Builder)
+	errBuf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	cmd.SetArgs([]string{"--repo", repo, "doctor"})
+
+	err = cmd.Execute()
+
+	// The doctor command should either:
+	// 1. Succeed without error, OR
+	// 2. Fail with a clear diagnostic about the legacy layout,
+	// But NOT fail with "armature.ops-worktree-path must be set"
+
+	errOutput := errBuf.String()
+	assert.NotContains(t, errOutput, "armature.ops-worktree-path must be set",
+		"doctor should not fail with missing git config error on legacy repo")
+
+	if err != nil {
+		// If it fails, the error message should not be the git config error
+		errMsg := err.Error()
+		assert.NotContains(t, errMsg, "armature.ops-worktree-path must be set",
+			"doctor error should not be about missing git config")
+	}
 }
