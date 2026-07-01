@@ -508,8 +508,9 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 // to the new dual-branch layout. If legacy ops exist in repoPath/.armature/ops, they are moved to
 // a timestamped backup directory .armature.migrated-<timestamp>, and the new dual-branch structure
 // is set up on the _armature branch in the .arm worktree.
-// Returns true if migration was performed, false if no legacy layout was detected or an error occurred.
-func migrateLegacySingleBranchOps(repoPath string) (bool, error) {
+// Returns (true, backupDirPath) if migration was performed, (false, "") if no legacy layout was detected,
+// or (false, error) if an error occurred.
+func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 	// Check if .armature/ops exists in the main working tree (legacy single-branch layout)
 	legacyArmatureDir := filepath.Join(repoPath, ".armature")
 	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
@@ -518,24 +519,24 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, error) {
 	info, err := os.Stat(legacyOpsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			return false, "", nil
 		}
-		return false, fmt.Errorf("check for legacy layout: %w", err)
+		return false, "", fmt.Errorf("check for legacy layout: %w", err)
 	}
 
 	// Confirm it's a directory with content
 	if !info.IsDir() {
-		return false, nil
+		return false, "", nil
 	}
 
 	entries, err := os.ReadDir(legacyOpsDir)
 	if err != nil {
-		return false, fmt.Errorf("read legacy ops directory: %w", err)
+		return false, "", fmt.Errorf("read legacy ops directory: %w", err)
 	}
 
 	// If the ops dir exists but is empty, no migration needed
 	if len(entries) == 0 {
-		return false, nil
+		return false, "", nil
 	}
 
 	// Legacy layout detected: rename .armature to .armature.migrated-<timestamp>
@@ -543,10 +544,79 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, error) {
 	backupDir := filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s", timestamp))
 
 	if err := os.Rename(legacyArmatureDir, backupDir); err != nil {
-		return false, fmt.Errorf("backup legacy .armature directory: %w", err)
+		return false, "", fmt.Errorf("backup legacy .armature directory: %w", err)
 	}
 
-	return true, nil
+	return true, backupDir, nil
+}
+
+// copyLegacyOpsToNewWorktree copies the ops directory contents from the backup (created during migration)
+// to the new worktree's .armature/ops directory. This preserves legacy issue data.
+func copyLegacyOpsToNewWorktree(backupDir string, newOpsDir string) error {
+	legacyOpsDir := filepath.Join(backupDir, "ops")
+
+	// Read the legacy ops directory
+	entries, err := os.ReadDir(legacyOpsDir)
+	if err != nil {
+		return fmt.Errorf("read legacy ops directory from backup: %w", err)
+	}
+
+	// Recursively copy all entries from legacy ops to new ops directory
+	for _, entry := range entries {
+		srcPath := filepath.Join(legacyOpsDir, entry.Name())
+		dstPath := filepath.Join(newOpsDir, entry.Name())
+
+		if err := copyRecursive(srcPath, dstPath); err != nil {
+			return fmt.Errorf("copy legacy ops file %s: %w", entry.Name(), err)
+		}
+	}
+
+	return nil
+}
+
+// copyRecursive recursively copies a file or directory from src to dst.
+// Note: uses os.Stat (follows symlinks) rather than os.Lstat, so symlinks in
+// the source tree are copied as their target's contents rather than being
+// preserved as symlinks. Legacy .armature/ops is not expected to contain
+// symlinks in practice.
+func copyRecursive(src string, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("stat source: %w", err)
+	}
+
+	if info.IsDir() {
+		// Create destination directory
+		if err := os.MkdirAll(dst, info.Mode()); err != nil {
+			return fmt.Errorf("create directory: %w", err)
+		}
+
+		// Recursively copy directory contents
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return fmt.Errorf("read directory: %w", err)
+		}
+
+		for _, entry := range entries {
+			srcPath := filepath.Join(src, entry.Name())
+			dstPath := filepath.Join(dst, entry.Name())
+			if err := copyRecursive(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	} else {
+		// Copy file
+		content, err := os.ReadFile(src) //nolint:gosec // G304: src is constructed from legacyOpsDir
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+
+		if err := os.WriteFile(dst, content, info.Mode()); err != nil { //nolint:gosec // dst is constructed from newOpsDir
+			return fmt.Errorf("write file: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // runRepoSetup initializes the repository structure for Armature in dual-branch mode.
@@ -562,7 +632,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	gitClient := adapters.New(repoPath)
 
 	// Attempt to migrate legacy single-branch layout if it exists
-	migrated, err := migrateLegacySingleBranchOps(repoPath)
+	migrated, backupDir, err := migrateLegacySingleBranchOps(repoPath)
 	if err != nil {
 		return RepoSetupResult{}, fmt.Errorf("migrate legacy single-branch layout: %w", err)
 	}
@@ -611,6 +681,13 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o750); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("create directory %s: %w", d, err)
+		}
+	}
+
+	// Copy legacy ops data from backup if migration happened
+	if migrated && backupDir != "" {
+		if err := copyLegacyOpsToNewWorktree(backupDir, opsDir); err != nil {
+			return RepoSetupResult{}, fmt.Errorf("copy legacy ops data: %w", err)
 		}
 	}
 
