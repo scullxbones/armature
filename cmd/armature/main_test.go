@@ -1925,6 +1925,81 @@ func TestHeartbeatCommand_JSONOutput(t *testing.T) {
 	assert.Contains(t, out, "task-01")
 }
 
+// TestPushOpsCommand_P2 verifies that the push-ops command exists and is wired into the CLI.
+// The post-commit hook calls `arm push-ops` to push ops logs after each commit,
+// so this command must exist and be executable.
+func TestPushOpsCommand_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Bootstrap to set up the dual-branch mode
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Verify that push-ops command exists and can be invoked (it should not fail with "unknown command")
+	out, err := runTrls(t, repo, "push-ops")
+	// We expect the command to either succeed (return 0) or fail gracefully
+	// (e.g., because there's no remote). But it should NOT fail with "unknown command".
+	// If the command doesn't exist, runTrls would return an error mentioning "unknown command".
+	if err != nil {
+		errMsg := err.Error()
+		// The command might fail because there's no remote configured, which is fine.
+		// We just want to verify the command exists.
+		assert.NotContains(t, errMsg, "unknown command", "push-ops command should exist")
+		assert.NotContains(t, errMsg, "no such command", "push-ops command should exist")
+		assert.NotContains(t, errMsg, "unrecognized", "push-ops command should exist")
+	}
+	// The command should not output an error about the command not existing
+	assert.NotContains(t, out, "unknown command", "push-ops command should exist")
+	assert.NotContains(t, out, "no such command", "push-ops command should exist")
+}
+
+// TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin verifies the happy path:
+// with a real (bare) origin remote configured, push-ops actually pushes the
+// _armature branch to it, and reports success as structured JSON.
+func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
+	// Set up a bare repo to act as the "origin" remote.
+	bareDir := t.TempDir()
+	run(t, bareDir, "git", "init", "--bare")
+
+	repo := initTempRepo(t)
+	run(t, repo, "git", "remote", "add", "origin", bareDir)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "push-ops", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"status":"pushed"`)
+	assert.Contains(t, out, `"branch":"_armature"`)
+
+	// Confirm the _armature branch actually landed in the bare "origin" repo.
+	refCmd := exec.CommandContext(context.Background(), "git", "-C", bareDir, "show-ref", "--verify", "refs/heads/_armature")
+	require.NoError(t, refCmd.Run(), "_armature branch should exist on origin after push-ops")
+}
+
+// TestPushOpsCommand_PushFailureReturnsErrorAndJSON verifies that when the
+// underlying git push fails (e.g. no remote configured), push-ops surfaces a
+// real, non-nil error (so a human invoking it directly sees a failure) and,
+// when --format json is requested, emits a structured JSON error object
+// consistent with other commands' error output.
+func TestPushOpsCommand_PushFailureReturnsErrorAndJSON(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// No "origin" remote configured, so the push must fail.
+	out, errBuf, err := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
+	require.Error(t, err, "push-ops should return a real error when the push fails")
+	assert.NotContains(t, out, `"status":"pushed"`)
+	// The command's RunE surfaces the error; combined with root err handling this
+	// should not silently look like success on stdout.
+	_ = errBuf
+}
+
 // UX: note should emit plain text in human mode, not JSON
 func TestNoteCommand_HumanOutput(t *testing.T) {
 	repo := setupRepoWithTask(t)

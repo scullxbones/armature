@@ -1211,6 +1211,133 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	assert.True(t, foundBackup, "should have .armature.migrated-<timestamp> backup directory")
 }
 
+// TestRunRepoSetupMigrationCommitsLegacyOpsData_P1 verifies that when migrating a legacy single-branch layout,
+// the copied ops files are COMMITTED to the _armature branch, not just present as untracked files.
+// This ensures that the migrated history is preserved for other clones and collaborators.
+func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout with multiple files
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create test ops files to verify data is preserved and committed
+	testFile1 := filepath.Join(legacyOpsPath, "issue001.json")
+	testContent1 := []byte(`{"id": "001", "title": "Legacy issue 1"}`)
+	require.NoError(t, os.WriteFile(testFile1, testContent1, 0o600))
+
+	testFile2 := filepath.Join(legacyOpsPath, "issue002.json")
+	testContent2 := []byte(`{"id": "002", "title": "Legacy issue 2"}`)
+	require.NoError(t, os.WriteFile(testFile2, testContent2, 0o600))
+
+	// Also create a subdirectory with content to test recursive copy and commit
+	legacyLogsDir := filepath.Join(legacyOpsPath, "logs")
+	require.NoError(t, os.MkdirAll(legacyLogsDir, 0o750))
+	testLog := filepath.Join(legacyLogsDir, "claim.log")
+	logContent := []byte("claim: worker1")
+	require.NoError(t, os.WriteFile(testLog, logContent, 0o600))
+
+	// Run bootstrap, which should detect and migrate the legacy layout
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify the migration happened
+	output := buf.String()
+	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
+
+	// Verify new dual-branch layout was created
+	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature", "ops"), "new ops should be in worktree")
+
+	// CRITICAL: Verify that the migrated ops files are actually COMMITTED to the _armature branch,
+	// not just present as untracked files in the worktree
+
+	// Check git log in the _armature branch (should have a commit for the migrated ops)
+	gitLogCmd := exec.CommandContext(context.Background(), "git", "log", "--oneline", "_armature")
+	gitLogCmd.Dir = repo
+	gitLogOut, err := gitLogCmd.Output()
+	require.NoError(t, err, "should be able to read git log from _armature branch")
+
+	logOutput := string(gitLogOut)
+	// There should be at least a commit message mentioning the migration or ops
+	// We expect to see something about the ops files being committed
+	assert.NotEmpty(t, logOutput, "_armature branch should have commits, not be empty")
+
+	// List files in the _armature branch to verify the migrated ops files are committed
+	gitShowCmd := exec.CommandContext(context.Background(), "git", "ls-tree", "-r", "_armature")
+	gitShowCmd.Dir = repo
+	gitShowOut, err := gitShowCmd.Output()
+	require.NoError(t, err, "should be able to list files in _armature branch")
+
+	showOutput := string(gitShowOut)
+	// Check that the committed files include the ops data
+	assert.Contains(t, showOutput, ".armature/ops/issue001.json", "migrated ops file should be committed to _armature branch")
+	assert.Contains(t, showOutput, ".armature/ops/issue002.json", "migrated ops file should be committed to _armature branch")
+	assert.Contains(t, showOutput, ".armature/ops/logs/claim.log", "migrated ops subdirectory should be committed to _armature branch")
+
+	// Verify the committed content is correct by showing the file from the _armature branch
+	gitShowFileCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:.armature/ops/issue001.json")
+	gitShowFileCmd.Dir = repo
+	gitShowFileOut, err := gitShowFileCmd.Output()
+	require.NoError(t, err, "should be able to show committed ops file from _armature branch")
+	assert.Equal(t, testContent1, gitShowFileOut, "committed ops file should have the correct content")
+}
+
+// TestRunRepoSetupMigrationIsIdempotent_P1 verifies that running bootstrap a second
+// time over an already-migrated repo does not error and does not disturb the
+// previously-migrated, committed ops data on the _armature branch.
+func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyOpsPath := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	testFile := filepath.Join(legacyOpsPath, "issue001.json")
+	testContent := []byte(`{"id": "001", "title": "Legacy issue 1"}`)
+	require.NoError(t, os.WriteFile(testFile, testContent, 0o600))
+
+	buf1 := new(strings.Builder)
+	cmd1 := newRootCmd()
+	cmd1.SetOut(buf1)
+	_, err := runRepoSetup(cmd1, repo)
+	require.NoError(t, err)
+	assert.Contains(t, buf1.String(), "Migrated legacy single-branch")
+
+	gitLogCmd := exec.CommandContext(context.Background(), "git", "log", "--oneline", "_armature")
+	gitLogCmd.Dir = repo
+	firstLogOut, err := gitLogCmd.Output()
+	require.NoError(t, err)
+
+	// Second run over the already-migrated repo should be a no-op: no error,
+	// no duplicate migration, and the _armature branch history is unchanged.
+	buf2 := new(strings.Builder)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf2)
+	_, err = runRepoSetup(cmd2, repo)
+	require.NoError(t, err, "second bootstrap run over an already-migrated repo should not error")
+	assert.NotContains(t, buf2.String(), "Migrated legacy single-branch",
+		"second run should not re-migrate")
+
+	gitLogCmd2 := exec.CommandContext(context.Background(), "git", "log", "--oneline", "_armature")
+	gitLogCmd2.Dir = repo
+	secondLogOut, err := gitLogCmd2.Output()
+	require.NoError(t, err)
+	assert.Equal(t, string(firstLogOut), string(secondLogOut),
+		"_armature branch history should be unchanged by a repeated bootstrap run")
+
+	// Migrated content should still be intact.
+	gitShowFileCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:.armature/ops/issue001.json")
+	gitShowFileCmd.Dir = repo
+	gitShowFileOut, err := gitShowFileCmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, testContent, gitShowFileOut)
+}
+
 // TestRunRepoSetupMigratesLegacyConfig_P2 verifies that when migrating a legacy single-branch layout,
 // the legacy config.json (if present) is loaded from the backup and written to the new location,
 // preserving user settings like custom TTL, token budget, and push threshold.
