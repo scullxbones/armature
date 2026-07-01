@@ -129,7 +129,7 @@ arm show ISSUE-ID      # shows outcome and acceptance criteria side by side
 `arm validate` may report `WARNING` lines in two categories:
 
 1. **Scope Overlap** — Two or more tasks touch the same file(s)
-2. **Context Files** — A task's context_files array references files that do not match its scope
+2. **Context Files** — A task's context_files array is empty while its scope spans 3+ distinct directories
 
 These warnings are not errors by default, but **must be resolved before sign-off**.
 
@@ -147,20 +147,20 @@ If two tasks genuinely do not overlap despite the warning, document the rational
 
 #### Context Files Resolution
 
-Context file mismatches occur when a task declares supporting files in `context_files` that fall outside its declared `scope`. These files are informational references, not target files, but must be declared accurately.
+The W5 warning fires when a task's `context_files` is empty AND its scope spans 3+ distinct directories (broad scope). Context files are informational references to files that inform the task but are not modified directly. Resolve this warning by either narrowing the scope to fewer directories or by adding context_files declarations.
 
 ```bash
-# View context_files mismatches
+# View context_files warnings
 arm validate
 
-# Remediate by declaring the full desired context_files set: --context-file
-# REPLACES the entire list, so include every file that should remain, not
-# just the new one
-arm amend <issue-id> --context-file <file-path> --context-file <other-file-path>
+# Option 1: Narrow the scope to cover fewer directories (< 3)
+arm amend <issue-id> --scope <glob>
 
-# Or confirm none should be tracked and clear the list entirely
-arm amend <issue-id> --clear-context-files
+# Option 2: Add context_files declarations (informational files that inform the task)
+arm amend <issue-id> --context-file <file-path> --context-file <other-file-path>
 ```
+
+Choose Option 1 if the task can be more tightly scoped. Choose Option 2 if the task genuinely works across multiple directories and context files will help the worker understand the cross-directory dependencies.
 
 #### Using --strict
 
@@ -170,7 +170,7 @@ The `--strict` flag promotes all warnings to errors, including both scope overla
 arm validate --strict
 ```
 
-This is useful in CI or pre-merge gates to ensure no warnings are missed. Scope overlap and context_files warnings are distinct categories and must be resolved separately — linking issues for scope overlap does not resolve context_files mismatches.
+This is useful in CI or pre-merge gates to ensure no warnings are missed. Scope overlap and context_files warnings are distinct categories and must be resolved separately — linking issues for scope overlap does not resolve context_files warnings.
 
 ### Step 5 — Repo Health
 
@@ -206,7 +206,7 @@ Before approving the story transition, all five checks must be green:
 | Citation integrity | `arm validate` | Zero ERRORs, `COVERAGE: N/N cited` |
 | Source freshness | `arm sources verify` | Zero MISSING |
 | Outcome quality | `arm render-context --issue ID` for each done task | All outcomes concrete, all acceptance criteria addressed |
-| Validation warnings | `arm validate --strict` | Zero scope overlap warnings, zero context_files mismatches |
+| Validation warnings | `arm validate --strict` | Zero scope overlap warnings, zero context_files warnings |
 | Repo health | `arm doctor --strict` | Exit zero (zero ERRORs, zero WARNINGs) |
 
 Only after all five pass should you approve the story for transition and PR.
