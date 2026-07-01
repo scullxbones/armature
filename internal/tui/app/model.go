@@ -244,7 +244,7 @@ func (m Model) doRefresh() tea.Cmd {
 	issuesDir := m.issuesDir
 	stateDir := m.stateDir
 	return func() tea.Msg {
-		snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), stateDir, true)
+		snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), stateDir)
 		if err != nil || snap.State == nil {
 			return nil
 		}
