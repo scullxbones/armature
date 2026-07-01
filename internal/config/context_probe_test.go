@@ -8,22 +8,19 @@ import (
 )
 
 type fakeRepoProbe struct {
-	mode         string
 	worktreePath string
 }
 
 func (f fakeRepoProbe) Probe(repoPath string) (RepoProbeResult, error) {
 	return RepoProbeResult{
 		RepoPath:     repoPath,
-		Mode:         f.mode,
 		WorktreePath: f.worktreePath,
 	}, nil
 }
 
-func TestResolveContextSeparatesRepoProbeFromContextDerivation(t *testing.T) {
+func TestResolveContextAlwaysUsesOpsWorktree_REQ_SB_T5(t *testing.T) {
 	t.Parallel()
 	probe := fakeRepoProbe{
-		mode:         "dual-branch",
 		worktreePath: "/repo/.arm",
 	}
 
@@ -32,4 +29,17 @@ func TestResolveContextSeparatesRepoProbeFromContextDerivation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/repo", ctx.RepoPath)
 	assert.Equal(t, "/repo/.arm/.armature", ctx.IssuesDir)
+	assert.Equal(t, "/repo/.arm", ctx.WorktreePath)
+}
+
+func TestResolveContextErrorsWhenOpsWorktreePathEmpty_REQ_SB_T5(t *testing.T) {
+	t.Parallel()
+	probe := fakeRepoProbe{
+		worktreePath: "",
+	}
+
+	_, err := ResolveContextWithProbe("/repo", probe, Config{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "armature.ops-worktree-path")
 }

@@ -161,22 +161,6 @@ func TestGitConfig_Unset(t *testing.T) {
 	}
 }
 
-func TestGitConfigMode_Default(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	cmd := exec.CommandContext(context.Background(), "git", "init", dir)
-	if err := cmd.Run(); err != nil {
-		t.Skip("git not available")
-	}
-	mode, err := GitConfigMode(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode != "single-branch" {
-		t.Fatalf("expected default 'single-branch', got %q", mode)
-	}
-}
-
 func TestHookInput_MarshalRoundtrip(t *testing.T) {
 	t.Parallel()
 	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w"}

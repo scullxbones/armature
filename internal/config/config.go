@@ -7,7 +7,6 @@ import (
 )
 
 type Config struct {
-	Mode                   string       `json:"mode"` // "single-branch" or "dual-branch"
 	ProjectType            string       `json:"project_type"`
 	DefaultTTL             int          `json:"default_ttl"` // minutes
 	TokenBudget            int          `json:"token_budget"`
@@ -53,10 +52,9 @@ func DetectProjectType(repoPath string) string {
 	return "unknown"
 }
 
-// DefaultConfig returns a config with sensible defaults for single-branch mode.
+// DefaultConfig returns a config with sensible defaults.
 func DefaultConfig(projectType string) Config {
 	return Config{
-		Mode:                   "single-branch",
 		ProjectType:            projectType,
 		DefaultTTL:             60,
 		TokenBudget:            1600,

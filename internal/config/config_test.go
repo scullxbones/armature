@@ -15,7 +15,6 @@ func TestConfigRoundTrip(t *testing.T) {
 	configPath := filepath.Join(dir, "config.json")
 
 	cfg := Config{
-		Mode:        "single-branch",
 		ProjectType: "go",
 		DefaultTTL:  60,
 		TokenBudget: 1600,
@@ -26,7 +25,6 @@ func TestConfigRoundTrip(t *testing.T) {
 
 	loaded, err := LoadConfig(configPath)
 	require.NoError(t, err)
-	assert.Equal(t, "single-branch", loaded.Mode)
 	assert.Equal(t, "go", loaded.ProjectType)
 	assert.Equal(t, 60, loaded.DefaultTTL)
 }
@@ -67,6 +65,5 @@ func TestDefaultConfigHasNoOrchestratorSection(t *testing.T) {
 
 	loaded, err := LoadConfig(configPath)
 	require.NoError(t, err)
-	assert.Equal(t, "single-branch", loaded.Mode)
 	assert.Equal(t, "go", loaded.ProjectType)
 }

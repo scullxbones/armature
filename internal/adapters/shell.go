@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -116,21 +115,6 @@ func GitConfig(repoPath, key string) (string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git config %s: %w", key, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// GitConfigMode reads armature.mode from git config, defaulting to "single-branch" if unset.
-func GitConfigMode(repoPath string) (string, error) {
-	cmd := NonInteractiveGitCommand(repoPath, "config", "armature.mode")
-	out, err := cmd.Output()
-	if err != nil {
-		// Exit code 1 means key not set — default to single-branch
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-			return "single-branch", nil
-		}
-		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
