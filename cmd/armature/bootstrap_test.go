@@ -173,7 +173,7 @@ func TestBootstrapCommandRegistered(t *testing.T) {
 	assert.Contains(t, buf.String(), "bootstrap")
 }
 
-// TestBootstrapCommandDefaultsToLocal verifies that the bootstrap command plan uses "local" target by default.
+// TestBootstrapCommandDefaultsToLocal verifies that the bootstrap command initializes the repository.
 func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
 	repo := initTempRepo(t)
 	// Create an initial commit so git is fully initialized
@@ -188,12 +188,13 @@ func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
 	err := cmd.Execute()
 	require.NoError(t, err)
 
-	// Verify .armature was initialized (part of init)
-	assert.DirExists(t, filepath.Join(repo, ".armature"))
+	// Verify dual-branch layout was initialized (always uses dual-branch mode now)
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"))
 }
 
 // TestRunRepoSetupCreatesStructure verifies that runRepoSetup creates the directory
 // structure (.armature/ops, .armature/state, etc.) needed for Armature.
+// In dual-branch mode, this structure is in the .arm worktree.
 func TestRunRepoSetupCreatesStructure(t *testing.T) {
 	repo := initTempRepo(t)
 	// Create an initial commit so git is fully initialized
@@ -203,21 +204,22 @@ func TestRunRepoSetupCreatesStructure(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify directory structure
-	assert.DirExists(t, filepath.Join(repo, ".armature"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "state"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "state", "issues"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "hooks"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "templates"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "review"))
+	// Verify directory structure in the dual-branch worktree
+	armatureBase := filepath.Join(repo, ".arm", ".armature")
+	assert.DirExists(t, armatureBase)
+	assert.DirExists(t, filepath.Join(armatureBase, "ops"))
+	assert.DirExists(t, filepath.Join(armatureBase, "state"))
+	assert.DirExists(t, filepath.Join(armatureBase, "state", "issues"))
+	assert.DirExists(t, filepath.Join(armatureBase, "hooks"))
+	assert.DirExists(t, filepath.Join(armatureBase, "templates"))
+	assert.DirExists(t, filepath.Join(armatureBase, "review"))
 }
 
 // TestRunRepoSetupWritesGitignore verifies that runRepoSetup writes .armature/.gitignore
-// to prevent state/ from being committed.
+// to prevent state/ from being committed. In dual-branch mode, .armature is in the worktree.
 func TestRunRepoSetupWritesGitignore(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -226,16 +228,17 @@ func TestRunRepoSetupWritesGitignore(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
+	gitignorePath := filepath.Join(repo, ".arm", ".armature", ".gitignore")
 	content, readErr := os.ReadFile(gitignorePath)
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), "state/")
 }
 
 // TestRunRepoSetupWritesSchemaFile verifies that runRepoSetup writes the SCHEMA file.
+// In dual-branch mode, the SCHEMA file is in the worktree's ops directory.
 func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -244,10 +247,10 @@ func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	schemaPath := filepath.Join(repo, ".armature", "ops", "SCHEMA")
+	schemaPath := filepath.Join(repo, ".arm", ".armature", "ops", "SCHEMA")
 	_, statErr := os.Stat(schemaPath)
 	require.NoError(t, statErr)
 }
@@ -261,7 +264,7 @@ func TestRunRepoSetupInstallsHooks(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Verify hooks are installed
@@ -279,14 +282,15 @@ func TestRunRepoSetupIdempotent(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err1 := runRepoSetup(cmd, repo, false)
+	_, err1 := runRepoSetup(cmd, repo)
 	require.NoError(t, err1)
 
-	_, err2 := runRepoSetup(cmd, repo, false)
+	_, err2 := runRepoSetup(cmd, repo)
 	require.NoError(t, err2, "second run should not fail")
 }
 
 // TestRunRepoSetupWritesConfig verifies that runRepoSetup writes config.json.
+// In dual-branch mode, config.json is in the worktree's .armature directory.
 func TestRunRepoSetupWritesConfig(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -295,12 +299,12 @@ func TestRunRepoSetupWritesConfig(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	configPath := filepath.Join(repo, ".armature", "config.json")
+	configPath := filepath.Join(repo, ".arm", ".armature", "config.json")
 	_, statErr := os.Stat(configPath)
-	require.NoError(t, statErr, "config.json should be created")
+	require.NoError(t, statErr, "config.json should be created in worktree")
 }
 
 // TestInstallHooksExecutable verifies that installHooks makes hook files executable.
@@ -312,7 +316,7 @@ func TestInstallHooksExecutable(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Verify at least one hook is executable
@@ -322,8 +326,9 @@ func TestInstallHooksExecutable(t *testing.T) {
 	assert.NotZero(t, stat.Mode()&0o111, "hook should be executable")
 }
 
-// TestRunRepoSetupDualBranchCreatesWorktree verifies that runRepoSetup creates a .arm worktree in dual-branch mode.
-func TestRunRepoSetupDualBranchCreatesWorktree(t *testing.T) {
+// TestRunRepoSetupAlwaysCreatesDualBranchWorktree verifies that runRepoSetup always creates a .arm worktree
+// in dual-branch mode, since dual-branch is now the only supported mode.
+func TestRunRepoSetupAlwaysCreatesDualBranchWorktree_REQ_SB_T9(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -331,7 +336,7 @@ func TestRunRepoSetupDualBranchCreatesWorktree(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, true)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Verify worktree exists at .arm/
@@ -340,11 +345,10 @@ func TestRunRepoSetupDualBranchCreatesWorktree(t *testing.T) {
 	// Verify .armature/ is inside the worktree
 	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"))
 
-	// Verify config is in dual-branch mode
+	// Verify config is created in the worktree
 	configPath := filepath.Join(repo, ".arm", ".armature", "config.json")
-	content, readErr := os.ReadFile(configPath)
-	require.NoError(t, readErr)
-	assert.Contains(t, string(content), `"mode": "dual-branch"`)
+	_, statErr := os.Stat(configPath)
+	require.NoError(t, statErr, "config.json should exist in worktree")
 }
 
 // TestBootstrapDeployPluginUsesPluginName verifies that deployPlugin uses the plugin's
@@ -397,7 +401,7 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Verify the user hook is still there unchanged
@@ -406,11 +410,10 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 	assert.Equal(t, userHookContent, string(hookData), "user-managed hook should not be overwritten")
 }
 
-// TestRunRepoSetupDetectsExistingDualBranchMode verifies that when re-running bootstrap with
-// dualBranch=false on a repo that was originally initialized with dualBranch=true,
-// the second run detects the existing dual-branch mode from git config and uses
-// the existing .arm worktree instead of creating .armature/ in the code repo.
-func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
+// TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9 verifies that when bootstrap is run twice,
+// both runs use dual-branch mode and idempotency is maintained. The second run should not
+// corrupt or recreate existing structures.
+func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -418,27 +421,27 @@ func TestRunRepoSetupDetectsExistingDualBranchMode(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	// First run: initialize with dual-branch mode
-	_, err := runRepoSetup(cmd, repo, true)
+	// First run: initialize in dual-branch mode (always the case now)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Verify dual-branch mode was set
 	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist after first run")
 
-	// Second run: call with dualBranch=false (simulating `arm bootstrap` without --dual-branch flag)
+	// Second run: call bootstrap again (should be idempotent)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(strings.Builder))
-	_, err = runRepoSetup(cmd2, repo, false)
+	_, err = runRepoSetup(cmd2, repo)
 	require.NoError(t, err)
 
-	// Verify the second run still uses .arm worktree (detected from git config)
-	// not .armature/ in the code repo
+	// Verify the second run still uses .arm worktree and does not corrupt it
 	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should still exist")
 	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"), ".armature should be in worktree")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature", "ops"), "ops directory should exist in worktree")
 
-	// The code repo should NOT have .armature/ directory
+	// The code repo should NOT have .armature/ directory in dual-branch mode
 	assert.False(t, pathExists(filepath.Join(repo, ".armature")),
-		"code repo should not have .armature/ when re-running with existing dual-branch mode")
+		"code repo should not have .armature/ in dual-branch mode")
 }
 
 // pathExists is a helper to check if a path exists without error
@@ -476,10 +479,11 @@ func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	issuesDir := filepath.Join(repo, ".armature")
+	// In dual-branch mode, issuesDir is in the worktree
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 
 	// Now test that installHooks returns the skipped hooks
 	skipped, err := installHooks(repo, issuesDir)
@@ -512,7 +516,7 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
 
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	errOutput := errBuf.String()
@@ -531,12 +535,6 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	repoPath := initTempRepo(t)
 	run(t, repoPath, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Clean up any previously initialized .armature to test fresh initialization
-	armaturePath := filepath.Join(repoPath, ".armature")
-	if err := os.RemoveAll(armaturePath); err != nil && !os.IsNotExist(err) {
-		t.Fatalf("Failed to clean up %s: %v", armaturePath, err)
-	}
-
 	outBuf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(outBuf)
@@ -548,11 +546,11 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	err := cmd.Execute()
 	require.NoError(t, err, "bootstrap with persistent --repo flag should succeed")
 
-	// Verify .armature was initialized at the correct path specified by the persistent flag
-	assert.DirExists(t, filepath.Join(repoPath, ".armature"), ".armature should be initialized in the repo specified by persistent --repo flag")
-	assert.DirExists(t, filepath.Join(repoPath, ".armature", "ops"), ".armature/ops should exist")
-	assert.DirExists(t, filepath.Join(repoPath, ".armature", "state"), ".armature/state should exist")
-	assert.DirExists(t, filepath.Join(repoPath, ".armature", "hooks"), ".armature/hooks should exist")
+	// Verify dual-branch .armature was initialized at the correct path specified by the persistent flag
+	assert.DirExists(t, filepath.Join(repoPath, ".arm", ".armature"), ".armature should be initialized in the .arm worktree")
+	assert.DirExists(t, filepath.Join(repoPath, ".arm", ".armature", "ops"), ".armature/ops should exist in worktree")
+	assert.DirExists(t, filepath.Join(repoPath, ".arm", ".armature", "state"), ".armature/state should exist in worktree")
+	assert.DirExists(t, filepath.Join(repoPath, ".arm", ".armature", "hooks"), ".armature/hooks should exist in worktree")
 }
 
 // TestBootstrapJSONSkippedHooksReported verifies that skipped_hooks appears in JSON output
@@ -681,7 +679,7 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Create a .codex/config.toml file WITHOUT the armature:managed marker to simulate
@@ -727,7 +725,7 @@ func TestInstallHooksSkipsUnmanagedHook(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Create an existing hook without the armature:managed marker
@@ -761,7 +759,7 @@ func TestInstallHooksOverwritesManagedHook(t *testing.T) {
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	_, err := runRepoSetup(cmd, repo, false)
+	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
 	// Create an existing hook WITH the armature:managed marker
@@ -774,7 +772,8 @@ echo "old"
 	require.NoError(t, os.WriteFile(hookPath, []byte(oldContent), 0o755))
 
 	// Call installHooks again
-	issuesDir := filepath.Join(repo, ".armature")
+	// In dual-branch mode, issuesDir is in the worktree
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	var skipped2 []string
 	skipped2, err = installHooks(repo, issuesDir)
 	_ = skipped2
@@ -992,4 +991,133 @@ func TestBootstrapPersistentFormatFlagSetOnNonTTY(t *testing.T) {
 	// (This is harder to test directly since errors go to stderr; we focus on the other tests)
 	// At minimum, verify the error occurred
 	assert.NotEmpty(t, errOutput)
+}
+
+// TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9 verifies that runRepoSetup detects
+// a pre-existing single-branch .armature/ops layout and migrates it, preserving the original data
+// by renaming .armature to .armature.migrated-<timestamp>.
+func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a test ops file to verify data is preserved
+	testOpsFile := filepath.Join(legacyOpsPath, "test.json")
+	testContent := []byte(`{"test": "data"}`)
+	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
+
+	// Run bootstrap, which should detect and migrate the legacy layout
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify the migration happened
+	output := buf.String()
+	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
+
+	// Verify new dual-branch layout was created
+	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"), ".armature should be in worktree")
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature", "ops"), "new ops should be in worktree")
+
+	// Verify old .armature directory was moved to timestamped backup
+	// Find the backup directory (it should be .armature.migrated-*)
+	entries, err := os.ReadDir(repo)
+	require.NoError(t, err)
+
+	var foundBackup bool
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
+			foundBackup = true
+			// Verify the backup contains the original test file
+			backupOpsFile := filepath.Join(repo, entry.Name(), "ops", "test.json")
+			content, readErr := os.ReadFile(backupOpsFile)
+			require.NoError(t, readErr, "original ops file should be in backup")
+			assert.Equal(t, testContent, content, "backup should preserve original data")
+			break
+		}
+	}
+	assert.True(t, foundBackup, "should have .armature.migrated-<timestamp> backup directory")
+
+	// Verify code repo does not have .armature directory anymore (it's only in the worktree)
+	assert.False(t, pathExists(legacyArmaturePath), "original .armature should not exist in code repo")
+}
+
+// TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9 verifies that running bootstrap twice
+// (with migration on the first run) does not corrupt data or attempt to double-migrate.
+func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a test ops file
+	testOpsFile := filepath.Join(legacyOpsPath, "test.json")
+	testContent := []byte(`{"test": "data"}`)
+	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
+
+	// First bootstrap run: migrate the legacy layout
+	buf1 := new(strings.Builder)
+	cmd1 := newRootCmd()
+	cmd1.SetOut(buf1)
+	_, err := runRepoSetup(cmd1, repo)
+	require.NoError(t, err)
+
+	// Verify migration happened
+	assert.Contains(t, buf1.String(), "Migrated legacy single-branch")
+
+	// Get the backup directory name from the first run
+	entries1, err := os.ReadDir(repo)
+	require.NoError(t, err)
+	var backupDir string
+	for _, entry := range entries1 {
+		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
+			backupDir = entry.Name()
+			break
+		}
+	}
+	require.NotEmpty(t, backupDir, "backup directory should exist after first run")
+
+	// Second bootstrap run: should be idempotent (no legacy layout to migrate)
+	buf2 := new(strings.Builder)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf2)
+	_, err = runRepoSetup(cmd2, repo)
+	require.NoError(t, err)
+
+	// Second run should NOT report migration (no legacy layout exists)
+	assert.NotContains(t, buf2.String(), "Migrated legacy single-branch", "second run should not attempt migration")
+
+	// Verify dual-branch structure still exists and is intact
+	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature", "ops"), "ops should still be in worktree")
+
+	// Verify backup directory from first run is still there and unchanged
+	entries2, err := os.ReadDir(repo)
+	require.NoError(t, err)
+	var foundBackup bool
+	for _, entry := range entries2 {
+		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
+			foundBackup = true
+			// Should be the same backup from the first run (no new backups created)
+			// If there were multiple migrated dirs, this test would fail, which is correct
+			assert.Equal(t, backupDir, entry.Name(), "should not create a new backup on second run")
+			break
+		}
+	}
+	assert.True(t, foundBackup, "backup directory should still exist after second run")
+
+	// Verify backup data is preserved
+	backupOpsFile := filepath.Join(repo, backupDir, "ops", "test.json")
+	content, err := os.ReadFile(backupOpsFile)
+	require.NoError(t, err, "backup data should be preserved")
+	assert.Equal(t, testContent, content, "backup should still contain original data")
 }
