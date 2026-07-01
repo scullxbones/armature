@@ -488,7 +488,7 @@ func TestMergedRejectsNonDoneStatus(t *testing.T) {
 	// Bootstrap in dual-branch mode
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -574,7 +574,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 
 		bootstrapCmd := newRootCmd()
 		bootstrapCmd.SetOut(new(bytes.Buffer))
-		bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+		bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 		require.NoError(t, bootstrapCmd.Execute())
 
 		_, err := runTrls(t, repo, "worker-init")
@@ -642,7 +642,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	// Bootstrap in dual-branch mode
 	bootstrapCmd := newRootCmd()
 	bootstrapCmd.SetOut(new(bytes.Buffer))
-	bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
 
 	workerCmd := newRootCmd()
@@ -850,7 +850,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	// Bootstrap in dual-branch mode so the dual-branch guard (else branch) is exercised.
 	bootstrapCmd := newRootCmd()
 	bootstrapCmd.SetOut(new(bytes.Buffer))
-	bootstrapCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo})
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
 
 	workerCmd := newRootCmd()

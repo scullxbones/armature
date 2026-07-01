@@ -423,20 +423,19 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "TST-AT", "--title", "Time travel test", "--type", "task")
 	require.NoError(t, err)
 
-	// Commit ops so SHA1 captures state after create (issue exists, no notes)
-	run(t, repo, "git", "add", ".armature/")
-	run(t, repo, "git", "commit", "-m", "add create op")
-	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	// Ops are committed automatically to the _armature branch (dual-branch mode
+	// is always on), so capture the ops-worktree HEAD after create (issue exists, no notes).
+	require.NotNil(t, appCtx)
+	require.NotEmpty(t, appCtx.WorktreePath)
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
 	_, err = runTrls(t, repo, "note", "--issue", "TST-AT", "--msg", "note added after sha1")
 	require.NoError(t, err)
 
-	// Commit so HEAD captures the note
-	run(t, repo, "git", "add", ".armature/")
-	run(t, repo, "git", "commit", "-m", "add note op")
-	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	// Capture ops-worktree HEAD after the note (should now include it)
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -551,11 +550,10 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	// Worktree should exist at .arm/
 	assert.DirExists(t, filepath.Join(repo, ".arm"))
 
-	// .armature/ inside worktree should have config.json with dual-branch mode
+	// .armature/ inside worktree should have a config.json (mode is no longer
+	// stored in config.json; it's tracked via git config armature.mode below).
 	cfgPath := filepath.Join(repo, ".arm", ".armature", "config.json")
-	data, err := os.ReadFile(cfgPath)
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "dual-branch")
+	assert.FileExists(t, cfgPath)
 
 	// Git config should have mode set
 	modeCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode")
@@ -768,7 +766,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Count ops before dry-run
-	issuesDir := filepath.Join(repo, ".armature")
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
@@ -863,7 +861,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".armature", "hooks", "post-merge.sh.template")
+	hookPath := filepath.Join(repo, ".arm", ".armature", "hooks", "post-merge.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "arm sync")
@@ -876,7 +874,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".armature", "hooks", "post-commit.sh.template")
+	hookPath := filepath.Join(repo, ".arm", ".armature", "hooks", "post-commit.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
@@ -891,7 +889,7 @@ func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template")
+	hookPath := filepath.Join(repo, ".arm", ".armature", "hooks", "prepare-commit-msg.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
@@ -1089,7 +1087,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	require.NotNil(t, appCtx)
 	defaultID := "default"
 	defaultID = workerIdentityWithSlot(defaultID) // Apply slot suffix if ARM_LOG_SLOT is set
-	expectedDefault := filepath.Join(repo, ".armature", "state", defaultID)
+	expectedDefault := filepath.Join(repo, ".arm", "state", defaultID)
 	assert.Equal(t, expectedDefault, appCtx.StateDir)
 
 	// Case 2: Worker ID set
@@ -1102,7 +1100,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, appCtx)
 	workerID = workerIdentityWithSlot(workerID) // Apply slot suffix if ARM_LOG_SLOT is set
-	expectedWorker := filepath.Join(repo, ".armature", "state", workerID)
+	expectedWorker := filepath.Join(repo, ".arm", "state", workerID)
 	assert.Equal(t, expectedWorker, appCtx.StateDir)
 }
 
@@ -1489,7 +1487,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	// Get the worker log path so we can inject ops directly
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	logPath := filepath.Join(repo, ".armature", "ops", fmt.Sprintf("%s.log", workerID))
+	logPath := filepath.Join(repo, ".arm", ".armature", "ops", fmt.Sprintf("%s.log", workerID))
 
 	t.Run("simple format when accepted_risk_nodes is zero", func(t *testing.T) {
 		// Inject a source-link op for COV-001; COV-002 remains uncited (no accepted-risk either)
@@ -1687,20 +1685,19 @@ func TestContextHistoryCommand(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "TST-HIST", "--title", "History test issue", "--type", "task")
 	require.NoError(t, err)
 
-	// Commit ops so SHA1 captures creation
-	run(t, repo, "git", "add", ".armature/")
-	run(t, repo, "git", "commit", "-m", "ops: create TST-HIST")
-	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	// Ops are committed automatically to the _armature branch (dual-branch mode
+	// is always on); capture the ops-worktree HEAD after creation.
+	require.NotNil(t, appCtx)
+	require.NotEmpty(t, appCtx.WorktreePath)
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
 	_, err = runTrls(t, repo, "note", "--issue", "TST-HIST", "--msg", "progress note for history")
 	require.NoError(t, err)
 
-	// Commit ops so SHA2 captures note
-	run(t, repo, "git", "add", ".armature/")
-	run(t, repo, "git", "commit", "-m", "ops: note TST-HIST")
-	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	// Capture the ops-worktree HEAD after the note
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -1721,10 +1718,6 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-
-	// Commit an empty ops dir
-	run(t, repo, "git", "add", ".armature/")
-	run(t, repo, "git", "commit", "-m", "ops: init")
 
 	_, err = runTrls(t, repo, "context-history", "--issue", "NO-SUCH")
 	assert.Error(t, err)
@@ -2031,7 +2024,7 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	require.NoError(t, err)
 
 	// The slotted file must exist; the plain file must NOT contain this note
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 
@@ -2063,7 +2056,7 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Clear the ops directory that was created with the global ARM_LOG_SLOT setting
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 	for _, e := range entries {
@@ -2101,7 +2094,7 @@ func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
 
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 	for _, e := range entries {
@@ -2174,7 +2167,22 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Both tasks must appear as merged (in single-branch mode done auto-transitions to merged)
+	// Ops are timestamped at second resolution (nowEpoch uses time.Now().Unix()),
+	// and materialization applies same-timestamp ops in file-load order (main
+	// worker log before slotted logs) as a stable tiebreak. Sleep past the
+	// current second so the "merged" transitions below are unambiguously later
+	// than the "done" transitions recorded above, guaranteeing deterministic
+	// ordering regardless of which log file a same-second op landed in.
+	time.Sleep(1100 * time.Millisecond)
+
+	// Promotion to merged now requires an explicit `arm merged` call; there is no
+	// more automatic done->merged promotion via git-history merge detection.
+	_, err = runTrls(t, repo, "merged", "--issue", "task-a")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "merged", "--issue", "task-b")
+	require.NoError(t, err)
+
+	// Both tasks must appear as merged
 	outA, err := runTrls(t, repo, "show", "--issue", "task-a")
 	require.NoError(t, err)
 	assert.Contains(t, outA, "merged")
@@ -2686,7 +2694,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load ops and count dismissal notes for task-02
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
 	require.NoError(t, err)
 
