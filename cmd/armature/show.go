@@ -31,9 +31,8 @@ func newShowCmd() *cobra.Command {
 
 			ctx := currentCtx(cmd)
 			issuesDir := ctx.IssuesDir
-			singleBranch := ctx.Mode == "single-branch"
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, singleBranch)
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

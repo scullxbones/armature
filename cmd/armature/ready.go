@@ -49,7 +49,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			ctx := currentCtx(cmd)
 			issuesDir := ctx.IssuesDir
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir, ctx.Mode == "single-branch")
+			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

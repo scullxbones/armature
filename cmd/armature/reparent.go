@@ -33,7 +33,7 @@ with an explicit error message.`,
 			}
 
 			appCtx := currentCtx(cmd)
-			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir, appCtx.Mode == "single-branch")
+			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir)
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

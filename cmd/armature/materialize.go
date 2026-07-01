@@ -22,7 +22,7 @@ func newMaterializeCmd() *cobra.Command {
 			}
 
 			if excludeWorker != "" {
-				_, result, err := materialize.MaterializeExcludeWorker(allOps, excludeWorker, appCtx.Mode == "single-branch")
+				_, result, err := materialize.MaterializeExcludeWorker(allOps, excludeWorker)
 				if err != nil {
 					return err
 				}
@@ -35,7 +35,7 @@ func newMaterializeCmd() *cobra.Command {
 				return nil
 			}
 
-			result, err := materialize.Materialize(appCtx.StateDir, allOps, appCtx.Mode == "single-branch", offsets)
+			result, err := materialize.Materialize(appCtx.StateDir, allOps, offsets)
 			if err != nil {
 				return err
 			}
