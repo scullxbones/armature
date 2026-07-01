@@ -156,16 +156,15 @@ For each wave of ready tasks:
 
 1. Claim and get context for each task:
    ```bash
-   git worktree add --detach /tmp/arm-task-TASK-ID   # create isolated worktree
    arm claim TASK-ID --ttl <minutes> --worktree /tmp/arm-task-TASK-ID
    arm render-context TASK-ID --format agent
    ```
    **Worktree is required.** When workers are dispatched as background agents without
    an active terminal session, they cannot inherit the parent session's Bash
-   permissions, causing shell commands to hang. Creating a git worktree and passing
-   `--worktree <path>` to `arm claim` ensures the worker has a dedicated, isolated
-   workspace with proper permission context. Use `git worktree add --detach` to create
-   the worktree before claiming.
+   permissions, causing shell commands to hang. Pass `--worktree <path>` to `arm claim`
+   (using a path that does not yet exist) — `arm claim` creates the worktree and a
+   correctly-bound task branch automatically. Do not pre-create the worktree with
+   `git worktree add`; let `arm claim` handle creation.
 
    Set `--ttl` to exceed your expected worker runtime. Default is 60 minutes; use
    `--ttl 240` or higher for complex tasks. If the TTL expires while a worker is
