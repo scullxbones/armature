@@ -27,9 +27,8 @@ Run `arm bootstrap` in your project root to set up Armature.
 arm bootstrap
 ```
 
-### Solo vs Dual-Branch Modes
-- **Solo Mode (Single-Branch):** If your repository doesn't have branch protection on `main`, Armature stores all data in a `.armature/` folder on your `main` branch.
-- **Dual-Branch Mode:** If `main` is protected (e.g., GitHub/GitLab PR workflow), Armature creates an orphan `_armature` branch for coordination data. It also creates a secondary worktree at `.arm/` so you can work on code and coordination state simultaneously without conflicts.
+### Initialization Details
+Armature creates an orphan `_armature` branch for coordination data, storing all state in `.armature/` (accessible via the `.arm/` worktree). This separation ensures code and coordination state never conflict, enabling reliable multi-agent coordination.
 
 For detailed configuration options (TTL, token budget, hooks), see [Configuration Reference](configuration.md).
 
@@ -113,7 +112,7 @@ arm transition TASK-001 --to done --outcome "Implemented auth middleware with JW
 
 > `arm transition --to done` rejects transitions on `main`/`master` to enforce
 > the PR workflow. Create a feature branch first, or pass `--force` to override
-> in single-branch repos.
+> in rare emergency cases.
 
 ### Loop Until Done
 ```bash

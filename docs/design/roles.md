@@ -2,7 +2,7 @@
 
 Armature supports four roles. A single human or agent may occupy multiple roles across a session (e.g., a solo developer is simultaneously Planner, Coordinator, and Worker). On larger teams, roles are typically held by different actors.
 
-Roles are orthogonal to **deployment topology** (solo/team, single-branch/dual-branch). The same four roles apply regardless of topology, team size, or technology stack.
+Roles are orthogonal to **deployment topology** (solo developer, team, monorepo, multi-repo). The same four roles apply regardless of team size or technology stack.
 
 Each role has a corresponding skill that provides a workflow-oriented guide from that role's perspective. The `arm` command reference skill is a shared reference card usable by all roles.
 

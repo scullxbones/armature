@@ -401,11 +401,11 @@ Captured while using armature to track its own E2 development.
 
 ## L34: Shell hook templates expose missing native `arm hook run` command
 
-**Observed**: The four hook templates added in E6-S6 (post-commit, post-merge, prepare-commit-msg, pre-commit) contain non-trivial shell logic: branch detection (`git symbolic-ref`), dual-branch mode detection (reading `.armature/config.json`), active claim ID lookup, and staged-file inspection. This logic is duplicated in shell rather than owned by arm. The templates call `arm` for the actual ops but must wrap it in shell scaffolding that is hard to test and fragile when `arm` is not on PATH.
+**Observed**: The four hook templates added in E6-S6 (post-commit, post-merge, prepare-commit-msg, pre-commit) contain non-trivial shell logic: branch detection (`git symbolic-ref`), ops worktree path resolution, active claim ID lookup, and staged-file inspection. This logic is duplicated in shell rather than owned by arm. The templates call `arm` for the actual ops but must wrap it in shell scaffolding that is hard to test and fragile when `arm` is not on PATH.
 
 **Impact**: Hook templates are verbose, brittle, and untestable in Go. Adding a new hook requires authoring shell logic that mirrors logic already inside `arm`. The w2h agent spent the most tokens of any Wave 2 agent (84,803 / 83 tool uses) largely due to this scaffolding overhead.
 
-**Recommendation**: Add a `arm hook run <hookname>` native subcommand. Each hookname (`post-commit`, `post-merge`, `prepare-commit-msg`, `pre-commit`) maps to native Go logic that owns branch detection, mode detection, and claim lookup. Shell templates become trivial one-liners (`arm hook run post-commit`), are testable in Go, and degrade gracefully when `arm` is missing (single exit-code check rather than scattered shell guards).
+**Recommendation**: Add a `arm hook run <hookname>` native subcommand. Each hookname (`post-commit`, `post-merge`, `prepare-commit-msg`, `pre-commit`) maps to native Go logic that owns branch detection, ops worktree path resolution, and claim lookup. Shell templates become trivial one-liners (`arm hook run post-commit`), are testable in Go, and degrade gracefully when `arm` is missing (single exit-code check rather than scattered shell guards).
 
 **File**: `cmd/armature/hook.go` (new), `.armature/hooks/*.sh.template`
 

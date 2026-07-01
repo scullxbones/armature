@@ -85,7 +85,7 @@ From your project root, run:
 arm bootstrap
 ```
 
-Armature will detect if your repository has branch protection and set up either a dual-branch (`_armature` orphan branch) or single-branch mode accordingly.
+Armature will create an orphan `_armature` branch for coordination data and an ops worktree at `.arm/`, enabling safe separation of code and coordination state.
 
 ### 2. Register Worker (Once Per Clone)
 
