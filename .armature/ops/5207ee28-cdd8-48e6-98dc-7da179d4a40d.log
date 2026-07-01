@@ -1654,3 +1654,4 @@
 ["claim","DF-S5-T1",1782867496,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90}]
 ["transition","DF-S5",1782867502,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["note","DF-S5-T5",1782867511,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with DF-S5 detected at claim time"}]
+["note","DF-S5",1782867511,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with DF-S5-T5 detected at claim time"}]
