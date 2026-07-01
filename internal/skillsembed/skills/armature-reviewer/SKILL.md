@@ -154,6 +154,11 @@ For each acceptance criterion in order:
 
 Criteria are indexed starting at 0: `acceptance[0]`, `acceptance[1]`, etc.
 
+Citations recorded here are subject to the mandatory line-citation verification
+rule detailed in Step 5 / the Step 5a self-check — every `{"path", "line"}`
+pair must resolve against an actual diff hunk, so cite accurately now rather
+than fixing it up later.
+
 ### 4. Assign Ratings
 
 After evaluating all criteria, derive the **Rating**:

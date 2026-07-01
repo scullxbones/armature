@@ -153,11 +153,13 @@ Context file mismatches occur when a task declares supporting files in `context_
 # View context_files mismatches
 arm validate
 
-# Remediate by adding context files to the declaration
-arm amend --context-file <issue-id> <file-path>
+# Remediate by declaring the full desired context_files set: --context-file
+# REPLACES the entire list, so include every file that should remain, not
+# just the new one
+arm amend <issue-id> --context-file <file-path> --context-file <other-file-path>
 
-# Or confirm they should not be tracked and remove them from context_files
-arm amend --issue <issue-id>  # manually edit context_files array
+# Or confirm none should be tracked and clear the list entirely
+arm amend <issue-id> --clear-context-files
 ```
 
 #### Using --strict
