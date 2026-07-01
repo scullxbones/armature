@@ -1703,3 +1703,86 @@ func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 	}
 	assert.Equal(t, 1, count, ".arm/ should not be duplicated on repeated calls")
 }
+
+// TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX verifies that when migrating a legacy
+// single-branch layout with a custom config.json, the config is committed to the _armature branch
+// along with the migrated ops data. This ensures custom settings (TTL, token budget, hooks, etc.)
+// are preserved and pushed to other clones. Previously, the config was loaded and written but
+// never committed to _armature, staying untracked in the .arm worktree.
+func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature layout with custom config and ops files
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a custom legacy config (with non-default values)
+	legacyConfigPath := filepath.Join(legacyArmaturePath, "config.json")
+	legacyConfig := config.Config{
+		ProjectType:            "go",
+		DefaultTTL:             120,  // non-default
+		TokenBudget:            3200, // non-default
+		LowStakesPushThreshold: 10,   // non-default
+		Hooks:                  []config.HookConfig{},
+	}
+	require.NoError(t, config.WriteConfig(legacyConfigPath, legacyConfig))
+
+	// Create legacy ops files
+	testOpsFile := filepath.Join(legacyOpsPath, "issue001.json")
+	testOpsContent := []byte(`{"id": "001", "title": "Legacy issue"}`)
+	require.NoError(t, os.WriteFile(testOpsFile, testOpsContent, 0o600))
+
+	// Commit the legacy state (as would exist in a real legacy repo)
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy armature setup")
+
+	// Run bootstrap, which should migrate and commit both ops and config
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify migration happened
+	output := buf.String()
+	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
+
+	// CRITICAL: Verify that the custom config was COMMITTED to the _armature branch,
+	// not just present as an untracked file on disk.
+	// This is the bug fix: config must be in the git history on _armature so it's pushed
+	// to other clones when they pull/clone.
+
+	// List files in the _armature branch to verify config is committed
+	gitShowCmd := exec.CommandContext(context.Background(), "git", "ls-tree", "-r", "_armature")
+	gitShowCmd.Dir = repo
+	gitShowOut, err := gitShowCmd.Output()
+	require.NoError(t, err, "should be able to list files in _armature branch")
+
+	showOutput := string(gitShowOut)
+
+	// The config.json MUST be committed to _armature, not just present on disk
+	assert.Contains(t, showOutput, ".armature/config.json",
+		"custom config.json MUST be committed to _armature branch so it's preserved for other clones")
+
+	// Also verify that ops files are committed
+	assert.Contains(t, showOutput, ".armature/ops/issue001.json",
+		"migrated ops files should also be committed to _armature branch")
+
+	// Verify the committed config content is correct
+	gitShowConfigCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:.armature/config.json")
+	gitShowConfigCmd.Dir = repo
+	gitShowConfigOut, err := gitShowConfigCmd.Output()
+	require.NoError(t, err, "should be able to show committed config from _armature branch")
+
+	// Parse the committed config and verify custom values are preserved
+	var committedConfig config.Config
+	err = json.Unmarshal(gitShowConfigOut, &committedConfig)
+	require.NoError(t, err, "committed config should be valid JSON")
+
+	assert.Equal(t, "go", committedConfig.ProjectType, "ProjectType should be committed")
+	assert.Equal(t, 120, committedConfig.DefaultTTL, "custom DefaultTTL should be committed (not default 60)")
+	assert.Equal(t, 3200, committedConfig.TokenBudget, "custom TokenBudget should be committed (not default 1600)")
+	assert.Equal(t, 10, committedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be committed (not default 5)")
+}

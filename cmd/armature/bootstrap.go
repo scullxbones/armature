@@ -789,6 +789,33 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 	}
 
+	// Load and prepare config early, before committing migrated data.
+	// This ensures custom config (if migrated) is included in the bootstrap commit.
+	configPath := filepath.Join(issuesDir, "config.json")
+	var configToWrite *config.Config
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		var cfg config.Config
+
+		// If migration happened, try to load legacy config from backup
+		if migrated && backupDir != "" {
+			legacyConfigPath := filepath.Join(backupDir, "config.json")
+			if legacyConfig, err := config.LoadConfig(legacyConfigPath); err == nil {
+				// Legacy config loaded successfully, use it
+				cfg = legacyConfig
+			} else {
+				// Legacy config not found or unreadable, use defaults
+				projectType := config.DetectProjectType(repoPath)
+				cfg = config.DefaultConfig(projectType)
+			}
+		} else {
+			// No migration, detect project type and use defaults
+			projectType := config.DetectProjectType(repoPath)
+			cfg = config.DefaultConfig(projectType)
+		}
+
+		configToWrite = &cfg
+	}
+
 	// Copy legacy ops data from backup if migration happened
 	if migrated && backupDir != "" {
 		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, opsDir)
@@ -799,21 +826,34 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%d legacy ops file(s) already present in new worktree, not overwritten\n", skippedCount)
 		}
 
-		// Commit the migrated ops files to the _armature branch so they're preserved for other clones.
-		// Use a gitClient scoped to the worktree to commit within that working tree.
-		worktreeGitClient := adapters.New(worktreePath)
-
-		// Stage the copied ops files
-		if err := worktreeGitClient.AddPaths([]string{".armature/ops"}); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("stage migrated ops data: %w", err)
+		// Write config before committing, so it's included in the migration commit
+		if configToWrite != nil {
+			if err := config.WriteConfig(configPath, *configToWrite); err != nil {
+				return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
+			}
 		}
 
-		// Commit the staged files
+		// Commit the migrated ops files and config to the _armature branch so they're preserved for other clones.
+		// Use a gitClient scoped to the worktree to commit within that working tree.
+		// Scoped to .armature/* so it structurally cannot sweep in unrelated staged changes.
+		worktreeGitClient := adapters.New(worktreePath)
+
+		// Stage the copied ops files and config
+		filesToStage := []string{".armature/ops"}
+		if configToWrite != nil {
+			filesToStage = append(filesToStage, ".armature/config.json")
+		}
+		if err := worktreeGitClient.AddPaths(filesToStage); err != nil {
+			return RepoSetupResult{}, fmt.Errorf("stage migrated data: %w", err)
+		}
+
+		// Commit the staged files (scoped to .armature paths)
+		// Use ".armature" as the scoped path to cover both ops and config.json
 		if err := worktreeGitClient.CommitPaths(
-			"chore: commit migrated legacy ops from single-branch layout",
-			".armature/ops",
+			"chore: commit migrated legacy ops and config from single-branch layout",
+			".armature",
 		); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("commit migrated ops data to _armature branch: %w", err)
+			return RepoSetupResult{}, fmt.Errorf("commit migrated data to _armature branch: %w", err)
 		}
 	}
 
@@ -855,27 +895,15 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping git hook %s (not Armature-managed)\n", hookName)
 	}
 
-	// Detect project type and write config
-	configPath := filepath.Join(issuesDir, "config.json")
+	// Write config if not already written during migration
+	// (configPath was defined earlier before migration block, so it's in scope throughout)
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		var cfg config.Config
 
-		// If migration happened, try to load legacy config from backup
-		if migrated && backupDir != "" {
-			legacyConfigPath := filepath.Join(backupDir, "config.json")
-			if legacyConfig, err := config.LoadConfig(legacyConfigPath); err == nil {
-				// Legacy config loaded successfully, use it
-				cfg = legacyConfig
-			} else {
-				// Legacy config not found or unreadable, use defaults
-				projectType := config.DetectProjectType(repoPath)
-				cfg = config.DefaultConfig(projectType)
-			}
-		} else {
-			// No migration, detect project type and use defaults
-			projectType := config.DetectProjectType(repoPath)
-			cfg = config.DefaultConfig(projectType)
-		}
+		// For non-migration case, detect project type and use defaults
+		// (For migration case, config was already prepared and written above)
+		projectType := config.DetectProjectType(repoPath)
+		cfg = config.DefaultConfig(projectType)
 
 		if err := config.WriteConfig(configPath, cfg); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
