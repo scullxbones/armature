@@ -374,7 +374,7 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 
 	// Inject a claim op for task-01 from a DIFFERENT worker, simulating a concurrent claim.
 	otherWorker := "other-worker-uuid"
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	logPath := filepath.Join(opsDir, otherWorker+".log")
 	claimOp := ops.Op{
 		Type:      ops.OpClaim,
@@ -617,7 +617,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Bootstrap in dual-branch mode: ops committed to _armature branch in .arm/ worktree.
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -880,7 +880,7 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 
 	// Inject a stale claim op from another worker with an old timestamp
 	otherWorker := "other-worker-uuid"
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	logPath := filepath.Join(opsDir, otherWorker+".log")
 
 	// Claim timestamp 2 hours ago, TTL 1 minute — definitely stale
@@ -1035,8 +1035,8 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 	// We'll inject ops from that same worker with a stale timestamp
 	workerID, logPath, err := resolveWorkerAndLog(&config.Context{
 		RepoPath:  repo,
-		IssuesDir: filepath.Join(repo, ".armature"),
-		StateDir:  filepath.Join(repo, ".armature", "state"),
+		IssuesDir: filepath.Join(repo, ".arm", ".armature"),
+		StateDir:  filepath.Join(repo, ".arm", ".armature", "state"),
 	})
 	require.NoError(t, err, "should resolve worker ID and log path")
 
@@ -1126,8 +1126,8 @@ func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
 	// Resolve the current worker ID (set by bootstrap/worker-init)
 	workerID, logPath, err := resolveWorkerAndLog(&config.Context{
 		RepoPath:  repo,
-		IssuesDir: filepath.Join(repo, ".armature"),
-		StateDir:  filepath.Join(repo, ".armature", "state"),
+		IssuesDir: filepath.Join(repo, ".arm", ".armature"),
+		StateDir:  filepath.Join(repo, ".arm", ".armature", "state"),
 	})
 	require.NoError(t, err, "should resolve worker ID and log path")
 

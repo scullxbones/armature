@@ -1699,7 +1699,7 @@ func TestDecomposeContextCmd_WithSources(t *testing.T) {
 func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
 	t.Parallel()
 
-	// Dual-branch mode (unconditional)
+	// Dual-branch mode (the only supported mode)
 	ctx := &config.Context{
 		IssuesDir: "/repo/.arm/.armature",
 		StateDir:  "/repo/.arm/state/worker-1",

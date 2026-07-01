@@ -207,7 +207,7 @@ func TestMaterializeCommand_WarningsVisible(t *testing.T) {
 	require.NoError(t, err)
 
 	// Inject two mismatched ops to the same file
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	logPath := filepath.Join(opsDir, "worker-mismatch.log")
 
 	op1 := ops.Op{
@@ -271,7 +271,7 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--title", "Ready Task", "--type", "task", "--id", "ready-01")
 	require.NoError(t, err)
 
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	unknownLog := filepath.Join(opsDir, "worker-unknown.log")
 	require.NoError(t, ops.AppendOp(unknownLog, ops.Op{
 		Type:      "unknown_future_type",
@@ -311,7 +311,7 @@ func TestMaterializeOffsetTracking(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a file with only mismatched ops
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	logPath := filepath.Join(opsDir, "all-mismatch.log")
 
 	op1 := ops.Op{
