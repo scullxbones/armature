@@ -251,18 +251,6 @@ func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 	assert.Equal(t, "sqlite", active.Choice)
 }
 
-func TestSingleBranchAutoMerge(t *testing.T) {
-	t.Parallel()
-	state := NewState()
-	state.SingleBranchMode = true
-	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
-		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
-	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
-	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
-		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "Done"}}))
-	assert.Equal(t, "merged", state.Issues["task-01"].Status)
-}
 
 func TestMaterializePipeline(t *testing.T) {
 	t.Parallel()
@@ -309,7 +297,6 @@ func TestPropRandomOpsNeverCrash(t *testing.T) {
 				return true
 			}
 			state := NewState()
-			state.SingleBranchMode = true
 
 			_ = state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: targetID, Timestamp: ts, //nolint:errcheck // property test checks for panic, not error correctness
 				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}})
@@ -611,10 +598,11 @@ func TestRunRollup_PromotesStoryWhenAllChildrenMerged(t *testing.T) {
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
 		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
 
-	// In single branch mode, done → merged
-	state.SingleBranchMode = true
+	// In dual-branch mode, done must be explicitly promoted to merged
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
 		WorkerID: "w1", Payload: ops.Payload{To: "done", Outcome: "done"}}))
+	// Manually set to merged since auto-promotion is removed
+	state.Issues["task-01"].Status = ops.StatusMerged
 
 	state.RunRollup()
 	assert.Equal(t, "merged", state.Issues["story-01"].Status)
@@ -630,11 +618,12 @@ func TestRunRollup_DoesNotPromoteWithUnmergedChild(t *testing.T) {
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
 		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}}))
 
-	state.SingleBranchMode = true
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
 		WorkerID: "w1", Payload: ops.Payload{TTL: 60}}))
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
 		WorkerID: "w1", Payload: ops.Payload{To: "done"}}))
+	// Manually set to merged since auto-promotion is removed
+	state.Issues["task-01"].Status = ops.StatusMerged
 
 	state.RunRollup()
 	assert.NotEqual(t, "merged", state.Issues["story-01"].Status, "story should not be merged with open task-02")
@@ -1310,7 +1299,6 @@ func TestApplyOp_ManagedExecutionOps_ReturnUnknownError(t *testing.T) {
 // With the previous O(n²) implementation, 10k issues would take too long.
 func BenchmarkRunRollup_10kIssues(b *testing.B) {
 	state := NewState()
-	state.SingleBranchMode = true
 
 	// Create a 3-level hierarchy: 1 epic -> 100 stories -> 100 tasks per story
 	// Total: ~10,101 issues
@@ -1351,7 +1339,7 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 		}
 	}
 
-	// Mark all tasks as done, which becomes merged in single branch mode
+	// Mark all tasks as merged (done must be explicitly promoted to merged in dual-branch mode)
 	for si := range 100 {
 		for ti := range 100 {
 			taskID := taskIDs[si][ti]
@@ -1365,6 +1353,8 @@ func BenchmarkRunRollup_10kIssues(b *testing.B) {
 				Payload: ops.Payload{To: "done"},
 			}))
 			timestamp++
+			// Manually set to merged since auto-promotion is removed
+			state.Issues[taskID].Status = ops.StatusMerged
 		}
 	}
 
