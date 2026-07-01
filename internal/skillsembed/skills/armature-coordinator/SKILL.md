@@ -547,14 +547,11 @@ The auditor checks:
 arm transition STORY-ID --to done --outcome "brief summary of what was delivered"
 ```
 
-### 3. Commit armature ops (single-branch mode only)
+### 3. Verify armature ops
 
-```bash
-git status
-git add .armature/ && git commit -m "chore(STORY-ID): sync armature state"
-```
-
-In **dual-branch mode**, ops are automatically committed to the `_armature` branch.
+Armature automatically commits ops to the separate `_armature` ops branch after each
+command. No manual ops commit is required — ops are already persisted and will be
+delivered separately.
 
 ### 4. Push and open PR
 ```bash

@@ -251,7 +251,6 @@ func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 	assert.Equal(t, "sqlite", active.Choice)
 }
 
-
 func TestMaterializePipeline(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
