@@ -1803,3 +1803,4 @@
 ["amend","SB-T13",1782876043,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["repo-wide grep and make check; no files modified"]}]
 ["amend","SB-T11",1782876051,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/adr/0006-eliminate-single-branch-mode.md","CONTEXT.md"]}]
 ["amend","SB-T12",1782876051,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/adr/0006-eliminate-single-branch-mode.md"]}]
+["claim","SB-T1",1782904157,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90}]
