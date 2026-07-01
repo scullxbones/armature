@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/bootstrap"
@@ -33,13 +34,13 @@ type BootstrapResult struct {
 }
 
 // runRepoSetupWithFormat calls runRepoSetup, silencing human output when format is "json".
-func runRepoSetupWithFormat(cmd *cobra.Command, repoPath string, dualBranch bool, format string) (RepoSetupResult, error) {
+func runRepoSetupWithFormat(cmd *cobra.Command, repoPath string, format string) (RepoSetupResult, error) {
 	if format == "json" || format == "agent" {
 		silentCmd := &cobra.Command{}
 		silentCmd.SetOut(io.Discard)
-		return runRepoSetup(silentCmd, repoPath, dualBranch)
+		return runRepoSetup(silentCmd, repoPath)
 	}
-	return runRepoSetup(cmd, repoPath, dualBranch)
+	return runRepoSetup(cmd, repoPath)
 }
 
 // executeHarnessSetupWithFormat calls executeHarnessSetup, silencing human output when format is "json" or "agent".
@@ -57,17 +58,15 @@ func executeHarnessSetupWithFormat(
 func newBootstrapCmd() *cobra.Command {
 	var global bool
 	var withHooks bool
-	var dualBranch bool
 	var platforms []string
 
 	cmd := &cobra.Command{
-		Use:   "bootstrap [--global] [--with-hooks] [--dual-branch] [--platform <name>]",
+		Use:   "bootstrap [--global] [--with-hooks] [--platform <name>]",
 		Short: "Bootstrap Armature: initialize repo and deploy harness artifacts",
 		Long: `Initialize a repository for Armature coordination and optionally deploy harness artifacts
 (skills, plugin metadata, harness hook configs).
 
 By default, artifacts deploy to .claude/ (local). Use --global to deploy to ~/.claude/ instead.
-Use --dual-branch to initialize in dual-branch mode (issues stored on separate _armature branch).
 Use --with-hooks to also write harness hook configuration (both require --platform support).
 Use --platform to restrict bootstrap to specific platforms (can be repeated); default is all verified platforms.
 
@@ -134,7 +133,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 
 			// Run repo setup and collect results (pass format flag for silent mode in JSON)
-			repoSetupResult, err := runRepoSetupWithFormat(cmd, repoPath, dualBranch, format)
+			repoSetupResult, err := runRepoSetupWithFormat(cmd, repoPath, format)
 			if err != nil {
 				// Emit error in JSON format before returning (for json/agent format)
 				if format == "json" || format == "agent" {
@@ -197,7 +196,6 @@ The command is idempotent: running it multiple times has the same effect as runn
 	}
 
 	cmd.Flags().BoolVar(&global, "global", false, "deploy to ~/.claude/ instead of .claude/")
-	cmd.Flags().BoolVar(&dualBranch, "dual-branch", false, "initialize in dual-branch mode (issues stored on separate _armature branch)")
 	cmd.Flags().BoolVar(&withHooks, "with-hooks", false, "also write harness hook configuration")
 	cmd.Flags().StringSliceVar(&platforms, "platform", nil, "restrict to specific platform(s) (can be repeated)")
 	return cmd
@@ -515,9 +513,54 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 	return skipped, nil
 }
 
-// runRepoSetup initializes the repository structure for Armature.
+// migrateLegacySingleBranchOps detects and migrates a pre-existing single-branch .armature/ops layout
+// to the new dual-branch layout. If legacy ops exist in repoPath/.armature/ops, they are moved to
+// a timestamped backup directory .armature.migrated-<timestamp>, and the new dual-branch structure
+// is set up on the _armature branch in the .arm worktree.
+// Returns true if migration was performed, false if no legacy layout was detected or an error occurred.
+func migrateLegacySingleBranchOps(repoPath string) (bool, error) {
+	// Check if .armature/ops exists in the main working tree (legacy single-branch layout)
+	legacyArmatureDir := filepath.Join(repoPath, ".armature")
+	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
+
+	// If the legacy layout doesn't exist, no migration needed
+	info, err := os.Stat(legacyOpsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check for legacy layout: %w", err)
+	}
+
+	// Confirm it's a directory with content
+	if !info.IsDir() {
+		return false, nil
+	}
+
+	entries, err := os.ReadDir(legacyOpsDir)
+	if err != nil {
+		return false, fmt.Errorf("read legacy ops directory: %w", err)
+	}
+
+	// If the ops dir exists but is empty, no migration needed
+	if len(entries) == 0 {
+		return false, nil
+	}
+
+	// Legacy layout detected: rename .armature to .armature.migrated-<timestamp>
+	timestamp := time.Now().Format("20060102150405")
+	backupDir := filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s", timestamp))
+
+	if err := os.Rename(legacyArmatureDir, backupDir); err != nil {
+		return false, fmt.Errorf("backup legacy .armature directory: %w", err)
+	}
+
+	return true, nil
+}
+
+// runRepoSetup initializes the repository structure for Armature in dual-branch mode.
 // Returns RepoSetupResult with status and any skipped hooks.
-func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) (RepoSetupResult, error) {
+func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) {
 	// Resolve repoPath to an absolute path so stored paths are never relative.
 	absRepoPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -527,41 +570,36 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) (RepoSet
 
 	gitClient := adapters.New(repoPath)
 
-	// Detect existing dual-branch mode from git config.
-	// If the repo was already initialized with dual-branch mode, re-running bootstrap
-	// (even without --dual-branch) should preserve the existing mode.
-	if !dualBranch {
-		existingMode, err := gitClient.ReadGitConfig("armature.mode")
-		if err == nil && existingMode == "dual-branch" {
-			dualBranch = true
-		}
+	// Attempt to migrate legacy single-branch layout if it exists
+	migrated, err := migrateLegacySingleBranchOps(repoPath)
+	if err != nil {
+		return RepoSetupResult{}, fmt.Errorf("migrate legacy single-branch layout: %w", err)
+	}
+	if migrated {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated legacy single-branch .armature layout to timestamped backup\n")
 	}
 
-	var issuesDir string
-	if dualBranch {
-		// Create orphan branch _armature (idempotent)
-		if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w", err)
-		}
-
-		// Create .arm/ worktree (idempotent)
-		worktreePath := filepath.Join(repoPath, ".arm")
-		if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w", err)
-		}
-
-		// Set git config keys
-		if err := gitClient.SetGitConfig("armature.mode", "dual-branch"); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("set armature.mode: %w", err)
-		}
-		if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("set armature.ops-worktree-path: %w", err)
-		}
-
-		issuesDir = filepath.Join(worktreePath, ".armature")
-	} else {
-		issuesDir = filepath.Join(repoPath, ".armature")
+	// Always use dual-branch mode: create orphan branch _armature and .arm worktree
+	// Create orphan branch _armature (idempotent)
+	if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
+		return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w", err)
 	}
+
+	// Create .arm/ worktree (idempotent)
+	worktreePath := filepath.Join(repoPath, ".arm")
+	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
+		return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w", err)
+	}
+
+	// Set git config keys for dual-branch mode
+	if err := gitClient.SetGitConfig("armature.mode", "dual-branch"); err != nil {
+		return RepoSetupResult{}, fmt.Errorf("set armature.mode: %w", err)
+	}
+	if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
+		return RepoSetupResult{}, fmt.Errorf("set armature.ops-worktree-path: %w", err)
+	}
+
+	issuesDir := filepath.Join(worktreePath, ".armature")
 
 	// Detect whether this is a fresh init or an idempotent re-run before writing anything.
 	opsDir := filepath.Join(issuesDir, "ops")
@@ -628,9 +666,6 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) (RepoSet
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		projectType := config.DetectProjectType(repoPath)
 		cfg := config.DefaultConfig(projectType)
-		if dualBranch {
-			cfg.Mode = "dual-branch"
-		}
 		if err := config.WriteConfig(configPath, cfg); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
 		}
@@ -643,18 +678,13 @@ func runRepoSetup(cmd *cobra.Command, repoPath string, dualBranch bool) (RepoSet
 		}
 	}
 
-	mode := "single-branch"
-	if dualBranch {
-		mode = "dual-branch"
-	}
-
 	var status string
 	if freshInit {
 		status = "initialized"
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in %s mode at %s\n", mode, issuesDir)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in dual-branch mode at %s\n", issuesDir)
 	} else {
 		status = "already_initialized"
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in %s mode at %s\n", mode, issuesDir)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in dual-branch mode at %s\n", issuesDir)
 	}
 
 	result := RepoSetupResult{
