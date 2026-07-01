@@ -128,7 +128,7 @@ func newListCmd() *cobra.Command {
 				})
 				for _, status := range statuses {
 					label := status
-					if status == ops.StatusDone && ctx.Mode != "single-branch" {
+					if status == ops.StatusDone {
 						label = "done (awaiting merge)"
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
@@ -136,7 +136,7 @@ func newListCmd() *cobra.Command {
 					for _, id := range groups[status] {
 						e := index[id]
 						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
-						if status == ops.StatusDone && ctx.Mode != "single-branch" && e.Branch != "" {
+						if status == ops.StatusDone && e.Branch != "" {
 							line += fmt.Sprintf("  [branch: %s", e.Branch)
 							if e.PR != "" {
 								line += fmt.Sprintf(", PR: #%s", e.PR)
