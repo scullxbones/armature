@@ -36,7 +36,7 @@ func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	// Assumption: arm create writes to a UUID-named log file, not to "worker-a.log".
 	// This test injects a cross-worker op into a hardcoded "worker-a.log" to avoid collision.
 	// Verify this assumption holds by checking that valid-01 is NOT in a worker-a.log file.
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	workerALogPath := filepath.Join(opsDir, "worker-a.log")
 
 	// Verify that valid-01 was not created in worker-a.log (it should be in a UUID-named file)
@@ -100,7 +100,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Inject a cross-worker op (will be excluded by validation)
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	logPath := filepath.Join(opsDir, "worker-x.log")
 	badOp := ops.Op{
 		Type:      ops.OpCreate,
@@ -152,7 +152,7 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Inject a cross-worker task (will be excluded)
-	opsDir := filepath.Join(repo, ".armature", "ops")
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
 	logPath := filepath.Join(opsDir, "worker-y.log")
 	crossWorkerOp := ops.Op{
 		Type:      ops.OpCreate,
