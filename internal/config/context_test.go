@@ -29,116 +29,54 @@ func initTestRepo(t *testing.T) string {
 	return dir
 }
 
-func TestResolveContext_SingleBranch_Default(t *testing.T) {
+func TestResolveContext_RequiresOpsWorktree(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	// Create .armature/config.json so LoadConfig works
-	issuesDir := filepath.Join(repo, ".armature")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-	cfg := DefaultConfig("go")
-	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
-
-	ctx, err := ResolveContext(repo)
-	require.NoError(t, err)
-	assert.Equal(t, "single-branch", ctx.Mode)
-	assert.Equal(t, filepath.Join(repo, ".armature"), ctx.IssuesDir)
-	assert.Equal(t, repo, ctx.RepoPath)
-	assert.Equal(t, "go", ctx.Config.ProjectType)
-}
-
-func TestResolveContext_DualBranch(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-
-	// Simulate a dual-branch setup: create the worktree dir with .armature/ inside
-	worktreePath := filepath.Join(repo, ".arm")
-	issuesDir := filepath.Join(worktreePath, ".armature")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-	cfg := DefaultConfig("go")
-	cfg.Mode = "dual-branch"
-	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
-
-	// Set git config keys
-	runGit := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-	runGit("config", "armature.mode", "dual-branch")
-	runGit("config", "armature.ops-worktree-path", worktreePath)
-
-	ctx, err := ResolveContext(repo)
-	require.NoError(t, err)
-	assert.Equal(t, "dual-branch", ctx.Mode)
-	assert.Equal(t, issuesDir, ctx.IssuesDir)
-	assert.Equal(t, repo, ctx.RepoPath)
-}
-
-func TestResolveContext_DualBranch_MissingWorktreePath(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-
-	// Set dual-branch mode but do NOT set ops-worktree-path
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode", "dual-branch")
-	require.NoError(t, cmd.Run())
-
+	// Without ops-worktree-path set, ResolveContext should error
 	_, err := ResolveContext(repo)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "armature.ops-worktree-path")
 }
 
-func TestResolveContext_SingleBranch_Explicit(t *testing.T) {
+func TestResolveContext_UsesOpsWorktree(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode", "single-branch")
-	require.NoError(t, cmd.Run())
-
-	issuesDir := filepath.Join(repo, ".armature")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), DefaultConfig("go")))
-
-	ctx, err := ResolveContext(repo)
-	require.NoError(t, err)
-	assert.Equal(t, "single-branch", ctx.Mode)
-}
-
-func TestResolveContext_DualBranch_WorktreePath(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-
+	// Create ops worktree with .armature/ inside
 	worktreePath := filepath.Join(repo, ".arm")
 	issuesDir := filepath.Join(worktreePath, ".armature")
 	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 	cfg := DefaultConfig("go")
-	cfg.Mode = "dual-branch"
 	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
 
+	// Set git config to point to ops worktree
 	runGit := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	runGit("config", "armature.mode", "dual-branch")
 	runGit("config", "armature.ops-worktree-path", worktreePath)
 
 	ctx, err := ResolveContext(repo)
 	require.NoError(t, err)
+	assert.Equal(t, issuesDir, ctx.IssuesDir)
+	assert.Equal(t, repo, ctx.RepoPath)
 	assert.Equal(t, worktreePath, ctx.WorktreePath)
 }
 
-func TestResolveContext_SingleBranch_WorktreePath_Empty(t *testing.T) {
+func TestResolveContext_ErrorWhenOpsWorktreePathNotSet_REQ_SB_T5(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	issuesDir := filepath.Join(repo, ".armature")
-	require.NoError(t, os.MkdirAll(issuesDir, 0755))
-	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), DefaultConfig("go")))
 
-	ctx, err := ResolveContext(repo)
-	require.NoError(t, err)
-	assert.Equal(t, "", ctx.WorktreePath)
+	// Do NOT set ops-worktree-path
+	_, err := ResolveContext(repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "armature.ops-worktree-path")
 }
+
+
+
 
 func TestContextStateDir(t *testing.T) {
 	t.Parallel()
@@ -148,15 +86,10 @@ func TestContextStateDir(t *testing.T) {
 	assert.Equal(t, "/tmp/armature-state", ctx.StateDir)
 }
 
-func TestResolveContext_GitWorktree_SingleBranch(t *testing.T) {
+func TestResolveContext_GitWorktreeResolvedToParent_REQ_SB_T5(t *testing.T) {
 	t.Parallel()
 	// Create a "parent" repo that will be the actual git repo
 	parentRepo := initTestRepo(t)
-
-	// Create parent repo's .armature directory
-	parentIssuesDir := filepath.Join(parentRepo, ".armature")
-	require.NoError(t, os.MkdirAll(parentIssuesDir, 0755))
-	require.NoError(t, WriteConfig(filepath.Join(parentIssuesDir, "config.json"), DefaultConfig("go")))
 
 	// Create a worktree checkout directory (simulates git worktree add)
 	worktreeCheckout := filepath.Join(parentRepo, "worktree-checkout")
@@ -169,11 +102,21 @@ func TestResolveContext_GitWorktree_SingleBranch(t *testing.T) {
 	gitFileContent := fmt.Sprintf("gitdir: %s\n", gitdirPath)
 	require.NoError(t, os.WriteFile(filepath.Join(worktreeCheckout, ".git"), []byte(gitFileContent), 0644))
 
+	// Create ops worktree in parent repo
+	opsWorktree := filepath.Join(parentRepo, ".arm")
+	opsIssuesDir := filepath.Join(opsWorktree, ".armature")
+	require.NoError(t, os.MkdirAll(opsIssuesDir, 0755))
+	require.NoError(t, WriteConfig(filepath.Join(opsIssuesDir, "config.json"), DefaultConfig("go")))
+
+	// Set git config in parent to point to ops worktree
+	cmd := exec.CommandContext(context.Background(), "git", "-C", parentRepo, "config", "armature.ops-worktree-path", opsWorktree)
+	require.NoError(t, cmd.Run())
+
 	// When ResolveContext is called from the worktree checkout path,
-	// it should detect that .git is a file and resolve IssuesDir relative to parentRepo
+	// it should detect that .git is a file and resolve parent repo and ops worktree
 	ctx, err := ResolveContext(worktreeCheckout)
 	require.NoError(t, err)
 	assert.Equal(t, parentRepo, ctx.RepoPath)
-	assert.Equal(t, parentIssuesDir, ctx.IssuesDir)
-	assert.Equal(t, "single-branch", ctx.Mode)
+	assert.Equal(t, opsIssuesDir, ctx.IssuesDir)
+	assert.Equal(t, opsWorktree, ctx.WorktreePath)
 }
