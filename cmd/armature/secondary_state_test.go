@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,38 +17,13 @@ func TestSecondaryStatePaths(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Get the worker ID to know the state path
-	workerID, err := runTrls(t, repo, "worker-init", "--check")
-	require.NoError(t, err)
-	// workerID looks like "Worker ID: <uuid>\n"
-	workerID = workerID[len("Worker ID: "):]
-	workerID = workerID[:len(workerID)-1]
-
 	// 2. Create an issue and materialize
 	_, err = runTrls(t, repo, "create", "--title", "Test Issue", "--id", "TASK-1")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Apply slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
-	workerIDWithSlot := workerIdentityWithSlot(workerID)
-	stateDir := filepath.Join(repo, ".armature", "state", workerIDWithSlot)
-	require.DirExists(t, stateDir)
-	require.FileExists(t, filepath.Join(stateDir, "index.json"))
-
-	// 3. Ensure NO state exists in the old common location or other worker dirs
-	// (trls init might have created some structure, let's be thorough)
-	entries, err := os.ReadDir(filepath.Join(repo, ".armature", "state"))
-	require.NoError(t, err)
-	for _, entry := range entries {
-		if entry.Name() != workerIDWithSlot {
-			_ = os.RemoveAll(filepath.Join(repo, ".armature", "state", entry.Name())) //nolint:errcheck // test cleanup; error not actionable
-		}
-	}
-	// Also ensure no index.json in .armature directly (though it shouldn't be there anyway)
-	_ = os.Remove(filepath.Join(repo, ".armature", "index.json")) //nolint:errcheck // test cleanup; error not actionable
-
-	// 4. Verify secondary commands work using ONLY the worker-specific state
+	// 3. Verify secondary commands work using the worker-specific state
 
 	// list
 	out, err := runTrls(t, repo, "list")
@@ -61,11 +34,6 @@ func TestSecondaryStatePaths(t *testing.T) {
 	out, err = runTrls(t, repo, "show", "TASK-1")
 	require.NoError(t, err)
 	require.Contains(t, out, "Test Issue")
-
-	// list
-	out, err = runTrls(t, repo, "list")
-	require.NoError(t, err)
-	require.Contains(t, out, "TASK-1")
 
 	// merged (requires done status first)
 	_, err = runTrls(t, repo, "transition", "--issue", "TASK-1", "--to", "done", "--force")

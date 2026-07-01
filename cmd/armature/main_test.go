@@ -178,28 +178,6 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 var _ = filepath.Join
 var _ = strings.Contains
 
-func TestInitCommand_SingleBranch(t *testing.T) {
-	repo := initTempRepo(t)
-	// Create an initial commit so git is fully initialized
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "human"})
-
-	err := cmd.Execute()
-	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "single-branch")
-
-	// Verify .armature directory structure was created
-	assert.DirExists(t, filepath.Join(repo, ".armature"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"))
-	assert.DirExists(t, filepath.Join(repo, ".armature", "state"))
-	assert.FileExists(t, filepath.Join(repo, ".armature", "config.json"))
-	assert.FileExists(t, filepath.Join(repo, ".armature", "ops", "SCHEMA"))
-}
-
 func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -209,7 +187,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute())
 
-	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
+	gitignorePath := filepath.Join(repo, ".arm", ".armature", ".gitignore")
 	assert.FileExists(t, gitignorePath)
 	content, err := os.ReadFile(gitignorePath)
 	require.NoError(t, err)
@@ -477,7 +455,7 @@ func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "worker-init")
@@ -564,7 +542,7 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", repo, "--format", "human"})
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "human"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -592,25 +570,6 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	assert.Contains(t, string(wtOut), ".arm")
 }
 
-func TestMaterialize_SingleBranchMode_AfterModeRefactor(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	// Init repo
-	cmd1 := newRootCmd()
-	cmd1.SetOut(new(bytes.Buffer))
-	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd1.Execute())
-
-	// Materialize should still work
-	buf := new(bytes.Buffer)
-	cmd2 := newRootCmd()
-	cmd2.SetOut(buf)
-	cmd2.SetArgs([]string{"materialize", "--repo", repo})
-	require.NoError(t, cmd2.Execute())
-	assert.Contains(t, buf.String(), "Materialized")
-}
-
 func TestDecomposeContextCommand(t *testing.T) {
 	planData := `{"version":1,"title":"My Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task"}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
@@ -630,7 +589,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -661,31 +620,11 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	assert.NotContains(t, string(mainOut), "ops: note")
 }
 
-func TestNote_SingleBranch_ViaAppendOp(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	// Init and set up a task
-	_, err := runTrls(t, repo, "bootstrap")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "test task", "--id", "T-001")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-
-	// Note on the task
-	out, err := runTrls(t, repo, "note", "--issue", "T-001", "--msg", "hello world")
-	require.NoError(t, err)
-	assert.Contains(t, out, "T-001")
-}
-
 func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -734,7 +673,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -889,7 +828,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Use dual-branch mode so done != merged
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -994,7 +933,7 @@ func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
 	// Check that hooks are installed to .git/hooks/
@@ -1035,7 +974,7 @@ func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1050,40 +989,11 @@ func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 	assert.Contains(t, err.Error(), "done")
 }
 
-func TestMerged_AcceptsDoneIssue_SingleBranch(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	_, err := runTrls(t, repo, "bootstrap")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "my task", "--id", "T-001")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--force", "--outcome", "done")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-
-	// In single-branch mode, merged accepts status=done (which auto-advances to merged)
-	out, err := runTrls(t, repo, "merged", "--issue", "T-001", "--pr", "123")
-	require.NoError(t, err)
-	assert.Contains(t, out, "T-001")
-}
-
 func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1115,7 +1025,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1825,11 +1735,11 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// First init --dual-branch should succeed
-	_, err := runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err, "first dual-branch init should succeed")
 
 	// Second init --dual-branch should also succeed (idempotent)
-	_, err = runTrls(t, repo, "bootstrap", "--dual-branch")
+	_, err = runTrls(t, repo, "bootstrap")
 	require.NoError(t, err, "second dual-branch init should succeed (idempotent)")
 
 	// The stored worktree path should be absolute (not relative).
@@ -1846,7 +1756,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) }) //nolint:errcheck // cleanup chdir error not actionable
 
 	// Re-init using "." as repo path — simulates running trls init --dual-branch in the repo root
-	dotCmd.SetArgs([]string{"bootstrap", "--dual-branch", "--repo", "."})
+	dotCmd.SetArgs([]string{"bootstrap", "--repo", "."})
 	err = dotCmd.Execute()
 	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")
 

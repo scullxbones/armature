@@ -32,7 +32,7 @@ func TestStaleReviewCmd_StaleSource_NoCacheFile(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Write a manifest entry with a fingerprint but no corresponding cache file.
-	issuesDir := filepath.Join(repo, ".armature")
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	srcDir := filepath.Join(issuesDir, "sources")
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 
@@ -66,7 +66,7 @@ func TestStaleReviewCmd_StaleSource_NoCacheFile(t *testing.T) {
 func TestStaleReviewCmd_StaleSource_FingerprintMismatch(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	issuesDir := filepath.Join(repo, ".armature")
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	srcDir := filepath.Join(issuesDir, "sources")
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 
@@ -104,7 +104,7 @@ func TestStaleReviewCmd_StaleSource_FingerprintMismatch(t *testing.T) {
 func TestStaleReviewCmd_MultipleStaleSources(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	issuesDir := filepath.Join(repo, ".armature")
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	srcDir := filepath.Join(issuesDir, "sources")
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 
@@ -134,7 +134,7 @@ func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	issuesDir := filepath.Join(repo, ".armature")
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
 	srcDir := filepath.Join(issuesDir, "sources")
 	require.NoError(t, os.MkdirAll(srcDir, 0o755))
 
