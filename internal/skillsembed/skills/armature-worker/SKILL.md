@@ -118,6 +118,27 @@ go run ./cmd/armature --help   # confirms the binary at least compiles
 3. `arm transition ISSUE-ID --to done --outcome "..."` — only after both pass.
 4. Immediately stage scoped files and commit — do not leave the transition uncommitted before moving to step 6.
 
+### 5b. Cross-Layer JSON Fixture Testing (when applicable)
+
+If your task both **adds or modifies a Go type** AND **documents that type's JSON format**
+in a skill (SKILL.md), CONTEXT.md, or other documentation, you must add at least one test
+that exercises the serialization round-trip — not just struct construction.
+
+**Why this matters:** A test using only Go struct literals never exercises `MarshalJSON`/
+`UnmarshalJSON` and cannot catch a mismatch between a documented string value and an integer
+enum representation. For example, a test can pass with integer marshaling while your skill
+documents the field as a string, and end-to-end workflows break when another tool tries to
+unmarshal that documented string format.
+
+**How to implement:**
+1. Parse JSON from a string literal matching your documented format
+2. Unmarshal into the Go type and verify the value
+3. Marshal the Go type back to JSON
+4. Verify the JSON form matches your documented format (strings vs integers, field names, etc.)
+
+See `examples/json-roundtrip-test.go` in this skill directory for a worked example to adapt
+to your specific types and fields.
+
 ### 6. Complete and Commit
 
 ```
@@ -210,3 +231,4 @@ and Traceability** section in `armature-planner/SKILL.md`.
 | Scope overlap WARNING on `arm validate` | Add `arm link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
 | MISSING entries in `arm sources verify` | Run `arm sources sync` to fetch and fingerprint; re-run `arm sources verify` until all show OK |
 | Test function named `TestFoo` instead of `TestFoo_REQ_ID` | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_ISSUE_ID`; see Test Naming and Traceability section |
+| Struct-only tests when task touches a JSON-documented Go type | Tests are green but end-to-end serialization is broken; your skill documents `"status":"satisfied"` but Go unmarshals 0 or vice versa | Add a round-trip JSON fixture test (unmarshal from string, assert Go value; marshal Go value, assert string form). See Section 5b and `examples/json-roundtrip-test.go` |
