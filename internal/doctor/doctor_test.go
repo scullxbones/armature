@@ -391,6 +391,8 @@ func TestRunChecks_D1_GitDivergence(t *testing.T) {
 	run("git", "config", "user.email", "test@test.com")
 	run("git", "config", "user.name", "Test")
 	run("git", "config", "commit.gpgsign", "false")
+	run("git", "config", "gc.auto", "0")
+	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "feat(task-open-1): implement feature")
 
 	index := materialize.Index{
@@ -417,6 +419,8 @@ func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 	run("git", "config", "user.email", "test@test.com")
 	run("git", "config", "user.name", "Test")
 	run("git", "config", "commit.gpgsign", "false")
+	run("git", "config", "gc.auto", "0")
+	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "feat(task-done-1): implement feature")
 
 	index := materialize.Index{
