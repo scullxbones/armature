@@ -119,6 +119,8 @@ func initTempRepo(t *testing.T) string {
 	run(t, dir, "git", "config", "user.email", "test@test.com")
 	run(t, dir, "git", "config", "user.name", "Test")
 	run(t, dir, "git", "config", "commit.gpgsign", "false")
+	run(t, dir, "git", "config", "gc.auto", "0")
+	run(t, dir, "git", "config", "maintenance.auto", "false")
 	return dir
 }
 

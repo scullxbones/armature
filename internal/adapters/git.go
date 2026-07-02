@@ -28,7 +28,13 @@ func New(repoPath string) *Client {
 // cmd builds a non-interactive git command rooted at the client's repo path.
 // GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
 func (c *Client) cmd(args ...string) *exec.Cmd {
-	fullArgs := append([]string{"-C", c.repoPath}, args...)
+	// maintenance.auto=false (and gc.auto=0 for older git) prevent git from
+	// forking "git maintenance run --auto --detach" on commit-like commands.
+	// That detached process can outlive this git invocation and still be
+	// writing under .git when a caller (e.g. a test's t.TempDir() cleanup)
+	// tries to remove the repo, causing intermittent "directory not empty"
+	// failures.
+	fullArgs := append([]string{"-C", c.repoPath, "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)
 	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: internal args, not user input
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
 	return cmd
