@@ -1096,3 +1096,119 @@ func TestDiffNameOnlyRange_NoChanges(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, files)
 }
+
+func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
+	t.Parallel()
+
+	// Create a bare repo that acts as shared origin
+	originDir := t.TempDir()
+
+	gitRun := func(dir string, args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	gitRun(originDir, "init", "--bare")
+
+	// Create a temp clone to push initial content to origin
+	tempDir := t.TempDir()
+	gitRun(tempDir, "init")
+	gitRun(tempDir, "config", "user.email", "test@test.com")
+	gitRun(tempDir, "config", "user.name", "Test")
+	gitRun(tempDir, "config", "commit.gpgsign", "false")
+	gitRun(tempDir, "remote", "add", "origin", originDir)
+	gitRun(tempDir, "commit", "--allow-empty", "-m", "init")
+	gitRun(tempDir, "branch", "-M", "main")
+	gitRun(tempDir, "push", "-u", "origin", "main")
+
+	// Create and push _armature branch from main
+	gitRun(tempDir, "checkout", "-b", "_armature")
+	gitRun(tempDir, "commit", "--allow-empty", "-m", "init armature")
+	gitRun(tempDir, "push", "-u", "origin", "_armature")
+
+	// Create a fresh clone (will have origin/_armature but no local _armature)
+	cloneDir := t.TempDir()
+	gitRun(cloneDir, "clone", originDir, "cloned")
+	clonePath := filepath.Join(cloneDir, "cloned")
+	gitRun(clonePath, "config", "user.email", "test@test.com")
+	gitRun(clonePath, "config", "user.name", "Test")
+	gitRun(clonePath, "config", "commit.gpgsign", "false")
+
+	// Verify preconditions: origin/_armature exists but local _armature doesn't
+	checkBranch := func(ref string) bool {
+		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", "--verify", ref)
+		return cmd.Run() == nil
+	}
+	require.True(t, checkBranch("origin/_armature"), "origin/_armature should exist")
+	require.False(t, checkBranch("_armature"), "local _armature should not exist yet")
+
+	// Call CreateOrphanBranch
+	c := adapters.New(clonePath)
+	err := c.CreateOrphanBranch("_armature")
+	require.NoError(t, err)
+
+	// Verify _armature now exists locally
+	require.True(t, checkBranch("_armature"), "local _armature should exist after CreateOrphanBranch")
+
+	// Verify it's a tracking branch (same commit as origin/_armature)
+	getCommit := func(ref string) string {
+		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", ref)
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	originCommit := getCommit("origin/_armature")
+	localCommit := getCommit("_armature")
+	require.Equal(t, originCommit, localCommit, "local _armature should have same commit as origin/_armature")
+}
+
+func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+
+	// Get current branch
+	getCurrentBranch := func() string {
+		cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	originalBranch := getCurrentBranch()
+
+	// Track a file so we can verify the working tree is actually restored,
+	// not just the branch name.
+	trackedPath := filepath.Join(repo, "tracked.txt")
+	const trackedContent = "original content\n"
+	require.NoError(t, os.WriteFile(trackedPath, []byte(trackedContent), 0o644))
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("add", "tracked.txt")
+	gitRun("commit", "-m", "add tracked file")
+
+	// Create a pre-commit hook that always fails to simulate commit failure
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
+
+	hookContent := "#!/bin/sh\nexit 1\n"
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+	require.NoError(t, os.WriteFile(hookPath, []byte(hookContent), 0o755))
+
+	// Try to create orphan branch (commit will fail due to pre-commit hook)
+	c := adapters.New(repo)
+	err := c.CreateOrphanBranch("_armature")
+	require.Error(t, err, "CreateOrphanBranch should fail when commit fails")
+
+	// Verify we're back on the original branch (not on the broken orphan)
+	currentBranch := getCurrentBranch()
+	require.Equal(t, originalBranch, currentBranch, "should be back on original branch after CreateOrphanBranch error")
+
+	// Verify the working tree was actually restored, not just the branch name
+	restoredContent, readErr := os.ReadFile(trackedPath)
+	require.NoError(t, readErr, "tracked file should still exist after restore")
+	require.Equal(t, trackedContent, string(restoredContent), "tracked file content should survive the restore")
+}

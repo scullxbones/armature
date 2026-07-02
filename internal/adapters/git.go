@@ -104,13 +104,34 @@ func (c *Client) IsWorkingTreeDirty() (bool, error) {
 	return false, nil
 }
 
+// isBenignEmptyRepoRmError reports whether output from `git rm -rf --quiet .`
+// reflects the expected, harmless failure on an empty repo (no tracked files
+// to remove) rather than a real error that could leave stale index entries.
+func isBenignEmptyRepoRmError(output []byte) bool {
+	return strings.Contains(string(output), "did not match any files")
+}
+
 // CreateOrphanBranch creates an orphan branch (no parent commits) with a single empty commit.
-// If the branch already exists, this is a no-op. Always returns to the original branch.
-// Fails with an error if the working tree is dirty (has uncommitted changes).
+// If the branch already exists locally, this is a no-op.
+// If the branch exists on origin but not locally, creates a local tracking branch from origin.
+// Otherwise, creates a new orphan branch with an empty commit.
+// Always returns to the original branch. Fails with an error if the working tree is dirty.
 func (c *Client) CreateOrphanBranch(branch string) error {
-	// Check if branch already exists — idempotent fast-path
+	// Check if branch already exists locally — idempotent fast-path
 	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err == nil {
+		return nil
+	}
+
+	// Check if the branch exists on origin and create a local tracking branch if so
+	remoteBranch := "origin/" + branch
+	remoteCheck := c.cmd("rev-parse", "--verify", remoteBranch)
+	if err := remoteCheck.Run(); err == nil {
+		// Remote branch exists; create a local tracking branch from it
+		createCmd := c.cmd("branch", branch, remoteBranch)
+		if out, err := createCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git branch %s from %s: %w\n%s", branch, remoteBranch, err, out)
+		}
 		return nil
 	}
 
@@ -136,11 +157,29 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	if out, err := orphanCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout --orphan %s: %w\n%s", branch, err, out)
 	}
-	// Clear the index; ignore exit code 1 (nothing to remove on an empty repo)
+	// Clear the index. On an empty repo there's nothing tracked to remove and
+	// git reports "pathspec '.' did not match any files" — that's expected and
+	// safe to ignore. Any other failure means the index may still hold stale
+	// entries, which would get committed onto the new orphan branch, so treat
+	// it as fatal and restore the prior branch.
 	rmCmd := c.cmd("rm", "-rf", "--quiet", ".")
-	rmCmd.Run() //nolint:errcheck,gosec // exit code 1 is expected on empty repo
+	if rmOut, rmErr := rmCmd.CombinedOutput(); rmErr != nil && !isBenignEmptyRepoRmError(rmOut) {
+		restore := c.cmd("checkout", priorBranch)
+		restoreErr := restore.Run()
+		if restoreErr != nil {
+			return fmt.Errorf("git rm -rf . on orphan branch failed: %w; then failed to restore to %s: %w\n%s", rmErr, priorBranch, restoreErr, rmOut)
+		}
+		return fmt.Errorf("git rm -rf . on orphan branch: %w\n%s", rmErr, rmOut)
+	}
 	commitCmd := c.cmd("commit", "--allow-empty", "-m", "chore: init armature issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
+		// Commit failed; attempt to restore to the prior branch before returning error
+		restore := c.cmd("checkout", priorBranch)
+		restoreErr := restore.Run()
+		if restoreErr != nil {
+			// Restore failed; include both errors in the message
+			return fmt.Errorf("git commit on orphan branch failed: %w; then failed to restore to %s: %w\n%s", err, priorBranch, restoreErr, out)
+		}
 		return fmt.Errorf("git commit on orphan branch: %w\n%s", err, out)
 	}
 
