@@ -908,6 +908,26 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		if err := config.WriteConfig(configPath, cfg); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
 		}
+
+		// In fresh bootstrap (no migration), commit the generated config to _armature branch
+		// so it's preserved in git history and pushed to other clones.
+		// Only do this for fresh init; idempotent re-runs on existing repos will skip this.
+		if freshInit {
+			worktreeGitClient := adapters.New(worktreePath)
+
+			// Stage the config file
+			if err := worktreeGitClient.AddPaths([]string{".armature/config.json"}); err != nil {
+				return RepoSetupResult{}, fmt.Errorf("stage config in fresh bootstrap: %w", err)
+			}
+
+			// Commit the config to _armature branch
+			if err := worktreeGitClient.CommitPaths(
+				"chore: init armature config",
+				".armature",
+			); err != nil {
+				return RepoSetupResult{}, fmt.Errorf("commit config to _armature branch: %w", err)
+			}
+		}
 	}
 
 	// Init worker if not already configured

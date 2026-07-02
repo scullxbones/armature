@@ -1786,3 +1786,55 @@ func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 	assert.Equal(t, 3200, committedConfig.TokenBudget, "custom TokenBudget should be committed (not default 1600)")
 	assert.Equal(t, 10, committedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be committed (not default 5)")
 }
+
+// TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch verifies that when runRepoSetup
+// performs a fresh bootstrap (no legacy migration), the generated config.json is COMMITTED to
+// the _armature branch, not just written to disk. This ensures config is preserved when the
+// _armature branch is pushed to other clones.
+func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	// Verify config.json exists in the worktree
+	configPath := filepath.Join(repo, ".arm", ".armature", "config.json")
+	_, err = os.Stat(configPath)
+	require.NoError(t, err, "config.json should exist in worktree")
+
+	// CRITICAL: Verify that config.json is COMMITTED to the _armature branch,
+	// not just written to disk untracked.
+	// This is the fix for Finding 2: fresh bootstrap must also commit the default config
+	// so it's preserved in git history and pushed to other clones.
+
+	// List files committed to the _armature branch
+	gitLsCmd := exec.CommandContext(context.Background(), "git", "ls-tree", "-r", "_armature")
+	gitLsCmd.Dir = repo
+	gitLsOut, err := gitLsCmd.Output()
+	require.NoError(t, err, "should be able to list files in _armature branch")
+
+	lsOutput := string(gitLsOut)
+
+	// The config.json MUST be committed to _armature
+	assert.Contains(t, lsOutput, ".armature/config.json",
+		"config.json MUST be committed to _armature branch on fresh bootstrap")
+
+	// Verify we can read the committed config from the branch
+	gitShowCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:.armature/config.json")
+	gitShowCmd.Dir = repo
+	gitShowOut, err := gitShowCmd.Output()
+	require.NoError(t, err, "should be able to show committed config from _armature branch")
+
+	// Verify the committed config is valid JSON
+	var committedConfig config.Config
+	err = json.Unmarshal(gitShowOut, &committedConfig)
+	require.NoError(t, err, "committed config should be valid JSON")
+
+	// Verify it contains expected default values
+	assert.NotEmpty(t, committedConfig.ProjectType, "ProjectType should be set in default config")
+}
