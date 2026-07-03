@@ -1988,3 +1988,4 @@
 ["transition","MIGH-T2",1783052806,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added CommitPathsNoVerify plus no-verify orphan init commits; switched bootstrap migration/config commits to no-verify and rewrote rollback tests to use non-hook commit failures; build/test/lint are green."}]
 ["transition","MIGH-T2",1783052810,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","MIGH-T3",1783082562,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Captured pre-migration HEAD SHA during legacy migration, threaded it through rollback, and replaced HEAD~1 reset with the recorded SHA; rollback tests and repo gates are green."}]
+["transition","MIGH-T3",1783082565,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
