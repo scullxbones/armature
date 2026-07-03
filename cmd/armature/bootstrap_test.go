@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -1843,7 +1844,7 @@ func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) 
 }
 
 // TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1 verifies that when migrateLegacySingleBranchOps
-// encounters a commit failure (rejected by a pre-commit hook), it rolls back completely: the backup
+// encounters a commit failure, it rolls back completely: the backup
 // directory is removed, the original .armature directory is restored, and the index is restored to its
 // original state with .armature re-added. This ensures the migration is atomic: either it fully succeeds
 // or the repo is left exactly as before, not in a half-migrated state.
@@ -1865,12 +1866,10 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy setup")
 
-	// Install a pre-commit hook that always rejects the commit, to force a deterministic
-	// commit failure. CommitPaths runs plain `git commit` with no --no-verify, so the hook fires.
-	hooksDir := filepath.Join(repo, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
-	preCommitHookPath := filepath.Join(hooksDir, "pre-commit")
-	require.NoError(t, os.WriteFile(preCommitHookPath, []byte("#!/bin/sh\nexit 1\n"), 0o750))
+	// Force a deterministic commit failure without relying on user hooks.
+	// A bogus signing key trips git commit before the migration can complete.
+	run(t, repo, "git", "config", "commit.gpgsign", "true")
+	run(t, repo, "git", "config", "gpg.program", "/nonexistent-gpg-program")
 
 	// Record the state before migration
 	gitClient := adapters.New(repo)
@@ -1913,10 +1912,11 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	assert.False(t, dirty, "working tree should be clean after rollback (no dangling staged removals)")
 
 	// 5. Verify that a retry of the migration can still detect the legacy layout
-	// (succeeds once the rejecting hook is removed)
-	require.NoError(t, os.Remove(preCommitHookPath))
+	// Clear the signing configuration and verify the migration can succeed on retry.
+	run(t, repo, "git", "config", "commit.gpgsign", "false")
+	run(t, repo, "git", "config", "--unset-all", "gpg.program")
 	migratedRetry, backupDirRetry, _, errRetry := migrateLegacySingleBranchOps(repo)
-	require.NoError(t, errRetry, "retry migration (without rejecting hook) should succeed")
+	require.NoError(t, errRetry, "retry migration (without signing failure) should succeed")
 	assert.True(t, migratedRetry, "retry migration should report success")
 	assert.NotEmpty(t, backupDirRetry, "retry migration should return a backup dir path")
 	assert.DirExists(t, backupDirRetry, "retry backup directory should exist")
@@ -2149,17 +2149,45 @@ func TestRunRepoSetupMigrationCommitFailureNamesBackupDir_P1(t *testing.T) {
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), []byte(`{"op":"x"}`), 0o600))
 
-	// A pre-commit hook that rejects only commits staging .armature/ops files:
-	// the orphan-branch init commit (empty) and config-only commits pass, but the
-	// migrated-data commit in the worktree fails.
-	hooksDir := filepath.Join(repo, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
-	hook := "#!/bin/sh\ngit diff --cached --name-only | grep -q '^\\.armature/ops/' && exit 1\nexit 0\n"
-	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte(hook), 0o755))
+	wrapperDir := t.TempDir()
+	wrapperPath := filepath.Join(wrapperDir, "git")
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+target=%q
+cmd=""
+found_target=""
+skip=""
+for arg in "$@"; do
+  if [ -n "$skip" ]; then
+    if [ "$skip" = "-C" ]; then
+      found_target="$arg"
+    fi
+    skip=""
+    continue
+  fi
+  case "$arg" in
+    -C|-c)
+      skip="$arg"
+      continue
+      ;;
+    commit)
+      cmd="$arg"
+      ;;
+  esac
+done
+if [ "$cmd" = "commit" ] && [ "$found_target" = "$target" ]; then
+  exit 1
+fi
+exec "$real_git" "$@"
+`, realGit, filepath.Join(repo, ".arm"))
+	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	_, err := runRepoSetup(cmd, repo)
+	_, err = runRepoSetup(cmd, repo)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "commit migrated data")
 	assert.Contains(t, err.Error(), ".armature.migrated-",

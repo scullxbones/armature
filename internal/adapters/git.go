@@ -208,7 +208,7 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		}
 		return fmt.Errorf("git rm -rf . on orphan branch: %w\n%s", rmErr, rmOut)
 	}
-	commitCmd := c.cmd("commit", "--allow-empty", "-m", "chore: init armature issues branch")
+	commitCmd := c.cmd("commit", "--no-verify", "--allow-empty", "-m", "chore: init armature issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		// Commit failed; attempt to restore to the prior branch before returning error
 		restore := c.cmd("checkout", priorBranch)
@@ -551,7 +551,19 @@ func (c *Client) IsTracked(path string) bool {
 // the given paths, this is a no-op (returns nil) rather than an error. Any other commit
 // failure (hook rejection, missing git identity, etc.) is returned as an error.
 func (c *Client) CommitPaths(message string, paths ...string) error {
+	return c.commitPaths(message, false, paths...)
+}
+
+// CommitPathsNoVerify behaves like CommitPaths but skips hooks with --no-verify.
+func (c *Client) CommitPathsNoVerify(message string, paths ...string) error {
+	return c.commitPaths(message, true, paths...)
+}
+
+func (c *Client) commitPaths(message string, noVerify bool, paths ...string) error {
 	args := append([]string{"commit", "-m", message, "--"}, paths...)
+	if noVerify {
+		args = append([]string{"commit", "--no-verify", "-m", message, "--"}, paths...)
+	}
 	cmd := c.cmd(args...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {

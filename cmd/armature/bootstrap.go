@@ -580,7 +580,7 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 	// Scoped to the .armature path so it structurally cannot sweep in unrelated staged
 	// changes; a real commit failure (not "nothing to commit") is propagated as an error.
 	if isTracked {
-		if err := gitClient.CommitPaths("chore: migrate legacy .armature to dual-branch layout", ".armature"); err != nil {
+		if err := gitClient.CommitPathsNoVerify("chore: migrate legacy .armature to dual-branch layout", ".armature"); err != nil {
 			// Rollback on commit failure: restore the original .armature directory from the backup
 			// and restore the index to its original state so the migration is atomic.
 			if restoreErr := os.Rename(backupDir, legacyArmatureDir); restoreErr != nil {
@@ -957,7 +957,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 		// Commit the staged files (scoped to .armature paths)
 		// Use ".armature" as the scoped path to cover both ops and config.json
-		if err := worktreeGitClient.CommitPaths(
+		if err := worktreeGitClient.CommitPathsNoVerify(
 			"chore: commit migrated legacy ops and config from single-branch layout",
 			".armature",
 		); err != nil {
@@ -1030,7 +1030,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 
 		// Commit the config to _armature branch
-		if err := worktreeGitClient.CommitPaths(
+		if err := worktreeGitClient.CommitPathsNoVerify(
 			"chore: init armature config",
 			".armature",
 		); err != nil {
