@@ -1838,3 +1838,83 @@ func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) 
 	// Verify it contains expected default values
 	assert.NotEmpty(t, committedConfig.ProjectType, "ProjectType should be set in default config")
 }
+
+// TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1 verifies that when migrateLegacySingleBranchOps
+// encounters a commit failure (rejected by a pre-commit hook), it rolls back completely: the backup
+// directory is removed, the original .armature directory is restored, and the index is restored to its
+// original state with .armature re-added. This ensures the migration is atomic: either it fully succeeds
+// or the repo is left exactly as before, not in a half-migrated state.
+func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a legacy single-branch .armature/ops layout, committed to git (as a real legacy repo would have)
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a test ops file to verify data is preserved
+	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
+	testContent := []byte(`{"id": "001", "title": "Test issue"}`)
+	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
+
+	// Commit the legacy .armature to git
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy setup")
+
+	// Install a pre-commit hook that always rejects the commit, to force a deterministic
+	// commit failure. CommitPaths runs plain `git commit` with no --no-verify, so the hook fires.
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
+	preCommitHookPath := filepath.Join(hooksDir, "pre-commit")
+	require.NoError(t, os.WriteFile(preCommitHookPath, []byte("#!/bin/sh\nexit 1\n"), 0o750))
+
+	// Record the state before migration
+	gitClient := adapters.New(repo)
+	wasTrackedBefore := gitClient.IsTracked(".armature")
+	require.True(t, wasTrackedBefore, ".armature should be tracked before migration")
+
+	// Call migrateLegacySingleBranchOps, which should encounter the pre-commit hook rejection
+	migratedFlag, backupDir, err := migrateLegacySingleBranchOps(repo)
+
+	// The migration should fail
+	require.Error(t, err, "migration should fail because the pre-commit hook rejects the commit")
+	assert.False(t, migratedFlag, "migrated flag should be false when migration fails")
+	assert.Empty(t, backupDir, "backupDir should be empty when migration fails")
+
+	// CRITICAL: Verify complete rollback
+	// 1. The original .armature directory should be restored
+	assert.DirExists(t, legacyArmaturePath, ".armature directory should be restored after failed migration")
+
+	// Verify the original file is still there
+	restoredOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
+	restoredContent, err := os.ReadFile(restoredOpsFile)
+	require.NoError(t, err, "original ops file should still exist after rollback")
+	assert.Equal(t, testContent, restoredContent, "original ops file content should be unchanged")
+
+	// 2. No backup directory should be left behind
+	entries, err := os.ReadDir(repo)
+	require.NoError(t, err)
+	for _, entry := range entries {
+		assert.False(t, strings.HasPrefix(entry.Name(), ".armature.migrated-"),
+			"backup directory should not exist after rollback (cleanup on error)")
+	}
+
+	// 3. The index should be clean and .armature should still be tracked
+	isTrackedAfter := gitClient.IsTracked(".armature")
+	assert.True(t, isTrackedAfter, ".armature should still be tracked after rollback (re-added to index on error)")
+
+	// 4. Working tree should be clean (no dangling staged removals)
+	dirty, err := gitClient.IsWorkingTreeDirty()
+	require.NoError(t, err)
+	assert.False(t, dirty, "working tree should be clean after rollback (no dangling staged removals)")
+
+	// 5. Verify that a retry of the migration can still detect the legacy layout
+	// (succeeds once the rejecting hook is removed)
+	require.NoError(t, os.Remove(preCommitHookPath))
+	migratedRetry, backupDirRetry, errRetry := migrateLegacySingleBranchOps(repo)
+	require.NoError(t, errRetry, "retry migration (without rejecting hook) should succeed")
+	assert.True(t, migratedRetry, "retry migration should report success")
+	assert.NotEmpty(t, backupDirRetry, "retry migration should return a backup dir path")
+	assert.DirExists(t, backupDirRetry, "retry backup directory should exist")
+}
