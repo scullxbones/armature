@@ -48,7 +48,7 @@ func logPassThrough(gitDir string, reason string) error {
 
 // logDecision logs a complete decision to <git-dir>/armature-hook.log.
 // Each entry includes: timestamp, issue ID, resolution step, event kind, tool, decision, and optional block reason.
-func logDecision(gitDir string, issueID string, eventKind string, tool string, decision string, blockReason string) error {
+func logDecision(gitDir string, issueID string, resolutionStep string, eventKind string, tool string, decision string, blockReason string) error {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	// #nosec G304 - logPath is derived from a trusted git directory
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -60,7 +60,7 @@ func logDecision(gitDir string, issueID string, eventKind string, tool string, d
 	}()
 	ts := time.Now().UTC().Format(time.RFC3339)
 	// Format: timestamp issue_id resolution_step event tool decision [block_reason]
-	entry := fmt.Sprintf("%s decision: issue_id=%s resolution_step=evaluated event=%s tool=%s decision=%s", ts, issueID, eventKind, tool, decision)
+	entry := fmt.Sprintf("%s decision: issue_id=%s resolution_step=%s event=%s tool=%s decision=%s", ts, issueID, resolutionStep, eventKind, tool, decision)
 	if blockReason != "" {
 		entry += fmt.Sprintf(" block_reason=%s", blockReason)
 	}
@@ -260,8 +260,9 @@ func newHarnessHookCmd() *cobra.Command {
 
 			// Log the decision with complete information to the resolved worktree's git dir
 			blockReason := result.Decision.Message
-			_ = logDecision(resolvedBinding.GitDir, resolvedBinding.IssueID, string(event.Kind), event.Tool, //nolint:errcheck // logging error not actionable
-				string(result.Decision.Action), blockReason)
+			_ = logDecision( //nolint:errcheck // logging error not actionable
+				resolvedBinding.GitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
+				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason)
 
 			// If the adapter returned a non-zero exit code, propagate it to the process exit.
 			// Exit-status-based blocking platforms (e.g., exit-status-signal) use this to

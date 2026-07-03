@@ -510,6 +510,8 @@ func TestDecisionLoggedToResolvedWorktree_REQ_HOOKBIND_T3(t *testing.T) {
 	assert.Contains(t, logContent, "task-01", "log must contain resolved issue ID")
 	assert.Contains(t, logContent, "pre-tool-use", "log must contain event kind")
 	assert.Contains(t, logContent, "apply_patch", "log must contain tool name")
+	// Verify that the resolution_step is logged correctly (file_path in this case since we're using file path resolution)
+	assert.Contains(t, logContent, "resolution_step=file_path", "log must contain the actual resolution step (file_path for path-based resolution)")
 
 	// Verify the log does NOT exist in the main repo's git dir (logging went to resolved worktree)
 	mainRepoLogPath := filepath.Join(repo, ".git", "armature-hook.log")
@@ -588,20 +590,36 @@ func TestFailOpenOnEventDecodeError_REQ_HOOKBIND_T3(t *testing.T) {
 // TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3 verifies that snapshot load errors
 // result in fail-open behavior: the hook logs a pass-through entry to armature-hook.log,
 // writes a loud stderr warning, and exits with code 0 (not propagating the error).
-// The test creates a stale task (one that was created but never claimed, then time passes)
-// so that when the hook tries to check the snapshot, the binding will be stale,
-// triggering a pass-through log that verifies the fail-open mechanism.
+// The test removes the .arm directory after setup to make snapshot loading fail,
+// then verifies the hook fails open with stderr warning and pass-through log entry.
 func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
+	// Claim the task so binding is valid
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	err = cmd.Execute()
+	require.NoError(t, err)
+
 	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
-	// Don't claim the task - just create it. This makes it stale.
-	// The snapshot will load successfully, but the binding will be stale,
-	// so the hook will fail-open with a "stale issue binding" pass-through entry.
+	// Make the ops directory unreadable to force snapshot load to fail.
+	// This makes os.ReadDir fail when ListLogFiles is called.
+	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	require.DirExists(t, opsDir, "opsDir should exist")
+
+	// Make the directory unreadable by removing all permissions
+	err = os.Chmod(opsDir, 0o000)
+	require.NoError(t, err, "should be able to chmod ops directory")
+	t.Cleanup(func() {
+		// Restore permissions for cleanup
+		_ = os.Chmod(opsDir, 0o755) //nolint:errcheck // cleanup code
+	})
 
 	var out, errOut bytes.Buffer
 	hookCmd := newRootCmd()
@@ -613,15 +631,20 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
 
 	err = hookCmd.Execute()
-	// Fail-open: should exit 0 even when binding is stale
-	require.NoError(t, err, "stale binding should fail-open with exit 0")
+	// Fail-open: should exit 0 even when snapshot load fails
+	require.NoError(t, err, "snapshot load error should fail-open with exit 0")
+
+	// Verify stderr contains loud warning about snapshot load failure
+	stderrOutput := errOut.String()
+	assert.Contains(t, stderrOutput, "error:", "stderr must contain error indication")
+	assert.Contains(t, stderrOutput, "snapshot", "stderr must mention snapshot")
 
 	// Verify pass-through entry was logged to armature-hook.log
-	// (no loud stderr because stale binding is a graceful fail-open, not an error condition)
 	gitDir := filepath.Join(repo, ".git")
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	logData, err := os.ReadFile(logPath)
 	require.NoError(t, err, "log must exist")
 	logContent := string(logData)
-	assert.Contains(t, logContent, "pass-through:", "stale binding should log pass-through entry")
+	assert.Contains(t, logContent, "pass-through:", "snapshot load error should log pass-through entry")
+	assert.Contains(t, logContent, "snapshot load failed", "log should describe the failure reason")
 }

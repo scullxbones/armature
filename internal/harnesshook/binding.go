@@ -14,11 +14,12 @@ type DecodedEventInfo struct {
 	Cwd      string // Current working directory from the hook event payload (for step 2 of resolution chain)
 }
 
-// ResolvedBinding carries both the resolved issue ID and the git directory
-// from which it was resolved.
+// ResolvedBinding carries the resolved issue ID, git directory, and the resolution step
+// that determined the binding (file_path, event_cwd, session, or none for unbound).
 type ResolvedBinding struct {
-	IssueID string
-	GitDir  string
+	IssueID        string
+	GitDir         string
+	ResolutionStep string // "file_path", "event_cwd", "session", or "" for unbound
 }
 
 // ResolveBindingFromFilePath walks up the directory tree from filePath to find
@@ -85,13 +86,14 @@ func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 // 4. ARMATURE_ISSUE_ID environment variable (handled by caller if needed)
 //
 // Bash and Stop events skip steps 1-2 and resolve at the session level only (steps 3-4).
-// Returns a ResolvedBinding with both the issue ID and the git directory it was resolved from.
+// Returns a ResolvedBinding with the issue ID, git directory, and resolution step (file_path, event_cwd, or session).
 func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessionGitDir string) (ResolvedBinding, error) {
 	// Bash and Stop events resolve at the session level only (steps 3-4)
 	if eventInfo.Kind == EventStop || eventInfo.Kind == EventKind("bash") {
 		return ResolvedBinding{
-			IssueID: sessionBinding,
-			GitDir:  sessionGitDir,
+			IssueID:        sessionBinding,
+			GitDir:         sessionGitDir,
+			ResolutionStep: "session",
 		}, nil
 	}
 
@@ -104,6 +106,7 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 				return ResolvedBinding{}, err
 			}
 			if pathBinding.IssueID != "" {
+				pathBinding.ResolutionStep = "file_path"
 				return pathBinding, nil
 			}
 		}
@@ -115,6 +118,7 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 				return ResolvedBinding{}, err
 			}
 			if cwdBinding.IssueID != "" {
+				cwdBinding.ResolutionStep = "event_cwd"
 				return cwdBinding, nil
 			}
 		}
@@ -122,7 +126,8 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 
 	// Step 3: Fall back to session binding
 	return ResolvedBinding{
-		IssueID: sessionBinding,
-		GitDir:  sessionGitDir,
+		IssueID:        sessionBinding,
+		GitDir:         sessionGitDir,
+		ResolutionStep: "session",
 	}, nil
 }
