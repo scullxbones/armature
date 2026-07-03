@@ -1679,6 +1679,36 @@ func TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3(t *testing.T) {
 	assert.Equal(t, "a\nx\nb\nc\n", string(merged))
 }
 
+func TestListMigrationBackupsSortsAndIgnoresUnreadableRepo_P3(t *testing.T) {
+	repo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703010101"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703000101"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "unrelated"), 0o750))
+
+	backups := listMigrationBackups(repo)
+	require.Equal(t, []string{".armature.migrated-20260703000101", ".armature.migrated-20260703010101"}, backups)
+	require.Nil(t, listMigrationBackups(filepath.Join(repo, "missing")))
+}
+
+func TestRunRepoSetupNotesStrandedMigrationBackups_P3(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature", "ops"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".armature", "ops", "log.jsonl"), []byte(`{"op":"x"}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703010101"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".armature.migrated-20260703010101", "note.txt"), []byte("stale"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703000101"), 0o750))
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Note: stranded migration backups remain: .armature.migrated-20260703000101, .armature.migrated-20260703010101")
+}
+
 // TestExcludeArmWorktreeFromGitExactLineMatch_P3 verifies that the idempotency check for
 // .arm/ in .git/info/exclude uses exact line matching, not substring containment. A
 // pre-existing similar-but-different line (e.g. "vendor.arm/") must not suppress the

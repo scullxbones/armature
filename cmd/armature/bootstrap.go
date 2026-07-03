@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -695,6 +696,25 @@ func copyLegacyOpsToNewWorktree(backupDir string, newIssuesDir string) (int, err
 	return skippedCount, nil
 }
 
+// listMigrationBackups returns sorted base names of stranded migration backups.
+// It is best-effort and returns nil when the repo cannot be read.
+func listMigrationBackups(repoPath string) []string {
+	entries, err := os.ReadDir(repoPath)
+	if err != nil {
+		return nil
+	}
+
+	var backups []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".armature.migrated-") {
+			backups = append(backups, name)
+		}
+	}
+	slices.Sort(backups)
+	return backups
+}
+
 // mergeAppendOnlyLog appends each non-empty line from src to dst if it is not already present.
 // It preserves the order of the source and treats identical logs as a no-op.
 func mergeAppendOnlyLog(srcPath, dstPath string) (int, error) {
@@ -1054,6 +1074,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	schemaPath := filepath.Join(issuesDir, "ops", "SCHEMA")
 	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0o600); err != nil {
 		return RepoSetupResult{}, fmt.Errorf("write SCHEMA: %w", err)
+	}
+
+	if backups := listMigrationBackups(repoPath); len(backups) > 0 {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: stranded migration backups remain: %s\n", strings.Join(backups, ", "))
 	}
 
 	// Write hook templates to .armature/hooks/
