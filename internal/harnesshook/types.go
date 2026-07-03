@@ -1,6 +1,8 @@
 package harnesshook
 
-import "context"
+import (
+	"context"
+)
 
 // EventKind identifies the phase of a hook event (pre-tool-use, post-tool-use, stop).
 type EventKind string
@@ -14,10 +16,11 @@ const (
 
 // Event carries the normalised fields extracted from a platform hook payload.
 type Event struct {
-	Kind    EventKind
-	Tool    string
-	Paths   []string
-	Command string
+	Kind      EventKind
+	Tool      string
+	Paths     []string
+	Command   string
+	ToolInput map[string]any // Raw tool input for binding resolution and other post-decode logic
 }
 
 // DecisionAction is the verdict returned by an Evaluator (allow, block, or no opinion).
