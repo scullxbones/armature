@@ -14,11 +14,19 @@ type DecodedEventInfo struct {
 	Cwd      string // Current working directory from the hook event payload (for step 2 of resolution chain)
 }
 
+// ResolvedBinding carries the resolved issue ID, git directory, and the resolution step
+// that determined the binding (file_path, event_cwd, session, or none for unbound).
+type ResolvedBinding struct {
+	IssueID        string
+	GitDir         string
+	ResolutionStep string // "file_path", "event_cwd", "session", or "" for unbound
+}
+
 // ResolveBindingFromFilePath walks up the directory tree from filePath to find
 // the containing worktree's .git directory and reads the armature-issue-id file.
-// Returns an empty string if no .git directory is found or if the armature-issue-id
-// file doesn't exist.
-func ResolveBindingFromFilePath(filePath string) (string, error) {
+// Returns a ResolvedBinding with both the issue ID and the git directory where it was found,
+// or an empty IssueID if no .git directory is found or if the armature-issue-id file doesn't exist.
+func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 	currentDir := filepath.Dir(filePath)
 
 	for {
@@ -35,7 +43,7 @@ func ResolveBindingFromFilePath(filePath string) (string, error) {
 				// Worktree: .git is a file containing "gitdir: <path>"
 				data, err := os.ReadFile(gitDir) //nolint:gosec // G304: derived from repo structure
 				if err != nil {
-					return "", nil
+					return ResolvedBinding{}, nil
 				}
 				gitdirLine := strings.TrimSpace(string(data))
 				gitdirLine = strings.TrimPrefix(gitdirLine, "gitdir: ")
@@ -50,18 +58,21 @@ func ResolveBindingFromFilePath(filePath string) (string, error) {
 			// Try to read armature-issue-id from the git dir
 			issueIDPath := filepath.Join(actualGitDir, "armature-issue-id")
 			if data, err := os.ReadFile(issueIDPath); err == nil { //nolint:gosec // G304: derived from git dir
-				return strings.TrimSpace(string(data)), nil
+				return ResolvedBinding{
+					IssueID: strings.TrimSpace(string(data)),
+					GitDir:  actualGitDir,
+				}, nil
 			}
 
 			// Git dir exists but no armature-issue-id file; stop searching
-			return "", nil
+			return ResolvedBinding{}, nil
 		}
 
 		// Move up to parent directory
 		parent := filepath.Dir(currentDir)
 		if parent == currentDir {
 			// Reached the filesystem root; no git dir found
-			return "", nil
+			return ResolvedBinding{}, nil
 		}
 		currentDir = parent
 	}
@@ -75,10 +86,15 @@ func ResolveBindingFromFilePath(filePath string) (string, error) {
 // 4. ARMATURE_ISSUE_ID environment variable (handled by caller if needed)
 //
 // Bash and Stop events skip steps 1-2 and resolve at the session level only (steps 3-4).
-func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding string) (string, error) {
+// Returns a ResolvedBinding with the issue ID, git directory, and resolution step (file_path, event_cwd, or session).
+func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessionGitDir string) (ResolvedBinding, error) {
 	// Bash and Stop events resolve at the session level only (steps 3-4)
 	if eventInfo.Kind == EventStop || eventInfo.Kind == EventKind("bash") {
-		return sessionBinding, nil
+		return ResolvedBinding{
+			IssueID:        sessionBinding,
+			GitDir:         sessionGitDir,
+			ResolutionStep: "session",
+		}, nil
 	}
 
 	// For PreToolUse and PostToolUse events, follow the 4-step chain:
@@ -87,9 +103,10 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding string)
 		if eventInfo.FilePath != "" {
 			pathBinding, err := ResolveBindingFromFilePath(eventInfo.FilePath)
 			if err != nil {
-				return "", err
+				return ResolvedBinding{}, err
 			}
-			if pathBinding != "" {
+			if pathBinding.IssueID != "" {
+				pathBinding.ResolutionStep = "file_path"
 				return pathBinding, nil
 			}
 		}
@@ -98,14 +115,19 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding string)
 		if eventInfo.Cwd != "" {
 			cwdBinding, err := ResolveBindingFromFilePath(eventInfo.Cwd)
 			if err != nil {
-				return "", err
+				return ResolvedBinding{}, err
 			}
-			if cwdBinding != "" {
+			if cwdBinding.IssueID != "" {
+				cwdBinding.ResolutionStep = "event_cwd"
 				return cwdBinding, nil
 			}
 		}
 	}
 
 	// Step 3: Fall back to session binding
-	return sessionBinding, nil
+	return ResolvedBinding{
+		IssueID:        sessionBinding,
+		GitDir:         sessionGitDir,
+		ResolutionStep: "session",
+	}, nil
 }
