@@ -673,6 +673,17 @@ func copyLegacyOpsToNewWorktree(backupDir string, newIssuesDir string) (int, err
 			srcPath := filepath.Join(legacyDir, entry.Name())
 			dstPath := filepath.Join(newDir, entry.Name())
 
+			if dirName == "ops" && strings.HasSuffix(entry.Name(), ".log") {
+				if _, err := os.Stat(dstPath); err == nil {
+					appended, err := mergeAppendOnlyLog(srcPath, dstPath)
+					if err != nil {
+						return skippedCount, fmt.Errorf("merge legacy %s log %s: %w", dirName, entry.Name(), err)
+					}
+					skippedCount += appended
+					continue
+				}
+			}
+
 			skipped, err := copyRecursive(srcPath, dstPath)
 			if err != nil {
 				return skippedCount, fmt.Errorf("copy legacy %s file %s: %w", dirName, entry.Name(), err)
@@ -682,6 +693,57 @@ func copyLegacyOpsToNewWorktree(backupDir string, newIssuesDir string) (int, err
 	}
 
 	return skippedCount, nil
+}
+
+// mergeAppendOnlyLog appends each non-empty line from src to dst if it is not already present.
+// It preserves the order of the source and treats identical logs as a no-op.
+func mergeAppendOnlyLog(srcPath, dstPath string) (int, error) {
+	srcContent, err := os.ReadFile(srcPath) //nolint:gosec // G304: srcPath is derived from controlled legacy repo paths
+	if err != nil {
+		return 0, fmt.Errorf("read source log: %w", err)
+	}
+	dstContent, err := os.ReadFile(dstPath) //nolint:gosec // G304: dstPath is derived from controlled repo paths
+	if err != nil {
+		return 0, fmt.Errorf("read destination log: %w", err)
+	}
+
+	existing := make(map[string]struct{})
+	for _, line := range strings.Split(strings.TrimRight(string(dstContent), "\n"), "\n") {
+		if line != "" {
+			existing[line] = struct{}{}
+		}
+	}
+
+	var merged []string
+	appended := 0
+	for _, line := range strings.Split(strings.TrimRight(string(srcContent), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		if _, ok := existing[line]; ok {
+			continue
+		}
+		existing[line] = struct{}{}
+		merged = append(merged, line)
+		appended++
+	}
+
+	if appended == 0 {
+		return 0, nil
+	}
+
+	mergedContent := string(dstContent)
+	if len(mergedContent) > 0 && !strings.HasSuffix(mergedContent, "\n") {
+		mergedContent += "\n"
+	}
+	mergedContent += strings.Join(merged, "\n")
+	if !strings.HasSuffix(mergedContent, "\n") {
+		mergedContent += "\n"
+	}
+	if err := os.WriteFile(dstPath, []byte(mergedContent), 0o600); err != nil { //nolint:gosec // G304: dstPath is derived from controlled repo paths
+		return 0, fmt.Errorf("write merged log: %w", err)
+	}
+	return appended, nil
 }
 
 // copyRecursive recursively copies a file or directory from src to dst.

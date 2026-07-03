@@ -1643,10 +1643,9 @@ func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 	assert.Contains(t, buf.String(), "Warning", "bootstrap should print a warning when the exclude write fails")
 }
 
-// TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3 verifies that when a destination
-// file already exists during legacy ops migration, the skipped count is surfaced to the
-// caller rather than being silently dropped.
-func TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3(t *testing.T) {
+// TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3 verifies that existing .log
+// files are merged line-by-line while non-log files still use skip-on-exists semantics.
+func TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3(t *testing.T) {
 	backupDir := t.TempDir()
 	newIssuesDir := t.TempDir()
 	newOpsDir := filepath.Join(newIssuesDir, "ops")
@@ -1655,16 +1654,17 @@ func TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3(t *testing.T) {
 	legacyOpsDir := filepath.Join(backupDir, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsDir, 0o750))
 
-	// One file that collides with an existing destination file, one that doesn't.
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsDir, "merged.log"), []byte("a\nb\nc\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(newOpsDir, "merged.log"), []byte("a\nx\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsDir, "existing.json"), []byte("legacy"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsDir, "new.json"), []byte("legacy"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(newOpsDir, "existing.json"), []byte("already here"), 0o600))
 
 	skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, newIssuesDir)
 	require.NoError(t, err)
-	assert.Equal(t, 1, skippedCount, "exactly one file should have been skipped due to a destination collision")
+	assert.Equal(t, 3, skippedCount, "one non-log collision plus two appended log lines should be counted")
 
-	// The colliding file should not have been overwritten.
+	// The colliding JSON file should not have been overwritten.
 	content, readErr := os.ReadFile(filepath.Join(newOpsDir, "existing.json"))
 	require.NoError(t, readErr)
 	assert.Equal(t, "already here", string(content))
@@ -1673,6 +1673,10 @@ func TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3(t *testing.T) {
 	content, readErr = os.ReadFile(filepath.Join(newOpsDir, "new.json"))
 	require.NoError(t, readErr)
 	assert.Equal(t, "legacy", string(content))
+
+	merged, readErr := os.ReadFile(filepath.Join(newOpsDir, "merged.log"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "a\nx\nb\nc\n", string(merged))
 }
 
 // TestExcludeArmWorktreeFromGitExactLineMatch_P3 verifies that the idempotency check for
