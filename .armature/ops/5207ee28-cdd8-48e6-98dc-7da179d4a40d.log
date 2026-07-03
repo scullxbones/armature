@@ -2153,3 +2153,4 @@
 ["source-link","EXECEV-T4",1783091971,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"6a6abbf2-2dbc-458f-b76f-a2c95f1aceca","source_url":"docs/adr/0008-execution-evidence-in-semantic-review.md"}]
 ["source-link","EXECEV-T5",1783091971,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"6a6abbf2-2dbc-458f-b76f-a2c95f1aceca","source_url":"docs/adr/0008-execution-evidence-in-semantic-review.md"}]
 ["link","EXECEV-T1",1783091980,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"HOOKBIND-T2","rel":"blocked_by"}]
+["link","EXECEV-T1",1783091980,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"HOOKBIND-T3","rel":"blocked_by"}]
