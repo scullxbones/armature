@@ -1919,3 +1919,4 @@
 ["link","MIGH-T7",1783050416,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"MIGH-T3","rel":"blocked_by"}]
 ["link","MIGH-T7",1783050416,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"MIGH-T4","rel":"blocked_by"}]
 ["link","MIGH-T7",1783050416,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"MIGH-T5","rel":"blocked_by"}]
+["amend","MIGH-T1",1783050706,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"acceptance":["TestCmdContextForcesCLocale_REQ_MIGH_T1 passes","go test ./internal/adapters/ -count=1 green"]}]
