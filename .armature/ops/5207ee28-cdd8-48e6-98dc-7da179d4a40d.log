@@ -1995,3 +1995,4 @@
 ["transition","MIGH-T5",1783083616,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","MIGH-T6",1783084191,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added a tracked/untracked migration invariant matrix that injects commit and worktree-add failures, verifies legacy content remains findable in worktree/restored backup paths, and confirms bootstrap converges on rerun."}]
 ["transition","MIGH-T6",1783084209,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","MIGH-T7",1783084366,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Validated the full migration hardening story with cache-safe build, test, lint, arm validate, and arm doctor gates; no remaining DAG or repo-health issues."}]
