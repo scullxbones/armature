@@ -1212,3 +1212,77 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 	require.NoError(t, readErr, "tracked file should still exist after restore")
 	require.Equal(t, trackedContent, string(restoredContent), "tracked file content should survive the restore")
 }
+
+func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
+	t.Parallel()
+
+	// Create a bare repo that acts as shared origin
+	originDir := t.TempDir()
+
+	gitRun := func(dir string, args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	gitRun(originDir, "init", "--bare")
+
+	// Create a temp clone to push initial content to origin
+	tempDir := t.TempDir()
+	gitRun(tempDir, "init")
+	gitRun(tempDir, "config", "user.email", "test@test.com")
+	gitRun(tempDir, "config", "user.name", "Test")
+	gitRun(tempDir, "config", "commit.gpgsign", "false")
+	gitRun(tempDir, "remote", "add", "origin", originDir)
+	gitRun(tempDir, "commit", "--allow-empty", "-m", "init")
+	gitRun(tempDir, "branch", "-M", "main")
+	gitRun(tempDir, "push", "-u", "origin", "main")
+
+	// Create and push _armature branch from main
+	gitRun(tempDir, "checkout", "-b", "_armature")
+	gitRun(tempDir, "commit", "--allow-empty", "-m", "init armature")
+	gitRun(tempDir, "push", "-u", "origin", "_armature")
+
+	// Get the commit SHA of the _armature branch on origin
+	armatureCmd := exec.CommandContext(context.Background(), "git", "-C", tempDir, "rev-parse", "origin/_armature")
+	armatureOut, err := armatureCmd.Output()
+	require.NoError(t, err)
+	expectedArmatureSHA := strings.TrimSpace(string(armatureOut))
+
+	// Create a clone with --single-branch --branch main
+	// This will NOT create origin/_armature remote-tracking ref even though it exists on the remote
+	cloneDir := t.TempDir()
+	gitRun(cloneDir, "clone", "--single-branch", "--branch", "main", originDir, "cloned")
+	clonePath := filepath.Join(cloneDir, "cloned")
+	gitRun(clonePath, "config", "user.email", "test@test.com")
+	gitRun(clonePath, "config", "user.name", "Test")
+	gitRun(clonePath, "config", "commit.gpgsign", "false")
+
+	// Verify preconditions: origin/_armature doesn't exist (because of single-branch),
+	// but the remote branch does exist on the server
+	checkBranch := func(ref string) bool {
+		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", "--verify", ref)
+		return cmd.Run() == nil
+	}
+	require.False(t, checkBranch("origin/_armature"), "origin/_armature should not exist (single-branch clone)")
+	require.False(t, checkBranch("_armature"), "local _armature should not exist yet")
+
+	// Call CreateOrphanBranch
+	c := adapters.New(clonePath)
+	err = c.CreateOrphanBranch("_armature")
+	require.NoError(t, err, "CreateOrphanBranch should fetch _armature from origin if not present locally")
+
+	// Verify _armature now exists locally
+	require.True(t, checkBranch("_armature"), "local _armature should exist after CreateOrphanBranch")
+
+	// Verify it adopted the remote history (not a new orphan)
+	getCommit := func(ref string) string {
+		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", ref)
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	localCommit := getCommit("_armature")
+	require.Equal(t, expectedArmatureSHA, localCommit, "local _armature should have the remote's commit, not a new orphan")
+}
