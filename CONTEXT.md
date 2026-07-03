@@ -249,9 +249,21 @@ _Avoid_: DAG, status list
 The integration boundary through which Armature applies scope and verification policy to an external harness. A harness hook is part of Armature's control surface, not an external worker in itself.
 _Avoid_: Queue runner, orchestrator
 
-**Task Binding**:
-The association between a claimed task and a specific worktree, established when `arm claim` writes the task ID into the worktree's local git state. Task binding is what allows the harness hook to enforce a task's scope within that worktree. It is distinct from the claim itself: the claim records reservation in the ops log; the binding records the active task in the worktree.
-_Avoid_: Claim, worktree assignment
+**Execution Evidence**:
+Harness-recorded command-and-output facts captured during a bound issue's work, admissible in semantic review as a weaker evidence class than the delivery diff. Execution evidence is upgrade-only: it can lift an indeterminate criterion toward satisfied but can never substitute for diff evidence or suppress a contradiction the diff supports.
+_Avoid_: Activity trace, transcript, worker claims
+
+**Activity Log**:
+The complete, unselected record of a bound issue's harness-recorded executions, kept locally with the issue's workspace and never entering durable Armature history. Completeness is what distinguishes it from worker-curated evidence.
+_Avoid_: Audit log, ops log, decision log
+
+**Activity Index**:
+A structured, schema-validated finding aid summarizing an activity log for reviewer navigation. The index routes a reviewer to raw activity entries; it is never itself citable evidence.
+_Avoid_: Summary report, activity evidence
+
+**Issue Binding**:
+The association between a claimed leaf issue and a specific worktree, established when `arm claim` writes the issue ID into the worktree's local git state. Issue binding is what allows the harness hook to enforce that issue's scope within that worktree, and it holds for any leaf issue (Task or Bug), not only Tasks. It is distinct from the claim itself: the claim records reservation in the ops log; the binding records the active issue in the worktree. Invariant: one harness process operates under exactly one issue binding at a time.
+_Avoid_: Task binding, claim, worktree assignment
 
 **Hook Pass-through**:
 The condition where the harness hook allows a tool operation without evaluating scope or verification policy. Pass-through occurs when no task is bound to the current worktree or when the bound task is no longer in an active state (claimed or in-progress). Pass-through events are logged to the worktree's hook log.

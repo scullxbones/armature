@@ -60,6 +60,28 @@ The harness platform type. Controls hook input/output encoding.
 export ARMATURE_HOOK_PLATFORM=claude
 ```
 
+### Environment propagation and subagents
+
+Hook handlers do not get task-specific variables injected per event — they inherit the
+**launch environment of the harness process**. Consequences:
+
+- Variables exported *inside* a session (e.g. via a shell tool call) do not reach hook
+  handlers; each tool call and each hook run is a fresh process. Only variables set before
+  the harness starts are visible to `arm harness-hook`.
+- Subagents spawned by the harness (Claude Code Task/Agent tool, etc.) run inside the same
+  harness process environment, so their tool calls fire the same hooks with the same
+  launch-time variables. You cannot give a subagent a different `ARMATURE_TASK_ID` via env.
+- This is why the worktree binding file is preferred: it derives the task ID from *where the
+  hook runs* (the event payload's `cwd`/git dir), not from process environment. Per-task
+  isolation falls out of per-task worktrees with zero env plumbing.
+- If transient per-invocation data is needed, put it in a file keyed by cwd or session
+  (like the binding file), or parse it from the hook's stdin JSON payload (`session_id`,
+  `cwd`, `tool_input`) — not from environment variables.
+
+Note for Claude Code specifically: hook commands receive the event as **JSON on stdin**
+(fields like `hook_event_name`, `tool_name`, `tool_input`, `cwd`, `session_id`) and
+`CLAUDE_PROJECT_DIR` in the environment. There is no `CLAUDE_TOOL_INPUT` variable.
+
 ## Claude Code Setup
 
 Claude Code uses `.claude/settings.json` for hook configuration.
