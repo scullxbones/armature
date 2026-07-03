@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/bootstrap"
@@ -2053,4 +2054,225 @@ func TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1(t *testing.T) {
 	dirty, err := gitClient.IsWorkingTreeDirty()
 	require.NoError(t, err)
 	assert.False(t, dirty, "working tree should be clean after rollback")
+}
+
+// TestRunRepoSetupRefusesOpsWorktree_P1 verifies that pointing bootstrap at the ops
+// worktree itself (.arm, checked out on _armature) is refused instead of being
+// mistaken for a legacy single-branch layout and "migrated" — which would rename
+// the real dual-branch ops data away and commit its removal on _armature.
+func TestRunRepoSetupRefusesOpsWorktree_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Normal bootstrap to create the dual-branch layout.
+	cmd1 := newRootCmd()
+	cmd1.SetOut(new(bytes.Buffer))
+	_, err := runRepoSetup(cmd1, repo)
+	require.NoError(t, err)
+
+	// Put a real ops log in the worktree so the "legacy detection" precondition
+	// (non-empty ops dir) holds.
+	armPath := filepath.Join(repo, ".arm")
+	opsFile := filepath.Join(armPath, ".armature", "ops", "worker-test.jsonl")
+	opsContent := []byte(`{"op":"create"}`)
+	require.NoError(t, os.WriteFile(opsFile, opsContent, 0o600))
+
+	// Bootstrap pointed at the ops worktree must refuse.
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	_, err = runRepoSetup(cmd2, armPath)
+	require.Error(t, err, "bootstrap targeting the ops worktree should be refused")
+	assert.Contains(t, err.Error(), "_armature")
+
+	// The real ops data must be untouched: no rename, no migrated backup.
+	content, readErr := os.ReadFile(opsFile)
+	require.NoError(t, readErr, "ops data must not be renamed away")
+	assert.Equal(t, opsContent, content)
+	entries, err := os.ReadDir(armPath)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.HasPrefix(e.Name(), ".armature.migrated-"),
+			"no migration backup should be created inside the ops worktree")
+	}
+}
+
+// TestRunRepoSetupMigrationFailureNamesBackupDir_P1 verifies that when a failure
+// happens AFTER the legacy .armature has been renamed to its backup (e.g. while
+// copying legacy data into the new worktree), the returned error names the backup
+// directory. Without that, a re-run sees no legacy layout, fresh-inits with
+// defaults, and the legacy ops are stranded in the backup with no pointer to them.
+func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyOpsPath := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), []byte(`{"op":"x"}`), 0o600))
+
+	// An unreadable legacy templates dir makes copyLegacyOpsToNewWorktree fail
+	// after the rename to the backup has already happened.
+	legacyTemplates := filepath.Join(repo, ".armature", "templates")
+	require.NoError(t, os.MkdirAll(legacyTemplates, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyTemplates, "t.md"), []byte("tmpl"), 0o600))
+	require.NoError(t, os.Chmod(legacyTemplates, 0o000))
+	t.Cleanup(func() {
+		// Restore perms wherever the dir ended up so TempDir cleanup works.
+		entries, readErr := os.ReadDir(repo)
+		if readErr != nil {
+			return
+		}
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), ".armature") {
+				if chmodErr := os.Chmod(filepath.Join(repo, e.Name(), "templates"), 0o750); chmodErr != nil && !os.IsNotExist(chmodErr) {
+					t.Logf("cleanup chmod: %v", chmodErr)
+				}
+			}
+		}
+	})
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), ".armature.migrated-",
+		"error after a post-rename failure must name the backup dir so data isn't silently stranded")
+}
+
+// TestRunRepoSetupMigrationCommitFailureNamesBackupDir_P1 verifies that when the
+// commit of migrated data to the _armature branch fails, the error names the
+// timestamped backup directory so the legacy data can be recovered manually.
+func TestRunRepoSetupMigrationCommitFailureNamesBackupDir_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyOpsPath := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), []byte(`{"op":"x"}`), 0o600))
+
+	// A pre-commit hook that rejects only commits staging .armature/ops files:
+	// the orphan-branch init commit (empty) and config-only commits pass, but the
+	// migrated-data commit in the worktree fails.
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
+	hook := "#!/bin/sh\ngit diff --cached --name-only | grep -q '^\\.armature/ops/' && exit 1\nexit 0\n"
+	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte(hook), 0o755))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commit migrated data")
+	assert.Contains(t, err.Error(), ".armature.migrated-",
+		"commit failure after migration must name the backup dir so data isn't silently stranded")
+}
+
+// TestRunRepoSetupMigrationBackupNameCollision_P2 verifies migration still succeeds
+// when a backup directory with the current-second timestamp already exists (e.g. a
+// retry right after a rolled-back migration, which leaves its backup behind).
+func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyOpsPath := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	opsContent := []byte(`{"op":"x"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), opsContent, 0o600))
+
+	// Pre-create non-empty backup dirs for this second and the next few, simulating
+	// leftovers from prior attempts, so a plain rename would fail with ENOTEMPTY.
+	staleContent := []byte("stale")
+	now := time.Now()
+	var staleDirs []string
+	for i := 0; i < 5; i++ {
+		name := filepath.Join(repo, ".armature.migrated-"+now.Add(time.Duration(i)*time.Second).Format("20060102150405"))
+		require.NoError(t, os.MkdirAll(name, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(name, "old.txt"), staleContent, 0o600))
+		staleDirs = append(staleDirs, name)
+	}
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err, "migration should succeed despite pre-existing backup dirs")
+
+	// Prior backups untouched.
+	for _, d := range staleDirs {
+		content, readErr := os.ReadFile(filepath.Join(d, "old.txt"))
+		require.NoError(t, readErr)
+		assert.Equal(t, staleContent, content, "pre-existing backup must not be clobbered")
+	}
+
+	// Legacy ops preserved in some (new) backup and copied into the worktree.
+	migrated, readErr := os.ReadFile(filepath.Join(repo, ".arm", ".armature", "ops", "log.jsonl"))
+	require.NoError(t, readErr)
+	assert.Equal(t, opsContent, migrated)
+}
+
+// TestRunRepoSetupCommittedRollbackNamesLeftoverBackup_P2 verifies that when a
+// committed migration is rolled back (hard reset restores tracked files), the error
+// still names the leftover backup dir — it's the only copy of any legacy files that
+// were untracked at migration time (the clean-tree pre-flight ignores untracked).
+func TestRunRepoSetupCommittedRollbackNamesLeftoverBackup_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyOpsPath := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "tracked.jsonl"), []byte(`{"op":"a"}`), 0o600))
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy setup")
+
+	// An untracked ops file: passes the clean-tree check, survives only in the backup.
+	untracked := []byte(`{"op":"untracked"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "untracked.jsonl"), untracked, 0o600))
+
+	// Force AddWorktree to fail after the migration commit.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".arm"), []byte("not a directory"), 0o600))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "add .arm worktree")
+	assert.Contains(t, err.Error(), ".armature.migrated-",
+		"rollback error must name the leftover backup holding untracked legacy files")
+
+	// The backup really is still on disk with the untracked file.
+	entries, readErr := os.ReadDir(repo)
+	require.NoError(t, readErr)
+	found := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".armature.migrated-") {
+			content, rerr := os.ReadFile(filepath.Join(repo, e.Name(), "ops", "untracked.jsonl"))
+			require.NoError(t, rerr)
+			assert.Equal(t, untracked, content)
+			found = true
+		}
+	}
+	assert.True(t, found, "backup dir should remain after committed rollback")
+}
+
+// TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3 verifies that when the legacy
+// config.json exists but cannot be loaded, migration proceeds with defaults but
+// warns the user instead of silently discarding their configuration.
+func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyOpsPath := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), []byte(`{"op":"x"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".armature", "config.json"), []byte("{not json"), 0o600))
+
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err, "corrupt legacy config should not abort migration")
+
+	combined := buf.String() + errBuf.String()
+	assert.Contains(t, combined, "config", "user should be warned that legacy config was not migrated")
+	assert.Contains(t, combined, "default", "warning should say defaults are used instead")
 }
