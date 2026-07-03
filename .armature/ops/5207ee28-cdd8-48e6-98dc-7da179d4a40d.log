@@ -1984,3 +1984,4 @@
 ["source-fingerprint","70b756f6-0ae5-4a71-aa9b-859a43a97324",1783050716,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"4f56f07266794e58e63f760251af29686b5690bcfec26b7417a433aba27b5042","provider":"filesystem"}]
 ["source-fingerprint","84e7b9cf-1975-424a-93cc-4967bf7eb0d4",1783050716,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"b7e44f55eaa9484fd381039dee3afdb0e09a4598f6cbd45ec22701a55827423c","provider":"filesystem"}]
 ["transition","MIGH-T1",1783051615,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Forced LC_ALL=C and LANG=C onto all git adapter commands and added a locale-override unit test; internal/adapters passes and repo gates are green."}]
+["transition","MIGH-T1",1783051620,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
