@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -543,9 +544,17 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 		return false, "", false, nil
 	}
 
-	// Legacy layout detected: rename .armature to .armature.migrated-<timestamp>
+	// Legacy layout detected: rename .armature to .armature.migrated-<timestamp>.
+	// The timestamp is second-resolution, and rolled-back migrations leave their
+	// backup behind, so uniquify the name rather than renaming onto an existing dir.
 	timestamp := time.Now().Format("20060102150405")
 	backupDir := filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s", timestamp))
+	for i := 2; ; i++ {
+		if _, err := os.Lstat(backupDir); os.IsNotExist(err) {
+			break
+		}
+		backupDir = filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s-%d", timestamp, i))
+	}
 
 	// Before renaming, check if .armature is tracked in git
 	gitClient := adapters.New(repoPath)
@@ -741,7 +750,7 @@ func excludeArmWorktreeFromGit(repoPath string) error {
 	// Check if .arm/ is already in the exclude file as an exact line match (not a
 	// substring match, which would false-positive on e.g. "vendor.arm/" or false-negative
 	// on a commented-out "#.arm/").
-	for _, line := range strings.Split(currentContent, "\n") {
+	for line := range strings.SplitSeq(currentContent, "\n") {
 		if strings.TrimSpace(line) == ".arm/" {
 			return nil // Already excluded, idempotent
 		}
@@ -772,6 +781,15 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	repoPath = absRepoPath
 
 	gitClient := adapters.New(repoPath)
+
+	// Pre-flight: refuse to run against a checkout of the ops branch itself (e.g. the
+	// .arm worktree). Its .armature/ops would otherwise be mistaken for a legacy
+	// single-branch layout and "migrated" — renaming the real dual-branch data away.
+	if branch, err := gitClient.CurrentBranch(); err == nil && branch == "_armature" {
+		return RepoSetupResult{}, fmt.Errorf(
+			"refusing to bootstrap a checkout of the _armature ops branch (path %s): run bootstrap from the main repository instead", repoPath,
+		)
+	}
 
 	// Pre-flight: refuse to touch anything if the working tree is dirty. This makes
 	// bootstrap atomic with respect to this check — either the tree is clean at the
@@ -806,6 +824,11 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 					err, rbErr, backupDir,
 				)
 			}
+			if migrationCommitted {
+				// The reset restored tracked files, but the backup is the only copy of
+				// any legacy files that were untracked at migration time.
+				return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w (migration rolled back; backup left at %s)", err, backupDir)
+			}
 		}
 		return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w", err)
 	}
@@ -819,6 +842,11 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 					"add .arm worktree: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
 					err, rbErr, backupDir,
 				)
+			}
+			if migrationCommitted {
+				// The reset restored tracked files, but the backup is the only copy of
+				// any legacy files that were untracked at migration time.
+				return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w (migration rolled back; backup left at %s)", err, backupDir)
 			}
 		}
 		return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w", err)
@@ -877,7 +905,13 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 				// Legacy config loaded successfully, use it
 				cfg = legacyConfig
 			} else {
-				// Legacy config not found or unreadable, use defaults
+				// Absent legacy config is normal; anything else means the user HAD a
+				// config that is being replaced — say so instead of silently defaulting.
+				if !errors.Is(err, os.ErrNotExist) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"Warning: legacy config.json could not be loaded (%v); using default config (original preserved at %s)\n",
+						err, legacyConfigPath)
+				}
 				projectType := config.DetectProjectType(repoPath)
 				cfg = config.DefaultConfig(projectType)
 			}
@@ -894,7 +928,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	if migrated && backupDir != "" {
 		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, issuesDir)
 		if err != nil {
-			return RepoSetupResult{}, fmt.Errorf("copy legacy ops data: %w", err)
+			return RepoSetupResult{}, fmt.Errorf("copy legacy ops data (preserved at %s): %w", backupDir, err)
 		}
 		if skippedCount > 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%d legacy file(s) already present in new worktree, not overwritten\n", skippedCount)
@@ -918,7 +952,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			filesToStage = append(filesToStage, ".armature/config.json")
 		}
 		if err := worktreeGitClient.AddPaths(filesToStage); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("stage migrated data: %w", err)
+			return RepoSetupResult{}, fmt.Errorf("stage migrated data (legacy data preserved at %s): %w", backupDir, err)
 		}
 
 		// Commit the staged files (scoped to .armature paths)
@@ -927,7 +961,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			"chore: commit migrated legacy ops and config from single-branch layout",
 			".armature",
 		); err != nil {
-			return RepoSetupResult{}, fmt.Errorf("commit migrated data to _armature branch: %w", err)
+			return RepoSetupResult{}, fmt.Errorf("commit migrated data to _armature branch (legacy data preserved at %s): %w", backupDir, err)
 		}
 	}
 
