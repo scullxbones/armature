@@ -1877,12 +1877,13 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	require.True(t, wasTrackedBefore, ".armature should be tracked before migration")
 
 	// Call migrateLegacySingleBranchOps, which should encounter the pre-commit hook rejection
-	migratedFlag, backupDir, _, err := migrateLegacySingleBranchOps(repo)
+	migratedFlag, backupDir, preMigrationSHA, _, err := migrateLegacySingleBranchOps(repo)
 
 	// The migration should fail
 	require.Error(t, err, "migration should fail because the pre-commit hook rejects the commit")
 	assert.False(t, migratedFlag, "migrated flag should be false when migration fails")
 	assert.Empty(t, backupDir, "backupDir should be empty when migration fails")
+	assert.NotEmpty(t, preMigrationSHA, "preMigrationSHA should be recorded before rollback")
 
 	// CRITICAL: Verify complete rollback
 	// 1. The original .armature directory should be restored
@@ -1915,10 +1916,11 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	// Clear the signing configuration and verify the migration can succeed on retry.
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
 	run(t, repo, "git", "config", "--unset-all", "gpg.program")
-	migratedRetry, backupDirRetry, _, errRetry := migrateLegacySingleBranchOps(repo)
+	migratedRetry, backupDirRetry, preMigrationSHARetry, _, errRetry := migrateLegacySingleBranchOps(repo)
 	require.NoError(t, errRetry, "retry migration (without signing failure) should succeed")
 	assert.True(t, migratedRetry, "retry migration should report success")
 	assert.NotEmpty(t, backupDirRetry, "retry migration should return a backup dir path")
+	assert.NotEmpty(t, preMigrationSHARetry, "retry migration should still record the pre-migration SHA")
 	assert.DirExists(t, backupDirRetry, "retry backup directory should exist")
 }
 
