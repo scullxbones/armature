@@ -11,7 +11,7 @@ import (
 
 // TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2 verifies that ResolveBindingFromFilePath
 // walks up from a file path to find the containing worktree's git dir and reads
-// the armature-issue-id file.
+// the armature-issue-id file, and returns both the issue ID and the git dir.
 func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
 	// Create a temporary directory structure simulating a worktree
@@ -41,11 +41,12 @@ func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	binding, err := ResolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
-	assert.Equal(t, "task-from-path", binding)
+	assert.Equal(t, "task-from-path", binding.IssueID)
+	assert.Equal(t, actualGitDir, binding.GitDir)
 }
 
 // TestResolveBindingFromFilePath_NoGitDir verifies that ResolveBindingFromFilePath
-// returns an empty string when no .git directory is found.
+// returns a ResolvedBinding with empty IssueID when no .git directory is found.
 func TestResolveBindingFromFilePath_NoGitDir(t *testing.T) {
 	t.Parallel()
 	// Create a temporary directory without any git structure
@@ -57,11 +58,11 @@ func TestResolveBindingFromFilePath_NoGitDir(t *testing.T) {
 	binding, err := ResolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
-	assert.Equal(t, "", binding)
+	assert.Equal(t, "", binding.IssueID)
 }
 
 // TestResolveBindingFromFilePath_NoIssueIDFile verifies that ResolveBindingFromFilePath
-// returns an empty string when the git dir exists but armature-issue-id file doesn't.
+// returns a ResolvedBinding with empty IssueID when the git dir exists but armature-issue-id file doesn't.
 func TestResolveBindingFromFilePath_NoIssueIDFile(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -77,7 +78,7 @@ func TestResolveBindingFromFilePath_NoIssueIDFile(t *testing.T) {
 	binding, err := ResolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
-	assert.Equal(t, "", binding)
+	assert.Equal(t, "", binding.IssueID)
 }
 
 // TestResolveBindingFromFilePath_StopsAtFirstGitDir verifies that ResolveBindingFromFilePath
@@ -107,7 +108,8 @@ func TestResolveBindingFromFilePath_StopsAtFirstGitDir(t *testing.T) {
 	binding, err := ResolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
-	assert.Equal(t, "task-from-child", binding)
+	assert.Equal(t, "task-from-child", binding.IssueID)
+	assert.Equal(t, childGitDir, binding.GitDir)
 }
 
 // TestResolveBindingFromFilePath_TrimsWhitespace verifies that ResolveBindingFromFilePath
@@ -132,7 +134,7 @@ func TestResolveBindingFromFilePath_TrimsWhitespace(t *testing.T) {
 	binding, err := ResolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
-	assert.Equal(t, "task-with-spaces", binding)
+	assert.Equal(t, "task-with-spaces", binding.IssueID)
 }
 
 // TestResolveBindingFromEvent_PreToolUse_WithFilePath verifies that
@@ -160,10 +162,11 @@ func TestResolveBindingFromEvent_PreToolUse_WithFilePath(t *testing.T) {
 		FilePath: filePath,
 	}
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir")
 
 	require.NoError(t, err)
-	assert.Equal(t, "task-from-path", binding)
+	assert.Equal(t, "task-from-path", binding.IssueID)
+	assert.Equal(t, gitDir, binding.GitDir)
 }
 
 // TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession verifies that
@@ -175,11 +178,13 @@ func TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession(t *tes
 		Kind:     EventPreToolUse,
 		FilePath: "",
 	}
+	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir)
 
 	require.NoError(t, err)
-	assert.Equal(t, "session-binding", binding)
+	assert.Equal(t, "session-binding", binding.IssueID)
+	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
 // TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2 verifies that
@@ -206,11 +211,13 @@ func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 		Kind:     EventStop,
 		FilePath: filePath,
 	}
+	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir)
 
 	require.NoError(t, err)
-	assert.Equal(t, "session-binding", binding)
+	assert.Equal(t, "session-binding", binding.IssueID)
+	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
 // TestResolveBindingFromEvent_Bash_UsesSessionBinding verifies that
@@ -221,11 +228,13 @@ func TestResolveBindingFromEvent_Bash_UsesSessionBinding(t *testing.T) {
 		Kind:     EventKind("bash"), // Bash is not a PreToolUse/PostToolUse/Stop
 		FilePath: "/some/path/file.go",
 	}
+	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir)
 
 	require.NoError(t, err)
-	assert.Equal(t, "session-binding", binding)
+	assert.Equal(t, "session-binding", binding.IssueID)
+	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
 // TestResolveBindingFromEvent_EmptySessionBinding verifies that ResolveBindingFromEvent
@@ -236,11 +245,12 @@ func TestResolveBindingFromEvent_EmptySessionBinding(t *testing.T) {
 		Kind:     EventStop,
 		FilePath: "",
 	}
+	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "")
+	binding, err := ResolveBindingFromEvent(eventInfo, "", sessionGitDir)
 
 	require.NoError(t, err)
-	assert.Equal(t, "", binding)
+	assert.Equal(t, "", binding.IssueID)
 }
 
 // TestBindingResolutionChain_REQ_HOOKBIND_T2 verifies the complete 4-step binding resolution
@@ -273,10 +283,11 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 			Cwd:      "",
 		}
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir")
 
 		require.NoError(t, err)
-		assert.Equal(t, "from-file-path", binding)
+		assert.Equal(t, "from-file-path", binding.IssueID)
+		assert.Equal(t, gitDir, binding.GitDir)
 	})
 
 	t.Run("Step2_EventPayloadCwdResolvesToBinding", func(t *testing.T) {
@@ -301,10 +312,11 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 			Cwd:      cwdDir,
 		}
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir")
 
 		require.NoError(t, err)
-		assert.Equal(t, "from-event-cwd", binding)
+		assert.Equal(t, "from-event-cwd", binding.IssueID)
+		assert.Equal(t, gitDir, binding.GitDir)
 	})
 
 	t.Run("Step2_FilePathTakesPrecedenceOverEventCwd", func(t *testing.T) {
@@ -341,10 +353,11 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 			Cwd:      cwdDir,
 		}
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir")
 
 		require.NoError(t, err)
-		assert.Equal(t, "from-file-path", binding, "file_path should take precedence over event cwd")
+		assert.Equal(t, "from-file-path", binding.IssueID, "file_path should take precedence over event cwd")
+		assert.Equal(t, filePathGitDir, binding.GitDir)
 	})
 
 	t.Run("Step3_SessionBindingFallback", func(t *testing.T) {
@@ -355,11 +368,13 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 			FilePath: "",
 			Cwd:      "",
 		}
+		sessionGitDir := "/session/git/dir"
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir)
 
 		require.NoError(t, err)
-		assert.Equal(t, "session-binding", binding)
+		assert.Equal(t, "session-binding", binding.IssueID)
+		assert.Equal(t, sessionGitDir, binding.GitDir)
 	})
 
 	t.Run("BashEventUsesSessionBindingOnly", func(t *testing.T) {
@@ -387,11 +402,13 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 			FilePath: filePath,
 			Cwd:      cwdDir,
 		}
+		sessionGitDir := "/session/git/dir"
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir)
 
 		require.NoError(t, err)
-		assert.Equal(t, "session-binding", binding, "bash events should use session binding only")
+		assert.Equal(t, "session-binding", binding.IssueID, "bash events should use session binding only")
+		assert.Equal(t, sessionGitDir, binding.GitDir)
 	})
 
 	t.Run("StopEventUsesSessionBindingOnly", func(t *testing.T) {
@@ -419,10 +436,12 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 			FilePath: filePath,
 			Cwd:      cwdDir,
 		}
+		sessionGitDir := "/session/git/dir"
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir)
 
 		require.NoError(t, err)
-		assert.Equal(t, "session-binding", binding, "stop events should use session binding only")
+		assert.Equal(t, "session-binding", binding.IssueID, "stop events should use session binding only")
+		assert.Equal(t, sessionGitDir, binding.GitDir)
 	})
 }

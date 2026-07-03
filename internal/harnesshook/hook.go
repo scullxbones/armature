@@ -66,12 +66,13 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 		FilePath: filePath,
 		Cwd:      event.Cwd,
 	}
-	binding, err := ResolveBindingFromEvent(eventInfo, input.SessionBinding)
+	resolvedBinding, err := ResolveBindingFromEvent(eventInfo, input.SessionBinding, "")
 	if err != nil {
 		return RunResult{}, fmt.Errorf("resolve binding from event: %w", err)
 	}
 
 	// Use resolved binding, fall back to TaskID for backward compat
+	binding := resolvedBinding.IssueID
 	if binding == "" {
 		binding = input.TaskID
 	}
