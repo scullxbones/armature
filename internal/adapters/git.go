@@ -28,6 +28,13 @@ func New(repoPath string) *Client {
 // cmd builds a non-interactive git command rooted at the client's repo path.
 // GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
 func (c *Client) cmd(args ...string) *exec.Cmd {
+	return c.cmdContext(context.Background(), args...)
+}
+
+// cmdContext is like cmd but binds the command to the given context, so
+// callers can bound long-running or network-touching commands (e.g. fetch)
+// with a timeout.
+func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	// maintenance.auto=false (and gc.auto=0 for older git) prevent git from
 	// forking "git maintenance run --auto --detach" on commit-like commands.
 	// That detached process can outlive this git invocation and still be
@@ -35,7 +42,7 @@ func (c *Client) cmd(args ...string) *exec.Cmd {
 	// tries to remove the repo, causing intermittent "directory not empty"
 	// failures.
 	fullArgs := append([]string{"-C", c.repoPath, "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)
-	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: internal args, not user input
+	cmd := exec.CommandContext(ctx, "git", fullArgs...) //nolint:gosec // G204: internal args, not user input
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
 	return cmd
 }
@@ -127,7 +134,12 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	// but not in the local remote-tracking refs (e.g., after git clone --single-branch).
 	// Fetch with refspec to create/update the remote-tracking ref.
 	// This is best-effort; ignore failures when the remote is absent, offline, or the branch doesn't exist.
-	fetchCmd := c.cmd("fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
+	// "origin" is hardcoded here, matching the existing pattern elsewhere in this
+	// client (Push/FetchAndRebase); this assumes a single remote named "origin".
+	// Bounded with a short timeout so a black-holed network can't hang bootstrap.
+	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	fetchCmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
 	_ = fetchCmd.Run() //nolint:errcheck // Ignore fetch errors; best-effort fetch for remote branch
 
 	// Check if the branch exists on origin and create a local tracking branch if so

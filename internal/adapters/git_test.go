@@ -1213,6 +1213,55 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 	require.Equal(t, trackedContent, string(restoredContent), "tracked file content should survive the restore")
 }
 
+func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+
+	// Get the current commit SHA before detaching
+	headSHACmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	headSHAOut, err := headSHACmd.Output()
+	require.NoError(t, err)
+	originalSHA := strings.TrimSpace(string(headSHAOut))
+
+	// Detach HEAD at the current commit
+	detachCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "checkout", "--detach")
+	_, err = detachCmd.CombinedOutput()
+	require.NoError(t, err)
+
+	// Verify we're in detached HEAD state
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	require.Equal(t, "HEAD", strings.TrimSpace(string(branchOut)), "should be in detached HEAD state")
+
+	// Create a pre-commit hook that always fails to simulate commit failure
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
+	hookContent := "#!/bin/sh\nexit 1\n"
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+	require.NoError(t, os.WriteFile(hookPath, []byte(hookContent), 0o755))
+
+	// Call CreateOrphanBranch; the commit on the orphan branch should fail due
+	// to the pre-commit hook, and CreateOrphanBranch should restore HEAD back
+	// to the original detached SHA (not leave it on the broken orphan branch).
+	c := adapters.New(repo)
+	err = c.CreateOrphanBranch("_armature")
+	require.Error(t, err, "CreateOrphanBranch should fail when commit fails")
+
+	// Verify we're back in detached HEAD state (not on _armature)
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchOut, err := currentBranchCmd.Output()
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD", strings.TrimSpace(string(currentBranchOut)), "should be back in detached HEAD state")
+
+	// Verify we're at the original commit SHA
+	currentSHACmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	currentSHAOut, err := currentSHACmd.Output()
+	require.NoError(t, err)
+	currentSHA := strings.TrimSpace(string(currentSHAOut))
+	assert.Equal(t, originalSHA, currentSHA, "HEAD should be restored to the original detached commit SHA")
+}
+
 func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	t.Parallel()
 
