@@ -1646,7 +1646,9 @@ func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 // caller rather than being silently dropped.
 func TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3(t *testing.T) {
 	backupDir := t.TempDir()
-	newOpsDir := t.TempDir()
+	newIssuesDir := t.TempDir()
+	newOpsDir := filepath.Join(newIssuesDir, "ops")
+	require.NoError(t, os.MkdirAll(newOpsDir, 0o750))
 
 	legacyOpsDir := filepath.Join(backupDir, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsDir, 0o750))
@@ -1656,7 +1658,7 @@ func TestCopyLegacyOpsToNewWorktreeReportsSkippedCount_P3(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsDir, "new.json"), []byte("legacy"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(newOpsDir, "existing.json"), []byte("already here"), 0o600))
 
-	skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, newOpsDir)
+	skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, newIssuesDir)
 	require.NoError(t, err)
 	assert.Equal(t, 1, skippedCount, "exactly one file should have been skipped due to a destination collision")
 
@@ -1875,7 +1877,7 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	require.True(t, wasTrackedBefore, ".armature should be tracked before migration")
 
 	// Call migrateLegacySingleBranchOps, which should encounter the pre-commit hook rejection
-	migratedFlag, backupDir, err := migrateLegacySingleBranchOps(repo)
+	migratedFlag, backupDir, _, err := migrateLegacySingleBranchOps(repo)
 
 	// The migration should fail
 	require.Error(t, err, "migration should fail because the pre-commit hook rejects the commit")
@@ -1912,9 +1914,143 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	// 5. Verify that a retry of the migration can still detect the legacy layout
 	// (succeeds once the rejecting hook is removed)
 	require.NoError(t, os.Remove(preCommitHookPath))
-	migratedRetry, backupDirRetry, errRetry := migrateLegacySingleBranchOps(repo)
+	migratedRetry, backupDirRetry, _, errRetry := migrateLegacySingleBranchOps(repo)
 	require.NoError(t, errRetry, "retry migration (without rejecting hook) should succeed")
 	assert.True(t, migratedRetry, "retry migration should report success")
 	assert.NotEmpty(t, backupDirRetry, "retry migration should return a backup dir path")
 	assert.DirExists(t, backupDirRetry, "retry backup directory should exist")
+}
+
+// TestRunRepoSetupMigratesTemplatesHooksReview_P2 verifies that legacy templates/, hooks/,
+// and review/ content (not just ops/ and config.json) is copied into the new worktree during
+// migration, rather than being left stranded only in the timestamped backup.
+func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(legacyArmaturePath, "ops"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(legacyArmaturePath, "templates"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(legacyArmaturePath, "hooks"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(legacyArmaturePath, "review"), 0o750))
+
+	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "ops", "issue.json"), []byte(`{"id":"1"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "templates", "custom.md"), []byte("custom template"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "hooks", "custom-hook.sh"), []byte("#!/bin/sh\necho hi\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "review", "notes.md"), []byte("review notes"), 0o600))
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	result, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+	assert.NotEmpty(t, result.Status)
+
+	newIssuesDir := filepath.Join(repo, ".arm", ".armature")
+
+	templateContent, err := os.ReadFile(filepath.Join(newIssuesDir, "templates", "custom.md"))
+	require.NoError(t, err, "legacy templates/ content should be migrated into the new worktree")
+	assert.Equal(t, "custom template", string(templateContent))
+
+	hookContent, err := os.ReadFile(filepath.Join(newIssuesDir, "hooks", "custom-hook.sh"))
+	require.NoError(t, err, "legacy hooks/ content should be migrated into the new worktree")
+	assert.Equal(t, "#!/bin/sh\necho hi\n", string(hookContent))
+
+	reviewContent, err := os.ReadFile(filepath.Join(newIssuesDir, "review", "notes.md"))
+	require.NoError(t, err, "legacy review/ content should be migrated into the new worktree")
+	assert.Equal(t, "review notes", string(reviewContent))
+}
+
+// TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2 verifies that a newly written
+// config.json is committed to the _armature branch even when the worktree is not a
+// fresh init (e.g. _armature was adopted from a remote that had ops/ but no
+// config.json). Previously the commit was gated on freshInit, so the generated
+// config.json could be written to disk but never preserved in git history.
+func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(repo, ".arm")
+	issuesDir := filepath.Join(worktreePath, ".armature")
+	configPath := filepath.Join(issuesDir, "config.json")
+
+	// Simulate "adopted from remote with ops but no config.json": remove config.json
+	// and delete its commit history by resetting the _armature branch, then add an ops
+	// file so the directory is non-empty (not a fresh init on the next run).
+	require.NoError(t, os.Remove(configPath))
+	worktreeGitClient := adapters.New(worktreePath)
+	require.NoError(t, worktreeGitClient.AddPaths([]string{".armature"}))
+	require.NoError(t, worktreeGitClient.CommitPaths("chore: simulate remote adoption without config.json", ".armature"))
+
+	opsFile := filepath.Join(issuesDir, "ops", "adopted-issue.json")
+	require.NoError(t, os.WriteFile(opsFile, []byte(`{"id":"adopted"}`), 0o600))
+
+	buf2 := new(bytes.Buffer)
+	cmd2 := newRootCmd()
+	cmd2.SetOut(buf2)
+	result2, err := runRepoSetup(cmd2, repo)
+	require.NoError(t, err)
+	assert.Equal(t, "already_initialized", result2.Status, "ops/ is non-empty, so this run should not be a fresh init")
+
+	assert.FileExists(t, configPath, "config.json should be regenerated")
+
+	// Verify the regenerated config.json was committed to _armature (not just written to disk).
+	statusOut, err := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "status", "--porcelain", ".armature/config.json").Output()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(statusOut)), "regenerated config.json should be committed, not left as an uncommitted/untracked change")
+
+	logOut, err := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "log", "-1", "--pretty=%s", "--", ".armature/config.json").Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(logOut), "init armature config", "config.json should have a commit preserving it in _armature history")
+}
+
+// TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1 verifies that if the legacy
+// migration succeeds (backup created, .armature removed and committed) but a later setup
+// step (AddWorktree) fails, the migration is rolled back rather than leaving the repo with
+// .armature gone from tracking while the new dual-branch layout was never created.
+func TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up and commit a legacy single-branch .armature/ops layout.
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	testContent := []byte(`{"id": "001", "title": "Test issue"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "test-issue.json"), testContent, 0o600))
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy setup")
+
+	// Pre-create .arm as a regular file (not a directory), so `git worktree add .arm _armature`
+	// fails deterministically (AddWorktree's own "already a worktree" fast-path only checks for
+	// .arm/.git, which won't exist here, so it falls through to the real `git worktree add`).
+	arm := filepath.Join(repo, ".arm")
+	require.NoError(t, os.WriteFile(arm, []byte("not a directory"), 0o600))
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err, "runRepoSetup should fail because .arm exists as a non-directory file")
+	assert.Contains(t, err.Error(), "add .arm worktree")
+
+	// The legacy migration should have been rolled back: .armature restored and tracked again.
+	gitClient := adapters.New(repo)
+	assert.DirExists(t, legacyArmaturePath, ".armature should be restored after rollback")
+	restoredContent, readErr := os.ReadFile(filepath.Join(legacyOpsPath, "test-issue.json"))
+	require.NoError(t, readErr, "legacy ops file should still exist after rollback")
+	assert.Equal(t, testContent, restoredContent)
+	assert.True(t, gitClient.IsTracked(".armature"), ".armature should be tracked again after rollback")
+
+	dirty, err := gitClient.IsWorkingTreeDirty()
+	require.NoError(t, err)
+	assert.False(t, dirty, "working tree should be clean after rollback")
 }
