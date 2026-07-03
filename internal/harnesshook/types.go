@@ -20,6 +20,7 @@ type Event struct {
 	Tool      string
 	Paths     []string
 	Command   string
+	Cwd       string         // Current working directory from the hook event payload (if available)
 	ToolInput map[string]any // Raw tool input for binding resolution and other post-decode logic
 }
 
