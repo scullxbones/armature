@@ -180,10 +180,11 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 	}
 
 	return Event{
-		Kind:    normalizeEvent(raw.HookEventName),
-		Tool:    raw.ToolName,
-		Paths:   extractPaths(raw.ToolInput),
-		Command: extractCommand(raw.ToolInput),
+		Kind:      normalizeEvent(raw.HookEventName),
+		Tool:      raw.ToolName,
+		Paths:     extractPaths(raw.ToolInput),
+		Command:   extractCommand(raw.ToolInput),
+		ToolInput: raw.ToolInput,
 	}, nil
 }
 

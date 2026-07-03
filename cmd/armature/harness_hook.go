@@ -61,6 +61,32 @@ func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	return claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, now)
 }
 
+// extractFilePathFromToolInput extracts the file path from the raw tool_input map.
+// It checks for common file path keys in the order they're likely to be used.
+func extractFilePathFromToolInput(toolInput map[string]any) string {
+	if toolInput == nil {
+		return ""
+	}
+
+	// Check for direct file_path or path keys
+	for _, key := range []string{"file_path", "path"} {
+		if value, ok := toolInput[key].(string); ok && value != "" {
+			return value
+		}
+	}
+
+	// Check for changes array (common in Edit/Write events)
+	if changes, ok := toolInput["changes"].([]any); ok && len(changes) > 0 {
+		if change, ok := changes[0].(map[string]any); ok {
+			if path, ok := change["path"].(string); ok && path != "" {
+				return path
+			}
+		}
+	}
+
+	return ""
+}
+
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
 // if the result's ExitCode is non-zero.
 func applyRunResult(out io.Writer, result harnesshook.RunResult) error {
@@ -96,10 +122,47 @@ func newHarnessHookCmd() *cobra.Command {
 				// unusual layout); the binding file may not exist but we degrade gracefully.
 				gitDir = filepath.Join(appCtx.RepoPath, ".git")
 			}
-			taskID := resolveIssueBinding(gitDir)
+			// Resolve session-level binding (from git dir or env) for use as fallback
+			sessionBinding := resolveIssueBinding(gitDir)
 
-			// If no issue binding is found, pass through with exit 0
-			if taskID == "" {
+			// Read hook input from stdin (before binding resolution per ADR-0007)
+			inputData, err := io.ReadAll(cmd.InOrStdin())
+			if err != nil {
+				return fmt.Errorf("read hook input: %w", err)
+			}
+
+			// Decode the event to determine if path-based binding resolution is needed
+			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
+			if err != nil {
+				// If we can't select an adapter, fail open and pass through
+				_ = logPassThrough(gitDir, "adapter selection failed") //nolint:errcheck // logging only, error not actionable
+				return nil
+			}
+
+			event, err := adapter.Decode(inputData)
+			if err != nil {
+				// If we can't decode the event, fail open and pass through
+				_ = logPassThrough(gitDir, "event decode failed") //nolint:errcheck // logging only, error not actionable
+				return nil
+			}
+
+			// Extract file path from tool input for path-based resolution
+			filePath := extractFilePathFromToolInput(event.ToolInput)
+			eventInfo := &harnesshook.DecodedEventInfo{
+				Kind:     event.Kind,
+				FilePath: filePath,
+			}
+
+			// Resolve binding from event and session binding
+			finalBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding)
+			if err != nil {
+				// If binding resolution fails, fail open and pass through
+				_ = logPassThrough(gitDir, "binding resolution failed") //nolint:errcheck // logging only, error not actionable
+				return nil
+			}
+
+			// If no binding is found, pass through with exit 0
+			if finalBinding == "" {
 				_ = logPassThrough(gitDir, "no issue binding found") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
@@ -113,16 +176,10 @@ func newHarnessHookCmd() *cobra.Command {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
-			// If binding is stale (status != claimed/in-progress or claim TTL expired), pass through
-			if isBindingStale(snap, taskID, time.Now().Unix()) {
+			// If binding is stale, pass through
+			if isBindingStale(snap, finalBinding, time.Now().Unix()) {
 				_ = logPassThrough(gitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
 				return nil
-			}
-
-			// Read hook input from stdin
-			inputData, err := io.ReadAll(cmd.InOrStdin())
-			if err != nil {
-				return fmt.Errorf("read hook input: %w", err)
 			}
 
 			// Create policy resolver
@@ -132,12 +189,13 @@ func newHarnessHookCmd() *cobra.Command {
 				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
 			})
 
-			// Create hook and evaluate
+			// Create hook and evaluate with resolved binding
 			hook := harnesshook.NewHook(resolver)
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
-				Input:    inputData,
-				TaskID:   taskID,
-				Platform: os.Getenv("ARMATURE_HOOK_PLATFORM"),
+				Input:          inputData,
+				TaskID:         finalBinding,
+				Platform:       os.Getenv("ARMATURE_HOOK_PLATFORM"),
+				SessionBinding: sessionBinding,
 			})
 			if err != nil {
 				return err
