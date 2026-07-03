@@ -2,6 +2,7 @@ package adapters_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,47 @@ func initTestRepo(t *testing.T) string {
 	gitRun("config", "commit.gpgsign", "false")
 	gitRun("commit", "--allow-empty", "-m", "init")
 	return dir
+}
+
+func installGitCommitFailureWrapper(t *testing.T, repo string) string {
+	t.Helper()
+
+	wrapperDir := t.TempDir()
+	wrapperPath := filepath.Join(wrapperDir, "git")
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+
+	script := `#!/bin/sh
+real_git=%q
+repo=%q
+cmd=""
+target=""
+skip=""
+for arg in "$@"; do
+  if [ -n "$skip" ]; then
+    if [ "$skip" = "-C" ]; then
+      target="$arg"
+    fi
+    skip=""
+    continue
+  fi
+  case "$arg" in
+    -C|-c)
+      skip="$arg"
+      continue
+      ;;
+    commit)
+      cmd="$arg"
+      ;;
+  esac
+done
+if [ "$cmd" = "commit" ] && [ "$target" = "$repo" ]; then
+  exit 1
+fi
+exec "$real_git" "$@"
+`
+	require.NoError(t, os.WriteFile(wrapperPath, []byte(fmt.Sprintf(script, realGit, repo)), 0o755))
+	return wrapperDir
 }
 
 func TestCreateOrphanBranch(t *testing.T) {
@@ -1165,7 +1207,6 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 }
 
 func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
-	t.Parallel()
 	repo := initTestRepo(t)
 
 	// Get current branch
@@ -1190,13 +1231,8 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 	gitRun("add", "tracked.txt")
 	gitRun("commit", "-m", "add tracked file")
 
-	// Create a pre-commit hook that always fails to simulate commit failure
-	hooksDir := filepath.Join(repo, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
-
-	hookContent := "#!/bin/sh\nexit 1\n"
-	hookPath := filepath.Join(hooksDir, "pre-commit")
-	require.NoError(t, os.WriteFile(hookPath, []byte(hookContent), 0o755))
+	wrapperDir := installGitCommitFailureWrapper(t, repo)
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	// Try to create orphan branch (commit will fail due to pre-commit hook)
 	c := adapters.New(repo)
@@ -1214,7 +1250,6 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 }
 
 func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
-	t.Parallel()
 	repo := initTestRepo(t)
 
 	// Get the current commit SHA before detaching
@@ -1234,12 +1269,8 @@ func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "HEAD", strings.TrimSpace(string(branchOut)), "should be in detached HEAD state")
 
-	// Create a pre-commit hook that always fails to simulate commit failure
-	hooksDir := filepath.Join(repo, ".git", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0o750))
-	hookContent := "#!/bin/sh\nexit 1\n"
-	hookPath := filepath.Join(hooksDir, "pre-commit")
-	require.NoError(t, os.WriteFile(hookPath, []byte(hookContent), 0o755))
+	wrapperDir := installGitCommitFailureWrapper(t, repo)
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	// Call CreateOrphanBranch; the commit on the orphan branch should fail due
 	// to the pre-commit hook, and CreateOrphanBranch should restore HEAD back
