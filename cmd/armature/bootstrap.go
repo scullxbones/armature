@@ -515,33 +515,34 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 // whether a git commit was made removing .armature from tracking (so callers can roll back
 // precisely if a later step fails); (false, "", false) if no legacy layout was detected;
 // or (false, "", false, error) if an error occurred.
-func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
+func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, error) {
 	// Check if .armature/ops exists in the main working tree (legacy single-branch layout)
 	legacyArmatureDir := filepath.Join(repoPath, ".armature")
 	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
+	preMigrationSHA := ""
 
 	// If the legacy layout doesn't exist, no migration needed
 	info, err := os.Stat(legacyOpsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, "", false, nil
+			return false, "", "", false, nil
 		}
-		return false, "", false, fmt.Errorf("check for legacy layout: %w", err)
+		return false, "", preMigrationSHA, false, fmt.Errorf("check for legacy layout: %w", err)
 	}
 
 	// Confirm it's a directory with content
 	if !info.IsDir() {
-		return false, "", false, nil
+		return false, "", "", false, nil
 	}
 
 	entries, err := os.ReadDir(legacyOpsDir)
 	if err != nil {
-		return false, "", false, fmt.Errorf("read legacy ops directory: %w", err)
+		return false, "", preMigrationSHA, false, fmt.Errorf("read legacy ops directory: %w", err)
 	}
 
 	// If the ops dir exists but is empty, no migration needed
 	if len(entries) == 0 {
-		return false, "", false, nil
+		return false, "", "", false, nil
 	}
 
 	// Legacy layout detected: rename .armature to .armature.migrated-<timestamp>.
@@ -559,6 +560,12 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 	// Before renaming, check if .armature is tracked in git
 	gitClient := adapters.New(repoPath)
 	isTracked := gitClient.IsTracked(".armature")
+	if isTracked {
+		preMigrationSHA, err = gitClient.HeadSHA()
+		if err != nil {
+			return false, "", preMigrationSHA, false, fmt.Errorf("capture pre-migration HEAD: %w", err)
+		}
+	}
 
 	// If tracked, remove from index to avoid leaving a dirty working tree after rename
 	if isTracked {
@@ -570,10 +577,10 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 		// left pointing at a removal that never happened on disk.
 		if isTracked {
 			if addErr := gitClient.AddPaths([]string{".armature"}); addErr != nil {
-				return false, "", false, fmt.Errorf("backup legacy .armature directory: %w; re-stage .armature after failed rename: %w", err, addErr)
+				return false, "", preMigrationSHA, false, fmt.Errorf("backup legacy .armature directory: %w; re-stage .armature after failed rename: %w", err, addErr)
 			}
 		}
-		return false, "", false, fmt.Errorf("backup legacy .armature directory: %w", err)
+		return false, "", preMigrationSHA, false, fmt.Errorf("backup legacy .armature directory: %w", err)
 	}
 
 	// If .armature was tracked, commit the removal to keep the working tree clean.
@@ -586,21 +593,27 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 			if restoreErr := os.Rename(backupDir, legacyArmatureDir); restoreErr != nil {
 				// If restore fails, the repo is in an inconsistent state; return both errors
 				// with the backup path so the user can recover .armature manually.
-				return false, "", false, fmt.Errorf("commit legacy .armature removal: %w; restore .armature from backup %s: %w", err, backupDir, restoreErr)
+				return false, "", preMigrationSHA, false, fmt.Errorf(
+					"commit legacy .armature removal: %w; restore .armature from backup %s: %w",
+					err, backupDir, restoreErr,
+				)
 			}
 
 			// Re-add .armature to the index to restore the tracked state before the failed migration
 			if restoreIndexErr := gitClient.AddPaths([]string{".armature"}); restoreIndexErr != nil {
 				// Directory is restored (the critical part); still surface the index
 				// re-add failure alongside the original commit error.
-				return false, "", false, fmt.Errorf("commit legacy .armature removal: %w; re-add .armature to index after rollback: %w", err, restoreIndexErr)
+				return false, "", preMigrationSHA, false, fmt.Errorf(
+					"commit legacy .armature removal: %w; re-add .armature to index after rollback: %w",
+					err, restoreIndexErr,
+				)
 			}
 
-			return false, "", false, fmt.Errorf("commit legacy .armature removal: %w", err)
+			return false, "", preMigrationSHA, false, fmt.Errorf("commit legacy .armature removal: %w", err)
 		}
 	}
 
-	return true, backupDir, isTracked, nil
+	return true, backupDir, preMigrationSHA, isTracked, nil
 }
 
 // rollbackLegacyMigration undoes a legacy migration whose subsequent dual-branch setup
@@ -613,10 +626,14 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 // commits between the migration and this rollback). Otherwise, .armature was never
 // git-tracked, so no commit exists to revert and the backup directory is simply renamed
 // back into place.
-func rollbackLegacyMigration(repoPath, backupDir string, committed bool) error {
+func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, committed bool) error {
 	if committed {
 		gitClient := adapters.New(repoPath)
-		if err := gitClient.ResetHard("HEAD~1"); err != nil {
+		target := preMigrationSHA
+		if target == "" {
+			target = "HEAD~1"
+		}
+		if err := gitClient.ResetHard(target); err != nil {
 			return fmt.Errorf("revert migration commit: %w", err)
 		}
 		return nil
@@ -806,7 +823,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	// Attempt to migrate legacy single-branch layout if it exists
-	migrated, backupDir, migrationCommitted, err := migrateLegacySingleBranchOps(repoPath)
+	migrated, backupDir, preMigrationSHA, migrationCommitted, err := migrateLegacySingleBranchOps(repoPath)
 	if err != nil {
 		return RepoSetupResult{}, fmt.Errorf("migrate legacy single-branch layout: %w", err)
 	}
@@ -818,13 +835,13 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// Create orphan branch _armature (idempotent)
 	if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
 		if migrated {
-			if rbErr := rollbackLegacyMigration(repoPath, backupDir, migrationCommitted); rbErr != nil {
+			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
 				return RepoSetupResult{}, fmt.Errorf(
 					"create _armature branch: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
 					err, rbErr, backupDir,
 				)
 			}
-			if migrationCommitted {
+			if migrationCommitted && preMigrationSHA != "" {
 				// The reset restored tracked files, but the backup is the only copy of
 				// any legacy files that were untracked at migration time.
 				return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w (migration rolled back; backup left at %s)", err, backupDir)
@@ -837,13 +854,13 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	worktreePath := filepath.Join(repoPath, ".arm")
 	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
 		if migrated {
-			if rbErr := rollbackLegacyMigration(repoPath, backupDir, migrationCommitted); rbErr != nil {
+			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
 				return RepoSetupResult{}, fmt.Errorf(
 					"add .arm worktree: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
 					err, rbErr, backupDir,
 				)
 			}
-			if migrationCommitted {
+			if migrationCommitted && preMigrationSHA != "" {
 				// The reset restored tracked files, but the backup is the only copy of
 				// any legacy files that were untracked at migration time.
 				return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w (migration rolled back; backup left at %s)", err, backupDir)
