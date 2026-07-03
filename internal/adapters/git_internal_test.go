@@ -42,3 +42,24 @@ func TestIsBenignEmptyRepoRmError(t *testing.T) {
 		})
 	}
 }
+
+func TestCmdContextSetsLocaleToC(t *testing.T) {
+	t.Parallel()
+
+	c := New(t.TempDir())
+	cmd := c.cmdContext(t.Context(), "status")
+
+	var gotLCAll, gotLang bool
+	for _, env := range cmd.Env {
+		switch env {
+		case "LC_ALL=C":
+			gotLCAll = true
+		case "LANG=C":
+			gotLang = true
+		}
+	}
+
+	if !gotLCAll || !gotLang {
+		t.Fatalf("cmdContext env missing locale overrides: LC_ALL=C=%v LANG=C=%v", gotLCAll, gotLang)
+	}
+}

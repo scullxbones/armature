@@ -43,7 +43,13 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	// failures.
 	fullArgs := append([]string{"-C", c.repoPath, "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...) //nolint:gosec // G204: internal args, not user input
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
+	cmd.Env = append(os.Environ(),
+		"LC_ALL=C",
+		"LANG=C",
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_EDITOR=true",
+		"GIT_ASKPASS=true",
+	)
 	return cmd
 }
 
