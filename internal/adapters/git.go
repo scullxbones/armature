@@ -151,13 +151,25 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		return fmt.Errorf("working tree is dirty (contains uncommitted changes): please commit or stash your changes before running bootstrap")
 	}
 
-	// Capture current branch name so we can return to it explicitly
+	// Capture current branch name so we can return to it explicitly.
+	// On detached HEAD, --abbrev-ref returns the literal string "HEAD".
+	// In that case, capture the concrete commit SHA instead so we can restore.
 	headCmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")
 	headOut, err := headCmd.Output()
 	if err != nil {
 		return fmt.Errorf("get current branch: %w", err)
 	}
 	priorBranch := strings.TrimSpace(string(headOut))
+
+	// If in detached HEAD, capture the SHA to restore to, not the "HEAD" literal
+	if priorBranch == "HEAD" {
+		shaCmd := c.cmd("rev-parse", "HEAD")
+		shaOut, err := shaCmd.Output()
+		if err != nil {
+			return fmt.Errorf("get current commit SHA: %w", err)
+		}
+		priorBranch = strings.TrimSpace(string(shaOut))
+	}
 
 	// Create orphan branch and make an empty initial commit
 	orphanCmd := c.cmd("checkout", "--orphan", branch)
