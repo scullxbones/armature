@@ -1999,3 +1999,4 @@
 ["transition","MIGH-T7",1783084371,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","MIGH",1783084389,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Completed migration-path hardening: locale-stable git commands, no-verify migration commits, SHA-based rollback, append-only log merges, stranded-backup notes, and an invariant matrix; all tasks are merged and validation passed."}]
 ["source-fingerprint","1b874777-6558-4835-9713-7553b8313733",1783090188,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"05056d855f01116e8895f2a851a9633670ca42ba0a07463d271448a88c630e19","provider":"filesystem"}]
+["source-fingerprint","3635a65c-b450-4fdc-a246-a89543bc30f9",1783090188,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"e6774595cdcebd4b95bd649320460d7383baaaeb82e06defb6b31b6f58a60f1f","provider":"filesystem"}]
