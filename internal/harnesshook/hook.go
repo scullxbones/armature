@@ -64,6 +64,7 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 	eventInfo := &DecodedEventInfo{
 		Kind:     event.Kind,
 		FilePath: filePath,
+		Cwd:      event.Cwd,
 	}
 	binding, err := ResolveBindingFromEvent(eventInfo, input.SessionBinding)
 	if err != nil {

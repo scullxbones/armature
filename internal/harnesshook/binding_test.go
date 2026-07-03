@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestResolveBindingFromFilePath_REQ_HOOKBIND_T2 verifies that ResolveBindingFromFilePath
+// TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2 verifies that ResolveBindingFromFilePath
 // walks up from a file path to find the containing worktree's git dir and reads
 // the armature-issue-id file.
-func TestResolveBindingFromFilePath_REQ_HOOKBIND_T2(t *testing.T) {
+func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
 	// Create a temporary directory structure simulating a worktree
 	tmpDir := t.TempDir()
@@ -182,10 +182,10 @@ func TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession(t *tes
 	assert.Equal(t, "session-binding", binding)
 }
 
-// TestResolveBindingFromEvent_Stop_UsesSessionBinding verifies that
+// TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2 verifies that
 // ResolveBindingFromEvent uses session binding for Stop events, ignoring any
 // file paths.
-func TestResolveBindingFromEvent_Stop_UsesSessionBinding(t *testing.T) {
+func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	gitDir := filepath.Join(tmpDir, ".git")
@@ -241,4 +241,188 @@ func TestResolveBindingFromEvent_EmptySessionBinding(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "", binding)
+}
+
+// TestBindingResolutionChain_REQ_HOOKBIND_T2 verifies the complete 4-step binding resolution
+// chain per ADR-0007: (1) file_path walk-up, (2) event-payload cwd, (3) session binding, (4) env.
+// This test exercises the most-specific-first priority and ensures event-payload cwd is consulted
+// between file_path and session binding for PreToolUse/PostToolUse events.
+func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Step1_FilePathResolvesToBinding", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		gitDir := filepath.Join(tmpDir, ".git")
+		fileDir := filepath.Join(tmpDir, "some", "path")
+		filePath := filepath.Join(fileDir, "file.go")
+
+		err := os.MkdirAll(gitDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(fileDir, 0o755)
+		require.NoError(t, err)
+
+		issueIDFile := filepath.Join(gitDir, "armature-issue-id")
+		err = os.WriteFile(issueIDFile, []byte("from-file-path"), 0o644)
+		require.NoError(t, err)
+
+		// Step 1 should resolve from file path, ignoring session binding
+		eventInfo := &DecodedEventInfo{
+			Kind:     EventPreToolUse,
+			FilePath: filePath,
+			Cwd:      "",
+		}
+
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+
+		require.NoError(t, err)
+		assert.Equal(t, "from-file-path", binding)
+	})
+
+	t.Run("Step2_EventPayloadCwdResolvesToBinding", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		gitDir := filepath.Join(tmpDir, ".git")
+		cwdDir := filepath.Join(tmpDir, "event-cwd", "path")
+
+		err := os.MkdirAll(gitDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(cwdDir, 0o755)
+		require.NoError(t, err)
+
+		issueIDFile := filepath.Join(gitDir, "armature-issue-id")
+		err = os.WriteFile(issueIDFile, []byte("from-event-cwd"), 0o644)
+		require.NoError(t, err)
+
+		// Step 2: event-payload cwd should resolve when file_path is empty
+		eventInfo := &DecodedEventInfo{
+			Kind:     EventPreToolUse,
+			FilePath: "",
+			Cwd:      cwdDir,
+		}
+
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+
+		require.NoError(t, err)
+		assert.Equal(t, "from-event-cwd", binding)
+	})
+
+	t.Run("Step2_FilePathTakesPrecedenceOverEventCwd", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		filePathGitDir := filepath.Join(tmpDir, "file-git", ".git")
+		eventCwdGitDir := filepath.Join(tmpDir, "cwd-git", ".git")
+		fileDir := filepath.Join(tmpDir, "file-git", "some", "path")
+		cwdDir := filepath.Join(tmpDir, "cwd-git", "some", "path")
+		filePath := filepath.Join(fileDir, "file.go")
+
+		err := os.MkdirAll(filePathGitDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(eventCwdGitDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(fileDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(cwdDir, 0o755)
+		require.NoError(t, err)
+
+		// Write different issue IDs to both git dirs
+		fileIssueIDFile := filepath.Join(filePathGitDir, "armature-issue-id")
+		err = os.WriteFile(fileIssueIDFile, []byte("from-file-path"), 0o644)
+		require.NoError(t, err)
+
+		cwdIssueIDFile := filepath.Join(eventCwdGitDir, "armature-issue-id")
+		err = os.WriteFile(cwdIssueIDFile, []byte("from-event-cwd"), 0o644)
+		require.NoError(t, err)
+
+		// Step 1 (file_path) should take precedence over step 2 (event cwd)
+		eventInfo := &DecodedEventInfo{
+			Kind:     EventPreToolUse,
+			FilePath: filePath,
+			Cwd:      cwdDir,
+		}
+
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+
+		require.NoError(t, err)
+		assert.Equal(t, "from-file-path", binding, "file_path should take precedence over event cwd")
+	})
+
+	t.Run("Step3_SessionBindingFallback", func(t *testing.T) {
+		t.Parallel()
+		// No file path, no event cwd -> should use session binding
+		eventInfo := &DecodedEventInfo{
+			Kind:     EventPreToolUse,
+			FilePath: "",
+			Cwd:      "",
+		}
+
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+
+		require.NoError(t, err)
+		assert.Equal(t, "session-binding", binding)
+	})
+
+	t.Run("BashEventUsesSessionBindingOnly", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		gitDir := filepath.Join(tmpDir, ".git")
+		cwdDir := filepath.Join(tmpDir, "cwd", "path")
+		fileDir := filepath.Join(tmpDir, "some", "path")
+		filePath := filepath.Join(fileDir, "file.go")
+
+		err := os.MkdirAll(gitDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(cwdDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(fileDir, 0o755)
+		require.NoError(t, err)
+
+		issueIDFile := filepath.Join(gitDir, "armature-issue-id")
+		err = os.WriteFile(issueIDFile, []byte("from-path"), 0o644)
+		require.NoError(t, err)
+
+		// Bash events should ignore both file_path and event cwd
+		eventInfo := &DecodedEventInfo{
+			Kind:     EventKind("bash"),
+			FilePath: filePath,
+			Cwd:      cwdDir,
+		}
+
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+
+		require.NoError(t, err)
+		assert.Equal(t, "session-binding", binding, "bash events should use session binding only")
+	})
+
+	t.Run("StopEventUsesSessionBindingOnly", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		gitDir := filepath.Join(tmpDir, ".git")
+		cwdDir := filepath.Join(tmpDir, "cwd", "path")
+		fileDir := filepath.Join(tmpDir, "some", "path")
+		filePath := filepath.Join(fileDir, "file.go")
+
+		err := os.MkdirAll(gitDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(cwdDir, 0o755)
+		require.NoError(t, err)
+		err = os.MkdirAll(fileDir, 0o755)
+		require.NoError(t, err)
+
+		issueIDFile := filepath.Join(gitDir, "armature-issue-id")
+		err = os.WriteFile(issueIDFile, []byte("from-path"), 0o644)
+		require.NoError(t, err)
+
+		// Stop events should ignore both file_path and event cwd
+		eventInfo := &DecodedEventInfo{
+			Kind:     EventStop,
+			FilePath: filePath,
+			Cwd:      cwdDir,
+		}
+
+		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding")
+
+		require.NoError(t, err)
+		assert.Equal(t, "session-binding", binding, "stop events should use session binding only")
+	})
 }

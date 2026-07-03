@@ -174,6 +174,7 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 		HookEventName string         `json:"hook_event_name"`
 		ToolName      string         `json:"tool_name"`
 		ToolInput     map[string]any `json:"tool_input"`
+		Cwd           string         `json:"cwd"`
 	}
 	if err := json.Unmarshal(input, &raw); err != nil {
 		return Event{}, err
@@ -184,6 +185,7 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 		Tool:      raw.ToolName,
 		Paths:     extractPaths(raw.ToolInput),
 		Command:   extractCommand(raw.ToolInput),
+		Cwd:       raw.Cwd,
 		ToolInput: raw.ToolInput,
 	}, nil
 }

@@ -11,6 +11,7 @@ import (
 type DecodedEventInfo struct {
 	Kind     EventKind
 	FilePath string
+	Cwd      string // Current working directory from the hook event payload (for step 2 of resolution chain)
 }
 
 // ResolveBindingFromFilePath walks up the directory tree from filePath to find
@@ -67,18 +68,22 @@ func ResolveBindingFromFilePath(filePath string) (string, error) {
 }
 
 // ResolveBindingFromEvent resolves the binding based on the decoded event and
-// session binding, following the ADR-0007 priority:
-// 1. For PreToolUse/PostToolUse events with a file path: walk up from the file path
-// 2. For Bash and Stop events: use session binding only
-// 3. Fall back to session binding if no file path is available
+// session binding, following the ADR-0007 4-step priority chain:
+// 1. For PreToolUse/PostToolUse events: walk up from tool_input.file_path to find armature-issue-id
+// 2. For PreToolUse/PostToolUse events: walk up from event-payload cwd to find armature-issue-id
+// 3. Hook process cwd / session binding (fallback)
+// 4. ARMATURE_ISSUE_ID environment variable (handled by caller if needed)
+//
+// Bash and Stop events skip steps 1-2 and resolve at the session level only (steps 3-4).
 func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding string) (string, error) {
-	// Bash and Stop events resolve at the session level only
+	// Bash and Stop events resolve at the session level only (steps 3-4)
 	if eventInfo.Kind == EventStop || eventInfo.Kind == EventKind("bash") {
 		return sessionBinding, nil
 	}
 
-	// For PreToolUse and PostToolUse events, try path-based resolution first
+	// For PreToolUse and PostToolUse events, follow the 4-step chain:
 	if eventInfo.Kind == EventPreToolUse || eventInfo.Kind == EventPostToolUse {
+		// Step 1: Try path-based resolution from tool_input.file_path
 		if eventInfo.FilePath != "" {
 			pathBinding, err := ResolveBindingFromFilePath(eventInfo.FilePath)
 			if err != nil {
@@ -88,8 +93,19 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding string)
 				return pathBinding, nil
 			}
 		}
+
+		// Step 2: Try path-based resolution from event-payload cwd
+		if eventInfo.Cwd != "" {
+			cwdBinding, err := ResolveBindingFromFilePath(eventInfo.Cwd)
+			if err != nil {
+				return "", err
+			}
+			if cwdBinding != "" {
+				return cwdBinding, nil
+			}
+		}
 	}
 
-	// Fall back to session binding
+	// Step 3: Fall back to session binding
 	return sessionBinding, nil
 }
