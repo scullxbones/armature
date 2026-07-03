@@ -712,14 +712,14 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 }
 
 // TestMergedSkipsUnboundWorktree tests the P2 bug fix: if a worktree exists on the
-// correct branch but has no (or wrong) armature-task-id binding, the worktree must
+// correct branch but has no (or wrong) armature-issue-id binding, the worktree must
 // NOT be removed. This prevents arm merged from deleting user-created worktrees
 // that happen to match the branch name.
 //
 // Scenario: user manually runs `git worktree add /tmp/foo -b task/task-01` for their
 // own purposes (not via `arm claim`). Then `arm merged --issue task-01` must:
 // 1. Find the worktree by branch name
-// 2. Check the binding in <gitDir>/armature-task-id
+// 2. Check the binding in <gitDir>/armature-issue-id
 // 3. Skip removal and log a warning if binding is missing or wrong
 // 4. Still mark the issue as merged (don't fail on binding mismatch)
 //
@@ -742,12 +742,12 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 	// Verify the worktree exists
 	assert.DirExists(t, unboundWorktreePath, "manually-created worktree should exist")
 
-	// Verify there is NO armature-task-id binding file in the git dir.
+	// Verify there is NO armature-issue-id binding file in the git dir.
 	// This is the key difference: a real claimed worktree would have this file.
 	gitDir, err := resolveWorktreeGitDir(unboundWorktreePath)
 	require.NoError(t, err)
-	bindingPath := filepath.Join(gitDir, "armature-task-id")
-	assert.NoFileExists(t, bindingPath, "unbound worktree should have no armature-task-id file")
+	bindingPath := filepath.Join(gitDir, "armature-issue-id")
+	assert.NoFileExists(t, bindingPath, "unbound worktree should have no armature-issue-id file")
 
 	// Transition task to done
 	transitionCmd := newRootCmd()
@@ -782,7 +782,7 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 }
 
 // TestMergedRemovesBoundWorktree verifies that if a worktree IS properly bound
-// (has the correct armature-task-id file), it will be removed during merged.
+// (has the correct armature-issue-id file), it will be removed during merged.
 // This ensures the binding check doesn't break the normal flow of removing
 // properly claimed worktrees.
 func TestMergedRemovesBoundWorktree(t *testing.T) {
@@ -799,8 +799,8 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 	assert.DirExists(t, worktreePath, "claimed worktree should exist")
 	gitDir, err := resolveWorktreeGitDir(worktreePath)
 	require.NoError(t, err)
-	bindingPath := filepath.Join(gitDir, "armature-task-id")
-	assert.FileExists(t, bindingPath, "claimed worktree should have armature-task-id file")
+	bindingPath := filepath.Join(gitDir, "armature-issue-id")
+	assert.FileExists(t, bindingPath, "claimed worktree should have armature-issue-id file")
 	bindingBytes, err := os.ReadFile(bindingPath)
 	require.NoError(t, err)
 	binding := strings.TrimSpace(string(bindingBytes))

@@ -48,13 +48,13 @@ func TestLauncherInstallWritesDevinConfig(t *testing.T) {
 	assert.Contains(t, string(data), "harness-hook")
 }
 
-func TestLauncherBuildEnvIncludesTaskIDAndPlatform(t *testing.T) {
+func TestLauncherBuildEnvIncludesIssueIDAndPlatform(t *testing.T) {
 	t.Parallel()
 	launcher := NewLauncher()
 
 	env := launcher.BuildEnv(map[string]string{"PATH": "/usr/bin"}, "TASK-1", "codex")
 
 	assert.Equal(t, "/usr/bin", env["PATH"])
-	assert.Equal(t, "TASK-1", env["ARMATURE_TASK_ID"])
+	assert.Equal(t, "TASK-1", env["ARMATURE_ISSUE_ID"])
 	assert.Equal(t, "codex", env["ARMATURE_HOOK_PLATFORM"])
 }

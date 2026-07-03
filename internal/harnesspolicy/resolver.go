@@ -15,7 +15,7 @@ type ResolverConfig struct {
 	SourcesDir string
 }
 
-type TaskPolicy struct {
+type IssuePolicy struct {
 	ID         string
 	Title      string
 	Scope      []string
@@ -23,27 +23,27 @@ type TaskPolicy struct {
 	Citations  []CitationCheck
 }
 
-type TaskPolicyResolver struct {
+type IssuePolicyResolver struct {
 	cfg ResolverConfig
 }
 
-func NewTaskPolicyResolver(cfg ResolverConfig) *TaskPolicyResolver {
-	return &TaskPolicyResolver{cfg: cfg}
+func NewIssuePolicyResolver(cfg ResolverConfig) *IssuePolicyResolver {
+	return &IssuePolicyResolver{cfg: cfg}
 }
 
-func (r *TaskPolicyResolver) Resolve(taskID string) (TaskPolicy, error) {
+func (r *IssuePolicyResolver) Resolve(taskID string) (IssuePolicy, error) {
 	issuePath := filepath.Join(r.stateDir(), "issues", taskID+".json")
 	issue, err := materialize.LoadIssue(issuePath)
 	if err != nil {
-		return TaskPolicy{}, fmt.Errorf("task %s not found: %w", taskID, err)
+		return IssuePolicy{}, fmt.Errorf("task %s not found: %w", taskID, err)
 	}
 
 	manifest, err := sources.ReadManifest(r.sourcesDir())
 	if err != nil {
-		return TaskPolicy{}, fmt.Errorf("read sources manifest: %w", err)
+		return IssuePolicy{}, fmt.Errorf("read sources manifest: %w", err)
 	}
 
-	return TaskPolicy{
+	return IssuePolicy{
 		ID:         issue.ID,
 		Title:      issue.Title,
 		Scope:      append([]string(nil), issue.Scope...),
@@ -52,14 +52,14 @@ func (r *TaskPolicyResolver) Resolve(taskID string) (TaskPolicy, error) {
 	}, nil
 }
 
-func (r *TaskPolicyResolver) stateDir() string {
+func (r *IssuePolicyResolver) stateDir() string {
 	if r.cfg.StateDir != "" {
 		return r.cfg.StateDir
 	}
 	return filepath.Join(r.cfg.RepoPath, ".armature", "state", "default")
 }
 
-func (r *TaskPolicyResolver) sourcesDir() string {
+func (r *IssuePolicyResolver) sourcesDir() string {
 	if r.cfg.SourcesDir != "" {
 		return r.cfg.SourcesDir
 	}

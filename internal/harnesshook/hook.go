@@ -7,9 +7,9 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
 
-// PolicyResolver is the interface for resolving task policies.
+// PolicyResolver is the interface for resolving issue policies.
 type PolicyResolver interface {
-	Resolve(taskID string) (harnesspolicy.TaskPolicy, error)
+	Resolve(taskID string) (harnesspolicy.IssuePolicy, error)
 }
 
 // RunResult contains the output and exit code from a hook run.

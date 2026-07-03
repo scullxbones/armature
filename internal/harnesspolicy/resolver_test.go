@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResolverLoadsTaskPolicyFromMaterializedState(t *testing.T) {
+func TestResolverLoadsIssuePolicyFromMaterializedState(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
@@ -50,7 +50,7 @@ func TestResolverLoadsTaskPolicyFromMaterializedState(t *testing.T) {
 		},
 	}))
 
-	resolver := NewTaskPolicyResolver(ResolverConfig{
+	resolver := NewIssuePolicyResolver(ResolverConfig{
 		RepoPath:   repo,
 		StateDir:   stateDir,
 		SourcesDir: sourcesDir,
@@ -98,7 +98,7 @@ func TestResolverMarksUnacceptedSourceLinks(t *testing.T) {
 		},
 	}))
 
-	resolver := NewTaskPolicyResolver(ResolverConfig{
+	resolver := NewIssuePolicyResolver(ResolverConfig{
 		RepoPath:   repo,
 		StateDir:   stateDir,
 		SourcesDir: sourcesDir,
@@ -141,7 +141,7 @@ func TestResolverTreatsGlobalAcceptanceAsCitingAllSources(t *testing.T) {
 		},
 	}))
 
-	resolver := NewTaskPolicyResolver(ResolverConfig{
+	resolver := NewIssuePolicyResolver(ResolverConfig{
 		RepoPath:   repo,
 		StateDir:   stateDir,
 		SourcesDir: sourcesDir,
@@ -161,7 +161,7 @@ func TestResolverRejectsUnknownTask(t *testing.T) {
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0o755))
 
-	resolver := NewTaskPolicyResolver(ResolverConfig{RepoPath: repo, StateDir: stateDir})
+	resolver := NewIssuePolicyResolver(ResolverConfig{RepoPath: repo, StateDir: stateDir})
 
 	_, err := resolver.Resolve("MISSING")
 

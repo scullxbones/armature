@@ -119,16 +119,16 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 		return nil // can't resolve git dir; let later steps surface the error
 	}
 
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	existingBytes, err := os.ReadFile(taskIDFile) //nolint:gosec // internal path
+	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	existingBytes, err := os.ReadFile(issueIDFile) //nolint:gosec // internal path
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("read existing binding: %w", err)
 	}
 
-	existingTaskID := strings.TrimSpace(string(existingBytes))
-	if existingTaskID != "" && existingTaskID != issueID {
+	existingIssueID := strings.TrimSpace(string(existingBytes))
+	if existingIssueID != "" && existingIssueID != issueID {
 		return fmt.Errorf("worktree at %s is already bound to %s: use a different --worktree path",
-			worktreePath, existingTaskID)
+			worktreePath, existingIssueID)
 	}
 
 	// Also verify the worktree's current branch matches the expected branch.
@@ -140,7 +140,7 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 	headStr := strings.TrimSpace(string(headBytes))
 	// Skip branch check for detached HEAD only when already bound to this issue
 	if !strings.HasPrefix(headStr, "ref: refs/heads/") {
-		if existingTaskID == issueID {
+		if existingIssueID == issueID {
 			return nil // already bound to this issue, detached HEAD is acceptable (mid-rebase, etc.)
 		}
 		return fmt.Errorf("worktree at %s has a detached HEAD with no existing binding for %s: checkout the expected branch %q or use a different --worktree path",
@@ -202,27 +202,27 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 		return fmt.Errorf("add worktree: %w", err)
 	}
 
-	// Create the task ID file in the worktree's .git directory
-	if err := updateTaskIDFile(worktreePath, issueID); err != nil {
-		return fmt.Errorf("write task ID file: %w", err)
+	// Create the issue ID file in the worktree's .git directory
+	if err := updateIssueIDFile(worktreePath, issueID); err != nil {
+		return fmt.Errorf("write issue ID file: %w", err)
 	}
 
 	return nil
 }
 
-// updateTaskIDFile writes the task ID to the armature-task-id file in the worktree's .git directory.
+// updateIssueIDFile writes the issue ID to the armature-issue-id file in the worktree's .git directory.
 // In a git worktree, .git is a file (not a directory) that points to the actual git directory.
 // We use resolveWorktreeGitDir to find the real git directory.
-func updateTaskIDFile(worktreePath, issueID string) error {
+func updateIssueIDFile(worktreePath, issueID string) error {
 	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
 	if err != nil {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
 
-	// Write the task ID file to the actual git directory
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	if err := os.WriteFile(taskIDFile, []byte(issueID), 0o600); err != nil {
-		return fmt.Errorf("write task ID file: %w", err)
+	// Write the issue ID file to the actual git directory
+	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	if err := os.WriteFile(issueIDFile, []byte(issueID), 0o600); err != nil {
+		return fmt.Errorf("write issue ID file: %w", err)
 	}
 	return nil
 }
@@ -242,8 +242,8 @@ Claiming an issue marks it as assigned to your worker ID and sets a TTL (time-to
 If the TTL expires without progress, the claim becomes stale and may be reassigned.
 This command also detects and warns about scope overlaps with concurrently claimed issues.
 When you claim a task, its parent story (if open) is automatically advanced to in-progress.
-A --worktree path is required; it creates a new worktree and task-specific branch if absent,
-or updates the armature-task-id file if the worktree exists.`,
+A --worktree path is required; it creates a new worktree and issue-specific branch if absent,
+or updates the armature-issue-id file if the worktree exists.`,
 		Example: `  # Claim an issue by ID with a worktree
   $ arm claim E6-S4-T2 --worktree ./e6-s4-t2
 
@@ -269,7 +269,7 @@ or updates the armature-task-id file if the worktree exists.`,
 			}
 
 			// Normalize worktreePath to an absolute path to ensure all subsequent
-			// operations (worktreePathExists, updateTaskIDFile, etc.) resolve paths
+			// operations (worktreePathExists, updateIssueIDFile, etc.) resolve paths
 			// relative to the worktree location, not the current working directory.
 			absWorktreePath, err := filepath.Abs(worktreePath)
 			if err != nil {
@@ -325,7 +325,7 @@ or updates the armature-task-id file if the worktree exists.`,
 			}
 
 			// Verify the existing worktree is registered to this repo (not a foreign repo).
-			// This prevents writing armature-task-id into a foreign repo's git dir,
+			// This prevents writing armature-issue-id into a foreign repo's git dir,
 			// which would cause later merged operations (which search only this repo's worktree list)
 			// to permanently fail to find and clean up the worktree.
 			if worktreeExists {
@@ -455,7 +455,7 @@ or updates the armature-task-id file if the worktree exists.`,
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
-				if err := updateTaskIDFile(worktreePath, issueID); err != nil {
+				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
 					// Task ID update failed after winning the claim race.
 					// Determine rollback status based on whether this is a same-worker active claim or stale/takeover:
 					// - Same-worker ACTIVE claim (priorClaimedBy == workerID && !stale): restore priorStatus (keep the claim)
