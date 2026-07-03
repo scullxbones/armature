@@ -11,11 +11,11 @@ import (
 )
 
 type mockResolver struct {
-	policy harnesspolicy.TaskPolicy
+	policy harnesspolicy.IssuePolicy
 	err    error
 }
 
-func (m *mockResolver) Resolve(_ string) (harnesspolicy.TaskPolicy, error) {
+func (m *mockResolver) Resolve(_ string) (harnesspolicy.IssuePolicy, error) {
 	return m.policy, m.err
 }
 
@@ -29,7 +29,7 @@ func TestHook_Evaluate_AllowsInScopeEdit_REQ_ARCHIMP_S17_T1(t *testing.T) {
 	}`)
 
 	resolver := &mockResolver{
-		policy: harnesspolicy.TaskPolicy{
+		policy: harnesspolicy.IssuePolicy{
 			ID:    "task-01",
 			Title: "Test hook task",
 			Scope: []string{"internal/harnesshook/"},

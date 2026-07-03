@@ -21,33 +21,33 @@ The `harness-hook` command is an internal integration surface called by harness-
    - Block (tool denied, reason provided to model)
    - None (event ignored, no policy applies)
 
-## Task Binding
+## Issue Binding
 
 The hook discovers the active task ID through two mechanisms, tried in order:
 
 ### 1. Worktree binding file (preferred)
 When a task is claimed with `arm claim --worktree <path>`, the task ID is written to
-`<worktree-git-dir>/armature-task-id` (e.g., `<parent>/.git/worktrees/<name>/armature-task-id`).
+`<worktree-git-dir>/armature-issue-id` (e.g., `<parent>/.git/worktrees/<name>/armature-issue-id`).
 The hook reads this file automatically when invoked inside the worktree — no environment variable is needed.
 
 This is the recommended approach: claim the task with `--worktree`, launch the harness from that
 worktree directory, and set only `ARMATURE_HOOK_PLATFORM`.
 
-### 2. `ARMATURE_TASK_ID` environment variable (fallback)
+### 2. `ARMATURE_ISSUE_ID` environment variable (fallback)
 If the binding file is absent (e.g., the worktree was not created via `arm claim --worktree`),
-the hook falls back to the `ARMATURE_TASK_ID` environment variable.
+the hook falls back to the `ARMATURE_ISSUE_ID` environment variable.
 
 ## Environment Variables
 
 When launching an external harness, set these variables in the harness environment:
 
-### `ARMATURE_TASK_ID` (fallback only)
+### `ARMATURE_ISSUE_ID` (fallback only)
 The active Armature task ID for the worker. Only required when NOT using `arm claim --worktree`.
 When a worktree binding file is present, this variable is ignored.
 
 **Example:**
 ```bash
-export ARMATURE_TASK_ID=TASK-001
+export ARMATURE_ISSUE_ID=TASK-001
 ```
 
 ### `ARMATURE_HOOK_PLATFORM` (required)
@@ -70,7 +70,7 @@ Hook handlers do not get task-specific variables injected per event — they inh
   the harness starts are visible to `arm harness-hook`.
 - Subagents spawned by the harness (Claude Code Task/Agent tool, etc.) run inside the same
   harness process environment, so their tool calls fire the same hooks with the same
-  launch-time variables. You cannot give a subagent a different `ARMATURE_TASK_ID` via env.
+  launch-time variables. You cannot give a subagent a different `ARMATURE_ISSUE_ID` via env.
 - This is why the worktree binding file is preferred: it derives the task ID from *where the
   hook runs* (the event payload's `cwd`/git dir), not from process environment. Per-task
   isolation falls out of per-task worktrees with zero env plumbing.
@@ -123,7 +123,7 @@ Add the following to `.claude/settings.json` (create the file if it doesn't exis
 When launching Claude Code, set:
 
 ```bash
-export ARMATURE_TASK_ID=TASK-001
+export ARMATURE_ISSUE_ID=TASK-001
 export ARMATURE_HOOK_PLATFORM=claude
 claude <project-directory>
 ```
@@ -158,7 +158,7 @@ stop = "arm harness-hook"
 When launching Codex, set:
 
 ```bash
-export ARMATURE_TASK_ID=TASK-001
+export ARMATURE_ISSUE_ID=TASK-001
 export ARMATURE_HOOK_PLATFORM=codex
 codex <project-directory>
 ```
@@ -208,7 +208,7 @@ Create or edit `.devin/hooks.json`:
 When launching Devin, set:
 
 ```bash
-export ARMATURE_TASK_ID=TASK-001
+export ARMATURE_ISSUE_ID=TASK-001
 export ARMATURE_HOOK_PLATFORM=devin
 devin <project-directory>
 ```
@@ -271,8 +271,8 @@ When the harness stops:
 
 ### Hook passes through with "no task binding found"
 
-**Cause:** Neither the worktree binding file (`<git-dir>/armature-task-id`) nor the
-`ARMATURE_TASK_ID` environment variable is present when the harness starts.
+**Cause:** Neither the worktree binding file (`<git-dir>/armature-issue-id`) nor the
+`ARMATURE_ISSUE_ID` environment variable is present when the harness starts.
 
 **Fix (preferred):** Claim the task with `--worktree` before launching the harness:
 ```bash
@@ -284,7 +284,7 @@ ARMATURE_HOOK_PLATFORM=claude claude .
 
 **Fix (fallback):** Set the environment variable before launching the harness:
 ```bash
-export ARMATURE_TASK_ID=TASK-001
+export ARMATURE_ISSUE_ID=TASK-001
 export ARMATURE_HOOK_PLATFORM=claude
 # then launch harness
 ```
@@ -322,7 +322,7 @@ Armature does not ship a harness hook installer. Configuration is manual:
 
 1. **Identify your harness platform** (Claude Code, Codex, or Devin).
 2. **Copy the JSON/TOML snippet** from the relevant section above into your config file.
-3. **Set `ARMATURE_TASK_ID` and `ARMATURE_HOOK_PLATFORM`** when launching the harness.
+3. **Set `ARMATURE_ISSUE_ID` and `ARMATURE_HOOK_PLATFORM`** when launching the harness.
 4. **Test** by claiming a task and attempting to edit in-scope and out-of-scope files.
 
 ## Hook Event Types
@@ -356,8 +356,8 @@ Example (Codex):
 ## How Hooks Integrate with Armature Workflow
 
 1. **Coordinator runs `arm ready`** to find unblocked tasks.
-2. **Coordinator runs `arm claim <task-id> --worktree <path>`** to reserve a task and create a git worktree. The task ID is written to `<worktree-git-dir>/armature-task-id`.
-3. **Coordinator launches harness** from the worktree directory with `ARMATURE_HOOK_PLATFORM` set. `ARMATURE_TASK_ID` is optional when a worktree binding file exists.
+2. **Coordinator runs `arm claim <task-id> --worktree <path>`** to reserve a task and create a git worktree. The task ID is written to `<worktree-git-dir>/armature-issue-id`.
+3. **Coordinator launches harness** from the worktree directory with `ARMATURE_HOOK_PLATFORM` set. `ARMATURE_ISSUE_ID` is optional when a worktree binding file exists.
 4. **Model within harness requests tools** (file edits, shell commands).
 5. **Pre-tool hook fires** → `arm harness-hook` reads task binding from file → checks scope → allow/block returned.
 6. **Model completes work** and requests harness to stop.

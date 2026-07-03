@@ -22,11 +22,11 @@ func (l *Launcher) Install(workdir, platform string) error {
 	return adapter.WriteConfig(workdir)
 }
 
-// BuildEnv merges base env vars with ARMATURE_TASK_ID and ARMATURE_HOOK_PLATFORM.
+// BuildEnv merges base env vars with ARMATURE_ISSUE_ID and ARMATURE_HOOK_PLATFORM.
 func (l *Launcher) BuildEnv(base map[string]string, taskID, platform string) map[string]string {
 	env := make(map[string]string, len(base)+2)
 	maps.Copy(env, base)
-	env["ARMATURE_TASK_ID"] = taskID
+	env["ARMATURE_ISSUE_ID"] = taskID
 	env["ARMATURE_HOOK_PLATFORM"] = platform
 	return env
 }

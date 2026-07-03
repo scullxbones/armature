@@ -16,16 +16,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resolveTaskBinding reads the task ID from <git-dir>/armature-task-id,
-// falls back to ARMATURE_TASK_ID environment variable, and returns an empty
+// resolveIssueBinding reads the issue ID from <git-dir>/armature-issue-id,
+// falls back to ARMATURE_ISSUE_ID environment variable, and returns an empty
 // string if neither is present.
-func resolveTaskBinding(gitDir string) string {
-	taskIDPath := filepath.Join(gitDir, "armature-task-id")
-	// #nosec G304 - taskIDPath is derived from a trusted git directory
-	if data, err := os.ReadFile(taskIDPath); err == nil {
+func resolveIssueBinding(gitDir string) string {
+	issueIDPath := filepath.Join(gitDir, "armature-issue-id")
+	// #nosec G304 - issueIDPath is derived from a trusted git directory
+	if data, err := os.ReadFile(issueIDPath); err == nil {
 		return strings.TrimSpace(string(data))
 	}
-	return os.Getenv("ARMATURE_TASK_ID")
+	return os.Getenv("ARMATURE_ISSUE_ID")
 }
 
 // logPassThrough logs a pass-through event to <git-dir>/armature-hook.log.
@@ -46,7 +46,7 @@ func logPassThrough(gitDir string, reason string) error {
 	return err
 }
 
-// isBindingStale checks if the task binding's status is not claimed or in-progress,
+// isBindingStale checks if the issue binding's status is not claimed or in-progress,
 // or if the claim's TTL has expired.
 func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	issue, ok := snap.Issues[taskID]
@@ -96,11 +96,11 @@ func newHarnessHookCmd() *cobra.Command {
 				// unusual layout); the binding file may not exist but we degrade gracefully.
 				gitDir = filepath.Join(appCtx.RepoPath, ".git")
 			}
-			taskID := resolveTaskBinding(gitDir)
+			taskID := resolveIssueBinding(gitDir)
 
-			// If no task binding is found, pass through with exit 0
+			// If no issue binding is found, pass through with exit 0
 			if taskID == "" {
-				_ = logPassThrough(gitDir, "no task binding found") //nolint:errcheck // logging only, error not actionable
+				_ = logPassThrough(gitDir, "no issue binding found") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
 
@@ -115,7 +115,7 @@ func newHarnessHookCmd() *cobra.Command {
 
 			// If binding is stale (status != claimed/in-progress or claim TTL expired), pass through
 			if isBindingStale(snap, taskID, time.Now().Unix()) {
-				_ = logPassThrough(gitDir, "stale binding") //nolint:errcheck // logging only, error not actionable
+				_ = logPassThrough(gitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
 
@@ -126,7 +126,7 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			// Create policy resolver
-			resolver := harnesspolicy.NewTaskPolicyResolver(harnesspolicy.ResolverConfig{
+			resolver := harnesspolicy.NewIssuePolicyResolver(harnesspolicy.ResolverConfig{
 				RepoPath:   appCtx.RepoPath,
 				StateDir:   appCtx.StateDir,
 				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),

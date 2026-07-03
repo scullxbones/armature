@@ -53,7 +53,7 @@ func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_TASK_ID", "task-01")
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
@@ -84,7 +84,7 @@ func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_TASK_ID", "task-01")
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
@@ -113,7 +113,7 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_TASK_ID", "task-01")
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
@@ -184,51 +184,51 @@ func TestApplyRunResult_ZeroExitCode(t *testing.T) {
 	assert.Equal(t, `{"decision":"approve"}`, buf.String())
 }
 
-// TestResolveTaskBinding_FromFile verifies that resolveTaskBinding reads from
-// <git-dir>/armature-task-id file.
-func TestResolveTaskBinding_FromFile(t *testing.T) {
+// TestResolveIssueBinding_FromFile verifies that resolveIssueBinding reads from
+// <git-dir>/armature-issue-id file.
+func TestResolveIssueBinding_FromFile(t *testing.T) {
 	gitDir := t.TempDir()
-	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	taskIDPath := filepath.Join(gitDir, "armature-issue-id")
 	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
 	require.NoError(t, err)
 
-	taskID := resolveTaskBinding(gitDir)
+	taskID := resolveIssueBinding(gitDir)
 
 	assert.Equal(t, "task-from-file", taskID)
 }
 
-// TestResolveTaskBinding_FromEnv verifies that resolveTaskBinding falls back to
-// ARMATURE_TASK_ID environment variable when file does not exist.
-func TestResolveTaskBinding_FromEnv(t *testing.T) {
+// TestResolveIssueBinding_FromEnv verifies that resolveIssueBinding falls back to
+// ARMATURE_ISSUE_ID environment variable when file does not exist.
+func TestResolveIssueBinding_FromEnv(t *testing.T) {
 	gitDir := t.TempDir()
-	t.Setenv("ARMATURE_TASK_ID", "task-from-env")
+	t.Setenv("ARMATURE_ISSUE_ID", "task-from-env")
 
-	taskID := resolveTaskBinding(gitDir)
+	taskID := resolveIssueBinding(gitDir)
 
 	assert.Equal(t, "task-from-env", taskID)
 }
 
-// TestResolveTaskBinding_Empty verifies that resolveTaskBinding returns an
+// TestResolveIssueBinding_Empty verifies that resolveIssueBinding returns an
 // empty string when neither file nor environment variable exists.
-func TestResolveTaskBinding_Empty(t *testing.T) {
+func TestResolveIssueBinding_Empty(t *testing.T) {
 	gitDir := t.TempDir()
-	t.Setenv("ARMATURE_TASK_ID", "")
+	t.Setenv("ARMATURE_ISSUE_ID", "")
 
-	taskID := resolveTaskBinding(gitDir)
+	taskID := resolveIssueBinding(gitDir)
 
 	assert.Equal(t, "", taskID)
 }
 
-// TestResolveTaskBinding_FilePreferredOverEnv verifies that the file takes
+// TestResolveIssueBinding_FilePreferredOverEnv verifies that the file takes
 // precedence over the environment variable.
-func TestResolveTaskBinding_FilePreferredOverEnv(t *testing.T) {
+func TestResolveIssueBinding_FilePreferredOverEnv(t *testing.T) {
 	gitDir := t.TempDir()
-	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	taskIDPath := filepath.Join(gitDir, "armature-issue-id")
 	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
 	require.NoError(t, err)
-	t.Setenv("ARMATURE_TASK_ID", "task-from-env")
+	t.Setenv("ARMATURE_ISSUE_ID", "task-from-env")
 
-	taskID := resolveTaskBinding(gitDir)
+	taskID := resolveIssueBinding(gitDir)
 
 	assert.Equal(t, "task-from-file", taskID)
 }
@@ -399,26 +399,26 @@ func TestIsBindingStale_ClaimedWithinTTLWindow(t *testing.T) {
 }
 
 // TestHarnessHookReadsBindingFromFileWithoutEnv verifies that harness-hook reads the
-// task binding from the worktree's armature-task-id file even when ARMATURE_TASK_ID
+// task binding from the worktree's armature-issue-id file even when ARMATURE_ISSUE_ID
 // is not set (F1/F13: file-based binding must work end-to-end).
 //
-// The test claims a task with --worktree, which writes armature-task-id into the
+// The test claims a task with --worktree, which writes armature-issue-id into the
 // worktree-specific git dir. It then invokes harness-hook with --repo pointing at
-// the worktree (not the parent repo) and no ARMATURE_TASK_ID env var. The hook
+// the worktree (not the parent repo) and no ARMATURE_ISSUE_ID env var. The hook
 // must still find the task binding and process the event.
 func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	// Claim the task to write armature-task-id into the worktree git dir.
+	// Claim the task to write armature-issue-id into the worktree git dir.
 	worktreeDir := t.TempDir()
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
 	require.NoError(t, claimCmd.Execute())
 
-	// Verify armature-task-id was written.
+	// Verify armature-issue-id was written.
 	gitPath := filepath.Join(worktreeDir, ".git")
 	gitFileContent, err := os.ReadFile(gitPath)
 	require.NoError(t, err)
@@ -426,11 +426,11 @@ func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	require.FileExists(t, taskIDFile, "armature-task-id must exist in worktree git dir")
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	require.FileExists(t, taskIDFile, "armature-issue-id must exist in worktree git dir")
 
-	// Ensure ARMATURE_TASK_ID is NOT set — hook must rely on the file alone.
-	t.Setenv("ARMATURE_TASK_ID", "")
+	// Ensure ARMATURE_ISSUE_ID is NOT set — hook must rely on the file alone.
+	t.Setenv("ARMATURE_ISSUE_ID", "")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer

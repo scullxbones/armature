@@ -48,11 +48,11 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 	worktreePath := findWorktreePathByBranch(repoPath, branchName)
 	if worktreePath != "" {
 		// Verify binding before proceeding: check if the worktree is actually bound
-		// to this issue via the armature-task-id file in the git dir.
+		// to this issue via the armature-issue-id file in the git dir.
 		// If the binding is missing or wrong, skip removal to protect user-created
 		// worktrees that happen to match the branch name (P2 bug fix).
 		if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
-			bindingBytes, readErr := os.ReadFile(filepath.Join(actualGitDir, "armature-task-id")) //nolint:gosec // internal git dir path
+			bindingBytes, readErr := os.ReadFile(filepath.Join(actualGitDir, "armature-issue-id")) //nolint:gosec // internal git dir path
 			binding := strings.TrimSpace(string(bindingBytes))
 			// If the file doesn't exist or contains a different ID, skip removal
 			if readErr != nil || binding != issue.ID {

@@ -114,15 +114,15 @@ func TestClaimCreatesWorktreeIfAbsent(t *testing.T) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
 
-	// Verify armature-task-id file is created in the actual git directory
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	assert.FileExists(t, taskIDFile, "armature-task-id file should be created in actual git dir")
+	// Verify armature-issue-id file is created in the actual git directory
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	assert.FileExists(t, taskIDFile, "armature-issue-id file should be created in actual git dir")
 	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // internal test path
 	require.NoError(t, err)
 	assert.Equal(t, "task-01", string(taskID))
 }
 
-// TestClaimUpdatesTaskIDIfWorktreeExists verifies that claim updates armature-task-id
+// TestClaimUpdatesTaskIDIfWorktreeExists verifies that claim updates armature-issue-id
 // when the worktree already exists.
 func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
 	repo := setupRepoWithTask(t)
@@ -147,8 +147,8 @@ func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
 
-	// Verify armature-task-id was written
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	// Verify armature-issue-id was written
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // internal test path
 	require.NoError(t, err)
 	assert.Equal(t, "task-01", string(taskID))
@@ -397,7 +397,7 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 }
 
 // TestClaimRejectsWorktreeBoundToDifferentTask verifies that when the --worktree path
-// already has an armature-task-id binding for a different issue, claim fails with a
+// already has an armature-issue-id binding for a different issue, claim fails with a
 // descriptive error rather than silently overwriting the binding.
 func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
@@ -411,7 +411,7 @@ func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
 	require.NoError(t, err)
 
-	// Verify that armature-task-id is "task-01".
+	// Verify that armature-issue-id is "task-01".
 	gitPath := filepath.Join(worktreePath, ".git")
 	gitFileContent, readErr := os.ReadFile(gitPath)
 	require.NoError(t, readErr)
@@ -419,7 +419,7 @@ func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	taskID, readErr := os.ReadFile(taskIDFile) //nolint:gosec // test path
 	require.NoError(t, readErr)
 	require.Equal(t, "task-01", string(taskID))
@@ -478,7 +478,7 @@ func TestClaimRejectsWorktreeWithMismatchedBranch(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
 	require.NoError(t, err)
 
-	// Delete the armature-task-id file from the worktree's git dir so the binding check is bypassed
+	// Delete the armature-issue-id file from the worktree's git dir so the binding check is bypassed
 	// and only the branch mismatch check applies
 	gitPath := filepath.Join(worktreePath, ".git")
 	gitFileContent, err := os.ReadFile(gitPath)
@@ -487,8 +487,8 @@ func TestClaimRejectsWorktreeWithMismatchedBranch(t *testing.T) {
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-task-id file") //nolint:gosec // internal test path
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-issue-id file") //nolint:gosec // internal test path
 
 	// Now try to claim task-02 using the same worktree path (which is still on task/task-01 branch)
 	// This should fail due to branch mismatch
@@ -558,13 +558,13 @@ func TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged(t *testing.T) {
 	assert.NotContains(t, errText, "merged", "error should NOT suggest 'arm merged' (only for post-merge teardown)")
 }
 
-// TestClaimReleasesClaimOnWorktreeSetupFailure verifies that when updateTaskIDFile fails
+// TestClaimReleasesClaimOnWorktreeSetupFailure verifies that when updateIssueIDFile fails
 // after the claim is won, a compensating transition op is appended to re-open the task.
 func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
 	// Manually create a worktree and git directory structure to simulate the scenario
-	// where worktreePathExists passes but updateTaskIDFile will fail.
+	// where worktreePathExists passes but updateIssueIDFile will fail.
 	tempDir := t.TempDir()
 	worktreePath := filepath.Join(tempDir, "task-01-worktree")
 
@@ -573,14 +573,14 @@ func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
 
 	// Create a fake .git file that points to a non-existent git directory
 	// This will make worktreePathExists return true (the file exists)
-	// but resolveWorktreeGitDir will fail when updateTaskIDFile tries to use it
+	// but resolveWorktreeGitDir will fail when updateIssueIDFile tries to use it
 	gitPath := filepath.Join(worktreePath, ".git")
 	require.NoError(t, os.WriteFile(gitPath, []byte("gitdir: /nonexistent/git/dir"), 0o644))
 
 	// Try to claim task-01 with this fake worktree
 	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
 
-	// The claim should fail - either during checkExistingWorktreeBinding or updateTaskIDFile
+	// The claim should fail - either during checkExistingWorktreeBinding or updateIssueIDFile
 	assert.Error(t, claimErr, "claim should fail with invalid worktree. stderr: %s", stderr)
 
 	// Even though the claim failed, verify that task-01 isn't stuck in "claimed" state.
@@ -628,7 +628,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 
 	// Create a pre-existing directory with a broken .git file.
 	// worktreePathExists() returns true; checkExistingWorktreeBinding may reject it, or
-	// updateTaskIDFile will fail when it tries to resolve the non-existent git dir.
+	// updateIssueIDFile will fail when it tries to resolve the non-existent git dir.
 	worktreePath := filepath.Join(t.TempDir(), "task-rb-01-worktree")
 	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
 	gitPath := filepath.Join(worktreePath, ".git")
@@ -686,7 +686,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 // TestClaimWorktreePathIsNormalized verifies that claim correctly resolves relative worktree paths
 // to absolute paths. When claim is invoked from a different working directory with a relative
 // --worktree path, the worktree should still be created at the correct absolute path, and the
-// armature-task-id binding should be written to the correct location.
+// armature-issue-id binding should be written to the correct location.
 func TestClaimWorktreePathIsNormalized(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -728,11 +728,11 @@ func TestClaimWorktreePathIsNormalized(t *testing.T) {
 		actualGitDir = filepath.Join(expectedAbsWorktree, actualGitDir)
 	}
 
-	// Verify armature-task-id was written to the correct location
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	// Verify armature-issue-id was written to the correct location
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // test path
-	require.NoError(t, err, "armature-task-id should exist in the correct git directory")
-	assert.Equal(t, "task-01", string(taskID), "armature-task-id should contain task-01")
+	require.NoError(t, err, "armature-issue-id should exist in the correct git directory")
+	assert.Equal(t, "task-01", string(taskID), "armature-issue-id should contain task-01")
 }
 
 // TestClaimRejectsMainCheckoutAsWorktree verifies that claim rejects the main checkout
@@ -777,7 +777,7 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // test path
 	require.NoError(t, err)
 	require.Equal(t, "task-01", string(taskID), "worktree should initially be bound to task-01")
@@ -792,8 +792,8 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 	headStr := strings.TrimSpace(string(headContent))
 	require.False(t, strings.HasPrefix(headStr, "ref: "), "HEAD should be detached")
 
-	// Remove the armature-task-id binding so the worktree has NO binding
-	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-task-id file") //nolint:gosec // internal test path
+	// Remove the armature-issue-id binding so the worktree has NO binding
+	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-issue-id file") //nolint:gosec // internal test path
 
 	// Now try to claim task-01 again with the unbound detached HEAD
 	// This should fail because even though the binding is empty, the detached HEAD
@@ -813,7 +813,7 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 // Scenario:
 // 1. Worker claims task-01 with --worktree /wt1 → succeeds, status=claimed, ClaimedBy=worker-A
 // 2. Worker retries with --worktree /wt1 again → wins claim race again (same worker, TTL not expired)
-// 3. updateTaskIDFile fails (e.g., .git file points to non-existent directory)
+// 3. updateIssueIDFile fails (e.g., .git file points to non-existent directory)
 // 4. Before the fix: compensating rollback → status=open (WRONG)
 // 5. After the fix: only rollback to open if the prior status was open; otherwise keep it claimed
 func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
@@ -832,12 +832,12 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed after first claim")
 
 	// Now break the worktree's .git file by replacing it with a pointer to a non-existent directory.
-	// This will cause updateTaskIDFile to fail on the re-claim attempt.
+	// This will cause updateIssueIDFile to fail on the re-claim attempt.
 	gitPath := filepath.Join(worktree1, ".git")
 	require.NoError(t, os.WriteFile(gitPath, []byte("gitdir: /nonexistent/git/dir"), 0o644),
 		"should be able to overwrite .git file")
 
-	// Second claim with same worktree should fail due to updateTaskIDFile failure
+	// Second claim with same worktree should fail due to updateIssueIDFile failure
 	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktree1)
 	assert.Error(t, claimErr, "second claim with broken worktree should error. stderr: %s", stderr)
 
@@ -933,7 +933,7 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 // that points to a linked worktree belonging to a DIFFERENT git repository (not the main repo),
 // claim must reject it even if the worktree is on the expected branch and has no conflicting binding.
 //
-// This prevents updateTaskIDFile from writing armature-task-id into a foreign repo's git dir,
+// This prevents updateIssueIDFile from writing armature-issue-id into a foreign repo's git dir,
 // which would cause later merged operations (which search only the main repo's worktree list)
 // to permanently fail to find and clean up the worktree.
 //
