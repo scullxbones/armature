@@ -201,8 +201,8 @@ func newHarnessHookCmd() *cobra.Command {
 				FilePath: filePath,
 			}
 
-			// Resolve binding from event and session binding
-			finalBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding)
+			// Resolve binding from event and session binding; also get the git dir where it was resolved
+			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir)
 			if err != nil {
 				// If binding resolution fails, fail open and pass through
 				_ = logPassThrough(gitDir, "binding resolution failed") //nolint:errcheck // logging only, error not actionable
@@ -212,11 +212,11 @@ func newHarnessHookCmd() *cobra.Command {
 			// If no binding is found:
 			// - File writes are violations (enforcement gap)
 			// - Other events are pass-throughs (no enforcement expected)
-			if finalBinding == "" {
+			if resolvedBinding.IssueID == "" {
 				if isFileWriteEvent(event.Kind) {
-					_ = logViolation(gitDir, "file write with no resolved binding") //nolint:errcheck // logging only, error not actionable
+					_ = logViolation(resolvedBinding.GitDir, "file write with no resolved binding") //nolint:errcheck // logging only, error not actionable
 				} else {
-					_ = logPassThrough(gitDir, "no issue binding found") //nolint:errcheck // logging only, error not actionable
+					_ = logPassThrough(resolvedBinding.GitDir, "no issue binding found") //nolint:errcheck // logging only, error not actionable
 				}
 				return nil
 			}
@@ -226,7 +226,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if err != nil {
 				// Snapshot load errors are fail-open with loud stderr warning
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to load snapshot: %v\n", err)
-				_ = logPassThrough(gitDir, "snapshot load failed") //nolint:errcheck // logging only, error not actionable
+				_ = logPassThrough(resolvedBinding.GitDir, "snapshot load failed") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
 			for _, w := range snap.Warnings {
@@ -234,8 +234,8 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			// If binding is stale, pass through
-			if isBindingStale(snap, finalBinding, time.Now().Unix()) {
-				_ = logPassThrough(gitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
+			if isBindingStale(snap, resolvedBinding.IssueID, time.Now().Unix()) {
+				_ = logPassThrough(resolvedBinding.GitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
 
@@ -250,7 +250,7 @@ func newHarnessHookCmd() *cobra.Command {
 			hook := harnesshook.NewHook(resolver)
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
 				Input:          inputData,
-				TaskID:         finalBinding,
+				TaskID:         resolvedBinding.IssueID,
 				Platform:       os.Getenv("ARMATURE_HOOK_PLATFORM"),
 				SessionBinding: sessionBinding,
 			})
@@ -258,9 +258,9 @@ func newHarnessHookCmd() *cobra.Command {
 				return err
 			}
 
-			// Log the decision with complete information
+			// Log the decision with complete information to the resolved worktree's git dir
 			blockReason := result.Decision.Message
-			_ = logDecision(gitDir, finalBinding, string(event.Kind), event.Tool, //nolint:errcheck // logging error not actionable
+			_ = logDecision(resolvedBinding.GitDir, resolvedBinding.IssueID, string(event.Kind), event.Tool, //nolint:errcheck // logging error not actionable
 				string(result.Decision.Action), blockReason)
 
 			// If the adapter returned a non-zero exit code, propagate it to the process exit.
