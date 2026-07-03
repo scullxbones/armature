@@ -1992,3 +1992,4 @@
 ["transition","MIGH-T4",1783082943,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added mergeAppendOnlyLog for ops/*.log migrations, routed colliding logs through append-only merge behavior, and verified non-log files still skip on collision; build/test/lint are green."}]
 ["transition","MIGH-T4",1783082946,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","MIGH-T5",1783083612,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added best-effort stranded migration backup listing and a bootstrap note that surfaces existing .armature.migrated-* dirs without deleting them; build/test/lint are green."}]
+["transition","MIGH-T5",1783083616,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
