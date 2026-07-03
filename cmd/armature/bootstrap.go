@@ -510,9 +510,11 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 // to the new dual-branch layout. If legacy ops exist in repoPath/.armature/ops, they are moved to
 // a timestamped backup directory .armature.migrated-<timestamp>, and the new dual-branch structure
 // is set up on the _armature branch in the .arm worktree.
-// Returns (true, backupDirPath) if migration was performed, (false, "") if no legacy layout was detected,
-// or (false, error) if an error occurred.
-func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
+// Returns (true, backupDirPath, committed) if migration was performed, where committed reports
+// whether a git commit was made removing .armature from tracking (so callers can roll back
+// precisely if a later step fails); (false, "", false) if no legacy layout was detected;
+// or (false, "", false, error) if an error occurred.
+func migrateLegacySingleBranchOps(repoPath string) (bool, string, bool, error) {
 	// Check if .armature/ops exists in the main working tree (legacy single-branch layout)
 	legacyArmatureDir := filepath.Join(repoPath, ".armature")
 	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
@@ -521,24 +523,24 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 	info, err := os.Stat(legacyOpsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, "", nil
+			return false, "", false, nil
 		}
-		return false, "", fmt.Errorf("check for legacy layout: %w", err)
+		return false, "", false, fmt.Errorf("check for legacy layout: %w", err)
 	}
 
 	// Confirm it's a directory with content
 	if !info.IsDir() {
-		return false, "", nil
+		return false, "", false, nil
 	}
 
 	entries, err := os.ReadDir(legacyOpsDir)
 	if err != nil {
-		return false, "", fmt.Errorf("read legacy ops directory: %w", err)
+		return false, "", false, fmt.Errorf("read legacy ops directory: %w", err)
 	}
 
 	// If the ops dir exists but is empty, no migration needed
 	if len(entries) == 0 {
-		return false, "", nil
+		return false, "", false, nil
 	}
 
 	// Legacy layout detected: rename .armature to .armature.migrated-<timestamp>
@@ -559,10 +561,10 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 		// left pointing at a removal that never happened on disk.
 		if isTracked {
 			if addErr := gitClient.AddPaths([]string{".armature"}); addErr != nil {
-				return false, "", fmt.Errorf("backup legacy .armature directory: %w; re-stage .armature after failed rename: %w", err, addErr)
+				return false, "", false, fmt.Errorf("backup legacy .armature directory: %w; re-stage .armature after failed rename: %w", err, addErr)
 			}
 		}
-		return false, "", fmt.Errorf("backup legacy .armature directory: %w", err)
+		return false, "", false, fmt.Errorf("backup legacy .armature directory: %w", err)
 	}
 
 	// If .armature was tracked, commit the removal to keep the working tree clean.
@@ -575,47 +577,82 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 			if restoreErr := os.Rename(backupDir, legacyArmatureDir); restoreErr != nil {
 				// If restore fails, the repo is in an inconsistent state; return both errors
 				// with the backup path so the user can recover .armature manually.
-				return false, "", fmt.Errorf("commit legacy .armature removal: %w; restore .armature from backup %s: %w", err, backupDir, restoreErr)
+				return false, "", false, fmt.Errorf("commit legacy .armature removal: %w; restore .armature from backup %s: %w", err, backupDir, restoreErr)
 			}
 
 			// Re-add .armature to the index to restore the tracked state before the failed migration
 			if restoreIndexErr := gitClient.AddPaths([]string{".armature"}); restoreIndexErr != nil {
 				// Directory is restored (the critical part); still surface the index
 				// re-add failure alongside the original commit error.
-				return false, "", fmt.Errorf("commit legacy .armature removal: %w; re-add .armature to index after rollback: %w", err, restoreIndexErr)
+				return false, "", false, fmt.Errorf("commit legacy .armature removal: %w; re-add .armature to index after rollback: %w", err, restoreIndexErr)
 			}
 
-			return false, "", fmt.Errorf("commit legacy .armature removal: %w", err)
+			return false, "", false, fmt.Errorf("commit legacy .armature removal: %w", err)
 		}
 	}
 
-	return true, backupDir, nil
+	return true, backupDir, isTracked, nil
 }
 
-// copyLegacyOpsToNewWorktree copies the ops directory contents from the backup (created during migration)
-// to the new worktree's .armature/ops directory. This preserves legacy issue data.
-// Returns the count of destination files that already existed and were therefore skipped
-// (not overwritten), so callers can surface a summary to the user.
-func copyLegacyOpsToNewWorktree(backupDir string, newOpsDir string) (int, error) {
-	legacyOpsDir := filepath.Join(backupDir, "ops")
-
-	// Read the legacy ops directory
-	entries, err := os.ReadDir(legacyOpsDir)
-	if err != nil {
-		return 0, fmt.Errorf("read legacy ops directory from backup: %w", err)
+// rollbackLegacyMigration undoes a legacy migration whose subsequent dual-branch setup
+// (orphan branch creation or worktree add) failed, so the repo isn't left with .armature
+// removed on disk/committed away while the new layout was never actually created.
+//
+// If committed is true, the migration made a commit removing .armature from tracking on
+// the current branch; that commit is reverted with a hard reset to its parent (safe here
+// because bootstrap requires a clean working tree before migration runs, and nothing else
+// commits between the migration and this rollback). Otherwise, .armature was never
+// git-tracked, so no commit exists to revert and the backup directory is simply renamed
+// back into place.
+func rollbackLegacyMigration(repoPath, backupDir string, committed bool) error {
+	if committed {
+		gitClient := adapters.New(repoPath)
+		if err := gitClient.ResetHard("HEAD~1"); err != nil {
+			return fmt.Errorf("revert migration commit: %w", err)
+		}
+		return nil
 	}
 
-	// Recursively copy all entries from legacy ops to new ops directory
-	skippedCount := 0
-	for _, entry := range entries {
-		srcPath := filepath.Join(legacyOpsDir, entry.Name())
-		dstPath := filepath.Join(newOpsDir, entry.Name())
+	legacyArmatureDir := filepath.Join(repoPath, ".armature")
+	if err := os.Rename(backupDir, legacyArmatureDir); err != nil {
+		return fmt.Errorf("restore .armature from backup %s: %w", backupDir, err)
+	}
+	return nil
+}
 
-		skipped, err := copyRecursive(srcPath, dstPath)
+// copyLegacyOpsToNewWorktree copies the ops/, templates/, hooks/, and review/ directory
+// contents from the backup (created during migration) into the corresponding directories
+// of the new worktree's .armature/, preserving all legacy data, not just ops/.
+// Returns the count of destination files that already existed and were therefore skipped
+// (not overwritten), so callers can surface a summary to the user.
+func copyLegacyOpsToNewWorktree(backupDir string, newIssuesDir string) (int, error) {
+	// Subdirectories under legacy .armature/ that may hold user data worth preserving.
+	// "ops" is required (callers only invoke this when legacy ops exist); the rest are
+	// copied best-effort if present, since older layouts may not have them.
+	legacyDirs := []string{"ops", "templates", "hooks", "review"}
+
+	skippedCount := 0
+	for _, dirName := range legacyDirs {
+		legacyDir := filepath.Join(backupDir, dirName)
+		entries, err := os.ReadDir(legacyDir)
 		if err != nil {
-			return skippedCount, fmt.Errorf("copy legacy ops file %s: %w", entry.Name(), err)
+			if os.IsNotExist(err) {
+				continue // optional legacy directory not present; nothing to copy
+			}
+			return skippedCount, fmt.Errorf("read legacy %s directory from backup: %w", dirName, err)
 		}
-		skippedCount += skipped
+
+		newDir := filepath.Join(newIssuesDir, dirName)
+		for _, entry := range entries {
+			srcPath := filepath.Join(legacyDir, entry.Name())
+			dstPath := filepath.Join(newDir, entry.Name())
+
+			skipped, err := copyRecursive(srcPath, dstPath)
+			if err != nil {
+				return skippedCount, fmt.Errorf("copy legacy %s file %s: %w", dirName, entry.Name(), err)
+			}
+			skippedCount += skipped
+		}
 	}
 
 	return skippedCount, nil
@@ -751,23 +788,39 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	// Attempt to migrate legacy single-branch layout if it exists
-	migrated, backupDir, err := migrateLegacySingleBranchOps(repoPath)
+	migrated, backupDir, migrationCommitted, err := migrateLegacySingleBranchOps(repoPath)
 	if err != nil {
 		return RepoSetupResult{}, fmt.Errorf("migrate legacy single-branch layout: %w", err)
 	}
 	if migrated {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated legacy single-branch .armature layout to timestamped backup\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated legacy single-branch .armature layout to timestamped backup at %s\n", backupDir)
 	}
 
 	// Always use dual-branch mode: create orphan branch _armature and .arm worktree
 	// Create orphan branch _armature (idempotent)
 	if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
+		if migrated {
+			if rbErr := rollbackLegacyMigration(repoPath, backupDir, migrationCommitted); rbErr != nil {
+				return RepoSetupResult{}, fmt.Errorf(
+					"create _armature branch: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
+					err, rbErr, backupDir,
+				)
+			}
+		}
 		return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w", err)
 	}
 
 	// Create .arm/ worktree (idempotent)
 	worktreePath := filepath.Join(repoPath, ".arm")
 	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
+		if migrated {
+			if rbErr := rollbackLegacyMigration(repoPath, backupDir, migrationCommitted); rbErr != nil {
+				return RepoSetupResult{}, fmt.Errorf(
+					"add .arm worktree: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
+					err, rbErr, backupDir,
+				)
+			}
+		}
 		return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w", err)
 	}
 
@@ -779,10 +832,9 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
 	}
 
-	// Set git config keys for dual-branch mode
-	if err := gitClient.SetGitConfig("armature.mode", "dual-branch"); err != nil {
-		return RepoSetupResult{}, fmt.Errorf("set armature.mode: %w", err)
-	}
+	// Set git config keys for dual-branch mode.
+	// Note: armature.mode is intentionally not written here; nothing reads it anymore
+	// (dual-branch is the only mode), so it would be dead legacy-compat state.
 	if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
 		return RepoSetupResult{}, fmt.Errorf("set armature.ops-worktree-path: %w", err)
 	}
@@ -840,12 +892,12 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	// Copy legacy ops data from backup if migration happened
 	if migrated && backupDir != "" {
-		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, opsDir)
+		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, issuesDir)
 		if err != nil {
 			return RepoSetupResult{}, fmt.Errorf("copy legacy ops data: %w", err)
 		}
 		if skippedCount > 0 {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%d legacy ops file(s) already present in new worktree, not overwritten\n", skippedCount)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%d legacy file(s) already present in new worktree, not overwritten\n", skippedCount)
 		}
 
 		// Write config before committing, so it's included in the migration commit
@@ -860,8 +912,8 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		// Scoped to .armature/* so it structurally cannot sweep in unrelated staged changes.
 		worktreeGitClient := adapters.New(worktreePath)
 
-		// Stage the copied ops files and config
-		filesToStage := []string{".armature/ops"}
+		// Stage the copied ops/templates/hooks/review files and config
+		filesToStage := []string{".armature/ops", ".armature/templates", ".armature/hooks", ".armature/review"}
 		if configToWrite != nil {
 			filesToStage = append(filesToStage, ".armature/config.json")
 		}
@@ -931,24 +983,24 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
 		}
 
-		// In fresh bootstrap (no migration), commit the generated config to _armature branch
-		// so it's preserved in git history and pushed to other clones.
-		// Only do this for fresh init; idempotent re-runs on existing repos will skip this.
-		if freshInit {
-			worktreeGitClient := adapters.New(worktreePath)
+		// Commit the generated config to the _armature branch so it's preserved in git
+		// history and pushed to other clones. Gated on config.json having just been
+		// written here (not on freshInit): a repo can be non-fresh (e.g. _armature was
+		// adopted from a remote with ops/ but no config.json) yet still need this new
+		// config.json committed, or it's silently unpreserved outside this worktree.
+		worktreeGitClient := adapters.New(worktreePath)
 
-			// Stage the config file
-			if err := worktreeGitClient.AddPaths([]string{".armature/config.json"}); err != nil {
-				return RepoSetupResult{}, fmt.Errorf("stage config in fresh bootstrap: %w", err)
-			}
+		// Stage the config file
+		if err := worktreeGitClient.AddPaths([]string{".armature/config.json"}); err != nil {
+			return RepoSetupResult{}, fmt.Errorf("stage config: %w", err)
+		}
 
-			// Commit the config to _armature branch
-			if err := worktreeGitClient.CommitPaths(
-				"chore: init armature config",
-				".armature",
-			); err != nil {
-				return RepoSetupResult{}, fmt.Errorf("commit config to _armature branch: %w", err)
-			}
+		// Commit the config to _armature branch
+		if err := worktreeGitClient.CommitPaths(
+			"chore: init armature config",
+			".armature",
+		); err != nil {
+			return RepoSetupResult{}, fmt.Errorf("commit config to _armature branch: %w", err)
 		}
 	}
 

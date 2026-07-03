@@ -552,16 +552,10 @@ func TestInitCommand_DualBranch(t *testing.T) {
 	// Worktree should exist at .arm/
 	assert.DirExists(t, filepath.Join(repo, ".arm"))
 
-	// .armature/ inside worktree should have a config.json (mode is no longer
-	// stored in config.json; it's tracked via git config armature.mode below).
+	// .armature/ inside worktree should have a config.json (mode is not stored
+	// anywhere; dual-branch is the only supported mode).
 	cfgPath := filepath.Join(repo, ".arm", ".armature", "config.json")
 	assert.FileExists(t, cfgPath)
-
-	// Git config should have mode set
-	modeCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.mode")
-	modeOut, err := modeCmd.Output()
-	require.NoError(t, err)
-	assert.Equal(t, "dual-branch\n", string(modeOut))
 
 	// Git config should have worktree path set
 	wtCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path")
