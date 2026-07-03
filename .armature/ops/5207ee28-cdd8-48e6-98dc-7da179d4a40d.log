@@ -1925,3 +1925,4 @@
 ["amend","MIGH-T4",1783050706,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"acceptance":["TestMigrationMergesDivergentOpsLogs_REQ_MIGH_T4 passes","TestMergeAppendOnlyLogIdenticalIsNoOp_REQ_MIGH_T4 passes","go test ./cmd/armature/ -run 'TestMigration|TestCopyLegacy|TestCopyRecursive|TestRunRepoSetupMigration' -count=1 green"]}]
 ["amend","MIGH-T5",1783050706,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"acceptance":["TestRunRepoSetupReportsStrandedBackups_REQ_MIGH_T5 passes","go test ./cmd/armature/ -run TestRunRepoSetup -count=1 green"]}]
 ["amend","MIGH-T6",1783050707,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"acceptance":["TestMigrationInvariantMatrix_REQ_MIGH_T6 passes all cases with -count=1 -v","go test ./cmd/armature/ -count=1 green"]}]
+["amend","MIGH",1783050707,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"acceptance":["make check green","arm validate exits 0","TestMigrationInvariantMatrix_REQ_MIGH_T6 passes for all cases"]}]
