@@ -906,3 +906,169 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	err = mergedCmd2.Execute()
 	require.NoError(t, err, "merged must succeed on retry when status is already merged in dual-branch mode (P2 bug fix)")
 }
+
+// TestMergedFailsOnViolations_REQ_HOOKBIND_T4 verifies that arm merged --issue exits
+// non-zero when the worktree's armature-hook.log contains violation: entries,
+// and does NOT tear down the worktree when violations are present.
+func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Create armature-hook.log with violation entries
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	gitDirLine := string(gitFileContent)
+
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
+	hookLogContent := "violation: unbound file write to main.go\nviolation: unbound file write to cmd/main.go\n"
+	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
+	require.NoError(t, err)
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command — should fail because violations are present
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+	require.Error(t, err, "merged should exit non-zero when violations are present")
+
+	// Verify worktree still exists (should NOT be removed when violations are found)
+	assert.DirExists(t, worktreePath, "worktree should NOT be removed when violations are present")
+
+	// Verify error message mentions violations
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "violation", "error should mention violations")
+}
+
+// TestMergedForceOverridesViolations_REQ_HOOKBIND_T4 verifies that with --force flag,
+// arm merged succeeds despite violation: entries in the hook log and proceeds to
+// tear down the worktree.
+func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Create armature-hook.log with violation entries
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	gitDirLine := string(gitFileContent)
+
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
+	hookLogContent := "violation: unbound file write to main.go\nviolation: unbound file write to cmd/main.go\n"
+	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
+	require.NoError(t, err)
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command with --force — should succeed despite violations
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
+	err = mergedCmd.Execute()
+	require.NoError(t, err, "merged with --force should succeed despite violations")
+
+	// Verify worktree IS removed (when --force is used, violations are overridden)
+	assert.NoDirExists(t, worktreePath, "worktree should be removed when --force is used despite violations")
+}
+
+// TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4 verifies that pass-through: entries
+// produce warnings only and do NOT cause merged to fail.
+func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	// Claim the task to create a worktree
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Create armature-hook.log with ONLY pass-through entries (no violations)
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	gitDirLine := string(gitFileContent)
+
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
+	hookLogContent := "pass-through: no task binding found\npass-through: stale binding\n"
+	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
+	require.NoError(t, err)
+
+	// Transition task to done
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	// Materialize so index.json reflects the done→merged transition before calling merged.
+	_, errMat := runTrls(t, repo, "materialize")
+	require.NoError(t, errMat)
+
+	// Call merged command — should succeed with pass-through entries (they are warnings only)
+	mergedCmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(outBuf)
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+	require.NoError(t, err, "merged should succeed with pass-through entries (warnings only)")
+
+	// Verify worktree IS removed (pass-through entries do not block removal)
+	assert.NoDirExists(t, worktreePath, "worktree should be removed even with pass-through entries")
+
+	// Verify warning is printed to stderr
+	errOutput := errBuf.String()
+	assert.Contains(t, errOutput, "pass-through", "should warn about pass-through entries in stderr")
+}

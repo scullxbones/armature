@@ -28,6 +28,65 @@ func readHookLogForPassThroughs(gitDir string) bool {
 	return strings.Contains(content, "pass-through:")
 }
 
+// readHookLogForViolations reads the armature-hook.log file and returns true if it contains violation entries.
+func readHookLogForViolations(gitDir string) bool {
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	data, err := os.ReadFile(logPath) //nolint:gosec // log path is derived from trusted git directory
+	if err != nil {
+		// Log doesn't exist or can't be read; no violations found
+		return false
+	}
+
+	content := string(data)
+	return strings.Contains(content, "violation:")
+}
+
+// CheckWorktreeHookLogResult contains the result of checking a worktree's hook log.
+type CheckWorktreeHookLogResult struct {
+	HasViolations  bool
+	HasPassThrough bool
+}
+
+// checkWorktreeHookLog checks the hook log for violations and pass-through entries.
+// Returns a CheckWorktreeHookLogResult with the findings. If the worktree cannot be
+// located or is unbound, returns an empty result.
+func checkWorktreeHookLog(repoPath string, issue materialize.Issue) *CheckWorktreeHookLogResult {
+	// Only check hook logs for types that claim creates them for.
+	// deriveBranchName returns a non-empty prefix for task, bug, feature, and story types.
+	branchName := deriveBranchName(issue.Type, issue.ID)
+	if branchName == "" {
+		return &CheckWorktreeHookLogResult{}
+	}
+
+	worktreePath := findWorktreePathByBranch(repoPath, branchName)
+	if worktreePath == "" {
+		// Worktree not found; no hook log to check
+		return &CheckWorktreeHookLogResult{}
+	}
+
+	// Verify binding before proceeding: check if the worktree is actually bound
+	// to this issue via the armature-issue-id file in the git dir.
+	// If the binding is missing or wrong, skip checking and return empty result
+	if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
+		bindingBytes, readErr := os.ReadFile(filepath.Join(actualGitDir, "armature-issue-id")) //nolint:gosec // internal git dir path
+		binding := strings.TrimSpace(string(bindingBytes))
+		// If the file doesn't exist or contains a different ID, skip checking
+		if readErr != nil || binding != issue.ID {
+			return &CheckWorktreeHookLogResult{}
+		}
+
+		// Check for both violations and pass-through entries
+		hasViolations := readHookLogForViolations(actualGitDir)
+		hasPassThrough := readHookLogForPassThroughs(actualGitDir)
+		return &CheckWorktreeHookLogResult{
+			HasViolations:  hasViolations,
+			HasPassThrough: hasPassThrough,
+		}
+	}
+
+	return &CheckWorktreeHookLogResult{}
+}
+
 // removeWorktreeForIssue removes the git worktree for a given issue if it exists.
 // If the worktree is found, it checks the hook log before removing it; if pass-through
 // entries are present, a warning is emitted to errWriter. If the worktree is already
@@ -116,6 +175,7 @@ func findWorktreePathByBranch(repoPath, branchName string) string {
 
 func newMergedCmd() *cobra.Command {
 	var issueID, pr string
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "merged",
@@ -144,6 +204,17 @@ func newMergedCmd() *cobra.Command {
 			issue, err := store.ReadIssue(issueID)
 			if err != nil {
 				return fmt.Errorf("load issue %s: %w", issueID, err)
+			}
+
+			// Check for violations in the hook log BEFORE recording the merge op.
+			// If violations are found and --force is not set, exit with error and
+			// do NOT proceed with the merge (preserving the worktree as evidence).
+			if !force {
+				hookLogResult := checkWorktreeHookLog(ctx.RepoPath, *issue)
+				if hookLogResult.HasViolations {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
+					return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
+				}
 			}
 
 			// Record the merge op FIRST, before removing the worktree.
@@ -192,6 +263,7 @@ func newMergedCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number or URL")
+	cmd.Flags().BoolVar(&force, "force", false, "force merge despite violations in hook log")
 	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }
