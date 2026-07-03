@@ -2074,3 +2074,4 @@
 ["source-link","HOOKBIND-T4",1783090251,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"d4622af1-c94f-4478-beb1-c837f54dec42","source_url":"docs/adr/0007-path-based-issue-binding-resolution.md"}]
 ["source-link","HOOKBIND-T5",1783090251,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"d4622af1-c94f-4478-beb1-c837f54dec42","source_url":"docs/adr/0007-path-based-issue-binding-resolution.md"}]
 ["link","HOOKBIND-T3",1783090271,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"HOOKBIND-T1","rel":"blocked_by"}]
+["link","HOOKBIND-T4",1783090271,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"HOOKBIND-T1","rel":"blocked_by"}]
