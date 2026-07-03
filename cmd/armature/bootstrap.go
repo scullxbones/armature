@@ -555,6 +555,13 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 	}
 
 	if err := os.Rename(legacyArmatureDir, backupDir); err != nil {
+		// If the deletion was already staged, re-stage .armature so the index isn't
+		// left pointing at a removal that never happened on disk.
+		if isTracked {
+			if addErr := gitClient.AddPaths([]string{".armature"}); addErr != nil {
+				return false, "", fmt.Errorf("backup legacy .armature directory: %w; re-stage .armature after failed rename: %w", err, addErr)
+			}
+		}
 		return false, "", fmt.Errorf("backup legacy .armature directory: %w", err)
 	}
 
@@ -563,6 +570,21 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, error) {
 	// changes; a real commit failure (not "nothing to commit") is propagated as an error.
 	if isTracked {
 		if err := gitClient.CommitPaths("chore: migrate legacy .armature to dual-branch layout", ".armature"); err != nil {
+			// Rollback on commit failure: restore the original .armature directory from the backup
+			// and restore the index to its original state so the migration is atomic.
+			if restoreErr := os.Rename(backupDir, legacyArmatureDir); restoreErr != nil {
+				// If restore fails, the repo is in an inconsistent state; return both errors
+				// with the backup path so the user can recover .armature manually.
+				return false, "", fmt.Errorf("commit legacy .armature removal: %w; restore .armature from backup %s: %w", err, backupDir, restoreErr)
+			}
+
+			// Re-add .armature to the index to restore the tracked state before the failed migration
+			if restoreIndexErr := gitClient.AddPaths([]string{".armature"}); restoreIndexErr != nil {
+				// Directory is restored (the critical part); still surface the index
+				// re-add failure alongside the original commit error.
+				return false, "", fmt.Errorf("commit legacy .armature removal: %w; re-add .armature to index after rollback: %w", err, restoreIndexErr)
+			}
+
 			return false, "", fmt.Errorf("commit legacy .armature removal: %w", err)
 		}
 	}
