@@ -1997,3 +1997,4 @@
 ["transition","MIGH-T6",1783084209,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","MIGH-T7",1783084366,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Validated the full migration hardening story with cache-safe build, test, lint, arm validate, and arm doctor gates; no remaining DAG or repo-health issues."}]
 ["transition","MIGH-T7",1783084371,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","MIGH",1783084389,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Completed migration-path hardening: locale-stable git commands, no-verify migration commits, SHA-based rollback, append-only log merges, stranded-backup notes, and an invariant matrix; all tasks are merged and validation passed."}]
