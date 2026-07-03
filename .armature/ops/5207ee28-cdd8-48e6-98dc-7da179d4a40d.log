@@ -1986,3 +1986,4 @@
 ["transition","MIGH-T1",1783051615,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Forced LC_ALL=C and LANG=C onto all git adapter commands and added a locale-override unit test; internal/adapters passes and repo gates are green."}]
 ["transition","MIGH-T1",1783051620,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["transition","MIGH-T2",1783052806,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added CommitPathsNoVerify plus no-verify orphan init commits; switched bootstrap migration/config commits to no-verify and rewrote rollback tests to use non-hook commit failures; build/test/lint are green."}]
+["transition","MIGH-T2",1783052810,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
