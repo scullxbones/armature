@@ -123,6 +123,13 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		return nil
 	}
 
+	// Attempt to fetch the branch from origin in case it exists on the remote
+	// but not in the local remote-tracking refs (e.g., after git clone --single-branch).
+	// Fetch with refspec to create/update the remote-tracking ref.
+	// This is best-effort; ignore failures when the remote is absent, offline, or the branch doesn't exist.
+	fetchCmd := c.cmd("fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
+	_ = fetchCmd.Run() //nolint:errcheck // Ignore fetch errors; best-effort fetch for remote branch
+
 	// Check if the branch exists on origin and create a local tracking branch if so
 	remoteBranch := "origin/" + branch
 	remoteCheck := c.cmd("rev-parse", "--verify", remoteBranch)
