@@ -135,7 +135,7 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 func TestAdapterExitError(t *testing.T) {
 	// Test that adapterExitError implements error interface
 	err := adapterExitError{code: 42}
-	assert.NotNil(t, err)
+	assert.Equal(t, 42, err.code, "code should be preserved on the struct")
 
 	// Test Error() method
 	errMsg := err.Error()
@@ -232,6 +232,74 @@ func TestResolveIssueBinding_FilePreferredOverEnv(t *testing.T) {
 	taskID := resolveIssueBinding(gitDir)
 
 	assert.Equal(t, "task-from-file", taskID)
+}
+
+// TestResolveIssueBinding_FallsBackToLegacyTaskIDFile verifies that
+// resolveIssueBinding falls back to the legacy armature-task-id file when
+// armature-issue-id is absent, matching harnesshook.ResolveBindingFromDir's
+// fallback (finding P2).
+func TestResolveIssueBinding_FallsBackToLegacyTaskIDFile(t *testing.T) {
+	gitDir := t.TempDir()
+	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	err := os.WriteFile(taskIDPath, []byte("legacy-task-id"), 0o644)
+	require.NoError(t, err)
+
+	taskID := resolveIssueBinding(gitDir)
+
+	assert.Equal(t, "legacy-task-id", taskID)
+}
+
+// TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding verifies
+// that when path-based resolution (steps 1-2) lands on a git dir that is not a
+// known worktree of the invoking repo, the hook actually falls back to the
+// session binding (per ADR-0007 fail-open) rather than resetting to an empty,
+// unbound binding — matching isKnownWorktreeGitDir's doc comment (finding P3).
+func TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
+	require.NoError(t, err)
+
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// An unrelated git repo, entirely outside the invoking repo's worktrees,
+	// bound to a different issue. A crafted tool_input.file_path pointing here
+	// must not be trusted for binding resolution.
+	attackerDir := t.TempDir()
+	attackerGitDir := filepath.Join(attackerDir, ".git")
+	require.NoError(t, os.MkdirAll(attackerGitDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(attackerGitDir, "armature-issue-id"), []byte("attacker-task"), 0o644))
+	attackerFile := filepath.Join(attackerDir, "some", "file.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(attackerFile), 0o755))
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	var out, errOut bytes.Buffer
+	cmd = newRootCmd()
+	payload := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":%q}]}}`, attackerFile)
+	cmd.SetIn(strings.NewReader(payload))
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"harness-hook", "--repo", repo})
+
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	assert.Contains(t, errOut.String(), "falling back to session binding")
+
+	sessionGitDir := filepath.Join(repo, ".git")
+	logData, readErr := os.ReadFile(filepath.Join(sessionGitDir, "armature-hook.log"))
+	require.NoError(t, readErr)
+	logContent := string(logData)
+	assert.Contains(t, logContent, "rejected as untrusted", "should log a violation for the rejected path-resolved git dir")
+	// The decision must be logged under the session's own binding (task-01),
+	// not left unbound, proving the fallback actually restores the session binding.
+	assert.Contains(t, logContent, "issue_id=task-01", "should evaluate under the session binding, not an empty binding")
 }
 
 // TestLogPassThrough verifies that logPassThrough writes a timestamped entry to

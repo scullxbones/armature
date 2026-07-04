@@ -43,6 +43,37 @@ func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "task-from-path", binding.IssueID)
 	assert.Equal(t, actualGitDir, binding.GitDir)
+	assert.Equal(t, worktreeDir, binding.Root, "Root should be the worktree root, not the gitdir parent (finding P3)")
+}
+
+// TestResolveBindingFromFilePath_LinkedWorktree_RootIsWorktreeRoot verifies that
+// for a linked-worktree layout (.git is a file pointing elsewhere, e.g.
+// <parent>/.git/worktrees/<name>), ResolvedBinding.Root is the worktree root
+// directory itself, not the parent of the actual git dir the .git file points to.
+func TestResolveBindingFromFilePath_LinkedWorktree_RootIsWorktreeRoot(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	parentRepo := filepath.Join(tmpDir, "parent-repo")
+	worktreeDir := filepath.Join(tmpDir, "linked-worktree")
+	actualGitDir := filepath.Join(parentRepo, ".git", "worktrees", "linked-worktree")
+	fileDir := filepath.Join(worktreeDir, "some", "path")
+	filePath := filepath.Join(fileDir, "file.go")
+
+	require.NoError(t, os.MkdirAll(actualGitDir, 0o755))
+	require.NoError(t, os.MkdirAll(fileDir, 0o755))
+
+	gitFile := filepath.Join(worktreeDir, ".git")
+	require.NoError(t, os.WriteFile(gitFile, []byte("gitdir: "+actualGitDir+"\n"), 0o644))
+
+	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	require.NoError(t, os.WriteFile(issueIDFile, []byte("linked-worktree-task"), 0o644))
+
+	binding, err := ResolveBindingFromFilePath(filePath)
+
+	require.NoError(t, err)
+	assert.Equal(t, "linked-worktree-task", binding.IssueID)
+	assert.Equal(t, actualGitDir, binding.GitDir)
+	assert.Equal(t, worktreeDir, binding.Root, "Root must be the worktree root (where .git lives), not actualGitDir's parent")
 }
 
 // TestResolveBindingFromFilePath_NoGitDir verifies that ResolveBindingFromFilePath
@@ -516,4 +547,124 @@ func TestResolveBindingFromEvent_UnboundWorktree_ReturnsWorktreeGitDir(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, "", binding.IssueID)
 	assert.Equal(t, gitDir, binding.GitDir, "should return the unbound worktree's git dir, not the session git dir")
+}
+
+// TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile verifies that
+// ResolveBindingFromFilePath falls back to reading armature-task-id when
+// armature-issue-id doesn't exist, for compatibility with worktrees claimed
+// before the binding file was renamed (commit d52d78be).
+func TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	fileDir := filepath.Join(tmpDir, "some", "path")
+	filePath := filepath.Join(fileDir, "file.go")
+
+	err := os.MkdirAll(gitDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(fileDir, 0o755)
+	require.NoError(t, err)
+
+	// Write legacy armature-task-id file only (no armature-issue-id)
+	taskIDFile := filepath.Join(gitDir, "armature-task-id")
+	err = os.WriteFile(taskIDFile, []byte("legacy-task-id"), 0o644)
+	require.NoError(t, err)
+
+	binding, err := ResolveBindingFromFilePath(filePath)
+
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-task-id", binding.IssueID)
+	assert.Equal(t, gitDir, binding.GitDir)
+}
+
+// TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID verifies that
+// when both armature-issue-id and armature-task-id exist, armature-issue-id
+// takes precedence.
+func TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	fileDir := filepath.Join(tmpDir, "some", "path")
+	filePath := filepath.Join(fileDir, "file.go")
+
+	err := os.MkdirAll(gitDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(fileDir, 0o755)
+	require.NoError(t, err)
+
+	// Write both files
+	issueIDFile := filepath.Join(gitDir, "armature-issue-id")
+	err = os.WriteFile(issueIDFile, []byte("new-issue-id"), 0o644)
+	require.NoError(t, err)
+
+	taskIDFile := filepath.Join(gitDir, "armature-task-id")
+	err = os.WriteFile(taskIDFile, []byte("legacy-task-id"), 0o644)
+	require.NoError(t, err)
+
+	binding, err := ResolveBindingFromFilePath(filePath)
+
+	require.NoError(t, err)
+	assert.Equal(t, "new-issue-id", binding.IssueID, "armature-issue-id should take precedence")
+	assert.Equal(t, gitDir, binding.GitDir)
+}
+
+// TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding verifies that
+// when event Cwd is the worktree root (step 2 of the resolution chain), the binding
+// is found at <cwd>/.git/armature-issue-id. This test catches the bug where
+// ResolveBindingFromFilePath(cwd) would do filepath.Dir(cwd), skipping the root's
+// own .git directory (finding P2).
+func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	worktreeRoot := tmpDir // cwd is the worktree root itself
+	gitDir := filepath.Join(worktreeRoot, ".git")
+
+	// Create .git directory and armature-issue-id file at the worktree root
+	err := os.MkdirAll(gitDir, 0o755)
+	require.NoError(t, err)
+
+	issueIDFile := filepath.Join(gitDir, "armature-issue-id")
+	err = os.WriteFile(issueIDFile, []byte("issue-at-root"), 0o644)
+	require.NoError(t, err)
+
+	// Create event with Cwd = worktree root, no FilePath (step 2 resolution)
+	eventInfo := &DecodedEventInfo{
+		Kind:     EventPreToolUse,
+		FilePath: "",
+		Cwd:      worktreeRoot,
+		Tool:     "Edit", // non-shell tool
+	}
+
+	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir")
+
+	require.NoError(t, err)
+	assert.Equal(t, "issue-at-root", binding.IssueID, "should find binding at event cwd worktree root")
+	assert.Equal(t, gitDir, binding.GitDir)
+	assert.Equal(t, "event_cwd", binding.ResolutionStep, "should resolve via event_cwd step")
+}
+
+// TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation verifies
+// that when the .git file in a worktree exists but can't be read (e.g. permission
+// denied), ResolveBindingFromDir still reports the discovered worktree location
+// (GitDir/Root) instead of dropping it, so callers can log violations against the
+// right worktree (finding P3).
+func TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: chmod 000 does not prevent root from reading files")
+	}
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitFile := filepath.Join(tmpDir, ".git")
+	require.NoError(t, os.WriteFile(gitFile, []byte("gitdir: /somewhere\n"), 0o644))
+	require.NoError(t, os.Chmod(gitFile, 0o000))
+	t.Cleanup(func() {
+		_ = os.Chmod(gitFile, 0o644) //nolint:errcheck // best-effort cleanup so TempDir removal doesn't fail
+	})
+
+	binding, err := ResolveBindingFromDir(tmpDir)
+
+	require.NoError(t, err)
+	assert.Equal(t, "", binding.IssueID)
+	assert.Equal(t, gitFile, binding.GitDir, "should report the .git file location even though it couldn't be read")
+	assert.Equal(t, tmpDir, binding.Root)
 }

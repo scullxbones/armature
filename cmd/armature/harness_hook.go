@@ -18,14 +18,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resolveIssueBinding reads the issue ID from <git-dir>/armature-issue-id,
-// falls back to ARMATURE_ISSUE_ID environment variable, and returns an empty
-// string if neither is present.
+// resolveIssueBinding reads the issue ID from <git-dir>/armature-issue-id
+// (falling back to the legacy <git-dir>/armature-task-id file for worktrees
+// claimed before the rename, commit d52d78be), then falls back to the
+// ARMATURE_ISSUE_ID environment variable, and returns an empty string if
+// none is present.
 func resolveIssueBinding(gitDir string) string {
-	issueIDPath := filepath.Join(gitDir, "armature-issue-id")
-	// #nosec G304 - issueIDPath is derived from a trusted git directory
-	if data, err := os.ReadFile(issueIDPath); err == nil {
-		return strings.TrimSpace(string(data))
+	if issueID := harnesshook.ReadIssueBindingFile(gitDir); issueID != "" {
+		return issueID
 	}
 	return os.Getenv("ARMATURE_ISSUE_ID")
 }
@@ -243,8 +243,13 @@ func newHarnessHookCmd() *cobra.Command {
 				(resolvedBinding.ResolutionStep == "" && logGitDir != gitDir)
 			if pathResolved {
 				if !isKnownWorktreeGitDir(rawRepo, logGitDir) {
-					fmt.Fprintf(cmd.ErrOrStderr(), "error: path-resolved git dir %q is not a known worktree of %q; treating as unbound\n", logGitDir, rawRepo)
-					resolvedBinding = harnesshook.ResolvedBinding{GitDir: gitDir}
+					fmt.Fprintf(cmd.ErrOrStderr(), "error: path-resolved git dir %q is not a known worktree of %q; falling back to session binding\n", logGitDir, rawRepo)
+					_ = logViolation(gitDir, fmt.Sprintf("path-resolved git dir %q rejected as untrusted", logGitDir)) //nolint:errcheck // logging only, error not actionable
+					resolvedBinding = harnesshook.ResolvedBinding{
+						IssueID:        sessionBinding,
+						GitDir:         gitDir,
+						ResolutionStep: "session",
+					}
 					logGitDir = gitDir
 				}
 			}
@@ -287,11 +292,14 @@ func newHarnessHookCmd() *cobra.Command {
 			})
 
 			// Create hook and evaluate with the already-resolved binding.
+			// For path-resolved bindings, pass the worktree root so the scope policy
+			// uses it for path normalization instead of os.Getwd().
 			hook := harnesshook.NewHook(resolver)
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
 				Input:    inputData,
 				Binding:  resolvedBinding.IssueID,
 				Platform: os.Getenv("ARMATURE_HOOK_PLATFORM"),
+				Root:     resolvedBinding.Root,
 			})
 			if err != nil {
 				// Evaluation errors (policy resolution, evaluator, encode) are fail-open

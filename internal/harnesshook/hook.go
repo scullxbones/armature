@@ -25,10 +25,15 @@ type RunResult struct {
 // harness-hook command), via ResolveBindingFromEvent. Hook.Evaluate accepts
 // the already-resolved issue ID and does not re-derive it, so the policy
 // enforced always matches the binding that was stale-checked and logged.
+//
+// Root is the worktree root directory (used for path normalization in scope checking).
+// For path-resolved bindings, this should be the worktree directory where the binding
+// was found. When empty, falls back to os.Getwd().
 type EvaluateInput struct {
 	Input    []byte // raw hook event JSON
 	Binding  string // resolved issue ID from ResolveBindingFromEvent (caller-resolved)
 	Platform string // platform identifier (claude, codex, devin); defaults to "claude"
+	Root     string // worktree root for path normalization (optional; defaults to os.Getwd())
 }
 
 // Hook orchestrates hook evaluation: adapter selection, policy resolution,
@@ -68,10 +73,18 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 		return RunResult{}, fmt.Errorf("resolve policy: %w", err)
 	}
 
-	// Build evaluator from resolved policy
+	// Build evaluator from resolved policy, using the provided root (if any) for path normalization.
+	// For path-resolved bindings, the root should be the worktree directory where the binding was found.
+	// When root is empty, falls back to os.Getwd().
 	service := harnesspolicy.NewVerificationService()
+	var scopePolicy harnesspolicy.ScopePolicy
+	if input.Root != "" {
+		scopePolicy = harnesspolicy.NewScopePolicyWithRoot(policy.Scope, input.Root)
+	} else {
+		scopePolicy = harnesspolicy.NewScopePolicy(policy.Scope)
+	}
 	evaluator := NewEvaluator(EvaluatorConfig{
-		ScopePolicy:         harnesspolicy.NewScopePolicy(policy.Scope),
+		ScopePolicy:         scopePolicy,
 		VerificationService: &service,
 		VerificationInput: harnesspolicy.VerificationRequest{
 			Acceptance: policy.Acceptance,
