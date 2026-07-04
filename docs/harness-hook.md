@@ -47,15 +47,17 @@ The hook attempts to resolve a binding in this order:
    - This covers harnesses that report per-agent working directories (e.g., when an
      agent runs inside a different worktree from the session root).
 
-3. **Hook process cwd / Session binding** (all events)
-   - The hook checks its own process current working directory (the session's cwd or
-     the coordinator's launch directory) and walks up to find `armature-issue-id`.
-   - This is the fallback for Bash and Stop events, which carry no file path in their
-     event payload and cannot be path-resolved.
+3. **Session binding** (all events)
+   - The hook reads `armature-issue-id` from the git dir of the repository passed via
+     `--repo` (or the current directory when `--repo` is omitted) — the session's own
+     worktree binding.
+   - This is the fallback for Bash and Stop events, which resolve at the session level
+     and are never path-resolved.
 
-4. **ARMATURE_ISSUE_ID environment variable** (fallback for unbound files)
-   - If all walk-up attempts fail, the hook checks the `ARMATURE_ISSUE_ID` environment
-     variable set at harness launch time.
+4. **ARMATURE_ISSUE_ID environment variable** (last-resort fallback)
+   - If the session git dir has no binding file, the hook falls back to the
+     `ARMATURE_ISSUE_ID` environment variable set at harness launch time.
+   - Bindings resolved via steps 3 or 4 are both logged with `resolution_step=session`.
 
 If none of these steps yields a binding, the write is marked as unbound (see Violation Gate below).
 
@@ -96,15 +98,15 @@ includes a UTC RFC3339 timestamp and one of the following formats:
 - `<timestamp>`: UTC RFC3339 (e.g., `2026-07-04T12:34:56Z`)
 - `<ISSUE-ID>`: The resolved task ID (e.g., `TASK-001`)
 - `<STEP>`: Resolution step that determined the binding: `file_path`, `event_cwd`, or `session`
-- `<EVENT_KIND>`: Hook event type (e.g., `PreToolUse`, `PostToolUse`, `Stop`)
+- `<EVENT_KIND>`: Normalized hook event kind (`pre-tool-use`, `post-tool-use`, or `stop`)
 - `<TOOL_NAME>`: The tool being invoked (e.g., `Edit`, `Write`, `Bash`)
 - `<ACTION>`: Hook decision (`allow`, `block`, or `none`)
 - `<REASON>`: (optional) Block reason or metadata, included if the action is `block`
 
 Example decision entries:
 ```
-2026-07-04T12:34:56Z decision: issue_id=TASK-001 resolution_step=file_path event=PreToolUse tool=Edit decision=allow
-2026-07-04T12:34:57Z decision: issue_id=TASK-001 resolution_step=file_path event=PreToolUse tool=Edit decision=block block_reason=path is outside task scope
+2026-07-04T12:34:56Z decision: issue_id=TASK-001 resolution_step=file_path event=pre-tool-use tool=Edit decision=allow
+2026-07-04T12:34:57Z decision: issue_id=TASK-001 resolution_step=file_path event=pre-tool-use tool=Edit decision=block block_reason=path is outside task scope
 ```
 
 **Pass-through entries** (for unblocked events with no binding):
