@@ -21,21 +21,154 @@ The `harness-hook` command is an internal integration surface called by harness-
    - Block (tool denied, reason provided to model)
    - None (event ignored, no policy applies)
 
-## Issue Binding
+## Issue Binding Resolution Chain
 
-The hook discovers the active task ID through two mechanisms, tried in order:
+The hook resolves the active task ID using a four-step resolution chain (ADR-0007),
+applied in priority order. Binding identity follows the artifact being touched, not the
+process touching it — this ensures each agent operates under exactly one issue binding
+regardless of worktree or session nesting.
 
-### 1. Worktree binding file (preferred)
-When a task is claimed with `arm claim --worktree <path>`, the task ID is written to
-`<worktree-git-dir>/armature-issue-id` (e.g., `<parent>/.git/worktrees/<name>/armature-issue-id`).
-The hook reads this file automatically when invoked inside the worktree — no environment variable is needed.
+### Four-Step Resolution Chain
 
-This is the recommended approach: claim the task with `--worktree`, launch the harness from that
-worktree directory, and set only `ARMATURE_HOOK_PLATFORM`.
+The hook attempts to resolve a binding in this order:
 
-### 2. `ARMATURE_ISSUE_ID` environment variable (fallback)
-If the binding file is absent (e.g., the worktree was not created via `arm claim --worktree`),
-the hook falls back to the `ARMATURE_ISSUE_ID` environment variable.
+1. **tool_input.file_path walk-up** (PreToolUse/PostToolUse only)
+   - For file edit/write/read events, the hook walks up the directory tree from the target
+     file path until it finds a `.git` directory.
+   - It then reads the `armature-issue-id` file from that `.git` directory (or from the
+     git worktree's git directory if the target is inside a git worktree).
+   - If a valid binding is found, resolution stops here — the event is evaluated under
+     the worktree's issue.
+
+2. **Event payload cwd walk-up** (PreToolUse/PostToolUse only)
+   - If step 1 yields no binding and the harness platform reported a current working
+     directory in the hook event payload, the hook walks up from that directory to find
+     a `.git` directory and reads `armature-issue-id`.
+   - This covers harnesses that report per-agent working directories (e.g., when an
+     agent runs inside a different worktree from the session root).
+
+3. **Hook process cwd / Session binding** (all events)
+   - The hook checks its own process current working directory (the session's cwd or
+     the coordinator's launch directory) and walks up to find `armature-issue-id`.
+   - This is the fallback for Bash and Stop events, which carry no file path in their
+     event payload and cannot be path-resolved.
+
+4. **ARMATURE_ISSUE_ID environment variable** (fallback for unbound files)
+   - If all walk-up attempts fail, the hook checks the `ARMATURE_ISSUE_ID` environment
+     variable set at harness launch time.
+
+If none of these steps yields a binding, the write is marked as unbound (see Violation Gate below).
+
+### Why Worktree Dispatch is Mandatory
+
+Worktree dispatch (passing `--worktree <path>` to `arm claim`) is **required** for worker
+dispatch. The binding-resolution invariant depends on it: without a bound worktree, steps 1–2
+have nothing to resolve against, and the hook cannot distinguish between intended pass-throughs
+and enforcement gaps. Workers claim with `arm claim TASK-ID --worktree <path>` (creating an
+isolated git worktree on a task-specific branch). The task ID is written to the worktree's
+git-dir `armature-issue-id` file. When the worker's hook fires, step 1 resolves the binding
+from the file path being edited, confirming that each agent operates under its claimed issue.
+
+### Binding File Locations
+
+- **Regular git repository:** `<repo-root>/.git/armature-issue-id`
+- **Git worktree:** `<repo-root>/.git/worktrees/<worktree-name>/armature-issue-id`
+
+When a task is claimed with `arm claim --worktree <path>`, the task ID is written to the
+worktree's git-specific directory, ensuring it is found during step 1 when the hook runs.
+
+## Decision Logging and Violation Gate
+
+All binding-resolution decisions and enforcement actions are logged to the worktree's
+local `armature-hook.log` file. This log is consulted during merge validation to detect
+violations (unbound file writes) and enforce the violation gate.
+
+### Decision Log Format
+
+The hook appends entries to `<git-dir>/armature-hook.log` for all events. Each entry
+includes a UTC RFC3339 timestamp and one of the following formats:
+
+**Decision entries** (for all resolved bindings):
+```
+<timestamp> decision: issue_id=<ISSUE-ID> resolution_step=<STEP> event=<EVENT_KIND> tool=<TOOL_NAME> decision=<ACTION> [block_reason=<REASON>]
+```
+
+- `<timestamp>`: UTC RFC3339 (e.g., `2026-07-04T12:34:56Z`)
+- `<ISSUE-ID>`: The resolved task ID (e.g., `TASK-001`)
+- `<STEP>`: Resolution step that determined the binding: `file_path`, `event_cwd`, or `session`
+- `<EVENT_KIND>`: Hook event type (e.g., `PreToolUse`, `PostToolUse`, `Stop`)
+- `<TOOL_NAME>`: The tool being invoked (e.g., `Edit`, `Write`, `Bash`)
+- `<ACTION>`: Hook decision (`allow`, `block`, or `none`)
+- `<REASON>`: (optional) Block reason or metadata, included if the action is `block`
+
+Example decision entries:
+```
+2026-07-04T12:34:56Z decision: issue_id=TASK-001 resolution_step=file_path event=PreToolUse tool=Edit decision=allow
+2026-07-04T12:34:57Z decision: issue_id=TASK-001 resolution_step=file_path event=PreToolUse tool=Edit decision=block block_reason=path is outside task scope
+```
+
+**Pass-through entries** (for unblocked events with no binding):
+```
+<timestamp> pass-through: <reason>
+```
+
+Pass-throughs occur when an event cannot be resolved to any binding (the session has no
+active binding, and the event has no file path to resolve from), or when a transient
+error occurs during binding resolution or policy evaluation. These are warnings, not
+enforcement gaps.
+
+Example pass-through entries:
+```
+2026-07-04T12:34:56Z pass-through: no issue binding found
+2026-07-04T12:34:57Z pass-through: snapshot load failed
+2026-07-04T12:34:58Z pass-through: event decode failed
+```
+
+**Violation entries** (for unbound file writes):
+```
+<timestamp> violation: <reason>
+```
+
+Violations represent enforcement gaps: file writes that should have been subject to
+scope policy but were not (because binding resolution failed). The hook is fail-open
+(does not block the write), but logs the violation for later auditing.
+
+Example violation entries:
+```
+2026-07-04T12:34:56Z violation: file write with no resolved binding
+```
+
+### Violation Gate
+
+The violation gate is a merge-time enforcement mechanism. When `arm merged --issue <TASK-ID>`
+is run to mark a completed task as merged:
+
+1. The hook checks the worktree's `armature-hook.log` for any `violation:` entries.
+2. If violations are found and `--force` is **not** specified, `arm merged` exits with an error
+   and **does not tear down the worktree** — preserving it as evidence for audit and remediation.
+3. If violations are found and `--force` **is** specified, the task is marked merged despite violations
+   (explicit operator override).
+4. Pass-through entries (`pass-through:`) are warnings only and do not block the merge;
+   a message is emitted to stderr.
+
+A wave whose tasks contain `violation:` entries in their logs **must not be integrated**
+(merged into the main branch) without explicit operator override (`--force`). Violations
+indicate that the harness was unable to enforce scope, raising risk for the story integration.
+
+### Fail-Open Posture
+
+The hook operates with a fail-open posture:
+- If snapshot loading fails (e.g., state files are corrupted or missing), the event is
+  passed through with loud stderr warning, not blocked.
+- If hook event decoding fails (e.g., the platform sends malformed JSON), the event is
+  passed through with loud stderr warning, not blocked.
+- If binding resolution encounters transient errors, the event is passed through with
+  loud stderr warning, not blocked.
+
+Enforcement gaps are surfaced by the **violation gate** (unbound file writes logged and
+blocked at merge time), not by freezing tool use and leaving the worker stranded. This
+ensures workers can continue even if temporary issues occur, while providing operators
+with a clear audit trail to detect and remediate enforcement gaps before merging.
 
 ## Environment Variables
 
