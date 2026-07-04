@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
@@ -71,8 +72,7 @@ func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePat
 		return "", "", "", false
 	}
 
-	bindingBytes, _ := os.ReadFile(filepath.Join(gitDir, "armature-issue-id")) //nolint:gosec,errcheck // internal git dir path; absent file means unbound
-	return worktreePath, gitDir, strings.TrimSpace(string(bindingBytes)), true
+	return worktreePath, gitDir, harnesshook.ReadIssueBindingFile(gitDir), true
 }
 
 // issueWorktreeHasViolations reports whether the hook log of the issue's worktree

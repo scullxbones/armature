@@ -72,7 +72,7 @@ func TestScopePolicyRejectsEmptyScope(t *testing.T) {
 
 func TestScopePolicyAllowsAbsolutePathWithinScope(t *testing.T) {
 	t.Parallel()
-	policy := newScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
+	policy := NewScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
 
 	result := policy.CheckPaths([]string{"/workspace/armature/internal/harnesshook/evaluator.go"})
 
@@ -82,7 +82,7 @@ func TestScopePolicyAllowsAbsolutePathWithinScope(t *testing.T) {
 
 func TestScopePolicyRejectsAbsolutePathOutsideScope(t *testing.T) {
 	t.Parallel()
-	policy := newScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
+	policy := NewScopePolicyWithRoot([]string{"internal/harnesshook/"}, "/workspace/armature")
 
 	result := policy.CheckPaths([]string{"/workspace/armature/cmd/armature/main.go"})
 

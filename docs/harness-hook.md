@@ -76,6 +76,11 @@ from the file path being edited, confirming that each agent operates under its c
 - **Regular git repository:** `<repo-root>/.git/armature-issue-id`
 - **Git worktree:** `<repo-root>/.git/worktrees/<worktree-name>/armature-issue-id`
 
+Every binding read (steps 1-3 above, plus the merged-issue violation gate) falls back to
+the legacy `armature-task-id` file in the same git dir when `armature-issue-id` is absent,
+for compatibility with worktrees claimed before the `armature-issue-id` rename (commit
+`d52d78be`). `armature-issue-id` always takes precedence when both files are present.
+
 When a task is claimed with `arm claim --worktree <path>`, the task ID is written to the
 worktree's git-specific directory, ensuring it is found during step 1 when the hook runs.
 

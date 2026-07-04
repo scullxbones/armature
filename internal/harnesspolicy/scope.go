@@ -25,10 +25,13 @@ type ScopeViolation struct {
 
 func NewScopePolicy(scope []string) ScopePolicy {
 	root, _ := os.Getwd() //nolint:errcheck // Getwd failure falls back to empty prefix for path normalization
-	return newScopePolicyWithRoot(scope, root)
+	return NewScopePolicyWithRoot(scope, root)
 }
 
-func newScopePolicyWithRoot(scope []string, root string) ScopePolicy {
+// NewScopePolicyWithRoot creates a ScopePolicy with an explicit root directory.
+// The root is used to normalize absolute paths for scope checking. When root is empty,
+// paths are normalized using their relative form or os.Getwd() defaults.
+func NewScopePolicyWithRoot(scope []string, root string) ScopePolicy {
 	return ScopePolicy{scope: append([]string(nil), scope...), root: root}
 }
 

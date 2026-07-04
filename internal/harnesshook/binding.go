@@ -15,12 +15,13 @@ type DecodedEventInfo struct {
 	Tool     string // Tool name from the event payload (e.g. "Bash"); used to detect shell events
 }
 
-// ResolvedBinding carries the resolved issue ID, git directory, and the resolution step
-// that determined the binding (file_path, event_cwd, session, or none for unbound).
+// ResolvedBinding carries the resolved issue ID, git directory, the resolution step,
+// and (for path-resolved bindings) the worktree root directory.
 type ResolvedBinding struct {
 	IssueID        string
 	GitDir         string
 	ResolutionStep string // "file_path", "event_cwd", "session", or "" for unbound
+	Root           string // Worktree root directory (only set for path-resolved bindings: file_path, event_cwd)
 }
 
 // ExtractFilePathFromToolInput extracts the file path from the raw tool_input map.
@@ -49,14 +50,34 @@ func ExtractFilePathFromToolInput(toolInput map[string]any) string {
 	return ""
 }
 
-// ResolveBindingFromFilePath walks up the directory tree from filePath to find
+// ReadIssueBindingFile reads the issue ID bound to gitDir, preferring the
+// current armature-issue-id file and falling back to the legacy
+// armature-task-id file for worktrees claimed before the rename (commit
+// d52d78be). Returns "" if neither file exists. This is the single shared
+// implementation behind every "read the binding for a git dir" call site
+// (ResolveBindingFromDir, cmd/armature session/merged-gate resolution).
+func ReadIssueBindingFile(gitDir string) string {
+	issueIDPath := filepath.Join(gitDir, "armature-issue-id")
+	if data, err := os.ReadFile(issueIDPath); err == nil { //nolint:gosec // G304: derived from a trusted git directory
+		return strings.TrimSpace(string(data))
+	}
+
+	taskIDPath := filepath.Join(gitDir, "armature-task-id")
+	if data, err := os.ReadFile(taskIDPath); err == nil { //nolint:gosec // G304: derived from a trusted git directory
+		return strings.TrimSpace(string(data))
+	}
+
+	return ""
+}
+
+// ResolveBindingFromDir walks up the directory tree starting from dir to find
 // the containing worktree's .git directory and reads the armature-issue-id file.
 // Returns a ResolvedBinding with both the issue ID and the git directory where it was found,
 // or an empty IssueID if no .git directory is found or if the armature-issue-id file doesn't exist.
 // When a git dir is found but has no armature-issue-id file, GitDir is still populated
 // (IssueID empty) so callers can distinguish "no worktree found" from "worktree found but unbound".
-func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
-	currentDir := filepath.Dir(filePath)
+func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
+	currentDir := dir
 
 	for {
 		gitDir := filepath.Join(currentDir, ".git")
@@ -72,7 +93,12 @@ func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 				// Worktree: .git is a file containing "gitdir: <path>"
 				data, err := os.ReadFile(gitDir) //nolint:gosec // G304: derived from repo structure
 				if err != nil {
-					return ResolvedBinding{}, nil
+					// Report the worktree location even though the .git file couldn't
+					// be read, so callers can log violations against the right
+					// worktree instead of dropping the location entirely. GitDir falls
+					// back to the .git file path itself since the real gitdir target
+					// is unknown.
+					return ResolvedBinding{GitDir: gitDir, Root: currentDir}, nil
 				}
 				gitdirLine := strings.TrimSpace(string(data))
 				gitdirLine = strings.TrimPrefix(gitdirLine, "gitdir: ")
@@ -84,18 +110,19 @@ func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 				}
 			}
 
-			// Try to read armature-issue-id from the git dir
-			issueIDPath := filepath.Join(actualGitDir, "armature-issue-id")
-			if data, err := os.ReadFile(issueIDPath); err == nil { //nolint:gosec // G304: derived from git dir
+			// Try to read armature-issue-id from the git dir, falling back to the
+			// legacy armature-task-id file (worktrees claimed before rename d52d78be).
+			if issueID := ReadIssueBindingFile(actualGitDir); issueID != "" {
 				return ResolvedBinding{
-					IssueID: strings.TrimSpace(string(data)),
+					IssueID: issueID,
 					GitDir:  actualGitDir,
+					Root:    currentDir,
 				}, nil
 			}
 
-			// Git dir exists but no armature-issue-id file; stop searching, but report
+			// Git dir exists but no armature-issue-id or armature-task-id file; stop searching, but report
 			// the git dir found so callers can log against the correct worktree.
-			return ResolvedBinding{GitDir: actualGitDir}, nil
+			return ResolvedBinding{GitDir: actualGitDir, Root: currentDir}, nil
 		}
 
 		// Move up to parent directory
@@ -106,6 +133,13 @@ func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 		}
 		currentDir = parent
 	}
+}
+
+// ResolveBindingFromFilePath walks up the directory tree from filePath to find
+// the containing worktree's .git directory and reads the armature-issue-id file.
+// It delegates to ResolveBindingFromDir by starting the walk from the file's parent directory.
+func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
+	return ResolveBindingFromDir(filepath.Dir(filePath))
 }
 
 // isShellTool reports whether the given tool name identifies a shell/bash tool,
@@ -157,7 +191,7 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 
 	// For PreToolUse and PostToolUse events, follow the 4-step chain:
 	if eventInfo.Kind == EventPreToolUse || eventInfo.Kind == EventPostToolUse {
-		var unboundGitDir string
+		var unboundGitDir, unboundRoot string
 
 		// Step 1: Try path-based resolution from tool_input.file_path
 		if abs, ok := absolutizeFilePath(eventInfo.FilePath, eventInfo.Cwd); ok {
@@ -171,12 +205,13 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 			}
 			if pathBinding.GitDir != "" {
 				unboundGitDir = pathBinding.GitDir
+				unboundRoot = pathBinding.Root
 			}
 		}
 
 		// Step 2: Try path-based resolution from event-payload cwd
 		if eventInfo.Cwd != "" && filepath.IsAbs(eventInfo.Cwd) {
-			cwdBinding, err := ResolveBindingFromFilePath(eventInfo.Cwd)
+			cwdBinding, err := ResolveBindingFromDir(eventInfo.Cwd)
 			if err != nil {
 				return ResolvedBinding{}, err
 			}
@@ -186,14 +221,19 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 			}
 			if unboundGitDir == "" && cwdBinding.GitDir != "" {
 				unboundGitDir = cwdBinding.GitDir
+				unboundRoot = cwdBinding.Root
 			}
 		}
 
 		// Steps 1-2 found a worktree but no binding: report that git dir so the
 		// caller logs a violation in the worktree that actually contains the
 		// unbound write, not the session's git dir (ADR-0007 / finding 1).
+		// When returning an unbound path-resolved binding, also include the root
+		// so callers can use it for evaluator setup if they later bind it. Root is
+		// captured from the pathBinding/cwdBinding result already in hand above,
+		// rather than re-walking the directory tree (finding P3).
 		if unboundGitDir != "" {
-			return ResolvedBinding{GitDir: unboundGitDir}, nil
+			return ResolvedBinding{GitDir: unboundGitDir, Root: unboundRoot}, nil
 		}
 	}
 
