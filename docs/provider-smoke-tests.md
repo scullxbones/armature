@@ -55,7 +55,7 @@ Devin remains deferred for a later phase.
    - `codex.toml`
 2. Confirm the config calls `arm harness-hook`.
 3. Export:
-   - `ARMATURE_TASK_ID=<ISSUE-ID>`
+   - `ARMATURE_ISSUE_ID=<ISSUE-ID>`
    - `ARMATURE_HOOK_PLATFORM=codex`
 4. Run an in-scope structured hook event through stdin and expect approval.
 5. Run an out-of-scope structured hook event through stdin and expect denial.

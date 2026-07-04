@@ -493,15 +493,21 @@ Internal hook entrypoint used by harness-native guardrails.
 `arm harness-hook`
 
 **Behavior:**
-- Reads the active task from `ARMATURE_ISSUE_ID`.
 - Selects the platform adapter from `ARMATURE_HOOK_PLATFORM`.
 - Decodes hook event JSON from stdin.
+- Resolves the issue binding via the ADR-0007 4-step chain, most specific first:
+  1. `tool_input.file_path` — walk up from the target file to the containing worktree's git dir and its `armature-issue-id` file;
+  2. event-payload `cwd` — same walk-up from the per-agent working directory reported by the harness;
+  3. hook process cwd — the session's own worktree binding (`<git-dir>/armature-issue-id`);
+  4. `ARMATURE_ISSUE_ID` environment variable — last-resort fallback.
 - Resolves task scope, acceptance, and citation policy from Armature state.
-- Returns a platform-native allow or block decision.
+- Returns a platform-native allow or block decision; all internal failures fail open (pass through with a stderr warning).
 
-**Required Environment:**
-- `ARMATURE_ISSUE_ID`: active Armature issue ID for the external worker.
-- `ARMATURE_HOOK_PLATFORM`: one of `claude`, `codex`, or `devin`.
+**Environment:**
+- `ARMATURE_HOOK_PLATFORM` (required): one of `claude`, `codex`, or `devin`.
+- `ARMATURE_ISSUE_ID` (optional): last-resort binding fallback (step 4 above) for harnesses without worktree support.
+
+See [Harness Hook Integration Guide](./harness-hook.md) for the full resolution and logging model.
 
 **Notes:**
 - This command is an internal integration surface, not a user-facing queue runner.

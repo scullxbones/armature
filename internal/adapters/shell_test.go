@@ -73,8 +73,8 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 	status, err := RunProcessWithEnv(
 		context.Background(),
 		t.TempDir(),
-		[]string{"sh", "-c", "printf %s \"$ARMATURE_TASK_ID\""},
-		map[string]string{"ARMATURE_TASK_ID": "TASK-1"},
+		[]string{"sh", "-c", "printf %s \"$ARMATURE_TEST_ENV\""},
+		map[string]string{"ARMATURE_TEST_ENV": "TEST-VALUE"},
 		&stdout,
 		&stderr,
 	)
@@ -84,7 +84,7 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 	if status != ProcessClean {
 		t.Fatalf("expected clean status, got %v", status)
 	}
-	if stdout.String() != "TASK-1" {
+	if stdout.String() != "TEST-VALUE" {
 		t.Fatalf("expected injected env value, got %q", stdout.String())
 	}
 }
