@@ -516,20 +516,18 @@ Violations represent scenarios where the hook was unable to enforce scope: a fil
 written but no binding was found during resolution. They are not the hook blocking an
 operation; they are enforcement gaps that slipped through.
 
+You do not need to inspect the logs by hand: the violation gate is built into
+`arm merged --issue TASK-ID`, which locates the task's worktree, resolves its git
+dir (worktree `.git` is a file pointing at the real git dir), and fails if the log
+contains `violation:` entries. To inspect a log manually:
+
 ```bash
-# Check each task's hook log for violations
-# (the following is a conceptual example; real verification is integrated into arm merged)
-for TASK_ID in $WAVE_TASK_IDS; do
-  if git log task/$TASK_ID --oneline | grep -q "TASK-ID"; then
-    # Worktree was used; check for violations in its hook log
-    WORKTREE_PATH=$(git worktree list --porcelain | grep "task/$TASK_ID" | awk '{print $1}')
-    if [ -n "$WORKTREE_PATH" ]; then
-      if grep -q "violation:" "$WORKTREE_PATH/.git/armature-hook.log" 2>/dev/null; then
-        echo "WARNING: $TASK_ID has violation entries in hook log"
-      fi
-    fi
-  fi
-done
+# Locate the worktree for the task's branch, then read its hook log
+WT=$(git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/task\/TASK-ID$/{print p}')
+if [ -n "$WT" ]; then
+  GIT_DIR=$(git -C "$WT" rev-parse --git-dir)
+  grep "violation:" "$GIT_DIR/armature-hook.log" 2>/dev/null && echo "WARNING: TASK-ID has violations"
+fi
 ```
 
 **Violation gate:**
