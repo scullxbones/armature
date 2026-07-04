@@ -15,76 +15,81 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// readHookLogForPassThroughs reads the armature-hook.log file and returns true if it contains pass-through entries.
+// hookLogContainsEntry reads <git-dir>/armature-hook.log and reports whether any
+// line contains an entry of the given kind (e.g. "violation:", "pass-through:").
+// Entries are matched at the start of the line body (immediately after the
+// RFC3339 timestamp), so injected newlines inside logged fields cannot forge
+// entries mid-line (finding 8; fields are also sanitized at write time).
+func hookLogContainsEntry(gitDir, kind string) bool {
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	data, err := os.ReadFile(logPath) //nolint:gosec // log path is derived from trusted git directory
+	if err != nil {
+		// Log doesn't exist or can't be read; no entries found
+		return false
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		// Each entry is "<RFC3339 timestamp> <kind> ...": strip the timestamp
+		// (first space-delimited token) and match the kind at line-body start.
+		_, rest, found := strings.Cut(line, " ")
+		if found && strings.HasPrefix(rest, kind) {
+			return true
+		}
+	}
+	return false
+}
+
+// readHookLogForPassThroughs reports whether the hook log contains pass-through entries.
 func readHookLogForPassThroughs(gitDir string) bool {
-	logPath := filepath.Join(gitDir, "armature-hook.log")
-	data, err := os.ReadFile(logPath) //nolint:gosec // log path is derived from trusted git directory
-	if err != nil {
-		// Log doesn't exist or can't be read; no pass-throughs found
-		return false
-	}
-
-	content := string(data)
-	return strings.Contains(content, "pass-through:")
+	return hookLogContainsEntry(gitDir, "pass-through:")
 }
 
-// readHookLogForViolations reads the armature-hook.log file and returns true if it contains violation entries.
+// readHookLogForViolations reports whether the hook log contains violation entries.
 func readHookLogForViolations(gitDir string) bool {
-	logPath := filepath.Join(gitDir, "armature-hook.log")
-	data, err := os.ReadFile(logPath) //nolint:gosec // log path is derived from trusted git directory
-	if err != nil {
-		// Log doesn't exist or can't be read; no violations found
-		return false
-	}
-
-	content := string(data)
-	return strings.Contains(content, "violation:")
+	return hookLogContainsEntry(gitDir, "violation:")
 }
 
-// CheckWorktreeHookLogResult contains the result of checking a worktree's hook log.
-type CheckWorktreeHookLogResult struct {
-	HasViolations  bool
-	HasPassThrough bool
-}
-
-// checkWorktreeHookLog checks the hook log for violations and pass-through entries.
-// Returns a CheckWorktreeHookLogResult with the findings. If the worktree cannot be
-// located or is unbound, returns an empty result.
-func checkWorktreeHookLog(repoPath string, issue materialize.Issue) *CheckWorktreeHookLogResult {
-	// Only check hook logs for types that claim creates them for.
-	// deriveBranchName returns a non-empty prefix for task, bug, feature, and story types.
+// resolveIssueWorktree locates the worktree for an issue's branch and resolves its
+// git dir and binding. Returns ok=false when the issue type has no branch, the
+// worktree doesn't exist, or its git dir can't be resolved. binding is the content
+// of armature-issue-id ("" when absent). Shared by the merged violation gate and
+// worktree removal (finding 7).
+func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePath, gitDir, binding string, ok bool) {
+	// Only types that claim creates worktrees for have a derivable branch name.
 	branchName := deriveBranchName(issue.Type, issue.ID)
 	if branchName == "" {
-		return &CheckWorktreeHookLogResult{}
+		return "", "", "", false
 	}
 
-	worktreePath := findWorktreePathByBranch(repoPath, branchName)
+	worktreePath = findWorktreePathByBranch(repoPath, branchName)
 	if worktreePath == "" {
-		// Worktree not found; no hook log to check
-		return &CheckWorktreeHookLogResult{}
+		return "", "", "", false
 	}
 
-	// Verify binding before proceeding: check if the worktree is actually bound
-	// to this issue via the armature-issue-id file in the git dir.
-	// If the binding is missing or wrong, skip checking and return empty result
-	if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
-		bindingBytes, readErr := os.ReadFile(filepath.Join(actualGitDir, "armature-issue-id")) //nolint:gosec // internal git dir path
-		binding := strings.TrimSpace(string(bindingBytes))
-		// If the file doesn't exist or contains a different ID, skip checking
-		if readErr != nil || binding != issue.ID {
-			return &CheckWorktreeHookLogResult{}
-		}
-
-		// Check for both violations and pass-through entries
-		hasViolations := readHookLogForViolations(actualGitDir)
-		hasPassThrough := readHookLogForPassThroughs(actualGitDir)
-		return &CheckWorktreeHookLogResult{
-			HasViolations:  hasViolations,
-			HasPassThrough: hasPassThrough,
-		}
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return "", "", "", false
 	}
 
-	return &CheckWorktreeHookLogResult{}
+	bindingBytes, _ := os.ReadFile(filepath.Join(gitDir, "armature-issue-id")) //nolint:gosec,errcheck // internal git dir path; absent file means unbound
+	return worktreePath, gitDir, strings.TrimSpace(string(bindingBytes)), true
+}
+
+// issueWorktreeHasViolations reports whether the hook log of the issue's worktree
+// contains violation entries. The log is checked when the worktree is bound to this
+// issue OR unbound (an unbound worktree on the issue's branch is exactly the
+// enforcement-gap case violations exist to catch — finding 1); a worktree bound to
+// a different issue is skipped.
+func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) bool {
+	_, gitDir, binding, ok := resolveIssueWorktree(repoPath, issue)
+	if !ok {
+		return false
+	}
+	if binding != "" && binding != issue.ID {
+		// Bound to a different issue; not ours to gate on.
+		return false
+	}
+	return readHookLogForViolations(gitDir)
 }
 
 // removeWorktreeForIssue removes the git worktree for a given issue if it exists.
@@ -93,42 +98,26 @@ func checkWorktreeHookLog(repoPath string, issue materialize.Issue) *CheckWorktr
 // gone (e.g., manually removed), no warning is emitted even if pass-throughs occurred.
 // Returns true if a pass-through warning was found and emitted.
 func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter io.Writer) (bool, error) {
-	// Only remove worktrees for types that claim creates them for.
-	// deriveBranchName returns a non-empty prefix for task, bug, feature, and story types.
-	branchName := deriveBranchName(issue.Type, issue.ID)
-	if branchName == "" {
+	worktreePath, gitDir, binding, ok := resolveIssueWorktree(repoPath, issue)
+	if !ok {
+		// No branch for this type, worktree missing, or git dir unresolvable; nothing to remove.
 		return false, nil
 	}
 
 	// Check for pass-through entries before doing anything else, so the warning
-	// is emitted regardless of whether the worktree is still present.
-	hasPassThrough := false
-
-	worktreePath := findWorktreePathByBranch(repoPath, branchName)
-	if worktreePath != "" {
-		// Verify binding before proceeding: check if the worktree is actually bound
-		// to this issue via the armature-issue-id file in the git dir.
-		// If the binding is missing or wrong, skip removal to protect user-created
-		// worktrees that happen to match the branch name (P2 bug fix).
-		if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
-			bindingBytes, readErr := os.ReadFile(filepath.Join(actualGitDir, "armature-issue-id")) //nolint:gosec // internal git dir path
-			binding := strings.TrimSpace(string(bindingBytes))
-			// If the file doesn't exist or contains a different ID, skip removal
-			if readErr != nil || binding != issue.ID {
-				_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is on branch %s but not bound to %s (binding=%q); skipping removal\n",
-					worktreePath, branchName, issue.ID, binding)
-				worktreePath = "" // skip removal
-			}
-			hasPassThrough = readHookLogForPassThroughs(actualGitDir)
-		}
-	}
-
+	// is emitted regardless of whether the worktree gets removed.
+	hasPassThrough := readHookLogForPassThroughs(gitDir)
 	if hasPassThrough {
 		_, _ = fmt.Fprintf(errWriter, "Warning: %s has pass-through entries in armature-hook.log\n", issue.ID)
 	}
 
-	if worktreePath == "" {
-		// Worktree not found; nothing to remove.
+	// Verify binding before removal: if the armature-issue-id file is missing or
+	// names a different issue, skip removal to protect user-created worktrees that
+	// happen to match the branch name (P2 bug fix).
+	if binding != issue.ID {
+		branchName := deriveBranchName(issue.Type, issue.ID)
+		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is on branch %s but not bound to %s (binding=%q); skipping removal\n",
+			worktreePath, branchName, issue.ID, binding)
 		return hasPassThrough, nil
 	}
 
@@ -209,12 +198,9 @@ func newMergedCmd() *cobra.Command {
 			// Check for violations in the hook log BEFORE recording the merge op.
 			// If violations are found and --force is not set, exit with error and
 			// do NOT proceed with the merge (preserving the worktree as evidence).
-			if !force {
-				hookLogResult := checkWorktreeHookLog(ctx.RepoPath, *issue)
-				if hookLogResult.HasViolations {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
-					return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
-				}
+			if !force && issueWorktreeHasViolations(ctx.RepoPath, *issue) {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
+				return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
 			}
 
 			// Record the merge op FIRST, before removing the worktree.

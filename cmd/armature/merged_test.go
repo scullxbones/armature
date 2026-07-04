@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -317,7 +318,7 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	}
 
 	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
-	hookLogContent := "pass-through: no task binding found\npass-through: stale binding\n"
+	hookLogContent := "2026-07-04T00:00:00Z pass-through: no task binding found\n2026-07-04T00:00:01Z pass-through: stale binding\n"
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
@@ -932,7 +933,7 @@ func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	}
 
 	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
-	hookLogContent := "violation: unbound file write to main.go\nviolation: unbound file write to cmd/main.go\n"
+	hookLogContent := "2026-07-04T00:00:00Z violation: unbound file write to main.go\n2026-07-04T00:00:01Z violation: unbound file write to cmd/main.go\n"
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
@@ -989,7 +990,7 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	}
 
 	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
-	hookLogContent := "violation: unbound file write to main.go\nviolation: unbound file write to cmd/main.go\n"
+	hookLogContent := "2026-07-04T00:00:00Z violation: unbound file write to main.go\n2026-07-04T00:00:01Z violation: unbound file write to cmd/main.go\n"
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
@@ -1041,7 +1042,7 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	}
 
 	hookLogPath := filepath.Join(actualGitDir, "armature-hook.log")
-	hookLogContent := "pass-through: no task binding found\npass-through: stale binding\n"
+	hookLogContent := "2026-07-04T00:00:00Z pass-through: no task binding found\n2026-07-04T00:00:01Z pass-through: stale binding\n"
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
@@ -1071,4 +1072,61 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	// Verify warning is printed to stderr
 	errOutput := errBuf.String()
 	assert.Contains(t, errOutput, "pass-through", "should warn about pass-through entries in stderr")
+}
+
+// TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4 verifies the full
+// enforcement loop (finding 1): the harness hook itself (not a hand-written
+// fixture) logs a violation for an unbound file write inside the issue's
+// worktree, and `arm merged --issue` subsequently blocks on that violation.
+func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create an UNBOUND worktree on the issue's branch (simulating a worker
+	// dispatched without `claim --worktree`, so no armature-issue-id exists).
+	worktreePath := filepath.Join(t.TempDir(), "unbound-worktree")
+	run(t, repo, "git", "worktree", "add", worktreePath, "-b", "task/task-01")
+
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(gitDir, "armature-issue-id"))
+
+	// Drive the hook with a file-write event targeting a file inside the
+	// unbound worktree. Path-based resolution finds the worktree's git dir,
+	// sees no binding, and must log a violation THERE.
+	t.Setenv("ARMATURE_ISSUE_ID", "")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	targetPath := filepath.Join(worktreePath, "internal", "somefile.go")
+	hookCmd := newRootCmd()
+	hookCmd.SetIn(strings.NewReader(fmt.Sprintf(
+		`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"%s"}]}}`, targetPath)))
+	hookCmd.SetOut(new(bytes.Buffer))
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+	require.NoError(t, hookCmd.Execute(), "hook must fail open (exit 0) on unbound write")
+
+	logData, err := os.ReadFile(filepath.Join(gitDir, "armature-hook.log"))
+	require.NoError(t, err, "hook must write the violation into the worktree's own git dir")
+	assert.Contains(t, string(logData), "violation:")
+
+	// Transition to done and materialize, then verify the merged gate fires.
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	mergedCmd := newRootCmd()
+	errBuf := new(bytes.Buffer)
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetErr(errBuf)
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	err = mergedCmd.Execute()
+	require.Error(t, err, "merged must block on hook-written violations")
+	assert.Contains(t, err.Error(), "violations")
+
+	// Worktree preserved as evidence.
+	assert.DirExists(t, worktreePath)
 }
