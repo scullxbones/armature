@@ -529,13 +529,17 @@ func TestUnboundFileWriteLogsViolation_REQ_HOOKBIND_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	// Without claiming the task, binding is stale (no claimed/in-progress issue)
-	// So a file write event will have no binding and should log a violation
+	// So a file write event will have no binding and should log a violation.
+	// Use an absolute path inside the (unbound) repo so path-based resolution
+	// finds the repo's git dir rather than depending on the test process cwd.
 	t.Setenv("ARMATURE_ISSUE_ID", "")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
 
+	targetPath := filepath.Join(repo, "internal", "harnesshook", "hook.go")
+
 	var out, errOut bytes.Buffer
 	cmd := newRootCmd()
-	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/hook.go"}]}}`))
+	cmd.SetIn(strings.NewReader(fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"%s"}]}}`, targetPath)))
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetArgs([]string{"harness-hook", "--repo", repo})
@@ -552,6 +556,60 @@ func TestUnboundFileWriteLogsViolation_REQ_HOOKBIND_T3(t *testing.T) {
 	// Should log a violation entry, not a pass-through
 	assert.Contains(t, logContent, "violation:", "unbound file write must log violation entry")
 	assert.NotContains(t, logContent, "pass-through:", "unbound file write must not log pass-through")
+}
+
+// TestResolverErrorFailsOpen_REQ_HOOKBIND_T3 verifies that an error from
+// hook.Evaluate's policy resolution step (e.g. a corrupt materialized issue JSON)
+// fails open: exit 0, loud stderr warning, pass-through logged (finding 3).
+func TestResolverErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
+	require.NoError(t, err)
+
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	err = cmd.Execute()
+	require.NoError(t, err)
+
+	// Materialize so issues/task-01.json exists to corrupt.
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Corrupt the materialized issue JSON so resolver.Resolve fails to decode it.
+	// State lives under .arm/state/<worker-id>/issues/; glob for the worker id.
+	matches, err := filepath.Glob(filepath.Join(repo, ".arm", "state", "*", "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.NotEmpty(t, matches, "materialized issue JSON must exist")
+	for _, issuePath := range matches {
+		err = os.WriteFile(issuePath, []byte("{not valid json"), 0o644)
+		require.NoError(t, err)
+	}
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	var out, errOut bytes.Buffer
+	hookCmd := newRootCmd()
+	jsonInput := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
+		`"tool_input":{"changes":[{"path":"internal/harnesshook/hook.go"}]}}`
+	hookCmd.SetIn(strings.NewReader(jsonInput))
+	hookCmd.SetOut(&out)
+	hookCmd.SetErr(&errOut)
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+
+	err = hookCmd.Execute()
+	require.NoError(t, err, "resolver error should fail-open with exit 0")
+
+	stderrOutput := errOut.String()
+	assert.Contains(t, stderrOutput, "error:", "stderr must contain error indication")
+
+	gitDir := filepath.Join(repo, ".git")
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	logData, err := os.ReadFile(logPath)
+	require.NoError(t, err, "log must exist")
+	assert.Contains(t, string(logData), "pass-through:", "resolver error should log pass-through entry")
 }
 
 // TestFailOpenOnEventDecodeError_REQ_HOOKBIND_T3 verifies that event decode errors
@@ -593,6 +651,9 @@ func TestFailOpenOnEventDecodeError_REQ_HOOKBIND_T3(t *testing.T) {
 // The test removes the .arm directory after setup to make snapshot loading fail,
 // then verifies the hook fails open with stderr warning and pass-through log entry.
 func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod 0o000 has no effect for the root user; cannot exercise unreadable-dir fail-open this way")
+	}
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)

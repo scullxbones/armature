@@ -39,7 +39,7 @@ func TestHook_Evaluate_AllowsInScopeEdit_REQ_ARCHIMP_S17_T1(t *testing.T) {
 	hook := NewHook(resolver)
 	result, err := hook.Evaluate(context.Background(), EvaluateInput{
 		Input:    input,
-		TaskID:   "task-01",
+		Binding:  "task-01",
 		Platform: "claude",
 	})
 
@@ -66,7 +66,7 @@ func TestHook_Evaluate_ResolverErrorPropagates_REQ_ARCHIMP_S17_T1(t *testing.T) 
 	hook := NewHook(resolver)
 	_, err := hook.Evaluate(context.Background(), EvaluateInput{
 		Input:    input,
-		TaskID:   "task-01",
+		Binding:  "task-01",
 		Platform: "claude",
 	})
 

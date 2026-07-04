@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,10 +30,21 @@ func resolveIssueBinding(gitDir string) string {
 	return os.Getenv("ARMATURE_ISSUE_ID")
 }
 
-// logPassThrough logs a pass-through event to <git-dir>/armature-hook.log.
-// Each entry is prefixed with an RFC3339 UTC timestamp so operators can
-// correlate entries with specific git operations.
-func logPassThrough(gitDir string, reason string) error {
+// sanitizeLogField strips newlines and carriage returns from a value before it
+// is interpolated into a single-line log entry, preventing log injection where
+// a crafted tool name or decision message could forge or mask a violation/decision
+// line (finding 8).
+func sanitizeLogField(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	return s
+}
+
+// appendHookLog appends a single line to <git-dir>/armature-hook.log, prefixed
+// with an RFC3339 UTC timestamp so operators can correlate entries with specific
+// git operations. This is the single shared implementation behind
+// logPassThrough/logDecision/logViolation (finding 6).
+func appendHookLog(gitDir string, line string) error {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	// #nosec G304 - logPath is derived from a trusted git directory
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -42,48 +55,32 @@ func logPassThrough(gitDir string, reason string) error {
 		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
 	}()
 	ts := time.Now().UTC().Format(time.RFC3339)
-	_, err = fmt.Fprintf(f, "%s pass-through: %s\n", ts, reason)
+	_, err = fmt.Fprintf(f, "%s %s\n", ts, line)
 	return err
 }
 
+// logPassThrough logs a pass-through event to <git-dir>/armature-hook.log.
+func logPassThrough(gitDir string, reason string) error {
+	return appendHookLog(gitDir, "pass-through: "+sanitizeLogField(reason))
+}
+
 // logDecision logs a complete decision to <git-dir>/armature-hook.log.
-// Each entry includes: timestamp, issue ID, resolution step, event kind, tool, decision, and optional block reason.
+// Each entry includes: issue ID, resolution step, event kind, tool, decision, and optional block reason.
 func logDecision(gitDir string, issueID string, resolutionStep string, eventKind string, tool string, decision string, blockReason string) error {
-	logPath := filepath.Join(gitDir, "armature-hook.log")
-	// #nosec G304 - logPath is derived from a trusted git directory
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
-	}()
-	ts := time.Now().UTC().Format(time.RFC3339)
-	// Format: timestamp issue_id resolution_step event tool decision [block_reason]
-	entry := fmt.Sprintf("%s decision: issue_id=%s resolution_step=%s event=%s tool=%s decision=%s", ts, issueID, resolutionStep, eventKind, tool, decision)
+	entry := fmt.Sprintf("decision: issue_id=%s resolution_step=%s event=%s tool=%s decision=%s",
+		sanitizeLogField(issueID), sanitizeLogField(resolutionStep), sanitizeLogField(eventKind),
+		sanitizeLogField(tool), sanitizeLogField(decision))
 	if blockReason != "" {
-		entry += fmt.Sprintf(" block_reason=%s", blockReason)
+		entry += fmt.Sprintf(" block_reason=%s", sanitizeLogField(blockReason))
 	}
-	_, err = fmt.Fprintf(f, "%s\n", entry)
-	return err
+	return appendHookLog(gitDir, entry)
 }
 
 // logViolation logs a violation entry for file writes that resolve to no binding.
 // Violations are distinguished from pass-throughs: they indicate an enforcement gap
 // (unbound file write when enforcement was expected).
 func logViolation(gitDir string, reason string) error {
-	logPath := filepath.Join(gitDir, "armature-hook.log")
-	// #nosec G304 - logPath is derived from a trusted git directory
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
-	}()
-	ts := time.Now().UTC().Format(time.RFC3339)
-	_, err = fmt.Fprintf(f, "%s violation: %s\n", ts, reason)
-	return err
+	return appendHookLog(gitDir, "violation: "+sanitizeLogField(reason))
 }
 
 // isBindingStale checks if the issue binding's status is not claimed or in-progress,
@@ -101,37 +98,56 @@ func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	return claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, now)
 }
 
-// extractFilePathFromToolInput extracts the file path from the raw tool_input map.
-// It checks for common file path keys in the order they're likely to be used.
-func extractFilePathFromToolInput(toolInput map[string]any) string {
-	if toolInput == nil {
-		return ""
-	}
-
-	// Check for direct file_path or path keys
-	for _, key := range []string{"file_path", "path"} {
-		if value, ok := toolInput[key].(string); ok && value != "" {
-			return value
-		}
-	}
-
-	// Check for changes array (common in Edit/Write events)
-	if changes, ok := toolInput["changes"].([]any); ok && len(changes) > 0 {
-		if change, ok := changes[0].(map[string]any); ok {
-			if path, ok := change["path"].(string); ok && path != "" {
-				return path
-			}
-		}
-	}
-
-	return ""
+// isFileWriteEvent checks if an event represents a file write operation.
+// Requires a non-empty extracted file path: Bash and other tool-use events
+// without a resolvable file path are not file writes and must not be logged
+// as violations, even though they arrive as Pre/PostToolUse (finding 4).
+func isFileWriteEvent(eventKind harnesshook.EventKind, filePath string) bool {
+	return (eventKind == harnesshook.EventPreToolUse || eventKind == harnesshook.EventPostToolUse) && filePath != ""
 }
 
-// isFileWriteEvent checks if an event represents a file write operation.
-// This is used to distinguish violations (unbound file writes) from pass-throughs.
-func isFileWriteEvent(eventKind harnesshook.EventKind) bool {
-	// Only PreToolUse events can be file writes; Stop and Bash events are not file operations
-	return eventKind == harnesshook.EventPreToolUse || eventKind == harnesshook.EventPostToolUse
+// isKnownWorktreeGitDir reports whether candidateGitDir corresponds to a worktree
+// of repoPath (including repoPath's own main .git), per `git worktree list`. This
+// bounds trust in path-resolved git dirs: a maliciously crafted tool_input.file_path
+// or cwd cannot cause the hook to read/write into an unrelated repository's git dir
+// (finding 9). Resolution failures are treated as untrusted (fail closed on trust,
+// not on hook execution — caller still fails open by falling back to session binding).
+func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
+	if candidateGitDir == "" {
+		return false
+	}
+	candidateAbs, err := filepath.Abs(candidateGitDir)
+	if err != nil {
+		return false
+	}
+
+	// The main repo's own .git always counts.
+	if mainGitDir, err := resolveWorktreeGitDir(repoPath); err == nil {
+		if abs, err := filepath.Abs(mainGitDir); err == nil && abs == candidateAbs {
+			return true
+		}
+	}
+
+	// #nosec G204 - git binary and repoPath are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		wtPath, ok := strings.CutPrefix(line, "worktree ")
+		if !ok {
+			continue
+		}
+		wtGitDir, err := resolveWorktreeGitDir(wtPath)
+		if err != nil {
+			continue
+		}
+		if abs, err := filepath.Abs(wtGitDir); err == nil && abs == candidateAbs {
+			return true
+		}
+	}
+	return false
 }
 
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
@@ -172,16 +188,21 @@ func newHarnessHookCmd() *cobra.Command {
 			// Resolve session-level binding (from git dir or env) for use as fallback
 			sessionBinding := resolveIssueBinding(gitDir)
 
-			// Read hook input from stdin (before binding resolution per ADR-0007)
+			// Read hook input from stdin (before binding resolution per ADR-0007).
+			// A read failure fails open: warn loudly and pass through rather than
+			// blocking the platform on a nonzero exit (finding 3).
 			inputData, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
-				return fmt.Errorf("read hook input: %w", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to read hook input: %v\n", err)
+				_ = logPassThrough(gitDir, "stdin read failed") //nolint:errcheck // logging only, error not actionable
+				return nil
 			}
 
 			// Decode the event to determine if path-based binding resolution is needed
 			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
 			if err != nil {
-				// If we can't select an adapter, fail open and pass through
+				// If we can't select an adapter, fail open and pass through with loud stderr warning
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to select hook adapter: %v\n", err)
 				_ = logPassThrough(gitDir, "adapter selection failed") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
@@ -195,28 +216,47 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			// Extract file path from tool input for path-based resolution
-			filePath := extractFilePathFromToolInput(event.ToolInput)
+			filePath := harnesshook.ExtractFilePathFromToolInput(event.ToolInput)
 			eventInfo := &harnesshook.DecodedEventInfo{
 				Kind:     event.Kind,
 				FilePath: filePath,
+				Cwd:      event.Cwd,
+				Tool:     event.Tool,
 			}
 
-			// Resolve binding from event and session binding; also get the git dir where it was resolved
+			// Resolve binding from event and session binding (single resolution per ADR-0007);
+			// also get the git dir where it was resolved.
 			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir)
 			if err != nil {
-				// If binding resolution fails, fail open and pass through
+				// If binding resolution fails, fail open and pass through with loud stderr warning
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: binding resolution failed: %v\n", err)
 				_ = logPassThrough(gitDir, "binding resolution failed") //nolint:errcheck // logging only, error not actionable
 				return nil
+			}
+
+			// If path-based resolution (steps 1-2) landed on a git dir outside the
+			// invoking repo's own worktrees, don't trust it: fall back to logging
+			// against the session's own git dir instead (finding 9).
+			logGitDir := resolvedBinding.GitDir
+			pathResolved := resolvedBinding.ResolutionStep == "file_path" ||
+				resolvedBinding.ResolutionStep == "event_cwd" ||
+				(resolvedBinding.ResolutionStep == "" && logGitDir != gitDir)
+			if pathResolved {
+				if !isKnownWorktreeGitDir(rawRepo, logGitDir) {
+					fmt.Fprintf(cmd.ErrOrStderr(), "error: path-resolved git dir %q is not a known worktree of %q; treating as unbound\n", logGitDir, rawRepo)
+					resolvedBinding = harnesshook.ResolvedBinding{GitDir: gitDir}
+					logGitDir = gitDir
+				}
 			}
 
 			// If no binding is found:
 			// - File writes are violations (enforcement gap)
 			// - Other events are pass-throughs (no enforcement expected)
 			if resolvedBinding.IssueID == "" {
-				if isFileWriteEvent(event.Kind) {
-					_ = logViolation(resolvedBinding.GitDir, "file write with no resolved binding") //nolint:errcheck // logging only, error not actionable
+				if isFileWriteEvent(event.Kind, filePath) {
+					_ = logViolation(logGitDir, "file write with no resolved binding") //nolint:errcheck // logging only, error not actionable
 				} else {
-					_ = logPassThrough(resolvedBinding.GitDir, "no issue binding found") //nolint:errcheck // logging only, error not actionable
+					_ = logPassThrough(logGitDir, "no issue binding found") //nolint:errcheck // logging only, error not actionable
 				}
 				return nil
 			}
@@ -226,7 +266,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if err != nil {
 				// Snapshot load errors are fail-open with loud stderr warning
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to load snapshot: %v\n", err)
-				_ = logPassThrough(resolvedBinding.GitDir, "snapshot load failed") //nolint:errcheck // logging only, error not actionable
+				_ = logPassThrough(logGitDir, "snapshot load failed") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
 			for _, w := range snap.Warnings {
@@ -235,7 +275,7 @@ func newHarnessHookCmd() *cobra.Command {
 
 			// If binding is stale, pass through
 			if isBindingStale(snap, resolvedBinding.IssueID, time.Now().Unix()) {
-				_ = logPassThrough(resolvedBinding.GitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
+				_ = logPassThrough(logGitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
 
@@ -246,22 +286,25 @@ func newHarnessHookCmd() *cobra.Command {
 				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
 			})
 
-			// Create hook and evaluate with resolved binding
+			// Create hook and evaluate with the already-resolved binding.
 			hook := harnesshook.NewHook(resolver)
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
-				Input:          inputData,
-				TaskID:         resolvedBinding.IssueID,
-				Platform:       os.Getenv("ARMATURE_HOOK_PLATFORM"),
-				SessionBinding: sessionBinding,
+				Input:    inputData,
+				Binding:  resolvedBinding.IssueID,
+				Platform: os.Getenv("ARMATURE_HOOK_PLATFORM"),
 			})
 			if err != nil {
-				return err
+				// Evaluation errors (policy resolution, evaluator, encode) are fail-open
+				// with loud stderr warning, per ADR-0007's "fail-open everywhere" (finding 3).
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: hook evaluation failed: %v\n", err)
+				_ = logPassThrough(logGitDir, "hook evaluation failed") //nolint:errcheck // logging only, error not actionable
+				return nil
 			}
 
 			// Log the decision with complete information to the resolved worktree's git dir
 			blockReason := result.Decision.Message
 			_ = logDecision( //nolint:errcheck // logging error not actionable
-				resolvedBinding.GitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
+				logGitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
 				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason)
 
 			// If the adapter returned a non-zero exit code, propagate it to the process exit.
