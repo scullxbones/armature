@@ -163,12 +163,30 @@ For each wave of ready tasks:
    arm claim TASK-ID --ttl <minutes> --worktree /tmp/arm-task-TASK-ID
    arm render-context TASK-ID --format agent
    ```
-   **Worktree is required.** When workers are dispatched as background agents without
-   an active terminal session, they cannot inherit the parent session's Bash
-   permissions, causing shell commands to hang. Pass `--worktree <path>` to `arm claim`
-   (using a path that does not yet exist) — `arm claim` creates the worktree and a
-   correctly-bound task branch automatically. Do not pre-create the worktree with
-   `git worktree add`; let `arm claim` handle creation.
+   **`--worktree` is REQUIRED for worker dispatch.** This is an invariant, not merely a
+   best practice for permissions. The binding-resolution logic in the harness hook depends
+   on the binding-identity invariant: each agent must operate under exactly one issue
+   binding, and that binding must follow the artifact being touched, not the process
+   touching it. Without a worktree, the hook's four-step resolution chain (file path →
+   event cwd → session cwd → env var) has no per-task `.git` directory to resolve from,
+   breaking the isolation that makes per-task enforcement possible.
+
+   When you pass `--worktree <path>` to `arm claim`:
+   - `arm claim` creates an isolated git worktree on a task-specific branch
+   - The task ID is written to `<worktree-git-dir>/armature-issue-id`
+   - Workers edit files inside the worktree (step 1 of binding resolution)
+   - The hook reads the binding from the file path being edited (step 1 succeeds)
+   - Events are evaluated under the correct task's policy
+
+   Without a worktree:
+   - No task-specific `.git/armature-issue-id` file exists
+   - Step 1 of binding resolution finds no file and falls through to steps 2–4
+   - All events resolve to the session's binding (or env var) regardless of which
+     agent's code is being changed
+   - Scope enforcement becomes meaningless; multiple agents cannot be parallelized safely
+
+   Do not pre-create the worktree with `git worktree add`; let `arm claim` handle creation
+   (it sets up binding and branch correctly).
 
    Set `--ttl` to exceed your expected worker runtime. Default is 60 minutes; use
    `--ttl 240` or higher for complex tasks. If the TTL expires while a worker is
@@ -480,15 +498,85 @@ the code profile and re-run.
 Do not proceed to the next wave or story transition if the gate is red after
 2 remediation attempts.
 
-### d. Mark completed tasks merged
+### d. Mark completed tasks merged (with violation gate)
 
-Once the verification gate passes, promote all completed wave tasks from `done` to `merged`:
+Once the verification gate passes, promote all completed wave tasks from `done` to `merged`.
+Before merging, check for enforcement gaps in the hook log.
+
+**Check for violations:**
+
+Each task's worktree maintains an `armature-hook.log` recording all binding-resolution
+decisions. The log contains three types of entries:
+
+- **`decision:`** — all resolved events (scope allow/block decisions)
+- **`pass-through:`** — events with no binding (warnings only)
+- **`violation:`** — file writes that resolved to no binding (enforcement gaps)
+
+Violations represent scenarios where the hook was unable to enforce scope: a file was
+written but no binding was found during resolution. They are not the hook blocking an
+operation; they are enforcement gaps that slipped through.
 
 ```bash
-arm merged --issue TASK-ID
+# Check each task's hook log for violations
+# (the following is a conceptual example; real verification is integrated into arm merged)
+for TASK_ID in $WAVE_TASK_IDS; do
+  if git log task/$TASK_ID --oneline | grep -q "TASK-ID"; then
+    # Worktree was used; check for violations in its hook log
+    WORKTREE_PATH=$(git worktree list --porcelain | grep "task/$TASK_ID" | awk '{print $1}')
+    if [ -n "$WORKTREE_PATH" ]; then
+      if grep -q "violation:" "$WORKTREE_PATH/.git/armature-hook.log" 2>/dev/null; then
+        echo "WARNING: $TASK_ID has violation entries in hook log"
+      fi
+    fi
+  fi
+done
 ```
 
-This allows dependent work to unblock cleanly before the next wave begins.
+**Violation gate:**
+
+When you run `arm merged --issue TASK-ID`:
+
+1. `arm merged` checks the worktree's `armature-hook.log` for `violation:` entries.
+2. If violations are found and `--force` is **not** specified:
+   - `arm merged` exits with an error
+   - The worktree is **preserved** (not torn down) as evidence
+   - The task remains in `done` status (not promoted to `merged`)
+   - You must review the violations and remediate or explicitly override with `--force`
+3. If violations are found and `--force` **is** specified:
+   - Violations are acknowledged and overridden
+   - The task is marked `merged`
+   - The worktree is torn down
+4. **Pass-through entries do not block merging** — they are warnings, not violations.
+   A message is emitted to stderr, but the merge proceeds.
+
+**Merging a wave with violations:**
+
+A wave whose tasks contain `violation:` entries **must not be integrated** (merged to main)
+without explicit operator review and override. Violations indicate that the harness was
+unable to enforce task scope on one or more file writes, raising risk for the story
+integration. Remediation options:
+
+1. **Investigate** — review the hook log, identify which files were written unbound, and
+   confirm they were in-scope anyway (violation was a false alarm).
+2. **Remediate** — if files were genuinely out-of-scope, update the task implementation
+   to keep all writes within scope, then re-run the task.
+3. **Override** — if you have reviewed the violations and accept the risk, use:
+   ```bash
+   arm merged --issue TASK-ID --force
+   ```
+   Use `--force` only when violations have been explicitly reviewed and approved.
+
+```bash
+# Promote all tasks to merged (with violation gate)
+for TASK_ID in $WAVE_TASK_IDS; do
+  arm merged --issue TASK_ID
+  # If this exits with an error about violations, either remediate or run:
+  # arm merged --issue TASK_ID --force   # (with explicit review)
+done
+```
+
+This allows dependent work to unblock cleanly before the next wave begins, while
+ensuring enforcement gaps are surfaced and reviewed.
 
 ### e. Check citation coverage
 ```bash
