@@ -44,10 +44,9 @@ func (r *IssuePolicyResolver) Resolve(taskID string) (IssuePolicy, error) {
 		return IssuePolicy{}, fmt.Errorf("read sources: %w", err)
 	}
 
-	// Build manifest from entries for compatibility.
-	manifest := sources.Manifest{Entries: make(map[string]sources.SourceEntry)}
+	knownSources := make(map[string]sources.SourceEntry, len(entries))
 	for _, entry := range entries {
-		manifest.Entries[entry.ID] = entry
+		knownSources[entry.ID] = entry
 	}
 
 	return IssuePolicy{
@@ -55,7 +54,7 @@ func (r *IssuePolicyResolver) Resolve(taskID string) (IssuePolicy, error) {
 		Title:      issue.Title,
 		Scope:      append([]string(nil), issue.Scope...),
 		Acceptance: append(json.RawMessage(nil), issue.Acceptance...),
-		Citations:  resolveCitationChecks(issue, manifest),
+		Citations:  resolveCitationChecks(issue, knownSources),
 	}, nil
 }
 
@@ -73,7 +72,7 @@ func (r *IssuePolicyResolver) sourcesDir() string {
 	return filepath.Join(r.cfg.RepoPath, ".armature", "sources")
 }
 
-func resolveCitationChecks(issue materialize.Issue, manifest sources.Manifest) []CitationCheck {
+func resolveCitationChecks(issue materialize.Issue, knownSources map[string]sources.SourceEntry) []CitationCheck {
 	if len(issue.SourceLinks) == 0 {
 		return nil
 	}
@@ -95,7 +94,7 @@ func resolveCitationChecks(issue materialize.Issue, manifest sources.Manifest) [
 		if link.SourceEntryID == "" {
 			continue
 		}
-		if _, ok := manifest.Get(link.SourceEntryID); !ok {
+		if _, ok := knownSources[link.SourceEntryID]; !ok {
 			checks = append(checks, CitationCheck{
 				SourceEntryID: link.SourceEntryID,
 				Accepted:      globallyAccepted,

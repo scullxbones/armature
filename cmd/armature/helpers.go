@@ -156,6 +156,15 @@ func nowEpoch() int64 {
 	return time.Now().Unix()
 }
 
+// short truncates a fingerprint string to 8 characters for display, returning
+// the string unchanged if it is already shorter than that to avoid a panic.
+func short(fp string) string {
+	if len(fp) < 8 {
+		return fp
+	}
+	return fp[:8]
+}
+
 // initPushDeps wires up the pusher and tracker based on the current context.
 // If a worktree path is present: AppendCommitAndPush with FilePushTracker.
 // Otherwise: NoPusher + NoTracker.

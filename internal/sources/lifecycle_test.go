@@ -3,6 +3,9 @@ package sources
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -447,5 +450,153 @@ func TestLifecycleRoundTripJSON_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	if retrieved.SyncFailed != entry.SyncFailed {
 		t.Errorf("SyncFailed: got %v, want %v", retrieved.SyncFailed, entry.SyncFailed)
+	}
+}
+
+func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	registry := &MockRegistry{
+		providers: map[string]Provider{
+			"mock": &MockProvider{data: []byte("original content")},
+		},
+	}
+	lc := NewLifecycleWithRegistry(dir, registry)
+
+	entry := SourceEntry{
+		ID:           "changed-1",
+		URL:          "https://example.com/doc",
+		Title:        "Changing Document",
+		ProviderType: "mock",
+	}
+	if _, err := lc.Register(entry); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if result := lc.Sync(context.Background(), entry.ID); result.Error != nil {
+		t.Fatalf("Sync failed: %v", result.Error)
+	}
+
+	// Mutate the cache file so its fingerprint diverges from the stored one.
+	if err := WriteCache(dir, entry.ID, []byte("tampered content")); err != nil {
+		t.Fatalf("WriteCache failed: %v", err)
+	}
+
+	result := lc.Verify(entry.ID)
+	if result.Status != VerifyChanged {
+		t.Fatalf("expected VerifyChanged, got %v", result.Status)
+	}
+	if result.Stored == "" || result.Current == "" {
+		t.Errorf("expected Stored and Current fingerprints populated, got stored=%q current=%q", result.Stored, result.Current)
+	}
+	if result.Stored == result.Current {
+		t.Errorf("expected differing fingerprints, both were %q", result.Stored)
+	}
+}
+
+func TestLifecycleSyncAll_PartialFailure_REQ_ARCHIMP_S18_T2(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	registry := &MockRegistry{
+		providers: map[string]Provider{
+			"mock":    &MockProvider{data: []byte("good content")},
+			"failing": &MockProvider{err: errors.New("fetch exploded")},
+		},
+	}
+	lc := NewLifecycleWithRegistry(dir, registry)
+
+	for id, provider := range map[string]string{"good-1": "mock", "bad-1": "failing"} {
+		if _, err := lc.Register(SourceEntry{ID: id, URL: "https://example.com/" + id, Title: id, ProviderType: provider}); err != nil {
+			t.Fatalf("Register %s failed: %v", id, err)
+		}
+	}
+
+	results, err := lc.SyncAll(context.Background())
+	if err != nil {
+		t.Fatalf("SyncAll with partial success must return nil error, got: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	var failures, successes int
+	for _, r := range results {
+		if r.Error != nil {
+			failures++
+		} else {
+			successes++
+		}
+	}
+	if failures != 1 || successes != 1 {
+		t.Errorf("expected 1 failure and 1 success, got %d failures / %d successes", failures, successes)
+	}
+}
+
+func TestLifecycleSyncAll_AllFail_REQ_ARCHIMP_S18_T2(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	registry := &MockRegistry{
+		providers: map[string]Provider{
+			"failing": &MockProvider{err: errors.New("fetch exploded")},
+		},
+	}
+	lc := NewLifecycleWithRegistry(dir, registry)
+
+	for _, id := range []string{"bad-1", "bad-2"} {
+		if _, err := lc.Register(SourceEntry{ID: id, URL: "https://example.com/" + id, Title: id, ProviderType: "failing"}); err != nil {
+			t.Fatalf("Register %s failed: %v", id, err)
+		}
+	}
+
+	results, err := lc.SyncAll(context.Background())
+	if err == nil {
+		t.Fatal("SyncAll with all sources failing must return an error")
+	}
+	if !strings.Contains(err.Error(), "all sources failed") {
+		t.Errorf("error must mention all sources failed, got: %v", err)
+	}
+	// Per-source detail must be present in the combined error.
+	if !strings.Contains(err.Error(), "bad-1") || !strings.Contains(err.Error(), "bad-2") {
+		t.Errorf("error must include per-source detail, got: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(results))
+	}
+}
+
+func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	srcFile := filepath.Join(t.TempDir(), "doc.md")
+	if err := os.WriteFile(srcFile, []byte("# local doc\n"), 0o644); err != nil {
+		t.Fatalf("write source file: %v", err)
+	}
+
+	// Default registry resolves the real FilesystemProvider.
+	lc := NewLifecycle(dir)
+	if _, err := lc.Register(SourceEntry{ID: "fs-1", URL: srcFile, Title: "Local Doc", ProviderType: "filesystem"}); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	result := lc.Sync(context.Background(), "fs-1")
+	if result.Error != nil {
+		t.Fatalf("Sync via FilesystemProvider failed: %v", result.Error)
+	}
+	if result.Fingerprint == "" {
+		t.Error("expected non-empty fingerprint")
+	}
+	if result.ProviderType != "filesystem" {
+		t.Errorf("expected ProviderType filesystem, got %q", result.ProviderType)
+	}
+
+	verify := lc.Verify("fs-1")
+	if verify.Status != VerifyOK {
+		t.Errorf("expected VerifyOK after sync, got %v", verify.Status)
+	}
+	content, err := lc.Content("fs-1")
+	if err != nil || string(content) != "# local doc\n" {
+		t.Errorf("Content mismatch: %q err=%v", content, err)
 	}
 }

@@ -276,9 +276,11 @@ func isSnapshotLoadCall(call *ast.CallExpr) bool {
 // - State isolation is enforced at build time
 // - Fallback behavior is eliminated
 //
-// This test scans all non-test .go files in cmd/armature and fails if any production
-// code references appCtx, appPusher, or appTracker (excluding the definition in helpers.go
-// and the initialization in main.go, which will be removed).
+// This test scans all non-test .go files in cmd/armature — with no exemptions — and
+// fails if any file declares appCtx, appPusher, or appTracker at package level. Any
+// read of such a global requires the package-level declaration to exist to compile,
+// so rejecting the declaration everywhere prevents reintroduction. (Locals named
+// appCtx bound via `appCtx, err := currentCtx(cmd)` are legitimate and not flagged.)
 func TestNoGlobalCommandRuntime_REQ_ARCHIMP_S18_T4(t *testing.T) {
 	fset := token.NewFileSet()
 	violations := []string{}
@@ -291,18 +293,8 @@ func TestNoGlobalCommandRuntime_REQ_ARCHIMP_S18_T4(t *testing.T) {
 	scopeFiles, err := os.ReadDir(cmdDir)
 	require.NoError(t, err)
 
-	// Files exempt from this check (where the globals are defined/initialized)
-	exemptFiles := map[string]bool{
-		"helpers.go": true, // Contains the var declarations (will be removed)
-		"main.go":    true, // Initializes the globals (will be removed)
-	}
-
 	for _, entry := range scopeFiles {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-
-		if exemptFiles[entry.Name()] {
 			continue
 		}
 
