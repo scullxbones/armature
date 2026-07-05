@@ -29,10 +29,7 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			manifest, err := sources.ReadManifest(sourcesDir())
-			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
-			}
+			lc := sources.NewLifecycle(sourcesDir())
 
 			// Load snapshot to get materialized state
 			store := newSnapshotStore(appCtx)
@@ -46,42 +43,50 @@ func newStaleReviewCmd() *cobra.Command {
 			}
 
 			// Detect stale entries.
-			var reviewItems []stalereview.ReviewItem
-			for _, entry := range manifest.Entries {
-				data, err := sources.ReadCache(sourcesDir(), entry.ID)
-				if err != nil {
-					return fmt.Errorf("read cache for %s: %w", entry.ID, err)
-				}
-				currentFP := sources.Fingerprint(data)
-				if data == nil || currentFP != entry.Fingerprint {
-					// Find cited issues.
-					var cited []*materialize.Issue
-					for _, issue := range state.Issues {
-						if len(issue.SourceLinks) == 0 {
-							continue
-						}
-						for _, link := range issue.SourceLinks {
-							if link.SourceEntryID == entry.ID {
-								cited = append(cited, issue)
-								break
-							}
-						}
-					}
-					sort.Slice(cited, func(i, j int) bool {
-						return cited[i].ID < cited[j].ID
-					})
+			verifyResults, _ := lc.VerifyAll() //nolint:errcheck // all results included even if some entries are not OK
 
-					summary := fmt.Sprintf("fingerprint changed (stored: %s, current: %s)",
-						entry.Fingerprint, currentFP)
-					if data == nil {
-						summary = "no cache found"
-					}
-					reviewItems = append(reviewItems, stalereview.ReviewItem{
-						SourceID:      entry.ID,
-						ChangeSummary: summary,
-						CitedIssues:   cited,
-					})
+			var reviewItems []stalereview.ReviewItem
+			for _, result := range verifyResults {
+				// Only include sources that are not OK.
+				if result.Status == sources.VerifyOK {
+					continue
 				}
+
+				// Find cited issues.
+				var cited []*materialize.Issue
+				for _, issue := range state.Issues {
+					if len(issue.SourceLinks) == 0 {
+						continue
+					}
+					for _, link := range issue.SourceLinks {
+						if link.SourceEntryID == result.ID {
+							cited = append(cited, issue)
+							break
+						}
+					}
+				}
+				sort.Slice(cited, func(i, j int) bool {
+					return cited[i].ID < cited[j].ID
+				})
+
+				summary := ""
+				switch result.Status {
+				case sources.VerifyChanged:
+					summary = fmt.Sprintf("fingerprint changed (stored: %s, current: %s)",
+						result.Stored[:8], result.Current[:8])
+				case sources.VerifyMissing:
+					summary = "no cache found"
+				case sources.VerifyStale:
+					summary = "last sync failed"
+				case sources.VerifyError:
+					summary = fmt.Sprintf("error: %v", result.Error)
+				}
+
+				reviewItems = append(reviewItems, stalereview.ReviewItem{
+					SourceID:      result.ID,
+					ChangeSummary: summary,
+					CitedIssues:   cited,
+				})
 			}
 
 			sort.Slice(reviewItems, func(i, j int) bool {

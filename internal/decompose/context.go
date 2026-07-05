@@ -38,18 +38,18 @@ func BuildContext(params ContextParams) (ContextOutput, error) {
 
 	if params.IssuesDir != "" && len(params.SourceIDs) > 0 {
 		sourcesDir := filepath.Join(params.IssuesDir, "sources")
-		manifest, err := sources.ReadManifest(sourcesDir)
-		if err == nil {
-			for _, id := range params.SourceIDs {
-				if _, ok := manifest.Get(id); !ok {
-					continue
-				}
-				data, err := sources.ReadCache(sourcesDir, id)
-				if err != nil || data == nil {
-					continue
-				}
-				out.Sources = append(out.Sources, SourceContent{ID: id, Content: string(data)})
+		lc := sources.NewLifecycle(sourcesDir)
+		for _, id := range params.SourceIDs {
+			// Verify the source exists and get its cached content via Lifecycle.
+			_, err := lc.Get(id)
+			if err != nil {
+				continue
 			}
+			data, err := sources.ReadCache(sourcesDir, id)
+			if err != nil || data == nil {
+				continue
+			}
+			out.Sources = append(out.Sources, SourceContent{ID: id, Content: string(data)})
 		}
 	}
 
