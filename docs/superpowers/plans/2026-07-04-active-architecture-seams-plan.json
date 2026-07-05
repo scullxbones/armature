@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "title": "Deepen active architecture seams",
+  "issues": [
+    {
+      "id": "ARCHIMP-S18",
+      "title": "Deepen active review, Source, runtime, and Snapshot seams",
+      "type": "story",
+      "parent": "ARCHIMP",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "Conformance Recording, Source Lifecycle, Command Runtime, and Repository Snapshot each expose one deep interface used by production callers. Prior ARCHIMP outcomes remain intact, user-visible behavior is preserved, and make check, arm validate --ci, and arm doctor are green.",
+      "scope": "cmd/armature/review.go, cmd/armature/sources.go, cmd/armature/main.go, cmd/armature/helpers.go, cmd/armature/architecture_test.go, internal/review, internal/sources, internal/snapshot",
+      "context_files": [
+        "docs/superpowers/specs/2026-07-04-active-architecture-seams-prd.md",
+        "docs/design/architecture.md",
+        "docs/adr/0004-deep-module-depguard-boundaries.md",
+        "docs/adr/0005-semantic-conformance-review-boundary.md",
+        "docs/adr/0008-execution-evidence-in-semantic-review.md"
+      ],
+      "acceptance": [
+        "All child tasks are merged with recorded outcomes",
+        "make check exits 0",
+        "arm validate --ci exits 0",
+        "arm doctor exits 0"
+      ],
+      "notes": [
+        "This is follow-up work under the existing ARCHIMP epic; do not rewrite completed story outcomes.",
+        "Preserve current user-facing command behavior and the advisory semantic-review model."
+      ]
+    },
+    {
+      "id": "ARCHIMP-S18-T1",
+      "title": "Deepen Conformance Recording into one review decision",
+      "type": "task",
+      "parent": "ARCHIMP-S18",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "The review module owns assessment structure, bundle identity, fingerprint, diff-citation, Task Contract coverage, duplicate, and attestation decisions. The review command only decodes input, renders output, and appends the resulting Op. ADR-0005 and ADR-0008 behavior is preserved.",
+      "scope": "cmd/armature/review.go, cmd/armature/review_test.go, internal/review/record.go (new), internal/review/record_test.go (new), internal/review/validate.go, internal/review/validate_test.go",
+      "context_files": [
+        "docs/superpowers/specs/2026-07-04-active-architecture-seams-prd.md",
+        "docs/adr/0005-semantic-conformance-review-boundary.md",
+        "docs/adr/0008-execution-evidence-in-semantic-review.md"
+      ],
+      "acceptance": [
+        "TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1 passes for reject, duplicate, and attest outcomes",
+        "review command adapter tests prove file or stdin decoding, output, and Op persistence",
+        "existing semantic-review conformance tests remain green",
+        "make check exits 0"
+      ],
+      "notes": [
+        "Keep model execution and delivery gating out of the review module.",
+        "Keep full assessment reports ephemeral; only the compact Assessment Attestation enters durable history."
+      ]
+    },
+    {
+      "id": "ARCHIMP-S18-T2",
+      "title": "Deepen Source Lifecycle across commands and consumers",
+      "type": "task",
+      "parent": "ARCHIMP-S18",
+      "priority": "high",
+      "blocked_by": [],
+      "dod": "One Source Lifecycle module owns registration, manifest and cache persistence, fingerprinting, synchronization state, and freshness. Source commands and policy or context consumers cross that interface; filesystem, Confluence, and SharePoint remain adapters; provenance Ops are unchanged.",
+      "scope": "cmd/armature/sources.go, cmd/armature/sources_test.go, cmd/armature/create.go, cmd/armature/source_link.go, cmd/armature/stalereview.go, internal/sources/lifecycle.go (new), internal/sources/lifecycle_test.go (new), internal/sources/manifest.go, internal/sources/types.go, internal/decompose/context.go, internal/harnesspolicy/resolver.go",
+      "context_files": [
+        "docs/superpowers/specs/2026-07-04-active-architecture-seams-prd.md",
+        "docs/design/architecture.md"
+      ],
+      "acceptance": [
+        "TestSourceLifecycleSyncAndVerify_REQ_ARCHIMP_S18_T2 passes for OK, STALE, MISSING, CHANGED, partial-success, and total-failure outcomes",
+        "filesystem and fake HTTP adapters cover provider variation without live network access",
+        "Source commands preserve existing human and structured behavior",
+        "make check exits 0"
+      ],
+      "notes": [
+        "Do not add providers or change Source Link and Citation Acceptance semantics.",
+        "The command runtime remains responsible for appending successful source-fingerprint Ops."
+      ]
+    },
+    {
+      "id": "ARCHIMP-S18-T3",
+      "title": "Collapse Repository Snapshot access modes",
+      "type": "task",
+      "parent": "ARCHIMP-S18",
+      "priority": "high",
+      "blocked_by": [
+        "ARCHIMP-S18-T1"
+      ],
+      "dod": "Repository Snapshot owns current-truth loading, validated Op warnings, state paths, caching, read-only access, refresh, and freshness policy. Direct current-state loads are removed from commands and TUI callers; historical materialization stays separate; architecture enforcement catches regressions.",
+      "scope": "internal/snapshot/snapshot.go, internal/snapshot/snapshot_test.go, cmd/armature/helpers.go, cmd/armature/architecture_test.go, cmd/armature/review.go, cmd/armature/sync.go, cmd/armature/reparent.go, cmd/armature/harness_hook.go, cmd/armature/harness_context.go, cmd/armature/ready.go, cmd/armature/show.go, internal/tui/app/model.go",
+      "context_files": [
+        "docs/superpowers/specs/2026-07-04-active-architecture-seams-prd.md",
+        "docs/design/architecture.md",
+        "docs/adr/0004-deep-module-depguard-boundaries.md"
+      ],
+      "acceptance": [
+        "TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3 passes for read-only, refresh, warnings, and empty-repository behavior",
+        "TestHandlersUseSnapshotAccess_REQ_ARCHIMP_S18_T3 rejects direct current-state loading and premature materialization",
+        "show, ready, review, Render Context, Harness Hook, and TUI regression tests remain green",
+        "make check exits 0"
+      ],
+      "notes": [
+        "Preserve the completed ARCHIMP-S14 behavior while closing current access-mode gaps.",
+        "Do not absorb historical MaterializeAtSHA behavior into the current-truth interface.",
+        "Coordinate with any unmerged Harness Hook path-resolution changes before editing its command caller."
+      ]
+    },
+    {
+      "id": "ARCHIMP-S18-T4",
+      "title": "Restore Command Runtime as the only execution-state seam",
+      "type": "task",
+      "parent": "ARCHIMP-S18",
+      "priority": "high",
+      "blocked_by": [
+        "ARCHIMP-S18-T2",
+        "ARCHIMP-S18-T3"
+      ],
+      "dod": "All production commands obtain repository context, pusher, tracker, and Snapshot access through explicit execution state in the Cobra context. Process-global command state and fallback behavior are removed, architecture enforcement prevents recurrence, and independent root commands remain isolated.",
+      "scope": "cmd/armature/main.go, cmd/armature/helpers.go, cmd/armature/main_test.go, cmd/armature/architecture_test.go, cmd/armature/sources.go, cmd/armature/workers.go, cmd/armature/materialize.go, cmd/armature/log.go, cmd/armature/sync.go, cmd/armature/context_history.go, cmd/armature/doctor.go, cmd/armature/tui.go, cmd/armature/harness_context.go, cmd/armature/harness_hook.go, cmd/armature/validate.go, cmd/armature/dagsum.go, cmd/armature/hook.go, cmd/armature/transition.go, cmd/armature/confirm.go, cmd/armature/reparent.go, cmd/armature/scope_delete.go, cmd/armature/scope_rename.go, cmd/armature/stalereview.go, cmd/armature/decompose.go, cmd/armature/render_context.go",
+      "context_files": [
+        "docs/superpowers/specs/2026-07-04-active-architecture-seams-prd.md",
+        "docs/design/architecture.md",
+        "docs/adr/0004-deep-module-depguard-boundaries.md"
+      ],
+      "acceptance": [
+        "TestCommandRuntimeIsolation_REQ_ARCHIMP_S18_T4 proves independent root commands cannot observe each other's execution state",
+        "TestNoGlobalCommandRuntime_REQ_ARCHIMP_S18_T4 fails on production appCtx, appPusher, or appTracker declarations or reads",
+        "all command integration tests preserve existing output and exit behavior",
+        "make check exits 0"
+      ],
+      "notes": [
+        "This is regression hardening after the completed S10 runtime story, not a rewrite of its outcome.",
+        "No compatibility window or global fallback is permitted."
+      ]
+    }
+  ]
+}
