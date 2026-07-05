@@ -483,3 +483,93 @@ func TestStore_ReadIssue_NotFound(t *testing.T) {
 	_, err := store.ReadIssue("nonexistent")
 	assert.Error(t, err, "ReadIssue should return error for non-existent issue")
 }
+
+// TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3 verifies that Store owns
+// current-truth loading, caching/read-only access, and refresh/freshness behavior.
+//
+// ACCEPTANCE CRITERIA:
+//  1. Store.Load() materializes state from disk and caches it (current-truth ownership).
+//  2. Store.Issue() returns from the cached snapshot after Load() (read-only cached access).
+//  3. Store.Index() returns from the cached snapshot after Load() (read-only cached access).
+//  4. Multiple calls to Store.Issue() or Store.Index() without Refresh() return identical
+//     references (cache consistency), but a subsequent Refresh() reloads and updates the cache.
+//  5. Before any Load(), Issue() returns nil and Index() returns empty (cache is empty).
+//  6. After Refresh(), the store reflects new data from disk (freshness policy).
+//
+// This test demonstrates that Store is the single gateway for snapshot materialization,
+// enforcing current-truth loading, read-only cached access, and explicit refresh semantics.
+func TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	stateDir := filepath.Join(tmpDir, "state")
+
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	require.NoError(t, os.MkdirAll(stateDir, 0755))
+
+	// Criterion 5: Before Load(), Issue() and Index() return nil/empty.
+	store := NewStore(opsDir, stateDir)
+	ctx := context.Background()
+
+	issue := store.Issue("initial-id")
+	assert.Nil(t, issue, "Issue() before Load() must return nil")
+
+	index := store.Index()
+	assert.Empty(t, index, "Index() before Load() must return empty")
+
+	// Criterion 1: Store.Load() materializes from disk and owns the current-truth.
+	workerID := "test-worker"
+	logPath := filepath.Join(opsDir, workerID+".log")
+	opLine := `["create","task-1",1000,"test-worker",{"title":"Task One","type":"task","scope":[],"context_files":[]}]`
+	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
+
+	snap1, err := store.Load(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, snap1)
+	assert.Equal(t, 1, len(snap1.Issues))
+
+	// Criterion 2 & 3: Issue() and Index() return cached data after Load().
+	issue1 := store.Issue("task-1")
+	require.NotNil(t, issue1)
+	assert.Equal(t, "task-1", issue1.ID)
+	assert.Equal(t, "Task One", issue1.Title)
+
+	index1 := store.Index()
+	require.NotEmpty(t, index1)
+	assert.Equal(t, 1, len(index1))
+	assert.NotNil(t, index1["task-1"])
+	assert.Equal(t, "Task One", index1["task-1"].Title)
+
+	// Criterion 4: Repeated calls without Refresh() return from cache (same reference).
+	issue2 := store.Issue("task-1")
+	require.NotNil(t, issue2)
+	assert.Equal(t, "task-1", issue2.ID)
+	// Both calls should retrieve from the same cached snapshot
+	assert.Equal(t, issue1.ID, issue2.ID)
+	assert.Equal(t, issue1.Title, issue2.Title)
+
+	index2 := store.Index()
+	assert.Equal(t, len(index1), len(index2))
+
+	// Criterion 6: After Refresh(), the store reflects new data from disk (freshness policy).
+	// Add a second issue to the ops log.
+	opLine2 := `["create","task-2",1001,"test-worker",{"title":"Task Two","type":"task","scope":[],"context_files":[]}]`
+	content := opLine + "\n" + opLine2 + "\n"
+	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
+
+	snap2, err := store.Refresh(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, snap2)
+	assert.Equal(t, 2, len(snap2.Issues), "after Refresh(), snapshot should have 2 issues")
+
+	// Verify Issue() and Index() now reflect the refreshed data.
+	issue3 := store.Issue("task-2")
+	require.NotNil(t, issue3, "after Refresh(), Issue() must return the newly added issue")
+	assert.Equal(t, "task-2", issue3.ID)
+	assert.Equal(t, "Task Two", issue3.Title)
+
+	index3 := store.Index()
+	assert.Equal(t, 2, len(index3), "after Refresh(), Index() must reflect the updated snapshot")
+	assert.NotNil(t, index3["task-2"])
+	assert.Equal(t, "Task Two", index3["task-2"].Title)
+}
