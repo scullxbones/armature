@@ -20,6 +20,7 @@ func newContextHistoryCmd() *cobra.Command {
 		Use:   "context-history",
 		Short: "Show commits where an issue's context changed",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			opsRepoPath := appCtx.RepoPath
 			if appCtx.WorktreePath != "" {
 				opsRepoPath = appCtx.WorktreePath

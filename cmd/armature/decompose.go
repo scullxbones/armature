@@ -186,6 +186,7 @@ plan, or --schema to view the JSON schema.`,
 				return fmt.Errorf("required flag \"plan\" not set")
 			}
 
+			appCtx := currentCtx(cmd)
 			issuesDir := appCtx.IssuesDir
 
 			plan, err := decompose.ParsePlan(planPath)
@@ -256,6 +257,7 @@ func newDecomposeRevertCmd() *cobra.Command {
 		Use:   "decompose-revert",
 		Short: "Revert a decomposition plan from the issue graph",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			issuesDir := appCtx.IssuesDir
 
 			plan, err := decompose.ParsePlan(planPath)
@@ -341,8 +343,9 @@ func newDecomposeContextCmd() *cobra.Command {
 			}
 
 			issuesDir := ""
-			if appCtx != nil {
-				issuesDir = appCtx.IssuesDir
+			state, err := stateFromCmd(cmd)
+			if err == nil && state != nil && state.ctx != nil {
+				issuesDir = state.ctx.IssuesDir
 			}
 			ctx, err := decompose.BuildContext(decompose.ContextParams{
 				IssuesDir:   issuesDir,

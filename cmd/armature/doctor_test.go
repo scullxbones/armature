@@ -54,11 +54,6 @@ func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
 	for _, name := range stray {
 		assert.NoFileExists(t, filepath.Join(cwd, name), "doctor must not write %s into the test process cwd", name)
 	}
-
-	// And confirm appCtx.StateDir was actually populated (non-empty), which is
-	// the root cause fix: doctor's PersistentPreRunE must delegate to root's so
-	// StateDir gets set via stateDirFor.
-	assert.NotEmpty(t, appCtx.StateDir)
 }
 
 // TestDoctorLegacyRepoEmitsDiagnostic verifies that when doctor falls back to the

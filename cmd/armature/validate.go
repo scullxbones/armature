@@ -51,6 +51,7 @@ COVERAGE and OK lines.`,
   # Suppress INFO lines (e.g. phantom-scope notices)
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(cmd.Context())
 			if err != nil {

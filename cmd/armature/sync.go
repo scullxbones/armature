@@ -32,6 +32,7 @@ preview changes without committing them.`,
   # Preview which issues would be transitioned without making changes
   $ arm sync --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			// Load snapshot to ensure state is up to date
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(cmd.Context())
