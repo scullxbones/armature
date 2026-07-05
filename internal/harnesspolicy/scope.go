@@ -101,8 +101,7 @@ func (p ScopePolicy) allows(path string) bool {
 			return true
 		}
 		if strings.Contains(scope, "**") {
-			prefix, _, _ := strings.Cut(scope, "**")
-			if strings.HasPrefix(path, prefix) {
+			if doublestarMatch(scope, path) {
 				return true
 			}
 			continue
@@ -115,6 +114,46 @@ func (p ScopePolicy) allows(path string) bool {
 		}
 	}
 	return false
+}
+
+// doublestarMatch reports whether path matches a scope glob pattern containing
+// "**" segments, matching path-segment-by-segment (unlike a plain prefix cut,
+// which ignores everything after the "**" and so both over-allows, e.g.
+// "**/*.go" allowing non-Go files, and under-allows nothing after a suffix,
+// e.g. "internal/**/api.go" matching "internal/foo/bar.go"). "**" spans zero
+// or more path segments, per the conventional doublestar glob semantics.
+func doublestarMatch(pattern, path string) bool {
+	return matchSegments(strings.Split(pattern, "/"), strings.Split(path, "/"))
+}
+
+// matchSegments matches pattern segments against path segments, expanding a
+// "**" segment to zero or more path segments via backtracking, and matching
+// all other segments with filepath.Match (which itself supports single-segment
+// glob syntax like "*", "?", "[...]").
+func matchSegments(pattern, segments []string) bool {
+	for len(pattern) > 0 {
+		if pattern[0] == "**" {
+			if len(pattern) == 1 {
+				return true
+			}
+			for i := 0; i <= len(segments); i++ {
+				if matchSegments(pattern[1:], segments[i:]) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(segments) == 0 {
+			return false
+		}
+		matched, err := filepath.Match(pattern[0], segments[0])
+		if err != nil || !matched {
+			return false
+		}
+		pattern = pattern[1:]
+		segments = segments[1:]
+	}
+	return len(segments) == 0
 }
 
 func (p ScopePolicy) cleanPath(path string) string {

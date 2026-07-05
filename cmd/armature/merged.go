@@ -29,7 +29,7 @@ func hookLogContainsEntry(gitDir, kind string) bool {
 		return false
 	}
 
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		// Each entry is "<RFC3339 timestamp> <kind> ...": strip the timestamp
 		// (first space-delimited token) and match the kind at line-body start.
 		_, rest, found := strings.Cut(line, " ")

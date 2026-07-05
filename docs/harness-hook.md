@@ -177,6 +177,14 @@ blocked at merge time), not by freezing tool use and leaving the worker stranded
 ensures workers can continue even if temporary issues occur, while providing operators
 with a clear audit trail to detect and remediate enforcement gaps before merging.
 
+The scope check itself is purely lexical: it compares the tool-reported path string
+against the declared scope globs and does not resolve symlinks. A symlink that lives
+inside the worktree but points outside it (e.g. to another repo or `/etc`) is treated
+as an in-scope path if its in-worktree name matches, and writes through it are not
+detected as an escape. This is consistent with the hook's overall fail-open posture
+(ADR-0007): the hook is a best-effort guardrail, not a sandbox, and only the violation
+gate at merge time provides a hard backstop.
+
 ## Environment Variables
 
 When launching an external harness, set these variables in the harness environment:

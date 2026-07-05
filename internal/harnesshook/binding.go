@@ -1,8 +1,10 @@
 package harnesshook
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -26,6 +28,15 @@ type ResolvedBinding struct {
 
 // ExtractFilePathFromToolInput extracts the file path from the raw tool_input map.
 // It checks for common file path keys in the order they're likely to be used.
+//
+// For multi-file "changes" arrays, only the first entry's path is used for
+// binding resolution, whereas scope checking (harnesspolicy.ScopePolicy /
+// the Event.Paths built from extractPaths) evaluates every path in the array.
+// This asymmetry is intentional and fail-safe, not a bug: if the first path
+// resolves a binding but a later path in the same tool call falls outside
+// that issue's declared scope, the scope check still blocks it — the extra
+// paths can only ever cause additional blocking, never additional access
+// that binding resolution didn't already grant.
 func ExtractFilePathFromToolInput(toolInput map[string]any) string {
 	if toolInput == nil {
 		return ""
@@ -53,21 +64,44 @@ func ExtractFilePathFromToolInput(toolInput map[string]any) string {
 // ReadIssueBindingFile reads the issue ID bound to gitDir, preferring the
 // current armature-issue-id file and falling back to the legacy
 // armature-task-id file for worktrees claimed before the rename (commit
-// d52d78be). Returns "" if neither file exists. This is the single shared
-// implementation behind every "read the binding for a git dir" call site
+// d52d78be). Returns "" if neither file exists, and also "" if either file
+// exists but cannot be read (e.g. permission denied) — callers that need to
+// distinguish "unbound" from "read failed" should use
+// ReadIssueBindingFileErr instead. This is the single shared implementation
+// behind every "read the binding for a git dir" call site
 // (ResolveBindingFromDir, cmd/armature session/merged-gate resolution).
 func ReadIssueBindingFile(gitDir string) string {
+	issueID, _ := ReadIssueBindingFileErr(gitDir) //nolint:errcheck // error-swallowing variant kept for existing best-effort call sites
+	return issueID
+}
+
+// ReadIssueBindingFileErr is the error-returning counterpart to
+// ReadIssueBindingFile. It reads the issue ID bound to gitDir the same way
+// (armature-issue-id, falling back to legacy armature-task-id), but returns a
+// non-nil error when a binding file exists and could not be read for a reason
+// other than "does not exist" (e.g. permission denied). Callers that must
+// fail closed on such errors (rather than silently treating the worktree as
+// unbound) should use this variant.
+func ReadIssueBindingFileErr(gitDir string) (string, error) {
 	issueIDPath := filepath.Join(gitDir, "armature-issue-id")
-	if data, err := os.ReadFile(issueIDPath); err == nil { //nolint:gosec // G304: derived from a trusted git directory
-		return strings.TrimSpace(string(data))
+	data, err := os.ReadFile(issueIDPath) //nolint:gosec // G304: derived from a trusted git directory
+	if err == nil {
+		return strings.TrimSpace(string(data)), nil
+	}
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("read %s: %w", issueIDPath, err)
 	}
 
 	taskIDPath := filepath.Join(gitDir, "armature-task-id")
-	if data, err := os.ReadFile(taskIDPath); err == nil { //nolint:gosec // G304: derived from a trusted git directory
-		return strings.TrimSpace(string(data))
+	data, err = os.ReadFile(taskIDPath) //nolint:gosec // G304: derived from a trusted git directory
+	if err == nil {
+		return strings.TrimSpace(string(data)), nil
+	}
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("read %s: %w", taskIDPath, err)
 	}
 
-	return ""
+	return "", nil
 }
 
 // ResolveBindingFromDir walks up the directory tree starting from dir to find
@@ -142,11 +176,12 @@ func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 	return ResolveBindingFromDir(filepath.Dir(filePath))
 }
 
-// isShellTool reports whether the given tool name identifies a shell/bash tool,
-// which per ADR-0007 resolves at the session level (steps 3-4) rather than via
-// path-based resolution.
-func isShellTool(tool string) bool {
-	return tool == "Bash"
+// isShellTool reports whether the given tool name identifies a shell tool from the
+// supported list, which per ADR-0007 resolves at the session level (steps 3-4)
+// rather than via path-based resolution. supportedShellTools is derived from the
+// selected platform's PlatformCapabilities.SupportedShellTools.
+func isShellTool(tool string, supportedShellTools []string) bool {
+	return slices.Contains(supportedShellTools, tool)
 }
 
 // absolutizeFilePath resolves filePath against cwd if filePath is relative.
@@ -172,20 +207,22 @@ func absolutizeFilePath(filePath, cwd string) (string, bool) {
 // 3. Hook process cwd / session binding (fallback)
 // 4. ARMATURE_ISSUE_ID environment variable (handled by caller if needed)
 //
-// Bash (shell) and Stop events skip steps 1-2 and resolve at the session level only (steps 3-4).
+// Shell tools (identified by supportedShellTools) and Stop events skip steps 1-2 and
+// resolve at the session level only (steps 3-4). supportedShellTools should be derived
+// from the selected platform's PlatformCapabilities.SupportedShellTools.
 // Returns a ResolvedBinding with the issue ID, git directory, and resolution step (file_path, event_cwd, or session).
 // When steps 1-2 locate a worktree git dir but it has no binding, that git dir is returned
 // (IssueID empty, ResolutionStep empty) so callers can log a violation against the correct
 // worktree rather than the session's git dir.
-func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessionGitDir string) (ResolvedBinding, error) {
+func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessionGitDir string, supportedShellTools []string) (ResolvedBinding, error) {
 	sessionFallback := ResolvedBinding{
 		IssueID:        sessionBinding,
 		GitDir:         sessionGitDir,
 		ResolutionStep: "session",
 	}
 
-	// Bash/shell and Stop events resolve at the session level only (steps 3-4)
-	if eventInfo.Kind == EventStop || isShellTool(eventInfo.Tool) {
+	// Stop events and shell tools resolve at the session level only (steps 3-4)
+	if eventInfo.Kind == EventStop || isShellTool(eventInfo.Tool, supportedShellTools) {
 		return sessionFallback, nil
 	}
 

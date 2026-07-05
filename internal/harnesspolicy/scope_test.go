@@ -108,3 +108,38 @@ func TestScopePolicyRejectsPathOutsideDoubleStarScope(t *testing.T) {
 
 	require.False(t, result.Allowed)
 }
+
+func TestScopePolicyDoubleStarPrefixSuffix(t *testing.T) {
+	t.Parallel()
+	policy := NewScopePolicy([]string{"**/*.go"})
+
+	allowed := policy.CheckPaths([]string{"main.go", "internal/foo/bar.go"})
+	require.True(t, allowed.Allowed, "*.go files at any depth should match **/*.go")
+
+	blocked := policy.CheckPaths([]string{"internal/foo/README.md"})
+	require.False(t, blocked.Allowed, "**/*.go must not allow non-.go files (prefix-cut bug regression)")
+}
+
+func TestScopePolicyDoubleStarMiddleSegmentRespectsSuffix(t *testing.T) {
+	t.Parallel()
+	policy := NewScopePolicy([]string{"internal/**/api.go"})
+
+	allowed := policy.CheckPaths([]string{"internal/api.go", "internal/foo/api.go", "internal/foo/bar/api.go"})
+	require.True(t, allowed.Allowed, "internal/**/api.go should match api.go at any depth under internal/, including zero intermediate segments")
+
+	blocked := policy.CheckPaths([]string{"internal/foo/bar.go"})
+	require.False(t, blocked.Allowed, "internal/**/api.go must not allow files that aren't named api.go (prefix-cut bug regression)")
+}
+
+func TestScopePolicyDoubleStarDoesNotMatchSiblingPrefixCollision(t *testing.T) {
+	t.Parallel()
+	policy := NewScopePolicy([]string{"internal/**"})
+
+	// "internal-x" shares the literal prefix "internal" with the scope "internal/**"
+	// but is not a path under "internal/"; it must not be allowed.
+	blocked := policy.CheckPaths([]string{"internal-x/foo.go"})
+	require.False(t, blocked.Allowed, "internal/** must not match sibling paths that merely share a string prefix")
+
+	allowed := policy.CheckPaths([]string{"internal/foo.go"})
+	require.True(t, allowed.Allowed)
+}
