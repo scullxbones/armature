@@ -43,12 +43,16 @@ func newStaleReviewCmd() *cobra.Command {
 			}
 
 			// Detect stale entries.
-			verifyResults, _ := lc.VerifyAll() //nolint:errcheck // all results included even if some entries are not OK
+			verifyResults, _ := lc.VerifyAll() //nolint:errcheck // combined error is redundant with per-result status below
 
 			var reviewItems []stalereview.ReviewItem
 			for _, result := range verifyResults {
-				// Only include sources that are not OK.
-				if result.Status == sources.VerifyOK {
+				// Only include sources that have changed or are missing from cache;
+				// surface read errors instead of silently discarding them.
+				if result.Status == sources.VerifyError {
+					return fmt.Errorf("read cache for %s: %w", result.ID, result.Error)
+				}
+				if result.Status != sources.VerifyChanged && result.Status != sources.VerifyMissing {
 					continue
 				}
 
@@ -73,13 +77,9 @@ func newStaleReviewCmd() *cobra.Command {
 				switch result.Status {
 				case sources.VerifyChanged:
 					summary = fmt.Sprintf("fingerprint changed (stored: %s, current: %s)",
-						result.Stored[:8], result.Current[:8])
+						short(result.Stored), short(result.Current))
 				case sources.VerifyMissing:
 					summary = "no cache found"
-				case sources.VerifyStale:
-					summary = "last sync failed"
-				case sources.VerifyError:
-					summary = fmt.Sprintf("error: %v", result.Error)
 				}
 
 				reviewItems = append(reviewItems, stalereview.ReviewItem{

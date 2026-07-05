@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -195,4 +196,42 @@ func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, verifyOut2.String(), "STALE")
 	assert.NotContains(t, verifyOut2.String(), "OK")
+}
+
+// TestSourcesCommandOutputParity_REQ_ARCHIMP_S18_T2 pins the human-facing
+// output format of `sources sync` and `sources verify` after the Lifecycle
+// refactor: sync prints "synced <id>  fp=<8-char fingerprint>" and verify
+// prints the ID padded to 40 columns followed by the status.
+func TestSourcesCommandOutputParity_REQ_ARCHIMP_S18_T2(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	tmpfile := filepath.Join(t.TempDir(), "source.txt")
+	require.NoError(t, os.WriteFile(tmpfile, []byte("parity content"), 0600))
+
+	addCmd := newRootCmd()
+	addCmd.SetOut(new(bytes.Buffer))
+	addCmd.SetErr(new(bytes.Buffer))
+	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
+		"--url", tmpfile, "--type", "filesystem"})
+	require.NoError(t, addCmd.Execute())
+
+	syncBuf := new(bytes.Buffer)
+	syncCmd := newRootCmd()
+	syncCmd.SetOut(syncBuf)
+	syncCmd.SetErr(new(bytes.Buffer))
+	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
+	require.NoError(t, syncCmd.Execute())
+
+	syncLine := regexp.MustCompile(`(?m)^synced \S+  fp=[0-9a-f]{8}$`)
+	assert.Regexp(t, syncLine, syncBuf.String(), "sync output format changed")
+
+	verifyBuf := new(bytes.Buffer)
+	verifyCmd := newRootCmd()
+	verifyCmd.SetOut(verifyBuf)
+	verifyCmd.SetErr(new(bytes.Buffer))
+	verifyCmd.SetArgs([]string{"sources", "verify", "--repo", repo})
+	require.NoError(t, verifyCmd.Execute())
+
+	verifyLine := regexp.MustCompile(`(?m)^\S+ +OK$`)
+	assert.Regexp(t, verifyLine, verifyBuf.String(), "verify output format changed")
 }

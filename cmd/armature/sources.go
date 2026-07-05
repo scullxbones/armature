@@ -113,13 +113,14 @@ func newSourcesSyncCmd() *cobra.Command {
 						Timestamp: nowEpoch(),
 						WorkerID:  workerID,
 						Payload: ops.Payload{
-							SHA: result.Fingerprint,
+							SHA:      result.Fingerprint,
+							Provider: result.ProviderType,
 						},
 					}
 					if syncErr := appendLowStakesOp(mustState(cmd), logPath, o); syncErr != nil {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", result.ID, syncErr)
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", result.ID, result.Fingerprint[:8])
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", result.ID, short(result.Fingerprint))
 				}
 			}
 
@@ -167,7 +168,7 @@ func newSourcesVerifyCmd() *cobra.Command {
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  MISSING\n", result.ID)
 					case sources.VerifyChanged:
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  CHANGED  (stored=%s actual=%s)\n",
-							result.ID, result.Stored[:8], result.Current[:8])
+							result.ID, short(result.Stored), short(result.Current))
 					}
 				}
 			}

@@ -40,12 +40,8 @@ func BuildContext(params ContextParams) (ContextOutput, error) {
 		sourcesDir := filepath.Join(params.IssuesDir, "sources")
 		lc := sources.NewLifecycle(sourcesDir)
 		for _, id := range params.SourceIDs {
-			// Verify the source exists and get its cached content via Lifecycle.
-			_, err := lc.Get(id)
-			if err != nil {
-				continue
-			}
-			data, err := sources.ReadCache(sourcesDir, id)
+			// Get the source's cached content via Lifecycle.
+			data, err := lc.Content(id)
 			if err != nil || data == nil {
 				continue
 			}

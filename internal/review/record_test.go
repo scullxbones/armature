@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRecord_Success_REQ_ARCHIMP_S18_T1(t *testing.T) {
+func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
 	// Create a minimal valid assessment
 	assessment := &ConformanceAssessment{

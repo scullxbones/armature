@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -68,10 +69,11 @@ func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 
 // SyncResult holds the result of a source synchronization.
 type SyncResult struct {
-	ID          string
-	Fingerprint string
-	LastSynced  time.Time
-	Error       error
+	ID           string
+	Fingerprint  string
+	ProviderType string
+	LastSynced   time.Time
+	Error        error
 }
 
 // Sync synchronizes a single source by fetching its content, computing a fingerprint,
@@ -85,6 +87,19 @@ func (l *Lifecycle) Sync(ctx context.Context, id string) SyncResult {
 		}
 	}
 
+	result := l.syncEntry(ctx, &manifest, id)
+
+	if writeErr := WriteManifest(l.manifestPath, manifest); writeErr != nil && result.Error == nil {
+		result.Error = fmt.Errorf("write manifest: %w", writeErr)
+	}
+
+	return result
+}
+
+// syncEntry synchronizes a single source against the given in-memory manifest,
+// mutating the manifest's entry in place but not persisting it. Callers are
+// responsible for writing the manifest to disk.
+func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string) SyncResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
 		return SyncResult{
@@ -92,15 +107,16 @@ func (l *Lifecycle) Sync(ctx context.Context, id string) SyncResult {
 			Error: fmt.Errorf("source %q not found in manifest", id),
 		}
 	}
+	providerType := entry.ProviderType
 
 	provider, err := l.provider.ProviderForType(entry.ProviderType)
 	if err != nil {
 		entry.SyncFailed = true
 		manifest.Upsert(*entry)
-		_ = WriteManifest(l.manifestPath, manifest) //nolint:errcheck // best-effort persist
 		return SyncResult{
-			ID:    id,
-			Error: err,
+			ID:           id,
+			ProviderType: providerType,
+			Error:        err,
 		}
 	}
 
@@ -108,40 +124,35 @@ func (l *Lifecycle) Sync(ctx context.Context, id string) SyncResult {
 	if err != nil {
 		entry.SyncFailed = true
 		manifest.Upsert(*entry)
-		_ = WriteManifest(l.manifestPath, manifest) //nolint:errcheck // best-effort persist
 		return SyncResult{
-			ID:    id,
-			Error: fmt.Errorf("fetch: %w", err),
+			ID:           id,
+			ProviderType: providerType,
+			Error:        fmt.Errorf("fetch: %w", err),
 		}
 	}
 
 	fp := Fingerprint(data)
+
+	if err := WriteCache(l.manifestPath, id, data); err != nil {
+		entry.SyncFailed = true
+		manifest.Upsert(*entry)
+		return SyncResult{
+			ID:           id,
+			ProviderType: providerType,
+			Error:        fmt.Errorf("write cache: %w", err),
+		}
+	}
+
 	entry.Fingerprint = fp
 	entry.LastSynced = time.Now().UTC() //nolint:forbidigo // sync records wall-clock time of update
 	entry.SyncFailed = false
 	manifest.Upsert(*entry)
 
-	if err := WriteManifest(l.manifestPath, manifest); err != nil {
-		return SyncResult{
-			ID:    id,
-			Error: fmt.Errorf("write manifest: %w", err),
-		}
-	}
-
-	if err := WriteCache(l.manifestPath, id, data); err != nil {
-		entry.SyncFailed = true
-		manifest.Upsert(*entry)
-		_ = WriteManifest(l.manifestPath, manifest) //nolint:errcheck // best-effort persist
-		return SyncResult{
-			ID:    id,
-			Error: fmt.Errorf("write cache: %w", err),
-		}
-	}
-
 	return SyncResult{
-		ID:          id,
-		Fingerprint: fp,
-		LastSynced:  entry.LastSynced,
+		ID:           id,
+		Fingerprint:  fp,
+		ProviderType: providerType,
+		LastSynced:   entry.LastSynced,
 	}
 }
 
@@ -157,16 +168,24 @@ func (l *Lifecycle) SyncAll(ctx context.Context) ([]SyncResult, error) {
 	successCount := 0
 
 	for id := range manifest.Entries {
-		result := l.Sync(ctx, id)
+		result := l.syncEntry(ctx, &manifest, id)
 		results = append(results, result)
 		if result.Error == nil {
 			successCount++
 		}
 	}
 
+	if writeErr := WriteManifest(l.manifestPath, manifest); writeErr != nil {
+		return results, fmt.Errorf("write manifest: %w", writeErr)
+	}
+
 	// Return error only if all sources failed.
 	if successCount == 0 && len(manifest.Entries) > 0 {
-		return results, fmt.Errorf("all sources failed to sync")
+		details := make([]string, 0, len(results))
+		for _, r := range results {
+			details = append(details, fmt.Sprintf("%s: %v", r.ID, r.Error))
+		}
+		return results, fmt.Errorf("all sources failed to sync: %s", strings.Join(details, "; "))
 	}
 
 	return results, nil
@@ -310,6 +329,15 @@ func (l *Lifecycle) ListAll() ([]SourceEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// Content returns the cached content for a source, verifying the source is
+// registered before reading its cache file. Returns nil if no cache exists.
+func (l *Lifecycle) Content(id string) ([]byte, error) {
+	if _, err := l.Get(id); err != nil {
+		return nil, err
+	}
+	return ReadCache(l.manifestPath, id)
 }
 
 // Get retrieves a single source by ID.
