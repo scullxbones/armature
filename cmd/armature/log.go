@@ -19,6 +19,7 @@ func newLogCmd() *cobra.Command {
 		Use:   "log",
 		Short: "Show the audit log of ops",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			opsDir := appCtx.IssuesDir + "/ops"
 
 			// Read all log files from opsDir

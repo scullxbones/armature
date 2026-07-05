@@ -32,6 +32,7 @@ func newRenderContextCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
+			appCtx := currentCtx(cmd)
 			var state *materialize.State
 			if rcAt != "" {
 				// Time-travel: replay ops as they existed at the given commit SHA.

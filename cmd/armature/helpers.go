@@ -88,12 +88,6 @@ type executionState struct {
 
 type executionStateKey struct{}
 
-var (
-	appCtx     *config.Context
-	appPusher  ops.Pusher
-	appTracker ops.PendingPushTracker
-)
-
 func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
 	if cmd == nil {
 		return nil, fmt.Errorf("command context unavailable")

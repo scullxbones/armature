@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -21,8 +22,7 @@ func newDoctorCmd() *cobra.Command {
 		Short: "Run repo health checks (D1-D6)",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Fall through to root PersistentPreRunE for normal config loading.
-			// This correctly sets appCtx, StateDir, pusher, tracker, etc. — the
-			// same as every other command — with no duplicated logic here.
+			// This correctly sets the execution state in the command context.
 			rootErr := cmd.Root().PersistentPreRunE(cmd, args)
 			if rootErr == nil {
 				return nil
@@ -46,13 +46,20 @@ func newDoctorCmd() *cobra.Command {
 			// Check if legacy layout exists
 			info, statErr := os.Stat(legacyOpsPath)
 			if statErr == nil && info.IsDir() {
-				// Legacy layout detected: set up minimal context to allow doctor to run
-				appCtx = &config.Context{
+				// Legacy layout detected: set up minimal execution state in the command context
+				legacyCtx := &config.Context{
 					RepoPath:  absRepoPath,
 					IssuesDir: legacyArmaturePath,
 					StateDir:  filepath.Join(legacyArmaturePath, "state"),
 					// Note: WorktreePath is empty for legacy repos, which is expected
 				}
+				state := &executionState{ctx: legacyCtx}
+				state.pusher, state.tracker = initPushDeps(legacyCtx)
+				baseCtx := cmd.Context()
+				if baseCtx == nil {
+					baseCtx = context.Background()
+				}
+				cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "legacy single-branch layout detected at %s; run `arm bootstrap` to migrate to dual-branch.\n", legacyOpsPath)
 				return nil
 			}
@@ -61,6 +68,7 @@ func newDoctorCmd() *cobra.Command {
 			return rootErr
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			issuesDir := appCtx.IssuesDir
 			repoPath := appCtx.RepoPath
 

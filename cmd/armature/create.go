@@ -85,7 +85,7 @@ func newCreateCmd() *cobra.Command {
 			// If --source was provided, resolve it from the manifest and emit a
 			// source-link op so the issue is fully cited in a single invocation.
 			if sourceRef != "" {
-				dir := sourcesDir()
+				dir := sourcesDir(ctx)
 				lc := sources.NewLifecycle(dir)
 
 				var entry *sources.SourceEntry

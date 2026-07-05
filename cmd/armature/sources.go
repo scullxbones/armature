@@ -12,11 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func sourcesDir(args ...*config.Context) string {
-	ctx := appCtx
-	if len(args) > 0 && args[0] != nil {
-		ctx = args[0]
-	}
+func sourcesDir(ctx *config.Context) string {
 	if ctx == nil {
 		return filepath.Join(".", "sources")
 	}

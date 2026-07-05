@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -53,6 +54,9 @@ This enforces branch + PR discipline.`,
 				return fmt.Errorf("invalid status %q: valid values are %v", to, valid)
 			}
 
+			state := mustState(cmd)
+			appCtx := state.ctx
+
 			// Check branch discipline when transitioning to done (unless --force)
 			if to == "done" && !force {
 				repoPath := appCtx.RepoPath
@@ -69,7 +73,7 @@ This enforces branch + PR discipline.`,
 
 			// Warn if transitioning to done and issue has no source-link or accept-citation (unless --force)
 			if to == "done" && !force {
-				if uncited := isIssueUncited(issueID); uncited {
+				if uncited := isIssueUncited(issueID, appCtx); uncited {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"WARNING: issue %s has no source citation.\n"+
 							"Run 'arm source-link --issue %s --source-id <UUID>' to link to a source document,\n"+
@@ -78,9 +82,6 @@ This enforces branch + PR discipline.`,
 						issueID, issueID, issueID)
 				}
 			}
-
-			state := mustState(cmd)
-			appCtx := state.ctx
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
@@ -171,7 +172,7 @@ This enforces branch + PR discipline.`,
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
 // It reads the materialized issue directly from disk without triggering rematerialization.
 // If the issue cannot be read (e.g. not yet materialized), it returns false to avoid false positives.
-func isIssueUncited(issueID string) bool {
+func isIssueUncited(issueID string, appCtx *config.Context) bool {
 	store := newSnapshotStore(appCtx)
 	// A read error degrades gracefully: treat the issue as not uncited, matching the previous
 	// behavior of ignoring missing-file errors when the issue file was absent.
