@@ -29,7 +29,7 @@ func newStaleReviewCmd() *cobra.Command {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			lc := sources.NewLifecycle(sourcesDir())
+			lc := sources.NewLifecycle(sourcesDir(appCtx))
 
 			// Load snapshot to get materialized state
 			store := newSnapshotStore(appCtx)

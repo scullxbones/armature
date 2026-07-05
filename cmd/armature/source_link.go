@@ -26,16 +26,16 @@ func newSourceLinkCmd() *cobra.Command {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
 
-			dir := sourcesDir()
+			state := mustState(cmd)
+			ctx := state.ctx
+
+			dir := sourcesDir(ctx)
 			lc := sources.NewLifecycle(dir)
 
 			entry, err := lc.Get(sourceID)
 			if err != nil {
 				return fmt.Errorf("source-id %q not found in manifest: %w", sourceID, err)
 			}
-
-			state := mustState(cmd)
-			ctx := state.ctx
 			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return err

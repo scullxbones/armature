@@ -27,6 +27,7 @@ func newWorkersCmd() *cobra.Command {
 		Use:   "workers",
 		Short: "Show worker activity status",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			opsDir := filepath.Join(appCtx.IssuesDir, "ops")
 			defaultTTL := appCtx.Config.DefaultTTL
 			if defaultTTL <= 0 {

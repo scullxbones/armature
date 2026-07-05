@@ -23,6 +23,7 @@ func newTUICmd() *cobra.Command {
 		Use:   "tui",
 		Short: "Interactive kanban board with auto-refresh",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			issuesDir := appCtx.IssuesDir
 			stateDir := filepath.Join(appCtx.IssuesDir, "state", ".tui")
 

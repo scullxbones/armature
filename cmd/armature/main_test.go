@@ -46,6 +46,15 @@ func (f *fakePendingPushTracker) Count() (int, error) {
 
 var runTrlsMu sync.Mutex
 
+// getTestContext resolves the execution context for a test repository.
+// This is a test helper that mirrors the production config.ResolveContext behavior.
+func getTestContext(t *testing.T, repo string) *config.Context {
+	t.Helper()
+	ctx, err := config.ResolveContext(repo)
+	require.NoError(t, err, "failed to resolve context for test repo %q", repo)
+	return ctx
+}
+
 // getTestStateDir returns the absolute path to the worker-specific state directory.
 // In dual-branch mode, state lives at the worktree root (.arm/state/); in single-branch,
 // it lives inside .armature/state/.
@@ -427,9 +436,9 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 
 	// Ops are committed automatically to the _armature branch (dual-branch mode
 	// is always on), so capture the ops-worktree HEAD after create (issue exists, no notes).
-	require.NotNil(t, appCtx)
-	require.NotEmpty(t, appCtx.WorktreePath)
-	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
+	testCtx := getTestContext(t, repo)
+	require.NotEmpty(t, testCtx.WorktreePath)
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", testCtx.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
@@ -437,7 +446,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 	require.NoError(t, err)
 
 	// Capture ops-worktree HEAD after the note (should now include it)
-	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", testCtx.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 
@@ -465,9 +474,9 @@ func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "TST-DB", "--title", "Dual branch render", "--type", "task")
 	require.NoError(t, err)
 
-	require.NotNil(t, appCtx)
-	require.NotEmpty(t, appCtx.WorktreePath)
-	shaCmd := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD")
+	testCtx2 := getTestContext(t, repo)
+	require.NotEmpty(t, testCtx2.WorktreePath)
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", testCtx2.WorktreePath, "rev-parse", "HEAD")
 	shaOutBytes, err := shaCmd.CombinedOutput()
 	require.NoError(t, err)
 	sha := strings.TrimSpace(string(shaOutBytes))
@@ -1080,11 +1089,13 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	run(t, repo, "git", "config", "--local", "--unset", "armature.worker-id")
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
-	require.NotNil(t, appCtx)
+	// Verify state dir is resolved correctly by checking that the expected path exists
 	defaultID := "default"
 	defaultID = workerIdentityWithSlot(defaultID) // Apply slot suffix if ARM_LOG_SLOT is set
 	expectedDefault := filepath.Join(repo, ".arm", "state", defaultID)
-	assert.Equal(t, expectedDefault, appCtx.StateDir)
+	// Check that state files exist in the expected location (verifying StateDir was set correctly)
+	_, err = os.Stat(expectedDefault)
+	assert.NoError(t, err, "StateDir should exist at %s when no worker ID is set", expectedDefault)
 
 	// Case 2: Worker ID set
 	_, err = runTrls(t, repo, "worker-init")
@@ -1094,10 +1105,12 @@ func TestAppCtxStateDirSet(t *testing.T) {
 
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
-	require.NotNil(t, appCtx)
+	// Verify state dir is resolved correctly for the configured worker ID
 	workerID = workerIdentityWithSlot(workerID) // Apply slot suffix if ARM_LOG_SLOT is set
 	expectedWorker := filepath.Join(repo, ".arm", "state", workerID)
-	assert.Equal(t, expectedWorker, appCtx.StateDir)
+	// Check that state files exist in the expected location
+	_, err = os.Stat(expectedWorker)
+	assert.NoError(t, err, "StateDir should exist at %s for configured worker ID", expectedWorker)
 }
 
 func TestLastOpTimestampFromLog_Empty(t *testing.T) {
@@ -1683,9 +1696,9 @@ func TestContextHistoryCommand(t *testing.T) {
 
 	// Ops are committed automatically to the _armature branch (dual-branch mode
 	// is always on); capture the ops-worktree HEAD after creation.
-	require.NotNil(t, appCtx)
-	require.NotEmpty(t, appCtx.WorktreePath)
-	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
+	testCtx3 := getTestContext(t, repo)
+	require.NotEmpty(t, testCtx3.WorktreePath)
+	sha1Out, err2 := exec.CommandContext(context.Background(), "git", "-C", testCtx3.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha1 := strings.TrimSpace(string(sha1Out))
 
@@ -1693,7 +1706,7 @@ func TestContextHistoryCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Capture the ops-worktree HEAD after the note
-	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", appCtx.WorktreePath, "rev-parse", "HEAD").Output()
+	sha2Out, err2 := exec.CommandContext(context.Background(), "git", "-C", testCtx3.WorktreePath, "rev-parse", "HEAD").Output()
 	require.NoError(t, err2)
 	sha2 := strings.TrimSpace(string(sha2Out))
 

@@ -15,6 +15,7 @@ func newMaterializeCmd() *cobra.Command {
 		Use:   "materialize",
 		Short: "Replay op logs and update materialized state files",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
 			// Read all ops from log files
 			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
 			if err != nil {
