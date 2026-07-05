@@ -86,29 +86,35 @@ func newCreateCmd() *cobra.Command {
 			// source-link op so the issue is fully cited in a single invocation.
 			if sourceRef != "" {
 				dir := sourcesDir()
-				manifest, err := sources.ReadManifest(dir)
-				if err != nil {
-					return fmt.Errorf("read manifest: %w", err)
-				}
+				lc := sources.NewLifecycle(dir)
 
 				var entry *sources.SourceEntry
 				var resolvedID string
+				var resolveErr error
 
 				// Treat the ref as a UUID first; fall back to URL/path lookup.
 				if _, parseErr := uuid.Parse(sourceRef); parseErr == nil {
-					e, ok := manifest.Get(sourceRef)
-					if !ok {
-						return fmt.Errorf("source %q not found in manifest", sourceRef)
+					entry, resolveErr = lc.Get(sourceRef)
+					if resolveErr != nil {
+						return fmt.Errorf("source %q not found in manifest: %w", sourceRef, resolveErr)
 					}
-					entry = e
 					resolvedID = sourceRef
 				} else {
-					e, ok := manifest.GetByURL(sourceRef)
-					if !ok {
+					// Fall back to URL lookup in the manifest.
+					allEntries, err := lc.ListAll()
+					if err != nil {
+						return fmt.Errorf("list sources: %w", err)
+					}
+					for _, e := range allEntries {
+						if e.URL == sourceRef {
+							entry = &e
+							resolvedID = e.ID
+							break
+						}
+					}
+					if entry == nil {
 						return fmt.Errorf("source %q not found in manifest", sourceRef)
 					}
-					entry = e
-					resolvedID = entry.ID
 				}
 
 				slOp := ops.Op{

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/config"
@@ -47,10 +45,7 @@ func newSourcesAddCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
-			manifest, err := sources.ReadManifest(dir)
-			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
-			}
+			lc := sources.NewLifecycle(dir)
 
 			entry := sources.SourceEntry{
 				ID:           uuid.New().String(),
@@ -66,13 +61,12 @@ func newSourcesAddCmd() *cobra.Command {
 						"safe when arm sync is always run from the repo root; use an absolute path to avoid this dependency\n", url)
 			}
 
-			manifest.Upsert(entry)
-
-			if err := sources.WriteManifest(dir, manifest); err != nil {
-				return fmt.Errorf("write manifest: %w", err)
+			registered, err := lc.Register(entry)
+			if err != nil {
+				return fmt.Errorf("register source: %w", err)
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "added source %s (%s)\n", entry.ID, entry.URL)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "added source %s (%s)\n", registered.ID, registered.URL)
 			return nil
 		},
 	}
@@ -93,12 +87,14 @@ func newSourcesSyncCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
-			manifest, err := sources.ReadManifest(dir)
+			lc := sources.NewLifecycle(dir)
+
+			entries, err := lc.ListAll()
 			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
+				return fmt.Errorf("list sources: %w", err)
 			}
 
-			if len(manifest.Entries) == 0 {
+			if len(entries) == 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no sources in manifest")
 				return nil
 			}
@@ -109,65 +105,31 @@ func newSourcesSyncCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			var syncErrors []string
-			syncedCount := 0
-			for id, entry := range manifest.Entries {
-				provider, err := providerForType(entry.ProviderType)
-				if err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "skip %s: %v\n", id, err)
-					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
-					entry.SyncFailed = true
-					manifest.Upsert(entry)
-					continue
-				}
+			results, err := lc.SyncAll(ctx)
 
-				data, err := provider.Fetch(ctx, entry)
-				if err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "fetch %s: %v\n", id, err)
-					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
-					entry.SyncFailed = true
-					manifest.Upsert(entry)
-					continue
+			for _, result := range results {
+				if result.Error != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "sync %s: %v\n", result.ID, result.Error)
+				} else {
+					o := ops.Op{
+						Type:      ops.OpSourceFingerprint,
+						TargetID:  result.ID,
+						Timestamp: nowEpoch(),
+						WorkerID:  workerID,
+						Payload: ops.Payload{
+							SHA: result.Fingerprint,
+						},
+					}
+					if syncErr := appendLowStakesOp(mustState(cmd), logPath, o); syncErr != nil {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", result.ID, syncErr)
+					}
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", result.ID, result.Fingerprint[:8])
 				}
-
-				entry.Fingerprint = sources.Fingerprint(data)
-				entry.LastSynced = time.Now().UTC()
-				entry.SyncFailed = false
-				manifest.Upsert(entry)
-
-				if err := sources.WriteCache(dir, id, data); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "write cache %s: %v\n", id, err)
-					syncErrors = append(syncErrors, fmt.Sprintf("%s: %v", id, err))
-					entry.SyncFailed = true
-					manifest.Upsert(entry)
-					continue
-				}
-
-				o := ops.Op{
-					Type:      ops.OpSourceFingerprint,
-					TargetID:  id,
-					Timestamp: nowEpoch(),
-					WorkerID:  workerID,
-					Payload: ops.Payload{
-						SHA:      entry.Fingerprint,
-						Provider: entry.ProviderType,
-					},
-				}
-				if err := appendLowStakesOp(mustState(cmd), logPath, o); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", id, err)
-				}
-
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", id, entry.Fingerprint[:8])
-				syncedCount++
 			}
 
-			if err := sources.WriteManifest(dir, manifest); err != nil {
-				return fmt.Errorf("write manifest: %w", err)
-			}
-
-			// Return error only when no sources could be synced successfully.
-			if syncedCount == 0 && len(syncErrors) > 0 {
-				return fmt.Errorf("all sources failed to sync: %s", strings.Join(syncErrors, "; "))
+			// Return error only when all sources failed.
+			if err != nil {
+				return err
 			}
 
 			return nil
@@ -182,49 +144,41 @@ func newSourcesVerifyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
-			manifest, err := sources.ReadManifest(dir)
+			lc := sources.NewLifecycle(dir)
+
+			entries, err := lc.ListAll()
 			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
+				return fmt.Errorf("list sources: %w", err)
 			}
 
-			if len(manifest.Entries) == 0 {
+			if len(entries) == 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no sources in manifest")
 				return nil
 			}
 
-			allOK := true
-			for id, entry := range manifest.Entries {
-				// Check if the last sync attempt failed
-				if entry.SyncFailed {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  STALE  (cached content exists but last sync failed)\n", id)
-					allOK = false
-					continue
-				}
+			results, err := lc.VerifyAll()
 
-				data, err := sources.ReadCache(dir, id)
-				if err != nil {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  ERROR  %v\n", id, err)
-					allOK = false
-					continue
-				}
-				if data == nil {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  MISSING\n", id)
-					allOK = false
-					continue
-				}
-
-				actual := sources.Fingerprint(data)
-				if actual == entry.Fingerprint {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  OK\n", id)
+			for _, result := range results {
+				if result.Error != nil {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  ERROR  %v\n", result.ID, result.Error)
 				} else {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  CHANGED  (stored=%s actual=%s)\n",
-						id, entry.Fingerprint[:8], actual[:8])
-					allOK = false
+					switch result.Status {
+					case sources.VerifyOK:
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  OK\n", result.ID)
+					case sources.VerifyStale:
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  STALE  (cached content exists but last sync failed)\n", result.ID)
+					case sources.VerifyMissing:
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  MISSING\n", result.ID)
+					case sources.VerifyChanged:
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  CHANGED  (stored=%s actual=%s)\n",
+							result.ID, result.Stored[:8], result.Current[:8])
+					}
 				}
 			}
 
-			if !allOK {
-				return fmt.Errorf("one or more sources have changed or are missing")
+			// Return error only when any source is not OK.
+			if err != nil {
+				return err
 			}
 			return nil
 		},
