@@ -27,14 +27,11 @@ func newSourceLinkCmd() *cobra.Command {
 			}
 
 			dir := sourcesDir()
-			manifest, err := sources.ReadManifest(dir)
-			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
-			}
+			lc := sources.NewLifecycle(dir)
 
-			entry, ok := manifest.Get(sourceID)
-			if !ok {
-				return fmt.Errorf("source-id %q not found in manifest", sourceID)
+			entry, err := lc.Get(sourceID)
+			if err != nil {
+				return fmt.Errorf("source-id %q not found in manifest: %w", sourceID, err)
 			}
 
 			state := mustState(cmd)

@@ -38,9 +38,16 @@ func (r *IssuePolicyResolver) Resolve(taskID string) (IssuePolicy, error) {
 		return IssuePolicy{}, fmt.Errorf("task %s not found: %w", taskID, err)
 	}
 
-	manifest, err := sources.ReadManifest(r.sourcesDir())
+	lc := sources.NewLifecycle(r.sourcesDir())
+	entries, err := lc.ListAll()
 	if err != nil {
-		return IssuePolicy{}, fmt.Errorf("read sources manifest: %w", err)
+		return IssuePolicy{}, fmt.Errorf("read sources: %w", err)
+	}
+
+	// Build manifest from entries for compatibility.
+	manifest := sources.Manifest{Entries: make(map[string]sources.SourceEntry)}
+	for _, entry := range entries {
+		manifest.Entries[entry.ID] = entry
 	}
 
 	return IssuePolicy{
