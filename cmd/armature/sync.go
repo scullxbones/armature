@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/snapshot"
 	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -34,10 +32,9 @@ preview changes without committing them.`,
   # Preview which issues would be transitioned without making changes
   $ arm sync --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issuesDir := appCtx.IssuesDir
-
 			// Load snapshot to ensure state is up to date
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir)
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
@@ -105,7 +102,7 @@ preview changes without committing them.`,
 			}
 
 			// Re-load snapshot so state files reflect the new merged status
-			snap, err = snapshot.Load(filepath.Join(issuesDir, "ops"), appCtx.StateDir)
+			snap, err = store.Refresh(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

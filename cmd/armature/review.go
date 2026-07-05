@@ -10,7 +10,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -63,10 +62,10 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	}
 
 	ctx := currentCtx(cmd)
-	issuesDir := ctx.IssuesDir
 
 	// Load snapshot to get issue metadata
-	snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
+	store := newSnapshotStore(ctx)
+	snap, err := store.Load(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
@@ -184,9 +183,9 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 
 	// Load snapshot to fetch issue data for contract validation and duplicate checking
 	ctx := currentCtx(cmd)
-	issuesDir := ctx.IssuesDir
 
-	snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
+	store := newSnapshotStore(ctx)
+	snap, err := store.Load(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}

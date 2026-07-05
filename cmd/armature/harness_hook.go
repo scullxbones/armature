@@ -284,7 +284,8 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			// Load snapshot to check if binding is stale
-			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir)
+			store := snapshot.NewStore(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir)
+			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				// Snapshot load errors are fail-open with loud stderr warning
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to load snapshot: %v\n", err)
