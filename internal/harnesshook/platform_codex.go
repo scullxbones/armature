@@ -32,12 +32,16 @@ func (a *CodexAdapter) Name() string { return "codex" }
 // Capabilities returns the hook event support matrix for Codex.
 func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
-		PreToolUse:          true,
-		Stop:                true,
-		BlockingStop:        true,
-		ShellInterception:   "best-effort",
-		SupportedEditTools:  []string{"apply_patch", "Edit", "Write"},
-		SupportedShellTools: []string{"Bash"},
+		PreToolUse:         true,
+		Stop:               true,
+		BlockingStop:       true,
+		ShellInterception:  "best-effort",
+		SupportedEditTools: []string{"apply_patch", "Edit", "Write"},
+		// Codex's native shell tool is named "shell" (also seen as "local_shell" in
+		// some harness versions); "Bash" is kept for compatibility with configurations
+		// that alias it. extractCommand already handles the "cmd"/"input" keys these
+		// tools use.
+		SupportedShellTools: []string{"shell", "local_shell", "Bash"},
 	}
 }
 

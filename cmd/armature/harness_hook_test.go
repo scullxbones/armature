@@ -304,6 +304,31 @@ func TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding(t *tes
 
 // TestLogPassThrough verifies that logPassThrough writes a timestamped entry to
 // the armature-hook.log file in the git directory.
+// TestIsKnownWorktreeGitDir_SymlinkedWorktree_NotFalselyRejected verifies the
+// fix for the review finding that isKnownWorktreeGitDir used plain
+// filepath.Abs while `git worktree list --porcelain` emits symlink-resolved
+// paths (matching isWorktreeOf's approach in claim.go, which already used
+// EvalSymlinks). Without EvalSymlinks, a worktree created under a symlinked
+// temp dir (common on macOS where TMPDIR is under /var -> /private/var, and
+// possible anywhere a symlinked path is used) would never string-match the
+// resolved path git reports, and would be falsely rejected as untrusted.
+func TestIsKnownWorktreeGitDir_SymlinkedWorktree_NotFalselyRejected(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	realParent := t.TempDir()
+	linkParent := filepath.Join(t.TempDir(), "symlinked-parent")
+	require.NoError(t, os.Symlink(realParent, linkParent))
+
+	worktreePath := filepath.Join(linkParent, "wt")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+
+	assert.True(t, isKnownWorktreeGitDir(repo, actualGitDir),
+		"a worktree reached through a symlinked path must still be recognized as a known worktree of repo")
+}
+
 func TestLogPassThrough(t *testing.T) {
 	gitDir := t.TempDir()
 

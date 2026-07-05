@@ -13,6 +13,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -119,13 +120,15 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 		return nil // can't resolve git dir; let later steps surface the error
 	}
 
-	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	existingBytes, err := os.ReadFile(issueIDFile) //nolint:gosec // internal path
-	if err != nil && !os.IsNotExist(err) {
+	// Use the legacy-aware binding reader that falls back from armature-issue-id to armature-task-id.
+	// This handles worktrees claimed before the rename to armature-issue-id. Unlike
+	// ReadIssueBindingFile, the Err variant surfaces non-ENOENT read errors (e.g.
+	// permission denied) so a binding file we can't read is not silently treated
+	// as unbound, restoring the old fail-closed behavior.
+	existingIssueID, err := harnesshook.ReadIssueBindingFileErr(actualGitDir)
+	if err != nil {
 		return fmt.Errorf("read existing binding: %w", err)
 	}
-
-	existingIssueID := strings.TrimSpace(string(existingBytes))
 	if existingIssueID != "" && existingIssueID != issueID {
 		return fmt.Errorf("worktree at %s is already bound to %s: use a different --worktree path",
 			worktreePath, existingIssueID)

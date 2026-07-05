@@ -116,14 +116,14 @@ func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
 	if candidateGitDir == "" {
 		return false
 	}
-	candidateAbs, err := filepath.Abs(candidateGitDir)
-	if err != nil {
+	candidateAbs := resolvePathForComparison(candidateGitDir)
+	if candidateAbs == "" {
 		return false
 	}
 
 	// The main repo's own .git always counts.
 	if mainGitDir, err := resolveWorktreeGitDir(repoPath); err == nil {
-		if abs, err := filepath.Abs(mainGitDir); err == nil && abs == candidateAbs {
+		if abs := resolvePathForComparison(mainGitDir); abs != "" && abs == candidateAbs {
 			return true
 		}
 	}
@@ -134,7 +134,7 @@ func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(string(output), "\n") {
+	for line := range strings.SplitSeq(string(output), "\n") {
 		wtPath, ok := strings.CutPrefix(line, "worktree ")
 		if !ok {
 			continue
@@ -143,11 +143,27 @@ func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
 		if err != nil {
 			continue
 		}
-		if abs, err := filepath.Abs(wtGitDir); err == nil && abs == candidateAbs {
+		if abs := resolvePathForComparison(wtGitDir); abs != "" && abs == candidateAbs {
 			return true
 		}
 	}
 	return false
+}
+
+// resolvePathForComparison resolves path to an absolute form suitable for
+// comparing against `git worktree list --porcelain` output, which emits
+// symlink-resolved paths. It prefers EvalSymlinks (matching isWorktreeOf's
+// approach in claim.go) and falls back to Abs when EvalSymlinks fails (e.g.
+// the path doesn't exist yet), so symlinked worktrees aren't falsely
+// rejected as untrusted.
+func resolvePathForComparison(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return ""
 }
 
 // applyRunResult writes the output to the provided writer and returns an adapterExitError
@@ -226,7 +242,8 @@ func newHarnessHookCmd() *cobra.Command {
 
 			// Resolve binding from event and session binding (single resolution per ADR-0007);
 			// also get the git dir where it was resolved.
-			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir)
+			// Pass the platform's supported shell tools so shell tool events skip path-based resolution.
+			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir, adapter.Capabilities().SupportedShellTools)
 			if err != nil {
 				// If binding resolution fails, fail open and pass through with loud stderr warning
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: binding resolution failed: %v\n", err)

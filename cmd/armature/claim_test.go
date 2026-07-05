@@ -1180,3 +1180,87 @@ func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
 	assert.Equal(t, workerID, issueAfter.ClaimedBy,
 		"ClaimedBy must remain set since the claim never expires")
 }
+
+// TestCheckExistingWorktreeBindingReadsLegacyTaskID verifies the P2 bug fix:
+// checkExistingWorktreeBinding should recognize legacy armature-task-id files
+// (from worktrees claimed before the rename to armature-issue-id).
+//
+// Scenario:
+// 1. Create a worktree with a detached HEAD
+// 2. Write only the legacy armature-task-id file to the .git directory (not armature-issue-id)
+// 3. Call checkExistingWorktreeBinding with the same issue ID
+// 4. Expect it to return nil (no error), allowing the claim to proceed for same-issue re-claim
+func TestCheckExistingWorktreeBindingReadsLegacyTaskID(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Create a worktree manually via git
+	worktreePath := filepath.Join(t.TempDir(), "legacy-worktree")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	// Verify worktree was created
+	assert.DirExists(t, worktreePath, "worktree directory should exist")
+
+	// Detach the HEAD in the worktree
+	run(t, worktreePath, "git", "checkout", "--detach", "HEAD")
+
+	// Get the actual git directory from the worktree's .git file
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	gitDirLine := string(gitFileContent)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	// Write only the legacy armature-task-id file (NOT armature-issue-id)
+	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
+	require.NoError(t, os.WriteFile(taskIDFile, []byte("task-01"), 0o600)) //nolint:gosec // test path is internal
+
+	// Verify that armature-issue-id does NOT exist
+	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	_, err = os.ReadFile(issueIDFile) //nolint:gosec // test path is internal
+	require.True(t, os.IsNotExist(err), "armature-issue-id should not exist (only legacy armature-task-id)")
+
+	// Now call checkExistingWorktreeBinding with the same issue ID
+	// It should recognize the legacy binding and return nil (no error)
+	err = checkExistingWorktreeBinding(worktreePath, "task-01", "task/task-01")
+	assert.NoError(t, err, "checkExistingWorktreeBinding should allow same-issue claim with legacy armature-task-id binding")
+}
+
+// TestCheckExistingWorktreeBindingFailsClosedOnPermissionError verifies the fix
+// for the review finding that checkExistingWorktreeBinding silently treated a
+// permission-denied armature-issue-id file as "unbound" (old code failed
+// closed on any read error other than not-exist; the refactor to
+// ReadIssueBindingFile regressed that by swallowing all errors). A worker
+// should not be able to silently overwrite a binding it merely couldn't read.
+func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: file permissions do not block reads")
+	}
+
+	repo := setupRepoWithParentAndTask(t)
+
+	worktreePath := filepath.Join(t.TempDir(), "perm-worktree")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	gitDirLine := string(gitFileContent)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(gitDirLine, "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+
+	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
+	require.NoError(t, os.WriteFile(issueIDFile, []byte("task-01"), 0o600)) //nolint:gosec // test path is internal
+	require.NoError(t, os.Chmod(issueIDFile, 0o000))                        //nolint:gosec // test path is internal
+	t.Cleanup(func() {
+		_ = os.Chmod(issueIDFile, 0o600) //nolint:errcheck,gosec // best-effort cleanup so TempDir removal succeeds
+	})
+
+	err = checkExistingWorktreeBinding(worktreePath, "task-01", "task/task-01")
+	require.Error(t, err, "a permission-denied binding file must fail closed, not be silently treated as unbound")
+	assert.Contains(t, err.Error(), "read existing binding")
+}

@@ -3,6 +3,7 @@ package harnesshook
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
@@ -52,7 +53,7 @@ func NewHook(resolver PolicyResolver) *Hook {
 // 2. Decodes input to Event
 // 3. Resolves task policy using the caller-resolved binding
 // 4. Builds evaluator from policy
-// 5. Evaluates event against policy
+// 5. Evaluates event against policy (with absolutized paths for scope checking)
 // 6. Encodes result to output
 func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, error) {
 	// Select adapter for platform
@@ -65,6 +66,32 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 	event, err := adapter.Decode(input.Input)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("decode hook input: %w", err)
+	}
+
+	// For scope checking, we need absolute paths. If the event has relative paths and a cwd,
+	// absolutize them against the cwd (as was done during binding resolution).
+	// This ensures that when cwd=/repo/docs and file_path=internal/x.go, the scope check
+	// evaluates the absolute path /repo/docs/internal/x.go against the root /repo,
+	// not the relative path against the cwd.
+	//
+	// When absolutization against cwd fails (cwd empty or itself relative) but a worktree
+	// root was supplied, join the relative path against Root instead of leaving it as-is.
+	// Falling through to the raw relative path would let it match scope entries textually
+	// (e.g. a path "internal/x.go" matching scope "internal/" even though, relative to
+	// Root, the file actually lives elsewhere) — a residual scope-check bypass.
+	if event.Cwd != "" || input.Root != "" {
+		absolutizedPaths := make([]string, 0, len(event.Paths))
+		for _, path := range event.Paths {
+			if absPath, ok := absolutizeFilePath(path, event.Cwd); ok {
+				absolutizedPaths = append(absolutizedPaths, absPath)
+			} else if input.Root != "" && !filepath.IsAbs(path) {
+				absolutizedPaths = append(absolutizedPaths, filepath.Join(input.Root, path))
+			} else {
+				// If absolutization fails, use the original path
+				absolutizedPaths = append(absolutizedPaths, path)
+			}
+		}
+		event.Paths = absolutizedPaths
 	}
 
 	// Resolve policy for task using the already-resolved binding (ADR-0007: single resolution)
