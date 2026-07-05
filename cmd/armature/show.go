@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/output"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -30,9 +28,9 @@ func newShowCmd() *cobra.Command {
 			}
 
 			ctx := currentCtx(cmd)
-			issuesDir := ctx.IssuesDir
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
+			store := newSnapshotStore(ctx)
+			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

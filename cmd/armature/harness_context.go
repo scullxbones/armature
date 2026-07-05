@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -20,7 +21,9 @@ func buildHarnessStructuredContext(appCtx *config.Context, issueID string) (stri
 		stateDir = stateDirFor(appCtx, workerID)
 	}
 
-	snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), stateDir)
+	// Use snapshot Store for current-truth loading
+	store := snapshot.NewStore(filepath.Join(appCtx.IssuesDir, "ops"), stateDir)
+	snap, err := store.Load(context.Background()) // Harness context doesn't have access to cmd context
 	if err != nil {
 		return "", fmt.Errorf("load snapshot: %w", err)
 	}
