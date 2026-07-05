@@ -2,6 +2,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -244,7 +245,8 @@ func (m Model) doRefresh() tea.Cmd {
 	issuesDir := m.issuesDir
 	stateDir := m.stateDir
 	return func() tea.Msg {
-		snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), stateDir)
+		store := snapshot.NewStore(filepath.Join(issuesDir, "ops"), stateDir)
+		snap, err := store.Load(context.Background())
 		if err != nil || snap.State == nil {
 			return nil
 		}

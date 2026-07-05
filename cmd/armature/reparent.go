@@ -3,11 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +31,8 @@ with an explicit error message.`,
 			}
 
 			appCtx := currentCtx(cmd)
-			snap, err := snapshot.Load(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir)
+			store := newSnapshotStore(appCtx)
+			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

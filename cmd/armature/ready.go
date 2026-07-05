@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
-	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
 	readytui "github.com/scullxbones/armature/internal/tui/ready"
 	"github.com/spf13/cobra"
@@ -47,9 +45,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
   $ arm ready --explain`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
-			issuesDir := ctx.IssuesDir
 
-			snap, err := snapshot.Load(filepath.Join(issuesDir, "ops"), ctx.StateDir)
+			store := newSnapshotStore(ctx)
+			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

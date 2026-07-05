@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6 verifies that handler files
@@ -157,4 +159,107 @@ func isStatePathJoin(call *ast.CallExpr) bool {
 
 	// Match on the .StateDir field name regardless of what the receiver is named
 	return firstArg.Sel.Name == "StateDir"
+}
+
+// TestHandlersUseSnapshotAccess_REQ_ARCHIMP_S18_T3 enforces the architecture:
+// no non-test file in cmd/armature or internal/tui calls snapshot.Load directly.
+//
+// ARCHITECTURE GUARD: After the migration to snapshot.Store, all snapshot loading
+// must go through Store.Load() or Store.Refresh(). Direct snapshot.Load() calls
+// bypass the Store and reintroduce fragmented initialization logic.
+//
+// This test scans cmd/armature and internal/tui sources (excluding _test.go files)
+// and fails if any calls snapshot.Load( directly.
+func TestHandlersUseSnapshotAccess_REQ_ARCHIMP_S18_T3(t *testing.T) {
+	fset := token.NewFileSet()
+	violations := []string{}
+
+	// Find the cmd/armature directory by using runtime to locate this test file
+	_, thisTestFile, _, _ := runtime.Caller(0)
+	cmdDir := filepath.Dir(thisTestFile)
+
+	// Scope: all Go files in cmd/armature, excluding _test.go
+	scopeCmd, err := os.ReadDir(cmdDir)
+	require.NoError(t, err)
+
+	for _, entry := range scopeCmd {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		path := filepath.Join(cmdDir, entry.Name())
+		src, err := os.ReadFile(path)
+		require.NoError(t, err)
+
+		file, err := parser.ParseFile(fset, path, src, parser.AllErrors)
+		require.NoError(t, err)
+
+		// Check for direct snapshot.Load calls
+		checkSnapshotLoadCalls(fset, path, file, &violations)
+	}
+
+	// Scope: all Go files in internal/tui, excluding _test.go
+	// Find the root of the repo by traversing up from cmd/armature
+	repoRoot := filepath.Dir(filepath.Dir(cmdDir))
+	tuiAppDir := filepath.Join(repoRoot, "internal", "tui", "app")
+	if info, err := os.Stat(tuiAppDir); err == nil && info.IsDir() {
+		tuiFiles, err := os.ReadDir(tuiAppDir)
+		require.NoError(t, err)
+
+		for _, entry := range tuiFiles {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
+			}
+
+			path := filepath.Join(tuiAppDir, entry.Name())
+			src, err := os.ReadFile(path)
+			require.NoError(t, err)
+
+			file, err := parser.ParseFile(fset, path, src, parser.AllErrors)
+			require.NoError(t, err)
+
+			// Check for direct snapshot.Load calls
+			checkSnapshotLoadCalls(fset, path, file, &violations)
+		}
+	}
+
+	if len(violations) > 0 {
+		t.Fatalf("Handlers must use Store.Load() or Store.Refresh() instead of direct snapshot.Load() calls:\n%s",
+			strings.Join(violations, "\n"))
+	}
+}
+
+// checkSnapshotLoadCalls walks the AST to find direct snapshot.Load() calls
+func checkSnapshotLoadCalls(fset *token.FileSet, filename string, file *ast.File, violations *[]string) {
+	ast.Inspect(file, func(n ast.Node) bool {
+		node, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		// Check for direct snapshot.Load calls
+		if isSnapshotLoadCall(node) {
+			line := fset.Position(node.Pos()).Line
+			*violations = append(*violations, fmt.Sprintf("%s:%d: direct snapshot.Load() call detected (use Store.Load() instead)", filename, line))
+		}
+
+		return true
+	})
+}
+
+// isSnapshotLoadCall detects calls to snapshot.Load(...)
+func isSnapshotLoadCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+
+	// Must be a method on snapshot package
+	x, ok := sel.X.(*ast.Ident)
+	if !ok || x.Name != "snapshot" {
+		return false
+	}
+
+	// Check for forbidden Load call
+	return sel.Sel.Name == "Load"
 }
