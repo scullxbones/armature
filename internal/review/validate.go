@@ -214,8 +214,11 @@ func ValidateActivityDigest(activity *Activity) []string {
 // - All cited entry IDs exist in the log
 // - No activity entry with an unknown exit code can support a Satisfied criterion status
 // - Activity-citations-only cannot support Satisfied or PartiallySatisfied on implementation criteria
+// - All cited entries match the delivery's HeadSHA (reject entries from earlier commits)
 // Returns a slice of validation error strings (empty = valid).
-func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]ActivityEntryDetails) []string {
+// deliveryHeadSHA is the expected commit SHA for the delivery; entries whose HeadSHA does
+// not match this value are rejected (they represent evidence from earlier commits).
+func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]ActivityEntryDetails, deliveryHeadSHA string) []string {
 	var errs []string
 
 	if activity == nil {
@@ -251,6 +254,22 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 					continue
 				}
 
+				supportsPositiveStatus := result.Status == Satisfied || result.Status == PartiallySatisfied
+
+				// Reject entries from earlier commits when they are being used to support a
+				// Satisfied/PartiallySatisfied status: the cited entry must have been executed
+				// at the delivery's HEAD commit, not at an earlier commit, to serve as evidence
+				// that the current delivery passes. Citing an earlier-commit entry to support a
+				// NotSatisfied status ("this was already broken before this commit too") is a
+				// legitimate use and is not blocked here.
+				if supportsPositiveStatus && deliveryHeadSHA != "" && entry.HeadSHA != deliveryHeadSHA {
+					errs = append(errs, fmt.Sprintf(
+						"criterion result %s: activity entry %d was executed at head_sha=%q but delivery head_sha=%q; "+
+							"entries from earlier commits cannot be used as evidence for the current delivery",
+						result.ID, entryID, entry.HeadSHA, deliveryHeadSHA))
+					continue
+				}
+
 				// An entry with no recorded exit code (harness omitted it) cannot be used
 				// as evidence that a criterion is fully satisfied — "unknown" and "succeeded"
 				// must remain distinguishable outcomes for verified behavioral evidence.
@@ -258,6 +277,14 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 					errs = append(errs, fmt.Sprintf(
 						"criterion result %s: activity entry %d has an unknown exit code and cannot support satisfied status",
 						result.ID, entryID))
+				}
+
+				// An entry with a known but nonzero exit code represents a failed command
+				// execution and cannot be used as evidence that a criterion passed.
+				if entry.ExitCodeKnown && entry.ExitCode != 0 && result.Status == Satisfied {
+					errs = append(errs, fmt.Sprintf(
+						"criterion result %s: activity entry %d has a failed exit code (%d) and cannot support satisfied status",
+						result.ID, entryID, entry.ExitCode))
 				}
 			}
 

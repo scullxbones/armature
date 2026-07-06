@@ -65,6 +65,23 @@ func Record(input RecordInput) (*RecordResult, error) {
 		}
 	}
 
+	// Recompute the bundle's identity from its actual on-disk contents and reject
+	// if it no longer matches the bundle's own recorded BundleID. Every other check
+	// below only compares fields *within* the same bundle (e.g. assessment.BundleID
+	// == bundle.BundleID), so a hand-edited bundle file with internally-consistent
+	// but altered fields (e.g. Delivery.HeadSHA blanked to dodge the HeadSHA-citation
+	// gate, or Activity.Digest recomputed to match a self-authored log) would pass
+	// every one of them. This check anchors the bundle to the identity Prepare
+	// actually computed for it.
+	if input.Bundle != nil {
+		if recomputed := ComputeBundleID(*input.Bundle); recomputed != input.Bundle.BundleID {
+			return nil, fmt.Errorf(
+				"bundle integrity check failed: recomputed bundle_id %s does not match bundle's "+
+					"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",
+				recomputed, input.Bundle.BundleID)
+		}
+	}
+
 	// Activity citations are only meaningful when validated against a bundle's
 	// Activity section; without one there is nothing to check a claimed entry ID
 	// against, so an assessment citing activity evidence must be rejected outright
@@ -153,7 +170,7 @@ func Record(input RecordInput) (*RecordResult, error) {
 		// existence and exit-code-known checks) and populating rendered details.
 		activityEntryMap := LoadActivityEntries(input.Bundle.Activity.LogPath)
 
-		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap); len(errs) > 0 {
+		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap, input.Bundle.Delivery.HeadSHA); len(errs) > 0 {
 			var sb strings.Builder
 			sb.WriteString("activity citation validation errors:")
 			for _, e := range errs {
