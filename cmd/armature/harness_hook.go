@@ -333,6 +333,12 @@ func newHarnessHookCmd() *cobra.Command {
 				logGitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
 				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason)
 
+			// Capture execution evidence for Bash PostToolUse events (ADR-0008)
+			if event.Kind == harnesshook.EventPostToolUse && event.Tool == "Bash" && resolvedBinding.IssueID != "" {
+				_ = harnesshook.AppendActivity( //nolint:errcheck // activity logging failure is fail-open
+					logGitDir, event.Command, event.ExitCode, event.Output)
+			}
+
 			// If the adapter returned a non-zero exit code, propagate it to the process exit.
 			// Exit-status-based blocking platforms (e.g., exit-status-signal) use this to
 			// communicate blocking decisions to the platform's process exit mechanism.

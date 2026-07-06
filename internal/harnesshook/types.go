@@ -22,6 +22,8 @@ type Event struct {
 	Command   string
 	Cwd       string         // Current working directory from the hook event payload (if available)
 	ToolInput map[string]any // Raw tool input for binding resolution and other post-decode logic
+	ExitCode  int            // Exit code from PostToolUse events (0 if not available or pre-execution)
+	Output    []byte         // Output from PostToolUse events (empty if not available)
 }
 
 // DecisionAction is the verdict returned by an Evaluator (allow, block, or no opinion).

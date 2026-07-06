@@ -735,6 +735,49 @@ func TestCodexAdapterNormalizeEventPostToolUseLower(t *testing.T) {
 	assert.Equal(t, EventPostToolUse, evt.Kind)
 }
 
+func TestClaudeAdapterDecodePropagatesExitCodeAndOutputFromToolResponse(t *testing.T) {
+	t.Parallel()
+	adapter := NewClaudeAdapter()
+	payload := []byte(`{
+		"hook_event_name": "PostToolUse",
+		"tool_name": "Bash",
+		"tool_input": {"command": "exit 2"},
+		"tool_response": {"stdout": "some output\n", "stderr": "some error\n", "exit_code": 2}
+	}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, 2, evt.ExitCode)
+	assert.Equal(t, []byte("some output\nsome error\n"), evt.Output)
+}
+
+func TestCodexAdapterDecodePropagatesExitCodeAndOutputFromToolResponse(t *testing.T) {
+	t.Parallel()
+	adapter := NewCodexAdapter()
+	payload := []byte(`{
+		"hook_event_name": "post_tool_use",
+		"tool_name": "shell",
+		"tool_input": {"cmd": "false"},
+		"tool_response": {"output": "boom", "exit_code": 1}
+	}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, 1, evt.ExitCode)
+	assert.Equal(t, []byte("boom"), evt.Output)
+}
+
+func TestDecodePreToolUseHasZeroExitCodeAndNilOutput(t *testing.T) {
+	t.Parallel()
+	adapter := NewClaudeAdapter()
+	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}`)
+
+	evt, err := adapter.Decode(payload)
+	require.NoError(t, err)
+	assert.Equal(t, 0, evt.ExitCode)
+	assert.Nil(t, evt.Output)
+}
+
 func TestCodexAdapterNormalizeEventStop(t *testing.T) {
 	t.Parallel()
 	adapter := NewCodexAdapter()
