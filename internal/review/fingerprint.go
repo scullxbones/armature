@@ -66,21 +66,50 @@ func FingerprintResult(assessment ConformanceAssessment) string {
 
 // ComputeBundleID computes a canonical bundle identifier from review data.
 // The format is "sha256:<64-char-hex-string>".
+// Note: LogPath is excluded from Activity when hashing because it is worktree-local
+// and differs across clones/worktrees even when the activity facts are identical.
 func ComputeBundleID(bundle ReviewBundle) string {
 	// Serialize the bundle (without bundleID itself) to canonical JSON
 	// We hash the core review data
+
+	// Prepare a normalized Activity without LogPath for hashing
+	var activityForHash *struct {
+		Digest            string
+		EntryCount        int
+		DeliveryHeadCount int
+		EarlierCount      int
+	}
+	if bundle.Activity != nil {
+		activityForHash = &struct {
+			Digest            string
+			EntryCount        int
+			DeliveryHeadCount int
+			EarlierCount      int
+		}{
+			Digest:            bundle.Activity.Digest,
+			EntryCount:        bundle.Activity.EntryCount,
+			DeliveryHeadCount: bundle.Activity.DeliveryHeadCount,
+			EarlierCount:      bundle.Activity.EarlierCount,
+		}
+	}
+
 	data := struct {
 		SchemaVersion int
 		Issue         IssueInfo
 		Contract      Contract
 		Delivery      Delivery
-		Activity      *Activity
+		Activity      *struct {
+			Digest            string
+			EntryCount        int
+			DeliveryHeadCount int
+			EarlierCount      int
+		}
 	}{
 		SchemaVersion: bundle.SchemaVersion,
 		Issue:         bundle.Issue,
 		Contract:      bundle.Contract,
 		Delivery:      bundle.Delivery,
-		Activity:      bundle.Activity,
+		Activity:      activityForHash,
 	}
 
 	jsonData, err := json.Marshal(data)
