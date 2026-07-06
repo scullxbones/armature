@@ -46,9 +46,14 @@ reintroducing managed execution.
   architectural checks.
 - Do not treat Armature's repository-development commands, including
   `make check`, as product behavior or a customer contract.
-- Do not collect general tool activity, command transcripts, reasoning traces,
-  or harness activity logs.
-- Do not use harness hooks to initiate semantic review.
+- ~~Do not collect general tool activity, command transcripts, reasoning traces,
+  or harness activity logs.~~ **Amended by ADR-0008:** Execution evidence (harness-recorded
+  command/output pairs) is now admissible as a third evidence class for behavioral
+  criteria, upgrade-only. See ADR-0008 and docs/sensitive-environments.md for
+  disclosure posture and how to disable capture.
+- Do not use harness hooks to initiate semantic review. **Amended by ADR-0008:**
+  Hooks record execution evidence but still neither initiate nor gate conformance
+  review.
 - Do not allow the reviewer to modify or remediate the delivery it assesses.
 - Do not make a rating or missing assessment block completion, merge, or PR
   delivery in phase one.
@@ -157,8 +162,12 @@ absence or rating into a gate.
 Harness hooks remain outside this workflow. A stop hook runs before a stable
 delivery commit exists, cannot provide the required fresh reviewer context, and
 would couple semantic review to provider-specific hook behavior. Hooks may
-continue enforcing deterministic policies such as task Scope, but they neither
-collect activity for nor initiate conformance review.
+continue enforcing deterministic policies such as task Scope. **Amended by ADR-0008:**
+Hooks now record execution evidence (harness-captured command/output pairs) to
+a worktree-local activity log. Despite recording activity, hooks still neither
+initiate nor gate conformance review. The activity log is a resource exclusively
+consumed by `arm review record` during attestation. See ADR-0008 for trust model,
+discovery posture, and capture mechanics.
 
 ## Command Surface
 
