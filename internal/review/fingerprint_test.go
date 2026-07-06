@@ -335,3 +335,132 @@ func TestFingerprintActivity_Empty_REQ_EXECEV_T2(t *testing.T) {
 	assert.NotEmpty(t, fp)
 	assert.Len(t, fp, 64)
 }
+
+// TestBundleID_LogPath_Excluded verifies that ComputeBundleID excludes LogPath from the hash.
+// Two Activity values that differ only in LogPath should produce the same bundle ID.
+// This is necessary because LogPath is worktree-local and differs across clones.
+func TestBundleID_LogPath_Excluded(t *testing.T) {
+	t.Parallel()
+	// Create two bundles identical except for Activity.LogPath
+	bundle1 := review.ReviewBundle{
+		SchemaVersion: 1,
+		Issue: review.IssueInfo{
+			ID:      "TASK-1",
+			Type:    "task",
+			Title:   "Test Task",
+			Outcome: "Completed",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "All tests pass",
+			Acceptance:       []string{"Feature works"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "abc123",
+			HeadSHA:      "def456",
+			ChangedFiles: []string{"main.go"},
+		},
+		Activity: &review.Activity{
+			Digest:            "sha256:activity1",
+			EntryCount:        5,
+			DeliveryHeadCount: 3,
+			EarlierCount:      2,
+			LogPath:           "/home/user/clone1/.armature/armature-activity.log",
+		},
+	}
+
+	bundle2 := review.ReviewBundle{
+		SchemaVersion: 1,
+		Issue: review.IssueInfo{
+			ID:      "TASK-1",
+			Type:    "task",
+			Title:   "Test Task",
+			Outcome: "Completed",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "All tests pass",
+			Acceptance:       []string{"Feature works"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "abc123",
+			HeadSHA:      "def456",
+			ChangedFiles: []string{"main.go"},
+		},
+		Activity: &review.Activity{
+			Digest:            "sha256:activity1",
+			EntryCount:        5,
+			DeliveryHeadCount: 3,
+			EarlierCount:      2,
+			LogPath:           "/home/user/clone2/.armature/armature-activity.log", // Different path
+		},
+	}
+
+	bundleID1 := review.ComputeBundleID(bundle1)
+	bundleID2 := review.ComputeBundleID(bundle2)
+
+	// Same bundle ID despite different LogPath
+	assert.Equal(t, bundleID1, bundleID2, "ComputeBundleID should exclude LogPath from hash")
+}
+
+// TestBundleID_Activity_Digest_Included verifies that ComputeBundleID includes Activity.Digest in the hash.
+// Two Activity values that differ in Digest should produce different bundle IDs.
+func TestBundleID_Activity_Digest_Included(t *testing.T) {
+	t.Parallel()
+	// Create two bundles with different Activity.Digest
+	bundle1 := review.ReviewBundle{
+		SchemaVersion: 1,
+		Issue: review.IssueInfo{
+			ID:      "TASK-1",
+			Type:    "task",
+			Title:   "Test Task",
+			Outcome: "Completed",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "All tests pass",
+			Acceptance:       []string{"Feature works"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "abc123",
+			HeadSHA:      "def456",
+			ChangedFiles: []string{"main.go"},
+		},
+		Activity: &review.Activity{
+			Digest:            "sha256:activity1",
+			EntryCount:        5,
+			DeliveryHeadCount: 3,
+			EarlierCount:      2,
+			LogPath:           "/path/to/log1",
+		},
+	}
+
+	bundle2 := review.ReviewBundle{
+		SchemaVersion: 1,
+		Issue: review.IssueInfo{
+			ID:      "TASK-1",
+			Type:    "task",
+			Title:   "Test Task",
+			Outcome: "Completed",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "All tests pass",
+			Acceptance:       []string{"Feature works"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "abc123",
+			HeadSHA:      "def456",
+			ChangedFiles: []string{"main.go"},
+		},
+		Activity: &review.Activity{
+			Digest:            "sha256:activity2", // Different digest
+			EntryCount:        5,
+			DeliveryHeadCount: 3,
+			EarlierCount:      2,
+			LogPath:           "/path/to/log1",
+		},
+	}
+
+	bundleID1 := review.ComputeBundleID(bundle1)
+	bundleID2 := review.ComputeBundleID(bundle2)
+
+	// Different bundle IDs when Digest differs
+	assert.NotEqual(t, bundleID1, bundleID2, "ComputeBundleID should include Activity.Digest in hash")
+}
