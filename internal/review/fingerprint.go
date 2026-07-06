@@ -209,6 +209,7 @@ type ActivityEntryDetails struct {
 	Command       string // The command that was executed
 	ExitCode      int    // The exit status (only meaningful when ExitCodeKnown is true)
 	ExitCodeKnown bool   // Whether the harness reported an exit code for this entry
+	HeadSHA       string // The commit SHA at which this entry's command was executed
 }
 
 // LoadActivityEntries reads an activity log file and returns a map of entry ID to entry details.
@@ -227,6 +228,7 @@ func LoadActivityEntries(logPath string) map[int]ActivityEntryDetails {
 			Command:       entry.Command,
 			ExitCode:      entry.ExitCode,
 			ExitCodeKnown: entry.ExitCodeKnown,
+			HeadSHA:       entry.HeadSHA,
 		}
 	}
 	return result

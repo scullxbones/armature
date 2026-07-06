@@ -46,7 +46,6 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	// Create a complete bundle and matching assessment
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
-		BundleID:      "bundle-123",
 		Issue: IssueInfo{
 			ID:    "task-01",
 			Type:  "task",
@@ -68,10 +67,11 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
+	bundle.BundleID = ComputeBundleID(*bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-123",
+		BundleID:            bundle.BundleID,
 		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Results: []CriterionResult{
@@ -97,11 +97,62 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	result, err := Record(input)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, "bundle-123", result.Attestation.BundleID)
+	assert.Equal(t, bundle.BundleID, result.Attestation.BundleID)
 	assert.Equal(t, "base123", result.Attestation.BaseSHA)
 	assert.Equal(t, "head456", result.Attestation.HeadSHA)
 	assert.Equal(t, Green, result.Attestation.Rating)
 	assert.Equal(t, 2, result.Attestation.SatisfiedCount)
+}
+
+// TestRecord_BundleIntegrityTampered_REQ_EXECEV verifies that Record recomputes
+// ComputeBundleID from the loaded bundle's actual contents and rejects the
+// bundle if it no longer matches the bundle's recorded BundleID. This guards
+// against a hand-edited bundle file (e.g. Delivery.HeadSHA blanked out to skip
+// the HeadSHA-citation gate) that would otherwise pass every check that only
+// compares fields *within* the same untrusted bundle file.
+func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Test Task"},
+		Contract:      Contract{DefinitionOfDone: "Implementation complete"},
+		Delivery: Delivery{
+			BaseSHA: "base123",
+			HeadSHA: "head456",
+			Diff:    "--- a/impl.go\n+++ b/impl.go\n@@ -1,0 +1,1 @@\n+package main",
+		},
+		Fingerprints: Fingerprints{
+			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	}
+	bundle.BundleID = ComputeBundleID(*bundle)
+
+	// Tamper with the bundle after its BundleID was computed (e.g. blank out
+	// HeadSHA to try to dodge the HeadSHA-citation gate) without recomputing the ID.
+	bundle.Delivery.HeadSHA = ""
+
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []CriterionResult{
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "Done"},
+		},
+	}
+
+	input := RecordInput{
+		Assessment: assessment,
+		Bundle:     bundle,
+		IssueID:    "task-01",
+	}
+
+	result, err := Record(input)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "integrity")
 }
 
 func TestRecord_WithIssueData_REQ_ARCHIMP_S18_T1(t *testing.T) {
@@ -216,7 +267,6 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
-		BundleID:      "bundle-123",
 		Issue: IssueInfo{
 			ID: "task-02",
 		},
@@ -225,10 +275,11 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
+	bundle.BundleID = ComputeBundleID(*bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-123",
+		BundleID:            bundle.BundleID,
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
@@ -257,7 +308,6 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
-		BundleID:      "bundle-123",
 		Issue: IssueInfo{
 			ID: "task-01",
 		},
@@ -266,6 +316,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
+	bundle.BundleID = ComputeBundleID(*bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -292,7 +343,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "bundle_id")
 	assert.Contains(t, err.Error(), "bundle-999")
-	assert.Contains(t, err.Error(), "bundle-123")
+	assert.Contains(t, err.Error(), bundle.BundleID)
 }
 
 func TestRecord_ContractFingerprintMismatch_RejectsWithoutBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
@@ -437,7 +488,6 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	// Create a bundle with a diff
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
-		BundleID:      "bundle-123",
 		Issue: IssueInfo{
 			ID: "task-01",
 		},
@@ -459,10 +509,11 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
+	bundle.BundleID = ComputeBundleID(*bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-123",
+		BundleID:            bundle.BundleID,
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
@@ -492,7 +543,6 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
-		BundleID:      "bundle-123",
 		Issue: IssueInfo{
 			ID: "task-01",
 		},
@@ -509,10 +559,11 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
+	bundle.BundleID = ComputeBundleID(*bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-123",
+		BundleID:            bundle.BundleID,
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
@@ -636,13 +687,12 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 	dir := t.TempDir()
 	logPath := dir + "/armature-activity.log"
 	logContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make build","exit_code":0,` +
-		`"exit_code_known":true,"head_sha":"abc123","output_hash":"h1"}` + "\n")
+		`"exit_code_known":true,"head_sha":"head","output_hash":"h1"}` + "\n")
 	require.NoError(t, os.WriteFile(logPath, logContent, 0o600))
 	digest := FingerprintActivity(logContent)
 
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
-		BundleID:      "bundle-activity-digest",
 		Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Test"},
 		Contract:      Contract{DefinitionOfDone: "Done", Acceptance: []string{"Works"}},
 		Delivery:      Delivery{BaseSHA: "base", HeadSHA: "head", Diff: "--- a/f.go\n+++ b/f.go\n@@ -1,0 +1,1 @@\n+package main"},
@@ -652,10 +702,11 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		},
 		Activity: &Activity{Digest: digest, EntryCount: 1, LogPath: logPath},
 	}
+	bundle.BundleID = ComputeBundleID(*bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-activity-digest",
+		BundleID:            bundle.BundleID,
 		ContractFingerprint: bundle.Fingerprints.Contract,
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
@@ -697,7 +748,6 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 		t.Parallel()
 		bundle := &ReviewBundle{
 			SchemaVersion: SchemaVersion,
-			BundleID:      "bundle-no-activity",
 			Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Test"},
 			Contract:      Contract{DefinitionOfDone: "Done"},
 			Delivery:      Delivery{BaseSHA: "base", HeadSHA: "head"},
@@ -706,6 +756,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			},
 		}
+		bundle.BundleID = ComputeBundleID(*bundle)
 		_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")

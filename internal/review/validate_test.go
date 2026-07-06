@@ -660,7 +660,7 @@ func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.Empty(t, errs, "Valid activity citation by entry ID should not produce errors")
 }
 
@@ -694,7 +694,7 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.NotEmpty(t, errs, "Unknown entry ID should produce validation errors")
 	assert.True(t, containsError(errs, "unknown activity entry ID"), "Error should mention unknown entry ID")
 }
@@ -729,7 +729,7 @@ func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T)
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.NotEmpty(t, errs, "Non-numeric entry ID should produce validation errors")
 	assert.True(t, containsError(errs, "invalid activity entry ID"), "Error should mention invalid entry ID")
 }
@@ -764,7 +764,7 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.NotEmpty(t, errs, "Activity-only satisfied on implementation criterion should produce errors")
 	assert.True(t, containsError(errs, "upgrade-only rule"), "Error should mention upgrade-only rule")
 }
@@ -800,7 +800,7 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.NotEmpty(t, errs, "Activity-only partially_satisfied on implementation criterion should be rejected")
 	assert.True(t, containsError(errs, "upgrade-only rule"), "Error should mention upgrade-only rule")
 }
@@ -835,7 +835,7 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.Empty(t, errs, "Activity-only satisfied on acceptance criterion should be allowed")
 }
 
@@ -870,7 +870,7 @@ func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 
 	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "")
 	assert.Empty(t, errs, "Mixed citations should not trigger upgrade-only rule")
 }
 
@@ -894,8 +894,196 @@ func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	errs := review.ValidateActivityCitations(assessment, nil, nil)
+	errs := review.ValidateActivityCitations(assessment, nil, nil, "")
 	assert.Empty(t, errs, "Validation against nil activity should succeed")
+}
+
+// TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2 verifies that activity entries
+// whose HeadSHA does not match the delivery's HeadSHA are rejected, even if the entry exists.
+// This prevents citing earlier successful test runs as evidence for the current delivery.
+func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
+	t.Parallel()
+	// An acceptance criterion cites an activity entry, but that entry was executed at
+	// an earlier commit (earlier_sha) while the delivery is at delivery_sha.
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Entry 0 was executed at earlier_sha, not delivery_sha
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        2,
+		DeliveryHeadCount: 1,
+		EarlierCount:      1,
+		LogPath:           "armature-activity.log",
+	}
+
+	// Entry 0 was at an earlier commit (earlier_sha), Entry 1 is at delivery_sha
+	entries := map[int]review.ActivityEntryDetails{
+		0: {EntryID: 0, Command: "make build", ExitCode: 0, ExitCodeKnown: true, HeadSHA: "earlier_sha"},
+		1: {EntryID: 1, Command: "make test", ExitCode: 0, ExitCodeKnown: true, HeadSHA: "delivery_sha"},
+	}
+
+	deliveryHeadSHA := "delivery_sha"
+
+	// Entry 0 should be rejected because its HeadSHA (earlier_sha) doesn't match delivery_sha
+	errs := review.ValidateActivityCitations(assessment, activity, entries, deliveryHeadSHA)
+	assert.NotEmpty(t, errs, "Activity entry with mismatched HeadSHA should be rejected")
+	assert.True(t, containsError(errs, "head_sha") || containsError(errs, "HeadSHA") || containsError(errs, "earlier commit"),
+		"Error should mention the HeadSHA mismatch")
+}
+
+// TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2 verifies that activity entries
+// whose HeadSHA matches the delivery's HeadSHA are accepted.
+func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
+	t.Parallel()
+	// An acceptance criterion cites an activity entry with matching HeadSHA
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "1"}, // Entry 1 is at delivery_sha
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        2,
+		DeliveryHeadCount: 1,
+		EarlierCount:      1,
+		LogPath:           "armature-activity.log",
+	}
+
+	entries := map[int]review.ActivityEntryDetails{
+		0: {EntryID: 0, Command: "make build", ExitCode: 0, ExitCodeKnown: true, HeadSHA: "earlier_sha"},
+		1: {EntryID: 1, Command: "make test", ExitCode: 0, ExitCodeKnown: true, HeadSHA: "delivery_sha"},
+	}
+
+	deliveryHeadSHA := "delivery_sha"
+
+	// Entry 1 should be accepted because its HeadSHA matches delivery_sha
+	errs := review.ValidateActivityCitations(assessment, activity, entries, deliveryHeadSHA)
+	assert.Empty(t, errs, "Activity entry with matching HeadSHA should be accepted")
+}
+
+// TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV verifies that a
+// citation referencing an activity entry with a known but nonzero exit code cannot support
+// a Satisfied criterion status: a failed command execution is not evidence that something
+// passed. Only !ExitCodeKnown was previously rejected; a known failing exit code slipped
+// through.
+func TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
+	entries := map[int]review.ActivityEntryDetails{
+		0: {EntryID: 0, Command: "make test", ExitCode: 1, ExitCodeKnown: true, HeadSHA: "head"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "head")
+	assert.NotEmpty(t, errs, "a failed (nonzero, known) exit code must not support a Satisfied citation")
+	assert.True(t, containsError(errs, "exit code") || containsError(errs, "exit_code"),
+		"error should mention the failed exit code")
+}
+
+// TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXECEV verifies
+// that a failed-exit-code entry can still be cited as evidence for a NotSatisfied status
+// (e.g. "this failed, confirming the bug") -- the rejection is specific to claiming success.
+func TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.NotSatisfied,
+				Rationale: "test still fails",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
+	entries := map[int]review.ActivityEntryDetails{
+		0: {EntryID: 0, Command: "make test", ExitCode: 1, ExitCodeKnown: true, HeadSHA: "head"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "head")
+	assert.Empty(t, errs, "a failed exit code citing NotSatisfied should be accepted")
+}
+
+// TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXECEV verifies
+// that the HeadSHA-mismatch gate only blocks citations supporting a Satisfied (or
+// PartiallySatisfied) status. Citing an earlier-commit run as evidence that something was
+// "already broken before this commit too" (NotSatisfied) is legitimate and must not be
+// blocked by the gate meant to stop stale evidence from propping up a passing claim.
+func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.NotSatisfied,
+				Rationale: "was already broken before this commit too",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
+	entries := map[int]review.ActivityEntryDetails{
+		0: {EntryID: 0, Command: "make test", ExitCode: 1, ExitCodeKnown: true, HeadSHA: "earlier_sha"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, entries, "delivery_sha")
+	assert.Empty(t, errs, "an earlier-commit citation supporting NotSatisfied must not be blocked by the HeadSHA gate")
 }
 
 // TestActivityCitationValidation_REQ_EXECEV_T3 is the contract-named acceptance test for
@@ -935,7 +1123,7 @@ func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 			LogPath:    "armature-activity.log",
 		}
 
-		errs := review.ValidateActivityCitations(assessment, activity, knownExitEntries(0, 1, 2, 3, 4))
+		errs := review.ValidateActivityCitations(assessment, activity, knownExitEntries(0, 1, 2, 3, 4), "")
 		assert.NotEmpty(t, errs, "index-terminology reference should be rejected")
 		assert.True(t, containsError(errs, "invalid activity entry ID"),
 			"error should reject the non-numeric index reference")
@@ -1011,13 +1199,12 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 	t.Run("citation rejected end-to-end at record time via Record", func(t *testing.T) {
 		t.Parallel()
 		e2eLogPath := filepath.Join(t.TempDir(), "armature-activity.log")
-		e2eContent := []byte(activityLogLineJSON(t, map[string]any{"command": "make build", "head_sha": "abc123"}) + "\n")
+		e2eContent := []byte(activityLogLineJSON(t, map[string]any{"command": "make build", "head_sha": "head456"}) + "\n")
 		require.NoError(t, os.WriteFile(e2eLogPath, e2eContent, 0o600))
 		e2eDigest := review.FingerprintActivity(e2eContent)
 
 		bundle := &review.ReviewBundle{
 			SchemaVersion: review.SchemaVersion,
-			BundleID:      "bundle-digest-e2e",
 			Issue: review.IssueInfo{
 				ID:    "task-01",
 				Type:  "task",
@@ -1042,10 +1229,11 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 				LogPath:    e2eLogPath,
 			},
 		}
+		bundle.BundleID = review.ComputeBundleID(*bundle)
 
 		assessment := &review.ConformanceAssessment{
 			SchemaVersion:       review.SchemaVersion,
-			BundleID:            "bundle-digest-e2e",
+			BundleID:            bundle.BundleID,
 			ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			Results: []review.CriterionResult{
@@ -1081,7 +1269,8 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 		require.NoError(t, err, "record should succeed when the activity log matches the bundle digest")
 
 		// Tamper with the log after prepare: content changes but the bundle's recorded digest doesn't.
-		require.NoError(t, os.WriteFile(e2eLogPath, []byte(activityLogLineJSON(t, map[string]any{"command": "curl evil.example", "head_sha": "abc123"})+"\n"), 0o600))
+		tamperedContent := []byte(activityLogLineJSON(t, map[string]any{"command": "curl evil.example", "head_sha": "head456"}) + "\n")
+		require.NoError(t, os.WriteFile(e2eLogPath, tamperedContent, 0o600))
 
 		_, err = review.Record(review.RecordInput{
 			Assessment: assessment,
