@@ -354,11 +354,33 @@ For each task that completed in the wave, dispatch semantic conformance review u
    
    This creates a JSON bundle file containing the issue's acceptance criteria, scope, and the diff of **only** that task's changed files. The bundle is written to `$BUNDLE_FILE` for later use in both the reviewer dispatch and assessment recording steps.
 
-3. **Dispatch the armature-reviewer agent** — pass the task-scoped bundle file path to a reviewer subagent:
+2.1. **Activity Index (if bundle has activity section)** — when the bundle includes execution evidence:
+
+   If the prepared bundle contains an `activity` section (log path, digest, entry counts), dispatch the activity indexer to produce a finding aid:
+   ```bash
+   # Extract activity metadata from the bundle
+   ACTIVITY_LOG_PATH=$(jq -r '.activity.log_path' "$BUNDLE_FILE")
+   ACTIVITY_DIGEST=$(jq -r '.activity.digest' "$BUNDLE_FILE")
+   
+   # Dispatch armature-activity-indexer to read the log and emit a structured index
+   # Pass the bundle file path (the indexer extracts activity metadata from it)
+   INDEX_OUTPUT=$(mktemp)
+   # Activity indexer returns JSON index to stdout
+   # The indexer routes the reviewer to raw log entries by entry ID
    ```
-   Dispatch armature-reviewer with bundle file: $BUNDLE_FILE (pass this path; the reviewer reads the bundle from the file)
+   
+   The Activity Index is a **finding aid only** — it summarizes the activity log to help the reviewer locate raw entries by category and exit status. The index itself is never citable; citations must reference raw activity log entry IDs.
+
+3. **Dispatch the armature-reviewer agent** — pass both the bundle and activity index (if available):
    ```
-   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). It is a subagent whose final text output is the `ConformanceAssessment` JSON. After the subagent returns, write its output text to a temp file:
+   Dispatch armature-reviewer with:
+   - bundle file: $BUNDLE_FILE (the reviewer reads the bundle from the file)
+   - activity index (if $INDEX_OUTPUT exists): provide the index as additional context
+   ```
+   
+   The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). For behavioral criteria, execution evidence from the activity log can lift indeterminate verdicts to satisfied or partially satisfied, but it never substitutes for diff citations on implementation criteria and never suppresses a not_satisfied the diff supports.
+   
+   It is a subagent whose final text output is the `ConformanceAssessment` JSON. After the subagent returns, write its output text to a temp file:
    ```bash
    RESULT_FILE=$(mktemp)
    # The reviewer subagent's returned text IS the ConformanceAssessment JSON.
@@ -373,7 +395,7 @@ For each task that completed in the wave, dispatch semantic conformance review u
    ```
    This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass both `--assessment "$RESULT_FILE"` and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
 
-**Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
+**Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. Activity evidence informs behavioral criteria only and is never citable directly (citations must reference raw log entry IDs). This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 
 ### a.3. Parallel Branch Overlap Audit
 
