@@ -261,6 +261,39 @@ func TestRenderMarkdown(t *testing.T) {
 		// Should have yellow rating when some partial but none not satisfied
 		assert.Contains(t, output, "yellow")
 	})
+
+	t.Run("activity entry citation rendered with details_REQ_EXECEV_T3", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-009",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "acceptance[0]",
+					Status:    review.Satisfied,
+					Rationale: "Test passed",
+					Citations: []review.Citation{
+						{
+							ActivityEntryID:      "0",
+							ActivityEntryDetails: `entry 0: command="make test" exit_code=0`,
+						},
+					},
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Should include activity entry details with entry ID, command, and exit status
+		assert.Contains(t, output, "Activity:")
+		assert.Contains(t, output, "entry 0")
+		assert.Contains(t, output, "make test")
+		assert.Contains(t, output, "exit_code=0")
+		// Should NOT include raw output
+		assert.NotContains(t, output, "... [output truncated")
+	})
 }
 
 func TestRenderHuman(t *testing.T) {
@@ -351,6 +384,37 @@ func TestRenderHuman(t *testing.T) {
 		// Citations should be readable
 		assert.Contains(t, output, "src/main.go")
 		assert.Contains(t, output, "10")
+	})
+
+	t.Run("activity entry citation in human output_REQ_EXECEV_T3", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-010",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "acceptance[0]",
+					Status:    review.Satisfied,
+					Rationale: "Test executed",
+					Citations: []review.Citation{
+						{
+							ActivityEntryID:      "1",
+							ActivityEntryDetails: `entry 1: command="make lint" exit_code=0`,
+						},
+					},
+				},
+			},
+		}
+
+		output := review.RenderHuman(assessment)
+
+		// Activity entry details should be shown with entry ID, command, exit status
+		assert.Contains(t, output, "Activity:")
+		assert.Contains(t, output, "entry 1")
+		assert.Contains(t, output, "make lint")
+		assert.Contains(t, output, "exit_code=0")
 	})
 }
 

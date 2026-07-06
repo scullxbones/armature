@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"strconv"
 )
 
 // IssueData holds the minimal issue information needed for recording.
@@ -103,6 +104,52 @@ func Record(input RecordInput) (*RecordResult, error) {
 				msg += "\n  - " + e
 			}
 			return nil, fmt.Errorf("%s", msg)
+		}
+	}
+
+	// When the bundle has activity evidence, validate activity citations and populate entry details.
+	// This ensures activity citations reference valid entry IDs and obey the upgrade-only rule.
+	var activityEntryMap map[int]ActivityEntryDetails
+	if input.Bundle != nil && input.Bundle.Activity != nil {
+		// Build contract for activity citation validation
+		contract := Contract{}
+		if input.Issue != nil {
+			criteria, err := ParseAcceptanceCriteria([]byte(input.Issue.Acceptance))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse acceptance criteria for activity validation: %w", err)
+			}
+			contract = Contract{
+				DefinitionOfDone: input.Issue.DefinitionOfDone,
+				Scope:            input.Issue.Scope,
+				Acceptance:       criteria,
+			}
+		}
+
+		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, contract); len(errs) > 0 {
+			msg := "activity citation validation errors:"
+			for _, e := range errs {
+				msg += "\n  - " + e
+			}
+			return nil, fmt.Errorf("%s", msg)
+		}
+
+		// Load activity entries for populating entry details
+		activityEntryMap = LoadActivityEntries(input.Bundle.Activity.LogPath)
+
+		// Populate activity entry details in citations
+		for i := range input.Assessment.Results {
+			for j := range input.Assessment.Results[i].Citations {
+				citation := &input.Assessment.Results[i].Citations[j]
+				if citation.ActivityEntryID != "" {
+					// Convert entry ID string to int for lookup
+					entryID, err := strconv.Atoi(citation.ActivityEntryID)
+					if err == nil {
+						if details, ok := activityEntryMap[entryID]; ok {
+							citation.ActivityEntryDetails = FormatActivityEntryDetails(details)
+						}
+					}
+				}
+			}
 		}
 	}
 

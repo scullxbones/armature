@@ -617,3 +617,281 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 	assert.True(t, len(errs) > 0, "Expected validation errors for path-only citation with file not in diff")
 	assert.True(t, containsError(errs, "nonexistent.go"), "Expected file reference in error message")
 }
+
+func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Valid activity citation by raw entry ID (numeric string)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+		Acceptance:       []string{"test passed"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Valid activity citation by entry ID should not produce errors")
+}
+
+func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Citation referencing an unknown entry ID (out of range)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "10"}, // Only 5 entries (0-4), so 10 is invalid
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.NotEmpty(t, errs, "Unknown entry ID should produce validation errors")
+	assert.True(t, containsError(errs, "unknown activity entry ID"), "Error should mention unknown entry ID")
+}
+
+func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Citation with non-numeric entry ID (malformed)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "not-a-number"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.NotEmpty(t, errs, "Non-numeric entry ID should produce validation errors")
+	assert.True(t, containsError(errs, "invalid activity entry ID"), "Error should mention invalid entry ID")
+}
+
+func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Activity-citations-only cannot support satisfied on implementation criterion (definition_of_done)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "implementation complete",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Activity-only citation
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.NotEmpty(t, errs, "Activity-only satisfied on implementation criterion should produce errors")
+	assert.True(t, containsError(errs, "upgrade-only rule"), "Error should mention upgrade-only rule")
+}
+
+func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Activity-citations-only can support partially_satisfied on implementation criterion
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.PartiallySatisfied,
+				Rationale: "partially implemented",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Activity-only citation
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Activity-only partially_satisfied on implementation criterion should be allowed")
+}
+
+func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Activity-citations-only can support satisfied on acceptance (behavioral) criterion
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test executed successfully",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Activity-only citation on acceptance criterion
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+		Acceptance:       []string{"test passed"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Activity-only satisfied on acceptance criterion should be allowed")
+}
+
+func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Mixed activity and diff citations should not trigger upgrade-only rule
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "implementation complete",
+				Citations: []review.Citation{
+					{Path: "main.go", Line: 10},
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Mixed citations should not trigger upgrade-only rule")
+}
+
+func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// When activity is nil, validation should succeed (no activity to validate against)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{Path: "main.go", Line: 10},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, nil, review.Contract{})
+	assert.Empty(t, errs, "Validation against nil activity should succeed")
+}

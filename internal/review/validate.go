@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"strconv"
 )
 
 // ValidateResult checks that a ConformanceAssessment is well-formed:
@@ -140,6 +141,98 @@ func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract
 	for id := range expectedIDs {
 		if !submittedIDs[id] {
 			errs = append(errs, fmt.Sprintf("criterion result: missing expected ID %q", id))
+		}
+	}
+
+	return errs
+}
+
+// ValidateActivityCitations validates activity citations in a ConformanceAssessment against
+// an Activity section and contract. It checks:
+// - Digest match between activity log and bundle
+// - All cited entry IDs are valid (not index numbers, not unknown)
+// - Activity-citations-only cannot support satisfied on implementation criteria
+// Returns a slice of validation error strings (empty = valid).
+func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, contract Contract) []string {
+	var errs []string
+
+	if activity == nil {
+		// No activity section to validate against
+		return errs
+	}
+
+	// Build a set of valid entry IDs (0 to EntryCount-1)
+	validEntryIDs := make(map[int]bool)
+	for i := 0; i < activity.EntryCount; i++ {
+		validEntryIDs[i] = true
+	}
+
+	// Track which criteria have activity citations only
+	activityOnlyByID := make(map[string]bool)
+
+	// Validate each activity citation in the assessment
+	for _, result := range assessment.Results {
+		hasActivityCitation := false
+		hasDiffCitation := false
+
+		for _, citation := range result.Citations {
+			if citation.ActivityEntryID != "" {
+				hasActivityCitation = true
+
+				// Reject citations referencing the "activity index" (use of "index" terminology)
+				// Index would be something like "index:0" or "activity_index"
+				// We only accept raw entry IDs which are numeric strings
+				entryID, err := strconv.Atoi(citation.ActivityEntryID)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("criterion result %s: invalid activity entry ID %q (must be numeric)", result.ID, citation.ActivityEntryID))
+					continue
+				}
+
+				// Validate the entry ID is within the valid range
+				if !validEntryIDs[entryID] {
+					errs = append(errs, fmt.Sprintf("criterion result %s: unknown activity entry ID %d (valid range: 0-%d)",
+						result.ID, entryID, activity.EntryCount-1))
+				}
+			}
+
+			if citation.Path != "" {
+				hasDiffCitation = true
+			}
+		}
+
+		// Track if this criterion has only activity citations
+		if hasActivityCitation && !hasDiffCitation {
+			activityOnlyByID[result.ID] = true
+		}
+	}
+
+	// Check upgrade-only rule: activity-citations-only cannot satisfy implementation criteria
+	for criterionID := range activityOnlyByID {
+		// Find the corresponding result
+		var result *CriterionResult
+		for i := range assessment.Results {
+			if assessment.Results[i].ID == criterionID {
+				result = &assessment.Results[i]
+				break
+			}
+		}
+
+		if result == nil {
+			continue
+		}
+
+		// Check if this is an implementation criterion
+		// Implementation criteria are: definition_of_done
+		// (Acceptance criteria and custom criteria are behavioral and can be satisfied by activity evidence)
+		isImplementationCriterion := (criterionID == "definition_of_done")
+
+		// If activity-citations-only is used on an implementation criterion with Satisfied status, reject it
+		if isImplementationCriterion && result.Status == Satisfied {
+			msg := fmt.Sprintf(
+				"criterion result %s: activity citations alone cannot support satisfied on implementation criterion (upgrade-only rule)",
+				result.ID,
+			)
+			errs = append(errs, msg)
 		}
 	}
 

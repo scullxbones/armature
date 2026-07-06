@@ -77,13 +77,20 @@ func RenderMarkdown(a *ConformanceAssessment) string {
 		if len(result.Citations) > 0 {
 			sb.WriteString("**Citations:**\n\n")
 			for _, citation := range result.Citations {
-				escapedPath := escapeMarkdownSpecialChars(html.EscapeString(citation.Path))
-				if citation.Line > 0 {
-					fmt.Fprintf(&sb, "- %s (line %d)\n",
-						escapedPath, citation.Line)
+				// Activity citation: show entry details
+				if citation.ActivityEntryID != "" {
+					escapedDetails := escapeMarkdownSpecialChars(html.EscapeString(citation.ActivityEntryDetails))
+					fmt.Fprintf(&sb, "- Activity: %s\n", escapedDetails)
 				} else {
-					fmt.Fprintf(&sb, "- %s\n",
-						escapedPath)
+					// Diff citation: show file and line
+					escapedPath := escapeMarkdownSpecialChars(html.EscapeString(citation.Path))
+					if citation.Line > 0 {
+						fmt.Fprintf(&sb, "- %s (line %d)\n",
+							escapedPath, citation.Line)
+					} else {
+						fmt.Fprintf(&sb, "- %s\n",
+							escapedPath)
+					}
 				}
 			}
 			sb.WriteString("\n")
@@ -135,10 +142,16 @@ func RenderHuman(a *ConformanceAssessment) string {
 		if len(result.Citations) > 0 {
 			sb.WriteString("  Citations:\n")
 			for _, citation := range result.Citations {
-				if citation.Line > 0 {
-					fmt.Fprintf(&sb, "    - %s (line %d)\n", citation.Path, citation.Line)
+				// Activity citation: show entry details
+				if citation.ActivityEntryID != "" {
+					fmt.Fprintf(&sb, "    - Activity: %s\n", citation.ActivityEntryDetails)
 				} else {
-					fmt.Fprintf(&sb, "    - %s\n", citation.Path)
+					// Diff citation: show file and line
+					if citation.Line > 0 {
+						fmt.Fprintf(&sb, "    - %s (line %d)\n", citation.Path, citation.Line)
+					} else {
+						fmt.Fprintf(&sb, "    - %s\n", citation.Path)
+					}
 				}
 			}
 		}
