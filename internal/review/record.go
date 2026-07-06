@@ -3,6 +3,7 @@ package review
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // IssueData holds the minimal issue information needed for recording.
@@ -56,11 +57,13 @@ func Record(input RecordInput) (*RecordResult, error) {
 	// Validate structural correctness without diff-index citation checking.
 	// When --bundle is provided, full diff-index citation validation is performed below.
 	if errs := ValidateResultNoDiff(input.Assessment); len(errs) > 0 {
-		msg := "assessment validation errors:"
+		var sb strings.Builder
+		sb.WriteString("assessment validation errors:")
 		for _, e := range errs {
-			msg += "\n  - " + e
+			sb.WriteString("\n  - ")
+			sb.WriteString(e)
 		}
-		return nil, fmt.Errorf("%s", msg)
+		return nil, fmt.Errorf("%s", sb.String())
 	}
 
 	// When the bundle is available, verify that the bundle was prepared for the correct issue.
@@ -99,11 +102,13 @@ func Record(input RecordInput) (*RecordResult, error) {
 			return nil, fmt.Errorf("build diff index: %w", err)
 		}
 		if errs := ValidateResult(input.Assessment, idx); len(errs) > 0 {
-			msg := "assessment citation validation errors:"
+			var sb strings.Builder
+			sb.WriteString("assessment citation validation errors:")
 			for _, e := range errs {
-				msg += "\n  - " + e
+				sb.WriteString("\n  - ")
+				sb.WriteString(e)
 			}
-			return nil, fmt.Errorf("%s", msg)
+			return nil, fmt.Errorf("%s", sb.String())
 		}
 	}
 
@@ -125,12 +130,29 @@ func Record(input RecordInput) (*RecordResult, error) {
 			}
 		}
 
-		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, contract); len(errs) > 0 {
-			msg := "activity citation validation errors:"
-			for _, e := range errs {
-				msg += "\n  - " + e
+		// Re-fingerprint the activity log on disk and reject if it no longer matches the
+		// digest recorded in the bundle (log tampered with or rotated since prepare), but
+		// only when the assessment actually relies on activity citations.
+		if hasActivityCitations(input.Assessment) {
+			if errs := ValidateActivityDigest(input.Bundle.Activity); len(errs) > 0 {
+				var sb strings.Builder
+				sb.WriteString("activity log validation errors:")
+				for _, e := range errs {
+					sb.WriteString("\n  - ")
+					sb.WriteString(e)
+				}
+				return nil, fmt.Errorf("%s", sb.String())
 			}
-			return nil, fmt.Errorf("%s", msg)
+		}
+
+		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, contract); len(errs) > 0 {
+			var sb strings.Builder
+			sb.WriteString("activity citation validation errors:")
+			for _, e := range errs {
+				sb.WriteString("\n  - ")
+				sb.WriteString(e)
+			}
+			return nil, fmt.Errorf("%s", sb.String())
 		}
 
 		// Load activity entries for populating entry details
@@ -184,11 +206,13 @@ func Record(input RecordInput) (*RecordResult, error) {
 
 		// Validate that assessment covers all expected criteria
 		if errs := ValidateResultCoverage(input.Assessment, contract); len(errs) > 0 {
-			msg := "assessment coverage validation errors:"
+			var sb strings.Builder
+			sb.WriteString("assessment coverage validation errors:")
 			for _, e := range errs {
-				msg += "\n  - " + e
+				sb.WriteString("\n  - ")
+				sb.WriteString(e)
 			}
-			return nil, fmt.Errorf("%s", msg)
+			return nil, fmt.Errorf("%s", sb.String())
 		}
 	}
 
