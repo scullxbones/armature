@@ -277,3 +277,39 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 	// Step 3: Fall back to session binding
 	return sessionFallback, nil
 }
+
+// ExtractExitCode extracts the exit code from tool_input, if available.
+// Returns 0 if the field is not present (e.g., for PreToolUse events).
+func ExtractExitCode(toolInput map[string]any) int {
+	if toolInput == nil {
+		return 0
+	}
+
+	// Check for exit_code field (PostToolUse events)
+	if code, ok := toolInput["exit_code"].(float64); ok {
+		return int(code)
+	}
+	if code, ok := toolInput["exit_code"].(int); ok {
+		return code
+	}
+
+	return 0
+}
+
+// ExtractOutput extracts the output from tool_input, if available.
+// Returns nil if the field is not present (e.g., for PreToolUse events).
+func ExtractOutput(toolInput map[string]any) []byte {
+	if toolInput == nil {
+		return nil
+	}
+
+	// Check for output field (PostToolUse events)
+	if output, ok := toolInput["output"].(string); ok {
+		return []byte(output)
+	}
+	if output, ok := toolInput["output"].([]byte); ok {
+		return output
+	}
+
+	return nil
+}
