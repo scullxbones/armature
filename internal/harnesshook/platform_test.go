@@ -879,3 +879,225 @@ func TestDevinAdapterEncode_BlockDecision(t *testing.T) {
 	assert.Equal(t, 0, exitCode)
 	assert.Contains(t, string(data), "block")
 }
+
+// TestClaudeAdapterWriteConfigInstallsPostToolUseHooks verifies that PostToolUse hooks
+// are installed by WriteConfig for capturing execution evidence (ADR-0008).
+func TestClaudeAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewClaudeAdapter()
+
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+
+	postToolUseRaw, ok := hooksRaw["PostToolUse"].([]any)
+	require.True(t, ok, "PostToolUse should be an array")
+	require.NotEmpty(t, postToolUseRaw, "PostToolUse hooks should not be empty")
+
+	// Verify there's an entry with "arm harness-hook" in PostToolUse
+	foundPostToolUseHook := false
+	for _, hookEntry := range postToolUseRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				foundPostToolUseHook = true
+				break
+			}
+		}
+		if foundPostToolUseHook {
+			break
+		}
+	}
+	assert.True(t, foundPostToolUseHook, "PostToolUse should contain an arm harness-hook entry")
+}
+
+// TestCodexAdapterWriteConfigInstallsPostToolUseHooks verifies that PostToolUse hooks
+// are installed by WriteConfig for capturing execution evidence (ADR-0008).
+func TestCodexAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewCodexAdapter()
+
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
+	require.NoError(t, err)
+	content := string(data)
+
+	// Verify that PostToolUse hooks are present in TOML format
+	assert.Contains(t, content, "[[hooks.PostToolUse]]", "PostToolUse should be present in config")
+	assert.Contains(t, content, "arm harness-hook", "PostToolUse should include arm harness-hook command")
+}
+
+// TestDevinAdapterWriteConfigInstallsPostToolUseHooks verifies that PostToolUse hooks
+// are installed by WriteConfig for capturing execution evidence (ADR-0008).
+func TestDevinAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewDevinAdapter()
+
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".devin", "hooks.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+
+	postToolUseRaw, ok := hooksRaw["PostToolUse"].([]any)
+	require.True(t, ok, "PostToolUse should be an array")
+	require.NotEmpty(t, postToolUseRaw, "PostToolUse hooks should not be empty")
+
+	// Verify there's an entry with "arm harness-hook" in PostToolUse
+	foundPostToolUseHook := false
+	for _, hookEntry := range postToolUseRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if cmd, ok := hookMap["command"].(string); ok && cmd == "arm harness-hook" {
+			foundPostToolUseHook = true
+			break
+		}
+	}
+	assert.True(t, foundPostToolUseHook, "PostToolUse should contain an arm harness-hook entry")
+}
+
+// TestClaudeAdapterWriteConfigDeduplicatesPostToolUseHooks verifies that calling WriteConfig twice
+// does not result in duplicate arm harness-hook entries in PostToolUse.
+func TestClaudeAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewClaudeAdapter()
+
+	// First call to WriteConfig
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	// Second call to WriteConfig (simulating bootstrap being run twice)
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+
+	postToolUseRaw, ok := hooksRaw["PostToolUse"].([]any)
+	require.True(t, ok, "PostToolUse should be an array")
+
+	// Count arm harness-hook entries in PostToolUse
+	armHarnessHookCountPostToolUse := 0
+	for _, hookEntry := range postToolUseRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooksList, ok := hookMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range hooksList {
+			h, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := h["command"].(string); ok && cmd == "arm harness-hook" {
+				armHarnessHookCountPostToolUse++
+			}
+		}
+	}
+
+	assert.Equal(t, 1, armHarnessHookCountPostToolUse, "should have exactly 1 arm harness-hook in PostToolUse, not duplicates")
+}
+
+// TestCodexAdapterWriteConfigDeduplicatesPostToolUseHooks verifies that calling WriteConfig twice
+// does not result in duplicate [[hooks.PostToolUse]] sections.
+func TestCodexAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewCodexAdapter()
+
+	// First call to WriteConfig
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	// Second call to WriteConfig (simulating bootstrap being run twice)
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
+	require.NoError(t, err)
+	content := string(data)
+
+	// Count occurrences of [[hooks.PostToolUse]]
+	count := 0
+	for i := 0; i < len(content)-len("[[hooks.PostToolUse]]"); i++ {
+		if content[i:i+len("[[hooks.PostToolUse]]")] == "[[hooks.PostToolUse]]" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "should have exactly 1 [[hooks.PostToolUse]] section, not duplicates")
+}
+
+// TestDevinAdapterWriteConfigDeduplicatesPostToolUseHooks verifies that calling WriteConfig twice
+// does not result in duplicate arm harness-hook entries in PostToolUse.
+func TestDevinAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	adapter := NewDevinAdapter()
+
+	// First call to WriteConfig
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	// Second call to WriteConfig (simulating bootstrap being run twice)
+	require.NoError(t, adapter.WriteConfig(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, ".devin", "hooks.json"))
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+
+	hooksRaw, ok := result["hooks"].(map[string]any)
+	require.True(t, ok, "hooks should be a map")
+
+	postToolUseRaw, ok := hooksRaw["PostToolUse"].([]any)
+	require.True(t, ok, "PostToolUse should be an array")
+
+	// Count arm harness-hook entries in PostToolUse
+	armHarnessHookCountPostToolUse := 0
+	for _, hookEntry := range postToolUseRaw {
+		hookMap, ok := hookEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if cmd, ok := hookMap["command"].(string); ok && cmd == "arm harness-hook" {
+			armHarnessHookCountPostToolUse++
+		}
+	}
+
+	assert.Equal(t, 1, armHarnessHookCountPostToolUse, "should have exactly 1 arm harness-hook in PostToolUse, not duplicates")
+}

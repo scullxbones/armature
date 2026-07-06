@@ -64,6 +64,7 @@ func (a *ClaudeAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
 		Stop:                true,
+		PostToolUse:         true,
 		BlockingStop:        true,
 		ShellInterception:   "structured",
 		SupportedEditTools:  []string{"Edit", "Write", "MultiEdit"},
@@ -106,6 +107,14 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 		}},
 	}
 
+	armaturePostToolUse := map[string]any{
+		"matcher": "Bash",
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": "arm harness-hook",
+		}},
+	}
+
 	armatureStop := map[string]any{
 		"hooks": []any{map[string]any{
 			"type":    "command",
@@ -120,6 +129,14 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	}
 	preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
 	hooks["PreToolUse"] = preToolUseHooks
+
+	// Merge PostToolUse hooks: remove any existing Armature-managed entries, then add the current version
+	postToolUseHooks := []any{}
+	if existing, ok := hooks["PostToolUse"].([]any); ok {
+		postToolUseHooks = removeArmatureHooks(existing)
+	}
+	postToolUseHooks = append(postToolUseHooks, armaturePostToolUse)
+	hooks["PostToolUse"] = postToolUseHooks
 
 	// Merge Stop hooks: remove any existing Armature-managed entries, then add the current version
 	stopHooks := []any{}

@@ -21,6 +21,7 @@ func (a *DevinAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
 		Stop:                true,
+		PostToolUse:         true,
 		BlockingStop:        true,
 		ShellInterception:   "structured",
 		SupportedEditTools:  []string{"edit"},
@@ -73,6 +74,10 @@ func (a *DevinAdapter) WriteConfig(workdir string) error {
 		"hooks": map[string]any{
 			"PreToolUse": []any{map[string]any{
 				"matcher": "edit|exec",
+				"command": "arm harness-hook",
+			}},
+			"PostToolUse": []any{map[string]any{
+				"matcher": "exec",
 				"command": "arm harness-hook",
 			}},
 			"Stop": []any{map[string]any{
