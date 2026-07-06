@@ -133,23 +133,65 @@ func fallbackGetHEAD(gitDir string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// activityLoggingConfigKey is the repo-level git config key that disables activity
+// capture. It follows the same repo-local git config pattern used elsewhere in
+// Armature (e.g. armature.worker-id, armature.ops-worktree-path): a boolean value
+// of "true" disables capture, anything else (including unset) leaves it enabled.
+const activityLoggingConfigKey = "armature.disable-activity-logging"
+
 // shouldCaptureActivity checks if activity logging is enabled (not disabled by kill-switch).
-func shouldCaptureActivity() bool {
-	// Check environment variable for kill-switch
+// Capture is on by default. It can be disabled two ways, either of which is sufficient:
+//   - Repo-level config: `git config --local armature.disable-activity-logging true`
+//     (the Definition-of-Done kill-switch; travels with the repo/worktree, not the shell).
+//   - Environment variable override: ARMATURE_DISABLE_ACTIVITY_LOGGING (handy for one-off
+//     shell sessions without touching repo config).
+func shouldCaptureActivity(gitDir string) bool {
+	// Environment variable override (checked first; either mechanism disabling is sufficient).
 	disableEnv := os.Getenv("ARMATURE_DISABLE_ACTIVITY_LOGGING")
 	if disableEnv != "" && disableEnv != "0" && disableEnv != "false" {
 		return false
 	}
+
+	// Repo-level config kill-switch.
+	if isActivityLoggingDisabledByRepoConfig(gitDir) {
+		return false
+	}
+
 	return true
+}
+
+// isActivityLoggingDisabledByRepoConfig reads the repo-level git config kill-switch
+// directly via --git-dir (rather than requiring a working-tree path), since callers
+// only have the resolved git dir (which may be a worktree's private git dir, e.g.
+// <repo>/.git/worktrees/<name>) available at this point. All worktrees of a repo
+// share the same --local config store, so this reads the same value regardless of
+// which worktree's hook invocation triggered it.
+// Returns false (capture enabled) if the key is unset or git fails for any reason,
+// so a missing/misconfigured git binary fails open rather than silently disabling
+// capture.
+func isActivityLoggingDisabledByRepoConfig(gitDir string) bool {
+	if gitDir == "" {
+		return false
+	}
+	//nolint:gosec // G204: git binary is constant, gitDir/key are internal, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "config", "--local", "--bool", activityLoggingConfigKey)
+	out, err := cmd.Output()
+	if err != nil {
+		// Unset key (or any other git config error) leaves capture enabled.
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
 }
 
 // AppendActivity appends an execution event to the worktree-local armature-activity.log.
 // It captures: command, exit status, truncated output, full-output hash, worktree HEAD sha, timestamp.
-// Respects a kill-switch via ARMATURE_DISABLE_ACTIVITY_LOGGING environment variable.
+// Respects a kill-switch, either the repo-level git config
+// armature.disable-activity-logging or the ARMATURE_DISABLE_ACTIVITY_LOGGING
+// environment variable.
 // Fails open on any capture error with stderr warning.
 func AppendActivity(gitDir string, command string, exitCode int, output []byte) error {
 	// Check if activity capture is disabled
-	if !shouldCaptureActivity() {
+	if !shouldCaptureActivity(gitDir) {
 		return nil
 	}
 

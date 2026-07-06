@@ -278,37 +278,51 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 	return sessionFallback, nil
 }
 
-// ExtractExitCode extracts the exit code from tool_input, if available.
-// Returns 0 if the field is not present (e.g., for PreToolUse events).
-func ExtractExitCode(toolInput map[string]any) int {
-	if toolInput == nil {
+// ExtractExitCode extracts the exit code from a hook payload map, if available.
+// It is used against the PostToolUse "tool_response" payload (and, for
+// harnesses/tests that place the field alongside the tool call arguments,
+// "tool_input"). Returns 0 if the field is not present (e.g., for
+// PreToolUse events, which have no execution result yet).
+func ExtractExitCode(fields map[string]any) int {
+	if fields == nil {
 		return 0
 	}
 
-	// Check for exit_code field (PostToolUse events)
-	if code, ok := toolInput["exit_code"].(float64); ok {
+	// Check for exit_code field (PostToolUse events). JSON numbers decode to
+	// float64 via encoding/json; the int case supports callers that construct
+	// the map directly (e.g. tests) rather than via json.Unmarshal.
+	if code, ok := fields["exit_code"].(float64); ok {
 		return int(code)
 	}
-	if code, ok := toolInput["exit_code"].(int); ok {
+	if code, ok := fields["exit_code"].(int); ok {
 		return code
 	}
 
 	return 0
 }
 
-// ExtractOutput extracts the output from tool_input, if available.
-// Returns nil if the field is not present (e.g., for PreToolUse events).
-func ExtractOutput(toolInput map[string]any) []byte {
-	if toolInput == nil {
+// ExtractOutput extracts the command output from a hook payload map, if
+// available. It is used against the PostToolUse "tool_response" payload.
+// Supports the explicit "output" key as well as the "stdout"/"stderr" shape
+// used by Claude Code's Bash tool_response (stdout and stderr are
+// concatenated, stdout first). Returns nil if no output field is present
+// (e.g., for PreToolUse events).
+func ExtractOutput(fields map[string]any) []byte {
+	if fields == nil {
 		return nil
 	}
 
-	// Check for output field (PostToolUse events)
-	if output, ok := toolInput["output"].(string); ok {
+	if output, ok := fields["output"].(string); ok {
 		return []byte(output)
 	}
-	if output, ok := toolInput["output"].([]byte); ok {
+	if output, ok := fields["output"].([]byte); ok {
 		return output
+	}
+
+	stdout, hasStdout := fields["stdout"].(string)
+	stderr, hasStderr := fields["stderr"].(string)
+	if hasStdout || hasStderr {
+		return []byte(stdout + stderr)
 	}
 
 	return nil

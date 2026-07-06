@@ -75,7 +75,7 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 			if strings.TrimSpace(legacyContentStr) == strings.TrimSpace(legacyCodexConfig) {
 				return true, nil
 			}
-			firstLine := strings.SplitN(legacyContentStr, "\n", 2)[0]
+			firstLine, _, _ := strings.Cut(legacyContentStr, "\n")
 			if strings.TrimSpace(firstLine) == "# armature:managed" {
 				return true, nil
 			}
@@ -89,7 +89,7 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	contentStr := string(content)
 
 	// Check for the marker at the beginning of the file
-	firstLine := strings.SplitN(contentStr, "\n", 2)[0]
+	firstLine, _, _ := strings.Cut(contentStr, "\n")
 	if strings.TrimSpace(firstLine) == "# armature:managed" {
 		return true, nil
 	}
@@ -133,7 +133,7 @@ command = "arm harness-hook"
 	legacyBytes, err := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
 	if err == nil {
 		legacyStr := string(legacyBytes)
-		firstLine := strings.SplitN(legacyStr, "\n", 2)[0]
+		firstLine, _, _ := strings.Cut(legacyStr, "\n")
 		owned := strings.TrimSpace(legacyStr) == strings.TrimSpace(legacyCodexConfig) ||
 			strings.TrimSpace(firstLine) == "# armature:managed"
 		if owned {
@@ -178,10 +178,25 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 		HookEventName string         `json:"hook_event_name"`
 		ToolName      string         `json:"tool_name"`
 		ToolInput     map[string]any `json:"tool_input"`
+		ToolResponse  map[string]any `json:"tool_response"`
 		Cwd           string         `json:"cwd"`
 	}
 	if err := json.Unmarshal(input, &raw); err != nil {
 		return Event{}, err
+	}
+
+	// PostToolUse execution evidence (ADR-0008) lives in tool_response for the
+	// harnesses that emit it (e.g. Claude Code's Bash tool_response carries
+	// stdout/stderr). Some callers (and tests) place exit_code/output directly
+	// on tool_input instead, so fall back to that when tool_response doesn't
+	// carry it. Both are no-ops (return zero value) for PreToolUse events.
+	exitCode := ExtractExitCode(raw.ToolResponse)
+	if exitCode == 0 {
+		exitCode = ExtractExitCode(raw.ToolInput)
+	}
+	output := ExtractOutput(raw.ToolResponse)
+	if output == nil {
+		output = ExtractOutput(raw.ToolInput)
 	}
 
 	return Event{
@@ -191,6 +206,8 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 		Command:   extractCommand(raw.ToolInput),
 		Cwd:       raw.Cwd,
 		ToolInput: raw.ToolInput,
+		ExitCode:  exitCode,
+		Output:    output,
 	}, nil
 }
 
