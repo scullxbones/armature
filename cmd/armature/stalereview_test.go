@@ -182,3 +182,67 @@ func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
 	cited, _ := first["cited_issues"].([]any) //nolint:errcheck
 	assert.NotEmpty(t, cited, "expected task-01 to appear in cited_issues")
 }
+
+// TestStaleReviewCmd_StaleSource_SyncFailed verifies that stale-review surfaces
+// sources whose last sync failed (SyncFailed=true), even though Verify()
+// short-circuits on SyncFailed before comparing fingerprints. Such sources must
+// still be surfaced for review since the upstream may have changed while the
+// sync was failing.
+func TestStaleReviewCmd_StaleSource_SyncFailed(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
+	srcDir := filepath.Join(issuesDir, "sources")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+
+	entry := sources.SourceEntry{
+		ID:          "src-syncfail",
+		Fingerprint: "fp-syncfail",
+		SyncFailed:  true,
+	}
+	m := sources.Manifest{}
+	m.Upsert(entry)
+	require.NoError(t, sources.WriteManifest(srcDir, m))
+
+	buf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetArgs([]string{"stale-review", "--repo", repo, "--format", "json"})
+	require.NoError(t, root.Execute())
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
+	staleSources, ok := result["stale_sources"].([]any)
+	require.True(t, ok, "expected stale_sources array in output")
+	require.Len(t, staleSources, 1)
+	first := staleSources[0].(map[string]any) //nolint:errcheck // panic in test is acceptable
+	assert.Equal(t, "src-syncfail", first["source_id"])
+	assert.Contains(t, first["change_summary"], "last sync failed")
+}
+
+// TestStaleReviewCmd_CorruptManifest verifies that stale-review fails gracefully
+// when the manifest.json file is unreadable or malformed.
+func TestStaleReviewCmd_CorruptManifest(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create sources directory and write invalid JSON to manifest.json
+	issuesDir := filepath.Join(repo, ".arm", ".armature")
+	srcDir := filepath.Join(issuesDir, "sources")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+
+	// Write corrupted manifest.json with invalid JSON
+	manifestPath := filepath.Join(srcDir, "manifest.json")
+	require.NoError(t, os.WriteFile(manifestPath, []byte("{ invalid json ]"), 0o644))
+
+	// Run stale-review and expect it to fail
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	root := newRootCmd()
+	root.SetOut(buf)
+	root.SetErr(errBuf)
+	root.SetArgs([]string{"stale-review", "--repo", repo})
+
+	err := root.Execute()
+	require.Error(t, err, "expected stale-review to fail with corrupt manifest")
+	assert.Contains(t, err.Error(), "manifest", "error message should mention manifest issue")
+}

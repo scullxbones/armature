@@ -29,9 +29,9 @@ func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider
 	case "filesystem":
 		return &FilesystemProvider{}, nil
 	case "confluence":
-		return NewConfluenceProvider("", Credentials{}), nil
+		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
 	case "sharepoint":
-		return NewSharePointProvider("", Credentials{}), nil
+		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
 	default:
 		return nil, fmt.Errorf("unknown provider type %q", providerType)
 	}
@@ -227,6 +227,13 @@ func (l *Lifecycle) Verify(id string) VerifyResult {
 		}
 	}
 
+	return l.verifyEntry(&manifest, id)
+}
+
+// verifyEntry checks freshness for a single source against an already-loaded
+// manifest, avoiding a redundant re-read. Callers that already hold a manifest
+// (e.g. VerifyAll) should use this instead of Verify.
+func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
 		return VerifyResult{
@@ -293,7 +300,7 @@ func (l *Lifecycle) VerifyAll() ([]VerifyResult, error) {
 	allOK := true
 
 	for id := range manifest.Entries {
-		result := l.Verify(id)
+		result := l.verifyEntry(&manifest, id)
 		results = append(results, result)
 		if result.Status != VerifyOK {
 			allOK = false
@@ -350,6 +357,21 @@ func (l *Lifecycle) Get(id string) (*SourceEntry, error) {
 	entry, ok := manifest.Get(id)
 	if !ok {
 		return nil, fmt.Errorf("source %q not found", id)
+	}
+
+	return entry, nil
+}
+
+// GetByURL retrieves a single source by its URL.
+func (l *Lifecycle) GetByURL(url string) (*SourceEntry, error) {
+	manifest, err := ReadManifest(l.manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read manifest: %w", err)
+	}
+
+	entry, ok := manifest.GetByURL(url)
+	if !ok {
+		return nil, fmt.Errorf("source with URL %q not found", url)
 	}
 
 	return entry, nil

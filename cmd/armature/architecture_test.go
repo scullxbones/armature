@@ -168,7 +168,7 @@ func isStatePathJoin(call *ast.CallExpr) bool {
 // no non-test file in cmd/armature or internal/tui calls snapshot.Load directly.
 //
 // ARCHITECTURE GUARD: After the migration to snapshot.Store, all snapshot loading
-// must go through Store.Load() or Store.Refresh(). Direct snapshot.Load() calls
+// must go through Store.Load(). Direct snapshot.Load() calls
 // bypass the Store and reintroduce fragmented initialization logic.
 //
 // This test scans cmd/armature and internal/tui sources (excluding _test.go files)
@@ -227,7 +227,7 @@ func TestHandlersUseSnapshotAccess_REQ_ARCHIMP_S18_T3(t *testing.T) {
 	}
 
 	if len(violations) > 0 {
-		t.Fatalf("Handlers must use Store.Load() or Store.Refresh() instead of direct snapshot.Load() calls:\n%s",
+		t.Fatalf("Handlers must use Store.Load() instead of direct snapshot.Load() calls:\n%s",
 			strings.Join(violations, "\n"))
 	}
 }

@@ -344,7 +344,7 @@ func runPostMergeHook(cmd *cobra.Command) error {
 	}
 
 	// Refresh snapshot after writing ops
-	if _, err := store.Refresh(context.Background()); err != nil {
+	if _, err := store.Load(context.Background()); err != nil {
 		return fmt.Errorf("refresh snapshot: %w", err)
 	}
 

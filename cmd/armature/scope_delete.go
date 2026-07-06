@@ -84,7 +84,7 @@ func newScopeDeleteCmd() *cobra.Command {
 			}
 
 			// Refresh snapshot to apply the ops to state.
-			snap, err := store.Refresh(context.Background())
+			snap, err := store.Load(context.Background())
 			if err != nil {
 				return fmt.Errorf("refresh snapshot: %w", err)
 			}

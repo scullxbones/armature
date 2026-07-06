@@ -103,7 +103,7 @@ preview changes without committing them.`,
 			}
 
 			// Re-load snapshot so state files reflect the new merged status
-			snap, err = store.Refresh(cmd.Context())
+			snap, err = store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

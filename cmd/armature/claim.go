@@ -402,7 +402,7 @@ or updates the armature-issue-id file if the worktree exists.`,
 			}
 
 			// Refresh store after appending claim Op
-			if _, err := store.Refresh(context.Background()); err != nil {
+			if _, err := store.Load(context.Background()); err != nil {
 				return fmt.Errorf("refresh store after claim: %w", err)
 			}
 
