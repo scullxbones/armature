@@ -1009,3 +1009,127 @@ func TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1(t
 	assert.Equal(t, review.FingerprintActivity(realContent), bundle.Activity.Digest,
 		"activity digest must come from the worktree's own log, not the parent repo's decoy log")
 }
+
+// TestReviewPrepareCommand_MismatchedBinding_NoActivityLog_REQ_EXECEV_F1 verifies that when
+// review prepare is run from a worktree bound to one issue (task-02) but preparing for a
+// different issue (task-01), the activity log from the mismatched worktree is NOT attached
+// to the bundle. This prevents a bundle for issue A from carrying issue B's activity log
+// and upstream record validation from accepting evidence against the wrong issue.
+func TestReviewPrepareCommand_MismatchedBinding_NoActivityLog_REQ_EXECEV_F1(t *testing.T) {
+	repo := setupRepoWithTwoTasks(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Create a worktree bound to task-02
+	worktreeDir := t.TempDir()
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-02", "--worktree", worktreeDir})
+	require.NoError(t, claimCmd.Execute())
+
+	// Resolve the worktree's actual git dir.
+	gitFile := filepath.Join(worktreeDir, ".git")
+	gitFileContent, err := os.ReadFile(gitFile)
+	require.NoError(t, err)
+	worktreeGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(worktreeGitDir) {
+		worktreeGitDir = filepath.Join(worktreeDir, worktreeGitDir)
+	}
+
+	// Write an activity log to the task-02 worktree's git dir
+	activityContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make build",` +
+		`"exit_code":0,"exit_code_known":true,"head_sha":"abc123","output_hash":"hash"}` + "\n")
+	activityLogPath := filepath.Join(worktreeGitDir, "armature-activity.log")
+	require.NoError(t, os.WriteFile(activityLogPath, activityContent, 0o600)) //nolint:gosec // G703: fixed test-controlled path
+
+	// Create a commit range inside the worktree.
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, worktreeDir, "git", "add", "impl.go")
+	run(t, worktreeDir, "git", "commit", "-m", "implementation")
+	baseCmd := newCmdInDir(worktreeDir, "git", "rev-parse", "HEAD~1")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+	headCmd := newCmdInDir(worktreeDir, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	// Run review prepare for task-01 (NOT task-02) from the worktree bound to task-02.
+	// The binding resolves to task-02, but we're preparing for task-01.
+	// The activity log should NOT be attached because the binding's issue ID doesn't match.
+	out, err := runTrls(t, worktreeDir, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head)
+	require.NoError(t, err)
+
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &bundle))
+
+	// The bundle should be for task-01
+	assert.Equal(t, "task-01", bundle.Issue.ID)
+
+	// The activity log should NOT be attached because the binding (task-02) doesn't match
+	// the issue being prepared (task-01). This prevents bundle for task-01 from carrying
+	// task-02's activity log, which would cause record validation to check against the wrong issue's evidence.
+	assert.Nil(t, bundle.Activity, "activity log must not be attached when binding issue ID does not match the prepared issue ID")
+}
+
+// TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV verifies that
+// review prepare attaches the activity log for a session bound via the ARMATURE_ISSUE_ID
+// env var (no armature-issue-id file present), not just a file-based binding. Capture
+// (cmd/armature/harness_hook.go's resolveIssueBinding) resolves bindings via file-then-env,
+// so prepare's gate must use the same resolution or an env-bound session's legitimately
+// captured activity is silently dropped even though it matches the issue being prepared.
+func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	worktreeDir := t.TempDir()
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	// Claim without --worktree flag semantics that write the binding file; instead we
+	// simulate an env-only-bound session by claiming into worktreeDir and then removing
+	// the armature-issue-id file, leaving only the env var as the binding source.
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, claimCmd.Execute())
+
+	gitFile := filepath.Join(worktreeDir, ".git")
+	gitFileContent, err := os.ReadFile(gitFile)
+	require.NoError(t, err)
+	worktreeGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(worktreeGitDir) {
+		worktreeGitDir = filepath.Join(worktreeDir, worktreeGitDir)
+	}
+
+	// Remove the file-based binding so only the env var resolves the issue ID, and also
+	// clear the legacy task-id file for the same reason.
+	require.NoError(t, os.Remove(filepath.Join(worktreeGitDir, "armature-issue-id"))) //nolint:gosec // G703: fixed test-controlled path, not user input
+
+	activityContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"go build ./...",` +
+		`"exit_code":0,"exit_code_known":true,"head_sha":"envsha","output_hash":"env"}` + "\n")
+	activityLogPath := filepath.Join(worktreeGitDir, "armature-activity.log")
+	require.NoError(t, os.WriteFile(activityLogPath, activityContent, 0o600)) //nolint:gosec // G703: fixed test-controlled path
+
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, worktreeDir, "git", "add", "impl.go")
+	run(t, worktreeDir, "git", "commit", "-m", "implementation")
+	baseCmd := newCmdInDir(worktreeDir, "git", "rev-parse", "HEAD~1")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+	headCmd := newCmdInDir(worktreeDir, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+
+	out, err := runTrls(t, worktreeDir, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head)
+	require.NoError(t, err)
+
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &bundle))
+
+	require.NotNil(t, bundle.Activity, "activity section must be attached for an env-bound session whose ARMATURE_ISSUE_ID matches the prepared issue")
+	assert.Equal(t, review.FingerprintActivity(activityContent), bundle.Activity.Digest)
+}

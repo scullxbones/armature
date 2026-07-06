@@ -109,8 +109,22 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	if err != nil {
 		return fmt.Errorf("resolve git dir for activity log: %w", err)
 	}
+	// The file-based binding alone is not the full picture: capture (see
+	// resolveIssueBinding below) also falls back to the ARMATURE_ISSUE_ID env var when
+	// no armature-issue-id file is present, so an env-bound session's legitimately
+	// captured activity would otherwise be silently dropped here (binding.IssueID would
+	// come back empty from the file-only resolver even though capture attached activity
+	// to this issue). Reuse the same resolution helper capture uses so the prepare-time
+	// gate compares against the same binding source that capture used.
+	resolvedIssueID := binding.IssueID
+	if resolvedIssueID == "" && binding.GitDir != "" {
+		resolvedIssueID = resolveIssueBinding(binding.GitDir)
+	}
 	activityLogPath := ""
-	if binding.GitDir != "" {
+	// Only attach the activity log if the binding's issue ID matches the issue being prepared.
+	// This prevents a bundle for issue A from carrying issue B's activity log, which would
+	// cause downstream record validation to check citations against the wrong issue's evidence.
+	if binding.GitDir != "" && resolvedIssueID == issueID {
 		activityLogPath = filepath.Join(binding.GitDir, "armature-activity.log")
 	}
 
