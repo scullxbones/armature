@@ -89,8 +89,12 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	// Create git adapter
 	git := adapters.New(ctx.RepoPath)
 
+	// Construct activity log path (.git/armature-activity.log in the worktree)
+	gitDir := filepath.Join(ctx.RepoPath, ".git")
+	activityLogPath := filepath.Join(gitDir, "armature-activity.log")
+
 	// Call prepare — pass real issue metadata (type, outcome, definition of done)
-	bundle, err := review.Prepare(git, issueID, title, issue.DefinitionOfDone, issue.Type, issue.Outcome, scope, criteria, base, head)
+	bundle, err := review.Prepare(git, issueID, title, issue.DefinitionOfDone, issue.Type, issue.Outcome, scope, criteria, base, head, activityLogPath)
 	if err != nil {
 		return fmt.Errorf("prepare review bundle: %w", err)
 	}

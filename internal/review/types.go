@@ -240,6 +240,20 @@ type Fingerprints struct {
 	Delivery string `json:"delivery"`
 }
 
+// Activity captures execution evidence for a worktree.
+type Activity struct {
+	// Digest is the SHA-256 fingerprint of the activity log file content.
+	Digest string `json:"digest"`
+	// EntryCount is the total number of entries in the activity log.
+	EntryCount int `json:"entry_count"`
+	// DeliveryHeadCount is the number of entries at the delivery HEAD commit.
+	DeliveryHeadCount int `json:"delivery_head_count"`
+	// EarlierCount is the number of entries at commits before the delivery HEAD.
+	EarlierCount int `json:"earlier_count"`
+	// LogPath is the path to the activity log file (relative to worktree root).
+	LogPath string `json:"log_path"`
+}
+
 // ReviewBundle is the canonical input package for a reviewer.
 type ReviewBundle struct {
 	// SchemaVersion is the protocol version.
@@ -254,6 +268,8 @@ type ReviewBundle struct {
 	Delivery Delivery `json:"delivery"`
 	// Fingerprints captures canonical fingerprints.
 	Fingerprints Fingerprints `json:"fingerprints"`
+	// Activity optionally captures execution evidence when a worktree activity log exists.
+	Activity *Activity `json:"activity,omitempty"`
 }
 
 // Valid validates that the ReviewBundle is well-formed.
@@ -329,6 +345,8 @@ type AssessmentAttestation struct {
 	ContractFingerprint string `json:"contract_fingerprint"`
 	// DeliveryFingerprint from the bundle.
 	DeliveryFingerprint string `json:"delivery_fingerprint"`
+	// ActivityDigest from the bundle (optional, present if activity log exists).
+	ActivityDigest string `json:"activity_digest,omitempty"`
 	// BaseSHA from the delivery range.
 	BaseSHA string `json:"base_sha"`
 	// HeadSHA from the delivery range.
