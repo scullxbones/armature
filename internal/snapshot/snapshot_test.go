@@ -285,7 +285,7 @@ func TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1(t *testing.T) {
 	assert.Equal(t, "Test Issue", issue.Title)
 
 	// Refresh should work
-	snap2, err := store.Refresh(ctx)
+	snap2, err := store.Load(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, snap2)
 
@@ -557,7 +557,7 @@ func TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3(t *testing.T) {
 	content := opLine + "\n" + opLine2 + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap2, err := store.Refresh(ctx)
+	snap2, err := store.Load(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, snap2)
 	assert.Equal(t, 2, len(snap2.Issues), "after Refresh(), snapshot should have 2 issues")

@@ -43,7 +43,12 @@ func newStaleReviewCmd() *cobra.Command {
 			}
 
 			// Detect stale entries.
-			verifyResults, _ := lc.VerifyAll() //nolint:errcheck // combined error is redundant with per-result status below
+			verifyResults, err := lc.VerifyAll()
+			if err != nil && verifyResults == nil {
+				return fmt.Errorf("verify sources: %w", err)
+			}
+			// Note: When VerifyAll() returns results, the combined error is redundant with per-result status,
+			// but when results are nil (manifest unreadable), the error must be propagated.
 
 			var reviewItems []stalereview.ReviewItem
 			for _, result := range verifyResults {
@@ -52,7 +57,7 @@ func newStaleReviewCmd() *cobra.Command {
 				if result.Status == sources.VerifyError {
 					return fmt.Errorf("read cache for %s: %w", result.ID, result.Error)
 				}
-				if result.Status != sources.VerifyChanged && result.Status != sources.VerifyMissing {
+				if result.Status != sources.VerifyChanged && result.Status != sources.VerifyMissing && result.Status != sources.VerifyStale {
 					continue
 				}
 
@@ -80,6 +85,8 @@ func newStaleReviewCmd() *cobra.Command {
 						short(result.Stored), short(result.Current))
 				case sources.VerifyMissing:
 					summary = "no cache found"
+				case sources.VerifyStale:
+					summary = "last sync failed; cached content may be stale"
 				}
 
 				reviewItems = append(reviewItems, stalereview.ReviewItem{

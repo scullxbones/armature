@@ -101,20 +101,11 @@ func newCreateCmd() *cobra.Command {
 					resolvedID = sourceRef
 				} else {
 					// Fall back to URL lookup in the manifest.
-					allEntries, err := lc.ListAll()
-					if err != nil {
-						return fmt.Errorf("list sources: %w", err)
-					}
-					for _, e := range allEntries {
-						if e.URL == sourceRef {
-							entry = &e
-							resolvedID = e.ID
-							break
-						}
-					}
-					if entry == nil {
+					entry, resolveErr = lc.GetByURL(sourceRef)
+					if resolveErr != nil {
 						return fmt.Errorf("source %q not found in manifest", sourceRef)
 					}
+					resolvedID = entry.ID
 				}
 
 				slOp := ops.Op{

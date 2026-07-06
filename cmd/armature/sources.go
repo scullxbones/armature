@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 
@@ -100,8 +99,7 @@ func newSourcesSyncCmd() *cobra.Command {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			ctx := context.Background()
-			results, err := lc.SyncAll(ctx)
+			results, err := lc.SyncAll(cmd.Context())
 
 			for _, result := range results {
 				if result.Error != nil {
