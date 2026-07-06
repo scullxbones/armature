@@ -185,6 +185,113 @@ detected as an escape. This is consistent with the hook's overall fail-open post
 (ADR-0007): the hook is a best-effort guardrail, not a sandbox, and only the violation
 gate at merge time provides a hard backstop.
 
+## Execution Evidence Capture
+
+In addition to scope and acceptance enforcement, harness hooks now record execution
+evidence for qualified tool invocations. This allows semantic review to access
+harness-captured command/output pairs (not worker-authored reasoning) as a
+third, explicitly weaker evidence class. See ADR-0008 for the trust model,
+disclosure posture, and why execution evidence is upgrade-only.
+
+### What Gets Captured
+
+For every **PostToolUse event** (`Bash` tool only) on the bound issue, the hook captures:
+- **Command:** The exact command string executed
+- **Exit Status:** The command's exit code
+- **Truncated Output:** First 1 KB of stdout/stderr + last 1 KB (if output > 2 KB)
+- **Full Output Hash:** SHA-256 hash of the complete output for integrity checking
+- **Worktree HEAD SHA:** The git commit at execution time (tied to delivery provenance)
+- **Timestamp:** UTC RFC3339 timestamp of execution
+
+This is a complete-capture, no-filtering policy. Every Bash command on the bound
+issue is recorded. Failure-then-success sequences remain visible instead of being
+curated by the worker.
+
+### Activity Log Format and Location
+
+The activity log is **worktree-local, ephemeral**, stored as JSONL entries:
+
+- **Location:** `<worktree-git-dir>/armature-activity.log` (e.g., `.git/armature-activity.log`
+  for regular repos, `.git/worktrees/<worktree-name>/armature-activity.log` for worktrees)
+- **Format:** One JSON entry per line, appended chronologically
+- **Retention:** Worktree-local only; never committed to the ops log or repository
+- **Lifecycle:** Deleted when the worktree is torn down
+
+Example log entry:
+```
+2026-07-04T12:34:56Z activity: command="go test ./..." exit_code=0 head_sha=abc1234... output_hash=def5678... output="ok  github.com/armature/examples  0.254s"
+```
+
+### Truncation Behavior
+
+Output is truncated content-neutrally:
+- **Short output** (≤ 2 KB): kept in full
+- **Long output** (> 2 KB): split as `<first 1 KB> ... [output truncated, see hash below] ... <last 1 KB>`
+
+The full output hash allows the Reviewer to verify that the reported excerpt matches
+the full execution. The hash is recorded in the activity log but **not shown** in the
+published report (citation boundary, see docs/sensitive-environments.md).
+
+### Kill-Switch Mechanisms
+
+Execution evidence capture is **default-on**. Disable it via either mechanism (both sufficient):
+
+#### 1. Repo-Level Git Config
+
+```bash
+git config --local armature.disable-activity-logging true
+```
+
+This setting:
+- Is per-repository (all worktrees of a repo share the same `--local` config)
+- Persists across sessions
+- Takes effect immediately on the next hook invocation
+
+#### 2. Environment Variable Override
+
+```bash
+export ARMATURE_DISABLE_ACTIVITY_LOGGING=1
+```
+
+This setting:
+- Applies to the current harness session only
+- Overrides the repo config if either is set
+- Useful for one-off scripts or sensitive environments where you don't want to modify repo state
+
+Any non-empty value other than `"0"` or `"false"` disables capture.
+
+### Fail-Open Posture
+
+The hook fails open on any capture error:
+- If worktree HEAD cannot be resolved, capture is skipped with stderr warning
+- If the log file cannot be opened or written, capture is skipped with stderr warning
+- The hook never blocks a tool invocation due to capture failure
+
+This ensures workers are never stranded due to activity logging errors. Warnings
+are emitted to stderr for operator visibility.
+
+### Teardown-After-Record Ordering Constraint
+
+**The activity log is worktree-local.** Worktree teardown must happen **ONLY AFTER**
+`arm review record`, never before. This is a hard constraint because:
+
+1. The activity log lives in the worktree's git directory
+2. `arm review record` re-verifies the activity log digest before finalizing attestation
+3. Tearing down the worktree (deleting it) destroys the log before it can be verified
+
+**Correct ordering:**
+```
+1. Worker completes and transitions task to done
+2. Coordinator runs `arm review prepare` (constructs bundle from delivery range)
+3. Coordinator dispatches Reviewer
+4. Reviewer evaluates and emits result
+5. Coordinator runs `arm review record` (verifies digest, creates attestation)
+6. Coordinator runs `arm merged --issue <task-id>` (tears down worktree)
+```
+
+Violating this order (e.g., tearing down before record) will cause `arm review record`
+to fail with a digest mismatch, since the log has been deleted.
+
 ## Environment Variables
 
 When launching an external harness, set these variables in the harness environment:
