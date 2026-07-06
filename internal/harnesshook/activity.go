@@ -3,63 +3,102 @@ package harnesshook
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ActivityEntry represents a single execution captured in the activity log.
 type ActivityEntry struct {
-	Command      string // The command that was executed
-	ExitCode     int    // The exit status of the command
-	OutputHead   string // First 1KB of output (or full output if shorter)
-	OutputTail   string // Last 1KB of output (or empty if total output is short)
-	OutputHash   string // SHA256 hash of full output for integrity checking
-	WorktreeHead string // Worktree HEAD commit sha at execution time
-	Timestamp    string // RFC3339 UTC timestamp
+	Command       string // The command that was executed
+	ExitCode      int    // The exit status of the command (only meaningful when ExitCodeKnown is true)
+	ExitCodeKnown bool   // Whether the harness reported an exit code for this command
+	OutputHead    string // First 1KB of output (or full output if shorter)
+	OutputTail    string // Last 1KB of output (or empty if total output is short)
+	OutputHash    string // SHA256 hash of full output for integrity checking
+	WorktreeHead  string // Worktree HEAD commit sha at execution time
+	Timestamp     string // RFC3339 UTC timestamp
 }
 
-// TruncatedOutput represents the truncated output with marker.
+// TruncatedOutput represents the truncated output.
 type TruncatedOutput struct {
-	Head   string // First 1KB
-	Tail   string // Last 1KB
-	Hash   string // Full output hash
-	Marker string // Marker indicating truncation
+	Head string // First 1KB
+	Tail string // Last 1KB (empty if output was not truncated)
+	Hash string // Full output hash
 }
 
 const (
 	// maxOutputChunkSize is the maximum number of bytes to include in head or tail
 	maxOutputChunkSize = 1024
-	// truncationMarker is the string inserted between head and tail to indicate truncation
-	truncationMarker = "\n... [output truncated, see hash below] ...\n"
+	// maxCommandSize caps the recorded command text so a single activity log
+	// line (and the O_APPEND write that produces it) stays small, keeping
+	// writes within typical kernel atomic-write guarantees (see AppendActivity).
+	maxCommandSize = 4096
 )
 
-// truncateOutput truncates output to head+tail format with a marker and full hash.
+// truncateOutput truncates output to head+tail format and computes the full hash.
+// Truncation points are adjusted backward (for head) or forward (for tail) to the
+// nearest UTF-8 rune boundary so multi-byte characters are never split.
 func truncateOutput(output []byte) TruncatedOutput {
 	hash := fmt.Sprintf("%x", sha256.Sum256(output))
 
 	if len(output) <= maxOutputChunkSize*2 {
 		// Output is short enough to keep in full
 		return TruncatedOutput{
-			Head:   string(output),
-			Tail:   "",
-			Hash:   hash,
-			Marker: "",
+			Head: string(output),
+			Tail: "",
+			Hash: hash,
 		}
 	}
 
-	// Truncate to head+tail format
-	head := string(output[:maxOutputChunkSize])
-	tail := string(output[len(output)-maxOutputChunkSize:])
+	headEnd := runeBoundaryAtOrBefore(output, maxOutputChunkSize)
+	tailStart := runeBoundaryAtOrAfter(output, len(output)-maxOutputChunkSize)
+
 	return TruncatedOutput{
-		Head:   head,
-		Tail:   tail,
-		Hash:   hash,
-		Marker: truncationMarker,
+		Head: string(output[:headEnd]),
+		Tail: string(output[tailStart:]),
+		Hash: hash,
 	}
+}
+
+// runeBoundaryAtOrBefore returns the largest index <= n that is not in the
+// middle of a UTF-8 multi-byte sequence.
+func runeBoundaryAtOrBefore(b []byte, n int) int {
+	if n >= len(b) {
+		return len(b)
+	}
+	for n > 0 && !utf8.RuneStart(b[n]) {
+		n--
+	}
+	return n
+}
+
+// runeBoundaryAtOrAfter returns the smallest index >= n that is not in the
+// middle of a UTF-8 multi-byte sequence.
+func runeBoundaryAtOrAfter(b []byte, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	for n < len(b) && !utf8.RuneStart(b[n]) {
+		n++
+	}
+	return n
+}
+
+// truncateCommand caps command text at maxCommandSize bytes (on a rune boundary)
+// so a single logged command can't blow past the append write size that a
+// concurrent worktree hook process could interleave with (m5).
+func truncateCommand(command string) string {
+	if len(command) <= maxCommandSize {
+		return command
+	}
+	end := runeBoundaryAtOrBefore([]byte(command), maxCommandSize)
+	return command[:end]
 }
 
 // getWorktreeHEAD retrieves the current HEAD sha of the worktree.
@@ -89,42 +128,21 @@ func getWorktreeHEAD(gitDir string) (string, error) {
 			return strings.TrimSpace(string(refContent)), nil
 		}
 		// If the ref file doesn't exist, fall back to git rev-parse (which doesn't require the ref file)
-		// Extract the worktree root from the git dir
-		// For a regular repo: gitDir is /repo/.git
-		// For a worktree: gitDir is /repo/.git/worktrees/name, and the parent repo root is /repo
 		return fallbackGetHEAD(gitDir)
 	}
 
 	return headRef, nil
 }
 
-// fallbackGetHEAD tries to get the HEAD sha using a git command as a last resort.
-// This is needed when the ref file doesn't exist yet (e.g., on a freshly created branch).
+// fallbackGetHEAD gets the HEAD sha using `git --git-dir=<gitDir> rev-parse HEAD`
+// as a last resort. This is needed when the ref file doesn't exist yet (e.g., on
+// a freshly created branch). Using --git-dir directly (rather than deriving a
+// working directory via path-string surgery) works uniformly for both a regular
+// repo's git dir and a worktree's private git dir, and doesn't require guessing
+// where the worktree's working tree lives.
 func fallbackGetHEAD(gitDir string) (string, error) {
-	// Try to find the working directory. For a worktree, we need to go up to find the repo root.
-	// gitDir can be either:
-	// - /repo/.git (regular repo)
-	// - /repo/.git/worktrees/name (worktree)
-	// We want to find /repo to pass to git -C
-	var workDir string
-	if strings.Contains(gitDir, ".git/worktrees/") {
-		// It's a worktree: extract the parent repo root
-		parts := strings.Split(gitDir, ".git/worktrees/")
-		if len(parts) >= 1 {
-			workDir = strings.TrimSuffix(parts[0], "/")
-		}
-	} else if strings.HasSuffix(gitDir, ".git") {
-		// Regular repo
-		workDir = strings.TrimSuffix(gitDir, ".git")
-	}
-
-	if workDir == "" {
-		return "", fmt.Errorf("unable to determine work directory from git dir: %s", gitDir)
-	}
-
-	// Use git rev-parse to get the HEAD sha, which works regardless of whether the ref file exists
-	//nolint:gosec // G204: git binary and workDir are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", workDir, "rev-parse", "HEAD")
+	//nolint:gosec // G204: git binary is constant, gitDir is internal, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
@@ -139,25 +157,17 @@ func fallbackGetHEAD(gitDir string) (string, error) {
 // of "true" disables capture, anything else (including unset) leaves it enabled.
 const activityLoggingConfigKey = "armature.disable-activity-logging"
 
-// shouldCaptureActivity checks if activity logging is enabled (not disabled by kill-switch).
-// Capture is on by default. It can be disabled two ways, either of which is sufficient:
-//   - Repo-level config: `git config --local armature.disable-activity-logging true`
-//     (the Definition-of-Done kill-switch; travels with the repo/worktree, not the shell).
-//   - Environment variable override: ARMATURE_DISABLE_ACTIVITY_LOGGING (handy for one-off
-//     shell sessions without touching repo config).
+// shouldCaptureActivity checks if activity logging is enabled (not disabled by
+// the repo-level kill-switch). Capture is on by default.
+//
+// There is intentionally no environment-variable override: an env var would be
+// settable by the worker process mid-session (export …=1; run failing test;
+// unset), letting the worker curate failure-then-success sequences out of the
+// log — exactly the selection bias ADR-0008 rule 2 forbids. The only supported
+// kill-switch is the repo-level git config, which travels with the repo/worktree
+// rather than the shell.
 func shouldCaptureActivity(gitDir string) bool {
-	// Environment variable override (checked first; either mechanism disabling is sufficient).
-	disableEnv := os.Getenv("ARMATURE_DISABLE_ACTIVITY_LOGGING")
-	if disableEnv != "" && disableEnv != "0" && disableEnv != "false" {
-		return false
-	}
-
-	// Repo-level config kill-switch.
-	if isActivityLoggingDisabledByRepoConfig(gitDir) {
-		return false
-	}
-
-	return true
+	return !isActivityLoggingDisabledByRepoConfig(gitDir)
 }
 
 // isActivityLoggingDisabledByRepoConfig reads the repo-level git config kill-switch
@@ -184,12 +194,11 @@ func isActivityLoggingDisabledByRepoConfig(gitDir string) bool {
 }
 
 // AppendActivity appends an execution event to the worktree-local armature-activity.log.
-// It captures: command, exit status, truncated output, full-output hash, worktree HEAD sha, timestamp.
-// Respects a kill-switch, either the repo-level git config
-// armature.disable-activity-logging or the ARMATURE_DISABLE_ACTIVITY_LOGGING
-// environment variable.
+// It captures: command, exit status (or its absence), truncated output, full-output hash,
+// worktree HEAD sha, timestamp. Respects the repo-level git config kill-switch
+// armature.disable-activity-logging.
 // Fails open on any capture error with stderr warning.
-func AppendActivity(gitDir string, command string, exitCode int, output []byte) error {
+func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown bool, output []byte) error {
 	// Check if activity capture is disabled
 	if !shouldCaptureActivity(gitDir) {
 		return nil
@@ -208,16 +217,17 @@ func AppendActivity(gitDir string, command string, exitCode int, output []byte) 
 
 	// Create activity entry
 	entry := ActivityEntry{
-		Command:      command,
-		ExitCode:     exitCode,
-		OutputHead:   truncated.Head,
-		OutputTail:   truncated.Tail,
-		OutputHash:   truncated.Hash,
-		WorktreeHead: headSha,
-		Timestamp:    time.Now().UTC().Format(time.RFC3339), //nolint:forbidigo // required for activity log timestamps
+		Command:       truncateCommand(command),
+		ExitCode:      exitCode,
+		ExitCodeKnown: exitCodeKnown,
+		OutputHead:    truncated.Head,
+		OutputTail:    truncated.Tail,
+		OutputHash:    truncated.Hash,
+		WorktreeHead:  headSha,
+		Timestamp:     time.Now().UTC().Format(time.RFC3339), //nolint:forbidigo // required for activity log timestamps
 	}
 
-	// Format the log line
+	// Format the log line (JSONL: one JSON object per line)
 	logLine := formatActivityLogEntry(entry)
 
 	// Append to armature-activity.log
@@ -243,28 +253,39 @@ func AppendActivity(gitDir string, command string, exitCode int, output []byte) 
 	return nil
 }
 
-// formatActivityLogEntry formats an ActivityEntry for the log file.
-func formatActivityLogEntry(entry ActivityEntry) string {
-	// Build the base entry with essential fields
-	logEntry := fmt.Sprintf("%s activity: command=%q exit_code=%d head_sha=%s output_hash=%s",
-		entry.Timestamp,
-		entry.Command,
-		entry.ExitCode,
-		entry.WorktreeHead,
-		entry.OutputHash,
-	)
+// activityLogLine is the JSONL record written for each activity entry. Field
+// names match what internal/review/fingerprint.go (and the
+// armature-activity-indexer skill) expect when parsing the log.
+type activityLogLine struct {
+	Timestamp     string `json:"timestamp"`
+	Command       string `json:"command"`
+	ExitCode      int    `json:"exit_code"`
+	ExitCodeKnown bool   `json:"exit_code_known"`
+	HeadSHA       string `json:"head_sha"`
+	OutputHash    string `json:"output_hash"`
+	OutputHead    string `json:"output_head,omitempty"`
+	OutputTail    string `json:"output_tail,omitempty"`
+}
 
-	// Add truncated output if available
-	if entry.OutputHead != "" {
-		// Escape newlines in output for log formatting
-		escapedHead := strings.ReplaceAll(entry.OutputHead, "\n", "\\n")
-		if entry.OutputTail != "" {
-			escapedTail := strings.ReplaceAll(entry.OutputTail, "\n", "\\n")
-			logEntry += fmt.Sprintf(" output_truncated=%q...%q", escapedHead, escapedTail)
-		} else {
-			logEntry += fmt.Sprintf(" output=%q", escapedHead)
-		}
+// formatActivityLogEntry formats an ActivityEntry as a single JSON line.
+func formatActivityLogEntry(entry ActivityEntry) string {
+	line := activityLogLine{
+		Timestamp:     entry.Timestamp,
+		Command:       entry.Command,
+		ExitCode:      entry.ExitCode,
+		ExitCodeKnown: entry.ExitCodeKnown,
+		HeadSHA:       entry.WorktreeHead,
+		OutputHash:    entry.OutputHash,
+		OutputHead:    entry.OutputHead,
+		OutputTail:    entry.OutputTail,
 	}
 
-	return logEntry
+	data, err := json.Marshal(line)
+	if err != nil {
+		// Should never happen for well-formed entries; fall back to a minimal
+		// valid JSON line rather than corrupting the log.
+		return fmt.Sprintf(`{"timestamp":%q,"command":"","exit_code":0,"exit_code_known":false,"head_sha":%q,"output_hash":""}`,
+			entry.Timestamp, entry.WorktreeHead)
+	}
+	return string(data)
 }

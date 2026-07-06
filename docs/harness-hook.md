@@ -209,37 +209,53 @@ curated by the worker.
 
 ### Activity Log Format and Location
 
-The activity log is **worktree-local, ephemeral**, stored as plain-text key=value entries
-(not JSON/JSONL):
+The activity log is **worktree-local, ephemeral**, stored as **JSONL** (one JSON object
+per line, via `encoding/json`):
 
 - **Location:** `<worktree-git-dir>/armature-activity.log` (e.g., `.git/armature-activity.log`
   for regular repos, `.git/worktrees/<worktree-name>/armature-activity.log` for worktrees)
-- **Format:** One plain-text line per entry, of the form
-  `<RFC3339 timestamp> activity: command=<quoted> exit_code=<int> head_sha=<sha> output_hash=<hash> [output=<quoted>|output_truncated=<quoted>...<quoted>]`,
-  appended chronologically
+- **Format:** One JSON object per line, appended chronologically, with fields
+  `timestamp` (RFC3339), `command`, `exit_code` (int, meaningful only when
+  `exit_code_known` is `true`), `exit_code_known` (bool), `head_sha`, `output_hash`,
+  and `output_head`/`output_tail` (present only when there is output to show)
+- **Entry IDs:** not stored in the file — an entry's ID is the 0-based physical line
+  number it occupies in the log file (see "Entry ID Convention" below)
 - **Retention:** Worktree-local only; never committed to the ops log or repository
 - **Lifecycle:** Deleted when the worktree is torn down
 
 Example log entry:
+```json
+{"timestamp":"2026-07-04T12:34:56Z","command":"go test ./...","exit_code":0,"exit_code_known":true,"head_sha":"abc1234...","output_hash":"def5678...","output_head":"ok  github.com/armature/examples  0.254s"}
 ```
-2026-07-04T12:34:56Z activity: command="go test ./..." exit_code=0 head_sha=abc1234... output_hash=def5678... output="ok  github.com/armature/examples  0.254s"
-```
+
+### Entry ID Convention
+
+Citations (`activity_entry_id` in a `ConformanceAssessment` Citation) reference entries
+by **0-based physical line number** as a plain integer string (`"0"`, `"1"`, `"2"`, …) —
+not zero-padded, not 1-based. A malformed or blank line consumes its line number but
+produces no entry, so entry IDs are not guaranteed to be contiguous, and later entries'
+IDs never shift because an earlier line failed to parse. This is the same convention
+documented in the `armature-activity-indexer` and `armature-reviewer` skills.
 
 ### Truncation Behavior
 
 Output is truncated content-neutrally:
-- **Short output** (≤ 2 KB): kept in full
-- **Long output** (> 2 KB): split as `<first 1 KB> ... [output truncated, see hash below] ... <last 1 KB>`
+- **Short output** (≤ 2 KB): kept in full, in `output_head` (`output_tail` absent/empty)
+- **Long output** (> 2 KB): split into `output_head` (first 1 KB) and `output_tail` (last 1 KB);
+  the middle is dropped, with only the full-output hash (`output_hash`) retained for integrity
+  verification — there is no separate in-band "truncated" marker string, since the presence
+  of a non-empty `output_tail` field is itself the truncation signal
+- Truncation points are adjusted to the nearest UTF-8 rune boundary so multi-byte characters
+  are never split across the head/tail cut
 
 The full output hash allows the Reviewer to verify that the reported excerpt matches
 the full execution. The hash is recorded in the activity log but **not shown** in the
 published report (citation boundary, see docs/sensitive-environments.md).
 
-### Kill-Switch Mechanisms
+### Kill-Switch Mechanism
 
-Execution evidence capture is **default-on**. Disable it via either mechanism (both sufficient):
-
-#### 1. Repo-Level Git Config
+Execution evidence capture is **default-on**. The only supported kill-switch is the
+repo-level git config:
 
 ```bash
 git config --local armature.disable-activity-logging true
@@ -250,18 +266,12 @@ This setting:
 - Persists across sessions
 - Takes effect immediately on the next hook invocation
 
-#### 2. Environment Variable Override
-
-```bash
-export ARMATURE_DISABLE_ACTIVITY_LOGGING=1
-```
-
-This setting:
-- Applies to the current harness session only
-- Overrides the repo config if either is set
-- Useful for one-off scripts or sensitive environments where you don't want to modify repo state
-
-Any non-empty value other than `"0"` or `"false"` disables capture.
+There is deliberately **no environment-variable override**. An env var would be
+settable by the worker process mid-session (`export …=1; run failing test; unset`),
+letting the worker curate failure-then-success sequences out of the log — exactly the
+selection bias this capture policy exists to prevent (see "What Gets Captured" above).
+Disabling capture is a repo-level Definition-of-Done decision, not something a running
+session should be able to toggle unilaterally.
 
 ### Fail-Open Posture
 

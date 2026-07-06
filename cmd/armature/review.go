@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/spf13/cobra"
@@ -89,9 +90,29 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	// Create git adapter
 	git := adapters.New(ctx.RepoPath)
 
-	// Construct activity log path (.git/armature-activity.log in the worktree)
-	gitDir := filepath.Join(ctx.RepoPath, ".git")
-	activityLogPath := filepath.Join(gitDir, "armature-activity.log")
+	// Construct the activity log path from the delivery worktree's *actual* git
+	// dir, not ctx.RepoPath — ctx.RepoPath is resolved to the parent repo root
+	// when this command runs inside a linked worktree (the standard armature
+	// delivery flow), while the harness hook writes each worktree's activity log
+	// to that worktree's private git dir (<repo>/.git/worktrees/<name>/). Using
+	// ctx.RepoPath here would either miss the log entirely or attach an unrelated
+	// session's activity as evidence for this delivery. Resolve from the same
+	// path the command was invoked against (the --repo flag, defaulting to the
+	// current directory, exactly as main.go resolves ctx before the parent-repo
+	// walk) so the resolution finds the invoking worktree's own git dir rather
+	// than the already-resolved parent repo root.
+	invocationPath, _ := cmd.Root().PersistentFlags().GetString("repo")
+	if invocationPath == "" {
+		invocationPath = "."
+	}
+	binding, err := harnesshook.ResolveBindingFromDir(invocationPath)
+	if err != nil {
+		return fmt.Errorf("resolve git dir for activity log: %w", err)
+	}
+	activityLogPath := ""
+	if binding.GitDir != "" {
+		activityLogPath = filepath.Join(binding.GitDir, "armature-activity.log")
+	}
 
 	// Call prepare — pass real issue metadata (type, outcome, definition of done)
 	bundle, err := review.Prepare(git, issueID, title, issue.DefinitionOfDone, issue.Type, issue.Outcome, scope, criteria, base, head, activityLogPath)

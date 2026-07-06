@@ -54,6 +54,25 @@ func Record(input RecordInput) (*RecordResult, error) {
 		return nil, fmt.Errorf("assessment validation failed: %w", err)
 	}
 
+	// Reset any reviewer-supplied ActivityEntryDetails unconditionally, before any
+	// other validation runs. This field is only ever legitimately populated from the
+	// activity log below; an inbound value is either stale (from a prior record) or
+	// adversarial (model-authored prose dressed as harness-verified execution facts)
+	// and must never survive to the published report.
+	for i := range input.Assessment.Results {
+		for j := range input.Assessment.Results[i].Citations {
+			input.Assessment.Results[i].Citations[j].ActivityEntryDetails = ""
+		}
+	}
+
+	// Activity citations are only meaningful when validated against a bundle's
+	// Activity section; without one there is nothing to check a claimed entry ID
+	// against, so an assessment citing activity evidence must be rejected outright
+	// rather than silently accepted with zero validation.
+	if hasActivityCitations(input.Assessment) && (input.Bundle == nil || input.Bundle.Activity == nil) {
+		return nil, fmt.Errorf("assessment cites activity log entries but no bundle activity section is available to validate against")
+	}
+
 	// Validate structural correctness without diff-index citation checking.
 	// When --bundle is provided, full diff-index citation validation is performed below.
 	if errs := ValidateResultNoDiff(input.Assessment); len(errs) > 0 {
@@ -114,22 +133,7 @@ func Record(input RecordInput) (*RecordResult, error) {
 
 	// When the bundle has activity evidence, validate activity citations and populate entry details.
 	// This ensures activity citations reference valid entry IDs and obey the upgrade-only rule.
-	var activityEntryMap map[int]ActivityEntryDetails
 	if input.Bundle != nil && input.Bundle.Activity != nil {
-		// Build contract for activity citation validation
-		contract := Contract{}
-		if input.Issue != nil {
-			criteria, err := ParseAcceptanceCriteria([]byte(input.Issue.Acceptance))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse acceptance criteria for activity validation: %w", err)
-			}
-			contract = Contract{
-				DefinitionOfDone: input.Issue.DefinitionOfDone,
-				Scope:            input.Issue.Scope,
-				Acceptance:       criteria,
-			}
-		}
-
 		// Re-fingerprint the activity log on disk and reject if it no longer matches the
 		// digest recorded in the bundle (log tampered with or rotated since prepare), but
 		// only when the assessment actually relies on activity citations.
@@ -145,7 +149,11 @@ func Record(input RecordInput) (*RecordResult, error) {
 			}
 		}
 
-		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, contract); len(errs) > 0 {
+		// Load activity entries once; used for both citation validation (entry
+		// existence and exit-code-known checks) and populating rendered details.
+		activityEntryMap := LoadActivityEntries(input.Bundle.Activity.LogPath)
+
+		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap); len(errs) > 0 {
 			var sb strings.Builder
 			sb.WriteString("activity citation validation errors:")
 			for _, e := range errs {
@@ -155,10 +163,8 @@ func Record(input RecordInput) (*RecordResult, error) {
 			return nil, fmt.Errorf("%s", sb.String())
 		}
 
-		// Load activity entries for populating entry details
-		activityEntryMap = LoadActivityEntries(input.Bundle.Activity.LogPath)
-
-		// Populate activity entry details in citations
+		// Populate activity entry details in citations from the log only (the
+		// inbound value was already reset to "" above).
 		for i := range input.Assessment.Results {
 			for j := range input.Assessment.Results[i].Citations {
 				citation := &input.Assessment.Results[i].Citations[j]
@@ -177,10 +183,12 @@ func Record(input RecordInput) (*RecordResult, error) {
 
 	// Create attestation, populating BaseSHA/HeadSHA from the bundle delivery when available.
 	var delivery Delivery
+	var activityForAttestation *Activity
 	if input.Bundle != nil {
 		delivery = input.Bundle.Delivery
+		activityForAttestation = input.Bundle.Activity
 	}
-	attestation := NewAttestation(input.Assessment, delivery)
+	attestation := NewAttestation(input.Assessment, delivery, activityForAttestation)
 
 	// If issue data is provided, verify the assessment's contract fingerprint and coverage.
 	if input.Issue != nil {

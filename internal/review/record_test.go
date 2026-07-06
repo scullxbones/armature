@@ -2,6 +2,7 @@ package review
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -624,4 +625,202 @@ func TestRecordWithDuplicateCheck_Error_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	result, err := RecordWithDuplicateCheck(input, nil)
 	assert.Error(t, err)
 	assert.Nil(t, result)
+}
+
+// TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV verifies that
+// AssessmentAttestation.ActivityDigest is populated from the bundle's Activity
+// section (M3 / ADR-0008: "the digest enters the attestation").
+func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logPath := dir + "/armature-activity.log"
+	logContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make build","exit_code":0,` +
+		`"exit_code_known":true,"head_sha":"abc123","output_hash":"h1"}` + "\n")
+	require.NoError(t, os.WriteFile(logPath, logContent, 0o600))
+	digest := FingerprintActivity(logContent)
+
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		BundleID:      "bundle-activity-digest",
+		Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Test"},
+		Contract:      Contract{DefinitionOfDone: "Done", Acceptance: []string{"Works"}},
+		Delivery:      Delivery{BaseSHA: "base", HeadSHA: "head", Diff: "--- a/f.go\n+++ b/f.go\n@@ -1,0 +1,1 @@\n+package main"},
+		Fingerprints: Fingerprints{
+			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		Activity: &Activity{Digest: digest, EntryCount: 1, LogPath: logPath},
+	}
+
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            "bundle-activity-digest",
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []CriterionResult{
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{{ActivityEntryID: "0"}}},
+		},
+	}
+
+	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	require.NoError(t, err)
+	assert.Equal(t, digest, result.Attestation.ActivityDigest, "attestation must carry the bundle's activity digest")
+}
+
+// TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV verifies that
+// an assessment citing activity log entries is rejected outright when no bundle
+// Activity section is available to validate against (M4) -- both when the bundle
+// itself is nil and when the bundle has no Activity section.
+func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            "bundle-no-activity",
+		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Results: []CriterionResult{
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{ActivityEntryID: "0"}}},
+		},
+	}
+
+	t.Run("nil bundle", func(t *testing.T) {
+		t.Parallel()
+		_, err := Record(RecordInput{Assessment: assessment, IssueID: "task-01"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "activity")
+	})
+
+	t.Run("bundle without activity section", func(t *testing.T) {
+		t.Parallel()
+		bundle := &ReviewBundle{
+			SchemaVersion: SchemaVersion,
+			BundleID:      "bundle-no-activity",
+			Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Test"},
+			Contract:      Contract{DefinitionOfDone: "Done"},
+			Delivery:      Delivery{BaseSHA: "base", HeadSHA: "head"},
+			Fingerprints: Fingerprints{
+				Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			},
+		}
+		_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "activity")
+	})
+}
+
+// TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV verifies that a
+// reviewer-supplied ActivityEntryDetails value is always discarded at record time,
+// even when there is no bundle activity section to populate it from -- it must
+// never survive into the recorded/published citation as model-authored prose
+// dressed as harness-verified fact (M10).
+func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            "bundle-reset",
+		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Results: []CriterionResult{
+			{
+				ID: "acceptance[0]", Status: Satisfied, Rationale: "ok",
+				Citations: []Citation{{Path: "f.go", Line: 1, ActivityEntryDetails: "fabricated: exit_code=0 all tests passed"}},
+			},
+		},
+	}
+
+	result, err := Record(RecordInput{Assessment: assessment, IssueID: "task-01"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, assessment.Results[0].Citations[0].ActivityEntryDetails,
+		"inbound ActivityEntryDetails must be reset, not passed through")
+}
+
+// TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV verifies that a citation
+// with both Path and ActivityEntryID set is rejected (M5): such a citation would
+// otherwise be skipped by diff-index validation (since activity citations are
+// validated separately) while still counting as a diff citation for
+// upgrade-only-rule purposes, letting a fabricated Path escape verification.
+func TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+	result := CriterionResult{
+		ID:        "acceptance[0]",
+		Status:    Satisfied,
+		Rationale: "ok",
+		Citations: []Citation{{Path: "f.go", Line: 1, ActivityEntryID: "0"}},
+	}
+	err := result.Valid()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+// TestParseActivityLogFile_IDsAreLinePositionNotSequentialCount_REQ_EXECEV verifies
+// that entry IDs are assigned by physical line number, so a malformed or blank
+// line does not shift the IDs of entries that come after it (m1). Without this,
+// a citation naming entry "2" (meant for the third physical line) could resolve
+// to the wrong parsed entry once an earlier line failed to parse.
+func TestParseActivityLogFile_IDsAreLinePositionNotSequentialCount_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logPath := dir + "/armature-activity.log"
+	content := `{"timestamp":"t0","command":"first","exit_code":0,"exit_code_known":true,"head_sha":"h","output_hash":"o"}
+this line is not valid JSON at all
+{"timestamp":"t2","command":"third","exit_code":0,"exit_code_known":true,"head_sha":"h","output_hash":"o"}
+`
+	require.NoError(t, os.WriteFile(logPath, []byte(content), 0o600))
+
+	entries, _, err := parseActivityLogFile(logPath)
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "the malformed line should be skipped, leaving 2 valid entries")
+
+	first, ok := entries[0]
+	require.True(t, ok, "the first entry must keep ID 0 (physical line 0)")
+	assert.Equal(t, "first", first.Command)
+
+	_, malformedPresent := entries[1]
+	assert.False(t, malformedPresent, "the malformed physical line 1 must not produce an entry")
+
+	third, ok := entries[2]
+	require.True(t, ok, "the third entry must be at ID 2 (physical line 2), not shifted to ID 1")
+	assert.Equal(t, "third", third.Command)
+}
+
+// TestParseActivityLogFile_HandlesOversizedLine_REQ_EXECEV verifies that a single
+// large activity log line (larger than bufio.Scanner's default 64KB token limit)
+// does not fail the entire scan and silently drop the whole activity section (M9).
+func TestParseActivityLogFile_HandlesOversizedLine_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logPath := dir + "/armature-activity.log"
+
+	// Build a line whose JSON-encoded size exceeds bufio.Scanner's default 64KB
+	// token limit but stays within the raised buffer.
+	bigOutput := make([]byte, 100*1024)
+	for i := range bigOutput {
+		bigOutput[i] = 'x'
+	}
+	line := activityLogLine{
+		Timestamp:     "2026-01-15T10:30:45Z",
+		Command:       "make build",
+		ExitCode:      0,
+		ExitCodeKnown: true,
+		HeadSHA:       "abc123",
+		OutputHash:    "hash",
+		OutputHead:    string(bigOutput),
+	}
+	data, err := json.Marshal(line)
+	require.NoError(t, err)
+	require.Greater(t, len(data), 64*1024, "test line must exceed the default scanner token limit")
+	require.NoError(t, os.WriteFile(logPath, append(data, '\n'), 0o600))
+
+	entries, _, err := parseActivityLogFile(logPath)
+	require.NoError(t, err, "an oversized line must not fail the whole scan")
+	require.Len(t, entries, 1)
+	assert.Equal(t, "make build", entries[0].Command)
 }

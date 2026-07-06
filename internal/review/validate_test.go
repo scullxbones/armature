@@ -192,7 +192,7 @@ func TestNewAttestation(t *testing.T) {
 		HeadSHA: "bbb111",
 	}
 
-	att := review.NewAttestation(assessment, delivery)
+	att := review.NewAttestation(assessment, delivery, nil)
 
 	assert.NotNil(t, att)
 	assert.Equal(t, "sha256:test123", att.BundleID)
@@ -222,7 +222,7 @@ func TestNewAttestation_AllGreen(t *testing.T) {
 	}
 	delivery := review.Delivery{}
 
-	att := review.NewAttestation(assessment, delivery)
+	att := review.NewAttestation(assessment, delivery, nil)
 
 	assert.Equal(t, review.Green, att.Rating)
 	assert.Equal(t, 2, att.SatisfiedCount)
@@ -248,7 +248,7 @@ func TestNewAttestation_PopulatesSHAs(t *testing.T) {
 		ChangedFiles: []string{"main.go"},
 	}
 
-	att := review.NewAttestation(assessment, delivery)
+	att := review.NewAttestation(assessment, delivery, nil)
 
 	assert.Equal(t, delivery.BaseSHA, att.BaseSHA, "BaseSHA must be populated from delivery")
 	assert.Equal(t, delivery.HeadSHA, att.HeadSHA, "HeadSHA must be populated from delivery")
@@ -620,6 +620,16 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 	assert.True(t, containsError(errs, "nonexistent.go"), "Expected file reference in error message")
 }
 
+// knownExitEntries builds an entries map (as LoadActivityEntries would return)
+// with the given IDs, all recording a known, successful exit code.
+func knownExitEntries(ids ...int) map[int]review.ActivityEntryDetails {
+	entries := make(map[int]review.ActivityEntryDetails)
+	for _, id := range ids {
+		entries[id] = review.ActivityEntryDetails{EntryID: id, Command: "make build", ExitCode: 0, ExitCodeKnown: true}
+	}
+	return entries
+}
+
 func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
 	// Valid activity citation by raw entry ID (numeric string)
@@ -648,12 +658,9 @@ func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{
-		DefinitionOfDone: "Task complete",
-		Acceptance:       []string{"test passed"},
-	}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
 	assert.Empty(t, errs, "Valid activity citation by entry ID should not produce errors")
 }
 
@@ -685,9 +692,9 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
 	assert.NotEmpty(t, errs, "Unknown entry ID should produce validation errors")
 	assert.True(t, containsError(errs, "unknown activity entry ID"), "Error should mention unknown entry ID")
 }
@@ -720,9 +727,9 @@ func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T)
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
 	assert.NotEmpty(t, errs, "Non-numeric entry ID should produce validation errors")
 	assert.True(t, containsError(errs, "invalid activity entry ID"), "Error should mention invalid entry ID")
 }
@@ -755,18 +762,17 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{
-		DefinitionOfDone: "Task complete",
-	}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
 	assert.NotEmpty(t, errs, "Activity-only satisfied on implementation criterion should produce errors")
 	assert.True(t, containsError(errs, "upgrade-only rule"), "Error should mention upgrade-only rule")
 }
 
 func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Activity-citations-only can support partially_satisfied on implementation criterion
+	// Activity-citations-only cannot support partially_satisfied on implementation criterion
+	// either (M6 extends the upgrade-only rule beyond just Satisfied).
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -792,12 +798,11 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{
-		DefinitionOfDone: "Task complete",
-	}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
-	assert.Empty(t, errs, "Activity-only partially_satisfied on implementation criterion should be allowed")
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
+	assert.NotEmpty(t, errs, "Activity-only partially_satisfied on implementation criterion should be rejected")
+	assert.True(t, containsError(errs, "upgrade-only rule"), "Error should mention upgrade-only rule")
 }
 
 func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testing.T) {
@@ -828,12 +833,9 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{
-		DefinitionOfDone: "Task complete",
-		Acceptance:       []string{"test passed"},
-	}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
 	assert.Empty(t, errs, "Activity-only satisfied on acceptance criterion should be allowed")
 }
 
@@ -866,11 +868,9 @@ func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 		LogPath:           "armature-activity.log",
 	}
 
-	contract := review.Contract{
-		DefinitionOfDone: "Task complete",
-	}
+	entries := knownExitEntries(0, 1, 2, 3, 4)
 
-	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	errs := review.ValidateActivityCitations(assessment, activity, entries)
 	assert.Empty(t, errs, "Mixed citations should not trigger upgrade-only rule")
 }
 
@@ -894,7 +894,7 @@ func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	errs := review.ValidateActivityCitations(assessment, nil, review.Contract{})
+	errs := review.ValidateActivityCitations(assessment, nil, nil)
 	assert.Empty(t, errs, "Validation against nil activity should succeed")
 }
 
@@ -935,7 +935,7 @@ func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 			LogPath:    "armature-activity.log",
 		}
 
-		errs := review.ValidateActivityCitations(assessment, activity, review.Contract{})
+		errs := review.ValidateActivityCitations(assessment, activity, knownExitEntries(0, 1, 2, 3, 4))
 		assert.NotEmpty(t, errs, "index-terminology reference should be rejected")
 		assert.True(t, containsError(errs, "invalid activity entry ID"),
 			"error should reject the non-numeric index reference")
@@ -1011,7 +1011,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 	t.Run("citation rejected end-to-end at record time via Record", func(t *testing.T) {
 		t.Parallel()
 		e2eLogPath := filepath.Join(t.TempDir(), "armature-activity.log")
-		e2eContent := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123` + "\n")
+		e2eContent := []byte(activityLogLineJSON(t, map[string]any{"command": "make build", "head_sha": "abc123"}) + "\n")
 		require.NoError(t, os.WriteFile(e2eLogPath, e2eContent, 0o600))
 		e2eDigest := review.FingerprintActivity(e2eContent)
 
@@ -1054,6 +1054,10 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 					Status:    review.PartiallySatisfied,
 					Rationale: "Some evidence of completion.",
 					Citations: []review.Citation{
+						// Mixed diff + activity citation: the diff citation keeps this
+						// off the activity-only upgrade-only rule (M6), which now also
+						// rejects PartiallySatisfied when backed by activity evidence alone.
+						{Path: "impl.go", Line: 1},
 						{ActivityEntryID: "0"},
 					},
 				},
@@ -1077,7 +1081,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 		require.NoError(t, err, "record should succeed when the activity log matches the bundle digest")
 
 		// Tamper with the log after prepare: content changes but the bundle's recorded digest doesn't.
-		require.NoError(t, os.WriteFile(e2eLogPath, []byte(`2026-01-15T10:30:45Z activity: command="curl evil.example" exit_code=0 head_sha=abc123`+"\n"), 0o600))
+		require.NoError(t, os.WriteFile(e2eLogPath, []byte(activityLogLineJSON(t, map[string]any{"command": "curl evil.example", "head_sha": "abc123"})+"\n"), 0o600))
 
 		_, err = review.Record(review.RecordInput{
 			Assessment: assessment,

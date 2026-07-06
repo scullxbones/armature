@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +26,6 @@ func TestActivityTruncateOutputShort_REQ_EXECEV_T1(t *testing.T) {
 	assert.Equal(t, "short output", result.Head)
 	assert.Equal(t, "", result.Tail)
 	assert.NotEmpty(t, result.Hash)
-	assert.Equal(t, "", result.Marker)
 }
 
 func TestActivityTruncateOutputExactBoundary_REQ_EXECEV_T1(t *testing.T) {
@@ -40,7 +41,6 @@ func TestActivityTruncateOutputExactBoundary_REQ_EXECEV_T1(t *testing.T) {
 	// At exactly 2*maxOutputChunkSize, it should not be truncated
 	assert.Equal(t, string(output), result.Head)
 	assert.Equal(t, "", result.Tail)
-	assert.Equal(t, "", result.Marker)
 }
 
 func TestActivityTruncateOutputLong_REQ_EXECEV_T1(t *testing.T) {
@@ -69,9 +69,6 @@ func TestActivityTruncateOutputLong_REQ_EXECEV_T1(t *testing.T) {
 	// Check tail
 	assert.Len(t, result.Tail, maxOutputChunkSize)
 	assert.True(t, strings.Contains(result.Tail, "T"))
-
-	// Check marker is set
-	assert.NotEmpty(t, result.Marker)
 
 	// Check hash is correct for full output
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256(output))
@@ -129,7 +126,7 @@ func TestActivityAppendActivityCreatesLog_REQ_EXECEV_T1(t *testing.T) {
 	exitCode := 0
 	output := []byte("hello\n")
 
-	err := AppendActivity(gitDir, command, exitCode, output)
+	err := AppendActivity(gitDir, command, exitCode, true, output)
 
 	require.NoError(t, err)
 
@@ -139,10 +136,12 @@ func TestActivityAppendActivityCreatesLog_REQ_EXECEV_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	logContent := string(content)
-	assert.Contains(t, logContent, "activity:")
-	assert.Contains(t, logContent, "command=")
-	assert.Contains(t, logContent, "exit_code=0")
+	assert.Contains(t, logContent, `"command"`)
+	assert.Contains(t, logContent, `"exit_code":0`)
 	assert.Contains(t, logContent, shaValue)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(content), &decoded), "activity log line must be valid JSON (JSONL format)")
 }
 
 func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
@@ -160,7 +159,7 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 		exitCode := i
 		output := []byte(fmt.Sprintf("output %d", i))
 
-		err := AppendActivity(gitDir, command, exitCode, output)
+		err := AppendActivity(gitDir, command, exitCode, true, output)
 		require.NoError(t, err)
 	}
 
@@ -181,11 +180,17 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 	assert.Len(t, nonEmptyLines, 3)
 	for i := range 3 {
 		assert.Contains(t, nonEmptyLines[i], fmt.Sprintf("command %d", i))
-		assert.Contains(t, nonEmptyLines[i], fmt.Sprintf("exit_code=%d", i))
+		assert.Contains(t, nonEmptyLines[i], fmt.Sprintf(`"exit_code":%d`, i))
 	}
 }
 
-func TestActivityKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T) {
+// TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1 verifies that the
+// legacy ARMATURE_DISABLE_ACTIVITY_LOGGING environment variable no longer
+// disables capture (M8): an env var kill-switch would be settable by the
+// worker process mid-session, letting it curate failure-then-success
+// sequences out of the log. The only supported kill-switch is the repo-level
+// git config key (see TestActivityRepoConfigKillSwitchDisablesLogging).
+func TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1(t *testing.T) {
 	gitDir := t.TempDir()
 
 	// Create HEAD file
@@ -193,50 +198,16 @@ func TestActivityKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T) {
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	// Set kill-switch environment variable
+	// This env var must have no effect on activity capture.
 	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "true")
 
-	// Try to append an activity
-	command := "echo hello"
-	exitCode := 0
-	output := []byte("hello\n")
-
-	err := AppendActivity(gitDir, command, exitCode, output)
-
-	// Should not error
+	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
 	require.NoError(t, err)
 
-	// Verify log file was not created
+	// Verify log file WAS created despite the env var being set.
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	_, err = os.ReadFile(logPath)
-	assert.True(t, os.IsNotExist(err), "activity log should not exist when disabled")
-}
-
-func TestActivityKillSwitchDisabledByDefault_REQ_EXECEV_T1(t *testing.T) {
-	gitDir := t.TempDir()
-
-	// Create HEAD file
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
-	headPath := filepath.Join(gitDir, "HEAD")
-	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
-
-	// Unset kill-switch
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
-
-	// Try to append an activity
-	command := "echo hello"
-	exitCode := 0
-	output := []byte("hello\n")
-
-	err := AppendActivity(gitDir, command, exitCode, output)
-
-	// Should not error
-	require.NoError(t, err)
-
-	// Verify log file was created (logging is enabled by default)
-	logPath := filepath.Join(gitDir, "armature-activity.log")
-	_, err = os.ReadFile(logPath)
-	assert.NoError(t, err, "activity log should exist when not disabled")
+	assert.NoError(t, err, "activity log should be created; ARMATURE_DISABLE_ACTIVITY_LOGGING must not disable capture")
 }
 
 // initTestGitRepo creates a real git repository at dir with one commit, so that
@@ -273,7 +244,7 @@ func TestActivityRepoConfigKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T)
 
 	setGitConfigBool(t, gitDir, "true")
 
-	err := AppendActivity(gitDir, "echo hello", 0, []byte("hello\n"))
+	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
 	require.NoError(t, err)
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
@@ -296,7 +267,7 @@ func TestActivityRepoConfigEnabledByDefault_REQ_EXECEV_T1(t *testing.T) {
 	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
 	gitDir := initTestGitRepo(t)
 
-	err := AppendActivity(gitDir, "echo hello", 0, []byte("hello\n"))
+	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
 	require.NoError(t, err)
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
@@ -312,7 +283,7 @@ func TestActivityRepoConfigKillSwitchFalseLeavesEnabled_REQ_EXECEV_T1(t *testing
 
 	setGitConfigBool(t, gitDir, "false")
 
-	err := AppendActivity(gitDir, "echo hello", 0, []byte("hello\n"))
+	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
 	require.NoError(t, err)
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
@@ -340,7 +311,7 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 	exitCode := 0
 	output := []byte("hello\n")
 
-	err = AppendActivity(gitDir, command, exitCode, output)
+	err = AppendActivity(gitDir, command, exitCode, true, output)
 
 	// Fail-open: should not return an error
 	assert.NoError(t, err)
@@ -383,7 +354,7 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 	exitCode := 0
 	output := []byte("hello\n")
 
-	err = AppendActivity(gitDir, command, exitCode, output)
+	err = AppendActivity(gitDir, command, exitCode, true, output)
 
 	// Fail-open: should not return an error
 	assert.NoError(t, err)
@@ -400,23 +371,65 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 func TestActivityFormatLogEntry_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	entry := ActivityEntry{
-		Command:      "test command",
-		ExitCode:     0,
-		OutputHead:   "test output",
-		OutputTail:   "",
-		OutputHash:   "abc123",
-		WorktreeHead: "def456",
-		Timestamp:    "2026-07-05T12:00:00Z",
+		Command:       "test command",
+		ExitCode:      0,
+		ExitCodeKnown: true,
+		OutputHead:    "test output",
+		OutputTail:    "",
+		OutputHash:    "abc123",
+		WorktreeHead:  "def456",
+		Timestamp:     "2026-07-05T12:00:00Z",
 	}
 
 	logLine := formatActivityLogEntry(entry)
 
+	// The line must be valid JSON (JSONL format).
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(logLine), &decoded))
+
 	assert.Contains(t, logLine, "2026-07-05T12:00:00Z")
-	assert.Contains(t, logLine, "activity:")
-	assert.Contains(t, logLine, "command=")
-	assert.Contains(t, logLine, "exit_code=0")
-	assert.Contains(t, logLine, "head_sha=def456")
-	assert.Contains(t, logLine, "output_hash=abc123")
+	assert.Contains(t, logLine, `"command"`)
+	assert.Contains(t, logLine, `"exit_code":0`)
+	assert.Contains(t, logLine, `"exit_code_known":true`)
+	assert.Contains(t, logLine, `"head_sha":"def456"`)
+	assert.Contains(t, logLine, `"output_hash":"abc123"`)
+}
+
+// TestActivityFormatLogEntryUnknownExitCode_REQ_EXECEV_T1 verifies that an
+// entry with no reported exit code is recorded as exit_code_known=false, not
+// silently coerced to a successful exit_code=0 (M2).
+func TestActivityFormatLogEntryUnknownExitCode_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
+	entry := ActivityEntry{
+		Command:       "test command",
+		ExitCode:      0,
+		ExitCodeKnown: false,
+		WorktreeHead:  "def456",
+		OutputHash:    "abc123",
+		Timestamp:     "2026-07-05T12:00:00Z",
+	}
+
+	logLine := formatActivityLogEntry(entry)
+
+	assert.Contains(t, logLine, `"exit_code_known":false`)
+}
+
+// TestActivityTruncateOutputRuneBoundary_REQ_EXECEV_T1 verifies that
+// truncation never splits a multi-byte UTF-8 rune across the head/tail
+// boundary (m8).
+func TestActivityTruncateOutputRuneBoundary_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
+	// Build output where a multi-byte rune (é, 2 bytes in UTF-8) straddles
+	// the maxOutputChunkSize head boundary and the tail start boundary.
+	filler := strings.Repeat("a", maxOutputChunkSize-1)
+	middle := strings.Repeat("b", maxOutputChunkSize)
+	tailFiller := strings.Repeat("c", maxOutputChunkSize-1)
+	output := []byte(filler + "é" + middle + "é" + tailFiller)
+
+	result := truncateOutput(output)
+
+	assert.True(t, utf8.ValidString(result.Head), "head must not split a UTF-8 rune")
+	assert.True(t, utf8.ValidString(result.Tail), "tail must not split a UTF-8 rune")
 }
 
 func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
@@ -434,7 +447,7 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	exitCode := 0
 	output := []byte("test output")
 
-	err := AppendActivity(gitDir, command, exitCode, output)
+	err := AppendActivity(gitDir, command, exitCode, true, output)
 	require.NoError(t, err)
 
 	afterTime := time.Now().UTC()
@@ -444,13 +457,13 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 
-	logContent := string(content)
-	// Parse timestamp from log line (format: YYYY-MM-DDTHH:MM:SSZ)
-	parts := strings.Split(logContent, " ")
-	assert.Greater(t, len(parts), 0)
+	var decoded struct {
+		Timestamp string `json:"timestamp"`
+	}
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(content), &decoded))
 
 	// Try to parse the timestamp
-	logTime, err := time.Parse(time.RFC3339, parts[0])
+	logTime, err := time.Parse(time.RFC3339, decoded.Timestamp)
 	require.NoError(t, err)
 
 	// Verify it's within the expected range
@@ -470,4 +483,65 @@ func TestActivityHashConsistency_REQ_EXECEV_T1(t *testing.T) {
 	// Hash should be the correct SHA256
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256(output))
 	assert.Equal(t, expectedHash, result1.Hash)
+}
+
+// TestActivityFallbackGetHEAD_UsesGitDirDirectly_REQ_EXECEV_M7 verifies that
+// fallbackGetHEAD resolves HEAD via `git --git-dir=<gitDir> rev-parse HEAD`
+// directly against the given git dir, without needing to derive or guess a
+// separate working-tree path (M7). This exercises the case where the loose ref
+// file is absent (e.g. after git packs refs) so getWorktreeHEAD must fall
+// through to fallbackGetHEAD.
+func TestActivityFallbackGetHEAD_UsesGitDirDirectly_REQ_EXECEV_M7(t *testing.T) {
+	t.Parallel()
+	gitDir := initTestGitRepo(t)
+
+	// Confirm the expected HEAD sha via git itself.
+	revParseCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+	expectedOut, err := revParseCmd.Output()
+	require.NoError(t, err)
+	expected := strings.TrimSpace(string(expectedOut))
+
+	// Pack refs so the loose ref file (refs/heads/main) is removed, forcing
+	// getWorktreeHEAD to fall back to fallbackGetHEAD.
+	packCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "pack-refs", "--all")
+	require.NoError(t, packCmd.Run())
+	_, statErr := os.Stat(filepath.Join(gitDir, "refs", "heads", "main"))
+	require.True(t, os.IsNotExist(statErr), "loose ref file must be gone after pack-refs for this test to exercise the fallback")
+
+	sha, err := getWorktreeHEAD(gitDir)
+	require.NoError(t, err)
+	assert.Equal(t, expected, sha)
+}
+
+// TestActivityFallbackGetHEAD_InvalidGitDir_REQ_EXECEV_M7 verifies that
+// fallbackGetHEAD surfaces an error when the git dir is not a valid git
+// directory (e.g. git rev-parse fails), rather than silently succeeding.
+func TestActivityFallbackGetHEAD_InvalidGitDir_REQ_EXECEV_M7(t *testing.T) {
+	t.Parallel()
+	_, err := fallbackGetHEAD(t.TempDir())
+	assert.Error(t, err)
+}
+
+// TestActivityAppendActivityCapsOversizedCommand_REQ_EXECEV_M5 verifies that an
+// oversized command is capped at write time (m5), so a single O_APPEND write
+// stays small enough to remain within typical kernel atomic-write guarantees
+// even when multiple worktree hook processes append concurrently.
+func TestActivityAppendActivityCapsOversizedCommand_REQ_EXECEV_M5(t *testing.T) {
+	t.Parallel()
+	gitDir := t.TempDir()
+	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(shaValue+"\n"), 0o600))
+
+	hugeCommand := strings.Repeat("x", maxCommandSize*3)
+	require.NoError(t, AppendActivity(gitDir, hugeCommand, 0, true, []byte("ok")))
+
+	content, err := os.ReadFile(filepath.Join(gitDir, "armature-activity.log"))
+	require.NoError(t, err)
+
+	var decoded struct {
+		Command string `json:"command"`
+	}
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(content), &decoded))
+	assert.LessOrEqual(t, len(decoded.Command), maxCommandSize, "command must be capped at write time")
+	assert.Less(t, len(decoded.Command), len(hugeCommand), "command must actually have been truncated")
 }

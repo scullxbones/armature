@@ -336,7 +336,7 @@ func newHarnessHookCmd() *cobra.Command {
 			// Capture execution evidence for Bash PostToolUse events (ADR-0008)
 			if event.Kind == harnesshook.EventPostToolUse && event.Tool == "Bash" && resolvedBinding.IssueID != "" {
 				_ = harnesshook.AppendActivity( //nolint:errcheck // activity logging failure is fail-open
-					logGitDir, event.Command, event.ExitCode, event.Output)
+					logGitDir, event.Command, event.ExitCode, event.ExitCodeKnown, event.Output)
 			}
 
 			// If the adapter returned a non-zero exit code, propagate it to the process exit.

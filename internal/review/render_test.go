@@ -23,8 +23,17 @@ func TestRenderExcludesRawOutput_REQ_EXECEV_T3(t *testing.T) {
 	const sentinel = "SENTINEL_RAW_BUILD_OUTPUT_DO_NOT_RENDER_9f3c2a"
 
 	logPath := filepath.Join(t.TempDir(), "armature-activity.log")
-	logLine := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123 output="` + sentinel + ` compiling... done"` + "\n"
-	require.NoError(t, os.WriteFile(logPath, []byte(logLine), 0o600))
+	logLineData, err := json.Marshal(map[string]any{
+		"timestamp":       "2026-01-15T10:30:45Z",
+		"command":         "make build",
+		"exit_code":       0,
+		"exit_code_known": true,
+		"head_sha":        "abc123",
+		"output_hash":     "deadbeef",
+		"output_head":     sentinel + " compiling... done",
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(logPath, append(logLineData, '\n'), 0o600))
 
 	entries := review.LoadActivityEntries(logPath)
 	require.Len(t, entries, 1)

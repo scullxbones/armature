@@ -356,26 +356,43 @@ For each task that completed in the wave, dispatch semantic conformance review u
 
 2.1. **Activity Index (if bundle has activity section)** — when the bundle includes execution evidence:
 
-   If the prepared bundle contains an `activity` section (log path, digest, entry counts), dispatch the activity indexer to produce a finding aid:
+   `arm review prepare` has no `--activity-log` or `--activity-digest` flags — it discovers
+   the worktree's activity log itself and attaches an `activity` section to the bundle
+   automatically when a log is present. Check for it after prepare:
    ```bash
-   # Extract activity metadata from the bundle
-   ACTIVITY_LOG_PATH=$(jq -r '.activity.log_path' "$BUNDLE_FILE")
-   ACTIVITY_DIGEST=$(jq -r '.activity.digest' "$BUNDLE_FILE")
-   
-   # Dispatch armature-activity-indexer to read the log and emit a structured index
-   # Pass the bundle file path (the indexer extracts activity metadata from it)
-   INDEX_OUTPUT=$(mktemp)
-   # Activity indexer returns JSON index to stdout
-   # The indexer routes the reviewer to raw log entries by entry ID
+   HAS_ACTIVITY=$(jq -r 'if .activity then "yes" else "no" end' "$BUNDLE_FILE")
    ```
-   
-   The Activity Index is a **finding aid only** — it summarizes the activity log to help the reviewer locate raw entries by category and exit status. The index itself is never citable; citations must reference raw activity log entry IDs.
+
+   If `HAS_ACTIVITY` is `yes`, dispatch the **armature-activity-indexer** as a subagent
+   before dispatching the reviewer:
+   ```
+   Dispatch armature-activity-indexer with:
+   - the bundle file: $BUNDLE_FILE (or at minimum, the bundle's activity.log_path,
+     activity.digest, activity.delivery_head_count, and activity.earlier_count fields —
+     read them out with jq if passing the whole file is inconvenient)
+
+   The indexer reads the log at activity.log_path, verifies its digest against
+   activity.digest, and returns an Activity Index JSON (schema_version, log_path,
+   log_digest, entry_count, delivery_head_count, earlier_count, entries[]) as its
+   final text output.
+   ```
+   Capture the indexer's returned text into a temp file:
+   ```bash
+   INDEX_OUTPUT=$(mktemp)
+   # The indexer subagent's returned text IS the Activity Index JSON.
+   # Write it directly to $INDEX_OUTPUT, e.g.:
+   #   echo "$INDEXER_OUTPUT" > "$INDEX_OUTPUT"
+   # where $INDEXER_OUTPUT is the text returned by the indexer subagent.
+   ```
+
+   The Activity Index is a **finding aid only** — it summarizes the activity log to help the reviewer locate raw entries by category and exit status. The index itself is never citable; citations must reference raw activity log entry IDs (0-based physical line numbers, e.g. `"0"`, `"1"` — see the reviewer skill).
 
 3. **Dispatch the armature-reviewer agent** — pass both the bundle and activity index (if available):
    ```
    Dispatch armature-reviewer with:
    - bundle file: $BUNDLE_FILE (the reviewer reads the bundle from the file)
-   - activity index (if $INDEX_OUTPUT exists): provide the index as additional context
+   - activity index (if $HAS_ACTIVITY was "yes"): pass the contents of $INDEX_OUTPUT as
+     additional context so the reviewer can route to raw entry IDs
    ```
    
    The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). For behavioral criteria, execution evidence from the activity log can lift indeterminate verdicts to satisfied or partially satisfied, but it never substitutes for diff citations on implementation criteria and never suppresses a not_satisfied the diff supports.
@@ -612,7 +629,17 @@ arm accept-citation --issue ID --ci               # if no source, mark as self-c
 
 ### f. Clean up worktrees
 
-If workers used git worktrees, remove them after their branches are merged:
+If workers used git worktrees, remove them after their branches are merged.
+
+**Ordering caveat:** `arm review prepare`/`arm review record` for a task must complete
+(and the assessment must be recorded) *before* that task's worktree is removed.
+`arm review prepare` reads the activity log from the worktree's own git dir
+(`<repo>/.git/worktrees/<name>/armature-activity.log`), and `arm review record`
+re-reads the log from the path the bundle recorded to re-verify its digest. Removing
+the worktree first deletes that private git dir — the log becomes unreadable and
+activity citations for that task can no longer be validated (surfacing as a "log
+missing or unreadable" error, not a "tampering" one). Sequence review-then-teardown
+per task, not teardown-then-review for the whole wave.
 
 ```bash
 git worktree list

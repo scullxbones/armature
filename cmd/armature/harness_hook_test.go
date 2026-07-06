@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -849,11 +851,11 @@ func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.
 	require.NoError(t, err, "activity log must be created for Bash PostToolUse")
 
 	activityContent := string(activityData)
-	assert.Contains(t, activityContent, "activity:", "activity log must contain activity entry")
-	assert.Contains(t, activityContent, "command=", "activity entry must contain command")
-	assert.Contains(t, activityContent, "exit_code=0", "activity entry must contain exit code")
-	assert.Contains(t, activityContent, "output_hash=", "activity entry must contain output hash")
-	assert.Contains(t, activityContent, "head_sha=", "activity entry must contain HEAD sha")
+	assert.Contains(t, activityContent, `"command"`, "activity entry must contain command")
+	assert.Contains(t, activityContent, `"exit_code":0`, "activity entry must contain exit code")
+	assert.Contains(t, activityContent, `"exit_code_known":true`, "activity entry must record that the exit code is known")
+	assert.Contains(t, activityContent, `"output_hash"`, "activity entry must contain output hash")
+	assert.Contains(t, activityContent, `"head_sha"`, "activity entry must contain HEAD sha")
 	assert.Regexp(t, `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`, activityContent, "activity entry must contain RFC3339 timestamp")
 }
 
@@ -905,11 +907,14 @@ func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) 
 
 	activityContent := string(activityData)
 	// For truncated output, should mention truncation or show both head and tail
-	assert.Contains(t, activityContent, "output_hash=", "activity entry must contain output hash for verification")
+	assert.Contains(t, activityContent, `"output_hash"`, "activity entry must contain output hash for verification")
 }
 
 // TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1 verifies that
-// activity logging can be disabled via ARMATURE_DISABLE_ACTIVITY_LOGGING environment variable.
+// activity logging can be disabled via the repo-level git config kill-switch
+// (armature.disable-activity-logging). There is deliberately no environment
+// variable override (M8): an env var would be settable by the worker process
+// mid-session, letting it curate failure-then-success sequences out of the log.
 func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
@@ -932,10 +937,13 @@ func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
 
+	// Enable the repo-level kill-switch (shared --local config store for all worktrees).
+	killSwitchCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+actualGitDir,
+		"config", "--local", "--bool", "armature.disable-activity-logging", "true")
+	require.NoError(t, killSwitchCmd.Run())
+
 	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
-	// Enable the kill-switch
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "true")
 
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
@@ -951,7 +959,7 @@ func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T
 	// Verify activity log was NOT created when kill-switch is enabled
 	activityLogPath := filepath.Join(actualGitDir, "armature-activity.log")
 	_, err = os.ReadFile(activityLogPath) //nolint:gosec // G703: safe to read test worktree activity log
-	assert.Error(t, err, "activity log should not exist when ARMATURE_DISABLE_ACTIVITY_LOGGING is set")
+	assert.Error(t, err, "activity log should not exist when the repo-level kill-switch is set")
 	assert.True(t, os.IsNotExist(err), "activity log should not exist (not exist error)")
 }
 

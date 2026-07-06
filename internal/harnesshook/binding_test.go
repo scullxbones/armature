@@ -758,3 +758,70 @@ func TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation(t *te
 	assert.Equal(t, gitFile, binding.GitDir, "should report the .git file location even though it couldn't be read")
 	assert.Equal(t, tmpDir, binding.Root)
 }
+
+// TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir
+// verifies that step 2 (event-payload cwd) alone can populate the unbound git
+// dir when step 1 (file_path) finds nothing at all (no FilePath present),
+// exercising the `unboundGitDir == "" && cwdBinding.GitDir != ""` branch.
+func TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	// No armature-issue-id file written: worktree exists but is unbound.
+
+	eventInfo := &DecodedEventInfo{
+		Kind: EventPreToolUse,
+		// No FilePath: step 1 is skipped entirely, leaving unboundGitDir == "".
+		Cwd: tmpDir,
+	}
+
+	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "", binding.IssueID)
+	assert.Equal(t, gitDir, binding.GitDir, "should return the unbound worktree's git dir found via cwd, not the session git dir")
+}
+
+// TestExtractFilePathFromToolInput covers ExtractFilePathFromToolInput's key
+// lookup order and the "changes" array fallback.
+func TestExtractFilePathFromToolInput(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "", ExtractFilePathFromToolInput(nil), "nil input must return empty string")
+
+	assert.Equal(t, "", ExtractFilePathFromToolInput(map[string]any{}), "no matching key must return empty string")
+
+	assert.Equal(t, "/a/file_path.go",
+		ExtractFilePathFromToolInput(map[string]any{"file_path": "/a/file_path.go"}))
+
+	assert.Equal(t, "/a/path.go",
+		ExtractFilePathFromToolInput(map[string]any{"path": "/a/path.go"}))
+
+	assert.Equal(t, "/a/file_path.go",
+		ExtractFilePathFromToolInput(map[string]any{"file_path": "/a/file_path.go", "path": "/a/path.go"}),
+		"file_path must take precedence over path")
+
+	assert.Equal(t, "",
+		ExtractFilePathFromToolInput(map[string]any{"file_path": ""}),
+		"empty string value must not be treated as present")
+
+	assert.Equal(t, "/a/changed.go",
+		ExtractFilePathFromToolInput(map[string]any{
+			"changes": []any{map[string]any{"path": "/a/changed.go"}},
+		}), "must fall back to the first changes[] entry's path")
+
+	assert.Equal(t, "",
+		ExtractFilePathFromToolInput(map[string]any{"changes": []any{}}),
+		"empty changes array must return empty string")
+
+	assert.Equal(t, "",
+		ExtractFilePathFromToolInput(map[string]any{
+			"changes": []any{map[string]any{"path": ""}},
+		}), "empty path within a changes entry must return empty string")
+
+	assert.Equal(t, "",
+		ExtractFilePathFromToolInput(map[string]any{
+			"changes": []any{"not-a-map"},
+		}), "a non-map changes entry must return empty string, not panic")
+}

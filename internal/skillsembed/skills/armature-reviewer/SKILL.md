@@ -147,7 +147,7 @@ For each acceptance criterion in order:
   "rationale": "Explain the assessment",
   "citations": [
     {"path": "...", "line": 123},
-    {"activity_entry_id": "042"}
+    {"activity_entry_id": "0"}
   ],
   "missing_evidence": "Only if needed"
 }
@@ -159,9 +159,20 @@ Criteria are indexed starting at 0: `acceptance[0]`, `acceptance[1]`, etc.
 - **Diff citations** (`path`, `line`, `column`) — evidence from the code diff
 - **Activity citations** (`activity_entry_id`) — evidence from the activity log (raw entry ID, never the index)
 
+A single citation object must use exactly one of these forms: `path` (with optional
+`line`/`column`) **or** `activity_entry_id`, never both. `arm review record` rejects
+a citation that sets both.
+
+`activity_entry_id` is a **plain, 0-based integer as a string** (`"0"`, `"1"`, `"2"`, …) —
+the physical line number of the entry in the activity log, exactly as returned by the
+Activity Indexer's `id` field. It is not zero-padded and not 1-based.
+
 Citations recorded here are subject to the mandatory verification rules:
 - Every diff citation (`{"path", "line"}`) must resolve against an actual diff hunk (Step 5a)
 - Every activity citation (`{"activity_entry_id"}`) must reference a valid entry ID from the activity log
+- An activity citation whose entry has `exit_status: "unknown"` (harness did not report an exit
+  code) cannot support a `satisfied` verdict on the criterion it's attached to — treat it the
+  same as missing evidence for that purpose
 - Activity citations follow the upgrade-only rule (lift indeterminate verdicts on behavioral criteria only)
 
 ### 4. Assign Ratings
@@ -270,7 +281,10 @@ Activity evidence can **lift** an indeterminate verdict on behavioral criteria o
 - Indeterminate → Partially Satisfied (if evidence partially supports the criterion)
 
 Activity evidence **cannot**:
-- Substitute for diff citations on implementation criteria (e.g., "code implements feature X")
+- Substitute for diff citations on implementation criteria (e.g., "code implements feature X").
+  This applies to **both** `satisfied` and `partially_satisfied` on `definition_of_done`: if
+  every citation on that criterion is activity-only (no diff citation present), `arm review
+  record` rejects both statuses, not just `satisfied`.
 - Suppress a `not_satisfied` that the diff supports (e.g., if the diff deletes necessary code, activity evidence of successful prior tests does not override this)
 - Replace the requirement for concrete code evidence on contract implementation
 
@@ -298,7 +312,7 @@ When citing activity evidence in a Citation object, use the `activity_entry_id` 
   "rationale": "Test suite passed with exit code 0",
   "citations": [
     {
-      "activity_entry_id": "042"
+      "activity_entry_id": "0"
     }
   ]
 }
