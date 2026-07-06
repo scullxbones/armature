@@ -45,7 +45,8 @@ Index-based citations are invalid; the activity index is a finding aid, not an e
 
 The `arm review record` command:
 1. Reconstructs the bundle from the explicit delivery range
-2. Re-verifies the activity log digest against the on-disk log
+2. Re-verifies the activity log digest against the on-disk log, but only when the
+   assessment contains activity citations; if it doesn't, this check is skipped
 3. Validates all reviewer citations against the raw activity log
 4. Creates a compact durable attestation (operator-facing, not public)
 
@@ -214,8 +215,8 @@ If you integrate Armature with a custom harness (not Claude Code, Codex, or Devi
 **Q: Can I inspect the activity log directly?**
 
 A: Yes. The log is at `<worktree-git-dir>/armature-activity.log` (e.g., `.git/armature-activity.log`).
-It's a JSONL file with one entry per command. Inspect it before the worktree is torn down,
-or disable capture to prevent it from being created.
+It's a plain-text file with one key=value entry per line per command (not JSON/JSONL).
+Inspect it before the worktree is torn down, or disable capture to prevent it from being created.
 
 **Q: Does disabling capture affect semantic review?**
 

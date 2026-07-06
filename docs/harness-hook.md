@@ -209,11 +209,14 @@ curated by the worker.
 
 ### Activity Log Format and Location
 
-The activity log is **worktree-local, ephemeral**, stored as JSONL entries:
+The activity log is **worktree-local, ephemeral**, stored as plain-text key=value entries
+(not JSON/JSONL):
 
 - **Location:** `<worktree-git-dir>/armature-activity.log` (e.g., `.git/armature-activity.log`
   for regular repos, `.git/worktrees/<worktree-name>/armature-activity.log` for worktrees)
-- **Format:** One JSON entry per line, appended chronologically
+- **Format:** One plain-text line per entry, of the form
+  `<RFC3339 timestamp> activity: command=<quoted> exit_code=<int> head_sha=<sha> output_hash=<hash> [output=<quoted>|output_truncated=<quoted>...<quoted>]`,
+  appended chronologically
 - **Retention:** Worktree-local only; never committed to the ops log or repository
 - **Lifecycle:** Deleted when the worktree is torn down
 
@@ -276,7 +279,9 @@ are emitted to stderr for operator visibility.
 `arm review record`, never before. This is a hard constraint because:
 
 1. The activity log lives in the worktree's git directory
-2. `arm review record` re-verifies the activity log digest before finalizing attestation
+2. `arm review record` re-verifies the activity log digest before finalizing attestation,
+   but **only when the assessment cites activity evidence** — if the assessment contains
+   no activity citations, this digest check is skipped
 3. Tearing down the worktree (deleting it) destroys the log before it can be verified
 
 **Correct ordering:**
@@ -290,7 +295,11 @@ are emitted to stderr for operator visibility.
 ```
 
 Violating this order (e.g., tearing down before record) will cause `arm review record`
-to fail with a digest mismatch, since the log has been deleted.
+to fail with a digest mismatch **when the assessment cites activity evidence**, since the
+log has been deleted. If the assessment contains no activity citations, the digest check
+is skipped and record will not fail on this basis — but the ordering constraint should
+still be followed, since whether activity citations are present is not known in advance
+at teardown time.
 
 ## Environment Variables
 
