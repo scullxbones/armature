@@ -2285,3 +2285,4 @@
 ["claim","EXECEV-T4",1783312186,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["assessment-attested","EXECEV-T4",1783313093,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"assessment":{"schema_version":1,"bundle_id":"sha256:c00dcef6e86bb243982265b39078795e805c5a0489623427cecbdc8646b0dfa2","contract_fingerprint":"3be9fe7b6650455067972702ea99d7cd24838837854e78638a670fed664ded08","delivery_fingerprint":"068465a4a4f2e1365213f35e7b605df17aa065c5b56b91a5f86b83bf432e56b9","base_sha":"edeb3f970adb340cfddf2b22867afef6b49f66dd","head_sha":"5ab8fa5e012923602f4b818e6c3f7dbc02805676","rating":"green","result_fingerprint":"f2e07503f7f9bf846c02cdfe043fd95da676f413c68a0a67666075a7eb1bb014","satisfied_count":4,"partially_satisfied_count":0,"not_satisfied_count":0,"indeterminate_count":0}}]
 ["transition","EXECEV-T4",1783313401,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["claim","EXECEV-T5",1783313401,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
