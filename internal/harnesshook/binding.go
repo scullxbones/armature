@@ -281,24 +281,26 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 // ExtractExitCode extracts the exit code from a hook payload map, if available.
 // It is used against the PostToolUse "tool_response" payload (and, for
 // harnesses/tests that place the field alongside the tool call arguments,
-// "tool_input"). Returns 0 if the field is not present (e.g., for
-// PreToolUse events, which have no execution result yet).
-func ExtractExitCode(fields map[string]any) int {
+// "tool_input"). Returns (0, false) if the field is not present (e.g., for
+// PreToolUse events, which have no execution result yet) — callers must check
+// the ok return value rather than treating an absent code as exit 0, since
+// "unknown" and "succeeded" are distinguishable facts for activity logging.
+func ExtractExitCode(fields map[string]any) (int, bool) {
 	if fields == nil {
-		return 0
+		return 0, false
 	}
 
 	// Check for exit_code field (PostToolUse events). JSON numbers decode to
 	// float64 via encoding/json; the int case supports callers that construct
 	// the map directly (e.g. tests) rather than via json.Unmarshal.
 	if code, ok := fields["exit_code"].(float64); ok {
-		return int(code)
+		return int(code), true
 	}
 	if code, ok := fields["exit_code"].(int); ok {
-		return code
+		return code, true
 	}
 
-	return 0
+	return 0, false
 }
 
 // ExtractOutput extracts the command output from a hook payload map, if

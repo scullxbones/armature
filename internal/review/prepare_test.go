@@ -1,13 +1,37 @@
 package review_test
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// activityLogLineJSON builds a single JSONL activity log line (the format
+// written by internal/harnesshook.AppendActivity / read by
+// review.parseActivityLogFile) for use in tests. Fields omitted from opts
+// default to their zero value.
+func activityLogLineJSON(t *testing.T, opts map[string]any) string {
+	t.Helper()
+	line := map[string]any{
+		"timestamp":       "2026-01-15T10:30:45Z",
+		"command":         "make build",
+		"exit_code":       0,
+		"exit_code_known": true,
+		"head_sha":        "abc123",
+		"output_hash":     "def456",
+	}
+	for k, v := range opts {
+		line[k] = v
+	}
+	data, err := json.Marshal(line)
+	require.NoError(t, err)
+	return string(data)
+}
 
 // mockGitAdapter is a mock implementation of GitAdapter for testing.
 type mockGitAdapter struct {
@@ -517,14 +541,16 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	logPath := tmpDir + "/armature-activity.log"
 
 	// Write a sample activity log with multiple entries
-	logContent := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 ` +
-		`head_sha=def456def456def456def456def456def456def4 output_hash=abc123 output="Build succeeded"
-` +
-		`2026-01-15T10:30:46Z activity: command="make test" exit_code=0 ` +
-		`head_sha=def456def456def456def456def456def456def4 output_hash=def789 output="Tests passed"
-` +
-		`2026-01-15T10:30:47Z activity: command="go lint" exit_code=0 ` +
-		`head_sha=abc123abc123abc123abc123abc123abc123abc1 output_hash=ghi012 output="Lint clean"`
+	logContent := activityLogLineJSON(t, map[string]any{
+		"command": "make build", "head_sha": "def456def456def456def456def456def456def4",
+		"output_hash": "abc123", "output_head": "Build succeeded",
+	}) + "\n" + activityLogLineJSON(t, map[string]any{
+		"command": "make test", "head_sha": "def456def456def456def456def456def456def4",
+		"output_hash": "def789", "output_head": "Tests passed",
+	}) + "\n" + activityLogLineJSON(t, map[string]any{
+		"command": "go lint", "head_sha": "abc123abc123abc123abc123abc123abc123abc1",
+		"output_hash": "ghi012", "output_head": "Lint clean",
+	})
 	err := os.WriteFile(logPath, []byte(logContent), 0o644)
 	require.NoError(t, err)
 
@@ -556,6 +582,52 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	assert.Equal(t, 2, bundle.Activity.DeliveryHeadCount, "Should have 2 entries at delivery HEAD")
 	assert.Equal(t, 1, bundle.Activity.EarlierCount, "Should have 1 entry at earlier commit")
 	assert.NotEmpty(t, bundle.Activity.LogPath, "LogPath should be set")
+}
+
+// TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV verifies that Activity.LogPath is
+// stored as an absolute path even when Prepare is given a relative path (m3):
+// ValidateActivityDigest re-reads LogPath at record time, potentially from a
+// different working directory than prepare ran in, so a relative path would
+// silently point at the wrong file (or nothing) and break digest validation.
+//
+//nolint:paralleltest // mutates process-wide cwd via os.Chdir; must not run concurrently with other tests
+func TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV(t *testing.T) {
+	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
+	headSHA := "def456def456def456def456def456def456def4"
+
+	tmpDir := t.TempDir()
+	logContent := activityLogLineJSON(t, map[string]any{"head_sha": headSHA})
+	require.NoError(t, os.WriteFile(tmpDir+"/armature-activity.log", []byte(logContent), 0o644))
+
+	git := &mockGitAdapter{
+		resolveRevisionFn: func(rev string) (string, error) {
+			if rev == "main" {
+				return baseSHA, nil
+			}
+			return headSHA, nil
+		},
+		diffRangeFn: func(base, head string) (string, error) {
+			return "diff --git a/file.go b/file.go\n", nil
+		},
+		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
+			return []string{"file.go"}, nil
+		},
+	}
+
+	// Change into tmpDir so a relative activity log path resolves there, then
+	// pass a relative path to Prepare.
+	origWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { require.NoError(t, os.Chdir(origWD)) }()
+
+	bundle, err := review.Prepare(git, "EXECEV-T2", "Relative path", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", "armature-activity.log")
+
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+	require.NotNil(t, bundle.Activity)
+	assert.True(t, filepath.IsAbs(bundle.Activity.LogPath), "LogPath must be absolute, got %q", bundle.Activity.LogPath)
 }
 
 func TestPrepare_WithoutActivityLog_REQ_EXECEV_T2(t *testing.T) {
@@ -637,10 +709,14 @@ func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
 
-	// Write a malformed activity log (missing "activity:" marker on some lines)
-	logContent := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=def456def456def456def456def456def456def4 output_hash=abc123
-this is a completely malformed line
-2026-01-15T10:30:46Z activity: command="make test" exit_code=0 head_sha=def456def456def456def456def456def456def4 output_hash=def789`
+	// Write a malformed activity log (a non-JSON line interleaved with valid JSONL entries)
+	logContent := activityLogLineJSON(t, map[string]any{
+		"command": "make build", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "abc123",
+	}) + "\n" +
+		"this is a completely malformed line\n" +
+		activityLogLineJSON(t, map[string]any{
+			"command": "make test", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "def789",
+		})
 	err := os.WriteFile(logPath, []byte(logContent), 0o644)
 	require.NoError(t, err)
 
@@ -675,7 +751,9 @@ func TestActivityDigestDeterministic_REQ_EXECEV_T2(t *testing.T) {
 	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
 	headSHA := "def456def456def456def456def456def456def4"
 
-	logContent := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=def456def456def456def456def456def456def4 output_hash=abc123`
+	logContent := activityLogLineJSON(t, map[string]any{
+		"command": "make build", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "abc123",
+	})
 
 	// Create two identical activity logs and verify they produce the same digest
 	tmpDir := t.TempDir()

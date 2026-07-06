@@ -190,9 +190,9 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 	// stdout/stderr). Some callers (and tests) place exit_code/output directly
 	// on tool_input instead, so fall back to that when tool_response doesn't
 	// carry it. Both are no-ops (return zero value) for PreToolUse events.
-	exitCode := ExtractExitCode(raw.ToolResponse)
-	if exitCode == 0 {
-		exitCode = ExtractExitCode(raw.ToolInput)
+	exitCode, exitCodeKnown := ExtractExitCode(raw.ToolResponse)
+	if !exitCodeKnown {
+		exitCode, exitCodeKnown = ExtractExitCode(raw.ToolInput)
 	}
 	output := ExtractOutput(raw.ToolResponse)
 	if output == nil {
@@ -200,14 +200,15 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 	}
 
 	return Event{
-		Kind:      normalizeEvent(raw.HookEventName),
-		Tool:      raw.ToolName,
-		Paths:     extractPaths(raw.ToolInput),
-		Command:   extractCommand(raw.ToolInput),
-		Cwd:       raw.Cwd,
-		ToolInput: raw.ToolInput,
-		ExitCode:  exitCode,
-		Output:    output,
+		Kind:          normalizeEvent(raw.HookEventName),
+		Tool:          raw.ToolName,
+		Paths:         extractPaths(raw.ToolInput),
+		Command:       extractCommand(raw.ToolInput),
+		Cwd:           raw.Cwd,
+		ToolInput:     raw.ToolInput,
+		ExitCode:      exitCode,
+		ExitCodeKnown: exitCodeKnown,
+		Output:        output,
 	}, nil
 }
 

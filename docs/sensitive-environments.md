@@ -121,7 +121,7 @@ published to external surfaces.
 
 Execution evidence capture is **enabled by default** wherever harness hooks are installed.
 
-### Disable Capture (Option 1: Git Config)
+### Disable Capture (Git Config — the only kill-switch)
 
 Disable for the entire repository (all worktrees):
 
@@ -134,31 +134,20 @@ This setting:
 - Persists across sessions
 - Affects all future hook invocations
 
-### Disable Capture (Option 2: Environment Variable)
-
-Disable for a single harness session:
-
-```bash
-export ARMATURE_DISABLE_ACTIVITY_LOGGING=1
-# then launch harness
-claude . 
-```
-
-This setting:
-- Applies only to the current session
-- Overrides repo config if set
-- Useful for one-off operations without modifying repo state
+There is deliberately **no environment-variable override**. An earlier version of
+Armature supported `ARMATURE_DISABLE_ACTIVITY_LOGGING` as a session-scoped alternative,
+but it has been removed: a worker process could `export` it mid-session to suppress
+capture around a failing command and `unset` it afterward, curating exactly the
+failure-then-success selection bias this capture policy exists to prevent. Disabling
+capture is a repo-level Definition-of-Done decision — use the git config kill-switch,
+which is visible in repo state and not something a running session can toggle
+unilaterally.
 
 ### Re-Enable Capture
-
-Re-enable via git config:
 
 ```bash
 git config --local --unset armature.disable-activity-logging
 ```
-
-Re-enable by unsetting the environment variable (it's session-scoped, so exiting
-the shell is sufficient).
 
 ## Operational Guidance for Sensitive Environments
 
@@ -172,11 +161,7 @@ the shell is sufficient).
 **You MUST disable execution evidence capture before running Armature workers:**
 
 ```bash
-# 1. Globally disable for the repo (recommended)
 git config --local armature.disable-activity-logging true
-
-# 2. Or, disable for a single session
-export ARMATURE_DISABLE_ACTIVITY_LOGGING=1
 arm claim TASK-001 --worktree ./worktree
 # then launch harness from the worktree
 ```
@@ -206,16 +191,17 @@ If capture was **enabled** during a delivery:
 If you integrate Armature with a custom harness (not Claude Code, Codex, or Devin):
 
 1. **Ensure the harness calls `arm harness-hook`** for PostToolUse events on the bound issue
-2. **Respect the `ARMATURE_DISABLE_ACTIVITY_LOGGING` environment variable** in your harness launcher
-3. **Document capture behavior** in your harness's own security/privacy documentation
-4. **Scrub or disable capture** before processing sensitive environments
+2. **Document capture behavior** in your harness's own security/privacy documentation, noting
+   that the only supported kill-switch is the repo-level `armature.disable-activity-logging`
+   git config key (there is no environment-variable override)
+3. **Scrub or disable capture** before processing sensitive environments
 
 ## FAQ
 
 **Q: Can I inspect the activity log directly?**
 
 A: Yes. The log is at `<worktree-git-dir>/armature-activity.log` (e.g., `.git/armature-activity.log`).
-It's a plain-text file with one key=value entry per line per command (not JSON/JSONL).
+It's a JSONL file (one JSON object per line, one line per command).
 Inspect it before the worktree is torn down, or disable capture to prevent it from being created.
 
 **Q: Does disabling capture affect semantic review?**

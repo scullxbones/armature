@@ -7,9 +7,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 )
+
+// activityScannerBufferSize is the initial buffer size handed to bufio.Scanner
+// when reading the activity log. bufio.Scanner's default 64KB token limit is
+// smaller than a single worst-case activity line (unbounded command up to
+// maxCommandSize plus ~2KB of truncated output plus JSON overhead), so a single
+// oversized line would otherwise fail the entire scan and silently drop the
+// whole activity section (M9). 1MB comfortably covers the writer's cap.
+const activityScannerBufferSize = 1 << 20
+
+// activityScannerMaxTokenSize is the hard ceiling passed to scanner.Buffer,
+// bounding how large a single line is allowed to grow before scanning fails.
+const activityScannerMaxTokenSize = 4 << 20
 
 // FingerprintContract computes a canonical SHA-256 fingerprint of a contract.
 // The fingerprint is deterministic across identical contracts.
@@ -63,11 +74,13 @@ func ComputeBundleID(bundle ReviewBundle) string {
 		Issue         IssueInfo
 		Contract      Contract
 		Delivery      Delivery
+		Activity      *Activity
 	}{
 		SchemaVersion: bundle.SchemaVersion,
 		Issue:         bundle.Issue,
 		Contract:      bundle.Contract,
 		Delivery:      bundle.Delivery,
+		Activity:      bundle.Activity,
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -81,41 +94,71 @@ func ComputeBundleID(bundle ReviewBundle) string {
 	return fmt.Sprintf("sha256:%s", hashStr)
 }
 
-// ActivityLogEntry represents a parsed line from the activity log (key=value format).
+// ActivityLogEntry represents a parsed line from the activity log (JSONL format:
+// one JSON object per line, written by internal/harnesshook.AppendActivity).
 type ActivityLogEntry struct {
-	Timestamp   string
-	Command     string
-	ExitCode    int
-	HeadSHA     string
-	OutputHash  string
-	OutputTrunc string // full output or truncated form
+	Timestamp     string
+	Command       string
+	ExitCode      int
+	ExitCodeKnown bool
+	HeadSHA       string
+	OutputHash    string
+	OutputHead    string
+	OutputTail    string
 }
 
-// parseActivityLogFile reads the activity log file and returns parsed entries and the raw file content.
-// The file is in a custom key=value format (one entry per line).
-// Returns the list of entries, raw file content for digest computation, and any error.
-func parseActivityLogFile(logPath string) ([]ActivityLogEntry, []byte, error) {
+// activityLogLine mirrors the JSON shape written by
+// internal/harnesshook.activityLogLine. Kept as a separate type (rather than a
+// shared import) since harnesshook and review intentionally don't depend on
+// each other; the two must be kept in sync (a round-trip test enforces this).
+type activityLogLine struct {
+	Timestamp     string `json:"timestamp"`
+	Command       string `json:"command"`
+	ExitCode      int    `json:"exit_code"`
+	ExitCodeKnown bool   `json:"exit_code_known"`
+	HeadSHA       string `json:"head_sha"`
+	OutputHash    string `json:"output_hash"`
+	OutputHead    string `json:"output_head"`
+	OutputTail    string `json:"output_tail"`
+}
+
+// parseActivityLogFile reads the activity log file (JSONL: one JSON object per
+// line) and returns parsed entries keyed by physical line number (0-based),
+// plus the raw file content for digest computation.
+//
+// Entry IDs are the 0-based physical line number, not a sequential count of
+// successfully parsed entries: a malformed or blank line consumes its line
+// number but produces no entry, so IDs never shift when such lines are
+// skipped (m1). Malformed lines are logged nowhere and simply skipped —
+// the digest already pins the exact file content, so a parse failure on one
+// line does not need to fail the whole bundle preparation.
+func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {
 	content, err := os.ReadFile(logPath) //nolint:gosec // G304: logPath is provided by Prepare
 	if err != nil {
 		return nil, nil, fmt.Errorf("read activity log: %w", err)
 	}
 
-	var entries []ActivityLogEntry
+	entries := make(map[int]ActivityLogEntry)
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
+	scanner.Buffer(make([]byte, 0, activityScannerBufferSize), activityScannerMaxTokenSize)
 
+	lineNum := 0
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line == "" {
+		id := lineNum
+		lineNum++
+
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		entry, err := parseActivityLogLine(line)
-		if err != nil {
-			// Log malformed lines gracefully — do not fail the entire bundle preparation
-			// but continue parsing remaining entries
+		var raw activityLogLine
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			// Malformed line: skip, but the line number is still consumed above.
 			continue
 		}
-		entries = append(entries, entry)
+
+		entries[id] = ActivityLogEntry(raw)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -123,104 +166,6 @@ func parseActivityLogFile(logPath string) ([]ActivityLogEntry, []byte, error) {
 	}
 
 	return entries, content, nil
-}
-
-// parseActivityLogLine parses a single activity log line in key=value format.
-// Example: 2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123...
-func parseActivityLogLine(line string) (ActivityLogEntry, error) {
-	entry := ActivityLogEntry{}
-
-	// Extract timestamp (everything before " activity:")
-	parts := strings.SplitN(line, " activity: ", 2)
-	if len(parts) != 2 {
-		return entry, fmt.Errorf("malformed activity log line: missing 'activity:' marker")
-	}
-
-	entry.Timestamp = parts[0]
-	kvPart := parts[1]
-
-	// Parse key=value pairs
-	// Simple parser: split by space, but be careful with quoted strings
-	fields := parseKeyValuePairs(kvPart)
-
-	for key, value := range fields {
-		switch key {
-		case "command":
-			entry.Command = value
-		case "exit_code":
-			// Parse as int; silently use default (0) if parsing fails
-			if exitCode, err := strconv.Atoi(value); err == nil {
-				entry.ExitCode = exitCode
-			}
-		case "head_sha":
-			entry.HeadSHA = value
-		case "output_hash":
-			entry.OutputHash = value
-		case "output":
-			entry.OutputTrunc = value
-		case "output_truncated":
-			entry.OutputTrunc = value
-		}
-	}
-
-	return entry, nil
-}
-
-// parseKeyValuePairs parses simple key=value pairs from a string.
-// Handles quoted values properly.
-func parseKeyValuePairs(input string) map[string]string {
-	result := make(map[string]string)
-	var i int
-	for i < len(input) {
-		// Skip whitespace
-		for i < len(input) && input[i] == ' ' {
-			i++
-		}
-		if i >= len(input) {
-			break
-		}
-
-		// Extract key
-		keyStart := i
-		for i < len(input) && input[i] != '=' {
-			i++
-		}
-		key := input[keyStart:i]
-
-		if i >= len(input) || input[i] != '=' {
-			break
-		}
-		i++ // skip '='
-
-		// Extract value (handle quoted strings)
-		var value string
-		if i < len(input) && input[i] == '"' {
-			i++ // skip opening quote
-			valueStart := i
-			for i < len(input) && input[i] != '"' {
-				if input[i] == '\\' && i+1 < len(input) {
-					i += 2 // skip escape sequence
-				} else {
-					i++
-				}
-			}
-			value = input[valueStart:i]
-			if i < len(input) {
-				i++ // skip closing quote
-			}
-		} else {
-			// Unquoted value (read until space)
-			valueStart := i
-			for i < len(input) && input[i] != ' ' {
-				i++
-			}
-			value = input[valueStart:i]
-		}
-
-		result[key] = value
-	}
-
-	return result
 }
 
 // FingerprintActivity computes a SHA-256 digest of the activity log file content.
@@ -231,13 +176,15 @@ func FingerprintActivity(logContent []byte) string {
 
 // ActivityEntryDetails holds extracted details from an activity log entry for rendering.
 type ActivityEntryDetails struct {
-	EntryID  int    // The 0-based entry ID
-	Command  string // The command that was executed
-	ExitCode int    // The exit status
+	EntryID       int    // The 0-based physical-line entry ID
+	Command       string // The command that was executed
+	ExitCode      int    // The exit status (only meaningful when ExitCodeKnown is true)
+	ExitCodeKnown bool   // Whether the harness reported an exit code for this entry
 }
 
 // LoadActivityEntries reads an activity log file and returns a map of entry ID to entry details.
-// Entry IDs are 0-based. If the file cannot be read or parsed, returns an empty map.
+// Entry IDs are the 0-based physical line number in the log file (see parseActivityLogFile).
+// If the file cannot be read, returns an empty map.
 func LoadActivityEntries(logPath string) map[int]ActivityEntryDetails {
 	entries, _, err := parseActivityLogFile(logPath)
 	if err != nil {
@@ -245,18 +192,24 @@ func LoadActivityEntries(logPath string) map[int]ActivityEntryDetails {
 	}
 
 	result := make(map[int]ActivityEntryDetails)
-	for i, entry := range entries {
-		result[i] = ActivityEntryDetails{
-			EntryID:  i,
-			Command:  entry.Command,
-			ExitCode: entry.ExitCode,
+	for id, entry := range entries {
+		result[id] = ActivityEntryDetails{
+			EntryID:       id,
+			Command:       entry.Command,
+			ExitCode:      entry.ExitCode,
+			ExitCodeKnown: entry.ExitCodeKnown,
 		}
 	}
 	return result
 }
 
 // FormatActivityEntryDetails formats activity entry details for rendering.
-// Returns a string like "entry 0: command="make build" exit_code=0"
+// Returns a string like "entry 0: command="make build" exit_code=0", or
+// "entry 0: command="make build" exit_code=unknown" when the harness did not
+// report an exit code for this entry.
 func FormatActivityEntryDetails(details ActivityEntryDetails) string {
+	if !details.ExitCodeKnown {
+		return fmt.Sprintf("entry %d: command=%q exit_code=unknown", details.EntryID, details.Command)
+	}
 	return fmt.Sprintf("entry %d: command=%q exit_code=%d", details.EntryID, details.Command, details.ExitCode)
 }

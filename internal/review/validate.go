@@ -72,7 +72,9 @@ func ValidateResultNoDiff(assessment *ConformanceAssessment) []string {
 // NewAttestation creates an AssessmentAttestation from a validated ConformanceAssessment and
 // its corresponding Delivery. The delivery's BaseSHA and HeadSHA are recorded in the attestation
 // so the durable record captures the exact commit range that was reviewed.
-func NewAttestation(assessment *ConformanceAssessment, delivery Delivery) *AssessmentAttestation {
+// activity is optional (nil when the bundle had no Activity section); when present, its digest
+// is carried into the attestation per ADR-0008 ("the digest enters the attestation").
+func NewAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *Activity) *AssessmentAttestation {
 	// Derive rating and counts from results
 	rating := DeriveRating(assessment.Results)
 	satisfied, partiallySatisfied, notSatisfied, indeterminate := CountCriteria(assessment.Results)
@@ -93,6 +95,10 @@ func NewAttestation(assessment *ConformanceAssessment, delivery Delivery) *Asses
 		PartiallySatisfiedCount: partiallySatisfied,
 		NotSatisfiedCount:       notSatisfied,
 		IndeterminateCount:      indeterminate,
+	}
+
+	if activity != nil {
+		att.ActivityDigest = activity.Digest
 	}
 
 	return att
@@ -193,7 +199,10 @@ func ValidateActivityDigest(activity *Activity) []string {
 	actualDigest := FingerprintActivity(content)
 	if actualDigest != activity.Digest {
 		errs = append(errs, fmt.Sprintf(
-			"activity log digest mismatch: bundle recorded %s but log at %q now has digest %s (tampered with or rotated since prepare)",
+			"activity log digest mismatch: bundle recorded %s but log at %q now has digest %s "+
+				"(the log changed since `arm review prepare` ran — this may be a new entry appended by "+
+				"further worktree activity, a stale/rotated log, or a tampered file; re-run prepare "+
+				"against the current log before recording)",
 			activity.Digest, activity.LogPath, actualDigest))
 	}
 
@@ -201,23 +210,17 @@ func ValidateActivityDigest(activity *Activity) []string {
 }
 
 // ValidateActivityCitations validates activity citations in a ConformanceAssessment against
-// an Activity section and contract. It checks:
-// - Digest match between activity log and bundle
-// - All cited entry IDs are valid (not index numbers, not unknown)
-// - Activity-citations-only cannot support satisfied on implementation criteria
+// parsed activity log entries. It checks:
+// - All cited entry IDs exist in the log
+// - No activity entry with an unknown exit code can support a Satisfied criterion status
+// - Activity-citations-only cannot support Satisfied or PartiallySatisfied on implementation criteria
 // Returns a slice of validation error strings (empty = valid).
-func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, contract Contract) []string {
+func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]ActivityEntryDetails) []string {
 	var errs []string
 
 	if activity == nil {
 		// No activity section to validate against
 		return errs
-	}
-
-	// Build a set of valid entry IDs (0 to EntryCount-1)
-	validEntryIDs := make(map[int]bool)
-	for i := 0; i < activity.EntryCount; i++ {
-		validEntryIDs[i] = true
 	}
 
 	// Track which criteria have activity citations only
@@ -241,10 +244,20 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 					continue
 				}
 
-				// Validate the entry ID is within the valid range
-				if !validEntryIDs[entryID] {
-					errs = append(errs, fmt.Sprintf("criterion result %s: unknown activity entry ID %d (valid range: 0-%d)",
-						result.ID, entryID, activity.EntryCount-1))
+				entry, ok := entries[entryID]
+				if !ok {
+					errs = append(errs, fmt.Sprintf("criterion result %s: unknown activity entry ID %d (not present in the activity log)",
+						result.ID, entryID))
+					continue
+				}
+
+				// An entry with no recorded exit code (harness omitted it) cannot be used
+				// as evidence that a criterion is fully satisfied — "unknown" and "succeeded"
+				// must remain distinguishable outcomes for verified behavioral evidence.
+				if !entry.ExitCodeKnown && result.Status == Satisfied {
+					errs = append(errs, fmt.Sprintf(
+						"criterion result %s: activity entry %d has an unknown exit code and cannot support satisfied status",
+						result.ID, entryID))
 				}
 			}
 
@@ -259,7 +272,8 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 		}
 	}
 
-	// Check upgrade-only rule: activity-citations-only cannot satisfy implementation criteria
+	// Check upgrade-only rule: activity-citations-only cannot satisfy or partially
+	// satisfy implementation criteria (ADR-0008 rule 1).
 	for criterionID := range activityOnlyByID {
 		// Find the corresponding result
 		var result *CriterionResult
@@ -279,11 +293,12 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 		// (Acceptance criteria and custom criteria are behavioral and can be satisfied by activity evidence)
 		isImplementationCriterion := (criterionID == "definition_of_done")
 
-		// If activity-citations-only is used on an implementation criterion with Satisfied status, reject it
-		if isImplementationCriterion && result.Status == Satisfied {
+		// If activity-citations-only is used on an implementation criterion with a
+		// Satisfied or PartiallySatisfied status, reject it.
+		if isImplementationCriterion && (result.Status == Satisfied || result.Status == PartiallySatisfied) {
 			msg := fmt.Sprintf(
-				"criterion result %s: activity citations alone cannot support satisfied on implementation criterion (upgrade-only rule)",
-				result.ID,
+				"criterion result %s: activity citations alone cannot support %s on implementation criterion (upgrade-only rule)",
+				result.ID, result.Status,
 			)
 			errs = append(errs, msg)
 		}

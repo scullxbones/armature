@@ -203,6 +203,17 @@ func (cr CriterionResult) Valid() error {
 		len(cr.Citations) == 0 && cr.MissingEvidence == "" {
 		return fmt.Errorf("criterion result %s: missing evidence text required for status %s", cr.ID, cr.Status)
 	}
+	// Path and ActivityEntryID are mutually exclusive citation forms; a citation
+	// with both set would silently skip diff-index validation (since activity
+	// citations are validated separately) while still counting as a diff
+	// citation for upgrade-only-rule purposes, letting a fabricated Path escape
+	// verification against the diff.
+	for i, citation := range cr.Citations {
+		if citation.ActivityEntryID != "" && citation.Path != "" {
+			return fmt.Errorf("criterion result %s: citation %d has both path %q and activity_entry_id %q; these are mutually exclusive",
+				cr.ID, i, citation.Path, citation.ActivityEntryID)
+		}
+	}
 	return nil
 }
 

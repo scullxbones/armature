@@ -944,3 +944,68 @@ func TestReviewPrepare_CoordinatorWaveScope(t *testing.T) {
 	assert.NotEqual(t, bundleA.Fingerprints.Delivery, correctBundleA.Fingerprints.Delivery,
 		"delivery fingerprint should differ when using different commit ranges")
 }
+
+// TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1
+// verifies the fix for C1: `arm review prepare` run inside a linked delivery
+// worktree must attach the Activity section from *that worktree's* private
+// git dir (<repo>/.git/worktrees/<name>/armature-activity.log), not from the
+// parent repo root's .git/armature-activity.log. Before the fix, ctx.RepoPath
+// is resolved to the parent repo root for worktree invocations, so the command
+// would either miss the log entirely or (worse) attach an unrelated session's
+// activity log as evidence for this delivery.
+func TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	worktreeDir := t.TempDir()
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, claimCmd.Execute())
+
+	// Resolve the worktree's actual (private) git dir.
+	gitFile := filepath.Join(worktreeDir, ".git")
+	gitFileContent, err := os.ReadFile(gitFile)
+	require.NoError(t, err)
+	worktreeGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(worktreeGitDir) {
+		worktreeGitDir = filepath.Join(worktreeDir, worktreeGitDir)
+	}
+
+	// A decoy activity log at the parent repo root's .git dir, from an unrelated
+	// session. If C1 regresses, this is the log the command would wrongly read.
+	decoyContent := []byte(`{"timestamp":"2020-01-01T00:00:00Z","command":"rm -rf /",` +
+		`"exit_code":0,"exit_code_known":true,"head_sha":"deadbeef","output_hash":"decoy"}` + "\n")
+	decoyLogPath := filepath.Join(repo, ".git", "armature-activity.log")
+	require.NoError(t, os.WriteFile(decoyLogPath, decoyContent, 0o600))
+
+	// The genuine activity log, written to the worktree's own private git dir.
+	realContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"go build ./...",` +
+		`"exit_code":0,"exit_code_known":true,"head_sha":"realsha","output_hash":"real"}` + "\n")
+	realLogPath := filepath.Join(worktreeGitDir, "armature-activity.log")
+	require.NoError(t, os.WriteFile(realLogPath, realContent, 0o600)) //nolint:gosec // G703: fixed test-controlled path, not user input
+
+	// Create a commit range inside the worktree.
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, worktreeDir, "git", "add", "impl.go")
+	run(t, worktreeDir, "git", "commit", "-m", "implementation")
+	baseCmd := newCmdInDir(worktreeDir, "git", "rev-parse", "HEAD~1")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+	headCmd := newCmdInDir(worktreeDir, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	out, err := runTrls(t, worktreeDir, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head)
+	require.NoError(t, err)
+
+	var bundle review.ReviewBundle
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &bundle))
+
+	require.NotNil(t, bundle.Activity, "activity section must be attached from the worktree's own git dir")
+	assert.Equal(t, review.FingerprintActivity(realContent), bundle.Activity.Digest,
+		"activity digest must come from the worktree's own log, not the parent repo's decoy log")
+}

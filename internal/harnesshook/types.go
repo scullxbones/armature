@@ -16,14 +16,15 @@ const (
 
 // Event carries the normalised fields extracted from a platform hook payload.
 type Event struct {
-	Kind      EventKind
-	Tool      string
-	Paths     []string
-	Command   string
-	Cwd       string         // Current working directory from the hook event payload (if available)
-	ToolInput map[string]any // Raw tool input for binding resolution and other post-decode logic
-	ExitCode  int            // Exit code from PostToolUse events (0 if not available or pre-execution)
-	Output    []byte         // Output from PostToolUse events (empty if not available)
+	Kind          EventKind
+	Tool          string
+	Paths         []string
+	Command       string
+	Cwd           string         // Current working directory from the hook event payload (if available)
+	ToolInput     map[string]any // Raw tool input for binding resolution and other post-decode logic
+	ExitCode      int            // Exit code from PostToolUse events (only meaningful when ExitCodeKnown is true)
+	ExitCodeKnown bool           // Whether the harness actually reported an exit code (false for PreToolUse events or harnesses that omit it)
+	Output        []byte         // Output from PostToolUse events (empty if not available)
 }
 
 // DecisionAction is the verdict returned by an Evaluator (allow, block, or no opinion).
