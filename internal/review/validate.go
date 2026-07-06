@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 )
 
@@ -26,6 +27,12 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 
 		// Validate citations reference lines present in the diff
 		for _, citation := range result.Citations {
+			// Activity citations reference the activity log, not the diff; they are validated
+			// separately by ValidateActivityCitations/ValidateActivityDigest and have no Path.
+			if citation.ActivityEntryID != "" {
+				continue
+			}
+
 			// If Line is omitted (0), validate that the file is in the diff
 			if citation.Line == 0 {
 				if !idx.ContainsFile(citation.Path) {
@@ -142,6 +149,52 @@ func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract
 		if !submittedIDs[id] {
 			errs = append(errs, fmt.Sprintf("criterion result: missing expected ID %q", id))
 		}
+	}
+
+	return errs
+}
+
+// hasActivityCitations reports whether any citation in the assessment references an activity
+// log entry (as opposed to a diff line).
+func hasActivityCitations(assessment *ConformanceAssessment) bool {
+	for _, result := range assessment.Results {
+		for _, citation := range result.Citations {
+			if citation.ActivityEntryID != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ValidateActivityDigest verifies that the activity log's current on-disk content matches the
+// digest recorded in the bundle's Activity section. This guards against a tampered or rotated
+// activity log being accepted at record time: the digest recorded during `arm review prepare`
+// must still match what is on disk when `arm review record` runs.
+//
+// If activity is nil, there is nothing to validate and no errors are returned. If the log file
+// is missing or unreadable, or its recomputed digest does not match activity.Digest, a
+// validation error is returned.
+func ValidateActivityDigest(activity *Activity) []string {
+	var errs []string
+
+	if activity == nil {
+		return errs
+	}
+
+	content, err := os.ReadFile(activity.LogPath)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf(
+			"activity log missing or unreadable at %q: %v (log must be present and unmodified since prepare)",
+			activity.LogPath, err))
+		return errs
+	}
+
+	actualDigest := FingerprintActivity(content)
+	if actualDigest != activity.Digest {
+		errs = append(errs, fmt.Sprintf(
+			"activity log digest mismatch: bundle recorded %s but log at %q now has digest %s (tampered with or rotated since prepare)",
+			activity.Digest, activity.LogPath, actualDigest))
 	}
 
 	return errs
