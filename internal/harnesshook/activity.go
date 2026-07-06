@@ -36,8 +36,12 @@ const (
 	// maxOutputChunkSize is the maximum number of bytes to include in head or tail
 	maxOutputChunkSize = 1024
 	// maxCommandSize caps the recorded command text so a single activity log
-	// line (and the O_APPEND write that produces it) stays small, keeping
-	// writes within typical kernel atomic-write guarantees (see AppendActivity).
+	// line (and the O_APPEND write that produces it) stays bounded. Note this
+	// does not guarantee atomic writes: a full line (command + head/tail output
+	// + JSON overhead) can still exceed PIPE_BUF-based atomic-write guarantees
+	// for regular files on POSIX systems. A malformed/interleaved line is
+	// simply skipped by parseActivityLogFile, so the blast radius is low, but
+	// this cap alone does not make concurrent appends safe.
 	maxCommandSize = 4096
 )
 

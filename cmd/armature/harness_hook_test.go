@@ -859,6 +859,66 @@ func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.
 	assert.Regexp(t, `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`, activityContent, "activity entry must contain RFC3339 timestamp")
 }
 
+// TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2 verifies that
+// PostToolUse events from platforms whose shell tool isn't literally named "Bash"
+// (Codex's "shell"/"local_shell", Devin's "exec") still get captured to the
+// activity log, using each platform's SupportedShellTools capability rather than
+// a hardcoded "Bash" tool-name check.
+func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testing.T) {
+	cases := []struct {
+		name     string
+		platform string
+		tool     string
+	}{
+		{name: "devin exec", platform: "devin", tool: "exec"},
+		{name: "codex shell", platform: "codex", tool: "shell"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := setupRepoWithTask(t)
+			_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
+			require.NoError(t, err)
+
+			worktreeDir := t.TempDir()
+			cmd := newRootCmd()
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+			err = cmd.Execute()
+			require.NoError(t, err)
+
+			gitFile := filepath.Join(worktreeDir, ".git")
+			gitFileContent, err := os.ReadFile(gitFile)
+			require.NoError(t, err)
+			actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+			if !filepath.IsAbs(actualGitDir) {
+				actualGitDir = filepath.Join(worktreeDir, actualGitDir)
+			}
+
+			t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+			t.Setenv("ARMATURE_HOOK_PLATFORM", tc.platform)
+
+			var out bytes.Buffer
+			hookCmd := newRootCmd()
+			payload := fmt.Sprintf(
+				`{"hook_event_name":"PostToolUse","tool_name":%q,"tool_input":{"command":"echo test","exit_code":0,"output":"test output\n"}}`,
+				tc.tool)
+			hookCmd.SetIn(strings.NewReader(payload))
+			hookCmd.SetOut(&out)
+			hookCmd.SetErr(new(bytes.Buffer))
+			hookCmd.SetArgs([]string{"harness-hook", "--repo", worktreeDir})
+
+			err = hookCmd.Execute()
+			require.NoError(t, err)
+
+			activityLogPath := filepath.Join(actualGitDir, "armature-activity.log")
+			activityData, err := os.ReadFile(activityLogPath) //nolint:gosec // G703: safe to read test worktree activity log
+			require.NoError(t, err, "activity log must be created for %s PostToolUse on platform %s", tc.tool, tc.platform)
+			assert.Contains(t, string(activityData), `"command"`, "activity entry must contain command")
+		})
+	}
+}
+
 // TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1 verifies that
 // activity log entries truncate large output to head+tail format with a marker and hash.
 func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) {

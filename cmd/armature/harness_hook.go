@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -333,8 +334,13 @@ func newHarnessHookCmd() *cobra.Command {
 				logGitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
 				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason)
 
-			// Capture execution evidence for Bash PostToolUse events (ADR-0008)
-			if event.Kind == harnesshook.EventPostToolUse && event.Tool == "Bash" && resolvedBinding.IssueID != "" {
+			// Capture execution evidence for shell PostToolUse events (ADR-0008).
+			// Each platform names its shell tool differently (Claude: "Bash", Codex:
+			// "shell"/"local_shell", Devin: "exec"), so match against the resolved
+			// adapter's capability matrix rather than hardcoding "Bash" (finding: P1,
+			// PR #71 review — this hardcoding silently discarded Codex/Devin evidence).
+			if event.Kind == harnesshook.EventPostToolUse && resolvedBinding.IssueID != "" &&
+				adapter.Capabilities().PostToolUse && slices.Contains(adapter.Capabilities().SupportedShellTools, event.Tool) {
 				_ = harnesshook.AppendActivity( //nolint:errcheck // activity logging failure is fail-open
 					logGitDir, event.Command, event.ExitCode, event.ExitCodeKnown, event.Output)
 			}

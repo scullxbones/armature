@@ -34,6 +34,7 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:         true,
 		Stop:               true,
+		PostToolUse:        true,
 		BlockingStop:       true,
 		ShellInterception:  "best-effort",
 		SupportedEditTools: []string{"apply_patch", "Edit", "Write"},
@@ -113,6 +114,11 @@ func (a *CodexAdapter) WriteConfig(workdir string) error {
 	content := `# armature:managed
 [[hooks.PreToolUse]]
 [[hooks.PreToolUse.hooks]]
+type = "command"
+command = "arm harness-hook"
+
+[[hooks.PostToolUse]]
+[[hooks.PostToolUse.hooks]]
 type = "command"
 command = "arm harness-hook"
 
