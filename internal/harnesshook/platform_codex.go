@@ -193,17 +193,14 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 
 	// PostToolUse execution evidence (ADR-0008) lives in tool_response for the
 	// harnesses that emit it (e.g. Claude Code's Bash tool_response carries
-	// stdout/stderr). Some callers (and tests) place exit_code/output directly
-	// on tool_input instead, so fall back to that when tool_response doesn't
-	// carry it. Both are no-ops (return zero value) for PreToolUse events.
+	// stdout/stderr). tool_input is model-authored (it's the arguments the model
+	// requested, not what the harness observed happening), so it must never be
+	// used as a source of exit_code/output: doing so would let a model fabricate
+	// its own "evidence" of a successful/failed execution, defeating the entire
+	// point of ADR-0008 (evidence must come from the harness). Both are no-ops
+	// (return zero value) for PreToolUse events, where tool_response doesn't exist yet.
 	exitCode, exitCodeKnown := ExtractExitCode(raw.ToolResponse)
-	if !exitCodeKnown {
-		exitCode, exitCodeKnown = ExtractExitCode(raw.ToolInput)
-	}
 	output := ExtractOutput(raw.ToolResponse)
-	if output == nil {
-		output = ExtractOutput(raw.ToolInput)
-	}
 
 	return Event{
 		Kind:          normalizeEvent(raw.HookEventName),

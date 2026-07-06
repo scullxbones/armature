@@ -836,7 +836,7 @@ func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
 	// PostToolUse event with Bash tool, exit code 0, and output
-	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test","exit_code":0,"output":"test output\n"}}`
+	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -901,7 +901,7 @@ func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testin
 			var out bytes.Buffer
 			hookCmd := newRootCmd()
 			payload := fmt.Sprintf(
-				`{"hook_event_name":"PostToolUse","tool_name":%q,"tool_input":{"command":"echo test","exit_code":0,"output":"test output\n"}}`,
+				`{"hook_event_name":"PostToolUse","tool_name":%q,"tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`,
 				tc.tool)
 			hookCmd.SetIn(strings.NewReader(payload))
 			hookCmd.SetOut(&out)
@@ -951,7 +951,9 @@ func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) 
 
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
-	payload := fmt.Sprintf(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test","exit_code":0,"output":%q}}`, largeOutput)
+	payload := fmt.Sprintf(
+		`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":%q}}`,
+		largeOutput)
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -1007,7 +1009,7 @@ func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T
 
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
-	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test","exit_code":0,"output":"test output\n"}}`
+	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -1064,7 +1066,7 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 	hookCmd := newRootCmd()
-	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test","exit_code":0,"output":"test output\n"}}`
+	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(&errOut)
@@ -1110,7 +1112,8 @@ func TestHarnessHookNoActivityForNonBashTools_REQ_EXECEV_T1(t *testing.T) {
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
 	// PostToolUse event with Edit tool (not Bash), should NOT log activity
-	payload := `{"hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"internal/harnesshook/hook.go","exit_code":0,"output":""}}`
+	payload := `{"hook_event_name":"PostToolUse","tool_name":"Edit",` +
+		`"tool_input":{"file_path":"internal/harnesshook/hook.go"},"tool_response":{"exit_code":0,"output":""}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
