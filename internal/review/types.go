@@ -138,13 +138,21 @@ func ParseRating(s string) (Rating, error) {
 }
 
 // Citation provides evidence for a criterion result by referencing a specific location in the delivery.
+// It can cite either a diff location (Path/Line/Column) or an activity log entry (ActivityEntryID).
+// These two forms are mutually exclusive.
 type Citation struct {
-	// Path is the file path within the delivery range.
-	Path string `json:"path"`
-	// Line is the line number (optional, for precision).
+	// Path is the file path within the delivery range (for diff citations).
+	Path string `json:"path,omitempty"`
+	// Line is the line number (optional, for precision, for diff citations).
 	Line int `json:"line,omitempty"`
-	// Column is the column number (optional, for precision).
+	// Column is the column number (optional, for precision, for diff citations).
 	Column int `json:"column,omitempty"`
+	// ActivityEntryID references a raw entry ID from the activity log (for activity citations).
+	// This is mutually exclusive with Path/Line/Column.
+	ActivityEntryID string `json:"activity_entry_id,omitempty"`
+	// ActivityEntryDetails contains pre-rendered activity entry information (entry ID, command, exit status).
+	// This is populated during record time for activity citations.
+	ActivityEntryDetails string `json:"activity_entry_details,omitempty"`
 }
 
 // CriterionResult records the reviewer's assessment for a single criterion.

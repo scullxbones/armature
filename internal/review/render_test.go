@@ -2,6 +2,8 @@ package review_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +11,60 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestRenderExcludesRawOutput_REQ_EXECEV_T3 exercises the full activity pipeline end to end:
+// a real activity log entry containing a distinctive raw-output sentinel is parsed via
+// LoadActivityEntries/FormatActivityEntryDetails (as record.go does), then rendered through
+// both RenderMarkdown and RenderHuman. The rendered reports must surface the entry ID, command
+// line, and exit status, but must never leak the raw command output.
+func TestRenderExcludesRawOutput_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+
+	const sentinel = "SENTINEL_RAW_BUILD_OUTPUT_DO_NOT_RENDER_9f3c2a"
+
+	logPath := filepath.Join(t.TempDir(), "armature-activity.log")
+	logLine := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123 output="` + sentinel + ` compiling... done"` + "\n"
+	require.NoError(t, os.WriteFile(logPath, []byte(logLine), 0o600))
+
+	entries := review.LoadActivityEntries(logPath)
+	require.Len(t, entries, 1)
+	details := entries[0]
+	require.Equal(t, "make build", details.Command)
+	require.Equal(t, 0, details.ExitCode)
+
+	formatted := review.FormatActivityEntryDetails(details)
+	require.NotContains(t, formatted, sentinel, "FormatActivityEntryDetails must not leak raw output")
+
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion:       1,
+		BundleID:            "bundle-raw-output",
+		ContractFingerprint: "contract-fp",
+		DeliveryFingerprint: "delivery-fp",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "Build succeeded",
+				Citations: []review.Citation{
+					{
+						ActivityEntryID:      "0",
+						ActivityEntryDetails: formatted,
+					},
+				},
+			},
+		},
+	}
+
+	markdown := review.RenderMarkdown(assessment)
+	human := review.RenderHuman(assessment)
+
+	for _, output := range []string{markdown, human} {
+		assert.Contains(t, output, "entry 0")
+		assert.Contains(t, output, "make build")
+		assert.Contains(t, output, "exit_code=0")
+		assert.NotContains(t, output, sentinel, "rendered report must not include raw activity log output")
+	}
+}
 
 func TestRenderMarkdown(t *testing.T) {
 	t.Parallel()
@@ -167,8 +223,7 @@ func TestRenderMarkdown(t *testing.T) {
 		output := review.RenderMarkdown(assessment)
 
 		// Newlines should be replaced with spaces in table cells
-		lines := strings.Split(output, "\n")
-		for _, line := range lines {
+		for line := range strings.SplitSeq(output, "\n") {
 			// Lines that are part of the table should not have embedded newlines
 			if strings.Contains(line, "Rationale") {
 				assert.NotContains(t, line, "\n")
@@ -261,6 +316,39 @@ func TestRenderMarkdown(t *testing.T) {
 		// Should have yellow rating when some partial but none not satisfied
 		assert.Contains(t, output, "yellow")
 	})
+
+	t.Run("activity entry citation rendered with details_REQ_EXECEV_T3", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-009",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "acceptance[0]",
+					Status:    review.Satisfied,
+					Rationale: "Test passed",
+					Citations: []review.Citation{
+						{
+							ActivityEntryID:      "0",
+							ActivityEntryDetails: `entry 0: command="make test" exit_code=0`,
+						},
+					},
+				},
+			},
+		}
+
+		output := review.RenderMarkdown(assessment)
+
+		// Should include activity entry details with entry ID, command, and exit status
+		assert.Contains(t, output, "Activity:")
+		assert.Contains(t, output, "entry 0")
+		assert.Contains(t, output, "make test")
+		assert.Contains(t, output, "exit_code=0")
+		// Should NOT include raw output
+		assert.NotContains(t, output, "... [output truncated")
+	})
 }
 
 func TestRenderHuman(t *testing.T) {
@@ -351,6 +439,37 @@ func TestRenderHuman(t *testing.T) {
 		// Citations should be readable
 		assert.Contains(t, output, "src/main.go")
 		assert.Contains(t, output, "10")
+	})
+
+	t.Run("activity entry citation in human output_REQ_EXECEV_T3", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       1,
+			BundleID:            "bundle-010",
+			ContractFingerprint: "contract-fp",
+			DeliveryFingerprint: "delivery-fp",
+			Results: []review.CriterionResult{
+				{
+					ID:        "acceptance[0]",
+					Status:    review.Satisfied,
+					Rationale: "Test executed",
+					Citations: []review.Citation{
+						{
+							ActivityEntryID:      "1",
+							ActivityEntryDetails: `entry 1: command="make lint" exit_code=0`,
+						},
+					},
+				},
+			},
+		}
+
+		output := review.RenderHuman(assessment)
+
+		// Activity entry details should be shown with entry ID, command, exit status
+		assert.Contains(t, output, "Activity:")
+		assert.Contains(t, output, "entry 1")
+		assert.Contains(t, output, "make lint")
+		assert.Contains(t, output, "exit_code=0")
 	})
 }
 

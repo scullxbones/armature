@@ -1,6 +1,8 @@
 package review_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -616,4 +618,473 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 	errs := review.ValidateResult(assessment, idx)
 	assert.True(t, len(errs) > 0, "Expected validation errors for path-only citation with file not in diff")
 	assert.True(t, containsError(errs, "nonexistent.go"), "Expected file reference in error message")
+}
+
+func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Valid activity citation by raw entry ID (numeric string)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+		Acceptance:       []string{"test passed"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Valid activity citation by entry ID should not produce errors")
+}
+
+func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Citation referencing an unknown entry ID (out of range)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "10"}, // Only 5 entries (0-4), so 10 is invalid
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.NotEmpty(t, errs, "Unknown entry ID should produce validation errors")
+	assert.True(t, containsError(errs, "unknown activity entry ID"), "Error should mention unknown entry ID")
+}
+
+func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Citation with non-numeric entry ID (malformed)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{ActivityEntryID: "not-a-number"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.NotEmpty(t, errs, "Non-numeric entry ID should produce validation errors")
+	assert.True(t, containsError(errs, "invalid activity entry ID"), "Error should mention invalid entry ID")
+}
+
+func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Activity-citations-only cannot support satisfied on implementation criterion (definition_of_done)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "implementation complete",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Activity-only citation
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.NotEmpty(t, errs, "Activity-only satisfied on implementation criterion should produce errors")
+	assert.True(t, containsError(errs, "upgrade-only rule"), "Error should mention upgrade-only rule")
+}
+
+func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Activity-citations-only can support partially_satisfied on implementation criterion
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.PartiallySatisfied,
+				Rationale: "partially implemented",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Activity-only citation
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Activity-only partially_satisfied on implementation criterion should be allowed")
+}
+
+func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Activity-citations-only can support satisfied on acceptance (behavioral) criterion
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test executed successfully",
+				Citations: []review.Citation{
+					{ActivityEntryID: "0"}, // Activity-only citation on acceptance criterion
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+		Acceptance:       []string{"test passed"},
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Activity-only satisfied on acceptance criterion should be allowed")
+}
+
+func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// Mixed activity and diff citations should not trigger upgrade-only rule
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "implementation complete",
+				Citations: []review.Citation{
+					{Path: "main.go", Line: 10},
+					{ActivityEntryID: "0"},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	activity := &review.Activity{
+		Digest:            "sha256:abc123",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           "armature-activity.log",
+	}
+
+	contract := review.Contract{
+		DefinitionOfDone: "Task complete",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, activity, contract)
+	assert.Empty(t, errs, "Mixed citations should not trigger upgrade-only rule")
+}
+
+func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+	// When activity is nil, validation should succeed (no activity to validate against)
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					{Path: "main.go", Line: 10},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	errs := review.ValidateActivityCitations(assessment, nil, review.Contract{})
+	assert.Empty(t, errs, "Validation against nil activity should succeed")
+}
+
+// TestActivityCitationValidation_REQ_EXECEV_T3 is the contract-named acceptance test for
+// EXECEV-T3's activity citation validation. It delegates to the equivalent focused tests above
+// for the raw-entry-ID-accepted, unknown-entry-ID-rejected, and upgrade-only cases, and adds a
+// dedicated assertion for rejecting citations that use "index" terminology instead of a raw
+// entry ID.
+func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid raw entry ID accepted", func(t *testing.T) { //nolint:paralleltest // delegated test below already calls t.Parallel()
+		TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t)
+	})
+
+	t.Run("index reference rejected", func(t *testing.T) {
+		t.Parallel()
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion: 1,
+			BundleID:      "sha256:test123",
+			Results: []review.CriterionResult{
+				{
+					ID:        "acceptance[0]",
+					Status:    review.Satisfied,
+					Rationale: "test passed",
+					Citations: []review.Citation{
+						{ActivityEntryID: "index:0"}, // "index" terminology, not a raw entry ID
+					},
+				},
+			},
+			ContractFingerprint: "sha256:contract123",
+			DeliveryFingerprint: "sha256:delivery123",
+		}
+
+		activity := &review.Activity{
+			Digest:     "sha256:abc123",
+			EntryCount: 5,
+			LogPath:    "armature-activity.log",
+		}
+
+		errs := review.ValidateActivityCitations(assessment, activity, review.Contract{})
+		assert.NotEmpty(t, errs, "index-terminology reference should be rejected")
+		assert.True(t, containsError(errs, "invalid activity entry ID"),
+			"error should reject the non-numeric index reference")
+	})
+
+	t.Run("unknown entry ID rejected", func(t *testing.T) { //nolint:paralleltest // delegated test below already calls t.Parallel()
+		TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t)
+	})
+
+	//nolint:paralleltest // delegated test below already calls t.Parallel()
+	t.Run("activity-only cannot satisfy implementation criteria (upgrade-only)", func(t *testing.T) {
+		TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECEV_T3(t)
+	})
+}
+
+// TestActivityDigestMismatchRejected_REQ_EXECEV_T3 verifies that when the on-disk activity log
+// no longer matches the digest recorded in the bundle (tampered with or rotated after prepare),
+// the mismatch is rejected at record time -- both via the standalone digest validator and
+// end-to-end through Record.
+func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
+	t.Parallel()
+
+	t.Run("digest still matches when log is unmodified", func(t *testing.T) {
+		t.Parallel()
+		logPath := filepath.Join(t.TempDir(), "armature-activity.log")
+		content := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123` + "\n")
+		require.NoError(t, os.WriteFile(logPath, content, 0o600))
+
+		activity := &review.Activity{
+			Digest:     review.FingerprintActivity(content),
+			EntryCount: 1,
+			LogPath:    logPath,
+		}
+
+		errs := review.ValidateActivityDigest(activity)
+		assert.Empty(t, errs, "unmodified log should match recorded digest")
+	})
+
+	t.Run("digest mismatch rejected when log content changes", func(t *testing.T) {
+		t.Parallel()
+		logPath := filepath.Join(t.TempDir(), "armature-activity.log")
+		originalContent := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123` + "\n")
+		require.NoError(t, os.WriteFile(logPath, originalContent, 0o600))
+		recordedDigest := review.FingerprintActivity(originalContent)
+
+		// Simulate tampering/rotation: overwrite the log with different content after prepare,
+		// while the bundle still records the digest of the original content.
+		require.NoError(t, os.WriteFile(logPath, []byte(`2026-01-15T10:30:45Z activity: command="rm -rf /" exit_code=0 head_sha=abc123`+"\n"), 0o600))
+
+		activity := &review.Activity{
+			Digest:     recordedDigest,
+			EntryCount: 1,
+			LogPath:    logPath,
+		}
+
+		errs := review.ValidateActivityDigest(activity)
+		assert.NotEmpty(t, errs, "tampered log content should be rejected")
+		assert.True(t, containsError(errs, "digest mismatch"), "error should mention digest mismatch")
+	})
+
+	t.Run("missing log rejected", func(t *testing.T) {
+		t.Parallel()
+		missingActivity := &review.Activity{
+			Digest:     "sha256:doesnotmatter",
+			EntryCount: 1,
+			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
+		}
+		errs := review.ValidateActivityDigest(missingActivity)
+		assert.NotEmpty(t, errs, "missing log should be rejected")
+		assert.True(t, containsError(errs, "missing or unreadable"), "error should mention the log is missing")
+	})
+
+	t.Run("citation rejected end-to-end at record time via Record", func(t *testing.T) {
+		t.Parallel()
+		e2eLogPath := filepath.Join(t.TempDir(), "armature-activity.log")
+		e2eContent := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123` + "\n")
+		require.NoError(t, os.WriteFile(e2eLogPath, e2eContent, 0o600))
+		e2eDigest := review.FingerprintActivity(e2eContent)
+
+		bundle := &review.ReviewBundle{
+			SchemaVersion: review.SchemaVersion,
+			BundleID:      "bundle-digest-e2e",
+			Issue: review.IssueInfo{
+				ID:    "task-01",
+				Type:  "task",
+				Title: "Test Task",
+			},
+			Contract: review.Contract{
+				DefinitionOfDone: "Implementation complete",
+				Acceptance:       []string{"Feature works correctly"},
+			},
+			Delivery: review.Delivery{
+				BaseSHA: "base123",
+				HeadSHA: "head456",
+				Diff:    "--- a/impl.go\n+++ b/impl.go\n@@ -1,0 +1,1 @@\n+package main",
+			},
+			Fingerprints: review.Fingerprints{
+				Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			},
+			Activity: &review.Activity{
+				Digest:     e2eDigest,
+				EntryCount: 1,
+				LogPath:    e2eLogPath,
+			},
+		}
+
+		assessment := &review.ConformanceAssessment{
+			SchemaVersion:       review.SchemaVersion,
+			BundleID:            "bundle-digest-e2e",
+			ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Results: []review.CriterionResult{
+				{
+					ID:        "definition_of_done",
+					Status:    review.PartiallySatisfied,
+					Rationale: "Some evidence of completion.",
+					Citations: []review.Citation{
+						{ActivityEntryID: "0"},
+					},
+				},
+				{
+					ID:        "acceptance[0]",
+					Status:    review.Satisfied,
+					Rationale: "Feature works as designed.",
+					Citations: []review.Citation{
+						{ActivityEntryID: "0"},
+					},
+				},
+			},
+		}
+
+		// Baseline: recording succeeds while the log matches the recorded digest.
+		_, err := review.Record(review.RecordInput{
+			Assessment: assessment,
+			Bundle:     bundle,
+			IssueID:    "task-01",
+		})
+		require.NoError(t, err, "record should succeed when the activity log matches the bundle digest")
+
+		// Tamper with the log after prepare: content changes but the bundle's recorded digest doesn't.
+		require.NoError(t, os.WriteFile(e2eLogPath, []byte(`2026-01-15T10:30:45Z activity: command="curl evil.example" exit_code=0 head_sha=abc123`+"\n"), 0o600))
+
+		_, err = review.Record(review.RecordInput{
+			Assessment: assessment,
+			Bundle:     bundle,
+			IssueID:    "task-01",
+		})
+		require.Error(t, err, "record should reject activity citations when the log digest no longer matches the bundle")
+		assert.Contains(t, err.Error(), "digest mismatch")
+	})
 }

@@ -228,3 +228,35 @@ func FingerprintActivity(logContent []byte) string {
 	hash := sha256.Sum256(logContent)
 	return hex.EncodeToString(hash[:])
 }
+
+// ActivityEntryDetails holds extracted details from an activity log entry for rendering.
+type ActivityEntryDetails struct {
+	EntryID  int    // The 0-based entry ID
+	Command  string // The command that was executed
+	ExitCode int    // The exit status
+}
+
+// LoadActivityEntries reads an activity log file and returns a map of entry ID to entry details.
+// Entry IDs are 0-based. If the file cannot be read or parsed, returns an empty map.
+func LoadActivityEntries(logPath string) map[int]ActivityEntryDetails {
+	entries, _, err := parseActivityLogFile(logPath)
+	if err != nil {
+		return make(map[int]ActivityEntryDetails)
+	}
+
+	result := make(map[int]ActivityEntryDetails)
+	for i, entry := range entries {
+		result[i] = ActivityEntryDetails{
+			EntryID:  i,
+			Command:  entry.Command,
+			ExitCode: entry.ExitCode,
+		}
+	}
+	return result
+}
+
+// FormatActivityEntryDetails formats activity entry details for rendering.
+// Returns a string like "entry 0: command="make build" exit_code=0"
+func FormatActivityEntryDetails(details ActivityEntryDetails) string {
+	return fmt.Sprintf("entry %d: command=%q exit_code=%d", details.EntryID, details.Command, details.ExitCode)
+}
