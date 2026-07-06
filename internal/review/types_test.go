@@ -399,3 +399,192 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 		})
 	}
 }
+
+func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	activity := review.Activity{
+		Digest:            "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+		EntryCount:        5,
+		DeliveryHeadCount: 3,
+		EarlierCount:      2,
+		LogPath:           ".git/armature-activity.log",
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(activity)
+	require.NoError(t, err)
+
+	// Unmarshal back
+	var decoded review.Activity
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	// Verify all fields are preserved
+	assert.Equal(t, activity.Digest, decoded.Digest)
+	assert.Equal(t, activity.EntryCount, decoded.EntryCount)
+	assert.Equal(t, activity.DeliveryHeadCount, decoded.DeliveryHeadCount)
+	assert.Equal(t, activity.EarlierCount, decoded.EarlierCount)
+	assert.Equal(t, activity.LogPath, decoded.LogPath)
+}
+
+func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	bundle := review.ReviewBundle{
+		SchemaVersion: review.SchemaVersion,
+		BundleID:      "sha256:bundle123",
+		Issue: review.IssueInfo{
+			ID:      "EXECEV-T2",
+			Type:    "task",
+			Title:   "Test task",
+			Outcome: "done",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "All tests pass",
+			Acceptance:       []string{"Feature works"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "abc123",
+			HeadSHA:      "def456",
+			ChangedFiles: []string{"file.go"},
+		},
+		Fingerprints: review.Fingerprints{
+			Contract: "fp_contract",
+			Delivery: "fp_delivery",
+		},
+		Activity: &review.Activity{
+			Digest:            "fp_activity",
+			EntryCount:        3,
+			DeliveryHeadCount: 2,
+			EarlierCount:      1,
+			LogPath:           ".git/armature-activity.log",
+		},
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(bundle)
+	require.NoError(t, err)
+
+	// Unmarshal back
+	var decoded review.ReviewBundle
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	// Verify bundle
+	assert.Equal(t, bundle.SchemaVersion, decoded.SchemaVersion)
+	assert.Equal(t, bundle.BundleID, decoded.BundleID)
+
+	// Verify Activity is preserved
+	require.NotNil(t, decoded.Activity)
+	assert.Equal(t, bundle.Activity.Digest, decoded.Activity.Digest)
+	assert.Equal(t, bundle.Activity.EntryCount, decoded.Activity.EntryCount)
+	assert.Equal(t, bundle.Activity.DeliveryHeadCount, decoded.Activity.DeliveryHeadCount)
+	assert.Equal(t, bundle.Activity.EarlierCount, decoded.Activity.EarlierCount)
+	assert.Equal(t, bundle.Activity.LogPath, decoded.Activity.LogPath)
+}
+
+func TestReviewBundle_WithoutActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	bundle := review.ReviewBundle{
+		SchemaVersion: review.SchemaVersion,
+		BundleID:      "sha256:bundle123",
+		Issue: review.IssueInfo{
+			ID:      "EXECEV-T2",
+			Type:    "task",
+			Title:   "Test task",
+			Outcome: "done",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "All tests pass",
+		},
+		Delivery: review.Delivery{
+			BaseSHA: "abc123",
+			HeadSHA: "def456",
+		},
+		Fingerprints: review.Fingerprints{
+			Contract: "fp_contract",
+			Delivery: "fp_delivery",
+		},
+		// Activity is nil
+		Activity: nil,
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(bundle)
+	require.NoError(t, err)
+
+	// Verify Activity field is omitted from JSON (due to omitempty)
+	assert.NotContains(t, string(data), "activity")
+
+	// Unmarshal back
+	var decoded review.ReviewBundle
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	// Verify Activity is still nil
+	assert.Nil(t, decoded.Activity)
+}
+
+func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	attestation := review.AssessmentAttestation{
+		SchemaVersion:           review.SchemaVersion,
+		BundleID:                "sha256:bundle123",
+		ContractFingerprint:     "fp_contract",
+		DeliveryFingerprint:     "fp_delivery",
+		ActivityDigest:          "fp_activity",
+		BaseSHA:                 "abc123",
+		HeadSHA:                 "def456",
+		Rating:                  review.Green,
+		ResultFingerprint:       "fp_result",
+		SatisfiedCount:          1,
+		PartiallySatisfiedCount: 0,
+		NotSatisfiedCount:       0,
+		IndeterminateCount:      0,
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(attestation)
+	require.NoError(t, err)
+
+	// Unmarshal back
+	var decoded review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	// Verify ActivityDigest is preserved
+	assert.Equal(t, attestation.ActivityDigest, decoded.ActivityDigest)
+}
+
+func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	attestation := review.AssessmentAttestation{
+		SchemaVersion:           review.SchemaVersion,
+		BundleID:                "sha256:bundle123",
+		ContractFingerprint:     "fp_contract",
+		DeliveryFingerprint:     "fp_delivery",
+		ActivityDigest:          "", // empty
+		BaseSHA:                 "abc123",
+		HeadSHA:                 "def456",
+		Rating:                  review.Green,
+		ResultFingerprint:       "fp_result",
+		SatisfiedCount:          1,
+		PartiallySatisfiedCount: 0,
+		NotSatisfiedCount:       0,
+		IndeterminateCount:      0,
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(attestation)
+	require.NoError(t, err)
+
+	// Verify ActivityDigest field is omitted from JSON (due to omitempty)
+	assert.NotContains(t, string(data), "activity_digest")
+
+	// Unmarshal back
+	var decoded review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	// Verify ActivityDigest is empty
+	assert.Empty(t, decoded.ActivityDigest)
+}

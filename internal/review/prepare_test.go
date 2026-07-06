@@ -1,6 +1,7 @@
 package review_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/review"
@@ -53,7 +54,7 @@ func TestPrepare_Success(t *testing.T) {
 
 	bundle, err := review.Prepare(
 		git, "SMTC-S1-T2", "Add git range helpers", "dod", "task", "outcome",
-		[]string{"file1", "file2"}, []string{"criteria1", "criteria2"}, "main", "HEAD",
+		[]string{"file1", "file2"}, []string{"criteria1", "criteria2"}, "main", "HEAD", "",
 	)
 
 	require.NoError(t, err)
@@ -81,7 +82,7 @@ func TestPrepare_ResolveRevisionError(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve")
@@ -99,7 +100,7 @@ func TestPrepare_DiffRangeError(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to compute diff")
@@ -120,7 +121,7 @@ func TestPrepare_DiffNameOnlyRangeError(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get changed files")
@@ -148,10 +149,10 @@ func TestPrepare_BundleIDDeterministic(t *testing.T) {
 	}
 
 	// Call prepare twice with the same inputs
-	bundle1, err1 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle1, err1 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 	require.NoError(t, err1)
 
-	bundle2, err2 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle2, err2 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 	require.NoError(t, err2)
 
 	// The bundle IDs should be identical
@@ -185,7 +186,7 @@ func TestPrepare_WithCriteria(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, criteria, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, criteria, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
@@ -215,7 +216,7 @@ func TestPrepare_EmptyChangedFiles(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.Error(t, err, "empty delivery should return an error")
 	assert.Contains(t, err.Error(), "no changed files")
@@ -244,7 +245,7 @@ func TestPrepare_IssueTitlePreserved(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", issueTitle, "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", issueTitle, "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, issueTitle, bundle.Issue.Title)
@@ -271,7 +272,7 @@ func TestPrepare_BundleValidation(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	// Verify the bundle is valid
@@ -303,7 +304,7 @@ func TestPrepare_ExcludesArmatureArtifacts(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
@@ -332,7 +333,7 @@ func TestPrepare_ExcludesArmDir(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
@@ -361,7 +362,7 @@ func TestPrepare_ErrorWhenDeliveryEmpty(t *testing.T) {
 		},
 	}
 
-	_, err := review.Prepare(git, "SMTC-S1-T2", "Task", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	_, err := review.Prepare(git, "SMTC-S1-T2", "Task", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no changed files")
@@ -462,7 +463,7 @@ func TestPrepare_DiffFiltersExcludedPaths(t *testing.T) {
 	}
 
 	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Add feature", "dod", "task", "done",
-		[]string{}, []string{}, "main", "HEAD")
+		[]string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, productDiff, bundle.Delivery.Diff,
@@ -498,9 +499,219 @@ func TestPrepare_MultipleArmaturePaths(t *testing.T) {
 		},
 	}
 
-	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Feature", "", "task", "", []string{}, []string{}, "main", "HEAD")
+	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Feature", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
 	assert.Equal(t, []string{"internal/service.go", "pkg/util.go"}, bundle.Delivery.ChangedFiles)
+}
+
+func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
+	headSHA := "def456def456def456def456def456def456def4"
+
+	// Create a temporary activity log file
+	tmpDir := t.TempDir()
+	logPath := tmpDir + "/armature-activity.log"
+
+	// Write a sample activity log with multiple entries
+	logContent := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 ` +
+		`head_sha=def456def456def456def456def456def456def4 output_hash=abc123 output="Build succeeded"
+` +
+		`2026-01-15T10:30:46Z activity: command="make test" exit_code=0 ` +
+		`head_sha=def456def456def456def456def456def456def4 output_hash=def789 output="Tests passed"
+` +
+		`2026-01-15T10:30:47Z activity: command="go lint" exit_code=0 ` +
+		`head_sha=abc123abc123abc123abc123abc123abc123abc1 output_hash=ghi012 output="Lint clean"`
+	err := os.WriteFile(logPath, []byte(logContent), 0o644)
+	require.NoError(t, err)
+
+	git := &mockGitAdapter{
+		resolveRevisionFn: func(rev string) (string, error) {
+			if rev == "main" {
+				return baseSHA, nil
+			}
+			return headSHA, nil
+		},
+		diffRangeFn: func(base, head string) (string, error) {
+			return "diff --git a/file.go b/file.go\n", nil
+		},
+		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
+			return []string{"file.go"}, nil
+		},
+	}
+
+	bundle, err := review.Prepare(git, "EXECEV-T2", "Add activity support", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", logPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+	require.NotNil(t, bundle.Activity, "Activity section should be present")
+
+	// Verify activity properties
+	assert.NotEmpty(t, bundle.Activity.Digest, "Activity digest should be set")
+	assert.Equal(t, 3, bundle.Activity.EntryCount, "Should have 3 activity entries")
+	assert.Equal(t, 2, bundle.Activity.DeliveryHeadCount, "Should have 2 entries at delivery HEAD")
+	assert.Equal(t, 1, bundle.Activity.EarlierCount, "Should have 1 entry at earlier commit")
+	assert.NotEmpty(t, bundle.Activity.LogPath, "LogPath should be set")
+}
+
+func TestPrepare_WithoutActivityLog_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
+	headSHA := "def456def456def456def456def456def456def4"
+
+	git := &mockGitAdapter{
+		resolveRevisionFn: func(rev string) (string, error) {
+			if rev == "main" {
+				return baseSHA, nil
+			}
+			return headSHA, nil
+		},
+		diffRangeFn: func(base, head string) (string, error) {
+			return "diff --git a/file.go b/file.go\n", nil
+		},
+		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
+			return []string{"file.go"}, nil
+		},
+	}
+
+	// Pass non-existent activity log path
+	bundle, err := review.Prepare(git, "EXECEV-T2", "No activity", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", "/nonexistent/path.log")
+
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+	// Activity section should be omitted when log doesn't exist
+	assert.Nil(t, bundle.Activity, "Activity section should be nil when log does not exist")
+}
+
+func TestPrepare_EmptyActivityLog_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
+	headSHA := "def456def456def456def456def456def456def4"
+
+	tmpDir := t.TempDir()
+	logPath := tmpDir + "/armature-activity.log"
+
+	// Create an empty activity log
+	err := os.WriteFile(logPath, []byte(""), 0o644)
+	require.NoError(t, err)
+
+	git := &mockGitAdapter{
+		resolveRevisionFn: func(rev string) (string, error) {
+			if rev == "main" {
+				return baseSHA, nil
+			}
+			return headSHA, nil
+		},
+		diffRangeFn: func(base, head string) (string, error) {
+			return "diff --git a/file.go b/file.go\n", nil
+		},
+		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
+			return []string{"file.go"}, nil
+		},
+	}
+
+	bundle, err := review.Prepare(git, "EXECEV-T2", "Empty activity", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", logPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+	require.NotNil(t, bundle.Activity, "Activity section should be present for empty log")
+	assert.Equal(t, 0, bundle.Activity.EntryCount, "Empty log should have zero entries")
+	assert.Equal(t, 0, bundle.Activity.DeliveryHeadCount, "No entries at delivery head")
+	assert.Equal(t, 0, bundle.Activity.EarlierCount, "No earlier entries")
+}
+
+func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
+	headSHA := "def456def456def456def456def456def456def4"
+
+	tmpDir := t.TempDir()
+	logPath := tmpDir + "/armature-activity.log"
+
+	// Write a malformed activity log (missing "activity:" marker on some lines)
+	logContent := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=def456def456def456def456def456def456def4 output_hash=abc123
+this is a completely malformed line
+2026-01-15T10:30:46Z activity: command="make test" exit_code=0 head_sha=def456def456def456def456def456def456def4 output_hash=def789`
+	err := os.WriteFile(logPath, []byte(logContent), 0o644)
+	require.NoError(t, err)
+
+	git := &mockGitAdapter{
+		resolveRevisionFn: func(rev string) (string, error) {
+			if rev == "main" {
+				return baseSHA, nil
+			}
+			return headSHA, nil
+		},
+		diffRangeFn: func(base, head string) (string, error) {
+			return "diff --git a/file.go b/file.go\n", nil
+		},
+		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
+			return []string{"file.go"}, nil
+		},
+	}
+
+	bundle, err := review.Prepare(git, "EXECEV-T2", "Malformed activity", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", logPath)
+
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+	require.NotNil(t, bundle.Activity, "Activity section should be present")
+	// Malformed lines are skipped, so we should have 2 valid entries
+	assert.Equal(t, 2, bundle.Activity.EntryCount, "Should skip malformed lines and parse valid ones")
+}
+
+func TestActivityDigestDeterministic_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
+	headSHA := "def456def456def456def456def456def456def4"
+
+	logContent := `2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=def456def456def456def456def456def456def4 output_hash=abc123`
+
+	// Create two identical activity logs and verify they produce the same digest
+	tmpDir := t.TempDir()
+	logPath1 := tmpDir + "/log1.log"
+	logPath2 := tmpDir + "/log2.log"
+
+	err := os.WriteFile(logPath1, []byte(logContent), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(logPath2, []byte(logContent), 0o644)
+	require.NoError(t, err)
+
+	git := &mockGitAdapter{
+		resolveRevisionFn: func(rev string) (string, error) {
+			if rev == "main" {
+				return baseSHA, nil
+			}
+			return headSHA, nil
+		},
+		diffRangeFn: func(base, head string) (string, error) {
+			return "diff --git a/file.go b/file.go\n", nil
+		},
+		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
+			return []string{"file.go"}, nil
+		},
+	}
+
+	bundle1, err1 := review.Prepare(git, "EXECEV-T2", "Test1", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", logPath1)
+	require.NoError(t, err1)
+
+	bundle2, err2 := review.Prepare(git, "EXECEV-T2", "Test2", "dod", "task", "done",
+		[]string{}, []string{}, "main", "HEAD", logPath2)
+	require.NoError(t, err2)
+
+	// Activity digests should be identical for identical log content
+	require.NotNil(t, bundle1.Activity)
+	require.NotNil(t, bundle2.Activity)
+	assert.Equal(t, bundle1.Activity.Digest, bundle2.Activity.Digest, "Activity digests should be deterministic")
 }

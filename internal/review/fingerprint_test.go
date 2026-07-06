@@ -293,3 +293,45 @@ func TestBundleIDFormat(t *testing.T) {
 	parts := len(bundleID) - len("sha256:")
 	assert.Equal(t, 64, parts, "BundleID should have sha256:<64-hex-chars> format")
 }
+
+func TestFingerprintActivity_Deterministic_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	logContent := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123 output_hash=def456
+2026-01-15T10:30:46Z activity: command="make test" exit_code=0 head_sha=abc123 output_hash=ghi789`)
+
+	fp1 := review.FingerprintActivity(logContent)
+	fp2 := review.FingerprintActivity(logContent)
+
+	// Same content produces same digest
+	assert.Equal(t, fp1, fp2)
+	// Digest is not empty
+	assert.NotEmpty(t, fp1)
+	// Should be 64 hex characters (SHA-256)
+	assert.Len(t, fp1, 64)
+}
+
+func TestFingerprintActivity_Different_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	logContent1 := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123 output_hash=def456`)
+	logContent2 := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=1 head_sha=abc123 output_hash=def456`)
+
+	fp1 := review.FingerprintActivity(logContent1)
+	fp2 := review.FingerprintActivity(logContent2)
+
+	// Different content produces different digests
+	assert.NotEqual(t, fp1, fp2)
+}
+
+func TestFingerprintActivity_Empty_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
+
+	logContent := []byte("")
+
+	fp := review.FingerprintActivity(logContent)
+
+	// Empty content still produces a valid hash
+	assert.NotEmpty(t, fp)
+	assert.Len(t, fp, 64)
+}

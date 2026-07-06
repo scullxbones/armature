@@ -2,6 +2,8 @@ package review
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -95,17 +97,71 @@ func filterExcludedPaths(files []string, excludePrefixes []string) []string {
 	return filtered
 }
 
+// attachActivitySection attempts to read the activity log and create an Activity section.
+// If the log does not exist or cannot be parsed, returns nil silently.
+// headSHA is the delivery commit SHA, used to count entries at delivery head vs earlier.
+func attachActivitySection(activityLogPath, headSHA string) *Activity {
+	// Check if the file exists
+	if _, err := os.Stat(activityLogPath); err != nil {
+		// File does not exist or is inaccessible — silently return nil
+		return nil
+	}
+
+	// Parse the activity log
+	entries, logContent, err := parseActivityLogFile(activityLogPath)
+	if err != nil {
+		// Parsing failed — silently return nil (activity is optional)
+		return nil
+	}
+
+	// Count entries at delivery head vs earlier
+	deliveryHeadCount := 0
+	earlierCount := 0
+	for _, entry := range entries {
+		if entry.HeadSHA == headSHA {
+			deliveryHeadCount++
+		} else {
+			earlierCount++
+		}
+	}
+
+	// Compute activity digest
+	digest := FingerprintActivity(logContent)
+
+	// Build relative path for the log (relative to worktree root)
+	logRelPath := activityLogPath
+	if !strings.HasPrefix(logRelPath, "/") {
+		// Make it relative if it's already not absolute
+		if cwd, err := os.Getwd(); err == nil {
+			if relPath, err := filepath.Rel(cwd, logRelPath); err == nil {
+				logRelPath = relPath
+			}
+		}
+	}
+
+	return &Activity{
+		Digest:            digest,
+		EntryCount:        len(entries),
+		DeliveryHeadCount: deliveryHeadCount,
+		EarlierCount:      earlierCount,
+		LogPath:           logRelPath,
+	}
+}
+
 // Prepare builds a ReviewBundle for an issue given its contract metadata and a git range.
 // It resolves the git revisions, computes the diff and changed files, and constructs
 // a complete ReviewBundle with fingerprints and bundle ID.
 //
 // issueType and issueOutcome are the issue's type (e.g. "task") and recorded outcome.
 // definitionOfDone is the primary contract criterion; scope is the file/area scope list.
+// activityLogPath is an optional path to the worktree's activity log file. If provided and
+// the file exists, an Activity section is attached to the bundle with digest, entry count,
+// and HEAD-anchored summary. If empty or the file does not exist, the Activity section is omitted.
 func Prepare(
 	git GitAdapter,
 	issueID, title, definitionOfDone, issueType, issueOutcome string,
 	scope []string, criteria []string,
-	base, head string,
+	base, head, activityLogPath string,
 ) (*ReviewBundle, error) {
 	// Resolve both revisions to full SHAs
 	baseSHA, err := git.ResolveRevision(base)
@@ -179,6 +235,16 @@ func Prepare(
 			Contract: contractFP,
 			Delivery: deliveryFP,
 		},
+	}
+
+	// Attempt to attach activity section if activity log path is provided
+	if activityLogPath != "" {
+		activity := attachActivitySection(activityLogPath, headSHA)
+		if activity != nil {
+			bundle.Activity = activity
+		}
+		// If activity log does not exist or cannot be parsed, silently continue
+		// (activity is optional per the spec)
 	}
 
 	// Compute and set the bundle ID
