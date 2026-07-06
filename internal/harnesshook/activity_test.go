@@ -2,9 +2,11 @@ package harnesshook
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,7 +50,7 @@ func TestActivityTruncateOutputLong_REQ_EXECEV_T1(t *testing.T) {
 	output := make([]byte, totalSize)
 
 	// Fill with different patterns to distinguish head and tail
-	for i := 0; i < maxOutputChunkSize; i++ {
+	for i := range maxOutputChunkSize {
 		output[i] = 'H' // HEAD
 	}
 	for i := maxOutputChunkSize; i < totalSize-maxOutputChunkSize; i++ {
@@ -153,7 +155,7 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
 	// Append multiple activities
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		command := fmt.Sprintf("command %d", i)
 		exitCode := i
 		output := []byte(fmt.Sprintf("output %d", i))
@@ -177,7 +179,7 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 	}
 
 	assert.Len(t, nonEmptyLines, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		assert.Contains(t, nonEmptyLines[i], fmt.Sprintf("command %d", i))
 		assert.Contains(t, nonEmptyLines[i], fmt.Sprintf("exit_code=%d", i))
 	}
@@ -237,8 +239,92 @@ func TestActivityKillSwitchDisabledByDefault_REQ_EXECEV_T1(t *testing.T) {
 	assert.NoError(t, err, "activity log should exist when not disabled")
 }
 
+// initTestGitRepo creates a real git repository at dir with one commit, so that
+// gitDir has both a resolvable HEAD (via getWorktreeHEAD) and a writable --local
+// git config store (via `git --git-dir=... config --local`). Returns the .git
+// directory path. Used to test the repo-level activity-logging kill-switch,
+// which is read via `git --git-dir=<gitDir> config`.
+func initTestGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		fullArgs := append([]string{"-C", dir, "-c", "commit.gpgsign=false"}, args...)
+		cmd := exec.CommandContext(context.Background(), "git", fullArgs...)
+		// Isolate from the developer's global/system git config (e.g. a global
+		// commit.gpgsign=true would hang the empty commit on a GPG pinentry).
+		cmd.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v failed: %s", args, out)
+	}
+	runGit("init", "-b", "main")
+	runGit("commit", "--allow-empty", "-m", "initial")
+	return filepath.Join(dir, ".git")
+}
+
+func TestActivityRepoConfigKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T) {
+	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
+	// another test can't race this test's default-on assertion.
+	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	gitDir := initTestGitRepo(t)
+
+	setGitConfigBool(t, gitDir, "true")
+
+	err := AppendActivity(gitDir, "echo hello", 0, []byte("hello\n"))
+	require.NoError(t, err)
+
+	logPath := filepath.Join(gitDir, "armature-activity.log")
+	_, err = os.ReadFile(logPath)
+	assert.True(t, os.IsNotExist(err), "activity log should not exist when repo-level kill-switch is set")
+}
+
+// setGitConfigBool sets the armature.disable-activity-logging local git config
+// key in the repo backed by gitDir.
+func setGitConfigBool(t *testing.T, gitDir, value string) {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir,
+		"config", "--local", "--bool", "armature.disable-activity-logging", value)
+	require.NoError(t, cmd.Run())
+}
+
+func TestActivityRepoConfigEnabledByDefault_REQ_EXECEV_T1(t *testing.T) {
+	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
+	// another test can't race this test's default-on assertion.
+	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	gitDir := initTestGitRepo(t)
+
+	err := AppendActivity(gitDir, "echo hello", 0, []byte("hello\n"))
+	require.NoError(t, err)
+
+	logPath := filepath.Join(gitDir, "armature-activity.log")
+	_, err = os.ReadFile(logPath)
+	assert.NoError(t, err, "activity log should exist when repo config kill-switch is unset")
+}
+
+func TestActivityRepoConfigKillSwitchFalseLeavesEnabled_REQ_EXECEV_T1(t *testing.T) {
+	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
+	// another test can't race this test's default-on assertion.
+	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	gitDir := initTestGitRepo(t)
+
+	setGitConfigBool(t, gitDir, "false")
+
+	err := AppendActivity(gitDir, "echo hello", 0, []byte("hello\n"))
+	require.NoError(t, err)
+
+	logPath := filepath.Join(gitDir, "armature-activity.log")
+	_, err = os.ReadFile(logPath)
+	assert.NoError(t, err, "activity log should exist when repo config kill-switch is explicitly false")
+}
+
 func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this test redirects the global os.Stderr and must not observe
+	// the kill-switch env var set by other tests, so pin it via t.Setenv (which
+	// also forces serial execution).
+	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
 	gitDir := t.TempDir()
 
 	// Don't create HEAD file, so getWorktreeHEAD fails
@@ -269,7 +355,9 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 }
 
 func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
-	t.Parallel()
+	// Not parallel: redirects global os.Stderr and depends on the kill-switch
+	// env var being unset; t.Setenv pins it and forces serial execution.
+	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
 	gitDir := t.TempDir()
 
 	// Create HEAD file
