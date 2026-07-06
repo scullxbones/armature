@@ -146,7 +146,8 @@ For each acceptance criterion in order:
   "status": "satisfied|partially_satisfied|not_satisfied|indeterminate",
   "rationale": "Explain the assessment",
   "citations": [
-    {"path": "...", "line": 123}
+    {"path": "...", "line": 123},
+    {"activity_entry_id": "042"}
   ],
   "missing_evidence": "Only if needed"
 }
@@ -154,10 +155,14 @@ For each acceptance criterion in order:
 
 Criteria are indexed starting at 0: `acceptance[0]`, `acceptance[1]`, etc.
 
-Citations recorded here are subject to the mandatory line-citation verification
-rule detailed in Step 5 / the Step 5a self-check — every `{"path", "line"}`
-pair must resolve against an actual diff hunk, so cite accurately now rather
-than fixing it up later.
+**Citation types:**
+- **Diff citations** (`path`, `line`, `column`) — evidence from the code diff
+- **Activity citations** (`activity_entry_id`) — evidence from the activity log (raw entry ID, never the index)
+
+Citations recorded here are subject to the mandatory verification rules:
+- Every diff citation (`{"path", "line"}`) must resolve against an actual diff hunk (Step 5a)
+- Every activity citation (`{"activity_entry_id"}`) must reference a valid entry ID from the activity log
+- Activity citations follow the upgrade-only rule (lift indeterminate verdicts on behavioral criteria only)
 
 ### 4. Assign Ratings
 
@@ -205,26 +210,34 @@ for a complete verbatim template.
 - **Every citation must correspond to a specific added/modified (`+`) line in a diff hunk** in the delivery.
   See `references/field-rules.md` for mandatory line-citation validation rules.
 
-### 5a. Self-Check: Validate Citations Against Diff Hunks (Mandatory)
+### 5a. Self-Check: Validate Citations Against Diff Hunks and Activity Log (Mandatory)
 
 Before returning the assessment, verify that every citation is valid:
 
-1. **For each citation in every result:**
+1. **For each diff citation in every result:**
    - Confirm the file path matches a file in `delivery.changed_files`
    - If a line number is specified, verify it is an added/modified (`+`) line in that file's diff hunk — unchanged context lines do not count
    - Path-level citations (line omitted or 0) are valid only if the file is in `changed_files`
 
-2. **For each result with non-satisfied status:**
+2. **For each activity citation in every result:**
+   - Confirm the `activity_entry_id` is a valid entry ID from the Activity Index (if provided)
+   - Confirm the citation follows the upgrade-only rule:
+     - Activity citations are valid only for behavioral criteria (e.g., "tests must pass", "must compile")
+     - Activity citations cannot replace diff citations on implementation criteria
+     - Activity citations cannot suppress a `not_satisfied` the diff supports
+   - Confirm the citation is via `activity_entry_id` field, NOT via a path or other form
+
+3. **For each result with non-satisfied status:**
    - Confirm `missing_evidence` is present and explains what evidence is absent
    - If citations exist, they must point to the evidence for *why* the criterion is not/partially satisfied
 
-3. **JSON schema validation:**
+4. **JSON schema validation:**
    - All required fields are present (`id`, `status`, `rationale`, and citations/missing_evidence as needed)
    - No typos in status values (must be `satisfied`, `partially_satisfied`, `not_satisfied`, or `indeterminate`)
    - `bundle_id`, `contract_fingerprint`, `delivery_fingerprint` match the input exactly
-   - Citations array is valid JSON with `path` and optional `line`/`column` fields
+   - Citations array is valid JSON with (`path` and optional `line`/`column`) OR `activity_entry_id` fields, but not the Activity Index
 
-4. **Idempotence check:**
+5. **Idempotence check:**
    - If you reviewed this bundle before, fingerprints will match previous results
    - Ensure the current assessment is identical to any prior assessment for the same bundle
 
@@ -241,6 +254,77 @@ fingerprint validation is bound to the exact bundle it dispatched.
 # Output the assessment JSON so the coordinator can capture it:
 cat assessment.json
 ```
+
+---
+
+## Activity Evidence and the Upgrade-Only Rule
+
+When the ReviewBundle includes an Activity Index (summary of execution evidence),
+it provides behavioral context for the delivery. The Activity Index itself is never
+citable — citations must reference **raw activity log entry IDs** only.
+
+### Upgrade-Only Rule
+
+Activity evidence can **lift** an indeterminate verdict on behavioral criteria only:
+- Indeterminate → Satisfied (if evidence supports the criterion)
+- Indeterminate → Partially Satisfied (if evidence partially supports the criterion)
+
+Activity evidence **cannot**:
+- Substitute for diff citations on implementation criteria (e.g., "code implements feature X")
+- Suppress a `not_satisfied` that the diff supports (e.g., if the diff deletes necessary code, activity evidence of successful prior tests does not override this)
+- Replace the requirement for concrete code evidence on contract implementation
+
+### When to Reference Activity Evidence
+
+**Valid uses (can cite raw entry IDs):**
+- Build/test command exit status as behavioral evidence ("test suite passed, exit code 0")
+- Build success for "must compile" criteria
+- Test success for "tests must pass" criteria
+- Lint pass for "must satisfy lint rules" criteria
+
+**Invalid uses (do NOT cite the index):**
+- Summarized counts or aggregate statistics from the Activity Index
+- "See entry X in the index" — cite the raw entry ID instead
+- Index as a substitute for diff review (diff review is always required)
+
+### Citation Format for Activity Evidence
+
+When citing activity evidence in a Citation object, use the `activity_entry_id` field:
+
+```json
+{
+  "id": "acceptance[2]",
+  "status": "satisfied",
+  "rationale": "Test suite passed with exit code 0",
+  "citations": [
+    {
+      "activity_entry_id": "042"
+    }
+  ]
+}
+```
+
+**DO NOT cite the Activity Index itself:**
+```json
+// WRONG: Do not cite the index
+{
+  "path": "activity-index.json",
+  "line": 15
+}
+```
+
+### Why the Index is Never Citable
+
+The Activity Index is a summary of the raw activity log. A reviewer who reads only
+the index cannot verify:
+- The full command line and exact options
+- The complete output (which may be truncated in the index)
+- The output hash (needed to verify integrity against later replay)
+
+Citations must be verifiable against durable, complete evidence. Raw log entry IDs
+are durable — the harness can look them up by ID and verify the entry's hash and
+timestamp. The index is a **finding aid** — it helps reviewers navigate the log —
+but it is not itself evidence.
 
 ---
 
