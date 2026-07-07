@@ -13,9 +13,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// loadActivityEntries reads the activity log at logPath, computes its digest, and
+// calls ValidateActivityDigestAndLoadEntries with a matching Activity so tests can
+// exercise the parser without duplicating digest bookkeeping. Fails the test if
+// validation reports any error (it must not, since the digest is self-computed).
+func loadActivityEntries(t *testing.T, logPath string) map[int]review.ActivityEntryDetails {
+	t.Helper()
+	content, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	activity := &review.Activity{
+		Digest:     review.FingerprintActivity(content),
+		EntryCount: strings.Count(string(content), "\n"),
+		LogPath:    logPath,
+	}
+	entries, errs := review.ValidateActivityDigestAndLoadEntries(activity)
+	require.Empty(t, errs)
+	return entries
+}
+
 // TestActivityWriterParserRoundTrip_REQ_EXECEV verifies the full write→read pipeline
 // between internal/harnesshook.AppendActivity (the writer) and
-// internal/review.LoadActivityEntries (the parser). C2/C3/M1 stemmed from these two
+// internal/review.ValidateActivityDigestAndLoadEntries (the parser). C2/C3/M1 stemmed from these two
 // components (plus the skill docs) being authored against different imagined log
 // formats with no cross-component test catching the mismatch; this test is that
 // missing guardrail. It exercises: quoted content, embedded newlines, unicode,
@@ -40,7 +58,7 @@ func TestActivityWriterParserRoundTrip_REQ_EXECEV(t *testing.T) {
 	require.NoError(t, harnesshook.AppendActivity(gitDir, command, 7, true, output))
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
-	entries := review.LoadActivityEntries(logPath)
+	entries := loadActivityEntries(t, logPath)
 	require.Len(t, entries, 1)
 
 	details, ok := entries[0]
@@ -70,7 +88,7 @@ func TestActivityWriterParserRoundTrip_UnknownExitCode_REQ_EXECEV(t *testing.T) 
 	require.NoError(t, harnesshook.AppendActivity(gitDir, "go test ./...", 0, false, []byte("FAIL")))
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
-	entries := review.LoadActivityEntries(logPath)
+	entries := loadActivityEntries(t, logPath)
 	require.Len(t, entries, 1)
 
 	details := entries[0]
@@ -93,7 +111,7 @@ func TestActivityWriterParserRoundTrip_MultipleEntriesHeadSHA_REQ_EXECEV(t *test
 	}
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
-	entries := review.LoadActivityEntries(logPath)
+	entries := loadActivityEntries(t, logPath)
 	require.Len(t, entries, 3)
 
 	for i := 0; i < 3; i++ {

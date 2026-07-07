@@ -2,7 +2,6 @@ package review
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 )
 
@@ -28,7 +27,7 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 		// Validate citations reference lines present in the diff
 		for _, citation := range result.Citations {
 			// Activity citations reference the activity log, not the diff; they are validated
-			// separately by ValidateActivityCitations/ValidateActivityDigest and have no Path.
+			// separately by ValidateActivityCitations/ValidateActivityDigestAndLoadEntries and have no Path.
 			if citation.ActivityEntryID != "" {
 				continue
 			}
@@ -171,42 +170,6 @@ func hasActivityCitations(assessment *ConformanceAssessment) bool {
 		}
 	}
 	return false
-}
-
-// ValidateActivityDigest verifies that the activity log's current on-disk content matches the
-// digest recorded in the bundle's Activity section. This guards against a tampered or rotated
-// activity log being accepted at record time: the digest recorded during `arm review prepare`
-// must still match what is on disk when `arm review record` runs.
-//
-// If activity is nil, there is nothing to validate and no errors are returned. If the log file
-// is missing or unreadable, or its recomputed digest does not match activity.Digest, a
-// validation error is returned.
-func ValidateActivityDigest(activity *Activity) []string {
-	var errs []string
-
-	if activity == nil {
-		return errs
-	}
-
-	content, err := os.ReadFile(activity.LogPath)
-	if err != nil {
-		errs = append(errs, fmt.Sprintf(
-			"activity log missing or unreadable at %q: %v (log must be present and unmodified since prepare)",
-			activity.LogPath, err))
-		return errs
-	}
-
-	actualDigest := FingerprintActivity(content)
-	if actualDigest != activity.Digest {
-		errs = append(errs, fmt.Sprintf(
-			"activity log digest mismatch: bundle recorded %s but log at %q now has digest %s "+
-				"(the log changed since `arm review prepare` ran — this may be a new entry appended by "+
-				"further worktree activity, a stale/rotated log, or a tampered file; re-run prepare "+
-				"against the current log before recording)",
-			activity.Digest, activity.LogPath, actualDigest))
-	}
-
-	return errs
 }
 
 // ValidateActivityCitations validates activity citations in a ConformanceAssessment against

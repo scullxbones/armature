@@ -167,6 +167,24 @@ func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, err
 		return nil, nil, fmt.Errorf("read activity log: %w", err)
 	}
 
+	entries, err := parseActivityLogBytes(content)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return entries, content, nil
+}
+
+// parseActivityLogBytes parses already-read activity log content (JSONL: one JSON
+// object per line) into entries keyed by physical line number (0-based). Both
+// parseActivityLogFile (which reads the path itself) and
+// ValidateActivityDigestAndLoadEntries (which already has the bytes on hand, to
+// avoid a second read and the TOCTOU window that reintroduces) call this shared
+// scan logic so they cannot drift.
+//
+// See parseActivityLogFile's doc comment for the entry-ID and malformed-line
+// semantics, which apply identically here.
+func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 	entries := make(map[int]ActivityLogEntry)
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	scanner.Buffer(make([]byte, 0, activityScannerBufferSize), activityScannerMaxTokenSize)
@@ -191,10 +209,30 @@ func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, err
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("scan activity log: %w", err)
+		return nil, fmt.Errorf("scan activity log: %w", err)
 	}
 
-	return entries, content, nil
+	return entries, nil
+}
+
+// formatActivityDigestMismatch renders the digest-mismatch error message shared
+// between record time and prepare-adjacent validation, so the wording can't drift
+// between the two call sites.
+func formatActivityDigestMismatch(logPath, recordedDigest, actualDigest string) string {
+	return fmt.Sprintf(
+		"activity log digest mismatch: bundle recorded %s but log at %q now has digest %s "+
+			"(the log changed since `arm review prepare` ran — this may be a new entry appended by "+
+			"further worktree activity, a stale/rotated log, or a tampered file; re-run prepare "+
+			"against the current log before recording)",
+		recordedDigest, logPath, actualDigest)
+}
+
+// formatActivityLogUnreadable renders the missing/unreadable activity log error
+// message shared between record time and prepare-adjacent validation.
+func formatActivityLogUnreadable(logPath string, err error) string {
+	return fmt.Sprintf(
+		"activity log missing or unreadable at %q: %v (log must be present and unmodified since prepare)",
+		logPath, err)
 }
 
 // FingerprintActivity computes a SHA-256 digest of the activity log file content.
@@ -212,15 +250,41 @@ type ActivityEntryDetails struct {
 	HeadSHA       string // The commit SHA at which this entry's command was executed
 }
 
-// LoadActivityEntries reads an activity log file and returns a map of entry ID to entry details.
-// Entry IDs are the 0-based physical line number in the log file (see parseActivityLogFile).
-// If the file cannot be read, returns an empty map.
-func LoadActivityEntries(logPath string) map[int]ActivityEntryDetails {
-	entries, _, err := parseActivityLogFile(logPath)
-	if err != nil {
-		return make(map[int]ActivityEntryDetails)
+// ValidateActivityDigestAndLoadEntries reads the activity log file exactly once,
+// validates its digest against the recorded digest, and returns parsed entries.
+// This avoids the TOCTOU race where ValidateActivityDigest and LoadActivityEntries
+// each did independent reads, allowing the file to change between them (PR #71 fix).
+//
+// Returns a map of entry details (entry ID to ActivityEntryDetails) and any validation
+// errors. Validation errors include file-read failures and digest mismatches.
+// Parse errors on individual lines are skipped (logged nowhere, as per parseActivityLogFile semantics).
+func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityEntryDetails, []string) {
+	var errs []string
+
+	if activity == nil {
+		return make(map[int]ActivityEntryDetails), errs
 	}
 
+	// Read the file exactly once
+	content, err := os.ReadFile(activity.LogPath)
+	if err != nil {
+		errs = append(errs, formatActivityLogUnreadable(activity.LogPath, err))
+		return make(map[int]ActivityEntryDetails), errs
+	}
+
+	// Validate the digest against the recorded digest
+	actualDigest := FingerprintActivity(content)
+	if actualDigest != activity.Digest {
+		errs = append(errs, formatActivityDigestMismatch(activity.LogPath, activity.Digest, actualDigest))
+	}
+
+	// Parse entries from the same bytes
+	entries, err := parseActivityLogBytes(content)
+	if err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	// Convert ActivityLogEntry to ActivityEntryDetails
 	result := make(map[int]ActivityEntryDetails)
 	for id, entry := range entries {
 		result[id] = ActivityEntryDetails{
@@ -231,7 +295,8 @@ func LoadActivityEntries(logPath string) map[int]ActivityEntryDetails {
 			HeadSHA:       entry.HeadSHA,
 		}
 	}
-	return result
+
+	return result, errs
 }
 
 // FormatActivityEntryDetails formats activity entry details for rendering.

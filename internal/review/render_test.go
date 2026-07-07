@@ -14,7 +14,7 @@ import (
 
 // TestRenderExcludesRawOutput_REQ_EXECEV_T3 exercises the full activity pipeline end to end:
 // a real activity log entry containing a distinctive raw-output sentinel is parsed via
-// LoadActivityEntries/FormatActivityEntryDetails (as record.go does), then rendered through
+// ValidateActivityDigestAndLoadEntries/FormatActivityEntryDetails (as record.go does), then rendered through
 // both RenderMarkdown and RenderHuman. The rendered reports must surface the entry ID, command
 // line, and exit status, but must never leak the raw command output.
 func TestRenderExcludesRawOutput_REQ_EXECEV_T3(t *testing.T) {
@@ -33,9 +33,14 @@ func TestRenderExcludesRawOutput_REQ_EXECEV_T3(t *testing.T) {
 		"output_head":     sentinel + " compiling... done",
 	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(logPath, append(logLineData, '\n'), 0o600))
+	logContent := make([]byte, 0, len(logLineData)+1)
+	logContent = append(logContent, logLineData...)
+	logContent = append(logContent, '\n')
+	require.NoError(t, os.WriteFile(logPath, logContent, 0o600))
 
-	entries := review.LoadActivityEntries(logPath)
+	activity := &review.Activity{Digest: review.FingerprintActivity(logContent), EntryCount: 1, LogPath: logPath}
+	entries, errs := review.ValidateActivityDigestAndLoadEntries(activity)
+	require.Empty(t, errs)
 	require.Len(t, entries, 1)
 	details := entries[0]
 	require.Equal(t, "make build", details.Command)
