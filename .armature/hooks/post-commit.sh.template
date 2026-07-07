@@ -1,6 +1,6 @@
 #!/bin/sh
 # armature:managed
-# Armature post-commit hook: emit heartbeat and push ops in dual-branch mode.
+# Armature post-commit hook: emit heartbeat and push ops.
 # Branch-aware: skips on _armature since ops are committed directly there.
 # To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
 
@@ -13,7 +13,7 @@ fi
 # Send heartbeat for active claim (if any)
 arm heartbeat 2>/dev/null
 
-# In dual-branch mode, push ops logs after each commit
-if grep -q '"mode".*"dual-branch"' .armature/config.json 2>/dev/null; then
-  arm push-ops 2>/dev/null
-fi
+# Push ops logs after each commit. A failed push (no network, no remote,
+# permission denied) must never block or break the commit that already
+# happened, so its exit status is explicitly ignored here.
+arm push-ops 2>/dev/null || true

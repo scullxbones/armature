@@ -10,7 +10,7 @@ Resolves the 5 gaps identified during TOC development. These decisions feed into
 
 The concept of "pull before operating" is scattered across four documents with inconsistent descriptions:
 
-**DESIGN.md (line 68):** Step 1 of the process flow is `git pull`. Assumes single branch, one worktree.
+**DESIGN.md (line 68):** Step 1 of the process flow is `git pull`. (Old design assumed simplified topology.)
 
 **DESIGN-BRANCHING.md (line 47):** Revised process flow step 1 is `cd ops-worktree && git pull`. Now targets the ops worktree specifically, but this is described as an internal implementation detail of the CLI, not a user-facing command.
 
@@ -152,8 +152,6 @@ The developer confirms or overrides. If nothing is detected, the CLI prompts for
 
 **Code worktree path:** The CLI does not need explicit configuration for the code worktree path. It discovers it by walking up from `cwd` to find the `.git` directory, which is the standard git behavior. The developer runs `arm transition` from within their code worktree (where they have been working). The CLI runs hooks in `cwd`, then switches to the ops worktree internally to record the transition. This matches the verify-then-record phase separation from the adversarial review.
 
-**Single-branch mode:** In single-branch mode, there is no worktree distinction — hooks run in the same directory as ops. The config format is identical.
-
 **Init flow:**
 
 ```
@@ -197,9 +195,9 @@ Offline mode requires no special handling. The existing timestamp-based conflict
 
 ### Personas and Their Repository Topology
 
-**Persona 1 — Freelance solo developer.** Single repo, no branch protection, likely no team. Uses single-branch mode. Multi-repo is irrelevant — if they have multiple repos, they run separate armature instances per repo. No coordination needed across repos because there is only one worker.
+**Persona 1 — Freelance solo developer.** Single repo, single worker. Multi-repo is irrelevant — if they have multiple repos, they run separate armature instances per repo. No coordination needed across repos because there is only one worker.
 
-**Persona 2 — Enterprise solo developer.** Single repo, protected main branch, uses dual-branch mode. Same as persona 1 for multi-repo: separate armature instances per repo. Branch protection drives the dual-branch model, but multi-repo coordination is not a concern because one developer does not face claim races with themselves.
+**Persona 2 — Enterprise solo developer.** Single repo, single worker with protected main branch. Same as persona 1 for multi-repo: separate armature instances per repo. Multi-repo coordination is not a concern because one developer does not face claim races with themselves.
 
 **Persona 3 — Enterprise/freelance developer team.** This is the persona where multi-repo becomes a real question. Multiple workers (human and AI) collaborate on a project. If the project spans multiple repositories, work items in one repo may depend on work items in another.
 
@@ -259,13 +257,14 @@ Best for: Loosely coupled teams that want optional cross-repo visibility without
 
 ### Persona-Driven Feature Matrix
 
+All deployments use the ops-branch architecture (`_armature` orphan branch + `.arm/` worktree). Feature variations reflect team size and coordination needs.
+
 | Feature | Solo Freelance | Solo Enterprise | Team (Monorepo) | Team (Multi-Repo) |
 |---|---|---|---|---|
-| Branch mode | Single-branch | Dual-branch | Dual-branch | Dual-branch |
-| Ops location | .armature/ on main | _armature branch | _armature branch | Hub repo (future) |
+| Ops location | _armature branch | _armature branch | _armature branch | Hub repo (future) |
 | Claim races | N/A (one worker) | N/A (one worker) | Full MRDT | Full MRDT |
-| Two-phase completion | Optional (no PR gate) | Yes | Yes | Yes |
-| Merge detection | Immediate (direct push) | Commit-message scan | Commit-message scan | Cross-repo scan (future) |
+| Two-phase completion | N/A | Yes | Yes | Yes |
+| Merge detection | N/A | Commit-message scan | Commit-message scan | Cross-repo scan (future) |
 | Cross-repo deps | N/A | N/A | N/A (monorepo) | Manual (v1), Hub (future) |
 | Hooks | Optional | Recommended | Recommended | Required (hub config) |
 | Workers per repo | 1 | 1 | Many | Many across repos |
@@ -276,6 +275,6 @@ Best for: Loosely coupled teams that want optional cross-repo visibility without
 
 **Mitigation:** Migration path from single-repo to hub-repo is straightforward: create the hub, copy the ops branch from the original repo, update worker configs. The data model does not change. Document this migration path even before implementing Option B.
 
-**Risk:** Solo enterprise developers find the dual-branch model unnecessarily complex for their use case (one worker, no claim races to resolve).
+**Risk:** Solo developers with simple workflows may find the ops-branch model adds unnecessary complexity.
 
-**Mitigation:** The single-branch fallback already handles this if they do not have branch protection. If they do have branch protection, dual-branch is genuinely necessary even for solo developers — they cannot push ops to protected main. The complexity is inherent to the constraint, not the tool.
+**Mitigation:** Even for solo developers, the ops-branch model provides clear separation of concerns and enables reliable gitops-based workflows. The `.arm/` worktree is fully automated by `arm bootstrap` — developers interact with it only implicitly through normal `arm` commands. The complexity is hidden from users.

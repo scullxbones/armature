@@ -43,16 +43,16 @@ Platform matrix: linux/macOS/Windows × amd64/arm64. Compatible with Claude Code
 
 Four deployment personas drive feature scope. See section 21 for the full persona-driven feature matrix.
 
-- **Solo freelance:** Single-branch mode, no claim races, hooks optional.
-- **Solo enterprise:** Dual-branch mode, no claim races, hooks recommended.
-- **Team monorepo:** Dual-branch mode, full MRDT coordination, hooks recommended.
+- **Solo freelance:** Single developer, no claim races, hooks optional.
+- **Solo enterprise:** Single developer with protected main, no claim races, hooks recommended.
+- **Team monorepo:** Multiple workers, full MRDT coordination, hooks recommended.
 - **Team multi-repo:** Separate armature instances per repo (v1), manual cross-repo deps.
 
 ---
 
 ## 2. Branching Model
 
-### Dual-Branch Architecture
+### Ops-Branch Architecture
 
 ```
 main (protected)        — code, PRs, reviewed merges
@@ -77,18 +77,14 @@ The worktree directory is `.arm/` in the repository root. This is the default lo
 
 Sparse checkout limits the ops worktree to essential directories (`ops/` and `state/`). `sources/cache/` remains on the ops branch but is excluded from the default sparse checkout to minimize disk usage. Workers needing source content (e.g., `arm sources sync`, `arm decompose-context`) expand the sparse checkout on demand.
 
-### Single-Branch Fallback
-
-If `_armature` does not exist and `main` is directly pushable (no branch protection), the CLI uses single-branch mode. All `.armature/` content lives on `main` alongside code. Single-branch mode is the default when `--dual-branch` is not passed. This preserves viability for solo developers and non-enterprise setups.
-
 ### Worktree Lifecycle
 
 | Event | Action |
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .arm --force`, then re-run `arm bootstrap --dual-branch` |
+| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .arm --force`, then re-run `arm bootstrap` |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
-| Worktree corruption | Manually remove the stale worktree (`git worktree remove .arm --force`), then re-run `arm bootstrap --dual-branch` to recreate it from remote |
+| Worktree corruption | Manually remove the stale worktree (`git worktree remove .arm --force`), then re-run `arm bootstrap` to recreate it from remote |
 
 ### Directory Structure (within `.arm/` worktree)
 
@@ -1272,10 +1268,6 @@ Verification is strictly two-phase: verify in code worktree, then record in ops 
 
 No cross-worktree operations occur within a single phase.
 
-### Single-Branch Mode
-
-In single-branch mode, there is no worktree distinction — hooks run in the same directory as ops. The config format is identical.
-
 ---
 
 ## 13. CLI Command Reference
@@ -1338,24 +1330,22 @@ Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting,
 arm bootstrap [flags]
 
 Behavior:
-  1. Detect branch protection (can push to main directly?)
-  2. If protected: create _armature orphan branch (if needed), set up ops worktree
-  3. If not protected: use single-branch mode
-  4. Auto-detect project type
-  5. Write .armature/config.json
-  6. Install git hooks from templates
-  7. Deploy bundled skills to .claude/skills/ (or ~/.claude/skills/ with --global)
-  8. Optionally deploy harness hook config (with --with-hooks)
+  1. Create _armature orphan branch (if needed)
+  2. Set up ops worktree at .arm/
+  3. Auto-detect project type
+  4. Write .armature/config.json
+  5. Install git hooks from templates
+  6. Deploy bundled skills to .claude/skills/ (or ~/.claude/skills/ with --global)
+  7. Optionally deploy harness hook config (with --with-hooks)
 
 Flags:
-  --dual-branch    Force dual-branch mode (create _armature branch)
   --global         Deploy skills to ~/.claude/skills/ instead of .claude/
   --platform       Restrict to specific platform(s) (repeatable)
   --repo           Repository path (default: current directory)
   --with-hooks     Write harness hook configuration
 
 Output:
-  Initialized Armature in dual-branch mode at .armature
+  Initialized Armature at .armature
   Deployed skills to ./.claude/skills/ for claude
   Deployed harness hook config for claude
   Bootstrap complete.
@@ -1486,7 +1476,7 @@ In human-interactive mode, displays the ready task queue with priority sort, est
 
 ## 16. SKILL.md Contract (AI Worker Interface)
 
-The SKILL.md is the machine-readable interface for AI workers. The CLI abstracts all worktree management — the agent never knows about dual branches, ops worktrees, or materialization.
+The SKILL.md is the machine-readable interface for AI workers. The CLI abstracts all worktree management — the agent never knows about the ops branch, ops worktree, or materialization details.
 
 ### Setup (Once Per Session)
 
@@ -1624,7 +1614,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Transition-code desync (done before code reviewed) | Downstream premature start | Two-phase done/merged model; downstream requires `merged` |
 | Ops branch force-push or deletion | Loss of coordination state | Configure force-push protection separately from PR requirements; local worktrees retain full history for recovery |
 | Squash-merge breaks commit ancestry checks | Merge detection miss | Commit-message scan (not ancestry) as primary detection; branch-name and explicit fallbacks |
-| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .arm --force` then re-run `arm bootstrap --dual-branch` |
+| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .arm --force` then re-run `arm bootstrap` |
 | Verify phase reads code worktree, record phase writes ops worktree | Cross-worktree corruption | Strict phase separation: verify(code) then record(ops); no cross-worktree operations within a phase |
 | Task stuck at done if PR abandoned | Downstream permanently blocked | Staleness check (no merge within N days of done); surfaced via `arm status` |
 | Manual commits to ops branch | Unexpected state | CLI ignores non-.armature/ files; contributing guide documents convention |
@@ -1759,13 +1749,14 @@ auth_method = "device_flow"
 
 ### Persona-Driven Feature Matrix
 
+All deployments use the ops-branch architecture (`_armature` orphan branch + `.arm/` worktree). Feature variations reflect team size and coordination needs, not branching strategy.
+
 | Feature | Solo Freelance | Solo Enterprise | Team (Monorepo) | Team (Multi-Repo) |
 |---|---|---|---|---|
-| Branch mode | Single-branch | Dual-branch | Dual-branch | Dual-branch |
-| Ops location | `.armature/` on main | `_armature` branch | `_armature` branch | Hub repo (future) |
+| Ops location | `_armature` branch | `_armature` branch | `_armature` branch | Hub repo (future) |
 | Claim races | N/A (one worker) | N/A (one worker) | Full MRDT | Full MRDT |
-| Two-phase completion | Optional (no PR gate) | Yes | Yes | Yes |
-| Merge detection | Immediate (direct push) | Commit-message scan | Commit-message scan | Cross-repo scan (future) |
+| Two-phase completion | N/A (direct push on code branch) | Yes (PR workflow) | Yes | Yes |
+| Merge detection | N/A | Commit-message scan | Commit-message scan | Cross-repo scan (future) |
 | Cross-repo deps | N/A | N/A | N/A (monorepo) | Manual (v1), Hub (future) |
 | Hooks | Optional | Recommended | Recommended | Required (hub config) |
 | Workers per repo | 1 | 1 | Many | Many across repos |
@@ -1825,8 +1816,7 @@ The skill interface is defined by the CLI contract (commands, arguments, JSON ou
 
 These decisions are locked and should not be revisited without significant new evidence.
 
-- Dual-branch architecture: `_armature` (unprotected, orphan) + `main` (protected, code)
-- Single-branch fallback when main is not protected
+- Ops-branch architecture: `_armature` (unprotected, orphan) + `main` (protected, code)
 - Ops worktree via `git worktree add` with sparse checkout
 - All ops route through worker's own log file (no shared log files)
 - Worker UUID in repo-local git config
