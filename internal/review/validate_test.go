@@ -1158,7 +1158,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 			LogPath:    logPath,
 		}
 
-		errs := review.ValidateActivityDigest(activity)
+		_, errs := review.ValidateActivityDigestAndLoadEntries(activity)
 		assert.Empty(t, errs, "unmodified log should match recorded digest")
 	})
 
@@ -1179,7 +1179,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 			LogPath:    logPath,
 		}
 
-		errs := review.ValidateActivityDigest(activity)
+		_, errs := review.ValidateActivityDigestAndLoadEntries(activity)
 		assert.NotEmpty(t, errs, "tampered log content should be rejected")
 		assert.True(t, containsError(errs, "digest mismatch"), "error should mention digest mismatch")
 	})
@@ -1191,7 +1191,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 			EntryCount: 1,
 			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
 		}
-		errs := review.ValidateActivityDigest(missingActivity)
+		_, errs := review.ValidateActivityDigestAndLoadEntries(missingActivity)
 		assert.NotEmpty(t, errs, "missing log should be rejected")
 		assert.True(t, containsError(errs, "missing or unreadable"), "error should mention the log is missing")
 	})
