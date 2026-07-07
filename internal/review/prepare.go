@@ -128,7 +128,7 @@ func attachActivitySection(activityLogPath, headSHA string) *Activity {
 	// Compute activity digest
 	digest := FingerprintActivity(logContent)
 
-	// Store an absolute path so ValidateActivityDigest (record time, potentially
+	// Store an absolute path so ValidateActivityDigestAndLoadEntries (record time, potentially
 	// a different working directory) resolves the same file that was hashed
 	// here, rather than a path relative to whatever directory happened to be
 	// current during prepare (m3).

@@ -269,7 +269,9 @@ type Activity struct {
 	DeliveryHeadCount int `json:"delivery_head_count"`
 	// EarlierCount is the number of entries at commits before the delivery HEAD.
 	EarlierCount int `json:"earlier_count"`
-	// LogPath is the path to the activity log file (relative to worktree root).
+	// LogPath is the absolute path to the activity log file (see prepare.go's
+	// attachActivitySection, which deliberately resolves it to absolute so record
+	// time re-reads the same file regardless of working directory).
 	LogPath string `json:"log_path"`
 }
 
