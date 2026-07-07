@@ -151,24 +151,25 @@ func Record(input RecordInput) (*RecordResult, error) {
 	// When the bundle has activity evidence, validate activity citations and populate entry details.
 	// This ensures activity citations reference valid entry IDs and obey the upgrade-only rule.
 	if input.Bundle != nil && input.Bundle.Activity != nil {
-		// Re-fingerprint the activity log on disk and reject if it no longer matches the
-		// digest recorded in the bundle (log tampered with or rotated since prepare), but
-		// only when the assessment actually relies on activity citations.
-		if hasActivityCitations(input.Assessment) {
-			if errs := ValidateActivityDigest(input.Bundle.Activity); len(errs) > 0 {
-				var sb strings.Builder
-				sb.WriteString("activity log validation errors:")
-				for _, e := range errs {
-					sb.WriteString("\n  - ")
-					sb.WriteString(e)
-				}
-				return nil, fmt.Errorf("%s", sb.String())
-			}
-		}
+		// Load activity entries and validate digest in a single file read (PR #71 fix).
+		// This avoids the TOCTOU race where ValidateActivityDigest and LoadActivityEntries
+		// each did independent reads, allowing the file to change between them.
+		activityEntryMap, digestErrs := ValidateActivityDigestAndLoadEntries(input.Bundle.Activity)
 
-		// Load activity entries once; used for both citation validation (entry
-		// existence and exit-code-known checks) and populating rendered details.
-		activityEntryMap := LoadActivityEntries(input.Bundle.Activity.LogPath)
+		// Always enforce the digest check, regardless of whether this assessment
+		// cites activity entries: NewAttestation below stamps activity.Digest into
+		// the durable attestation unconditionally, so if the on-disk log no longer
+		// matches that digest, recording must fail rather than attest to a digest
+		// that was never actually re-verified against disk (PR #71 finding #4).
+		if len(digestErrs) > 0 {
+			var sb strings.Builder
+			sb.WriteString("activity log validation errors:")
+			for _, e := range digestErrs {
+				sb.WriteString("\n  - ")
+				sb.WriteString(e)
+			}
+			return nil, fmt.Errorf("%s", sb.String())
+		}
 
 		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap, input.Bundle.Delivery.HeadSHA); len(errs) > 0 {
 			var sb strings.Builder
