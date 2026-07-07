@@ -586,7 +586,7 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 
 // TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV verifies that Activity.LogPath is
 // stored as an absolute path even when Prepare is given a relative path (m3):
-// ValidateActivityDigest re-reads LogPath at record time, potentially from a
+// ValidateActivityDigestAndLoadEntries re-reads LogPath at record time, potentially from a
 // different working directory than prepare ran in, so a relative path would
 // silently point at the wrong file (or nothing) and break digest validation.
 //
