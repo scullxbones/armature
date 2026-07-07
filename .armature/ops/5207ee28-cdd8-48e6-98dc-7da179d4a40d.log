@@ -2455,3 +2455,4 @@
 ["amend","TOPTIER-S6-T2",1783426824,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["docs/design/ops-schema-compatibility.md (new)","internal/ops/version.go (new)","internal/ops/version_test.go (new)","internal/materialize/replay_fixture_test.go (new)","internal/materialize/testdata/ (new)"]}]
 ["amend","TOPTIER-S8-T3",1783426824,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["README.md","docs/assets/ (new)"]}]
 ["amend","TOPTIER-S10-T3",1783426824,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/"]}]
+["amend","TOPTIER-S7-T1",1783426824,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"definition_of_done":"The quickstart is rewritten against a fresh clone with every command verified verbatim: duplicate skill-install step removed, the .arm/ worktree vs .armature/ state-dir distinction stated once and matching getting-started.md, and a CI job extracts and runs the quickstart commands in a scratch repo so future drift fails the build."}]
