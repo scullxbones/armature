@@ -3,11 +3,22 @@ package review
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// errsContain reports whether any error string in errs contains substr.
+func errsContain(errs []string, substr string) bool {
+	for _, e := range errs {
+		if strings.Contains(e, substr) {
+			return true
+		}
+	}
+	return false
+}
 
 func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
@@ -874,4 +885,224 @@ func TestParseActivityLogFile_HandlesOversizedLine_REQ_EXECEV(t *testing.T) {
 	require.NoError(t, err, "an oversized line must not fail the whole scan")
 	require.Len(t, entries, 1)
 	assert.Equal(t, "make build", entries[0].Command)
+}
+
+// TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix is a regression test
+// that exercises Record's activity citation path with digest validation (PR #71 TOCTOU fix).
+// When an assessment uses activity citations, Record must:
+// 1. Validate the activity log's digest matches what was recorded in the bundle
+// 2. Load activity entries and validate citations
+// 3. Populate ActivityEntryDetails in citations
+//
+// The TOCTOU bug was that ValidateActivityDigest and LoadActivityEntries each did
+// independent os.ReadFile calls on the same path. Between those reads, the file could
+// change, causing the digest check to pass against one version while citations were
+// validated against a different version.
+//
+// After the fix, the file is read exactly once and the same bytes are used for both
+// digest validation and entry parsing.
+//
+// This test verifies end-to-end that the activity path works correctly. A literal
+// TOCTOU race test is impractical without injection points, so this regression test
+// confirms no breakage in the common case (code inspection verifies single read).
+func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logPath := dir + "/armature-activity.log"
+	logContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make test","exit_code":0,` +
+		`"exit_code_known":true,"head_sha":"head","output_hash":"h1"}` + "\n")
+	require.NoError(t, os.WriteFile(logPath, logContent, 0o600))
+	digest := FingerprintActivity(logContent)
+
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue:         IssueInfo{ID: "task-02", Type: "task", Title: "Activity Test"},
+		Contract:      Contract{DefinitionOfDone: "Done", Acceptance: []string{"Test passed"}},
+		Delivery: Delivery{
+			BaseSHA: "base",
+			HeadSHA: "head",
+			Diff:    "--- a/t.go\n+++ b/t.go\n@@ -1,0 +1,1 @@\n+func Test()",
+		},
+		Fingerprints: Fingerprints{
+			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		Activity: &Activity{
+			Digest:            digest,
+			EntryCount:        1,
+			DeliveryHeadCount: 1,
+			LogPath:           logPath,
+		},
+	}
+	bundle.BundleID = ComputeBundleID(*bundle)
+
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    Satisfied,
+				Rationale: "Implementation ready",
+				Citations: []Citation{{Path: "t.go", Line: 1}},
+			},
+			{
+				ID:        "acceptance[0]",
+				Status:    Satisfied,
+				Rationale: "Tests pass",
+				Citations: []Citation{{ActivityEntryID: "0"}},
+			},
+		},
+	}
+
+	// With the TOCTOU bug, if the log file were to change between ValidateActivityDigest
+	// and LoadActivityEntries, this would either fail or use inconsistent content.
+	// After the fix, the file is read once and reused for both operations.
+	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-02"})
+	require.NoError(t, err, "Record should succeed with valid activity citations")
+	require.NotNil(t, result)
+	require.NotNil(t, result.Attestation)
+	assert.Equal(t, digest, result.Attestation.ActivityDigest, "attestation must carry activity digest")
+	assert.Equal(t, Green, result.Attestation.Rating, "activity citation should contribute to passing rating")
+	assert.False(t, result.IsDuplicate)
+
+	// Verify that the activity entry details were populated in the assessment's citations
+	// (Record modifies the input assessment in place)
+	activityCitation := &assessment.Results[1].Citations[0]
+	assert.NotEmpty(t, activityCitation.ActivityEntryDetails, "activity entry details must be populated from the log")
+	assert.Contains(t, activityCitation.ActivityEntryDetails, "entry 0")
+	assert.Contains(t, activityCitation.ActivityEntryDetails, "make test")
+	assert.Contains(t, activityCitation.ActivityEntryDetails, "exit_code=0")
+}
+
+// TestValidateActivityDigestAndLoadEntries_FailurePaths directly exercises
+// ValidateActivityDigestAndLoadEntries's failure paths (PR #71 review finding #3),
+// which were previously only covered indirectly through Record's happy path.
+func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("digest mismatch reports an error", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		logPath := dir + "/armature-activity.log"
+		original := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make test","exit_code":0,` +
+			`"exit_code_known":true,"head_sha":"head"}` + "\n")
+		require.NoError(t, os.WriteFile(logPath, original, 0o600))
+		recordedDigest := FingerprintActivity(original)
+
+		// Tamper with the log after the digest was recorded.
+		tampered := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"rm -rf /","exit_code":0,` +
+			`"exit_code_known":true,"head_sha":"head"}` + "\n")
+		require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
+
+		activity := &Activity{Digest: recordedDigest, EntryCount: 1, LogPath: logPath}
+		entries, errs := ValidateActivityDigestAndLoadEntries(activity)
+		require.NotEmpty(t, errs, "digest mismatch must be reported regardless of whether citations exist")
+		assert.True(t, errsContain(errs, "digest mismatch"))
+		// Entries are still parsed from the (mismatched) on-disk bytes; callers that
+		// gate on citations decide separately whether to use them.
+		assert.Len(t, entries, 1)
+	})
+
+	t.Run("unreadable log reports an error and returns no entries", func(t *testing.T) {
+		t.Parallel()
+		activity := &Activity{
+			Digest:     "sha256:doesnotmatter",
+			EntryCount: 1,
+			LogPath:    t.TempDir() + "/does-not-exist.log",
+		}
+		entries, errs := ValidateActivityDigestAndLoadEntries(activity)
+		require.NotEmpty(t, errs)
+		assert.True(t, errsContain(errs, "missing or unreadable"))
+		assert.Empty(t, entries)
+	})
+
+	t.Run("nil activity returns no entries and no errors", func(t *testing.T) {
+		t.Parallel()
+		entries, errs := ValidateActivityDigestAndLoadEntries(nil)
+		assert.Empty(t, errs)
+		assert.Empty(t, entries)
+	})
+}
+
+// TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations verifies the fix for
+// PR #71 review finding #4: Record must reject a digest mismatch even when the
+// assessment cites no activity entries, because NewAttestation unconditionally
+// stamps the bundle's recorded activity.Digest into the durable attestation. Before
+// the fix, a mismatch with zero activity citations was silently discarded, letting
+// the attestation claim a digest that was never actually re-verified against disk.
+func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	logPath := dir + "/armature-activity.log"
+	original := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make test","exit_code":0,` +
+		`"exit_code_known":true,"head_sha":"head"}` + "\n")
+	require.NoError(t, os.WriteFile(logPath, original, 0o600))
+	recordedDigest := FingerprintActivity(original)
+
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue:         IssueInfo{ID: "task-03", Type: "task", Title: "No Activity Citations"},
+		Contract:      Contract{DefinitionOfDone: "Done", Acceptance: []string{"Test passed"}},
+		Delivery: Delivery{
+			BaseSHA: "base",
+			HeadSHA: "head",
+			Diff:    "--- a/t.go\n+++ b/t.go\n@@ -1,0 +1,1 @@\n+func Test()",
+		},
+		Fingerprints: Fingerprints{
+			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		Activity: &Activity{
+			Digest:            recordedDigest,
+			EntryCount:        1,
+			DeliveryHeadCount: 1,
+			LogPath:           logPath,
+		},
+	}
+	bundle.BundleID = ComputeBundleID(*bundle)
+
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    Satisfied,
+				Rationale: "Implementation ready",
+				Citations: []Citation{{Path: "t.go", Line: 1}},
+			},
+			{
+				ID:        "acceptance[0]",
+				Status:    Satisfied,
+				Rationale: "Tests pass",
+				// No activity citations here at all -- only a diff citation.
+				Citations: []Citation{{Path: "t.go", Line: 1}},
+			},
+		},
+	}
+
+	// Baseline: matches on disk, so Record succeeds even though citations never
+	// reference activity.
+	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, recordedDigest, result.Attestation.ActivityDigest)
+
+	// Tamper with the log after the digest was recorded, without adding any activity
+	// citations to the assessment.
+	tampered := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"rm -rf /","exit_code":0,` +
+		`"exit_code_known":true,"head_sha":"head"}` + "\n")
+	require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
+
+	_, err = Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
+	require.Error(t, err, "Record must reject a digest mismatch even when no activity citations are present, "+
+		"since the attestation stamps activity.Digest unconditionally")
+	assert.Contains(t, err.Error(), "digest mismatch")
 }
