@@ -2569,3 +2569,4 @@
 ["amend","TOPTIER-S11",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/stats/ (new)"," cmd/armature/stats.go (new)"," cmd/armature/show.go"]}]
 ["amend","TOPTIER-S11-T1",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/ops/types.go"," internal/review/types.go"," internal/ops/types_test.go"," internal/review/types_test.go"]}]
 ["amend","TOPTIER-S11-T2",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/stats.go (new)"," cmd/armature/show.go"," internal/stats/cost.go (new)"," internal/stats/cost_test.go (new)"]}]
+["amend","TOPTIER-S12",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/doctor/doctor.go"," docs/design/architecture.md"," docs/ops-backup.md (new)"]}]
