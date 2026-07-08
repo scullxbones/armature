@@ -284,3 +284,35 @@ _Avoid_: Note, comment
 **Note**:
 An unstructured annotation attached to an issue for progress, observations, or reminders. A note provides context without carrying the stronger meaning of a recorded decision.
 _Avoid_: Decision, rationale record
+
+**Surface**:
+A user-facing point of the product: an issue type, status, confidence state, field, command, or flag. Surface is the general concept; specific processes (the subtractive-release census, the CLI grammar contract) each govern a subset of surfaces for their own purpose. A surface is distinct from a config knob (operator-facing, not user-facing) and from a skill (agent-facing prose, not a typed interface point).
+_Avoid_: Feature, config knob, endpoint
+
+**Deep Module**:
+A package or command group with a narrow public interface hiding substantial implementation, per ADR 0004. Deep modules exist at two layers that should stay aligned: the Go package (`internal/sources`, `internal/validate`, etc.) and, where a package has a CLI-facing counterpart, the command group (`sources`, `validate`) that exposes it. A hyphenated command with no corresponding deep module is a signal that either a module boundary needs drawing or the command doesn't deserve group status.
+_Avoid_: Package, module, component
+
+**Census**:
+The permanent, one-row-per-surface audit record pairing every surface subject to the subtractive-release census with its dogfood-corpus evidence and its ruling. The census table is the record of decision; it does not require a separate ADR per surface. A census row's identity survives a rename: renaming a surface updates the row's aliases, it does not reset its ruling or require fresh evidence.
+_Avoid_: Audit, inventory
+
+**Ruling**:
+The recorded keep-or-park decision for a single surface in the census, made by a single accountable person and justified by corpus evidence or written reasoning. A ruling is not a vote or a consensus process.
+_Avoid_: Decision, verdict
+
+**Park**:
+The census outcome for a cut surface: its code is deleted outright, but its census row, re-entry criterion, and the removing commit persist as an intentional, documented, in-principle-reversible record. Park is the only cut outcome this process produces.
+_Avoid_: Purge, deprecate, feature-flag off
+
+**Purge**:
+A hypothetical cut outcome with no census row, no re-entry criterion, and no documented path back — reserved for code with no product surface at all. The subtractive-release census does not use this outcome; everything it cuts is parked.
+_Avoid_: Park, delete
+
+**Re-entry Criterion**:
+The written condition, recorded on a surface's census row at park time, that would justify resuscitating that surface. A re-entry criterion is a standing test, not a promise of future work.
+_Avoid_: Justification, ruling
+
+**Resuscitation**:
+The act of re-implementing a parked surface after its re-entry criterion is met. Resuscitation is triggered by evidence, not by request alone.
+_Avoid_: Restore, unpark, revert
