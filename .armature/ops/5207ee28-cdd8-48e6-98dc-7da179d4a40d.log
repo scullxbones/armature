@@ -2580,3 +2580,4 @@
 ["amend","TOPTIER-S12-T2",1783473389,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/doctor/doctor.go"," internal/doctor/doctor_test.go"," docs/ops-backup.md (new)"]}]
 ["amend","TOPTIER-S12",1783473389,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/design/architecture.md"]}]
 ["source-fingerprint","3fda6d85-83af-4cba-b542-c359c1d99305",1783478557,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"24859513129cc2eeaf4c1f97f2869fb11eab3942df1265fa7be04331c0ec0a4f","provider":"filesystem"}]
+["source-fingerprint","b6e5c559-b6de-41cb-8005-f2a158c7cb8d",1783478558,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"84223883df7b065b3081661d7e6a20ad13868294889f4466ef424971c3131a0c","provider":"filesystem"}]
