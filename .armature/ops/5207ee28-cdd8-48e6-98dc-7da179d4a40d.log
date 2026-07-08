@@ -2671,3 +2671,4 @@
 ["amend","NXTTN-S2-T4",1783478721,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/*.go"," docs/commands.md"],"context_files":["docs/design/surface-census.md"]}]
 ["amend","NXTTN-S2-T5",1783478721,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["Makefile"," scripts/census-drift-check.sh (new)"," .github/workflows/ci.yml"],"context_files":["docs/design/surface-census.md"]}]
 ["dag-transition","NXTTN",1783478724,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"NXTTN"}]
+["create","NXTTN-S1",1783478865,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"title":"Constitution — surface census","parent":"NXTTN","type":"task"}]
