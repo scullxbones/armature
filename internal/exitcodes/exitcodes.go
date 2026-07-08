@@ -1,4 +1,4 @@
-// Package exitcodes defines typed exit code constants for the trls CLI.
+// Package exitcodes defines typed exit code constants for the arm CLI.
 // All cmd error paths should use these constants rather than bare integers
 // to ensure consistent exit codes across commands.
 package exitcodes
