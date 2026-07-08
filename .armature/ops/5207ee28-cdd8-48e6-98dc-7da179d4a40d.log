@@ -2840,3 +2840,4 @@
 ["link","NXTTN-S5-T4",1783480532,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"NXTTN-S2-T3","rel":"blocked_by"}]
 ["link","NXTTN-S5-T4",1783480532,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"NXTTN-S2-T4","rel":"blocked_by"}]
 ["link","NXTTN-S5-T4",1783480533,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"NXTTN-S5-T2","rel":"blocked_by"}]
+["dag-transition","NXTTN",1783480540,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"NXTTN"}]
