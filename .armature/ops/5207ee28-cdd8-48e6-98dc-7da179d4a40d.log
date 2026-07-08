@@ -2567,3 +2567,4 @@
 ["source-link","TOPTIER-S16-T1",1783473338,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"4b23c8db-df48-4b94-b970-e0db912ba413","source_url":"docs/design/narrow-gaps-addendum.md"}]
 ["source-link","TOPTIER-S16-T2",1783473339,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"4b23c8db-df48-4b94-b970-e0db912ba413","source_url":"docs/design/narrow-gaps-addendum.md"}]
 ["amend","TOPTIER-S11",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/stats/ (new)"," cmd/armature/stats.go (new)"," cmd/armature/show.go"]}]
+["amend","TOPTIER-S11-T1",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/ops/types.go"," internal/review/types.go"," internal/ops/types_test.go"," internal/review/types_test.go"]}]
