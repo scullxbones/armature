@@ -2577,3 +2577,4 @@
 ["amend","TOPTIER-S14-T2",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["docs/design/extensibility.md (new)"]}]
 ["amend","TOPTIER-S16",1783473381,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["AUTHORSHIP.md (new)"," CONTRIBUTING.md (new)"]}]
 ["amend","TOPTIER-S16-T2",1783473381,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["docs/design/strategy-memo.md (new)"]}]
+["amend","TOPTIER-S12-T2",1783473389,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/doctor/doctor.go"," internal/doctor/doctor_test.go"," docs/ops-backup.md (new)"]}]
