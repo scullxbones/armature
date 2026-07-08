@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Next Ten — Armature, Round Three</title>
+<style>
+  :root {
+    --paper: #f4efe4;
+    --ink: #2b2620;
+    --muted: #6b6355;
+    --hairline: #d8cfbc;
+    --hairline-strong: #b8ac93;
+    --accent: #8c2f2a;      /* oxblood — verdicts, kills */
+    --moss: #4f6b3a;        /* survival */
+    --bar: #8f6b3f;         /* single-hue magnitude */
+    --code-bg: #ebe4d3;
+    --ghost: #e3dbc8;       /* giant numerals */
+    --serif-display: "Palatino Linotype", Palatino, "Iowan Old Style", "Book Antiqua", "URW Palladio L", Georgia, serif;
+    --serif-body: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, "DejaVu Serif", serif;
+    --mono: "Cascadia Code", "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #211d18;
+      --ink: #e8e1d4;
+      --muted: #a49a88;
+      --hairline: #3d372e;
+      --hairline-strong: #574e3f;
+      --accent: #cf7061;
+      --moss: #93b177;
+      --bar: #c49a66;
+      --code-bg: #2b261f;
+      --ghost: #302a22;
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif-body);
+    font-size: clamp(1.02rem, 0.95rem + 0.3vw, 1.14rem);
+    line-height: 1.62;
+    padding: clamp(1.2rem, 4vw, 4rem) clamp(1rem, 5vw, 5rem) 6rem;
+  }
+
+  .sheet { max-width: 66rem; margin: 0 auto; }
+  .prose { max-width: 46rem; }   /* asymmetric: prose hugs the left */
+
+  /* ---------- masthead ---------- */
+  .rule-double { border: 0; border-top: 3px double var(--hairline-strong); }
+  .rule { border: 0; border-top: 1px solid var(--hairline); }
+
+  .masthead { padding: 1.1rem 0 2.4rem; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem;
+    justify-content: space-between;
+    padding: 0.65rem 0 2.6rem;
+  }
+  h1 {
+    font-family: var(--serif-display);
+    font-weight: 400;
+    font-size: clamp(3rem, 8.5vw, 6.4rem);
+    line-height: 0.98;
+    letter-spacing: -0.015em;
+    max-width: 14ch;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+  .standfirst {
+    font-size: clamp(1.12rem, 1rem + 0.6vw, 1.38rem);
+    line-height: 1.5;
+    max-width: 38ch;
+    margin: 1.8rem 0 0 auto;      /* pushed right — break the grid once */
+    font-style: italic;
+    color: var(--muted);
+    border-left: 2px solid var(--accent);
+    padding-left: 1.1rem;
+  }
+  .meta {
+    font-family: var(--mono); font-size: 0.74rem; color: var(--muted);
+    margin-top: 2.6rem; display: flex; flex-wrap: wrap; gap: 0.35rem 1.6rem;
+  }
+  nav.toc {
+    margin-top: 1.1rem; padding-top: 0.8rem; border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.06em;
+    display: flex; flex-wrap: wrap; gap: 0.3rem 1.5rem;
+  }
+  nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--hairline-strong); }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ---------- sections ---------- */
+  section { padding: 3.2rem 0 1rem; }
+  .sec-label {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--accent);
+    display: block; margin-bottom: 0.7rem;
+  }
+  h2 {
+    font-family: var(--serif-display); font-weight: 400;
+    font-size: clamp(1.7rem, 1.4rem + 1.4vw, 2.5rem);
+    line-height: 1.12; margin-bottom: 1.3rem; max-width: 24ch;
+  }
+  h2 .thin { color: var(--muted); }
+  p + p { margin-top: 0.9em; }
+  .lede { font-size: 1.06em; }
+  strong { font-weight: 700; }
+  code, .mono {
+    font-family: var(--mono); font-size: 0.85em;
+    background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 3px;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- rubric table ---------- */
+  .tablewrap { overflow-x: auto; margin: 1.6rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92em; }
+  th, td { text-align: left; padding: 0.55rem 1rem 0.55rem 0; vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); font-weight: 400;
+    border-bottom: 1px solid var(--hairline-strong); white-space: nowrap;
+  }
+  tbody td { border-bottom: 1px solid var(--hairline); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.axis { font-family: var(--serif-display); font-style: italic; white-space: nowrap; }
+
+  /* ---------- gauntlet ---------- */
+  .rounds { list-style: none; counter-reset: rd; margin: 1.4rem 0; }
+  .rounds li {
+    counter-increment: rd; padding: 0.9rem 0 0.9rem 3.4rem;
+    position: relative; border-top: 1px solid var(--hairline); max-width: 46rem;
+  }
+  .rounds li::before {
+    content: "R" counter(rd);
+    position: absolute; left: 0; top: 0.95rem;
+    font-family: var(--mono); font-size: 0.8rem; color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .rounds b { font-family: var(--serif-display); font-style: italic; font-weight: 400; font-size: 1.05em; }
+
+  .personas {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0 2.5rem; margin-top: 1.8rem;
+  }
+  .persona { border-top: 2px solid var(--ink); padding: 0.7rem 0 1.2rem; }
+  .persona h3 { font-family: var(--serif-display); font-weight: 400; font-style: italic; font-size: 1.1rem; margin-bottom: 0.25rem; }
+  .persona p { font-size: 0.88em; color: var(--muted); line-height: 1.5; }
+
+  /* ---------- kill ledger ---------- */
+  .ledger { margin-top: 1.6rem; }
+  .kill {
+    display: grid; grid-template-columns: 3.2rem 1fr; gap: 0 1rem;
+    padding: 0.75rem 0; border-top: 1px solid var(--hairline);
+  }
+  .kill .rd {
+    font-family: var(--mono); font-size: 0.74rem; color: var(--accent);
+    padding-top: 0.28em; letter-spacing: 0.05em;
+  }
+  .kill h3 {
+    font-family: var(--serif-display); font-weight: 400; font-size: 1.06rem; display: inline;
+  }
+  .kill h3::before { content: "† "; color: var(--accent); }
+  .kill .epitaph { font-size: 0.9em; color: var(--muted); display: block; margin-top: 0.1rem; max-width: 60ch; }
+
+  /* ---------- overview chart ---------- */
+  figure.chart { margin: 2.2rem 0 1rem; }
+  figcaption {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 1rem;
+  }
+  .brow {
+    display: grid; grid-template-columns: minmax(11rem, 16rem) 1fr 2.6rem;
+    align-items: center; gap: 0 0.9rem; padding: 0.34rem 0;
+  }
+  .brow:hover .bname, .brow:hover .bval { color: var(--accent); }
+  .bname { font-size: 0.9em; text-align: right; line-height: 1.25; }
+  .bname .r { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-right: 0.45em; }
+  .btrack { position: relative; height: 11px; }
+  .btrack i {
+    position: absolute; inset: 0 auto 0 0; display: block;
+    background: var(--bar); border-radius: 0 4px 4px 0;
+  }
+  .bval { font-family: var(--mono); font-size: 0.78rem; text-align: right; }
+  @media (max-width: 40rem) {
+    .brow { grid-template-columns: 1fr 2.4rem; }
+    .bname { grid-column: 1 / -1; text-align: left; padding-top: 0.35rem; }
+  }
+
+  /* ---------- the ten ---------- */
+  article.item {
+    display: grid; grid-template-columns: 7.5rem 1fr; gap: 0 2rem;
+    padding: 3rem 0 2.2rem; border-top: 1px solid var(--hairline-strong);
+  }
+  article.item:first-of-type { border-top: none; }
+  .ordinal {
+    font-family: var(--serif-display);
+    font-size: clamp(3.4rem, 6vw, 5.2rem); line-height: 0.9;
+    color: var(--ghost); user-select: none; letter-spacing: -0.04em;
+    -webkit-text-stroke: 1px var(--hairline-strong);
+  }
+  @media (max-width: 48rem) {
+    article.item { grid-template-columns: 1fr; }
+    .ordinal { font-size: 2.6rem; -webkit-text-stroke: 0; color: var(--hairline-strong); margin-bottom: 0.4rem; }
+  }
+  .itemhead { display: flex; flex-wrap: wrap; gap: 0.5rem 0.8rem; align-items: baseline; margin-bottom: 0.5rem; }
+  h3.title { font-family: var(--serif-display); font-weight: 400; font-size: clamp(1.45rem, 1.2rem + 1vw, 1.95rem); line-height: 1.15; }
+  .chip {
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase;
+    border: 1px solid; border-radius: 2px; padding: 0.22em 0.6em; white-space: nowrap;
+  }
+  .chip.ok { color: var(--moss); border-color: var(--moss); }
+  .chip.sum { color: var(--muted); border-color: var(--hairline-strong); }
+  .thesis { font-style: italic; color: var(--muted); font-size: 1.04em; max-width: 52ch; margin-bottom: 1.2rem; }
+
+  .field { margin-top: 1.05rem; max-width: 46rem; }
+  .field > .fl {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.25rem;
+  }
+  .field ul { list-style: none; }
+  .field ul li { padding: 0.28rem 0 0.28rem 1.1rem; position: relative; font-size: 0.95em; }
+  .field ul li::before { content: "—"; position: absolute; left: 0; color: var(--hairline-strong); }
+  .redteam { border-left: 2px solid var(--hairline-strong); padding-left: 1rem; }
+  .redteam .voice { font-style: italic; }
+  .redteam .who { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); font-style: normal; }
+
+  /* ---------- score meter ---------- */
+  .meter {
+    display: grid; grid-template-columns: repeat(6, max-content);
+    gap: 0.5rem 1.7rem; margin-top: 1.5rem; padding: 0.85rem 0 0.15rem;
+    border-top: 1px solid var(--hairline);
+  }
+  @media (max-width: 48rem) { .meter { grid-template-columns: repeat(3, max-content); } }
+  @media (max-width: 26rem) { .meter { grid-template-columns: repeat(2, max-content); } }
+  .ax { display: flex; flex-direction: column; gap: 0.3rem; }
+  .ax .al { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.14em; color: var(--muted); }
+  .dots { display: flex; gap: 4px; align-items: center; }
+  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--bar); }
+  .dots i.off { background: none; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+  .dots .dv { font-family: var(--mono); font-size: 0.72rem; margin-left: 0.35rem; color: var(--ink); }
+
+  /* ---------- matrix ---------- */
+  .matrix td, .matrix th { padding: 0.5rem 0.9rem 0.5rem 0; }
+  .matrix td.num, .matrix th.num { text-align: right; font-family: var(--mono); font-size: 0.85em; }
+  .matrix td.sig { color: var(--accent); font-weight: 700; }
+
+  /* ---------- sequencing ---------- */
+  .train { display: grid; grid-template-columns: minmax(9rem, 13rem) 1fr; gap: 0 1.6rem; padding: 1rem 0; border-top: 1px solid var(--hairline); max-width: 54rem; }
+  .train h3 { font-family: var(--serif-display); font-style: italic; font-weight: 400; font-size: 1.12rem; }
+  .train .cars { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); letter-spacing: 0.1em; display: block; margin-top: 0.2rem; }
+  .train p { font-size: 0.93em; }
+  @media (max-width: 40rem) { .train { grid-template-columns: 1fr; gap: 0.3rem 0; } }
+
+  /* ---------- colophon ---------- */
+  .colophon { font-size: 0.88em; color: var(--muted); max-width: 46rem; }
+  .colophon p + p { margin-top: 0.7em; }
+
+  @media print {
+    body { padding: 0.5in; font-size: 10.5pt; }
+    .ordinal { -webkit-text-stroke: 0; }
+    section { padding-top: 1.4rem; }
+    article.item { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <hr class="rule-double">
+    <div class="eyebrow">
+      <span>Armature · Internal Review</span>
+      <span>Round Three</span>
+      <span>2026-07-07</span>
+    </div>
+    <h1>The Next<br><em>Ten</em></h1>
+    <p class="standfirst">Two planning rounds mapped the engineering. This one asks what they couldn’t: what the project believes, where it ends, what it deletes, and what every agent session silently pays.</p>
+    <div class="meta">
+      <span>working tree <span class="num">v0.0.1-509-gdfc5979a</span></span>
+      <span>supersedes nothing</span>
+      <span>cites everything</span>
+    </div>
+    <nav class="toc" aria-label="Contents">
+      <a href="#charter">§0 Charter</a>
+      <a href="#rubric">§1 Rubric</a>
+      <a href="#gauntlet">§2 Gauntlet</a>
+      <a href="#killed">§3 The Killed</a>
+      <a href="#ten">§4 The Ten</a>
+      <a href="#matrix">§5 Matrix</a>
+      <a href="#sequence">§6 Sequencing</a>
+      <a href="#colophon">§7 Colophon</a>
+    </nav>
+  </header>
+
+  <!-- ============================================================ -->
+  <section id="charter">
+    <span class="sec-label">§0 · Charter</span>
+    <h2>What this round is,<br><span class="thin">and what is out of bounds</span></h2>
+    <div class="prose">
+      <p class="lede">The <a href="top-tier-gap-analysis.md" style="color:inherit">gap analysis</a> closed the distance to a top-tier open-source project. The <a href="long-horizon-proposals.md" style="color:inherit">long-horizon proposals</a> raised the ceiling. Everything in both — <span class="mono">GAP·T1–T5</span>, <span class="mono">GAP·D1–D5</span>, <span class="mono">LH·F1–F5</span>, <span class="mono">LH·D1–D5</span>, <span class="mono">LH·C1–C10</span> — plus their recorded kill lists, is out of bounds here. So is the TUI, which a live redesign spec already owns.</p>
+      <p>What remains is the layer those documents could not reach from inside an engineering frame: identity, boundaries, strategy, subtraction, the economics of agent attention, and the cost of the project’s own inner loop. Ten proposals survived four adversarial rounds; thirteen did not, and their deaths are recorded so they aren’t re-litigated — a house tradition by now.</p>
+      <p>Two rules govern every entry. <strong>Adjacency is disclosed, never hidden</strong> — where an item borders prior work, the border is stated in the entry. And <strong>every measurable claim was measured</strong>, this session, from this working tree. When a number appears, a command produced it.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="rubric">
+    <span class="sec-label">§1 · The Rubric</span>
+    <h2>Six axes, <span class="thin">two of them new</span></h2>
+    <div class="prose">
+      <p>The long-horizon round scored on Leverage, Evidence, Differentiation, Agent-first, Durability, and Cost. This round keeps the spine and changes two axes, because this round admits <em>documents as deliverables</em> — and documents fail differently than features. They fail by arriving too late, or by never being read.</p>
+      <p><strong>Dropped:</strong> <em>Differentiation</em> (for strategy work, differentiation is the content, not a score) and <em>Agent-first</em> (agents are the declared primary users; a separate axis double-counts what Leverage and Compounding already price). <strong>Added:</strong> <em>Timing</em> and <em>Consumption</em>.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Axis</th><th>The question</th><th>What a 5 looks like</th></tr></thead>
+        <tbody>
+          <tr><td class="axis">Leverage</td><td>How many future decisions, workflows, and personas improve at once?</td><td>Every later planning round and every session inherits it.</td></tr>
+          <tr><td class="axis">Evidence</td><td>Is it grounded in measured repo facts and the dogfood corpus, not vibes?</td><td>Cites paths, counts, and commands run this session.</td></tr>
+          <tr><td class="axis">Timing</td><td>Is <em>now</em> materially cheaper than later? Is there an expiry window?</td><td>Post-v0.1.0 or post-adoption, the move becomes breaking or impossible.</td></tr>
+          <tr><td class="axis">Compounding</td><td>Does the value accrue — especially against agent session amnesia?</td><td>Converts re-derived-every-session knowledge into durable structure.</td></tr>
+          <tr><td class="axis">Consumption</td><td>Who reads or runs this, when, and what breaks if they don’t?</td><td>A gate, a template field, or a CI job — not a hope.</td></tr>
+          <tr><td class="axis">Cost&#8315;&#185;</td><td>Plan + build + maintain burden, inverted.</td><td>An afternoon to draft, near-zero to keep.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Each axis scores 1–5; items are ranked by Σ/30. Scores are ordinal, self-assigned, and argued in public in each entry — the Colophon states the biases.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="gauntlet">
+    <span class="sec-label">§2 · The Gauntlet</span>
+    <h2>Four rounds, <span class="thin">four adversaries</span></h2>
+    <ol class="rounds">
+      <li><b>The Novelty Audit.</b> Dies if the gap analysis, the long-horizon doc, or their kill lists already own it. Survivors must disclose every adjacency inline.</li>
+      <li><b>The Shelfware Tribunal.</b> Every document-shaped proposal names its reader and its enforcement mechanism, or dies. <em>Who reads this, when, and what breaks if they don’t?</em></li>
+      <li><b>Constraint &amp; Timing.</b> Must not violate the architecture’s invariants (git-native, no daemon, append-only, merge-conflict-free by construction) — and must answer <em>why now</em>, at v0.0.1, with zero external adopters.</li>
+      <li><b>The Persona Gauntlet.</b> Survivors face all four adversaries below; each entry records the sharpest objection and the argument that answered it.</li>
+    </ol>
+    <div class="personas">
+      <div class="persona"><h3>The Year-Two Maintainer</h3><p>Lives with whatever this round creates after the excitement wears off. Kills rot, ritual, and anything that needs a gardener.</p></div>
+      <div class="persona"><h3>The Cold-Start Agent</h3><p>Wakes with no memory, pays for every token it reads, and believes documentation over reality. Kills context bloat and drift.</p></div>
+      <div class="persona"><h3>The Skeptical Adopter</h3><p>Arrives from the README with GitHub Issues open in the next tab. Kills claims without evidence and paths that only work here.</p></div>
+      <div class="persona"><h3>The Rival Author</h3><p>Building the competing tool; reads this repository for weaknesses. Kills undefended moats and unpriced risks.</p></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="killed">
+    <span class="sec-label">§3 · The Killed</span>
+    <h2>Thirteen graves, <span class="thin">recorded so they aren’t re-litigated</span></h2>
+    <div class="ledger">
+      <div class="kill"><span class="rd">R1</span><div><h3>Skills single-source compiler</h3><span class="epitaph">Already built. <span class="mono">internal/skillsembed/</span> plus <span class="mono">make deploy-skills</span> fans one source out to <span class="mono">.claude/</span>, <span class="mono">.gemini/</span>, <span class="mono">.codex/</span>. Verified in the Makefile; nothing to do.</span></div></div>
+      <div class="kill"><span class="rd">R1</span><div><h3>License &amp; governance decision</h3><span class="epitaph">Apache-2.0 already sits in the repo root. The remaining scaffolding is GAP·D4’s job.</span></div></div>
+      <div class="kill"><span class="rd">R1</span><div><h3>Ubiquitous-language lint</h3><span class="epitaph">A worthwhile rule, not a workstream. It rides inside the CI machinery GAP·T1.1 and GAP·D2.1 are already building — one more check against CONTEXT.md’s “Avoid” columns.</span></div></div>
+      <div class="kill"><span class="rd">R1</span><div><h3>Unified four-surface versioning policy</h3><span class="epitaph">GAP·T5.2 (versioned ops, forward) and LH·D3 (shim retirement, backward) are the two hard edges. The connective paragraph belongs inside T5.2’s document, not in a third one.</span></div></div>
+      <div class="kill"><span class="rd">R1</span><div><h3>Capability manifest / <span class="mono">arm explain</span></h3><span class="epitaph">Crowded out by GAP·D2.1’s published schemas plus LH·C3’s error contract. The agent that needs to discover the CLI will be told by the CLI.</span></div></div>
+      <div class="kill"><span class="rd">R2</span><div><h3>Operating-cadence document</h3><span class="epitaph">No mechanism can enforce a cadence on a solo maintainer. The strategy memo’s review date is the only cadence that will actually fire.</span></div></div>
+      <div class="kill"><span class="rd">R2</span><div><h3>Backlog-governance document</h3><span class="epitaph">The source-citation pipeline — plans become registered sources become epics — already <em>is</em> the governance. Writing it down twice is theater.</span></div></div>
+      <div class="kill"><span class="rd">R2</span><div><h3>Standalone pre-mortem register</h3><span class="epitaph">Merged into the strategy memo (№ 09), where the risks get an owner, tripwires, and a review date instead of a shelf.</span></div></div>
+      <div class="kill"><span class="rd">R2</span><div><h3>Dogfood-corpus content play</h3><span class="epitaph">Merged into the strategy memo (№ 09). The corpus is the most credible marketing the project owns; when to spend it is a strategy decision.</span></div></div>
+      <div class="kill"><span class="rd">R3</span><div><h3>Model-drift eval loop</h3><span class="epitaph">Right idea, wrong decade of the project. Building an eval platform for one adopter loses to dogfooding, which surfaces drift in days. Revisit when external adopters depend on skill stability across model releases; GAP·T1.2’s golden-transcript harness is the mount point when it returns.</span></div></div>
+      <div class="kill"><span class="rd">R3</span><div><h3>Trust &amp; authorship model for multi-writer ops</h3><span class="epitaph">Zero adopters means zero adversarial writers. LH·C2’s signed-snapshot design will force the decision at the right moment. Recorded as a tripwire in the constitution (№ 01) instead.</span></div></div>
+      <div class="kill"><span class="rd">R4</span><div><h3>Complexity ratchet gates</h3><span class="epitaph">The Year-Two Maintainer testified: numeric complexity gates rot into ritual and <span class="mono">//nolint</span> archaeology. The real cost problem is pipeline latency, and № 07 addresses it directly.</span></div></div>
+      <div class="kill"><span class="rd">—</span><div><h3>Anything touching the TUI</h3><span class="epitaph">Out of bounds. A live redesign spec already owns that surface; a second opinion from this round would only fork it.</span></div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="ten">
+    <span class="sec-label">§4 · The Ten</span>
+    <h2>Ranked by the rubric, <span class="thin">argued in the open</span></h2>
+
+    <figure class="chart" role="img" aria-label="Ranked total rubric scores out of 30: Constitution 27, Subtractive Release 27, Context Economics 26, Paved Road 25, CLI Grammar 25, Second Substrate 25, Tiered Gates 25, Harness Contract 24, Strategy Memo 23, Living Diagrams 23">
+      <figcaption>Total score, Σ/30 — every value labeled; color carries nothing</figcaption>
+      <div class="brow"><span class="bname"><span class="r">01</span>The Armature Constitution</span><span class="btrack"><i style="width:90%"></i></span><span class="bval num">27</span></div>
+      <div class="brow"><span class="bname"><span class="r">02</span>The Subtractive Release</span><span class="btrack"><i style="width:90%"></i></span><span class="bval num">27</span></div>
+      <div class="brow"><span class="bname"><span class="r">03</span>Context Economics</span><span class="btrack"><i style="width:86.7%"></i></span><span class="bval num">26</span></div>
+      <div class="brow"><span class="bname"><span class="r">04</span>The Paved Road</span><span class="btrack"><i style="width:83.3%"></i></span><span class="bval num">25</span></div>
+      <div class="brow"><span class="bname"><span class="r">05</span>The CLI Grammar Contract</span><span class="btrack"><i style="width:83.3%"></i></span><span class="bval num">25</span></div>
+      <div class="brow"><span class="bname"><span class="r">06</span>The Second Substrate</span><span class="btrack"><i style="width:83.3%"></i></span><span class="bval num">25</span></div>
+      <div class="brow"><span class="bname"><span class="r">07</span>Tiered Quality Gates</span><span class="btrack"><i style="width:83.3%"></i></span><span class="bval num">25</span></div>
+      <div class="brow"><span class="bname"><span class="r">08</span>The Harness Compatibility Contract</span><span class="btrack"><i style="width:80%"></i></span><span class="bval num">24</span></div>
+      <div class="brow"><span class="bname"><span class="r">09</span>The Strategy Memo</span><span class="btrack"><i style="width:76.7%"></i></span><span class="bval num">23</span></div>
+      <div class="brow"><span class="bname"><span class="r">10</span>Living Diagrams</span><span class="btrack"><i style="width:76.7%"></i></span><span class="bval num">23</span></div>
+    </figure>
+
+    <!-- ==================== 01 ==================== -->
+    <article class="item" id="i01">
+      <div class="ordinal" aria-hidden="true">01</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The Armature Constitution</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 27</span>
+        </div>
+        <p class="thesis">The project’s invariants are its sharpest asset, and they are currently buried on line 20 of an 1,867-line implementer document.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>A versioned charter, deliberately small — ≤ 2 KB, because it must earn a seat in every agent session’s standing context — in three parts. <strong>Invariants</strong>, numbered, each phrased as <em>we will / we will never</em>: git-native; no daemon; append-only history is never rewritten; merge-conflict-free by construction; agents are the primary users; deterministic gates decide, LLM judges advise; done ≠ merged. <strong>Non-goals</strong>: not a CI system, not an agent framework, not a chat bus, not a merge authority, not a human-first PM suite. <strong>Tripwires</strong> — sentences that kill a proposal on contact: <em>needs a long-running process; rewrites history; syncs bidirectionally with a mutable remote.</em></p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li>The constraints exist — as “Key Constraints,” §1 of <span class="mono">docs/design/architecture.md</span>, an 1,867-line document whose stated audience is implementers and whose details have drifted from the live tree.</li>
+            <li>Both prior planning rounds had to reconstruct the constraint set by hand; the long-horizon doc invented a “constraint round” precisely because no citable boundary document exists.</li>
+            <li>The strongest precedent is the house’s own sentence: kills are recorded “so they aren’t re-litigated.” A constitution is that sentence promoted to standing policy.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>GAP·T4.3 documents what the harness hook guarantees; <span class="mono">architecture.md</span> states constraints for implementers. This is neither — it is the small, stable, citable layer above both, with a consumption mechanism attached. The killed trust-model item (§3) survives here as a tripwire.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“A values poster. It will be beautiful, and it will be wallpaper.”</span> <span class="who">— R2, the Year-Two Maintainer</span></p>
+          <p>Answered: the consumption mechanism <em>is</em> the proposal. An ADR-template field (“principles touched,” riding GAP·D5.2’s template work), kill rounds that cite tripwires by number instead of re-arguing them, and a hard token budget that keeps it inside AGENTS.md context. Wallpaper can’t be cited; this is built to be cited.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>A one-page charter draft; ratification as an ADR; the template field; the AGENTS.md wiring; an amendment bar (an ADR, not an edit).</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 5, evidence 4, timing 4, compounding 5, consumption 4, cost-inverse 5">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 02 ==================== -->
+    <article class="item" id="i02">
+      <div class="ordinal" aria-hidden="true">02</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The Subtractive Release</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 27</span>
+        </div>
+        <p class="thesis">The cheapest deletion window this project will ever have is open now, and it closes at v0.1.0.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>An evidence-based census of every user-facing surface — issue types, statuses, confidence states, fields, commands, flags. Each entry must show use in the dogfood corpus, or carry a written justification, or be cut before the first real release. Cut means <em>parked, not purged</em>: the surface leaves the product, stays in git history, and carries a one-paragraph re-entry criterion.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li>Measured this session across <strong>6,918 ops in 71 worker logs</strong>: the <span class="mono">feature</span> issue type appears <strong>zero times</strong> — while CONTEXT.md needs paired “Avoid” entries to keep Story and Feature apart.</li>
+            <li>A <span class="mono">behavior</span> type appears <strong>8 times</strong> in the live corpus and <strong>zero times</strong> in CONTEXT.md — surface the glossary doesn’t know exists.</li>
+            <li><span class="mono">inferred</span> confidence: no occurrences found; <span class="mono">draft</span> appears 414 times.</li>
+            <li>46 top-level commands, including <span class="mono">import</span>, <span class="mono">accept-citation</span>, <span class="mono">stale-review</span>, <span class="mono">scope-delete</span> — usage unknown, cost permanent.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>LH·D1 ran exactly this audit on config knobs — treat it as the completed pilot. LH·D4 (merged-promotion) and LH·D5 (dotdir) are single instances. This is the general sweep, with GAP·T5.3’s v0.1.0 release as the deadline that gives it teeth.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“You’ll cut something my team needs in month two.”</span> <span class="who">— R4, the Skeptical Adopter</span></p>
+          <p>Answered: restoring a parked verb costs a release note. Carrying an unused one costs tests, docs, schema surface, and agent context — forever, for everyone. The asymmetry is the argument.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The census table (surface × corpus evidence × ruling); the park protocol; a PR series sequenced before v0.1.0; a standing surface-budget rule — every new verb starts with a census row.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 4, evidence 5, timing 5, compounding 4, consumption 5, cost-inverse 4">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 03 ==================== -->
+    <article class="item" id="i03">
+      <div class="ordinal" aria-hidden="true">03</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">Context Economics</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 26</span>
+        </div>
+        <p class="thesis">Line 15 of the architecture document declares “minimizes context consumption for AI agents” a design goal. Nothing in the repository measures it.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>Make tokens a governed budget the way coverage already is: a report target that prices every agent-facing artifact — skills, rendered contexts, <span class="mono">--format agent</span> payloads, the glossary — budgets per artifact class, a CI gate that fails when an artifact grows past budget, and a trim plan for the current offenders.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li>The embedded skill surface totals <strong>100,926 bytes (~25k tokens)</strong>. The coordinator skill alone is <strong>32,271 bytes (~8k tokens)</strong> — re-read by every coordinator session, every wave.</li>
+            <li>CONTEXT.md: 16,903 B. <span class="mono">docs/commands.md</span>: 21,531 B. <span class="mono">concepts.md</span>: 17,021 B. <span class="mono">use-cases.md</span>: 14,194 B.</li>
+            <li>The one existing knob — config <span class="mono">token_budget</span> — is documented as inert (LH·D1’s own evidence).</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>LH·C3 improves error <em>quality</em>; GAP·D2 fixes doc <em>accuracy</em>; GAP·T1.3’s pseudocode-to-subcommand moves are token wins it doesn’t count. This is the missing meter: <em>weight</em>, priced and gated. It is also what finally gives LH·D1’s <span class="mono">token_budget</span> knob a truthful meaning.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“Budgets get gamed. The prose gets terser and more ambiguous, and I will misread it at 3 a.m.”</span> <span class="who">— R4, the Cold-Start Agent</span></p>
+          <p>Answered: the budget is paired with GAP·T1’s semantic skill tests. An artifact must pass the comprehension gate <em>and</em> the weight gate; compression that breaks the golden transcripts fails the other check. Two gates, opposite failure modes.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>A <span class="mono">make context-report</span> spec; the token-counting method; class budgets and a ratchet policy; the coordinator-skill trim as the first application.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 5, evidence 5, timing 3, compounding 5, consumption 4, cost-inverse 4">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 04 ==================== -->
+    <article class="item" id="i04">
+      <div class="ordinal" aria-hidden="true">04</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The Paved Road</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 25</span>
+        </div>
+        <p class="thesis">Forty-six commands, four deployment personas — and no sentence anywhere that says: this is the way.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>Declare one blessed end-to-end pipeline — bootstrap → plan/decompose → wave dispatch → work → review → sync — as product truth. Documentation leads with it; defaults optimize for it; skills teach only it; everything else becomes an escape hatch, labeled as such in <span class="mono">--help</span>. The census (№ 02) takes paved-road membership as its first sorting criterion.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li>46 commands in five help groupings offer many workflows and bless none.</li>
+            <li>LH·D4 found <em>three</em> coexisting merged-promotion mechanisms with contradicting docs — the signature failure of an unopinionated surface.</li>
+            <li>The <span class="mono">session-recovery-gaps</span> theme records a coordinator abandoning the worker protocol when reconstruction got expensive. When the road isn’t paved, agents go off-road.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>GAP·D1.1 rewrites the quickstart so it is <em>accurate</em>; this decides <em>which workflow deserves to be the quickstart</em>. LH·C8’s dispatch policy is one paved-road brick; this is the road.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“Opinions in a doc don’t bind anything.”</span> <span class="who">— R2, the Shelfware Tribunal</span></p>
+          <p>Answered with three bindings: the CI-executed quickstart (GAP·D1.1) <em>is</em> the paved road by definition; the skills document nothing else; off-road commands carry an explicit label in help output. Opinion becomes configuration.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The pipeline named step-by-step; the escape-hatch labeling policy; a doc/skill restructure list; a defaults audit — which flags exist only because the road was never chosen.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 5, evidence 4, timing 4, compounding 4, consumption 4, cost-inverse 4">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 05 ==================== -->
+    <article class="item" id="i05">
+      <div class="ordinal" aria-hidden="true">05</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The CLI Grammar Contract</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 25</span>
+        </div>
+        <p class="thesis">Every rename after v0.1.0 is a breaking change; every inconsistency kept is a permanent tax on agents.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>A grammar specification — command taxonomy (groups get subcommands; no new hyphen compounds), flag conventions, the <span class="mono">--format</span> contract, an exit-code table, a TTY policy — plus an audit of all 46 commands against it, a rename-and-alias schedule that lands before v0.1.0, and a conformance test every new command must pass.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence — all from <span class="mono">arm --help</span>, today</span>
+          <ul>
+            <li><span class="mono">merged</span> — a status used as a verb — sits beside <span class="mono">transition</span>.</li>
+            <li><span class="mono">sources</span> is a proper command group; <span class="mono">source-link</span> is a hyphenated orphan beside it.</li>
+            <li><span class="mono">scope-delete</span> and <span class="mono">scope-rename</span> got hyphens where <span class="mono">review</span> got subcommands.</li>
+            <li><span class="mono">stale-review</span> beside <span class="mono">review</span>; <span class="mono">worker-init</span> beside <span class="mono">workers</span>; <span class="mono">push-ops</span> beside <span class="mono">sync</span>.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>LH·C3 governs what comes <em>back</em> (errors); this governs what you <em>type</em>. LH·D4 consolidates one redundant verb; this is the law that stops the next one from appearing.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“Renames now break the dogfood fleet’s muscle memory and every published skill.”</span> <span class="who">— R3, Constraint &amp; Timing</span></p>
+          <p>Answered: the fleet has no muscle memory, only context — and skills are single-sourced in <span class="mono">internal/skillsembed/</span>, regenerated in one commit. That is exactly why the window is pre-adoption. Old names alias for one release, then die — LH·D3’s shim policy, applied at birth instead of at the funeral.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The grammar spec; the 46-command audit table; the rename map with alias sunset dates; a conformance-test spec at the command-registration layer.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 4, evidence 5, timing 5, compounding 3, consumption 4, cost-inverse 4">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 06 ==================== -->
+    <article class="item" id="i06">
+      <div class="ordinal" aria-hidden="true">06</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The Second Substrate</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 25</span>
+        </div>
+        <p class="thesis">Every one of the 69 findings that justify this roadmap was collected on one Go monorepo, by one maintainer, mostly on one harness.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>A deliberate dogfood campaign on a foreign repository — different language and shape (a TypeScript service, say), ideally a second harness — running one full story arc down the paved road, capturing findings through the existing pipeline, and ending in a <em>generality report</em>: which assumptions traveled, and which were Armature-shaped all along.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li>69 raw findings, 8 curated themes: all of them Armature-on-Armature.</li>
+            <li>Go-specific residue is already leaking into product design: LH·F1 bakes gopls and <span class="mono">go.work</span> mitigations into the managed-worktree proposal.</li>
+            <li>GAP·D3 is about to write positioning claims — from a sample size of one.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>GAP·D3.2 wants a showcase artifact; this is an evidence campaign that produces one as a by-product. GAP·T2’s harness simulates the mechanics; this samples reality.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“A week of fleet time on someone else’s repo, at v0.0.1? That’s a vacation, not a plan.”</span> <span class="who">— R3, the Year-Two Maintainer</span></p>
+          <p>Answered: timeboxed to one story arc, with abort criteria. The capture pipeline already exists, so marginal process cost is near zero — and it is the cheapest possible insurance against shipping a Go-shaped v0.1.0 and calling it general.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>Target-repo selection criteria; the campaign arc (bootstrap → one story → review → PR); the capture protocol (the existing skill, unchanged); the generality-report outline; the timebox and abort criteria.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 5, evidence 4, timing 5, compounding 3, consumption 5, cost-inverse 3">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 07 ==================== -->
+    <article class="item" id="i07">
+      <div class="ordinal" aria-hidden="true">07</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">Tiered Quality Gates</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 25</span>
+        </div>
+        <p class="thesis">The commit gate runs the full test suite twice and mutation-tests thirty-one packages — on every commit, and again on every push to every branch.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>Keep every threshold; move <em>when</em> each is paid. Inner loop, in seconds: lint plus tests for changed packages. Commit gate: the full suite once — the coverage profile taken from the same run instead of a second one. Merge gate, in CI: full suite plus coverage. Nightly: the full mutation sweep, with a ratchet — a red nightly blocks next-day merges via required status. Step one of the plan is measuring current wall-clock, the number nobody has written down.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li><span class="mono">make check</span> = lint + <span class="mono">go test ./...</span> + <span class="mono">go test -coverprofile ./...</span> — the suite compiles and runs twice — + gremlins across <span class="mono">./internal</span> (31 packages, 95% mutation coverage / 99% efficacy) + build.</li>
+            <li><span class="mono">quality-gates.md</span>: “must pass before every commit/push.” <span class="mono">ci.yml</span> repeats the identical pipeline on push to <span class="mono">'**'</span>.</li>
+            <li>Every fleet worker pays this toll per task; so does every human commit.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>Neither prior document touches pipeline latency — they <em>add</em> CI work (GAP·T1.1, GAP·D1.1, GAP·T4.1). This item is what keeps those additions affordable.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“Nightly mutation is mutation you can ignore.”</span> <span class="who">— R4, the Year-Two Maintainer, prosecuting his own witness</span></p>
+          <p>Answered: the ratchet. A red nightly blocks merges the next morning exactly as a red commit gate would have. What changes is who waits — a scheduled job instead of every worker on every task — not whether anyone does.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The wall-clock baseline; a tier assignment per gate; the Makefile and CI restructure spec; the nightly ratchet policy; a fleet-throughput before/after estimate.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 4, evidence 5, timing 3, compounding 4, consumption 5, cost-inverse 4">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 08 ==================== -->
+    <article class="item" id="i08">
+      <div class="ordinal" aria-hidden="true">08</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The Harness Compatibility Contract</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 24</span>
+        </div>
+        <p class="thesis">The enforcement layer rides third-party hook APIs that can change any Tuesday, and the support claim is a comma-separated list in an architecture doc.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>An adapter seam — one internal interface the harness hook targets per platform — plus a public support matrix (harness × capability: <em>enforce / advisory / none</em>), versioned and tested; a canary CI job against latest harness releases, scheduled and initially non-blocking; and an entry/exit policy for harness support.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li><span class="mono">architecture.md</span> §1: “Compatible with Claude Code, Gemini CLI, Cursor, Windsurf, Kiro” — no per-harness capability statement, no test behind the sentence.</li>
+            <li>Three legacy shims already live at v0.0.1 (LH·D3’s census) — each one the fossil of an untracked harness format change.</li>
+            <li>Skills already fan out to three harness directories: <span class="mono">.claude/</span>, <span class="mono">.gemini/</span>, <span class="mono">.codex/</span>.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>GAP·T4.1 tests our hook’s allow/deny logic; GAP·T4.3 documents today’s guarantees honestly; LH·D3 buries yesterday’s shims. This governs <em>tomorrow’s</em>: the seam decides where future migrations live, so shims stop accreting in the security-relevant path.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“This is T4.3 plus D3 wearing a trenchcoat.”</span> <span class="who">— R1, the Novelty Audit — the hardest round for this item</span></p>
+          <p>Answered: neither defines forward policy. T4.3 is a snapshot of today’s guarantees; D3 is a funeral for old code. Nothing anywhere says what happens when Claude Code changes its hook payload next month — and that gap is where the next three shims come from.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The adapter interface sketch; support matrix v1; the canary CI design with a promotion path from advisory to blocking; the harness add/drop policy.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 4, evidence 5, timing 4, compounding 4, consumption 4, cost-inverse 3">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 09 ==================== -->
+    <article class="item" id="i09">
+      <div class="ordinal" aria-hidden="true">09</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">The Strategy Memo</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 23</span>
+        </div>
+        <p class="thesis">Three roadmap documents now exist, and none of them says who this is for first.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>One internal memo that decides: <strong>the wedge</strong> — a named first persona; the evidence points at the solo operator running an agent fleet on a real repository. <strong>The wager</strong> — what must be true for Armature to matter. <strong>Sequencing</strong> — depth-first dogfood, then a few design partners, then public. <strong>The pre-mortem</strong> — five risks with tripwires: harness API churn (hedged by № 08), model behavior drift, bus factor, a context-price collapse inverting the economics, category consolidation. <strong>Metrics with a review date.</strong> And <strong>the content play</strong>: the dogfood corpus is the most credible marketing this project owns.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li>A market analysis exists — <span class="mono">docs/design/ai-context-management-market-analysis.md</span> — and nothing cites it.</li>
+            <li>Persona vocabulary is drifting: <span class="mono">architecture.md</span> §21 speaks solo-freelance / solo-enterprise / team-monorepo / team-multi-repo; the planning docs speak Wrangler and Conductor.</li>
+            <li>Two stacked roadmaps with no stated wedge to sort them by.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>GAP·D3 is the adopter-facing positioning artifact. This is the internal decision that makes D3 writable without hedging.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“Strategy memos are how founders procrastinate.”</span> <span class="who">— R2, the Shelfware Tribunal — its weakest round</span></p>
+          <p>Survived, barely, on three mechanisms: a review date, metrics that can fail, and the sort order it imposes on both existing roadmaps — every future planning round cites the wedge or argues with it. Scored lowest of the ten on Consumption for exactly this reason; kept because every other item’s sequencing quietly assumes an answer to the question it decides.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The wedge decision; the wager statement; the sequencing; the pre-mortem table; metrics and a review date; one unified persona vocabulary, fed back into CONTEXT.md.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 5, evidence 3, timing 4, compounding 3, consumption 3, cost-inverse 5">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- ==================== 10 ==================== -->
+    <article class="item" id="i10">
+      <div class="ordinal" aria-hidden="true">10</div>
+      <div>
+        <div class="itemhead">
+          <h3 class="title">Living Diagrams</h3>
+          <span class="chip ok">Survived R1–R4</span><span class="chip sum">Σ 23</span>
+        </div>
+        <p class="thesis">The core of the product is a state machine, and no picture of it exists anywhere in the repository.</p>
+
+        <div class="field"><span class="fl">What</span>
+          <p>A small set of load-bearing diagrams, each with a drift story. The issue-lifecycle state machine, <strong>generated from the transition table in code</strong> — a diagram that cannot lie. The ops → materialization → ready-queue data flow. The claim/review sequence. One context/container view. CI regenerates and diffs the generated ones; the drawn ones carry a verified-against commit stamp.</p>
+        </div>
+        <div class="field"><span class="fl">Evidence</span>
+          <ul>
+            <li><span class="mono">docs/design/architecture.md</span>: 1,867 lines, exactly one mermaid diagram.</li>
+            <li>Its header still cites the superseded DESIGN*.md lineage; its terminology table reads “epic → story → task,” omitting Feature and Bug; it defines “Working memory,” a term CONTEXT.md doesn’t know.</li>
+            <li>The issue lifecycle — open, claimed, in-progress, done, merged, blocked, cancelled, reopen — is the product’s core vocabulary, and it has no visual anywhere.</li>
+          </ul>
+        </div>
+        <div class="field"><span class="fl">Not that</span>
+          <p>GAP·D5.1 archives and indexes prose; GAP·T3.1 specifies recovery decisions. This creates the visual layer — and makes the generated core mechanically un-driftable.</p>
+        </div>
+        <div class="field redteam"><span class="fl">The red team</span>
+          <p><span class="voice">“Agents don’t read pictures; I parse mermaid as text anyway.”</span> <span class="who">— R4, the Cold-Start Agent</span></p>
+          <p>Half-conceded — which is why the state machine generates <em>both</em> a diagram and a table from the same source. Humans get the picture (GAP·D1.2 already wants a README visual); agents get the table; drift gets nothing.</p>
+        </div>
+        <div class="field"><span class="fl">The plan produces</span>
+          <p>The inventory of load-bearing views; a generation source per diagram; the drift-gate CI design; embed points — README, architecture, getting-started.</p>
+        </div>
+        <div class="meter" aria-label="Scores: leverage 4, evidence 4, timing 3, compounding 4, consumption 5, cost-inverse 3">
+          <div class="ax"><span class="al">LEV</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">EVI</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">TIM</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+          <div class="ax"><span class="al">CMP</span><span class="dots"><i></i><i></i><i></i><i></i><i class="off"></i><span class="dv">4</span></span></div>
+          <div class="ax"><span class="al">CNS</span><span class="dots"><i></i><i></i><i></i><i></i><i></i><span class="dv">5</span></span></div>
+          <div class="ax"><span class="al">C&#8315;&#185;</span><span class="dots"><i></i><i></i><i></i><i class="off"></i><i class="off"></i><span class="dv">3</span></span></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="matrix">
+    <span class="sec-label">§5 · The Matrix</span>
+    <h2>All scores, <span class="thin">one table</span></h2>
+    <div class="tablewrap">
+      <table class="matrix">
+        <thead>
+          <tr><th>№</th><th>Proposal</th><th class="num">Lev</th><th class="num">Evi</th><th class="num">Tim</th><th class="num">Cmp</th><th class="num">Cns</th><th class="num">C&#8315;&#185;</th><th class="num">Σ</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">01</td><td>The Armature Constitution</td><td class="num">5</td><td class="num">4</td><td class="num">4</td><td class="num">5</td><td class="num">4</td><td class="num">5</td><td class="num sig">27</td></tr>
+          <tr><td class="num">02</td><td>The Subtractive Release</td><td class="num">4</td><td class="num">5</td><td class="num">5</td><td class="num">4</td><td class="num">5</td><td class="num">4</td><td class="num sig">27</td></tr>
+          <tr><td class="num">03</td><td>Context Economics</td><td class="num">5</td><td class="num">5</td><td class="num">3</td><td class="num">5</td><td class="num">4</td><td class="num">4</td><td class="num sig">26</td></tr>
+          <tr><td class="num">04</td><td>The Paved Road</td><td class="num">5</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num sig">25</td></tr>
+          <tr><td class="num">05</td><td>The CLI Grammar Contract</td><td class="num">4</td><td class="num">5</td><td class="num">5</td><td class="num">3</td><td class="num">4</td><td class="num">4</td><td class="num sig">25</td></tr>
+          <tr><td class="num">06</td><td>The Second Substrate</td><td class="num">5</td><td class="num">4</td><td class="num">5</td><td class="num">3</td><td class="num">5</td><td class="num">3</td><td class="num sig">25</td></tr>
+          <tr><td class="num">07</td><td>Tiered Quality Gates</td><td class="num">4</td><td class="num">5</td><td class="num">3</td><td class="num">4</td><td class="num">5</td><td class="num">4</td><td class="num sig">25</td></tr>
+          <tr><td class="num">08</td><td>The Harness Compatibility Contract</td><td class="num">4</td><td class="num">5</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">3</td><td class="num sig">24</td></tr>
+          <tr><td class="num">09</td><td>The Strategy Memo</td><td class="num">5</td><td class="num">3</td><td class="num">4</td><td class="num">3</td><td class="num">3</td><td class="num">5</td><td class="num sig">23</td></tr>
+          <tr><td class="num">10</td><td>Living Diagrams</td><td class="num">4</td><td class="num">4</td><td class="num">3</td><td class="num">4</td><td class="num">5</td><td class="num">3</td><td class="num sig">23</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Ties broken by judgment, argued here: № 01 leads № 02 because the census cuts along lines the constitution draws. № 09 leads № 10 because the memo frames everything else — its rank measures its rubric score, not its urgency; the Sequencing section corrects for that.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="sequence">
+    <span class="sec-label">§6 · Sequencing</span>
+    <h2>Six trains, <span class="thin">two with departure times</span></h2>
+    <div class="train"><div><h3>The Frame</h3><span class="cars">01 · 09</span></div><p>Written first, in the same week. The two cheapest items on the list, and every other item cites them. The constitution supplies the cut lines; the memo supplies the sort order.</p></div>
+    <div class="train"><div><h3>The Subtraction Train</h3><span class="cars">02 · 05 · 04</span></div><p>Coupled to GAP·T5.3’s v0.1.0 release — the forcing function. These expire: after the release, cuts and renames become breaking changes and the window closes for good.</p></div>
+    <div class="train"><div><h3>The Meters</h3><span class="cars">03 · 07</span></div><p>Start measuring immediately — wall-clock and tokens are both one command away. Trimming is forever; the meters just make it visible.</p></div>
+    <div class="train"><div><h3>The Evidence Campaign</h3><span class="cars">06</span></div><p>Before GAP·D3 writes generality claims. A positioning doc written after the second substrate is honest; written before, it is hopeful.</p></div>
+    <div class="train"><div><h3>The Boundary</h3><span class="cars">08</span></div><p>Before LH·D3’s shim deletions land, so the migrations have a seam to live in rather than another string-match to add.</p></div>
+    <div class="train"><div><h3>The Visual Layer</h3><span class="cars">10</span></div><p>Rides GAP·D5’s documentation-hygiene wave; the state-machine generator is the one piece worth pulling forward.</p></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="colophon" class="colophon">
+    <hr class="rule-double">
+    <span class="sec-label" style="margin-top:1.2rem; display:block;">§7 · Colophon</span>
+    <p><strong>Method honesty.</strong> The rubric is self-scored by the same author who proposed the items — the same bias the long-horizon round carried, inherited knowingly. Scores are ordinal, not cardinal: a 27 is not “12.5% better” than a 24; it is <em>earlier in line</em>. The red-team voices are internal adversarial passes, not independent reviewers; their value is that every objection recorded here was strong enough to kill three of this document’s earlier drafts’ candidates.</p>
+    <p><strong>Provenance.</strong> All measurements taken 2026-07-07 from working tree <span class="mono">v0.0.1-509-gdfc5979a</span>: byte counts via <span class="mono">wc -c</span>; op counts via <span class="mono">grep</span> over <span class="mono">.arm/.armature/ops/*.log</span> (6,918 ops, 71 logs); command counts from <span class="mono">arm --help</span>; pipeline facts from <span class="mono">Makefile</span> and <span class="mono">.github/workflows/ci.yml</span>. Reference keys: <span class="mono">GAP·</span> = top-tier-gap-analysis.md; <span class="mono">LH·</span> = long-horizon-proposals.md.</p>
+    <p><strong>On the presentation.</strong> Set in Palatino and Charter over warm paper, with one oxblood accent for verdicts and one bronze for magnitude. Every score is direct-labeled; color carries nothing alone. The document renders in light and dark, prints acceptably, and depends on no network resource — like the project it describes, it is a single self-contained artifact.</p>
+  </section>
+
+</div>
+</body>
+</html>
