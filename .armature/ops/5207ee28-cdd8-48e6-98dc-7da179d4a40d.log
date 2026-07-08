@@ -2924,3 +2924,4 @@
 ["link","LNGHZN-S1-T5",1783511561,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"LNGHZN-S1-T2","rel":"blocked_by"}]
 ["dag-transition","LNGHZN",1783511568,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"LNGHZN"}]
 ["source-link","LNGHZN-B1",1783511582,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"f74a305a-97ec-4816-8fe1-886a57bb56e2","source_url":"docs/design/dotdir-collapse.md"}]
+["source-link","LNGHZN-S1",1783511582,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"f74a305a-97ec-4816-8fe1-886a57bb56e2","source_url":"docs/design/dotdir-collapse.md"}]
