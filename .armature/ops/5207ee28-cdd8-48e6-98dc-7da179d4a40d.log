@@ -3042,3 +3042,4 @@
 ["source-link","LNGHZN-S2-T3",1783522010,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"5b40675c-1b83-49e9-80eb-abbd5aafb208","source_url":"docs/design/next-work-sequencing.md"}]
 ["link","TOPTIER-S1-T2",1783522015,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"LNGHZN-S2-T1","rel":"blocked_by"}]
 ["link","TOPTIER-S1-T2",1783522015,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"LNGHZN-S2-T3","rel":"blocked_by"}]
+["amend","LNGHZN-S2",1783522060,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"definition_of_done":"arm ready gains --waves: partitions the ready queue into scope-disjoint dispatch waves via greedy first-fit (priority-tier hard boundary, conflict-degree ordering within a tier, ancestor/descendant exclusion, no size cap), emitted as a new grouped output additive to unchanged plain arm ready. An ADR codifies the wave-planning non-goal and other resolved decisions. Pure computed view; no new op type."}]
