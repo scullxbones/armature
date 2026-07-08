@@ -2543,3 +2543,4 @@
 ["create","TOPTIER-S16-T2",1783473326,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"title":"Add authorship risk with tripwire to the Strategy Memo pre-mortem","parent":"TOPTIER-S16","type":"task","scope":["docs/design/strategy-memo.md"],"acceptance":["Strategy memo pre-mortem table includes the authorship/copyright risk row with a tripwire","arm validate exits 0"],"definition_of_done":"Once the Strategy Memo (Next-Ten #09) exists, its pre-mortem table names the authorship/copyright risk with a tripwire; until then this task tracks the pending edit as a note.","priority":"low","confidence":"draft"}]
 ["link","TOPTIER-S16-T2",1783473326,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"TOPTIER-S16-T1","rel":"blocked_by"}]
 ["dag-transition","TOPTIER-S11",1783473330,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"TOPTIER-S11"}]
+["dag-transition","TOPTIER-S12",1783473330,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"TOPTIER-S12"}]
