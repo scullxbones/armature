@@ -2934,3 +2934,4 @@
 ["amend","LNGHZN-S1-T5",1783511611,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["AGENTS.md"," docs/design/architecture.md"," docs/agents/"," internal/skillsembed/skills/"]}]
 ["amend","LNGHZN-S1",1783511611,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/design/dotdir-collapse.md"]}]
 ["amend","LNGHZN-S1-T1",1783511612,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/design/dotdir-collapse.md"]}]
+["amend","LNGHZN-S1-T5",1783511612,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/design/dotdir-collapse.md"]}]
