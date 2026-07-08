@@ -2575,3 +2575,4 @@
 ["amend","TOPTIER-S14",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/validate/validate.go"," internal/validate/validate_test.go"," docs/design/extensibility.md (new)"]}]
 ["amend","TOPTIER-S14-T1",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/validate/validate.go"," internal/validate/validate_test.go"]}]
 ["amend","TOPTIER-S14-T2",1783473380,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["docs/design/extensibility.md (new)"]}]
+["amend","TOPTIER-S16",1783473381,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["AUTHORSHIP.md (new)"," CONTRIBUTING.md (new)"]}]
