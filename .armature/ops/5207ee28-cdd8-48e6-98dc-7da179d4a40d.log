@@ -3049,3 +3049,4 @@
 ["link","TOPTIER-S17-T3",1783522067,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"TOPTIER-S17-T2","rel":"blocked_by"}]
 ["link","TOPTIER-S17-T4",1783522067,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"TOPTIER-S17-T3","rel":"blocked_by"}]
 ["amend","TOPTIER-S17",1783522067,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/dogfood/findings/themes/scope-overlap-validation-gaps/README.md"]}]
+["amend","LNGHZN-S2",1783522067,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/design/next-work-sequencing.md"]}]
