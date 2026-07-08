@@ -2834,3 +2834,4 @@
 ["source-link","NXTTN-S5-T4",1783480532,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"aa2bf5c7-4a37-4e16-bcc1-ebbd0cd9d02b","source_url":"docs/design/cli-grammar-contract.md"}]
 ["source-link","NXTTN-S5-T1",1783480532,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"22abceac-3a79-4265-beab-4908bfc310eb","source_url":"docs/adr/0011-cli-groups-mirror-deep-modules.md"}]
 ["source-link","NXTTN-S5-T3",1783480532,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"22abceac-3a79-4265-beab-4908bfc310eb","source_url":"docs/adr/0011-cli-groups-mirror-deep-modules.md"}]
+["link","NXTTN-S5-T1",1783480532,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"NXTTN-S2-T3","rel":"blocked_by"}]
