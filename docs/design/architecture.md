@@ -18,10 +18,10 @@ Distributed as a single Go binary (`arm`). Open source.
 
 ### Key Constraints
 
-- **Git-native:** All state lives in git. No database, no server, no daemon.
+Invariants (git-native, append-only, merge-conflict-free by construction, etc.) are defined in `CONSTITUTION.md` — this section only covers implementation constraints not promoted to invariant status:
+
 - **Single binary:** One compiled Go binary, zero runtime dependencies beyond `git` (v2.25+ for sparse checkout).
 - **Zero external deps:** Core operations (claim, transition, render-context, materialize) never make network calls beyond `git push/pull`. Only `sources add` and `sources sync` contact external providers.
-- **Merge-conflict-free by construction:** Each worker writes exclusively to its own log file. No two workers ever write the same file.
 
 ### Supported Platforms and Agentic Tools
 
