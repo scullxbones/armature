@@ -73,6 +73,7 @@ or landed.
 | `graph-facts-refactor-follow-up.md` | Planners | Current — proposed |
 | `harness-hooks-review-and-retooling.md` | Planners | Current — proposed |
 | `deterministic-quality-guardrails.md` | Planners | Current — proposed standard |
+| `plan-post-bootstrap.json` | Historical | Superseded — Trellis E2/E3/E4 decomposition plan, landed long ago |
 
 ## Archive (`archive/`)
 
