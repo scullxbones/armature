@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+
 # Armature Dogfooding Learnings
 
 Captured while using armature to track its own E2 development.
