@@ -45,7 +45,9 @@ adding a new one, not editing the old).
 | `0009-ratify-the-armature-constitution.md` | Contributors | Current |
 | `0010-park-not-purge-subtractive-release.md` | Contributors | Current |
 | `0011-cli-groups-mirror-deep-modules.md` | Contributors | Current |
-| `adr-context-files.md` | Contributors | Current — ADR authoring guide |
+| `0012-context-files-intent-lifecycle-and-cli-semantics.md` | Contributors | Current |
+| `template.md` | Contributors | Current — template for new ADRs |
+| `README.md` | Contributors | Current — ADR index |
 
 ## Design (`design/`)
 
