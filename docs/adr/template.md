@@ -4,6 +4,10 @@
 
 Proposed | Accepted | Superseded by ADR-NNNN
 
+## Principles touched
+
+I1 | T1 | N1 | none
+
 ## Context
 
 What problem or decision point prompted this ADR. Cite the concrete evidence
