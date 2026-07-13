@@ -1,4 +1,4 @@
-> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+> **Superseded by:** No single document. Historical ceremony record; see `docs/agents/dogfood-findings.md` for the current dogfooding process.
 
 # E1 Bootstrap Dogfood Ceremony
 
