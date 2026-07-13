@@ -1,3 +1,5 @@
+// Package harnesspolicy resolves and verifies scope and verification policy for a task,
+// deciding which files a worker may touch and what checks must pass before completion.
 package harnesspolicy
 
 import (

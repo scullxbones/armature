@@ -1,3 +1,5 @@
+// Package materialize replays the append-only op log into materialized task state: the
+// DAG, checkpoints, history, and current snapshot the rest of armature reads from.
 package materialize
 
 import (

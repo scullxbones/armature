@@ -1,3 +1,4 @@
+// Package dagsum implements the TUI dependency-graph summary view.
 package dagsum
 
 import (

@@ -1,3 +1,4 @@
+// Package hooks runs armature's git hooks (e.g. pre-commit/pre-push checks) against the working tree.
 package hooks
 
 import (

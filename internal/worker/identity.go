@@ -1,3 +1,4 @@
+// Package worker resolves and persists the current worker's identity, used to attribute claims and commits.
 package worker
 
 import (

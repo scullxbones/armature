@@ -1,3 +1,5 @@
+// Package context assembles and renders the layered context bundle (spec, scope, citations)
+// passed to workers via render-context, with truncation to keep bundles within budget.
 package context
 
 import (

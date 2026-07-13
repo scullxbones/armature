@@ -161,7 +161,6 @@ linters:
           - checkPrivateReceivers: true
           disabled: true
         - name: package-comments
-          disabled: true
     lll:
       line-length: 160
   exclusions:

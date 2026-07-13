@@ -1,3 +1,6 @@
+// Package audit implements the pre-merge audit gate: citation integrity, source freshness,
+// outcome quality, scope overlap, and repo health checks that must pass before a story is
+// transitioned to done.
 package audit
 
 import (

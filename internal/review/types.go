@@ -1,3 +1,5 @@
+// Package review implements semantic conformance review: preparing task-scoped delivery
+// bundles, recording reviewer assessments, and rating them against acceptance criteria.
 package review
 
 import (
