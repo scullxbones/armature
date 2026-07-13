@@ -1,3 +1,5 @@
+// Package claim resolves task claim ownership from the op log, detecting stale claims
+// (expired TTL with no heartbeat) and overlapping claims across concurrent workers.
 package claim
 
 import (

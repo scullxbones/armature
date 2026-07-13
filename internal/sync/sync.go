@@ -1,3 +1,4 @@
+// Package sync checks whether a branch or worktree is merge-conflict-free relative to its target before promoting a task to merged.
 package sync
 
 import (

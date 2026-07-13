@@ -1,3 +1,4 @@
+// Package errors defines armature's typed error values and wrapping helpers so callers can distinguish user-facing failures from internal ones.
 package errors
 
 import "fmt"

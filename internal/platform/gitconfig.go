@@ -1,3 +1,4 @@
+// Package platform reads and writes git-config-backed values, such as the worker identity used by claim and heartbeat.
 package platform
 
 import "github.com/scullxbones/armature/internal/adapters"

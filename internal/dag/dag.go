@@ -1,3 +1,4 @@
+// Package dag builds and validates the issue dependency graph, detecting cycles and computing blocked/ready state from op-log-derived edges.
 package dag
 
 import (

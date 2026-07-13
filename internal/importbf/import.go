@@ -1,3 +1,4 @@
+// Package importbf implements brownfield import: converting an existing, non-armature-native repository's issues into armature op-log entries.
 package importbf
 
 import (

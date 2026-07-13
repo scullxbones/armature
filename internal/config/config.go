@@ -1,3 +1,4 @@
+// Package config loads and resolves armature's repository and worker configuration, including per-command context needed to render task specs.
 package config
 
 import (

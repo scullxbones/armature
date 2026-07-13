@@ -1,3 +1,4 @@
+// Package sources implements the TUI view for external source (Confluence/SharePoint/filesystem) freshness.
 package sources
 
 import (

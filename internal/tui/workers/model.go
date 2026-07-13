@@ -1,3 +1,4 @@
+// Package workers implements the TUI view listing active worker claims.
 package workers
 
 import (

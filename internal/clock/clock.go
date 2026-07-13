@@ -1,3 +1,4 @@
+// Package clock provides a narrow time-source seam so callers can inject a fixed or fake clock in tests instead of depending on wall-clock time directly.
 package clock
 
 import "time"

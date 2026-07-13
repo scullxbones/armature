@@ -1,3 +1,4 @@
+// Package ready computes the set of unblocked, unclaimed issues (the ready queue) and detects stale in-progress claims.
 package ready
 
 import (
