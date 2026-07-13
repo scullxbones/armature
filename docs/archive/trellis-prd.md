@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+
 # TRELLIS — Product Requirements Document
 
 **Git-Native Work Orchestration for Multi-Agent AI Coordination**

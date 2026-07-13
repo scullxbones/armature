@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+
 # E1 Bootstrap Dogfood Ceremony
 
 Date: 2026-03-15
