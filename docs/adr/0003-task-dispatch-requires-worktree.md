@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I3, I4
+
 ## Context
 
 The harness hook enforces task scope and verification policy by reading the active task ID from the worktree's local git state. For this enforcement to be reliable, the task ID must be written by the `arm claim` call itself — not by a separate coordinator instruction the LLM might omit. The coordinator is an LLM and is stochastic; governance setup cannot depend on it following a sequence correctly.

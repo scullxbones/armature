@@ -2,6 +2,10 @@
 
 Status: accepted
 
+## Principles touched
+
+I4
+
 Harness workers are dispatched as subagents *inside* the coordinator's harness session, not as separate harness processes. Subagents share the session's hook configuration, environment, and hook working directory — so a hook that resolves the issue binding from its own process cwd attributes every worker's activity to the coordinator's binding (usually none, yielding silent pass-through with no scope enforcement). To preserve the invariant that each agent operates under exactly one Issue Binding, `arm harness-hook` resolves the binding from the **event itself**, most specific first:
 
 1. `tool_input.file_path` — walk up from the target file to the containing worktree's git dir and its `armature-issue-id` file

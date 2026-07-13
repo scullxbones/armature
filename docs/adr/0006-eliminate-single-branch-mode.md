@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I1, I3
+
 ## Context
 
 Armature originally supported two operating modes: single-branch mode, where `.armature/` coordination data lived on the same branch as code, and dual-branch mode, where coordination data lived on a dedicated `_armature` ops branch accessed through a separate ops worktree. `Mode` was a config field (`internal/config/config.go`), defaulting to `"single-branch"`, with both modes threaded through config probing, materialization, sync, hooks, the TUI, and most of `docs/`.

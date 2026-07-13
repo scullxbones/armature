@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I1, I4
+
 ## Context
 
 Armature's setup surface had split across multiple commands and responsibilities:

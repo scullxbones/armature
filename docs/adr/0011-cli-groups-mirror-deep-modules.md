@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+none
+
 ## Context
 
 `docs/design/the-next-ten.html`, item №05 ("The CLI Grammar Contract"), catalogs a real inconsistency in Armature's 46-command surface: `sources` is a proper command group (`sources add/sync/verify`) but `source-link` sits beside it as a hyphenated orphan; `review` has subcommands but `stale-review` doesn't; `workers` is a group but `worker-init` isn't; `scope-delete`/`scope-rename` got hyphens where a comparable pattern elsewhere got subcommands. The obvious fix is a CLI-only naming convention — pick a taxonomy rule and apply it.

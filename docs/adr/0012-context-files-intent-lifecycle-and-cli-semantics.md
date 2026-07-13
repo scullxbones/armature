@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I4, I5
+
 ## Context
 
 Armature tasks already carry `scope`, `acceptance`, `definition_of_done`, and optional free-form `context`. The `context_files` field exists to name stable background documents that should be rendered for an agent before it starts work, especially when the implementation scope spans several directories.

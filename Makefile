@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint clean mutate check help skill dist-skills install build validate-skills deploy-skills trace-report
+.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills deploy-skills trace-report
 
 # Variables
 GO ?= go
@@ -16,7 +16,7 @@ help:
 	@echo "  make test       - Run all tests"
 	@echo "  make coverage   - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check - Check coverage meets 80% threshold (fails build if not)"
-	@echo "  make lint       - Run golangci-lint"
+	@echo "  make lint       - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate     - Run mutation testing on core packages"
 	@echo "  make validate-skills - Validate embedded skill source"
 	@echo "  make trace-report - Scan test files for spec traceability patterns"
@@ -52,7 +52,7 @@ coverage-check:
 		exit 1; \
 	fi
 
-lint:
+lint: adr-principles
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "golangci-lint not found. Install with:"; \
 		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
@@ -60,6 +60,9 @@ lint:
 		exit 1; \
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
+
+adr-principles:
+	@$(PYTHON) scripts/check_adr_principles.py docs/adr
 
 mutate:
 	@command -v gremlins >/dev/null 2>&1 || { \

@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I1, I2, I3, I4, I5, I6, I7, N1, N2, N3, N4, N5, T1, T2, T3
+
 ## Context
 
 Armature's invariants — git-native, no daemon, append-only history, merge-conflict-free by construction — existed only as "Key Constraints," §1 of `docs/design/architecture.md`, an 1,800+ line document whose stated audience is implementers and whose surrounding detail drifts from the live tree faster than a small, stable charter should. Two prior planning rounds (the gap analysis and the long-horizon proposals) each had to reconstruct the constraint set by hand before they could reason about new work, because no citable boundary document existed independent of the implementer-facing architecture doc.

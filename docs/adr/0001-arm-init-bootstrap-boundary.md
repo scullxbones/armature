@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I1, I4
+
 ## Context
 
 Armature's first-run path had drifted into several separate setup actions: repository initialization, worker identity, git hook installation, bundled skill deployment, and harness-hook configuration. The primary user is often an agent, so missing or manual setup steps create product friction quickly and can make integrations appear active when they are not.

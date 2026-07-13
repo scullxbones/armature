@@ -1,5 +1,9 @@
 # ADR: Depguard Boundaries for Deep Modules
 
+## Principles touched
+
+none
+
 Seven packages are designated deep modules — narrow public interfaces hiding substantial implementation — and are protected by strict-mode depguard allow lists in `.golangci.yml`: `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, and `output`. `dag` and `issuetype` are additionally guarded as truly pure packages (no internal imports at all). All rules are immediately green against the current codebase.
 
 The distinction between "pure" (dag, issuetype — no internal imports) and "port-clean" (ops, claim, traceability, materialize, sources — may use `adapters` as the I/O port abstraction) reflects a hexagonal architecture where `internal/adapters` is the secondary port layer. Using adapters does not make a package imperative; it uses a controlled, testable abstraction boundary.

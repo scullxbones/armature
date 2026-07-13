@@ -2,6 +2,10 @@
 
 Status: accepted — amends ADR-0005 and the 2026-06-27 semantic conformance review design (Non-Goals: "do not collect general tool activity… or harness activity logs"; Architecture: "hooks… neither collect activity for nor initiate conformance review")
 
+## Principles touched
+
+I5, N4
+
 Behavioral criteria ("endpoint returns 401") often cannot be established from the delivery diff, forcing the Reviewer to `indeterminate` even when the behavior was demonstrably exercised. We now let harness hooks capture **Execution Evidence** — harness-recorded `(command, output)` pairs from the bound issue's session — and admit it into semantic review as a third, explicitly weaker evidence class. Hooks still never initiate review, never block on review results, and worker prose remains inadmissible; what changed is that *platform-recorded* execution facts are no longer conflated with the untrusted worker-authored activity ADR-0005 meant to exclude.
 
 ## The trust model
