@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+
 # Armature Rename — Decision Archive
  
 **Date:** April 19, 2026

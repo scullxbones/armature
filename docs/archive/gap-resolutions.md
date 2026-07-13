@@ -1,3 +1,5 @@
+> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+
 # Architecture TOC Gap Resolutions
 
 Resolves the 5 gaps identified during TOC development. These decisions feed into the architecture document.
