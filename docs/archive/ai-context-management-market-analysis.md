@@ -1,4 +1,4 @@
-> **Superseded by:** `docs/design/architecture.md`. Archived as historical reference; not maintained.
+> **Superseded by:** No specific document. Historical, point-in-time market analysis (see freshness notice within); retained for competitive-positioning context.
 
 # **The Paradigm Shift from Prompt to Context Engineering: A Market Analysis of Agentic Work Management and Task Decomposition Systems**
 
