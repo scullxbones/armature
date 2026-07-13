@@ -1,3 +1,4 @@
+// Package decompose turns a story or epic plan into concrete task issues, and supports applying, reverting, and re-planning a decomposition.
 package decompose
 
 import (

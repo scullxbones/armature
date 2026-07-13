@@ -1,3 +1,5 @@
+// Package sources ingests external reference material (filesystem, Confluence, SharePoint)
+// used to back citations, tracking manifest and freshness fingerprints.
 package sources
 
 import (

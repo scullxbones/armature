@@ -1,3 +1,4 @@
+// Package tui provides shared terminal UI primitives (screen management, color palette, component widgets, TTY detection) used by the higher-level TUI views.
 package tui
 
 import (

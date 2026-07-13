@@ -1,3 +1,6 @@
+// Package harnesshook implements the harness integration layer that lets external agent
+// platforms (Claude, Codex, Devin) invoke armature commands through a common hook and
+// activity-binding contract.
 package harnesshook
 
 import (

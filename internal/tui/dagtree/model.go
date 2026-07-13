@@ -1,3 +1,4 @@
+// Package dagtree implements the TUI dependency-tree view.
 package dagtree
 
 import (

@@ -1,3 +1,4 @@
+// Package issuetype defines the set of issue types (epic, story, task, bug, ADR, etc.) and their validation rules.
 package issuetype
 
 // IsValid returns true if t is a known issue type.

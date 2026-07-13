@@ -1,3 +1,4 @@
+// Package tuivalidate implements the TUI view for arm validate/doctor findings.
 package tuivalidate
 
 import (

@@ -1,3 +1,4 @@
+// Package validate implements armature's DAG and citation integrity checks (arm validate / arm doctor), reporting overlap, cycle, and coverage errors.
 package validate
 
 import (

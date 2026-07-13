@@ -1,3 +1,4 @@
+// Package stalereview implements the TUI view for surfacing stale review assessments.
 package stalereview
 
 import (

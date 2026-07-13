@@ -1,3 +1,4 @@
+// Package snapshot captures and restores point-in-time views of materialized task state.
 package snapshot
 
 import (

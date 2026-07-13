@@ -1,3 +1,4 @@
+// Package output formats command results for human and machine (JSON) consumption across the CLI.
 package output
 
 import (

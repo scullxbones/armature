@@ -1,3 +1,4 @@
+// Package detail implements the TUI issue detail view.
 package detail
 
 import (

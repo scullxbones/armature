@@ -1,3 +1,4 @@
+// Package ops defines the op-log schema (typed, append-only events), and provides parsing, commit, push, and rate-limiting for writing and reading that log.
 package ops
 
 import "encoding/json"
