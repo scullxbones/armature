@@ -91,7 +91,7 @@ def extract_code_blocks(content):
 
 def join_continued_lines(code_block):
     """Join shell lines continued by an unquoted trailing backslash."""
-    return re.sub(r"\\\\\n[ \t]*", " ", code_block)
+    return re.sub(r"\\\n[ \t]*", " ", code_block)
 
 
 def extract_arm_commands(code_block):
