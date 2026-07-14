@@ -111,12 +111,17 @@ def extract_arm_commands(code_block):
         if not line or line.startswith("#"):
             continue
 
-        # Handle inline arm commands in a line with pipes or &&
-        # Split by && and | to handle compound statements
-        parts = re.split(r"(?:&&|\||\|\|)", line)
+        # Handle inline arm commands in a line with pipes, &&, or ;
+        # Split on && , | , || , and ; to handle compound statements
+        parts = re.split(r"(?:&&|\||\|\||;)", line)
 
         for part in parts:
             part = part.strip()
+            # Strip a trailing (unquoted) shell redirection, e.g.
+            # "arm ready > out.json" or "arm ready >> out.json", so the
+            # redirect operator and target filename don't leak into the
+            # parsed arm command as bogus subcommands/args.
+            part = re.sub(r"\s*>>?\s*\S+$", "", part)
             # `arm` can be the command in a command substitution or a prefix
             # assignment, e.g. `FILES=$(arm ready --format json | ...)`.
             # Keep the surrounding shell segment boundary above, then extract
@@ -127,7 +132,7 @@ def extract_arm_commands(code_block):
 
             # Do not mistake prose such as "arm command, run: ..." for an
             # invocation. Command substitutions have a distinct shell marker.
-            match = re.search(r"\$\(\s*(arm(?:\s+[^|&;\n]*)?)", part)
+            match = re.search(r"\$\(\s*(arm(?:\s+[^|&;\n)]*)?)(?=[\s)]|$)", part)
             if match:
                 commands.append(match.group(1).rstrip(")"))
 
@@ -263,7 +268,7 @@ def parse_command_line(arm_command):
     in_quotes = False
 
     for char in arm_command:
-        if char == '"':
+        if char == '"' or char == "'":
             in_quotes = not in_quotes
         elif char == " " and not in_quotes:
             if current:

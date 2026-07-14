@@ -187,6 +187,57 @@ More info.
 		require.Contains(t, output.String(), "--not-a-real-flag")
 	})
 
+	// `arm` as a mere prefix of another command name inside a command
+	// substitution (e.g. `armature-cli`, not the `arm` CLI) must not be
+	// mistaken for an arm invocation.
+	t.Run("CommandSubstitutionArmPrefixIsNotFlagged", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\nSTATUS=$(armature-cli status)\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.NoError(t, err, "stderr: %s", output.String())
+	})
+
+	// A `;`-separated compound line must have each segment parsed as its
+	// own arm command, and trailing shell redirections must be stripped
+	// before parsing so they don't leak into the subcommand chain.
+	t.Run("SemicolonSeparatedAndRedirectedCommandsAreLinted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm doctor; arm validate\narm ready > out.json\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.NoError(t, err, "stderr: %s", output.String())
+	})
+
+	// The tokenizer must treat single quotes the same as double quotes so a
+	// quoted argument value containing a space and a dash-like sequence
+	// isn't mistaken for separate flag tokens.
+	t.Run("SingleQuotedArgumentIsNotMistakenForFlags", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm note TASK-01 --msg 'contains --not-a-real-flag inside a string'\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.NoError(t, err, "stderr: %s", output.String())
+	})
+
 	// `arm` commands in command substitutions are real invocations, not prose.
 	t.Run("CommandSubstitutionIsLinted", func(t *testing.T) {
 		tmpDir := t.TempDir()
