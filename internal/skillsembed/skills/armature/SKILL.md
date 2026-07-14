@@ -20,8 +20,8 @@ arm worker-init --check || arm worker-init              # register once per clon
 
 ```
 arm ready                                               # list actionable issues
-arm claim --issue ID [--ttl 3600]                       # claim an issue
-arm render-context --issue ID [--budget 4000]           # get task context
+arm claim ID --worktree /path/to/wt [--ttl 60]          # claim an issue with worktree
+arm render-context ID [--budget 4000]                   # get task context
 ```
 
 ## During Work
@@ -53,8 +53,8 @@ arm doctor [--strict]                                   # repo health check
 ```
 arm sources add --url PATH --title "TEXT" --type filesystem
 arm sources sync && arm sources verify
-arm source-link --issue ID --source-id UUID
-arm accept-citation --issue ID --rationale TEXT --ci
+arm source-link ID --source-id UUID
+arm accept-citation ID --rationale TEXT --ci
 ```
 
 ## Scope Management
@@ -67,8 +67,8 @@ arm scope-delete <path>
 ## Semantic Conformance Review
 
 ```
-arm review prepare --issue ID --base BASE-SHA --head HEAD-SHA  # create review bundle
-arm review record --issue ID --assessment assessment.json      # record reviewer output
+arm review prepare --issue ID --base BASE-SHA --head HEAD-SHA # create review bundle
+arm review record --issue ID --assessment assessment.json     # record reviewer output
 ```
 
 Semantic review validates that delivered work conforms to acceptance criteria and scope. Use the `armature-reviewer` skill with the bundle from `review prepare`; persist results with `review record`.
