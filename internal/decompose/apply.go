@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -41,6 +42,10 @@ type ApplyOptions struct {
 func ValidatePlan(plan *Plan) []string {
 	var warnings []string
 	for _, issue := range plan.Issues {
+		if !issuetype.IsValid(issue.Type) {
+			warnings = append(warnings, fmt.Sprintf("issue %s (%s) has invalid type %q: valid types are %s",
+				issue.ID, issue.Title, issue.Type, strings.Join(issuetype.All(), ", ")))
+		}
 		if issue.DoD == "" {
 			warnings = append(warnings, fmt.Sprintf("issue %s (%s) is missing a definition of done", issue.ID, issue.Title))
 		}

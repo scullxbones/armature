@@ -193,3 +193,22 @@ func TestDryRunApplyPlanWithOptions_StrictRejectsWarnings(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "warning")
 }
+
+func TestValidatePlan_RejectsInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
+	t.Parallel()
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Plan with invalid type",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "Valid task", Type: "task", DoD: "definition"},
+			{ID: "PLAN-002", Title: "Invalid behavior type", Type: "behavior", DoD: "definition"},
+		},
+	}
+
+	warnings := ValidatePlan(plan)
+	assert.Len(t, warnings, 1, "should have exactly one warning for invalid type")
+	assert.Contains(t, warnings[0], "PLAN-002")
+	assert.Contains(t, warnings[0], "invalid type")
+	assert.Contains(t, warnings[0], "behavior")
+}
