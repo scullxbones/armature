@@ -25,6 +25,7 @@ func newReviewCmd() *cobra.Command {
 
 	cmd.AddCommand(newReviewPrepareCmd())
 	cmd.AddCommand(newReviewRecordCmd())
+	cmd.AddCommand(newReviewCommitsCmd())
 
 	return cmd
 }
@@ -179,6 +180,66 @@ assessment contract fingerprint matches the bundle contract fingerprint.`,
 	cmd.Flags().StringVar(&bundleFile, "bundle", "", "review bundle file path (optional; enables diff-index citation validation)")
 
 	return cmd
+}
+
+func newReviewCommitsCmd() *cobra.Command {
+	var issueID string
+
+	cmd := &cobra.Command{
+		Use:   "commits <issue-id>",
+		Short: "List delivery commits for an issue across all conventional-commit types",
+		Long: `List delivery commits for an issue by scanning conventional-commit-style commit
+messages that reference the issue ID in their scope (e.g., feat(ISSUE-ID): ..., fix(ISSUE-ID): ..., etc.).
+
+This discovers commits across all commit type prefixes (feat, fix, refactor, test, docs, chore),
+replacing the coordinator skill's feat-only grep pseudocode which silently dropped other types.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				issueID = args[0]
+			}
+			return runReviewCommits(cmd, issueID)
+		},
+	}
+
+	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID (required)")
+
+	return cmd
+}
+
+func runReviewCommits(cmd *cobra.Command, issueID string) error {
+	if issueID == "" {
+		return fmt.Errorf("issue ID is required")
+	}
+
+	ctx := currentCtx(cmd)
+	git := adapters.New(ctx.RepoPath)
+
+	commits, err := review.ReviewCommits(git, issueID)
+	if err != nil {
+		return fmt.Errorf("failed to list commits for issue %s: %w", issueID, err)
+	}
+
+	// Output in JSON format when in agent context, otherwise human-readable
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	if format == "json" || format == "agent" {
+		data, err := json.Marshal(commits)
+		if err != nil {
+			return fmt.Errorf("failed to marshal commits: %w", err)
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	} else {
+		// Human-readable output
+		if len(commits) == 0 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No commits found for issue %s\n", issueID)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d commit(s) for issue %s:\n\n", len(commits), issueID)
+			for _, commit := range commits {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s (%s, %s)\n", commit.SHA[:7], commit.Subject, commit.Author, commit.Date)
+			}
+		}
+	}
+
+	return nil
 }
 
 func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile string) error {

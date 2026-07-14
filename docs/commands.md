@@ -601,6 +601,31 @@ arm review record --issue TASK-001 --assessment assessment.json
 
 ---
 
+## review commits
+
+List delivery commits for an issue across all conventional-commit types.
+
+**Synopsis:**
+`arm review commits <issue-id> [flags]`
+
+**Flags:**
+- `--issue string`: Issue ID (alternative to positional argument).
+
+**Description:**
+Discovers and lists all commits on the current branch that reference the issue ID in their
+conventional-commit-style scope (e.g., `feat(ISSUE-ID): ...`, `fix(ISSUE-ID): ...`, etc.).
+
+This command scans commit messages across all type prefixes (feat, fix, refactor, test, docs, chore),
+replacing the coordinator skill's feat-only grep pseudocode which silently dropped other commit types.
+
+**Example:**
+```bash
+arm review commits TASK-001
+arm review commits --issue TASK-001 --format json
+```
+
+---
+
 ## reopen
 
 Reopen a done or blocked issue.
