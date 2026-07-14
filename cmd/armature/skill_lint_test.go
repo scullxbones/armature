@@ -26,6 +26,21 @@ func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
 	}
 	scriptPath := filepath.Join(projectRoot, "scripts", "skill_lint.py")
 
+	// Point skill_lint.py at a real, freshly-built arm binary instead of
+	// relying on PATH: CI doesn't build/install arm before running go test,
+	// so `arm` may not exist on PATH there even though it does on a dev
+	// machine with `make install` run previously.
+	armBin := os.Getenv("ARM_BIN")
+	if armBin == "" {
+		armBin = filepath.Join(projectRoot, "bin", "arm")
+	}
+	require.FileExists(t, armBin, "expected arm binary to be built at %s (run `make build` first)", armBin)
+
+	pythonBin := os.Getenv("PYTHON")
+	if pythonBin == "" {
+		pythonBin = "python3"
+	}
+
 	// Test 1: Verify that valid arm commands pass
 	t.Run("ValidCommandsPasses", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -60,7 +75,8 @@ More info.
 		// Run skill-lint
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "python3", scriptPath, tmpDir)
+		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
 		errOutput := new(bytes.Buffer)
 		cmd.Stdout = output
@@ -100,16 +116,18 @@ More info.
 		// Run skill-lint
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "python3", scriptPath, tmpDir)
+		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
 		errOutput := new(bytes.Buffer)
 		cmd.Stdout = output
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// Should fail
+		// Should fail, and fail for the right reason
 		require.Error(t, err, "skill-lint should fail when mandatory --worktree flag is missing from claim command")
-		t.Logf("Expected failure output: %s", errOutput.String())
+		require.Contains(t, errOutput.String(), "missing mandatory flags: --worktree",
+			"failure should be attributed to the missing --worktree flag")
 	})
 
 	// Test 3: Verify that invalid subcommands fail
@@ -139,16 +157,18 @@ More info.
 		// Run skill-lint
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "python3", scriptPath, tmpDir)
+		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
 		errOutput := new(bytes.Buffer)
 		cmd.Stdout = output
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// Should fail
+		// Should fail, and fail for the right reason
 		require.Error(t, err, "skill-lint should fail for invalid subcommands")
-		t.Logf("Expected failure output: %s", errOutput.String())
+		require.Contains(t, errOutput.String(), "Unknown subcommand 'invalid-subcommand'",
+			"failure should be attributed to the unknown subcommand")
 	})
 
 	// Test 4: Verify that invalid flags fail
@@ -178,16 +198,17 @@ More info.
 		// Run skill-lint
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "python3", scriptPath, tmpDir)
+		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
 		errOutput := new(bytes.Buffer)
 		cmd.Stdout = output
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// Should fail
+		// Should fail, and fail for the right reason
 		require.Error(t, err, "skill-lint should fail for invalid flags")
-		t.Logf("Expected failure output: %s", errOutput.String())
+		require.Contains(t, errOutput.String(), "invalid flags: --invalid-flag", "failure should be attributed to the invalid flag, not some other cause")
 	})
 }
 

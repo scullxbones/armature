@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -838,6 +839,97 @@ func TestReviewRecordCommand_ValidationError(t *testing.T) {
 	err = cmd.Execute()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "validation")
+}
+
+func TestReviewCommitsCommand_Success(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "feat(task-01): add feature")
+
+	out, err := runTrls(t, repo, "review", "commits", "task-01", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Found 1 commit(s) for issue task-01")
+	assert.Contains(t, out, "feat(task-01): add feature")
+}
+
+func TestReviewCommitsCommand_JSONFormat(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "feat(task-01): add feature")
+
+	cmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	cmd.SetOut(outBuf)
+	cmd.SetArgs([]string{"review", "commits", "task-01", "--repo", repo, "--format", "json"})
+	require.NoError(t, cmd.Execute())
+
+	var entries []adapters.LogEntry
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(outBuf.Bytes()), &entries))
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Subject, "feat(task-01): add feature")
+}
+
+func TestReviewCommitsCommand_NoCommitsFound(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "review", "commits", "task-01", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No commits found for issue task-01")
+}
+
+func TestReviewCommitsCommand_RequiresIssue(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"review", "commits", "--repo", repo})
+
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "issue")
+}
+
+func TestReviewCommitsCommand_PositionalAndFlagConflict(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"review", "commits", "task-01", "--issue", "task-02", "--repo", repo})
+
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicting issue ID")
+}
+
+func TestReviewCommitsCommand_PositionalAndFlagAgree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "feat(task-01): add feature")
+
+	out, err := runTrls(t, repo, "review", "commits", "task-01", "--issue", "task-01", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Found 1 commit(s) for issue task-01")
+}
+
+func TestReviewCommitsCommand_BranchFlag(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Create a side branch with a commit for task-01, then switch back to main
+	// so HEAD no longer contains it — --branch should still find it.
+	run(t, repo, "git", "checkout", "-b", "task/task-01")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "feat(task-01): add feature")
+
+	out, err := runTrls(t, repo, "review", "commits", "task-01", "--branch", "task/task-01", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Found 1 commit(s) for issue task-01")
 }
 
 // TestReviewPrepare_CoordinatorWaveScope verifies that review bundles use task-specific

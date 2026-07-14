@@ -74,7 +74,7 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	git := adapters.New(repo)
 
 	// Call ReviewCommits
-	commits, err := ReviewCommits(git, "TOPTIER-S1-T3")
+	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "HEAD")
 	require.NoError(t, err, "ReviewCommits should succeed")
 
 	// Verify all expected commits are found
@@ -114,7 +114,7 @@ func TestReviewCommits_EmptyRepo(t *testing.T) {
 
 	git := adapters.New(repo)
 
-	commits, err := ReviewCommits(git, "NONEXISTENT-ISSUE")
+	commits, err := ReviewCommits(git, "NONEXISTENT-ISSUE", "HEAD")
 	require.NoError(t, err)
 	assert.Equal(t, 0, len(commits), "should return empty slice for issue with no commits")
 }
@@ -141,7 +141,7 @@ func TestReviewCommits_PartialMatchIgnored(t *testing.T) {
 	git := adapters.New(repo)
 
 	// Should not match because TOPTIER-S1-T3 is not the scope, even though it's mentioned
-	commits, err := ReviewCommits(git, "TOPTIER-S1-T3")
+	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "HEAD")
 	require.NoError(t, err)
 	assert.Equal(t, 0, len(commits), "should not match when issue ID is in body but not scope")
 }
@@ -170,7 +170,7 @@ func TestReviewCommits_MultilineMessage(t *testing.T) {
 
 	git := adapters.New(repo)
 
-	commits, err := ReviewCommits(git, "TOPTIER-S1-T3")
+	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "HEAD")
 	require.NoError(t, err)
 	assert.Equal(t, 1, len(commits), "should find commit with multiline message")
 	assert.Contains(t, commits[0].Subject, "feat(TOPTIER-S1-T3): add feature")

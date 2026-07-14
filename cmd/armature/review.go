@@ -183,30 +183,39 @@ assessment contract fingerprint matches the bundle contract fingerprint.`,
 }
 
 func newReviewCommitsCmd() *cobra.Command {
-	var issueID string
+	var issueID, branch string
 
 	cmd := &cobra.Command{
-		Use:   "commits <issue-id>",
+		Use:   "commits [issue-id]",
+		Args:  cobra.MaximumNArgs(1),
 		Short: "List delivery commits for an issue across all conventional-commit types",
 		Long: `List delivery commits for an issue by scanning conventional-commit-style commit
 messages that reference the issue ID in their scope (e.g., feat(ISSUE-ID): ..., fix(ISSUE-ID): ..., etc.).
 
 This discovers commits across all commit type prefixes (feat, fix, refactor, test, docs, chore),
-replacing the coordinator skill's feat-only grep pseudocode which silently dropped other types.`,
+replacing the coordinator skill's feat-only grep pseudocode which silently dropped other types.
+
+By default, only the currently checked-out branch (HEAD) is scanned. When run from a worktree
+whose parent repo has a different branch checked out, or to inspect a task/story branch before
+merge, pass --branch, e.g. --branch task/TASK-ID or --branch story/STORY-ID.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
+				if issueID != "" && issueID != args[0] {
+					return fmt.Errorf("conflicting issue ID: positional argument %q and --issue %q disagree", args[0], issueID)
+				}
 				issueID = args[0]
 			}
-			return runReviewCommits(cmd, issueID)
+			return runReviewCommits(cmd, issueID, branch)
 		},
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID (required)")
+	cmd.Flags().StringVar(&branch, "branch", "HEAD", "branch to scan for commits (e.g. task/TASK-ID or a story branch)")
 
 	return cmd
 }
 
-func runReviewCommits(cmd *cobra.Command, issueID string) error {
+func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 	if issueID == "" {
 		return fmt.Errorf("issue ID is required")
 	}
@@ -214,7 +223,7 @@ func runReviewCommits(cmd *cobra.Command, issueID string) error {
 	ctx := currentCtx(cmd)
 	git := adapters.New(ctx.RepoPath)
 
-	commits, err := review.ReviewCommits(git, issueID)
+	commits, err := review.ReviewCommits(git, issueID, branch)
 	if err != nil {
 		return fmt.Errorf("failed to list commits for issue %s: %w", issueID, err)
 	}
@@ -234,7 +243,7 @@ func runReviewCommits(cmd *cobra.Command, issueID string) error {
 		} else {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d commit(s) for issue %s:\n\n", len(commits), issueID)
 			for _, commit := range commits {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s (%s, %s)\n", commit.SHA[:7], commit.Subject, commit.Author, commit.Date)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%.7s %s (%s, %s)\n", commit.SHA, commit.Subject, commit.Author, commit.Date)
 			}
 		}
 	}
