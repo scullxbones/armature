@@ -19,14 +19,25 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 FIXTURE="$WORKDIR/fixture"
 
-# Start from a tracked repository snapshot, then overlay the candidate checker
-# and census. Every assertion below invokes the fixture's checker, so mutations
-# cannot accidentally be checked by the mutable source-worktree script.
-git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$FIXTURE" && tar -x -C "$FIXTURE")
-cp "$REPO_ROOT/scripts/census-drift-check.sh" "$FIXTURE/scripts/census-drift-check.sh"
-cp "$REPO_ROOT/docs/design/surface-census.md" "$FIXTURE/docs/design/surface-census.md"
-chmod +x "$FIXTURE/scripts/census-drift-check.sh"
+# Build from the candidate worktree rather than HEAD. Copy every source tree
+# the checker reads, rather than overlaying only the checker and census onto a
+# historical snapshot.
+make_fixture() {
+    local destination="$1"
+    mkdir -p "$destination"
+    tar -C "$REPO_ROOT" -cf - \
+        cmd internal docs/design/surface-census.md scripts/census-drift-check.sh | \
+        tar -x -C "$destination"
+    chmod +x "$destination/scripts/census-drift-check.sh"
+}
+
+make_fixture "$FIXTURE"
 SCRIPT="$FIXTURE/scripts/census-drift-check.sh"
+
+if ! cmp -s "$REPO_ROOT/cmd/armature/transition.go" "$FIXTURE/cmd/armature/transition.go"; then
+    echo "FAIL: fixture does not contain the candidate worktree transition source" >&2
+    exit 1
+fi
 
 # ----------------------------------------------------------------------------
 # Test 1: the candidate checker passes against its clean fixture
@@ -167,44 +178,57 @@ else
         echo "  PASS"
     fi
 
-# Restore the census fixture for any subsequent tests.
-    git -C "$REPO_ROOT" show HEAD:docs/design/surface-census.md > "$CENSUS_FIXTURE" 2>/dev/null || true
+# Restore the candidate census for any subsequent tests.
     cp "$REPO_ROOT/docs/design/surface-census.md" "$CENSUS_FIXTURE"
 fi
 
 # ----------------------------------------------------------------------------
-# Test 6: a flag documented for the wrong command is detected as drift
+# Test 6: all forms of missing or incorrect transition --force ownership are
+# detected. The fixture's candidate source was verified above, rather than
+# relying on a historical HEAD archive plus a partial overlay.
 # ----------------------------------------------------------------------------
-echo "Test 6: census-drift-check detects a flag assigned to the wrong command..."
+echo "Test 6: census-drift-check detects transition --force ownership drift..."
 
-# Use a new clean fixture because the prior tests deliberately mutate code.
 OWNERSHIP_FIXTURE="$WORKDIR/ownership-fixture"
-git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$OWNERSHIP_FIXTURE" && tar -x -C "$OWNERSHIP_FIXTURE")
-cp "$REPO_ROOT/scripts/census-drift-check.sh" "$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh"
-cp "$REPO_ROOT/docs/design/surface-census.md" "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
-chmod +x "$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh"
+make_fixture "$OWNERSHIP_FIXTURE"
 
-# Reassign a real flag to a command that does not own it. A command-aware
-# checker must reject this rather than validating only the global flag-name
-# set.
-sed -i 's/| `--dry-run` | sync, decompose-apply, decompose-revert, import |/| `--dry-run` | sync, decompose-revert, import, scope-delete |/' \
-    "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+assert_transition_force_drift() {
+    local name="$1"
+    local expected="transition|--force"
+    cp "$REPO_ROOT/docs/design/surface-census.md" "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+    case "$name" in
+        omitted)
+            sed -i 's/, transition | bool/, | bool/' "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+            ;;
+        removed)
+            sed -i '/^| `--force` |/d' "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+            expected="Command flag '--force' in code but not in census"
+            ;;
+        misassigned)
+            sed -i 's/, transition | bool/, scope-delete | bool/' "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+            ;;
+    esac
 
-set +e
-OUTPUT=$("$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh" "$OWNERSHIP_FIXTURE" 2>&1)
-STATUS=$?
-set -e
+    set +e
+    OUTPUT=$("$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh" "$OWNERSHIP_FIXTURE" 2>&1)
+    STATUS=$?
+    set -e
 
-if [[ $STATUS -eq 0 ]]; then
-    echo "  FAIL: expected non-zero exit when --dry-run is documented for scope-delete"
-    FAILURES=$((FAILURES + 1))
-elif ! grep -q "Command flag '--dry-run' ownership differs" <<< "$OUTPUT"; then
-    echo "  FAIL: expected flag ownership drift message not found in output"
-    echo "$OUTPUT"
-    FAILURES=$((FAILURES + 1))
-else
-    echo "  PASS"
-fi
+    if [[ $STATUS -eq 0 ]]; then
+        echo "  FAIL: expected non-zero exit when transition --force ownership is $name"
+        FAILURES=$((FAILURES + 1))
+    elif ! grep -q "$expected" <<< "$OUTPUT"; then
+        echo "  FAIL: expected transition --force ownership drift message not found for $name"
+        echo "$OUTPUT"
+        FAILURES=$((FAILURES + 1))
+    else
+        echo "  PASS: $name"
+    fi
+}
+
+assert_transition_force_drift "omitted"
+assert_transition_force_drift "removed"
+assert_transition_force_drift "misassigned"
 
 # ----------------------------------------------------------------------------
 # Test 7: a materialized Issue field missing from the census is detected
@@ -212,10 +236,7 @@ fi
 echo "Test 7: census-drift-check detects an undocumented Issue field..."
 
 FIELDS_FIXTURE="$WORKDIR/fields-fixture"
-git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$FIELDS_FIXTURE" && tar -x -C "$FIELDS_FIXTURE")
-cp "$REPO_ROOT/scripts/census-drift-check.sh" "$FIELDS_FIXTURE/scripts/census-drift-check.sh"
-cp "$REPO_ROOT/docs/design/surface-census.md" "$FIELDS_FIXTURE/docs/design/surface-census.md"
-chmod +x "$FIELDS_FIXTURE/scripts/census-drift-check.sh"
+make_fixture "$FIELDS_FIXTURE"
 
 sed -i '/^type Issue struct {/a\\	FakeDriftField string `json:"fake_drift_field,omitempty"`' \
     "$FIELDS_FIXTURE/internal/materialize/state.go"

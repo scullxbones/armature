@@ -198,9 +198,9 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--issue` | claim, transition, note, decision, amend, show, assign, unassign, etc. | string | Target issue ID (positional alternative in some commands) | **kept-evidence** |
-| `--type` | create, amend | string | Issue type (epic, story, feature, task, bug) | **kept-evidence** |
+| `--type` | create, amend, list | string | Issue type (epic, story, feature, task, bug) | **kept-evidence** |
 | `--parent` | create, reparent, list, ready | string | Parent issue ID (or filter) | **kept-evidence** |
-| `--title` | create | string | Human-readable title | **kept-evidence** |
+| `--title` | create, sources add | string | Human-readable title | **kept-evidence** |
 | `--scope` | create, amend | string[] | File scope globs | **kept-evidence** |
 | `--dod` | create, amend | string | Definition of done | **kept-evidence** |
 | `--priority` | create | string | Priority level (critical, high, medium, low) | **kept-evidence** |
@@ -216,14 +216,14 @@ The following flags are defined across all commands. Grouped by usage pattern.
 |------|-----------|------|-------|--------|
 | `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
 | `--worktree` | claim | string | Path to task worktree (required) | **kept-evidence** |
-| `--force` | claim, merged, accept-citation | bool | Override warnings or require confirmation | **kept-evidence** |
+| `--force` | claim, merged, accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
-| `--to` | transition | string | Target status (open, in-progress, done, merged, blocked, cancelled) | **kept-evidence** |
+| `--to` | transition, dag-transition | string | Target status (open, in-progress, done, merged, blocked, cancelled) | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
-| `--worker` | assign | string | Worker ID for assignment | **kept-evidence** |
+| `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
 | `--rationale` | decision, accept-citation | string | Why this choice | **kept-evidence** |
@@ -249,12 +249,12 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--sources` | decompose-context | string | Comma-separated source IDs to include | **kept-evidence** |
 | `--template` | decompose-context | string | Prompt template with placeholders | **kept-evidence** |
 | `--output` | decompose-context, review prepare | string | Output file (default: stdout) | **kept-evidence** |
-| `--format` | decompose-context | string | Output format (text, json, jsonl) | **kept-evidence** |
+| `--format` | amend, assign, bootstrap, claim, create, dag-summary, decision, decompose-context, doctor, heartbeat, import, link, list, push-ops, ready, render-context, reparent, scope-delete, scope-rename, show, stale-review, transition, unassign, unlink, validate, workers | string | Output format (text, json, jsonl) | **kept-evidence** |
 | `--existing-dag` | decompose-context | bool | Include existing DAG in context | **kept-evidence** |
 | `--approve-all` | dag-summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
 | `--dep` | link, unlink | string | Dependency issue ID | **kept-evidence** |
 | `--rel` | link | string | Relationship type (default blocked_by) | **kept-evidence** |
-| `--source` | link | string | Source issue ID | **kept-evidence** |
+| `--source` | link, unlink | string | Source issue ID | **kept-evidence** |
 
 ### Citation/Source Flags
 
@@ -285,7 +285,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
-| `--repo` | worker-init | string | Repository path for worker identity setup | **kept-evidence** |
+| `--repo` | bootstrap, doctor, harness-hook, push-ops, worker-init | string | Repository path for worker identity setup | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |
