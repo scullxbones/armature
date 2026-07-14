@@ -83,7 +83,7 @@ arm sources verify      # re-run until all show OK
 If a source is gone entirely, re-register it:
 
 ```bash
-arm sources add --url <url-or-path> --type filesystem
+arm sources add --url /path/to/source --type filesystem
 ```
 
 If source content changed and you need to review the delta before accepting it:
@@ -154,10 +154,10 @@ The W5 warning fires when a task's `context_files` is empty AND its scope spans 
 arm validate
 
 # Option 1: Narrow the scope to cover fewer directories (< 3)
-arm amend <issue-id> --scope <glob>
+arm amend TASK-01 --scope "src/**/*.go"
 
 # Option 2: Add context_files declarations (informational files that inform the task)
-arm amend <issue-id> --context-file <file-path> --context-file <other-file-path>
+arm amend TASK-01 --context-file docs/notes.md --context-file docs/spec.md
 ```
 
 Choose Option 1 if the task can be more tightly scoped. Choose Option 2 if the task genuinely works across multiple directories and context files will help the worker understand the cross-directory dependencies.

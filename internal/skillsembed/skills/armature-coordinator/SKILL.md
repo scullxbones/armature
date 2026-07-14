@@ -160,7 +160,7 @@ For each wave of ready tasks:
 
 1. Claim and get context for each task:
    ```bash
-   arm claim TASK-ID --ttl <minutes> --worktree /tmp/arm-task-TASK-ID
+   arm claim TASK-ID --ttl 120 --worktree /tmp/arm-task-TASK-ID
    arm render-context TASK-ID --format agent
    ```
    **`--worktree` is REQUIRED for worker dispatch.** This is an invariant, not merely a
