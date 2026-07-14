@@ -20,8 +20,8 @@ arm worker-init --check || arm worker-init              # register once per clon
 
 ```
 arm ready                                               # list actionable issues
-arm claim ID --worktree /path/to/wt [--ttl 60]          # claim an issue with worktree
-arm render-context ID [--budget 4000]                   # get task context
+arm claim ID --worktree /path/to/wt --ttl 60            # claim an issue with worktree
+arm render-context ID --budget 4000                      # get task context
 ```
 
 ## During Work
@@ -40,12 +40,12 @@ Valid `--to` values: `in-progress`, `done`, `cancelled`, `blocked`
 
 ```
 arm create --title "X" --type task --parent ID          # create sub-issue
-arm list [--parent ID] [--type TYPE] [--status STATUS]  # list issues
-arm show ISSUE-ID [ISSUE-ID ...]                        # show issue details
-arm decompose-apply --plan plan.json [--dry-run]        # bulk load issues
+arm list --parent ID --type TYPE --status STATUS        # list issues
+arm show ISSUE-ID                                       # show issue details
+arm decompose-apply --plan plan.json --dry-run          # bulk load issues
 arm dag-transition --issue ID                           # promote draft issues
-arm validate [--ci]                                     # validate citation coverage
-arm doctor [--strict]                                   # repo health check
+arm validate --ci                                       # validate citation coverage
+arm doctor --strict                                     # repo health check
 ```
 
 ## Citation

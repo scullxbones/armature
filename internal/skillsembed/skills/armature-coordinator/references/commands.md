@@ -43,8 +43,8 @@ arm assign --issue ID --worker WORKER-ID   # pre-assign (does not claim)
 arm unassign --issue ID                     # release assignment
 
 # Claiming and context
-arm claim --issue ID --worktree /tmp/issue-id [--ttl 120]  # claim (marks in-progress, sets TTL)
-arm render-context --issue ID [--budget 4000]  # assemble full task context
+arm claim --issue ID --worktree /tmp/issue-id --ttl 120  # claim (marks in-progress, sets TTL)
+arm render-context --issue ID --budget 4000  # assemble full task context
 
 # Validation and story close
 arm validate                    # citation coverage + source UUID integrity
