@@ -3,9 +3,18 @@
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+# Shell operator tokens that separate distinct commands within a single
+# logical line (compound statements).
+_COMPOUND_OPS = {";", "&&", "||", "|"}
+
+# Redirection operator tokens. Each is dropped along with the single token
+# immediately following it (the redirect target).
+_REDIRECT_OPS = {">", ">>", "<"}
 
 
 # Known mandatory flags for specific commands. Keep in sync with
@@ -94,47 +103,154 @@ def join_continued_lines(code_block):
     return re.sub(r"\\\n[ \t]*", " ", code_block)
 
 
+def tokenize_shell_line(line):
+    """Tokenize a shell line quote-awarely, keeping operators as tokens.
+
+    Uses `shlex.shlex` with `punctuation_chars=True` so multi-character
+    shell operators (`;`, `&&`, `||`, `|`, `>`, `>>`, `<`) come through as
+    distinct tokens without being split apart by, or splitting apart, quoted
+    content. `commenters='#'` strips a trailing unquoted `# comment` for
+    free, quote-aware, instead of the previous naive `"#" not in quotes`
+    heuristic.
+
+    Returns None if the line contains unterminated quoting shlex can't
+    tokenize (rather than raising), so callers can skip it.
+    """
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    try:
+        return list(lexer)
+    except ValueError:
+        return None
+
+
+def _split_on_compound_ops(tokens):
+    """Split a token stream into command groups at compound-statement ops."""
+    groups = [[]]
+    for tok in tokens:
+        if tok in _COMPOUND_OPS:
+            groups.append([])
+        else:
+            groups[-1].append(tok)
+    return [g for g in groups if g]
+
+
+def _find_arm_invocation(tokens):
+    """Find where an `arm` invocation starts within a token group.
+
+    Returns the sub-list of tokens starting at `arm`, or None if this group
+    isn't an arm invocation (a bare command, e.g. `arm claim ...`) or a
+    command substitution / prefix-assignment invocation (e.g.
+    `FILES=$(arm ready ...)`).
+    """
+    if not tokens:
+        return None
+
+    if tokens[0] == "arm":
+        return list(tokens)
+
+    # Look for `$( arm ...` — a command substitution or prefix-assignment
+    # invocation. Require the token immediately before `arm` to be `(` and
+    # the token before that to end in `$`, so a bare word that happens to
+    # equal "arm" mid-sentence isn't mistaken for an invocation.
+    for i, tok in enumerate(tokens):
+        if tok != "arm" or i < 2:
+            continue
+        if tokens[i - 1] == "(" and tokens[i - 2].endswith("$"):
+            command_tokens = tokens[i:]
+            # Strip trailing close-paren token(s) left over from the
+            # substitution syntax, mirroring the previous `.rstrip(")")`.
+            while command_tokens and command_tokens[-1] == ")":
+                command_tokens = command_tokens[:-1]
+            return command_tokens
+
+    return None
+
+
+def strip_redirects(tokens):
+    """Drop redirection operator tokens and their target token.
+
+    Operates on already-tokenized input rather than the raw string, so a
+    redirect target like `<old-path>` (three tokens: `<`, `old-path`, `>`)
+    can't be mistaken for a redirect immediately followed by another
+    redirect — each `_REDIRECT_OPS` token consumes exactly the one token
+    after it.
+    """
+    result = []
+    skip_next = False
+    for tok in tokens:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok in _REDIRECT_OPS:
+            skip_next = True
+            continue
+        result.append(tok)
+    return result
+
+
+_SHELL_SPECIAL_RE = re.compile(r"[\s;&|<>'\"$()#]")
+
+
+def display_join(tokens):
+    """Rejoin tokens into a string that re-tokenizes back to the same tokens.
+
+    A plain `" ".join` would corrupt a token that itself contains whitespace
+    or a shell operator character (e.g. a quoted argument value like
+    "a;b" or "contains --not-a-real-flag inside a string") by letting it
+    re-split or be mistaken for an operator on a later tokenize_shell_line()
+    pass. Any token containing such a character is re-quoted; plain operator
+    tokens (`>`, `<`, `;`, ...) and ordinary words contain none of these
+    characters as a *whole token* match target (they're single/short
+    multi-char operators, not embedded inside a longer word) so they round
+    trip as bare tokens and remain recognizable operators on re-tokenization.
+    """
+    parts = []
+    for tok in tokens:
+        if tok in _COMPOUND_OPS or tok in _REDIRECT_OPS:
+            parts.append(tok)
+        elif _SHELL_SPECIAL_RE.search(tok):
+            parts.append("'" + tok.replace("'", "'\\''") + "'")
+        else:
+            parts.append(tok)
+    return " ".join(parts)
+
+
+def has_angle_bracket_placeholder(tokens):
+    """Detect a `<placeholder>` synopsis token sequence.
+
+    An unquoted `<name>` span tokenizes (via shlex punctuation_chars) as
+    three adjacent tokens: `<`, `name`, `>`. That is also, not coincidentally,
+    exactly the shell shape of "redirect stdin from a file named `name`,
+    then open an ambiguous empty output redirect" — never a sensible real
+    command. Must run on the pre-redirect-strip token list.
+    """
+    for i in range(len(tokens) - 2):
+        if tokens[i] == "<" and tokens[i + 2] == ">":
+            return True
+    return False
+
+
 def extract_arm_commands(code_block):
     """Extract all arm command invocations from a code block."""
     commands = []
     lines = join_continued_lines(code_block).split("\n")
 
     for line in lines:
-        # Strip trailing (unquoted) "#" comments before parsing. Skill docs
-        # commonly annotate commands, e.g. "arm claim TASK-01 --worktree /tmp/wt  # claim an issue with worktree"
-        # and leaving the comment in would corrupt the parsed subcommand chain.
-        if "#" in line and '"' not in line and "'" not in line:
-            line = line.split("#", 1)[0]
-
-        # Skip comments and empty lines
         line = line.strip()
         if not line or line.startswith("#"):
             continue
 
-        # Handle inline arm commands in a line with pipes, &&, or ;
-        # Split on && , | , || , and ; to handle compound statements
-        parts = re.split(r"(?:&&|\||\|\||;)", line)
+        tokens = tokenize_shell_line(line)
+        if tokens is None:
+            continue
 
-        for part in parts:
-            part = part.strip()
-            # Strip a trailing (unquoted) shell redirection, e.g.
-            # "arm ready > out.json" or "arm ready >> out.json", so the
-            # redirect operator and target filename don't leak into the
-            # parsed arm command as bogus subcommands/args.
-            part = re.sub(r"\s*>>?\s*\S+$", "", part)
-            # `arm` can be the command in a command substitution or a prefix
-            # assignment, e.g. `FILES=$(arm ready --format json | ...)`.
-            # Keep the surrounding shell segment boundary above, then extract
-            # the invocation rather than requiring it to start the segment.
-            if part.startswith("arm "):
-                commands.append(part)
+        for group in _split_on_compound_ops(tokens):
+            arm_tokens = _find_arm_invocation(group)
+            if arm_tokens is None:
                 continue
-
-            # Do not mistake prose such as "arm command, run: ..." for an
-            # invocation. Command substitutions have a distinct shell marker.
-            match = re.search(r"\$\(\s*(arm(?:\s+[^|&;\n)]*)?)(?=[\s)]|$)", part)
-            if match:
-                commands.append(match.group(1).rstrip(")"))
+            commands.append(display_join(arm_tokens))
 
     return commands
 
@@ -248,55 +364,33 @@ def extract_valid_flags_from_help(help_text):
     return flags
 
 
-def parse_command_line(arm_command):
-    """Parse an arm command line into subcommands and arguments.
+def parse_command_line(tokens):
+    """Split already-tokenized command tokens into subcommands and arguments.
 
-    Example: "arm claim TASK-01 --worktree /tmp/wt"
+    Example: ["claim", "TASK-01", "--worktree", "/tmp/wt"]
     Returns: (["claim"], ["TASK-01", "--worktree", "/tmp/wt"])
 
     For nested commands:
-    "arm sources add --url PATH"
+    ["sources", "add", "--url", "PATH"]
     Returns: (["sources", "add"], ["--url", "PATH"])
+
+    `tokens` is expected to already have the leading "arm" and any
+    redirection tokens/targets removed, and to come from quote-aware
+    tokenization (tokenize_shell_line), so no hand-rolled quote tracking is
+    needed here.
     """
-    # Remove leading "arm " if present
-    if arm_command.startswith("arm "):
-        arm_command = arm_command[4:]
-
-    # Split by whitespace, but be careful with quoted arguments
-    parts = []
-    current = ""
-    in_quotes = False
-
-    for char in arm_command:
-        if char == '"' or char == "'":
-            in_quotes = not in_quotes
-        elif char == " " and not in_quotes:
-            if current:
-                parts.append(current)
-            current = ""
-        else:
-            current += char
-
-    if current:
-        parts.append(current)
-
-    if not parts:
-        return [], []
-
-    # Separate subcommands (which don't start with -- or -)
-    # from arguments (which do or are values)
     subcommands = []
     args = []
     started_args = False
 
-    for part in parts:
-        if not started_args and not (part.startswith("-") or part.startswith("$")):
-            # Looks like a subcommand or positional argument
-            # We'll treat subsequent non-flag parts as arguments
-            subcommands.append(part)
+    for tok in tokens:
+        if not started_args and not (tok.startswith("-") or tok.startswith("$")):
+            # Looks like a subcommand or positional argument. We'll treat
+            # subsequent non-flag tokens as arguments once a flag is seen.
+            subcommands.append(tok)
         else:
             started_args = True
-            args.append(part)
+            args.append(tok)
 
     return subcommands, args
 
@@ -306,9 +400,22 @@ def extract_flags(args):
 
     Returns a set of flag names (without values).
     Example: ["TASK-01", "--worktree", "/tmp/wt"] -> {"--worktree"}
+
+    A bare "-" is the documented stdin-sentinel positional argument (e.g.
+    `arm review record --assessment -`), not a flag. A bare "--"
+    end-of-options marker means every token after it is positional, so flag
+    scanning stops there.
     """
     flags = set()
+    stopped = False
     for arg in args:
+        if stopped:
+            continue
+        if arg == "--":
+            stopped = True
+            continue
+        if arg == "-":
+            continue
         if arg.startswith("--"):
             # Handle --flag=value format
             flag_name = arg.split("=")[0]
@@ -332,14 +439,32 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     if valid_flags_cache is None:
         valid_flags_cache = {}
 
+    tokens = tokenize_shell_line(arm_command)
+    if tokens is None:
+        return False, f"Could not parse command (unterminated quoting) in: {arm_command}"
+
     # Square brackets in a command synopsis describe an optional argument to
     # the reader; a shell passes them literally. Shipped skill examples are
     # intended to be copyable, so reject this documentation notation rather
-    # than silently accepting a command that will not run as shown.
-    if re.search(r"(?:^|\s)\[[^\]\n]+\]", arm_command):
+    # than silently accepting a command that will not run as shown. No
+    # leading-whitespace requirement (unlike the old regex) so a fused
+    # flag+bracket token like "--ttl[=N]" is also caught, and the span may
+    # cross a token boundary (e.g. "[--ttl 120]" tokenizes as "[--ttl" and
+    # "120]"), so this scans the whole command string rather than per-token.
+    if re.search(r"\[[^\]\n]+\]", arm_command):
         return False, f"Command uses bracketed synopsis syntax in: {arm_command}"
 
-    subcommands, args = parse_command_line(arm_command)
+    # Angle-bracket placeholders (e.g. "<old-path>") must be checked before
+    # redirect-stripping, which would otherwise discard the very tokens that
+    # make this a placeholder rather than a real redirect.
+    if has_angle_bracket_placeholder(tokens):
+        return False, f"Command uses angle-bracket synopsis syntax in: {arm_command}"
+
+    tokens = strip_redirects(tokens)
+    if tokens and tokens[0] == "arm":
+        tokens = tokens[1:]
+
+    subcommands, args = parse_command_line(tokens)
 
     if not subcommands:
         return False, f"Invalid arm command syntax: {arm_command}"
