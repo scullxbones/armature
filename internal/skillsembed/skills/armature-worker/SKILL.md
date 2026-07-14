@@ -91,7 +91,7 @@ Before completing work, cite every issue you touched or created:
 ```
 arm source-link ISSUE-ID --source-id SOURCE-UUID        # if a source doc exists
 # or
-arm accept-citation ISSUE-ID --ci                       # if no source exists
+arm accept-citation ISSUE-ID --rationale "No external source; self-citing" --ci  # if no source exists
 ```
 
 Do not leave issues uncited.

@@ -171,6 +171,88 @@ More info.
 			"failure should be attributed to the unknown subcommand")
 	})
 
+	// Test for the extract_code_blocks fence-pairing bug: a non-bash fenced
+	// block (e.g. ```json) appearing before a ```bash block must not cause
+	// the bash block's commands to be silently skipped.
+	t.Run("BashBlockAfterNonBashBlockIsExtracted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+
+		skillMD := `---
+name: test-skill
+description: Test skill
+---
+
+# Test Skill
+
+Here's some JSON:
+
+` + "```json" + `
+{"key": "value"}
+` + "```" + `
+
+Now an arm command with an invalid subcommand, so it must be caught:
+
+` + "```bash" + `
+arm invalid-subcommand-after-json --some-flag value
+` + "```" + `
+`
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		errOutput := new(bytes.Buffer)
+		cmd.Stdout = output
+		cmd.Stderr = errOutput
+		err := cmd.Run()
+
+		// If the bash block after the json block were silently skipped (the
+		// bug), skill-lint would report no errors here. It must be caught.
+		require.Error(t, err, "the bash block after a non-bash fenced block must still be extracted and linted")
+		require.Contains(t, errOutput.String(), "Unknown subcommand 'invalid-subcommand-after-json'",
+			"the invalid command inside the bash block after the json block should have been found")
+	})
+
+	// Regression check for the concrete case the reviewer flagged: before the
+	// fence-parser fix, armature-reviewer/SKILL.md's `arm review ...`
+	// commands (which follow ```json blocks in the same file) were silently
+	// never extracted, so skill-lint validated nothing in that file's bash
+	// blocks.
+	t.Run("ArmatureReviewerSkillCommandsAreExtracted", func(t *testing.T) {
+		skillPath := filepath.Join(projectRoot, "internal", "skillsembed", "skills", "armature-reviewer", "SKILL.md")
+		require.FileExists(t, skillPath)
+
+		script := `
+import sys
+sys.path.insert(0, "scripts")
+import skill_lint
+
+with open("` + skillPath + `", encoding="utf-8") as f:
+    content = f.read()
+
+blocks = skill_lint.extract_code_blocks(content)
+commands = [c for b in blocks for c in skill_lint.extract_arm_commands(b)]
+assert any("arm review commits" in c for c in commands), commands
+`
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		cmd := exec.CommandContext(ctx, pythonBin, "-c", script) //nolint:gosec // pythonBin: test-controlled, not attacker input
+		cmd.Dir = projectRoot
+		output := new(bytes.Buffer)
+		errOutput := new(bytes.Buffer)
+		cmd.Stdout = output
+		cmd.Stderr = errOutput
+		err := cmd.Run()
+		if err != nil {
+			t.Logf("stdout: %s\nstderr: %s", output.String(), errOutput.String())
+		}
+		require.NoError(t, err, "arm review show/record commands should be extracted from armature-reviewer/SKILL.md")
+	})
+
 	// Test 4: Verify that invalid flags fail
 	t.Run("InvalidFlagFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
