@@ -14,10 +14,10 @@ An issue has neither a `source-link` nor an `accept-citation`. It is completely 
 
 ```bash
 # Link to a source document
-arm source-link ISSUE-ID
+arm source-link ISSUE-ID --source-id SOURCE-UUID
 
 # Or accept the citation risk explicitly (for issues with no recoverable source)
-arm accept-citation --ci ISSUE-ID
+arm accept-citation --ci ISSUE-ID --rationale "No recoverable source remains"
 ```
 
 ### E8 — Unknown Source
@@ -40,7 +40,7 @@ If the source is gone permanently, register a replacement and re-link:
 
 ```bash
 arm sources add <replacement-url-or-path>
-arm source-link ISSUE-ID  # link to the new source UUID
+arm source-link ISSUE-ID --source-id SOURCE-UUID  # link to the new source UUID
 arm validate              # confirm E8 is resolved
 ```
 

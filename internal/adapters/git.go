@@ -411,9 +411,17 @@ func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
 }
 
 // LogBranch returns up to n log entries from the tip of branch, most recent first.
+// A non-positive n returns all entries.
 func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
+	if strings.HasPrefix(branch, "-") {
+		return nil, fmt.Errorf("invalid branch %q", branch)
+	}
 	format := "%H%x00%s%x00%ae%x00%ai"
-	cmd := c.cmd("log", branch, fmt.Sprintf("-n%d", n), "--format="+format)
+	args := []string{"log", branch, "--format=" + format}
+	if n > 0 {
+		args = append(args, fmt.Sprintf("-n%d", n))
+	}
+	cmd := c.cmd(args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log %s: %w", branch, err)

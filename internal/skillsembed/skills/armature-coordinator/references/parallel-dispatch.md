@@ -12,8 +12,8 @@ arm assign --issue T2-ID --worker WORKER-B
 
 **b. Claim all tasks in the wave:**
 ```bash
-arm claim --issue T1-ID
-arm claim --issue T2-ID
+arm claim --issue T1-ID --worktree /tmp/t1-id
+arm claim --issue T2-ID --worktree /tmp/t2-id
 ```
 
 **c. Render context for each:**

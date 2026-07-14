@@ -119,6 +119,14 @@ func TestReviewCommits_EmptyRepo(t *testing.T) {
 	assert.Equal(t, 0, len(commits), "should return empty slice for issue with no commits")
 }
 
+func TestReviewCommits_RejectsOptionLikeBranch(t *testing.T) {
+	t.Parallel()
+	git := adapters.New(t.TempDir())
+	_, err := ReviewCommits(git, "TOPTIER-S1-T3", "--all")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid branch")
+}
+
 // TestReviewCommits_PartialMatchIgnored verifies that ReviewCommits only matches
 // issue IDs when they are the complete scope identifier in the commit message,
 // not as a substring within other text.

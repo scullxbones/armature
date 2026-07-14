@@ -22,7 +22,7 @@ func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapt
 
 	// Get all commits on the requested branch (e.g. a task or story branch,
 	// not necessarily whatever happens to be checked out).
-	entries, err := git.LogBranch(branch, 10000)
+	entries, err := git.LogBranch(branch, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list commits: %w", err)
 	}
