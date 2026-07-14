@@ -214,15 +214,18 @@ CONSTRUCTOR_PATHS=$(grep -oE 'new[A-Z][A-Za-z]+Cmd\(\)' "$REPO_ROOT/cmd/armature
         [[ -n "$use" ]] && printf '%s|%s\n' "$ctor" "$use"
     done)
 
+CONSTRUCTOR_PATHS_TMP=$(mktemp)
+trap 'rm -f "$CONSTRUCTOR_PATHS_TMP"' EXIT
 while IFS='|' read -r parent_ctor parent_use; do
     [[ -z "$parent_ctor" ]] && continue
     while read -r sub_ctor; do
         sub_use=$(command_use "$sub_ctor")
         [[ -n "$sub_use" ]] && printf '%s|%s %s\n' "$sub_ctor" "$parent_use" "$sub_use"
     done < <(subcommand_constructors "$parent_ctor")
-done <<< "$CONSTRUCTOR_PATHS" >> /tmp/census-constructor-paths.$$
-CONSTRUCTOR_PATHS=$(cat /tmp/census-constructor-paths.$$; printf '%s\n' "$CONSTRUCTOR_PATHS")
-rm -f /tmp/census-constructor-paths.$$
+done <<< "$CONSTRUCTOR_PATHS" >> "$CONSTRUCTOR_PATHS_TMP"
+CONSTRUCTOR_PATHS=$(cat "$CONSTRUCTOR_PATHS_TMP"; printf '%s\n' "$CONSTRUCTOR_PATHS")
+rm -f "$CONSTRUCTOR_PATHS_TMP"
+trap - EXIT
 
 CODE_FLAG_OWNERS=$(while IFS='|' read -r constructor command; do
     [[ -z "$constructor" ]] && continue
@@ -230,9 +233,21 @@ CODE_FLAG_OWNERS=$(while IFS='|' read -r constructor command; do
         $0 ~ "^func " ctor "\\(" { in_constructor = 1; next }
         in_constructor && /^func / { exit }
         in_constructor && /Flags\(\)\.[A-Za-z]*\(/ {
-            if (match($0, /"[^"]+"/)) {
-                flag = substr($0, RSTART + 1, RLENGTH - 2)
-                print command "|--" flag
+            # Only credit ownership from definition-style calls (String, StringVar,
+            # StringVarP, Bool, BoolVar, Int, StringSlice, etc — including the P
+            # suffix variant). Explicitly exclude read-style calls: Get*, Changed,
+            # Set, Lookup. A command merely reading a flag value (e.g. inside a
+            # RunE closure via cmd.Flags().GetString(...)) does not own that flag.
+            if (match($0, /Flags\(\)\.([A-Za-z]+)\(/)) {
+                call = substr($0, RSTART, RLENGTH)
+                sub(/^Flags\(\)\./, "", call)
+                sub(/\($/, "", call)
+                if (call !~ /^Get/ && call != "Changed" && call != "Set" && call != "Lookup") {
+                    if (match($0, /"[^"]+"/)) {
+                        flag = substr($0, RSTART + 1, RLENGTH - 2)
+                        print command "|--" flag
+                    }
+                }
             }
         }
     ' "$REPO_ROOT"/cmd/armature/*.go
@@ -282,6 +297,56 @@ done <<< "$CENSUS_FLAG_OWNERS")
 # flag attributed to the wrong command, but also a real command owner omitted
 # from a shared census row (for example, `transition|--force`).
 compare_lists "Command flag ownership" "$CODE_ENUMERATED_FLAG_OWNERS" "$CENSUS_ENUMERATED_FLAG_OWNERS"
+
+# ============================================================================
+# RELATIONSHIP TYPES CHECK
+# ============================================================================
+echo "Checking Relationship Types..."
+
+# Extract accepted rel values from applyLink's op.Payload.Rel == "..." branches.
+CODE_RELS=$(awk '
+    /^func \(s \*State\) applyLink\(/ { in_func = 1; next }
+    in_func && /^}/ { exit }
+    in_func && /op\.Payload\.Rel (==|!=) "/ {
+        if (match($0, /op\.Payload\.Rel (==|!=) "[^"]+"/)) {
+            s = substr($0, RSTART, RLENGTH)
+            sub(/^op\.Payload\.Rel (==|!=) "/, "", s)
+            sub(/"$/, "", s)
+            print s
+        }
+    }
+' "$REPO_ROOT/internal/materialize/engine.go" | sort -u)
+
+CENSUS_RELS=$(sed -n '/^## Relationship Types/,/^## [^#]/p' "$CENSUS_FILE" | \
+    grep '| `' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+
+# The census also documents `blocks` as a derived/output-only relationship type
+# (never a valid --rel input). Only compare accepted *inputs* here, since
+# CODE_RELS is sourced from applyLink's input validation branches.
+compare_lists "Relationship type (accepted input)" "$CODE_RELS" "blocked_by"
+
+# ============================================================================
+# PROVIDER TYPES CHECK
+# ============================================================================
+echo "Checking Provider Types..."
+
+CODE_PROVIDERS=$(awk '
+    /^func providerForType\(/ { in_func = 1; next }
+    in_func && /^}/ { exit }
+    in_func && /case "/ {
+        if (match($0, /case "[^"]+"/)) {
+            s = substr($0, RSTART, RLENGTH)
+            sub(/^case "/, "", s)
+            sub(/"$/, "", s)
+            print s
+        }
+    }
+' "$REPO_ROOT/cmd/armature/sources.go" | sort -u)
+
+CENSUS_PROVIDERS=$(sed -n '/^## Provider Types/,/^## [^#]/p' "$CENSUS_FILE" | \
+    grep '| `' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+
+compare_lists "Provider type" "$CODE_PROVIDERS" "$CENSUS_PROVIDERS"
 
 # ============================================================================
 # SUMMARY

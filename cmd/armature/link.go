@@ -17,17 +17,11 @@ func newLinkCmd() *cobra.Command {
 		Long: `Create a dependency relationship between two issues.
 
 Link one issue (source) to another (dependency) with a specified relationship type.
-Valid relationship types include: depends-on (source depends on dependency), blocks
-(source blocks dependency), and relates-to (informational connection). Links establish
-the DAG structure and help identify blocking dependencies.`,
-		Example: `  # Source depends on another issue
-  $ arm link --source E6-S4-T2 --dep E6-S4-T1 --rel depends-on
-
-  # Source blocks another issue
-  $ arm link --source E6-S4-T1 --dep E6-S4-T3 --rel blocks
-
-  # Informational relationship
-  $ arm link --source E6-S4-T2 --dep E5-S2-T1 --rel relates-to`,
+The only supported --rel value is blocked_by (source is blocked by dependency); the
+inverse "blocks" relationship is derived automatically on the dependency and cannot
+be set directly. Links establish the DAG structure and drive ready-queue eligibility.`,
+		Example: `  # Source is blocked by another issue
+  $ arm link --source E6-S4-T2 --dep E6-S4-T1 --rel blocked_by`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state := mustState(cmd)
 			ctx := state.ctx

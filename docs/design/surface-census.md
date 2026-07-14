@@ -30,9 +30,9 @@ This document inventories the actual surfaces of the armature system: issue type
 
 | State | Defined | Used By | Status | Notes |
 |-------|---------|---------|--------|-------|
-| `draft` | internal/ops/types.go:127 (comment), create.go:62, Payload.Confidence | Confidence field in create payload, dag-transition checks (claim.go:311), tests | **kept-evidence** | Set via --confidence flag on create. Blocks claiming (claim.go:311-312). Used by dag-transition flow for confidence promotion. |
+| `draft` | internal/ops/types.go:127 (comment), create.go:62, Payload.Confidence | Confidence field in create payload, ready-queue gate (internal/ready/compute.go:~60, ~113), dag-transition promotion, tests | **kept-evidence** | Set via --confidence flag on create. Gates *readiness*, not claiming: `draft` issues are excluded from the ready queue in internal/ready/compute.go (ComputeReady and ExplainNotReady both skip `Confidence == "draft"`). Promoted to `verified` via dag-transition/confirm flow. |
 | `verified` | internal/ops/types.go:127 (comment: default), materialize assumptions, tests | Default when confidence absent, claim eligibility, tests | **kept-evidence** | Implicit default for issues created without explicit confidence. Claim-eligible state. |
-| `inferred` | claim.go:311 (check) | Claim rejection logic | **kept-evidence** | Provenance confidence value that blocks claiming. Set during materialization when reconstructing inferred nodes. |
+| `inferred` | claim.go:311 (check) | Claim rejection logic | **kept-evidence** | Provenance confidence value that blocks *claiming* (claim.go:311 rejects `Confidence == "inferred"` specifically — it does not check `draft`). Set during materialization when reconstructing inferred nodes. |
 
 ## Issue Fields
 
@@ -47,15 +47,15 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `parent` | string | state.go:18 | create, reparent | **kept-evidence** | Parent issue ID for hierarchy. Amendable. |
 | `children` | []string | state.go:19 | derived from parent links | **kept-evidence** | Materialized inverse of parent. Read-only. |
 | `blocked_by` | []string | state.go:20 | link op (rel=blocked_by) | **kept-evidence** | Issues that must complete first. Used by ready queue logic. |
-| `blocks` | []string | state.go:21 | link op (rel=blocks) | **kept-evidence** | Issues blocked by this one. Inverse of blocked_by. |
-| `assignee` | string | state.go:22 | assign command | **kept-evidence** | Human assignee name/email. Informational. |
+| `blocks` | []string | state.go:21 | derived automatically as the inverse of a `link` op with rel=blocked_by applied to the other issue (engine.go applyLink) | **kept-evidence** | Issues blocked by this one. Inverse of blocked_by. Never set directly by a `rel=blocks` op — that input is rejected. |
+| `assignee` | string | state.go:22 | (no writer found) | **parked** | Dead field: no code path sets `Issue.Assignee` anywhere in internal/ or cmd/ (verified via `grep -rn '\.Assignee *=' internal/ cmd/`). The `assign` command sets `AssignedWorker` (internal/materialize/engine.go, applyAssign), not `Assignee`. Re-entry criterion: a writer is added and exercised by a test, or the field is removed from state.go. |
 | `priority` | string | state.go:23 | create payload, amend | **kept-evidence** | Priority level (critical, high, medium, low). Set via --priority flag. Used in diagnostics. |
 | `estimated_complexity` | string | state.go:24 | create payload | **kept-evidence** | Complexity estimate. Set via --complexity (if exposed) or inferred from acceptance criteria. |
 | `definition_of_done` | string | state.go:25 | create, amend | **kept-evidence** | Completion criteria. Required for task type (issuetype.go:90). |
 | `scope` | []string | state.go:26 | create, amend | **kept-evidence** | File scope globs. Used by overlap detection and scope-rename/delete commands. |
 | `context_files` | []string | state.go:27 | create, amend | **kept-evidence** | Stable reference files. Set via --context-file flag. Used by harness hook to render context. |
 | `acceptance` | json.RawMessage | state.go:28 | create, amend (acceptance JSON) | **kept-evidence** | Acceptance criteria as opaque JSON. Set via --acceptance flag on create. |
-| `context` | json.RawMessage | state.go:29 | implicit from context_files or explicit via decompose | **kept-evidence** | Rendered context blob. Set by harness or decompose flow. |
+| `context` | json.RawMessage | state.go:29 | (no current producer) | **kept-justified** | Rendered context blob. Copied through from ops in engine.go, but nothing currently sets `Payload.Context` — internal/decompose/apply.go's create payload construction (~lines 183-193) does not populate it, and no CLI flag sets it either. Under-documented/unproduced; similar situation to `estimated_complexity`. Flagged for a future story. |
 | `source_citation` | json.RawMessage | state.go:30 | source-link ops (transitive) | **kept-evidence** | Citation metadata. Used by sources and citation acceptance flows. |
 | `provenance` | Provenance | state.go:31 | create (method, confidence, worker) | **kept-evidence** | Metadata: method (create/decompose/import), confidence, source worker, dag_confirmed flag. Used to detect inferred nodes and confidence state. |
 | `decision_refs` | []string | state.go:32 | decision op (derives refs) | **kept-evidence** | Decision operation IDs affecting this issue. Read-only. |
@@ -88,7 +88,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `transition` | internal/ops/types.go:11 | engine.go | **kept-evidence** | Changes issue status. Payload: to (status), outcome, branch, pr. |
 | `note` | internal/ops/types.go:12 | engine.go | **kept-evidence** | Adds worker note. Payload: msg, note_id for deletion. |
 | `note-delete` | internal/ops/types.go:13 | engine.go | **kept-evidence** | Soft-deletes note by ID. Marks note.deleted=true. |
-| `link` | internal/ops/types.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Supports rel=blocked_by, rel=blocks. |
+| `link` | internal/ops/types.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Only rel=blocked_by is a supported input; engine.go's applyLink returns an error for any other rel value. `blocks` is derived automatically as the inverse and is never a valid input. |
 | `unlink` | internal/ops/types.go:15 | engine.go | **kept-evidence** | Removes dependency. Payload: dep (target). |
 | `source-link` | internal/ops/types.go:16 | engine.go | **kept-evidence** | Links external source. Payload: source_id, source_url. Creates source_links entries. |
 | `source-fingerprint` | internal/ops/types.go:17 | engine.go | **kept-evidence** | Records source version. Payload: sha, version_id, provider. Used for staleness detection. |
@@ -131,7 +131,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `decompose-apply` | main.go:143, decompose.go | Create issues from plan JSON | **kept-evidence** | Bulk creation from structured plan. Validates hierarchy. |
 | `decompose-revert` | main.go:147, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
 | `decompose-context` | main.go:151, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
-| `link` | main.go:155, link.go | Add dependency | **kept-evidence** | Couples issues. Supports blocked_by and blocks relations. |
+| `link` | main.go:155, link.go | Add dependency | **kept-evidence** | Couples issues. Only `--rel blocked_by` is a valid input; `blocks` is derived automatically as the inverse. |
 | `unlink` | main.go:159, unlink.go | Remove dependency | **kept-evidence** | Uncouples issues. Removes from blocked_by/blocks. |
 
 ### Sync Commands (sync group)
@@ -189,7 +189,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Type | Default | Usage | Status | Notes |
 |------|------|---------|-------|--------|-------|
 | `--debug` | bool | false | Dump stack traces on error | **kept-evidence** | Diagnostic. Always available. |
-| `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. |
+| `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. Inherited by every command except `decompose-context`, which defines its own command-local `--format` (see DAG/Decompose Flags below). |
 | `--repo` | string | "" (current directory) | Repository path | **kept-evidence** | Allows multi-repo operation. |
 | `--non-interactive` | bool | false | Skip TUI, use structured output | **kept-evidence** | Auto-set in CI. |
 
@@ -219,7 +219,8 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--force` | claim, merged, accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
-| `--to` | transition, dag-transition | string | Target status (open, in-progress, done, merged, blocked, cancelled) | **kept-evidence** |
+| `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
+| `--to` | dag-transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag-transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
@@ -249,7 +250,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--sources` | decompose-context | string | Comma-separated source IDs to include | **kept-evidence** |
 | `--template` | decompose-context | string | Prompt template with placeholders | **kept-evidence** |
 | `--output` | decompose-context, review prepare | string | Output file (default: stdout) | **kept-evidence** |
-| `--format` | amend, assign, bootstrap, claim, create, dag-summary, decision, decompose-context, doctor, heartbeat, import, link, list, push-ops, ready, render-context, reparent, scope-delete, scope-rename, show, stale-review, transition, unassign, unlink, validate, workers | string | Output format (text, json, jsonl) | **kept-evidence** |
+| `--format` | decompose-context | string | Command-local output format override (text or json; decompose.go:383). All other commands listed here read the inherited root persistent `--format` flag (see Universal/Root Flags above) rather than defining their own — they do not appear in this row. | **kept-evidence** |
 | `--existing-dag` | decompose-context | bool | Include existing DAG in context | **kept-evidence** |
 | `--approve-all` | dag-summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
 | `--dep` | link, unlink | string | Dependency issue ID | **kept-evidence** |
@@ -285,7 +286,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
-| `--repo` | bootstrap, doctor, harness-hook, push-ops, worker-init | string | Repository path for worker identity setup | **kept-evidence** |
+| `--repo` | worker-init | string | Command-local repository path override (worker_init.go:42). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |
@@ -319,20 +320,29 @@ Values are documented on the `--priority` flag in create.go:142.
 
 ## Estimated Complexity Levels
 
-Values appear on the estimated_complexity field (state.go:24) and are set via create payload. No explicit enumeration found in corpus.
+Values appear on the estimated_complexity field (state.go:24) and are copied from the create payload
+in engine.go. An enumeration does exist downstream: internal/validate/validate.go's
+`checkW6ComplexityMismatch` (~lines 388-402) interprets `small` and `large` specifically (flagging a
+mismatch between complexity and scope size), so those two values are load-bearing even though nothing
+enforces them at write time.
 
 | Value | Status | Notes |
 |-------|--------|-------|
-| (free-form string) | **kept-justified** | Field exists in state and payload but no command flag documented for --complexity. Likely set by agents or inferred from acceptance criteria. No tests enumerate values. |
+| `small` | **kept-evidence** | Interpreted by checkW6ComplexityMismatch (validate.go:~390): warns if scope has >5 files. |
+| `large` | **kept-evidence** | Interpreted by checkW6ComplexityMismatch (validate.go:~397): warns if scope has <2 files. |
+| (other free-form string) | **kept-justified** | Field exists in state and payload but no CLI flag or decompose plan field currently sets it — nothing in cmd/ or internal/decompose/ produces `EstComplexity`; it is only ever copied through from whatever the create payload already contains. No current producer exists. Flagged here for a future story rather than fixed in this pass. |
 
 ## Relationship Types (for link/unlink)
 
-Defined in the `rel` field of link operations (types.go:97) and link command flag (link.go).
+Defined in the `rel` field of link operations (types.go:97) and link command flag (link.go). The only
+accepted input value is `blocked_by`: internal/materialize/engine.go's `applyLink` returns an error for
+any other `Rel` value, since `blocks` is a derived/output-only field (see below), never a valid `--rel`
+input.
 
 | Type | Used By | Status | Notes |
 |------|---------|--------|-------|
-| `blocked_by` | link.go:92 (default), ready queue logic | **kept-evidence** | Default relationship. Used to block ready queue eligibility. |
-| `blocks` | link.go, inverse of blocked_by | **kept-evidence** | Inverse relationship. Records what this issue blocks. |
+| `blocked_by` | link.go:57 (default), engine.go applyLink (only accepted input), ready queue logic | **kept-evidence** | The only valid `--rel` input. Used to block ready queue eligibility. |
+| `blocks` | state.go Issue.Blocks field, engine.go applyLink (auto-derived) | **kept-evidence** | Derived/output-only. Automatically populated as the inverse when a `blocked_by` link is applied to the *other* issue. Never a valid `--rel` input — `applyLink` rejects `rel=blocks` with an error. |
 
 ## Provider Types (for sources)
 
@@ -349,12 +359,12 @@ Enumerated in sources.go flag description:
 - **Issue Types**: 5 (all kept-evidence)
 - **Statuses**: 7 (all kept-evidence)
 - **Confidence States**: 3 (all kept-evidence)
-- **Issue Fields**: 35 (all kept-evidence)
+- **Issue Fields**: 35 (34 kept-evidence, 1 parked)
 - **Op Types**: 19 (all kept-evidence)
 - **CLI Commands**: 47 (all kept-evidence, 6 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Parked Surfaces**: 0
-- **Estimated Complexity Levels**: TBD (no explicit enumeration)
+- **Parked Surfaces**: 1 (`assignee` field — see Issue Fields)
+- **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
 ## Query Recipe (Reproducibility)
 
