@@ -379,6 +379,68 @@ assert any("arm review commits" in c for c in commands), commands
 		require.NoError(t, err, "arm review show/record commands should be extracted from armature-reviewer/SKILL.md")
 	})
 
+	// Regression test for the reviewer-flagged bug: a placeholder positional
+	// arg (e.g. "<replacement-url-or-path>") that doesn't start with "-" gets
+	// appended to `subcommands` by parse_command_line, so the full chain
+	// becomes "sources add <replacement-url-or-path>" -- which isn't a key in
+	// MANDATORY_FLAGS, so validate_command fell back to the top-level "sources"
+	// key (which has no mandatory-flags entry) and silently skipped checking
+	// for the mandatory --url/--type flags on "sources add". This mirrors the
+	// shipped armature-auditor/references/citation-errors.md example.
+	t.Run("SourcesAddWithPlaceholderArgMissingMandatoryFlagsFails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "```bash\narm sources add <replacement-url-or-path>\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err, "sources add missing --url/--type must be flagged even with a placeholder positional arg")
+		require.Contains(t, output.String(), "missing mandatory flags")
+		require.Contains(t, output.String(), "--url")
+		require.Contains(t, output.String(), "--type")
+	})
+
+	// Regression test for the reviewer-flagged bug: FENCE_RE only matched
+	// fences at column 1, so fenced code blocks indented under a numbered or
+	// bulleted list item (as in the shipped armature-coordinator/SKILL.md)
+	// were never entered by extract_code_blocks, silently skipping their
+	// content from linting entirely.
+	t.Run("IndentedFencedBlockUnderListItemIsLinted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "1. Claim the task:\n   ```bash\n   arm claim TASK-01 --worktree /tmp/wt\n   ```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.NoError(t, err, "a valid arm command inside an indented fenced block should pass lint; stderr: %s", output.String())
+	})
+
+	t.Run("IndentedFencedBlockUnderListItemMissingMandatoryFlagFails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "1. Claim the task:\n   ```bash\n   arm claim TASK-01\n   ```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err, "the indented block's content must still be validated, not just its presence")
+		require.Contains(t, output.String(), "missing mandatory flags: --worktree")
+	})
+
 	// Test 4: Verify that invalid flags fail
 	t.Run("InvalidFlagFails", func(t *testing.T) {
 		tmpDir := t.TempDir()

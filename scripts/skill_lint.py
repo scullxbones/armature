@@ -48,7 +48,7 @@ def find_skill_files(root_dir):
     return sorted(skill_files)
 
 
-FENCE_RE = re.compile(r"^```(\w*)\s*$")
+FENCE_RE = re.compile(r"^\s*```(\w*)\s*$")
 
 
 def extract_code_blocks(content):
@@ -77,7 +77,7 @@ def extract_code_blocks(content):
                 block_lang = m.group(1)
                 current_lines = []
         else:
-            if line.rstrip() == "```":
+            if line.strip() == "```":
                 if block_lang in ("", "bash", "sh"):
                     blocks.append("\n".join(current_lines))
                 in_block = False
@@ -346,8 +346,20 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     # (e.g. "sources add"), falling back to the top-level command name, so
     # both flat commands (e.g. "transition") and nested ones (e.g.
     # "sources add") can be covered.
-    full_chain = " ".join(subcommands)
-    mandatory_key = full_chain if full_chain in MANDATORY_FLAGS else first_cmd
+    # `subcommands` may include trailing positional/placeholder tokens (e.g.
+    # parse_command_line doesn't know which tokens are real subcommands vs.
+    # positional args, so a placeholder like "<replacement-url-or-path>"
+    # that doesn't start with "-" ends up appended to subcommands). Try
+    # progressively shorter prefixes of the chain so a longer, more specific
+    # match (e.g. "sources add") is preferred over the bare top-level
+    # command, without requiring an exact match against the full chain
+    # including trailing positional tokens.
+    mandatory_key = first_cmd
+    for prefix_len in range(len(subcommands), 0, -1):
+        candidate = " ".join(subcommands[:prefix_len])
+        if candidate in MANDATORY_FLAGS:
+            mandatory_key = candidate
+            break
     if mandatory_key in MANDATORY_FLAGS:
         flags = extract_flags(args)
         missing_flags = []
