@@ -410,18 +410,20 @@ assert any("arm review commits" in c for c in commands), commands
 	})
 
 	// Regression test for the reviewer-flagged bug: a placeholder positional
-	// arg (e.g. "<replacement-url-or-path>") that doesn't start with "-" gets
-	// appended to `subcommands` by parse_command_line, so the full chain
-	// becomes "sources add <replacement-url-or-path>" -- which isn't a key in
-	// MANDATORY_FLAGS, so validate_command fell back to the top-level "sources"
-	// key (which has no mandatory-flags entry) and silently skipped checking
-	// for the mandatory --url/--type flags on "sources add". This mirrors the
-	// shipped armature-auditor/references/citation-errors.md example.
+	// arg that doesn't start with "-" gets appended to `subcommands` by
+	// parse_command_line, so the full chain becomes "sources add
+	// SOME-PLACEHOLDER" -- which isn't a key in MANDATORY_FLAGS, so
+	// validate_command fell back to the top-level "sources" key (which has
+	// no mandatory-flags entry) and silently skipped checking for the
+	// mandatory --url/--type flags on "sources add". Uses a bare-word
+	// placeholder (not angle-bracket syntax) so this test exercises the
+	// mandatory-flags-fallback bug specifically, distinct from the
+	// angle-bracket copyability check covered below.
 	t.Run("SourcesAddWithPlaceholderArgMissingMandatoryFlagsFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		skillMD := "```bash\narm sources add <replacement-url-or-path>\n```\n"
+		skillMD := "```bash\narm sources add SOME-PLACEHOLDER-URL-OR-PATH\n```\n"
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
@@ -433,6 +435,45 @@ assert any("arm review commits" in c for c in commands), commands
 		require.Contains(t, output.String(), "missing mandatory flags")
 		require.Contains(t, output.String(), "--url")
 		require.Contains(t, output.String(), "--type")
+	})
+
+	// Angle-bracket synopsis placeholders (e.g. "<old-path>") are not
+	// copyable shell syntax either: unquoted, they tokenize as the literal
+	// `<` / `>` redirection operators. Lint must reject them the same way it
+	// rejects square-bracket optional-flag syntax.
+	t.Run("AngleBracketPlaceholderSyntaxFails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "```bash\narm scope-rename <old-path> <new-path>\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err, "angle-bracket synopsis placeholders are not valid shell syntax")
+		require.Contains(t, output.String(), "angle-bracket synopsis syntax")
+	})
+
+	// The bracket check must not require a leading whitespace before "[" so
+	// a flag fused directly to its optional-value bracket (e.g. "--ttl[=N]")
+	// is also caught, not just a space-separated "[--ttl 120]".
+	t.Run("FusedBracketedFlagSyntaxFails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "```bash\narm claim TASK-01 --worktree /tmp/wt --ttl[=60]\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err, "a fused flag+bracket token is not valid shell syntax")
+		require.Contains(t, output.String(), "bracketed synopsis syntax")
 	})
 
 	// Regression test for the reviewer-flagged bug: FENCE_RE only matched
