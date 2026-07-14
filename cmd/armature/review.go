@@ -223,6 +223,27 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 	ctx := currentCtx(cmd)
 	git := adapters.New(ctx.RepoPath)
 
+	// When --branch is left at its default ("HEAD"), resolve HEAD against
+	// the invocation directory, not ctx.RepoPath — ctx.RepoPath is resolved
+	// to the parent repo root when this command runs inside a linked git
+	// worktree (the standard `arm claim --worktree` delivery flow), so a
+	// bare "HEAD" passed straight through to git.LogBranch would report the
+	// *parent* repo's checked-out branch instead of the worktree's own,
+	// silently returning wrong (or empty) results with exit 0. Mirrors the
+	// same invocation-path resolution runReviewPrepare already applies to
+	// the activity log path, for the same underlying reason. Only applies
+	// when the flag wasn't explicitly passed — an explicit --branch always
+	// means exactly what it says.
+	if !cmd.Flags().Changed("branch") {
+		invocationPath, _ := cmd.Root().PersistentFlags().GetString("repo")
+		if invocationPath == "" {
+			invocationPath = "."
+		}
+		if resolved, err := adapters.New(invocationPath).CurrentBranch(); err == nil && resolved != "" {
+			branch = resolved
+		}
+	}
+
 	commits, err := review.ReviewCommits(git, issueID, branch)
 	if err != nil {
 		return fmt.Errorf("failed to list commits for issue %s: %w", issueID, err)
