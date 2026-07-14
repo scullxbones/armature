@@ -41,6 +41,17 @@ func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
 		pythonBin = "python3"
 	}
 
+	// Command examples in the quick-reference skill are meant to be copied
+	// into a shell. Optional-argument brackets are Cobra synopsis notation,
+	// not shell syntax, and would be passed as literal positional arguments.
+	t.Run("ArmatureQuickReferenceUsesCopyableCommands", func(t *testing.T) {
+		skillPath := filepath.Join(projectRoot, "internal", "skillsembed", "skills", "armature", "SKILL.md")
+		content, err := os.ReadFile(skillPath)
+		require.NoError(t, err)
+		require.NotContains(t, string(content), "arm claim ID --worktree /path/to/wt [--ttl 60]")
+		require.NotContains(t, string(content), "arm render-context ID [--budget 4000]")
+	})
+
 	// Test 1: Verify that valid arm commands pass
 	t.Run("ValidCommandsPasses", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -144,6 +155,25 @@ More info.
 		err := cmd.Run()
 		require.Error(t, err)
 		require.Contains(t, output.String(), "invalid-reference-command")
+	})
+
+	// Optional flags in square brackets are Cobra synopsis notation, not
+	// copyable shell syntax. Lint must reject them before they ship in an
+	// executable example.
+	t.Run("BracketedOptionalFlagSyntaxFails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "```bash\narm claim --issue TASK-01 --worktree /tmp/wt [--ttl 120]\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err, "bracketed optional flags are not valid shell syntax")
+		require.Contains(t, output.String(), "bracketed synopsis syntax")
 	})
 
 	// A continued command is one shell command, so a mandatory flag supplied

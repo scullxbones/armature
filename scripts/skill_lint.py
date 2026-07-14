@@ -332,6 +332,13 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     if valid_flags_cache is None:
         valid_flags_cache = {}
 
+    # Square brackets in a command synopsis describe an optional argument to
+    # the reader; a shell passes them literally. Shipped skill examples are
+    # intended to be copyable, so reject this documentation notation rather
+    # than silently accepting a command that will not run as shown.
+    if re.search(r"(?:^|\s)\[[^\]\n]+\]", arm_command):
+        return False, f"Command uses bracketed synopsis syntax in: {arm_command}"
+
     subcommands, args = parse_command_line(arm_command)
 
     if not subcommands:
