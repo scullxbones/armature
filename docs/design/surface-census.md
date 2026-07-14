@@ -65,7 +65,7 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `decisions` | []Decision | state.go:36 | decision op | **kept-evidence** | Structured decisions affecting scope. Set by decision command. |
 | `source_links` | []SourceLink | state.go:37 | source-link op | **kept-evidence** | External source references. Set by source-link or create --source. |
 | `citation_acceptances` | []CitationAcceptance | state.go:38 | citation-accepted op | **kept-evidence** | Record of accepted source citations. Set by accept-citation command. |
-| `assessment_attestations` | []review.AssessmentAttestation | state.go:39 | assessment-attested op (review.go) | **kept-evidence** | Code review assessment records. Set by review attest flow. |
+| `assessment_attestations` | []review.AssessmentAttestation | state.go:39 | assessment-attested op (review.go) | **kept-evidence** | Code review assessment records. Set by review record flow. |
 | `claimed_by` | string | state.go:40 | claim op | **kept-evidence** | Worker ID that holds the claim. Set by claim command. |
 | `claimed_at` | int64 | state.go:41 | claim op | **kept-evidence** | Claim timestamp (epoch ms). Used to calculate staleness. |
 | `claim_ttl` | int | state.go:42 | claim op (TTL in minutes) | **kept-evidence** | Claim time-to-live. Set by --ttl flag (default 60 min). Used by stale review logic. |
@@ -82,25 +82,25 @@ The following op types are defined in internal/ops/types.go and materialized by 
 
 | Op Type | Defined | Handler | Status | Notes |
 |---------|---------|---------|--------|-------|
-| `create` | ops.go:8 | engine.go | **kept-evidence** | Creates new issue. Emits create payload with type, title, parent, scope, etc. |
-| `claim` | ops.go:9 | engine.go | **kept-evidence** | Assigns issue to worker with TTL. Sets claimed_by, claimed_at, claim_ttl. |
-| `heartbeat` | ops.go:10 | engine.go | **kept-evidence** | Refreshes claim TTL. Updates last_heartbeat timestamp. |
-| `transition` | ops.go:11 | engine.go | **kept-evidence** | Changes issue status. Payload: to (status), outcome, branch, pr. |
-| `note` | ops.go:12 | engine.go | **kept-evidence** | Adds worker note. Payload: msg, note_id for deletion. |
-| `note-delete` | ops.go:13 | engine.go | **kept-evidence** | Soft-deletes note by ID. Marks note.deleted=true. |
-| `link` | ops.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Supports rel=blocked_by, rel=blocks. |
-| `unlink` | ops.go:15 | engine.go | **kept-evidence** | Removes dependency. Payload: dep (target). |
-| `source-link` | ops.go:16 | engine.go | **kept-evidence** | Links external source. Payload: source_id, source_url. Creates source_links entries. |
-| `source-fingerprint` | ops.go:17 | engine.go | **kept-evidence** | Records source version. Payload: sha, version_id, provider. Used for staleness detection. |
-| `dag-transition` | ops.go:18 | engine.go | **kept-evidence** | Promotes confidence (draft→verified). Payload: issue_id, confirmed, confirmed_noninteractively. Sets dag_confirmed flag. |
-| `decision` | ops.go:19 | engine.go | **kept-evidence** | Records structured decision. Payload: topic, choice, rationale, affects (scope globs). |
-| `assign` | ops.go:20 | engine.go | **kept-evidence** | Assigns worker to issue. Payload: assigned_to (worker ID). |
-| `amend` | ops.go:21 | engine.go | **kept-evidence** | Updates issue metadata. Payload: type, scope, context_files, dod, acceptance (partial updates). |
-| `citation-accepted` | ops.go:22 | engine.go | **kept-evidence** | Records citation acceptance. Payload: source_entry_id, confirmed_noninteractively flag. |
-| `scope-rename` | ops.go:23 | engine.go | **kept-evidence** | Renames scope glob. Payload: old_path, new_path. Updates scope entries. |
-| `scope-delete` | ops.go:24 | engine.go | **kept-evidence** | Removes scope glob. Payload: deleted_path. Removes from scope array. |
-| `reparent` | ops.go:27 | engine.go | **kept-evidence** | Moves issue to new parent. Payload: parent (new parent ID, can be empty for top-level). |
-| `assessment-attested` | ops.go:30 | engine.go | **kept-evidence** | Records code review attestation. Payload: assessment (JSON blob). Used by review attest. |
+| `create` | internal/ops/types.go:8 | engine.go | **kept-evidence** | Creates new issue. Emits create payload with type, title, parent, scope, etc. |
+| `claim` | internal/ops/types.go:9 | engine.go | **kept-evidence** | Assigns issue to worker with TTL. Sets claimed_by, claimed_at, claim_ttl. |
+| `heartbeat` | internal/ops/types.go:10 | engine.go | **kept-evidence** | Refreshes claim TTL. Updates last_heartbeat timestamp. |
+| `transition` | internal/ops/types.go:11 | engine.go | **kept-evidence** | Changes issue status. Payload: to (status), outcome, branch, pr. |
+| `note` | internal/ops/types.go:12 | engine.go | **kept-evidence** | Adds worker note. Payload: msg, note_id for deletion. |
+| `note-delete` | internal/ops/types.go:13 | engine.go | **kept-evidence** | Soft-deletes note by ID. Marks note.deleted=true. |
+| `link` | internal/ops/types.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Supports rel=blocked_by, rel=blocks. |
+| `unlink` | internal/ops/types.go:15 | engine.go | **kept-evidence** | Removes dependency. Payload: dep (target). |
+| `source-link` | internal/ops/types.go:16 | engine.go | **kept-evidence** | Links external source. Payload: source_id, source_url. Creates source_links entries. |
+| `source-fingerprint` | internal/ops/types.go:17 | engine.go | **kept-evidence** | Records source version. Payload: sha, version_id, provider. Used for staleness detection. |
+| `dag-transition` | internal/ops/types.go:18 | engine.go | **kept-evidence** | Promotes confidence (draft→verified). Payload: issue_id, confirmed, confirmed_noninteractively. Sets dag_confirmed flag. |
+| `decision` | internal/ops/types.go:19 | engine.go | **kept-evidence** | Records structured decision. Payload: topic, choice, rationale, affects (scope globs). |
+| `assign` | internal/ops/types.go:20 | engine.go | **kept-evidence** | Assigns worker to issue. Payload: assigned_to (worker ID). |
+| `amend` | internal/ops/types.go:21 | engine.go | **kept-evidence** | Updates issue metadata. Payload: type, scope, context_files, dod, acceptance (partial updates). |
+| `citation-accepted` | internal/ops/types.go:22 | engine.go | **kept-evidence** | Records citation acceptance. Payload: source_entry_id, confirmed_noninteractively flag. |
+| `scope-rename` | internal/ops/types.go:23 | engine.go | **kept-evidence** | Renames scope glob. Payload: old_path, new_path. Updates scope entries. |
+| `scope-delete` | internal/ops/types.go:24 | engine.go | **kept-evidence** | Removes scope glob. Payload: deleted_path. Removes from scope array. |
+| `reparent` | internal/ops/types.go:27 | engine.go | **kept-evidence** | Moves issue to new parent. Payload: parent (new parent ID, can be empty for top-level). |
+| `assessment-attested` | internal/ops/types.go:30 | engine.go | **kept-evidence** | Records code review attestation. Payload: assessment (JSON blob). Used by review record. |
 
 ## CLI Commands
 
@@ -159,6 +159,9 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `log` | main.go:205, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
 | `workers` | main.go:209, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
 | `sources` | main.go:213, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. |
+| `sources add` | sources.go:34 | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
+| `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
+| `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
 | `source-link` | main.go:217, source_link.go | Link issue to source | **kept-evidence** | Citation. Creates source-link ops. |
 | `accept-citation` | main.go:221, accept_citation.go | Accept source citation | **kept-evidence** | Citation workflow. Sets citation_acceptances. |
 | `show` | main.go:225, show.go | Display issue details | **kept-evidence** | Query tool. Supports --field for extraction. |
@@ -168,10 +171,14 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `doctor` | main.go:241, doctor.go | Diagnose DAG health | **kept-evidence** | Validator. Checks for broken refs, cycles, orphans. |
 | `completion` | main.go:245, cmd_completion.go | Bash/zsh completion | **kept-evidence** | Shell integration. Cobra-generated. |
 | `hook` | main.go:249, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
+| `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
 | `tui` | main.go:253, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
 | `context-history` | main.go:257, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
 | `harness-hook` | main.go:261, harness_hook.go | Harness hook runner (internal) | **kept-evidence** | Internal. Runs on pre-commit and post-merge. |
-| `review` | main.go:265, review.go | Record code review | **kept-evidence** | Review infrastructure. Attest and cite changes. |
+| `review` | main.go:265, review.go | Manage conformance reviews for issues | **kept-evidence** | Review infrastructure. |
+| `review prepare` | review.go:33 | Prepare a review bundle for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --base, --head, --output. |
+| `review record` | review.go:157 | Record a conformance assessment for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --assessment, --bundle. |
+| `review commits` | review.go:185 | List delivery commits for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --branch (default HEAD). |
 
 ## Command Flags
 
@@ -183,7 +190,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 |------|------|---------|-------|--------|-------|
 | `--debug` | bool | false | Dump stack traces on error | **kept-evidence** | Diagnostic. Always available. |
 | `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. |
-| `--repo` | string | . | Repository path | **kept-evidence** | Allows multi-repo operation. |
+| `--repo` | string | "" (current directory) | Repository path | **kept-evidence** | Allows multi-repo operation. |
 | `--non-interactive` | bool | false | Skip TUI, use structured output | **kept-evidence** | Auto-set in CI. |
 
 ### Issue/Field Flags (common across commands)
@@ -290,10 +297,10 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--at` | render-context | string | Replay context at git commit SHA | **kept-evidence** |
 | `--limit` | context-history | int | Max commits to scan (default 100) | **kept-evidence** |
 | `--source` | import | string | Source ID to link imported items to | **kept-evidence** |
-| `--assessment` | review attest | string | Assessment file or '-' for stdin | **kept-evidence** |
-| `--bundle` | review attest | string | Review bundle file path | **kept-evidence** |
-| `--base` | review cite | string | Base revision for diff | **kept-evidence** |
-| `--head` | review cite | string | Head revision for diff | **kept-evidence** |
+| `--assessment` | review record | string | Assessment file or '-' for stdin | **kept-evidence** |
+| `--bundle` | review record | string | Review bundle file path (optional) | **kept-evidence** |
+| `--base` | review prepare | string | Base revision for diff | **kept-evidence** |
+| `--head` | review prepare | string | Head revision for diff | **kept-evidence** |
 | `--clear-context-files` | amend | bool | Remove all context_files entries | **kept-evidence** |
 
 ## Priority Levels (on priority field)

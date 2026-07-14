@@ -70,6 +70,26 @@ CENSUS_STATUSES=$(sed -n '/^## Issue Statuses/,/^## [^#]/p' "$CENSUS_FILE" | \
 compare_lists "Status" "$CODE_STATUSES" "$CENSUS_STATUSES"
 
 # ============================================================================
+# CONFIDENCE STATES CHECK
+# ============================================================================
+echo "Checking Confidence States..."
+
+# Confidence states aren't enumerated in a const block; they're documented in
+# the --confidence flag help text (draft/verified) plus a literal check for
+# the "inferred" provenance value in claim.go. Extract from both sources.
+CODE_CONFIDENCE=$( {
+    grep -h 'confidence level:' "$REPO_ROOT/cmd/armature/create.go" | \
+        sed -n 's/.*confidence level: \([a-z]*\) or \([a-z]*\).*/\1\n\2/p'
+    grep -oE '"inferred"' "$REPO_ROOT/cmd/armature/claim.go" | tr -d '"'
+} | sort -u)
+
+# Extract from census
+CENSUS_CONFIDENCE=$(sed -n '/^## Confidence States/,/^## [^#]/p' "$CENSUS_FILE" | \
+    grep '| `' | sed 's/^| `\([^`]*\)`.*/\1/')
+
+compare_lists "Confidence state" "$CODE_CONFIDENCE" "$CENSUS_CONFIDENCE"
+
+# ============================================================================
 # OP TYPES CHECK
 # ============================================================================
 echo "Checking Op Types..."
@@ -111,6 +131,36 @@ CODE_CMDS=$(grep -oE 'new[A-Z][A-Za-z]+Cmd\(\)' "$REPO_ROOT/cmd/armature/main.go
     sed -E 's/^new//; s/Cmd\(\)$//' | while read -r name; do
         command_use "new${name}Cmd"
     done | sort -u)
+
+# Also walk subcommands registered via AddCommand inside each top-level
+# constructor (e.g. `review prepare`, `sources add`, `hook run`) so the
+# census can be checked against real subcommand names, not just top-level
+# command names. Without this, a flag/command mistakenly attributed to a
+# nonexistent subcommand (e.g. "review attest") would pass unnoticed.
+subcommand_constructors() {
+    local constructor="$1"
+    awk -v ctor="$constructor" '
+        $0 ~ "^func " ctor "\\(" { infunc = 1; next }
+        infunc && /^func / { infunc = 0 }
+        infunc && /AddCommand\(new[A-Za-z]+Cmd\(\)\)/ {
+            if (match($0, /new[A-Za-z]+Cmd/)) {
+                print substr($0, RSTART, RLENGTH)
+            }
+        }
+    ' "$REPO_ROOT"/cmd/armature/*.go
+}
+
+CODE_SUBCMDS=$(grep -oE 'new[A-Z][A-Za-z]+Cmd\(\)' "$REPO_ROOT/cmd/armature/main.go" | grep -v '^newRootCmd()$' | \
+    sed -E 's/^new//; s/Cmd\(\)$//' | while read -r name; do
+        parent_use=$(command_use "new${name}Cmd")
+        [[ -z "$parent_use" ]] && continue
+        subcommand_constructors "new${name}Cmd" | while read -r sub_ctor; do
+            sub_use=$(command_use "$sub_ctor")
+            [[ -n "$sub_use" ]] && echo "${parent_use} ${sub_use}"
+        done
+    done | sort -u)
+
+CODE_CMDS=$(printf '%s\n%s\n' "$CODE_CMDS" "$CODE_SUBCMDS" | sed '/^$/d' | sort -u)
 
 # Extract from census (get command names from CLI Commands section)
 CENSUS_CMDS=$(sed -n '/^## CLI Commands/,/^## [^#]/p' "$CENSUS_FILE" | \
