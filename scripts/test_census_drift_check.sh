@@ -134,6 +134,44 @@ else
     fi
 fi
 
+# ----------------------------------------------------------------------------
+# Test 5: a phantom command name in the census (that doesn't exist in code,
+# including as a subcommand) is detected as drift
+# ----------------------------------------------------------------------------
+echo "Test 5: census-drift-check detects a phantom census command..."
+
+CENSUS_FIXTURE="$FIXTURE/docs/design/surface-census.md"
+if [[ ! -f "$CENSUS_FIXTURE" ]]; then
+    echo "  FAIL: fixture missing $CENSUS_FIXTURE"
+    FAILURES=$((FAILURES + 1))
+else
+    # Inject a phantom subcommand row that has no matching AddCommand/Use in
+    # code, mirroring the real "review attest" drift this regression guards
+    # against (a phantom subcommand name that was never a real command).
+    sed -i 's/^| `review record` |/| `review attest` |/' "$CENSUS_FIXTURE"
+
+    set +e
+    OUTPUT=$("$SCRIPT" "$FIXTURE" 2>&1)
+    STATUS=$?
+    set -e
+
+    if [[ $STATUS -eq 0 ]]; then
+        echo "  FAIL: expected non-zero exit when a phantom census command is injected"
+        echo "$OUTPUT"
+        FAILURES=$((FAILURES + 1))
+    elif ! grep -q "CLI command 'review attest' in census but not in code" <<< "$OUTPUT"; then
+        echo "  FAIL: expected phantom command drift message not found in output"
+        echo "$OUTPUT"
+        FAILURES=$((FAILURES + 1))
+    else
+        echo "  PASS"
+    fi
+
+    # Restore the census fixture for any subsequent tests.
+    git -C "$REPO_ROOT" show HEAD:docs/design/surface-census.md > "$CENSUS_FIXTURE" 2>/dev/null || true
+    cp "$REPO_ROOT/docs/design/surface-census.md" "$CENSUS_FIXTURE"
+fi
+
 echo ""
 if [[ $FAILURES -eq 0 ]]; then
     echo "All census-drift-check tests passed"
