@@ -167,9 +167,74 @@ else
         echo "  PASS"
     fi
 
-    # Restore the census fixture for any subsequent tests.
+# Restore the census fixture for any subsequent tests.
     git -C "$REPO_ROOT" show HEAD:docs/design/surface-census.md > "$CENSUS_FIXTURE" 2>/dev/null || true
     cp "$REPO_ROOT/docs/design/surface-census.md" "$CENSUS_FIXTURE"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 6: a flag documented for the wrong command is detected as drift
+# ----------------------------------------------------------------------------
+echo "Test 6: census-drift-check detects a flag assigned to the wrong command..."
+
+# Use a new clean fixture because the prior tests deliberately mutate code.
+OWNERSHIP_FIXTURE="$WORKDIR/ownership-fixture"
+git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$OWNERSHIP_FIXTURE" && tar -x -C "$OWNERSHIP_FIXTURE")
+cp "$REPO_ROOT/scripts/census-drift-check.sh" "$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh"
+cp "$REPO_ROOT/docs/design/surface-census.md" "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+chmod +x "$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh"
+
+# Reassign a real flag to a command that does not own it. A command-aware
+# checker must reject this rather than validating only the global flag-name
+# set.
+sed -i 's/| `--dry-run` | sync, decompose-apply, decompose-revert, import |/| `--dry-run` | sync, decompose-revert, import, scope-delete |/' \
+    "$OWNERSHIP_FIXTURE/docs/design/surface-census.md"
+
+set +e
+OUTPUT=$("$OWNERSHIP_FIXTURE/scripts/census-drift-check.sh" "$OWNERSHIP_FIXTURE" 2>&1)
+STATUS=$?
+set -e
+
+if [[ $STATUS -eq 0 ]]; then
+    echo "  FAIL: expected non-zero exit when --dry-run is documented for scope-delete"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -q "Command flag '--dry-run' ownership differs" <<< "$OUTPUT"; then
+    echo "  FAIL: expected flag ownership drift message not found in output"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "  PASS"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 7: a materialized Issue field missing from the census is detected
+# ----------------------------------------------------------------------------
+echo "Test 7: census-drift-check detects an undocumented Issue field..."
+
+FIELDS_FIXTURE="$WORKDIR/fields-fixture"
+git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$FIELDS_FIXTURE" && tar -x -C "$FIELDS_FIXTURE")
+cp "$REPO_ROOT/scripts/census-drift-check.sh" "$FIELDS_FIXTURE/scripts/census-drift-check.sh"
+cp "$REPO_ROOT/docs/design/surface-census.md" "$FIELDS_FIXTURE/docs/design/surface-census.md"
+chmod +x "$FIELDS_FIXTURE/scripts/census-drift-check.sh"
+
+sed -i '/^type Issue struct {/a\\	FakeDriftField string `json:"fake_drift_field,omitempty"`' \
+    "$FIELDS_FIXTURE/internal/materialize/state.go"
+
+set +e
+OUTPUT=$("$FIELDS_FIXTURE/scripts/census-drift-check.sh" "$FIELDS_FIXTURE" 2>&1)
+STATUS=$?
+set -e
+
+if [[ $STATUS -eq 0 ]]; then
+    echo "  FAIL: expected non-zero exit when an undocumented Issue field is injected"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -q "Issue field 'fake_drift_field' in code but not in census" <<< "$OUTPUT"; then
+    echo "  FAIL: expected Issue field drift message not found in output"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "  PASS"
 fi
 
 echo ""

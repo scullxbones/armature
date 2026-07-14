@@ -90,6 +90,31 @@ CENSUS_CONFIDENCE=$(sed -n '/^## Confidence States/,/^## [^#]/p' "$CENSUS_FILE" 
 compare_lists "Confidence state" "$CODE_CONFIDENCE" "$CENSUS_CONFIDENCE"
 
 # ============================================================================
+# ISSUE FIELDS CHECK
+# ============================================================================
+echo "Checking Issue Fields..."
+
+# The census explicitly inventories the fields materialized on Issue. Compare
+# its JSON field names to the source of truth rather than only checking the
+# documented row count.
+CODE_ISSUE_FIELDS=$(awk '
+    /^type Issue struct \{/ { in_issue = 1; next }
+    in_issue && /^}/ { exit }
+    in_issue {
+        if (match($0, /json:"[^"]+"/)) {
+            value = substr($0, RSTART + 6, RLENGTH - 7)
+            sub(/,.*/, "", value)
+            print value
+        }
+    }
+' "$REPO_ROOT/internal/materialize/state.go" | sort -u)
+
+CENSUS_ISSUE_FIELDS=$(sed -n '/^## Issue Fields/,/^## [^#]/p' "$CENSUS_FILE" | \
+    grep '^| `' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+
+compare_lists "Issue field" "$CODE_ISSUE_FIELDS" "$CENSUS_ISSUE_FIELDS"
+
+# ============================================================================
 # OP TYPES CHECK
 # ============================================================================
 echo "Checking Op Types..."
@@ -173,16 +198,79 @@ compare_lists "CLI command" "$CODE_CMDS" "$CENSUS_CMDS"
 # ============================================================================
 echo "Checking Command Flags..."
 
-# Extract every Cobra flag name from root persistent flags and command-local
-# flag definitions. The census deliberately groups shared flags by usage, so
-# this validates the documented flag surface as a set.
-CODE_FLAGS=$(grep -h 'Flags()\.' "$REPO_ROOT"/cmd/armature/*.go | \
-    sed -n 's/.*Flags()\.[A-Za-z]*([^" ]* *"\([^"]*\)".*/--\1/p' | sort -u)
+# Check root persistent flags independently: they are inherited by every
+# command, so their ownership is the root command rather than a local command.
+CODE_ROOT_FLAGS=$(sed -n 's/.*PersistentFlags()\.[A-Za-z]*([^" ]* *"\([^"]*\)".*/--\1/p' \
+    "$REPO_ROOT/cmd/armature/main.go" | sort -u)
+CENSUS_ROOT_FLAGS=$(sed -n '/^### Universal\/Root Flags/,/^### /p' "$CENSUS_FILE" | \
+    grep '^| `--' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+compare_lists "Root persistent flag" "$CODE_ROOT_FLAGS" "$CENSUS_ROOT_FLAGS"
 
-CENSUS_FLAGS=$(sed -n '/^## Command Flags/,/^## Priority Levels/p' "$CENSUS_FILE" | \
-    grep '| `--' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+# For command-local flags, compare command/flag pairs, not merely the global
+# flag-name set. This catches a real but wrongly attributed flag row.
+CONSTRUCTOR_PATHS=$(grep -oE 'new[A-Z][A-Za-z]+Cmd\(\)' "$REPO_ROOT/cmd/armature/main.go" | \
+    grep -v '^newRootCmd()$' | sed -E 's/\(\)$//' | while read -r ctor; do
+        use=$(command_use "$ctor")
+        [[ -n "$use" ]] && printf '%s|%s\n' "$ctor" "$use"
+    done)
 
+while IFS='|' read -r parent_ctor parent_use; do
+    [[ -z "$parent_ctor" ]] && continue
+    while read -r sub_ctor; do
+        sub_use=$(command_use "$sub_ctor")
+        [[ -n "$sub_use" ]] && printf '%s|%s %s\n' "$sub_ctor" "$parent_use" "$sub_use"
+    done < <(subcommand_constructors "$parent_ctor")
+done <<< "$CONSTRUCTOR_PATHS" >> /tmp/census-constructor-paths.$$
+CONSTRUCTOR_PATHS=$(cat /tmp/census-constructor-paths.$$; printf '%s\n' "$CONSTRUCTOR_PATHS")
+rm -f /tmp/census-constructor-paths.$$
+
+CODE_FLAG_OWNERS=$(while IFS='|' read -r constructor command; do
+    [[ -z "$constructor" ]] && continue
+    awk -v ctor="$constructor" -v command="$command" '
+        $0 ~ "^func " ctor "\\(" { in_constructor = 1; next }
+        in_constructor && /^func / { exit }
+        in_constructor && /Flags\(\)\.[A-Za-z]*\(/ {
+            if (match($0, /"[^"]+"/)) {
+                flag = substr($0, RSTART + 1, RLENGTH - 2)
+                print command "|--" flag
+            }
+        }
+    ' "$REPO_ROOT"/cmd/armature/*.go
+done <<< "$CONSTRUCTOR_PATHS" | sort -u)
+
+# A command cell can contain a comma-separated list. Ignore intentionally
+# non-enumerable prose ("etc.") but validate every named canonical command.
+CENSUS_FLAG_OWNERS=$(sed -n '/^## Command Flags/,/^## Priority Levels/p' "$CENSUS_FILE" | \
+    awk -F'|' '
+        /^### Universal\/Root Flags/ { command_table = 0 }
+        /^\| Flag \| Command\(s\)/ { command_table = 1; next }
+        /^\| `--/ {
+            if (!command_table) next
+            flag = $2; commands = $3
+            gsub(/^[[:space:]]*`|`[[:space:]]*$/, "", flag)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", commands)
+            count = split(commands, parts, ",")
+            for (i = 1; i <= count; i++) {
+                command = parts[i]
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", command)
+                if (command != "" && command !~ /etc\./) print command "|" flag
+            }
+        }
+    ' | sort -u)
+
+CODE_FLAGS=$(cut -d'|' -f2 <<< "$CODE_FLAG_OWNERS" | sort -u)
+CENSUS_FLAGS=$(cut -d'|' -f2 <<< "$CENSUS_FLAG_OWNERS" | sort -u)
 compare_lists "Command flag" "$CODE_FLAGS" "$CENSUS_FLAGS"
+
+while IFS= read -r pair; do
+    [[ -z "$pair" ]] && continue
+    if ! grep -qxF -- "$pair" <<< "$CODE_FLAG_OWNERS"; then
+        flag=${pair##*|}
+        command=${pair%%|*}
+        echo "FAIL: Command flag '$flag' ownership differs: documented for '$command' but not defined there" >&2
+        ERRORS=$((ERRORS + 1))
+    fi
+done <<< "$CENSUS_FLAG_OWNERS"
 
 # ============================================================================
 # SUMMARY
