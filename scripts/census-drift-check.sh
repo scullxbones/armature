@@ -23,7 +23,7 @@ compare_lists() {
     # Check items in code but not in census (exact line match, not substring)
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
-        if ! grep -qxF "$item" <<< "$census_list"; then
+        if ! grep -qxF -- "$item" <<< "$census_list"; then
             echo "FAIL: $name '$item' in code but not in census" >&2
             ERRORS=$((ERRORS + 1))
         fi
@@ -32,7 +32,7 @@ compare_lists() {
     # Check items in census but not in code (exact line match, not substring)
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
-        if ! grep -qxF "$item" <<< "$code_list"; then
+        if ! grep -qxF -- "$item" <<< "$code_list"; then
             echo "FAIL: $name '$item' in census but not in code" >&2
             ERRORS=$((ERRORS + 1))
         fi
@@ -89,72 +89,50 @@ compare_lists "Op type" "$CODE_OPS" "$CENSUS_OPS"
 # ============================================================================
 echo "Checking CLI Commands..."
 
-# Build a mapping of function names to command names based on the census
-declare -A cmd_map=(
-    [Ready]=ready
-    [Claim]=claim
-    [Transition]=transition
-    [Unassign]=unassign
-    [Reopen]=reopen
-    [Heartbeat]=heartbeat
-    [Note]=note
-    [Decision]=decision
-    [Amend]=amend
-    [Confirm]=confirm
-    [Assign]=assign
-    [DAGSummary]=dagsum
-    [DAGTransition]="dag-transition"
-    [DecomposeApply]="decompose apply"
-    [DecomposeRevert]="decompose revert"
-    [DecomposeContext]="decompose context"
-    [Link]=link
-    [Unlink]=unlink
-    [Sync]=sync
-    [PushOps]="push-ops"
-    [Merged]=merged
-    [Materialize]=materialize
-    [Import]=import
-    [StaleReview]="stale-review"
-    [Version]=version
-    [WorkerInit]="worker-init"
-    [Bootstrap]=bootstrap
-    [Create]=create
-    [Reparent]=reparent
-    [Validate]=validate
-    [RenderContext]="render-context"
-    [Log]=log
-    [Workers]=workers
-    [Sources]=sources
-    [SourceLink]="source-link"
-    [AcceptCitation]="accept-citation"
-    [Show]=show
-    [List]=list
-    [ScopeRename]="scope-rename"
-    [ScopeDelete]="scope-delete"
-    [Doctor]=doctor
-    [Completion]=completion
-    [Hook]=hook
-    [TUI]=tui
-    [ContextHistory]="context-history"
-    [HarnessHook]="harness-hook"
-    [Review]=review
-)
+# Extract the actual Cobra Use value from each root command constructor. This
+# keeps the census aligned with what users can invoke, rather than a guessed
+# transformation of Go constructor names.
+command_use() {
+    local constructor="$1"
+    awk -v constructor="$constructor" '
+        $0 ~ "^func " constructor "\\(" { in_constructor = 1 }
+        in_constructor && /Use:[[:space:]]*"/ {
+            if (match($0, /"[^"]+"/)) {
+                use = substr($0, RSTART + 1, RLENGTH - 2)
+                split(use, parts, " ")
+                print parts[1]
+                exit
+            }
+        }
+    ' "$REPO_ROOT"/cmd/armature/*.go
+}
 
-# Extract commands from code
-CODE_CMDS=$(grep -oE 'new[A-Z][A-Za-z]+Cmd\(\)' "$REPO_ROOT/cmd/armature/main.go" | \
-    sed 's/^new//' | sed 's/Cmd()$//' | while read name; do
-        if [[ -v cmd_map[$name] ]]; then
-            echo "${cmd_map[$name]}"
-        else
-            echo "$name" | sed 's/\([A-Z]\)/-\L\1/g' | sed 's/^-//'
-        fi
-    done | grep -v '^root$' | sort -u)
+CODE_CMDS=$(grep -oE 'new[A-Z][A-Za-z]+Cmd\(\)' "$REPO_ROOT/cmd/armature/main.go" | grep -v '^newRootCmd()$' | \
+    sed -E 's/^new//; s/Cmd\(\)$//' | while read -r name; do
+        command_use "new${name}Cmd"
+    done | sort -u)
 
 # Extract from census (get command names from CLI Commands section)
 CENSUS_CMDS=$(sed -n '/^## CLI Commands/,/^## [^#]/p' "$CENSUS_FILE" | \
     grep '| `' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
 
 compare_lists "CLI command" "$CODE_CMDS" "$CENSUS_CMDS"
+
+# ============================================================================
+# COMMAND FLAGS CHECK
+# ============================================================================
+echo "Checking Command Flags..."
+
+# Extract every Cobra flag name from root persistent flags and command-local
+# flag definitions. The census deliberately groups shared flags by usage, so
+# this validates the documented flag surface as a set.
+CODE_FLAGS=$(grep -h 'Flags()\.' "$REPO_ROOT"/cmd/armature/*.go | \
+    sed -n 's/.*Flags()\.[A-Za-z]*([^" ]* *"\([^"]*\)".*/--\1/p' | sort -u)
+
+CENSUS_FLAGS=$(sed -n '/^## Command Flags/,/^## Priority Levels/p' "$CENSUS_FILE" | \
+    grep '| `--' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+
+compare_lists "Command flag" "$CODE_FLAGS" "$CENSUS_FLAGS"
 
 # ============================================================================
 # SUMMARY
