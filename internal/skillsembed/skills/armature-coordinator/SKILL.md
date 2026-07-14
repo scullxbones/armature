@@ -298,7 +298,7 @@ arm transition TASK-ID --to done --outcome "CONCRETE_OUTCOME_DESCRIPTION"
 
 The recovery step:
 1. **Identify the gap** — run `arm list --parent STORY-ID` and look for tasks with `"status": "in-progress"` or `"status": "done"` that do not appear in the wave manifest or were not marked `merged` in step (c) below.
-2. **Understand what the worker did** — check the commit log for `TASK-ID` commits and review the scope files modified. Use `git diff` to confirm the work is complete.
+2. **Understand what the worker did** — run `arm review commits TASK-ID` to find the delivery commits and review the scope files modified. Use `git diff` to confirm the work is complete.
 3. **Write a concrete outcome** — do not re-use generic phrases like "Done" or "Completed". Reference specific files changed, tests added, or commands verified. Example: `"Implemented TokenParser.Parse() method; all 8 token types pass new tests; coverage 82%"`.
 4. **Transition manually** — run `arm transition TASK-ID --to done --outcome "..."` with the specific outcome. This unblocks dependent tasks and prepares the issue for merge validation.
 
@@ -487,7 +487,7 @@ echo "Branch: $WAVE_BRANCH"
 echo "Wave type: $WAVE_TYPE"
 ```
 If any variable is unset, stop — the manifest was not recorded before dispatch.
-Reconstruct it from `arm list --status done` and `git log` before proceeding.
+Reconstruct it from `arm list --status done` and `arm review commits TASK-ID` before proceeding.
 
 **Determine changed-file set:**
 ```bash

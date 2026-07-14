@@ -14,9 +14,9 @@ MANDATORY_FLAGS = {
     "transition": ["--to"],
 }
 
-# Commands that don't require additional validation (they just need to exist)
-# Note: We still validate flags for these, we just don't require mandatory flags
-SIMPLE_COMMANDS = set()
+# The arm binary to invoke. Configurable via ARM_BIN so CI (and tests) can
+# point at a freshly built binary instead of relying on PATH.
+ARM_BIN = os.environ.get("ARM_BIN", "arm")
 
 
 def find_skill_files(root_dir):
@@ -45,6 +45,12 @@ def extract_arm_commands(code_block):
     lines = code_block.split("\n")
 
     for line in lines:
+        # Strip trailing (unquoted) "#" comments before parsing. Skill docs
+        # commonly annotate commands, e.g. "arm claim TASK-01 --worktree /tmp/wt  # claim an issue with worktree"
+        # and leaving the comment in would corrupt the parsed subcommand chain.
+        if "#" in line and '"' not in line and "'" not in line:
+            line = line.split("#", 1)[0]
+
         # Skip comments and empty lines
         line = line.strip()
         if not line or line.startswith("#"):
@@ -66,7 +72,7 @@ def get_valid_subcommands():
     """Get the list of valid subcommands from arm --help."""
     try:
         result = subprocess.run(
-            ["arm", "--help"],
+            [ARM_BIN, "--help"],
             capture_output=True,
             text=True,
             timeout=5
@@ -115,7 +121,7 @@ def get_subcommand_help(subcommands):
         Help text if found, None otherwise
     """
     try:
-        cmd = ["arm"] + subcommands + ["--help"]
+        cmd = [ARM_BIN] + subcommands + ["--help"]
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -276,10 +282,6 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
         if missing_flags:
             return False, f"Command '{first_cmd}' missing mandatory flags: {', '.join(missing_flags)} in: {arm_command}"
 
-    # For simple commands, just verify subcommand exists (already done above)
-    if first_cmd in SIMPLE_COMMANDS:
-        return True, None
-
     # Validate flags for this subcommand chain
     # Use the full subcommand chain as the cache key
     cache_key = " ".join(subcommands) if subcommands else ""
@@ -290,29 +292,35 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
 
     if cache_key in valid_flags_cache:
         valid_flags = valid_flags_cache[cache_key]
-        if valid_flags:  # Only validate if we could parse flags from help
-            used_flags = extract_flags(args)
-            invalid_flags = []
+        if not valid_flags:
+            # get_subcommand_help failed to return usable help text (e.g. the
+            # subcommand chain doesn't exist or --help failed). Don't silently
+            # skip flag validation — report it as a lint error.
+            cmd_name = " ".join(subcommands)
+            return False, f"Could not determine valid flags for '{cmd_name}' (help text unavailable) in: {arm_command}"
 
-            for flag in used_flags:
-                # Skip positional arguments and values
-                if not flag.startswith("-"):
-                    continue
+        used_flags = extract_flags(args)
+        invalid_flags = []
 
-                # Handle --flag=value format
-                flag_name = flag.split("=")[0]
+        for flag in used_flags:
+            # Skip positional arguments and values
+            if not flag.startswith("-"):
+                continue
 
-                # Global flags are always valid
-                global_flags = {"--debug", "--format", "--non-interactive", "--repo", "--help", "-h"}
-                if flag_name in global_flags:
-                    continue
+            # Handle --flag=value format
+            flag_name = flag.split("=")[0]
 
-                if flag_name not in valid_flags:
-                    invalid_flags.append(flag_name)
+            # Global flags are always valid
+            global_flags = {"--debug", "--format", "--non-interactive", "--repo", "--help", "-h"}
+            if flag_name in global_flags:
+                continue
 
-            if invalid_flags:
-                cmd_name = " ".join(subcommands)
-                return False, f"Command '{cmd_name}' has invalid flags: {', '.join(invalid_flags)} in: {arm_command}"
+            if flag_name not in valid_flags:
+                invalid_flags.append(flag_name)
+
+        if invalid_flags:
+            cmd_name = " ".join(subcommands)
+            return False, f"Command '{cmd_name}' has invalid flags: {', '.join(invalid_flags)} in: {arm_command}"
 
     return True, None
 

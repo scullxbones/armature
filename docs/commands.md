@@ -610,10 +610,14 @@ List delivery commits for an issue across all conventional-commit types.
 
 **Flags:**
 - `--issue string`: Issue ID (alternative to positional argument).
+- `--branch string`: Branch to scan for commits (default `HEAD`). Point this at `task/TASK-ID` or
+  a story branch to find a task's commits before merge, e.g. from a worktree whose parent repo
+  has a different branch checked out.
 
 **Description:**
-Discovers and lists all commits on the current branch that reference the issue ID in their
-conventional-commit-style scope (e.g., `feat(ISSUE-ID): ...`, `fix(ISSUE-ID): ...`, etc.).
+Discovers and lists all commits on the given branch (default: the currently checked-out branch)
+that reference the issue ID in their conventional-commit-style scope (e.g., `feat(ISSUE-ID): ...`,
+`fix(ISSUE-ID): ...`, etc.). Breaking-change syntax (`feat(ISSUE-ID)!: ...`) is also matched.
 
 This command scans commit messages across all type prefixes (feat, fix, refactor, test, docs, chore),
 replacing the coordinator skill's feat-only grep pseudocode which silently dropped other commit types.
@@ -622,6 +626,7 @@ replacing the coordinator skill's feat-only grep pseudocode which silently dropp
 ```bash
 arm review commits TASK-001
 arm review commits --issue TASK-001 --format json
+arm review commits TASK-001 --branch task/TASK-001
 ```
 
 ---

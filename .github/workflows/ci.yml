@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Build
+        run: make build
+
       - name: Test
         run: make test
 
@@ -35,11 +38,5 @@ jobs:
       - name: Mutation
         run: make mutate
 
-      - name: Skill lint
-        run: make skill-lint
-
       - name: Validate skills
         run: make validate-skills
-
-      - name: Build
-        run: make build

@@ -26,14 +26,14 @@ help:
 	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint test coverage-check mutate validate-skills build
+check: lint build test coverage-check mutate validate-skills
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
 
-test:
+test: build
 	@tmp=$$(mktemp); \
-	$(GO) test -json -count=1 ./... > "$$tmp"; status=$$?; \
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -json -count=1 ./... > "$$tmp"; status=$$?; \
 	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
 	rm -f "$$tmp"; \
 	exit $$status
@@ -96,8 +96,8 @@ validate-skills: skill-lint
 	fi
 	@echo "Skills validated: no 'make install' references"
 
-skill-lint:
-	@$(PYTHON) scripts/skill_lint.py .
+skill-lint: build
+	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/skill_lint.py .
 
 clean:
 	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/

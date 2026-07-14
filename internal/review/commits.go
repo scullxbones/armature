@@ -15,9 +15,14 @@ import (
 // is any lowercase alphabetic string (e.g., feat, fix, refactor, test, docs, chore).
 // This replaces the coordinator skill's feat-only grep pseudocode which silently
 // dropped other commit types.
-func ReviewCommits(git *adapters.Client, issueID string) ([]adapters.LogEntry, error) {
-	// Get all commits on the current branch
-	entries, err := git.LogBranch("HEAD", 10000)
+func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapters.LogEntry, error) {
+	if branch == "" {
+		branch = "HEAD"
+	}
+
+	// Get all commits on the requested branch (e.g. a task or story branch,
+	// not necessarily whatever happens to be checked out).
+	entries, err := git.LogBranch(branch, 10000)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list commits: %w", err)
 	}
@@ -26,23 +31,15 @@ func ReviewCommits(git *adapters.Client, issueID string) ([]adapters.LogEntry, e
 	// Pattern: ^[a-z]+\(ISSUE-ID\):
 	// This matches any lowercase type (feat, fix, refactor, etc.) followed by
 	// the issue ID in parentheses and a colon.
-	pattern := regexp.MustCompile(`^[a-z]+\(` + regexp.QuoteMeta(issueID) + `\):`)
+	pattern := regexp.MustCompile(`^[a-z]+\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
 
-	var results []adapters.LogEntry
+	// Initialize as an empty (non-nil) slice so the no-match case marshals to
+	// JSON "[]" rather than "null" for agent consumers.
+	results := []adapters.LogEntry{}
 	for _, entry := range entries {
-		// Match against the first line of the subject (in case of multiline messages)
-		firstLine := entry.Subject
-		if idx := len(firstLine); idx > 0 {
-			// Find the newline if present
-			for i := 0; i < len(firstLine); i++ {
-				if firstLine[i] == '\n' {
-					firstLine = firstLine[:i]
-					break
-				}
-			}
-		}
-
-		if pattern.MatchString(firstLine) {
+		// LogBranch's format string produces a single-line subject, so no
+		// further newline-splitting is needed here.
+		if pattern.MatchString(entry.Subject) {
 			results = append(results, entry)
 		}
 	}
