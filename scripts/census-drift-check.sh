@@ -20,21 +20,23 @@ compare_lists() {
     local code_list="$2"
     local census_list="$3"
 
-    # Check items in code but not in census
-    for item in $code_list; do
-        if ! echo "$census_list" | grep -qw "$item"; then
+    # Check items in code but not in census (exact line match, not substring)
+    while IFS= read -r item; do
+        [[ -z "$item" ]] && continue
+        if ! grep -qxF "$item" <<< "$census_list"; then
             echo "FAIL: $name '$item' in code but not in census" >&2
             ERRORS=$((ERRORS + 1))
         fi
-    done
+    done <<< "$code_list"
 
-    # Check items in census but not in code
-    for item in $census_list; do
-        if ! echo "$code_list" | grep -qw "$item"; then
+    # Check items in census but not in code (exact line match, not substring)
+    while IFS= read -r item; do
+        [[ -z "$item" ]] && continue
+        if ! grep -qxF "$item" <<< "$code_list"; then
             echo "FAIL: $name '$item' in census but not in code" >&2
             ERRORS=$((ERRORS + 1))
         fi
-    done
+    done <<< "$census_list"
 }
 
 # ============================================================================

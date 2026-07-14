@@ -194,9 +194,11 @@ func TestDryRunApplyPlanWithOptions_StrictRejectsWarnings(t *testing.T) {
 	assert.Contains(t, err.Error(), "warning")
 }
 
-func TestValidatePlan_RejectsInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
+func TestValidatePlan_DoesNotWarnOnInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
 	t.Parallel()
 
+	// Invalid types are now always fatal (see validateTypes /
+	// TestApplyPlan_InvalidType_AlwaysFatal below), not advisory warnings.
 	plan := &Plan{
 		Version: 1,
 		Title:   "Plan with invalid type",
@@ -207,8 +209,44 @@ func TestValidatePlan_RejectsInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
 	}
 
 	warnings := ValidatePlan(plan)
-	assert.Len(t, warnings, 1, "should have exactly one warning for invalid type")
-	assert.Contains(t, warnings[0], "PLAN-002")
-	assert.Contains(t, warnings[0], "invalid type")
-	assert.Contains(t, warnings[0], "behavior")
+	assert.Empty(t, warnings, "invalid type should not be reported as an advisory warning")
+}
+
+func TestApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
+	t.Parallel()
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Plan with invalid type",
+		Issues: []PlanIssue{
+			{ID: "PLAN-002", Title: "Invalid behavior type", Type: "behavior", DoD: "definition"},
+		},
+	}
+	state := materialize.NewState()
+	dir := t.TempDir()
+
+	// Non-strict apply must still fail: an invalid type is never
+	// legitimate or salvageable, unlike e.g. a missing DoD.
+	count, err := ApplyPlanWithOptions(plan, dir, "worker-1", state, ApplyOptions{Strict: false}, clock.System)
+	require.Error(t, err)
+	assert.Equal(t, 0, count)
+	assert.Contains(t, err.Error(), "invalid type")
+	assert.Contains(t, err.Error(), "PLAN-002")
+}
+
+func TestDryRunApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
+	t.Parallel()
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Plan with invalid type",
+		Issues: []PlanIssue{
+			{ID: "PLAN-002", Title: "Invalid behavior type", Type: "behavior", DoD: "definition"},
+		},
+	}
+	state := materialize.NewState()
+
+	_, err := DryRunApplyPlanWithOptions(plan, state, ApplyOptions{Strict: false})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid type")
 }
