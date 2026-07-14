@@ -146,13 +146,36 @@ More info.
 		require.Contains(t, output.String(), "invalid-reference-command")
 	})
 
-	// A continued command is one shell command, so mandatory flags on later
-	// physical lines must be checked together.
-	t.Run("ContinuedCommandIsLinted", func(t *testing.T) {
+	// A continued command is one shell command, so a mandatory flag supplied
+	// only on the continuation line must satisfy the mandatory-flag check.
+	// This discriminates joined-vs-unjoined continuations: `arm claim
+	// TASK-01` alone would already be missing --worktree, so a test that
+	// only checks for that failure can't prove the join happened. Here the
+	// continuation line supplies the mandatory flag, so the command must
+	// PASS lint -- which only happens if the physical lines were actually
+	// joined before validation.
+	t.Run("ContinuedCommandSuppliesMandatoryFlagOnContinuationLine", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 \\\n+  --force\n```\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 \\\n  --worktree /tmp/wt\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.NoError(t, err, "stderr: %s", output.String())
+	})
+
+	// The continuation line's flags must actually be parsed and validated,
+	// not just the first physical line -- an invalid flag on the
+	// continuation line must be caught.
+	t.Run("ContinuedCommandValidatesFlagsOnContinuationLine", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 --worktree /tmp/wt \\\n  --not-a-real-flag\n```\n"), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -160,7 +183,8 @@ More info.
 		cmd.Stderr = output
 		err := cmd.Run()
 		require.Error(t, err)
-		require.Contains(t, output.String(), "missing mandatory flags: --worktree")
+		require.Contains(t, output.String(), "invalid flags")
+		require.Contains(t, output.String(), "--not-a-real-flag")
 	})
 
 	// `arm` commands in command substitutions are real invocations, not prose.
