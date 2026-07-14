@@ -40,3 +40,6 @@ jobs:
 
       - name: Validate skills
         run: make validate-skills
+
+      - name: Census drift check
+        run: make census-drift-check
