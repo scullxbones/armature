@@ -237,6 +237,22 @@ func TestApplyLinkOp(t *testing.T) {
 	assert.Contains(t, state.Issues["task-02"].Blocks, "task-01")
 }
 
+func TestApplyLinkOp_RejectsUnsupportedRel(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "A", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "B", NodeType: "task"}}))
+
+	err := state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocks"}})
+	require.Error(t, err, "rel=blocks is derived/output-only and must not be accepted as a link input")
+	assert.Contains(t, err.Error(), "blocked_by")
+
+	assert.NotContains(t, state.Issues["task-01"].BlockedBy, "task-02", "no silent no-op link should be recorded")
+}
+
 func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 	t.Parallel()
 	state := NewState()

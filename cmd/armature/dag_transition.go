@@ -27,6 +27,9 @@ func newDAGTransitionCmd() *cobra.Command {
 			if targetConfidence == "" {
 				targetConfidence = "verified"
 			}
+			if targetConfidence != "draft" && targetConfidence != "verified" {
+				return fmt.Errorf("invalid --to confidence value %q: must be one of draft, verified", targetConfidence)
+			}
 
 			op := ops.Op{
 				Type:      ops.OpDAGTransition,
@@ -50,7 +53,7 @@ func newDAGTransitionCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "root issue ID of the subtree to promote")
-	cmd.Flags().StringVar(&to, "to", "", "target confidence level (default: verified)")
+	cmd.Flags().StringVar(&to, "to", "", "target confidence level: draft or verified (default: verified)")
 	_ = cmd.MarkFlagRequired("issue")
 	return cmd
 }

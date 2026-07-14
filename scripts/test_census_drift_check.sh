@@ -43,13 +43,15 @@ fi
 # Test 1: the candidate checker passes against its clean fixture
 # ----------------------------------------------------------------------------
 echo "Test 1: census-drift-check passes on a clean fixture..."
-if "$SCRIPT" "$FIXTURE" > /tmp/census-drift-clean.out 2>&1; then
+CLEAN_OUT=$(mktemp)
+if "$SCRIPT" "$FIXTURE" > "$CLEAN_OUT" 2>&1; then
     echo "  PASS"
 else
     echo "  FAIL: expected exit 0 on clean tree, got non-zero"
-    cat /tmp/census-drift-clean.out
+    cat "$CLEAN_OUT"
     FAILURES=$((FAILURES + 1))
 fi
+rm -f "$CLEAN_OUT"
 
 # ----------------------------------------------------------------------------
 # Test 2: an op type in code but not in the census is detected as drift
@@ -252,6 +254,39 @@ if [[ $STATUS -eq 0 ]]; then
     FAILURES=$((FAILURES + 1))
 elif ! grep -q "Issue field 'fake_drift_field' in code but not in census" <<< "$OUTPUT"; then
     echo "  FAIL: expected Issue field drift message not found in output"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "  PASS"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 8: a flag READ (cmd.Flags().GetString) inside a command's RunE must not
+# be credited as flag ownership. The ownership awk pattern historically matched
+# any `Flags().<Word>(` call, including reads like GetString/Changed/Lookup/Set,
+# not just definition-style calls (String/StringVar/Bool/...). A read of a flag
+# that isn't even defined (a "phantom" flag) must not cause the checker to
+# treat that command as the flag's owner / require a census row for it.
+# ----------------------------------------------------------------------------
+echo "Test 8: census-drift-check ignores flag reads (GetString/Changed/etc) when determining ownership..."
+
+PHANTOM_FIXTURE="$WORKDIR/phantom-fixture"
+make_fixture "$PHANTOM_FIXTURE"
+
+sed -i 's/repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")/repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")\n\t\t\tphantomVal, _ := cmd.Flags().GetString("phantom-flag")\n\t\t\t_ = phantomVal/' \
+    "$PHANTOM_FIXTURE/cmd/armature/bootstrap.go"
+
+set +e
+OUTPUT=$("$PHANTOM_FIXTURE/scripts/census-drift-check.sh" "$PHANTOM_FIXTURE" 2>&1)
+STATUS=$?
+set -e
+
+if [[ $STATUS -ne 0 ]]; then
+    echo "  FAIL: expected exit 0 — a flag read must not be credited as flag ownership"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif grep -q "phantom-flag" <<< "$OUTPUT"; then
+    echo "  FAIL: phantom-flag read was incorrectly credited as ownership"
     echo "$OUTPUT"
     FAILURES=$((FAILURES + 1))
 else
