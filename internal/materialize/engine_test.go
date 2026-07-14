@@ -237,7 +237,7 @@ func TestApplyLinkOp(t *testing.T) {
 	assert.Contains(t, state.Issues["task-02"].Blocks, "task-01")
 }
 
-func TestApplyLinkOp_RejectsUnsupportedRel(t *testing.T) {
+func TestApplyLinkOp_LegacyNonBlockedByRelIsNoOp(t *testing.T) {
 	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
@@ -245,12 +245,14 @@ func TestApplyLinkOp_RejectsUnsupportedRel(t *testing.T) {
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 101,
 		WorkerID: "w1", Payload: ops.Payload{Title: "B", NodeType: "task"}}))
 
-	err := state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
-		WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: "blocks"}})
-	require.Error(t, err, "rel=blocks is derived/output-only and must not be accepted as a link input")
-	assert.Contains(t, err.Error(), "blocked_by")
-
-	assert.NotContains(t, state.Issues["task-01"].BlockedBy, "task-02", "no silent no-op link should be recorded")
+	for _, rel := range []string{"blocks", "depends-on", "relates-to"} {
+		err := state.ApplyOp(ops.Op{Type: ops.OpLink, TargetID: "task-01", Timestamp: 200,
+			WorkerID: "w1", Payload: ops.Payload{Dep: "task-02", Rel: rel}})
+		require.NoError(t, err, "legacy rel=%q must replay as a no-op", rel)
+		assert.NotContains(t, state.Issues["task-01"].BlockedBy, "task-02")
+		assert.NotContains(t, state.Issues["task-02"].Blocks, "task-01")
+		assert.Equal(t, int64(200), state.Issues["task-01"].Updated, "no-op must retain historical Updated semantics")
+	}
 }
 
 func TestApplyDecisionOp_LastWriteWins(t *testing.T) {

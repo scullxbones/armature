@@ -243,14 +243,11 @@ func (s *State) applyLink(op ops.Op) error {
 	if !ok {
 		return fmt.Errorf("link: source issue %s not found", op.TargetID)
 	}
-	if op.Payload.Rel != "blocked_by" {
-		return fmt.Errorf("link: unsupported rel %q — only \"blocked_by\" is a valid --rel input; "+
-			"\"blocks\" is derived automatically as the inverse of a blocked_by link and cannot be set directly",
-			op.Payload.Rel)
-	}
-	source.BlockedBy = appendUnique(source.BlockedBy, op.Payload.Dep)
-	if dep, ok := s.Issues[op.Payload.Dep]; ok {
-		dep.Blocks = appendUnique(dep.Blocks, op.TargetID)
+	if op.Payload.Rel == "blocked_by" {
+		source.BlockedBy = appendUnique(source.BlockedBy, op.Payload.Dep)
+		if dep, ok := s.Issues[op.Payload.Dep]; ok {
+			dep.Blocks = appendUnique(dep.Blocks, op.TargetID)
+		}
 	}
 	source.Updated = op.Timestamp
 	return nil

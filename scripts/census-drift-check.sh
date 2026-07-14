@@ -285,12 +285,16 @@ CENSUS_ENUMERATED_FLAGS=$(sed -n '/^## Command Flags/,/^## Priority Levels/p' "$
 CODE_ENUMERATED_FLAG_OWNERS=$(while IFS= read -r pair; do
     [[ -z "$pair" ]] && continue
     flag=${pair##*|}
-    grep -qxF -- "$flag" <<< "$CENSUS_ENUMERATED_FLAGS" && printf '%s\n' "$pair"
+    if grep -qxF -- "$flag" <<< "$CENSUS_ENUMERATED_FLAGS"; then
+        printf '%s\n' "$pair"
+    fi
 done <<< "$CODE_FLAG_OWNERS")
 CENSUS_ENUMERATED_FLAG_OWNERS=$(while IFS= read -r pair; do
     [[ -z "$pair" ]] && continue
     flag=${pair##*|}
-    grep -qxF -- "$flag" <<< "$CENSUS_ENUMERATED_FLAGS" && printf '%s\n' "$pair"
+    if grep -qxF -- "$flag" <<< "$CENSUS_ENUMERATED_FLAGS"; then
+        printf '%s\n' "$pair"
+    fi
 done <<< "$CENSUS_FLAG_OWNERS")
 
 # Comparing the full command/flag pair in both directions catches not only a
