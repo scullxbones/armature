@@ -3081,3 +3081,4 @@
 ["claim","NXTTN-S2-T4",1784052983,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["claim","NXTTN-S2-T5",1784052986,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["assessment-attested","NXTTN-S2-T5",1784053947,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"assessment":{"schema_version":1,"bundle_id":"sha256:3b6034bc8fa9d3b51ac2ea31da3da4515195edf1b25668a5fe6e326ec08da5e0","contract_fingerprint":"812ff546bb19b854c12de1411bccc28a2a1e235605d4253fe00fb24f713ade1b","delivery_fingerprint":"fe55147715a5633c6532e9f5af9fd77e7b9aa0c4c15be8fe08fd53ef0ed11171","base_sha":"d8024e5ea98bb4118afaa4581b92176f6e2283ae","head_sha":"23f2b7affab4bb6192025178ed3c4694f703a9e1","rating":"green","result_fingerprint":"360408c08c348aa82fd8ba4cbf9dab9bb60bd450076cc39509fb8c6b764d450d","satisfied_count":4,"partially_satisfied_count":0,"not_satisfied_count":0,"indeterminate_count":0}}]
+["transition","NXTTN-S2-T3",1784054323,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
