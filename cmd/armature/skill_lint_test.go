@@ -175,7 +175,8 @@ More info.
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 --worktree /tmp/wt \\\n  --not-a-real-flag\n```\n"), 0644))
+		skillMD := "```bash\narm claim TASK-01 --worktree /tmp/wt \\\n  --not-a-real-flag\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -228,7 +229,8 @@ More info.
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm note TASK-01 --msg 'contains --not-a-real-flag inside a string'\n```\n"), 0644))
+		skillMD := "```bash\narm note TASK-01 --msg 'contains --not-a-real-flag inside a string'\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
