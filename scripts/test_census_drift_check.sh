@@ -1,55 +1,77 @@
 #!/bin/bash
-# Test fixture for census-drift-check.sh
+# Real (non-manual) test for census-drift-check.sh.
 #
-# This script demonstrates how the census-drift-check detects surface drift.
+# Verifies:
+# 1. The check passes (exit 0) on a clean checkout.
+# 2. The check fails (non-zero) and reports the expected message when a
+#    surface exists in code but not in the census (injected op type).
 #
-# The check verifies that:
-# 1. All CLI commands defined in cmd/armature/main.go exist in the census
-# 2. All issue types in internal/issuetype/ exist in the census
-# 3. All statuses in internal/ops/types.go exist in the census
-# 4. All op types in internal/ops/types.go exist in the census
-#
-# Example drift scenarios:
-#
-# Scenario 1: Adding a new command without census entry
-#   - Add newExampleCmd() to cmd/armature/main.go
-#   - Add root.AddCommand(exampleCmd) to main()
-#   - Run: scripts/census-drift-check.sh
-#   - Expected: FAIL with "CLI command 'example' in code but not in census"
-#
-# Scenario 2: Adding an issue type without census entry
-#   - Add "example": true to validTypes map in internal/issuetype/issuetype.go
-#   - Run: scripts/census-drift-check.sh
-#   - Expected: FAIL with "Issue type 'example' in code but not in census"
-#
-# Scenario 3: Adding an op type without census entry
-#   - Add OpExample = "example" to internal/ops/types.go const block
-#   - Run: scripts/census-drift-check.sh
-#   - Expected: FAIL with "Op type 'example' in code but not in census"
+# This is wired into `make check` via the `test-census-drift-check` target.
 
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"
 SCRIPT="$REPO_ROOT/scripts/census-drift-check.sh"
 
-echo "Census Drift Check Test"
-echo "======================"
-echo ""
-echo "Running census-drift-check on current codebase..."
-echo ""
+FAILURES=0
 
-# Run the check - should pass on clean codebase
-if "$SCRIPT" "$REPO_ROOT"; then
-    echo ""
-    echo "✓ Test passed: No census drift detected on current codebase"
-    echo ""
-    echo "To test drift detection:"
-    echo "1. Add a new command (e.g., newTestCmd) to cmd/armature/main.go"
-    echo "2. Run: $SCRIPT"
-    echo "3. Expected: FAIL with 'CLI command in code but not in census'"
+# ----------------------------------------------------------------------------
+# Test 1: clean tree passes
+# ----------------------------------------------------------------------------
+echo "Test 1: census-drift-check passes on a clean tree..."
+if "$SCRIPT" "$REPO_ROOT" > /tmp/census-drift-clean.out 2>&1; then
+    echo "  PASS"
+else
+    echo "  FAIL: expected exit 0 on clean tree, got non-zero"
+    cat /tmp/census-drift-clean.out
+    FAILURES=$((FAILURES + 1))
+fi
+
+# ----------------------------------------------------------------------------
+# Test 2: an op type in code but not in the census is detected as drift
+# ----------------------------------------------------------------------------
+echo "Test 2: census-drift-check detects an undocumented op type..."
+
+WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR"' EXIT
+
+# Copy the tracked tree into an isolated fixture so we can safely mutate it.
+git -C "$REPO_ROOT" archive HEAD | (mkdir -p "$WORKDIR/fixture" && tar -x -C "$WORKDIR/fixture")
+
+TYPES_FILE="$WORKDIR/fixture/internal/ops/types.go"
+if [[ ! -f "$TYPES_FILE" ]]; then
+    echo "  FAIL: fixture missing $TYPES_FILE"
+    FAILURES=$((FAILURES + 1))
+else
+    # Inject a fake op type constant that has no corresponding census row.
+    awk '
+        /^const \(/ && !done { print; print "\tOpFakeDriftSurface = \"fake-drift-surface\""; done=1; next }
+        { print }
+    ' "$TYPES_FILE" > "$TYPES_FILE.new" && mv "$TYPES_FILE.new" "$TYPES_FILE"
+
+    set +e
+    OUTPUT=$("$SCRIPT" "$WORKDIR/fixture" 2>&1)
+    STATUS=$?
+    set -e
+
+    if [[ $STATUS -eq 0 ]]; then
+        echo "  FAIL: expected non-zero exit when an undocumented op type is injected"
+        echo "$OUTPUT"
+        FAILURES=$((FAILURES + 1))
+    elif ! grep -q "Op type 'fake-drift-surface' in code but not in census" <<< "$OUTPUT"; then
+        echo "  FAIL: expected drift message not found in output"
+        echo "$OUTPUT"
+        FAILURES=$((FAILURES + 1))
+    else
+        echo "  PASS"
+    fi
+fi
+
+echo ""
+if [[ $FAILURES -eq 0 ]]; then
+    echo "All census-drift-check tests passed"
     exit 0
 else
-    echo ""
-    echo "✗ Test failed: Census drift detected (see above for details)"
+    echo "FAIL: $FAILURES census-drift-check test(s) failed"
     exit 1
 fi

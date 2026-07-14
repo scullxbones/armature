@@ -39,18 +39,30 @@ type ApplyOptions struct {
 
 // ValidatePlan returns a list of advisory warnings for the plan.
 // These are non-fatal by default; use ApplyOptions.Strict to treat them as errors.
+// It does not report invalid issue types: those are always fatal, see
+// validateTypes.
 func ValidatePlan(plan *Plan) []string {
 	var warnings []string
 	for _, issue := range plan.Issues {
-		if !issuetype.IsValid(issue.Type) {
-			warnings = append(warnings, fmt.Sprintf("issue %s (%s) has invalid type %q: valid types are %s",
-				issue.ID, issue.Title, issue.Type, strings.Join(issuetype.All(), ", ")))
-		}
 		if issue.DoD == "" {
 			warnings = append(warnings, fmt.Sprintf("issue %s (%s) is missing a definition of done", issue.ID, issue.Title))
 		}
 	}
 	return warnings
+}
+
+// validateTypes rejects a plan containing any issue with an unrecognized
+// Type. Unlike the advisory warnings in ValidatePlan, this is always a hard
+// error, regardless of ApplyOptions.Strict: an unrecognized type is never a
+// legitimate, salvageable situation.
+func validateTypes(plan *Plan) error {
+	for _, issue := range plan.Issues {
+		if !issuetype.IsValid(issue.Type) {
+			return fmt.Errorf("issue %s (%s) has invalid type %q: valid types are %s",
+				issue.ID, issue.Title, issue.Type, strings.Join(issuetype.All(), ", "))
+		}
+	}
+	return nil
 }
 
 // preparePlan applies the ApplyOptions transformations to a copy of the plan.
@@ -107,6 +119,10 @@ func DryRunApplyPlan(plan *Plan, state *materialize.State) (*DryRunResult, error
 
 // DryRunApplyPlanWithOptions is like DryRunApplyPlan but respects ApplyOptions.
 func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts ApplyOptions) (*DryRunResult, error) {
+	if err := validateTypes(plan); err != nil {
+		return nil, err
+	}
+
 	warnings := ValidatePlan(plan)
 
 	if opts.Strict && len(warnings) > 0 {
@@ -134,6 +150,10 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 
 // ApplyPlanWithOptions is like ApplyPlan but respects ApplyOptions and accepts a clock.Clock parameter.
 func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) (int, error) {
+	if err := validateTypes(plan); err != nil {
+		return 0, err
+	}
+
 	warnings := ValidatePlan(plan)
 
 	if opts.Strict && len(warnings) > 0 {
