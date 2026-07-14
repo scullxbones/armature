@@ -390,6 +390,6 @@ arm list --group                                      # grouped by status
 arm list --parent STORY-ID                            # tasks under a story
 
 # Scope maintenance (after refactoring renames or deletions)
-arm scope-rename <old-path> <new-path>   # rename path/prefix across all scopes
-arm scope-delete <path>                  # remove exact path from all scopes
+arm scope-rename OLD-PATH NEW-PATH        # rename path/prefix across all scopes
+arm scope-delete PATH                    # remove exact path from all scopes
 ```

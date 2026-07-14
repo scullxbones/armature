@@ -60,8 +60,8 @@ arm accept-citation ID --rationale TEXT --ci
 ## Scope Management
 
 ```
-arm scope-rename <old-path> <new-path>
-arm scope-delete <path>
+arm scope-rename OLD-PATH NEW-PATH
+arm scope-delete PATH
 ```
 
 ## Semantic Conformance Review

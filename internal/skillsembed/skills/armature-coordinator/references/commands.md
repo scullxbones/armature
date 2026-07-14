@@ -57,8 +57,8 @@ arm doctor --strict             # warnings as errors
 arm workers                     # worker activity status
 
 # Scope maintenance (after file renames or deletions)
-arm scope-rename <old> <new>    # rewrite path/prefix across all issue scopes
-arm scope-delete <path>         # remove exact file path from all issue scopes
+arm scope-rename OLD-PATH NEW-PATH  # rewrite path/prefix across all issue scopes
+arm scope-delete PATH           # remove exact file path from all issue scopes
 ```
 
 **Valid transition targets:** `in-progress`, `done`, `cancelled`, `blocked`
