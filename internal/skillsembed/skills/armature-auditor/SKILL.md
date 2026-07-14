@@ -83,7 +83,7 @@ arm sources verify      # re-run until all show OK
 If a source is gone entirely, re-register it:
 
 ```bash
-arm sources add <url-or-path>
+arm sources add --url <url-or-path> --type filesystem
 ```
 
 If source content changed and you need to review the delta before accepting it:

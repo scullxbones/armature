@@ -39,7 +39,7 @@ arm validate              # re-run — E8 should be gone if the source was re-fo
 If the source is gone permanently, register a replacement and re-link:
 
 ```bash
-arm sources add <replacement-url-or-path>
+arm sources add --url <replacement-url-or-path> --type filesystem
 arm source-link ISSUE-ID --source-id SOURCE-UUID  # link to the new source UUID
 arm validate              # confirm E8 is resolved
 ```
