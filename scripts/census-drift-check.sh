@@ -322,8 +322,12 @@ CENSUS_RELS=$(sed -n '/^## Relationship Types/,/^## [^#]/p' "$CENSUS_FILE" | \
 
 # The census also documents `blocks` as a derived/output-only relationship type
 # (never a valid --rel input). Only compare accepted *inputs* here, since
-# CODE_RELS is sourced from applyLink's input validation branches.
-compare_lists "Relationship type (accepted input)" "$CODE_RELS" "blocked_by"
+# CODE_RELS is sourced from applyLink's input validation branches. A row counts
+# as an accepted input only if its Notes column doesn't mark it derived/output-only.
+CENSUS_INPUT_RELS=$(sed -n '/^## Relationship Types/,/^## [^#]/p' "$CENSUS_FILE" | \
+    grep '| `' | grep -vi 'derived/output-only' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)
+
+compare_lists "Relationship type (accepted input)" "$CODE_RELS" "$CENSUS_INPUT_RELS"
 
 # ============================================================================
 # PROVIDER TYPES CHECK

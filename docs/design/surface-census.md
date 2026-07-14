@@ -341,7 +341,7 @@ input.
 
 | Type | Used By | Status | Notes |
 |------|---------|--------|-------|
-| `blocked_by` | link.go:57 (default), engine.go applyLink (only accepted input), ready queue logic | **kept-evidence** | The only valid `--rel` input. Used to block ready queue eligibility. |
+| `blocked_by` | link.go:55 (default), link.go RunE (rejects any other value before the op is written), engine.go applyLink (only accepted input), ready queue logic | **kept-evidence** | The only valid `--rel` input. Used to block ready queue eligibility. |
 | `blocks` | state.go Issue.Blocks field, engine.go applyLink (auto-derived) | **kept-evidence** | Derived/output-only. Automatically populated as the inverse when a `blocked_by` link is applied to the *other* issue. Never a valid `--rel` input — `applyLink` rejects `rel=blocks` with an error. |
 
 ## Provider Types (for sources)

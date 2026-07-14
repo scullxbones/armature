@@ -29,6 +29,10 @@ be set directly. Links establish the DAG structure and drive ready-queue eligibi
 			if err != nil {
 				return err
 			}
+			if rel != "blocked_by" {
+				return fmt.Errorf("invalid --rel value %q: only blocked_by is supported (blocks is derived automatically)", rel)
+			}
+
 			op := ops.Op{Type: ops.OpLink, TargetID: sourceID, Timestamp: nowEpoch(),
 				WorkerID: workerID, Payload: ops.Payload{Dep: dep, Rel: rel}}
 			if err := appendOp(ctx, logPath, op); err != nil {
