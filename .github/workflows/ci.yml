@@ -35,6 +35,9 @@ jobs:
       - name: Mutation
         run: make mutate
 
+      - name: Skill lint
+        run: make skill-lint
+
       - name: Validate skills
         run: make validate-skills
 

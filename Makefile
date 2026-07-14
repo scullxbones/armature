@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills deploy-skills trace-report
+.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills deploy-skills trace-report skill-lint
 
 # Variables
 GO ?= go
@@ -89,12 +89,15 @@ mutate:
 	fi; \
 	exit $$status
 
-validate-skills:
+validate-skills: skill-lint
 	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md 2>/dev/null; then \
 		echo "FAIL: 'make install' found in skill bodies — remove it or replace with: 'If arm is not found, stop and resolve this before proceeding'"; \
 		exit 1; \
 	fi
 	@echo "Skills validated: no 'make install' references"
+
+skill-lint:
+	@$(PYTHON) scripts/skill_lint.py .
 
 clean:
 	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/

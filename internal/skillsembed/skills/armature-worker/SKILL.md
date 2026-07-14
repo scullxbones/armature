@@ -89,9 +89,9 @@ another worker may steal the claim. Issue heartbeat calls at natural checkpoints
 Before completing work, cite every issue you touched or created:
 
 ```
-arm source-link --issue ISSUE-ID --source SOURCE-UUID   # if a source doc exists
+arm source-link ISSUE-ID --source-id SOURCE-UUID        # if a source doc exists
 # or
-arm accept-citation --issue ISSUE-ID --ci               # if no source exists
+arm accept-citation ISSUE-ID --ci                       # if no source exists
 ```
 
 Do not leave issues uncited.
