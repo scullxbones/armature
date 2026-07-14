@@ -201,7 +201,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--type` | create, amend | string | Issue type (epic, story, feature, task, bug) | **kept-evidence** |
 | `--parent` | create, reparent, list, ready | string | Parent issue ID (or filter) | **kept-evidence** |
 | `--title` | create | string | Human-readable title | **kept-evidence** |
-| `--scope` | create, amend, decision | string[] | File scope globs | **kept-evidence** |
+| `--scope` | create, amend | string[] | File scope globs | **kept-evidence** |
 | `--dod` | create, amend | string | Definition of done | **kept-evidence** |
 | `--priority` | create | string | Priority level (critical, high, medium, low) | **kept-evidence** |
 | `--acceptance` | create, amend | string | Acceptance criteria as JSON | **kept-evidence** |
@@ -221,9 +221,9 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status (open, in-progress, done, merged, blocked, cancelled) | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
-| `--branch` | transition, review | string | Feature branch name | **kept-evidence** |
+| `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
-| `--worker` | assign, workers | string | Worker ID (for assignment or filtering) | **kept-evidence** |
+| `--worker` | assign | string | Worker ID for assignment | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
 | `--rationale` | decision, accept-citation | string | Why this choice | **kept-evidence** |
@@ -233,24 +233,24 @@ The following flags are defined across all commands. Grouped by usage pattern.
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--dry-run` | sync, decompose revert, import, scope-delete | bool | Preview without writing ops | **kept-evidence** |
+| `--dry-run` | sync, decompose-apply, decompose-revert, import | bool | Preview without writing ops | **kept-evidence** |
 | `--into` | sync | string | Target branch for merge checks | **kept-evidence** |
 
 ### DAG/Decompose Flags
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--plan` | decompose apply, decompose revert, decompose context | string | Path to plan JSON file | **kept-evidence** |
-| `--example` | decompose apply | bool | Print minimal plan example | **kept-evidence** |
-| `--schema` | decompose apply | bool | Print JSON Schema | **kept-evidence** |
-| `--strict` | decompose apply, doctor, validate | bool | Treat warnings as errors | **kept-evidence** |
-| `--generate-ids` | decompose apply | bool | Replace plan IDs with UUIDs | **kept-evidence** |
-| `--root` | decompose apply | string | Override inferred root | **kept-evidence** |
-| `--sources` | decompose context | string | Comma-separated source IDs to include | **kept-evidence** |
-| `--template` | decompose context | string | Prompt template with placeholders | **kept-evidence** |
-| `--output` | decompose context, review | string | Output file (default: stdout) | **kept-evidence** |
-| `--format` | decompose context, log | string | Output format (text, json, jsonl) | **kept-evidence** |
-| `--existing-dag` | decompose context | bool | Include existing DAG in context | **kept-evidence** |
+| `--plan` | decompose-apply, decompose-revert, decompose-context | string | Path to plan JSON file | **kept-evidence** |
+| `--example` | decompose-apply | bool | Print minimal plan example | **kept-evidence** |
+| `--schema` | decompose-apply | bool | Print JSON Schema | **kept-evidence** |
+| `--strict` | decompose-apply, doctor, validate | bool | Treat warnings as errors | **kept-evidence** |
+| `--generate-ids` | decompose-apply | bool | Replace plan IDs with UUIDs | **kept-evidence** |
+| `--root` | decompose-apply | string | Override inferred root | **kept-evidence** |
+| `--sources` | decompose-context | string | Comma-separated source IDs to include | **kept-evidence** |
+| `--template` | decompose-context | string | Prompt template with placeholders | **kept-evidence** |
+| `--output` | decompose-context, review prepare | string | Output file (default: stdout) | **kept-evidence** |
+| `--format` | decompose-context | string | Output format (text, json, jsonl) | **kept-evidence** |
+| `--existing-dag` | decompose-context | bool | Include existing DAG in context | **kept-evidence** |
 | `--approve-all` | dag-summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
 | `--dep` | link, unlink | string | Dependency issue ID | **kept-evidence** |
 | `--rel` | link | string | Relationship type (default blocked_by) | **kept-evidence** |
@@ -262,8 +262,9 @@ The following flags are defined across all commands. Grouped by usage pattern.
 |------|-----------|------|-------|--------|
 | `--source-id` | source-link | string | UUID of source entry in manifest | **kept-evidence** |
 | `--ci` | accept-citation, validate | bool | Non-interactive mode / bypass prompt | **kept-evidence** |
-| `--url` | sources | string | URL or path of source | **kept-evidence** |
-| `--type` | sources | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
+| `--non-interactive` | accept-citation | bool | Alias for --ci on this command | **kept-evidence** |
+| `--url` | sources add | string | URL or path of source | **kept-evidence** |
+| `--type` | sources add | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
 
 ### Query/Filter Flags
 
@@ -274,7 +275,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--group` | list | bool | Group by status with headers | **kept-evidence** |
 | `--assigned-to` | ready | string | Filter to tasks assigned to worker | **kept-evidence** |
 | `--explain` | ready | bool | Diagnose why tasks aren't ready | **kept-evidence** |
-| `--field` | show, transition (alternative to --to) | string | Extract specific fields | **kept-evidence** |
+| `--field` | show, transition | string | Extract specific fields | **kept-evidence** |
 | `--json` | workers, log | bool | Output as JSONL | **kept-evidence** |
 | `--worker` | log | string | Filter ops by worker ID | **kept-evidence** |
 | `--since` | log | string | Filter ops since RFC3339 or YYYY-MM-DD | **kept-evidence** |
@@ -284,6 +285,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
+| `--repo` | worker-init | string | Repository path for worker identity setup | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |
