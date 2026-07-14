@@ -38,13 +38,13 @@ test: build
 	rm -f "$$tmp"; \
 	exit $$status
 
-coverage:
-	$(GO) test -coverprofile=coverage.out ./...
+coverage: build
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
-coverage-check:
-	$(GO) test -coverprofile=coverage.out ./...
+coverage-check: build
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out ./...
 	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
 	echo "Total coverage: $${COVERAGE}%"; \
 	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 85) }'; then \
