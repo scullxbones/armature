@@ -262,15 +262,26 @@ CODE_FLAGS=$(cut -d'|' -f2 <<< "$CODE_FLAG_OWNERS" | sort -u)
 CENSUS_FLAGS=$(cut -d'|' -f2 <<< "$CENSUS_FLAG_OWNERS" | sort -u)
 compare_lists "Command flag" "$CODE_FLAGS" "$CENSUS_FLAGS"
 
-while IFS= read -r pair; do
+# Some census rows intentionally use "etc." rather than enumerating every
+# owner. Restrict pair-level comparison to rows with complete ownership lists;
+# the name-level comparison above still covers every command flag.
+CENSUS_ENUMERATED_FLAGS=$(sed -n '/^## Command Flags/,/^## Priority Levels/p' "$CENSUS_FILE" | \
+    awk -F'|' '/^\| `--/ && $0 !~ /etc\./ { flag = $2; gsub(/^[[:space:]]*`|`[[:space:]]*$/, "", flag); print flag }' | sort -u)
+CODE_ENUMERATED_FLAG_OWNERS=$(while IFS= read -r pair; do
     [[ -z "$pair" ]] && continue
-    if ! grep -qxF -- "$pair" <<< "$CODE_FLAG_OWNERS"; then
-        flag=${pair##*|}
-        command=${pair%%|*}
-        echo "FAIL: Command flag '$flag' ownership differs: documented for '$command' but not defined there" >&2
-        ERRORS=$((ERRORS + 1))
-    fi
-done <<< "$CENSUS_FLAG_OWNERS"
+    flag=${pair##*|}
+    grep -qxF -- "$flag" <<< "$CENSUS_ENUMERATED_FLAGS" && printf '%s\n' "$pair"
+done <<< "$CODE_FLAG_OWNERS")
+CENSUS_ENUMERATED_FLAG_OWNERS=$(while IFS= read -r pair; do
+    [[ -z "$pair" ]] && continue
+    flag=${pair##*|}
+    grep -qxF -- "$flag" <<< "$CENSUS_ENUMERATED_FLAGS" && printf '%s\n' "$pair"
+done <<< "$CENSUS_FLAG_OWNERS")
+
+# Comparing the full command/flag pair in both directions catches not only a
+# flag attributed to the wrong command, but also a real command owner omitted
+# from a shared census row (for example, `transition|--force`).
+compare_lists "Command flag ownership" "$CODE_ENUMERATED_FLAG_OWNERS" "$CENSUS_ENUMERATED_FLAG_OWNERS"
 
 # ============================================================================
 # SUMMARY
