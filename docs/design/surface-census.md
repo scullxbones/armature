@@ -339,9 +339,9 @@ Enumerated in sources.go flag description:
 - **Issue Types**: 5 (all kept-evidence)
 - **Statuses**: 7 (all kept-evidence)
 - **Confidence States**: 3 (all kept-evidence)
-- **Issue Fields**: 30 (all kept-evidence)
+- **Issue Fields**: 35 (all kept-evidence)
 - **Op Types**: 19 (all kept-evidence)
-- **CLI Commands**: 43 (all kept-evidence, 6 groups)
+- **CLI Commands**: 47 (all kept-evidence, 6 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
 - **Parked Surfaces**: 0
 - **Estimated Complexity Levels**: TBD (no explicit enumeration)
