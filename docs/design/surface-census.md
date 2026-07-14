@@ -126,11 +126,11 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
-| `dagsum` | main.go:135, dagsum.go | Summarize draft nodes | **kept-evidence** | Diagnostic and planning tool. Lists unconfirmed nodes in a subtree. |
+| `dag-summary` | main.go:135, dagsum.go | Summarize draft nodes | **kept-evidence** | Diagnostic and planning tool. Lists unconfirmed nodes in a subtree. |
 | `dag-transition` | main.go:139, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. |
-| `decompose apply` | main.go:143, decompose.go | Create issues from plan JSON | **kept-evidence** | Bulk creation from structured plan. Validates hierarchy. |
-| `decompose revert` | main.go:147, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
-| `decompose context` | main.go:151, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
+| `decompose-apply` | main.go:143, decompose.go | Create issues from plan JSON | **kept-evidence** | Bulk creation from structured plan. Validates hierarchy. |
+| `decompose-revert` | main.go:147, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
+| `decompose-context` | main.go:151, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
 | `link` | main.go:155, link.go | Add dependency | **kept-evidence** | Couples issues. Supports blocked_by and blocks relations. |
 | `unlink` | main.go:159, unlink.go | Remove dependency | **kept-evidence** | Uncouples issues. Removes from blocked_by/blocks. |
 
@@ -244,9 +244,10 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--output` | decompose context, review | string | Output file (default: stdout) | **kept-evidence** |
 | `--format` | decompose context, log | string | Output format (text, json, jsonl) | **kept-evidence** |
 | `--existing-dag` | decompose context | bool | Include existing DAG in context | **kept-evidence** |
+| `--approve-all` | dag-summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
 | `--dep` | link, unlink | string | Dependency issue ID | **kept-evidence** |
 | `--rel` | link | string | Relationship type (default blocked_by) | **kept-evidence** |
-| `--source-id` | link, source-link | string | Source issue ID | **kept-evidence** |
+| `--source` | link | string | Source issue ID | **kept-evidence** |
 
 ### Citation/Source Flags
 

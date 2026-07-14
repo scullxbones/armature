@@ -43,3 +43,6 @@ jobs:
 
       - name: Census drift check
         run: make census-drift-check
+
+      - name: Census drift-check regression tests
+        run: make test-census-drift-check
