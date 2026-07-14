@@ -130,6 +130,55 @@ More info.
 			"failure should be attributed to the missing --worktree flag")
 	})
 
+	// References are shipped with their parent skill and must be linted too.
+	t.Run("ReferenceMarkdownIsLinted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		referenceDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill", "references")
+		require.NoError(t, os.MkdirAll(referenceDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(referenceDir, "commands.md"), []byte("```bash\narm invalid-reference-command\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err)
+		require.Contains(t, output.String(), "invalid-reference-command")
+	})
+
+	// A continued command is one shell command, so mandatory flags on later
+	// physical lines must be checked together.
+	t.Run("ContinuedCommandIsLinted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 \\\n+  --force\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err)
+		require.Contains(t, output.String(), "missing mandatory flags: --worktree")
+	})
+
+	// `arm` commands in command substitutions are real invocations, not prose.
+	t.Run("CommandSubstitutionIsLinted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\nFILES=$(arm ready --not-a-real-flag | jq -r '.')\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err)
+		require.Contains(t, output.String(), "--not-a-real-flag")
+	})
+
 	// Test 3: Verify that invalid subcommands fail
 	t.Run("InvalidSubcommandFails", func(t *testing.T) {
 		tmpDir := t.TempDir()

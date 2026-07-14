@@ -36,14 +36,15 @@ ARM_BIN = os.environ.get("ARM_BIN", "arm")
 
 
 def find_skill_files(root_dir):
-    """Find all SKILL.md files in the internal/skillsembed/skills/ directory."""
+    """Find every shipped Markdown file in the embedded skills directory."""
     skills_dir = Path(root_dir) / "internal" / "skillsembed" / "skills"
     if not skills_dir.exists():
         return []
 
     skill_files = []
-    for skill_path in skills_dir.glob("*/SKILL.md"):
-        skill_files.append(skill_path)
+    for skill_path in skills_dir.rglob("*.md"):
+        if skill_path.is_file():
+            skill_files.append(skill_path)
     return sorted(skill_files)
 
 
@@ -88,10 +89,15 @@ def extract_code_blocks(content):
     return blocks
 
 
+def join_continued_lines(code_block):
+    """Join shell lines continued by an unquoted trailing backslash."""
+    return re.sub(r"\\\\\n[ \t]*", " ", code_block)
+
+
 def extract_arm_commands(code_block):
     """Extract all arm command invocations from a code block."""
     commands = []
-    lines = code_block.split("\n")
+    lines = join_continued_lines(code_block).split("\n")
 
     for line in lines:
         # Strip trailing (unquoted) "#" comments before parsing. Skill docs
@@ -111,8 +117,19 @@ def extract_arm_commands(code_block):
 
         for part in parts:
             part = part.strip()
+            # `arm` can be the command in a command substitution or a prefix
+            # assignment, e.g. `FILES=$(arm ready --format json | ...)`.
+            # Keep the surrounding shell segment boundary above, then extract
+            # the invocation rather than requiring it to start the segment.
             if part.startswith("arm "):
                 commands.append(part)
+                continue
+
+            # Do not mistake prose such as "arm command, run: ..." for an
+            # invocation. Command substitutions have a distinct shell marker.
+            match = re.search(r"\$\(\s*(arm(?:\s+[^|&;\n]*)?)", part)
+            if match:
+                commands.append(match.group(1).rstrip(")"))
 
     return commands
 
