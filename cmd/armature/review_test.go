@@ -932,6 +932,62 @@ func TestReviewCommitsCommand_BranchFlag(t *testing.T) {
 	assert.Contains(t, out, "Found 1 commit(s) for issue task-01")
 }
 
+// TestReviewCommitsCommand_DefaultBranchResolvesFromWorktree verifies that
+// `arm review commits <issue-id>` with the default --branch ("HEAD") resolves
+// against the invoking git worktree's own checked-out branch, not the parent
+// repo root's branch. `ctx.RepoPath` resolves to the *parent* repo root when
+// this command runs from inside a linked git worktree (the standard
+// `arm claim --worktree` delivery flow) -- see config.ResolveContext's
+// worktree handling. Passing "HEAD" straight through to git.LogBranch would
+// therefore report the parent repo's checked-out branch (which may have no
+// commits for the issue at all), silently returning wrong/empty results
+// with exit 0 instead of the worktree's own commits.
+func TestReviewCommitsCommand_DefaultBranchResolvesFromWorktree(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Record whatever branch the parent repo is on (it will remain checked
+	// out there, untouched by the worktree add below) so the assertion
+	// isn't tied to init.defaultBranch naming ("main" vs "master").
+	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+	require.NotEmpty(t, parentBranch)
+
+	// Create a linked worktree on its own branch, with a commit for task-01
+	// that only exists on that branch -- the parent repo's checked-out
+	// branch never gets this commit.
+	worktreeDir := t.TempDir()
+	run(t, repo, "git", "worktree", "add", worktreeDir, "-b", "task/task-01")
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, worktreeDir, "git", "add", "impl.go")
+	run(t, worktreeDir, "git", "commit", "-m", "feat(task-01): add feature")
+
+	// Sanity check: the parent repo's own branch does NOT have this commit.
+	parentOut, err := runTrls(t, repo, "review", "commits", "task-01", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, parentOut, "No commits found for issue task-01",
+		"parent repo's checked-out branch should not see the worktree-only commit")
+
+	// Invoke `review commits` pointed at the worktree, with --branch left at
+	// its default. It must resolve the worktree's own branch (task/task-01),
+	// not the parent repo's.
+	cmd := newRootCmd()
+	outBuf := new(bytes.Buffer)
+	cmd.SetOut(outBuf)
+	cmd.SetArgs([]string{"review", "commits", "task-01", "--repo", worktreeDir, "--format", "human"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, outBuf.String(), "Found 1 commit(s) for issue task-01",
+		"review commits from inside a worktree should find the worktree's own commit without an explicit --branch")
+}
+
+// runGitOutput runs a git command in dir and returns its stdout.
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %v failed", args)
+	return string(out)
+}
+
 // TestReviewPrepare_CoordinatorWaveScope verifies that review bundles use task-specific
 // commit ranges, not wave-combined ranges. This is critical for the coordinator workflow:
 // when multiple tasks complete in a wave, each task's review should be scoped to only its own
