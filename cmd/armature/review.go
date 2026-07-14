@@ -209,7 +209,7 @@ merge, pass --branch, e.g. --branch task/TASK-ID or --branch story/STORY-ID.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID (required)")
+	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID (alternative to the positional argument)")
 	cmd.Flags().StringVar(&branch, "branch", "HEAD", "branch to scan for commits (e.g. task/TASK-ID or a story branch)")
 
 	return cmd

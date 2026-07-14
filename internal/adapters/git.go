@@ -421,6 +421,12 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	if n > 0 {
 		args = append(args, fmt.Sprintf("-n%d", n))
 	}
+	// TEST_EXCEPTION: disambiguates branch from a path when a branch name
+	// collides with a file/directory path in the repo (git would otherwise
+	// error "ambiguous argument"). Not covered by a dedicated test: exercising
+	// it requires contriving a directory that shadows a branch name, which
+	// isn't a proportionate amount of test scaffolding for a one-line fix.
+	args = append(args, "--")
 	cmd := c.cmd(args...)
 	out, err := cmd.Output()
 	if err != nil {
