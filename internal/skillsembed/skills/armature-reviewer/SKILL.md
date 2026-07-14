@@ -412,11 +412,8 @@ cat assessment.json
 # arm review record --issue TASK-42 --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
 ```
 
-The recorded assessment is durable and can be queried later:
-
-```bash
-arm review show TASK-42
-```
+The recorded assessment is durable — it's stored as an attestation on the issue and can be inspected via the
+issue's materialized state (there is no dedicated `arm review show`/`arm review list` query command today).
 
 ---
 
@@ -468,18 +465,12 @@ arm review show TASK-42
 
 ```bash
 # Prepare a bundle (done by coordinator, not reviewer)
-arm review prepare --issue TASK-42 --title "Implement feature X" \
-  --scope "pkg/feature.go" "pkg/feature_test.go" \
-  --criteria "Feature must compile" "All tests pass" \
-  --base abc123 --head def456
+arm review prepare --issue TASK-42 --base abc123 --head def456 --output bundle.json
 
 # Record an assessment (done by coordinator, not reviewer)
 arm review record --issue TASK-42 --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
 
-# Display recorded assessment
-arm review show TASK-42
-
-# List all assessments for a story
-arm review list --story STORY-99
+# Show commits included in the bundle's diff range (done by coordinator)
+arm review commits TASK-42 --branch task/TASK-42
 ```
 

@@ -8,10 +8,26 @@ import sys
 from pathlib import Path
 
 
-# Known mandatory flags for specific commands
+# Known mandatory flags for specific commands. Keep in sync with
+# `MarkFlagRequired` calls in cmd/armature/*.go — a Go test
+# (cmd/armature/skill_lint_flags_test.go) fails CI if this drifts out of
+# sync with the actual Cobra command definitions.
 MANDATORY_FLAGS = {
     "claim": ["--worktree"],
     "transition": ["--to"],
+    "assign": ["--worker"],
+    "accept-citation": ["--rationale"],
+    "dag-transition": ["--issue"],
+    "link": ["--source", "--dep"],
+    "unlink": ["--source", "--dep"],
+    "decision": ["--topic", "--choice"],
+    "merged": ["--issue"],
+    "create": ["--title"],
+    "context-history": ["--issue"],
+    "decompose-revert": ["--plan"],
+    "reparent": ["--issue", "--parent"],
+    "source-link": ["--source-id"],
+    "sources add": ["--url", "--type"],
 }
 
 # The arm binary to invoke. Configurable via ARM_BIN so CI (and tests) can
@@ -31,12 +47,45 @@ def find_skill_files(root_dir):
     return sorted(skill_files)
 
 
+FENCE_RE = re.compile(r"^```(\w*)\s*$")
+
+
 def extract_code_blocks(content):
-    """Extract all fenced code blocks from markdown content."""
-    # Match code blocks with optional language specifier
-    pattern = r"```(?:bash|sh)?\n(.*?)\n```"
-    matches = re.findall(pattern, content, re.DOTALL)
-    return matches
+    """Extract fenced code blocks whose language is bash, sh, or unspecified.
+
+    Walks the file line by line rather than using a single regex, because a
+    regex like ``` ```(?:bash|sh)?\\n(.*?)\\n``` ``` mis-pairs fences: a
+    non-bash fenced block (e.g. ```json) earlier in the file doesn't match at
+    its own opening fence (its language token isn't bash/sh/empty), so the
+    regex engine instead matches starting at that block's *closing* fence
+    (read as an opening fence with an empty language token), swallowing the
+    next block's real opening fence as content. That silently drops bash
+    blocks that follow a non-bash block from extraction.
+    """
+    blocks = []
+    lines = content.split("\n")
+    in_block = False
+    block_lang = None
+    current_lines = []
+
+    for line in lines:
+        if not in_block:
+            m = FENCE_RE.match(line)
+            if m:
+                in_block = True
+                block_lang = m.group(1)
+                current_lines = []
+        else:
+            if line.rstrip() == "```":
+                if block_lang in ("", "bash", "sh"):
+                    blocks.append("\n".join(current_lines))
+                in_block = False
+                block_lang = None
+                current_lines = []
+            else:
+                current_lines.append(line)
+
+    return blocks
 
 
 def extract_arm_commands(code_block):
@@ -271,11 +320,16 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     if first_cmd not in valid_subcommands:
         return False, f"Unknown subcommand '{first_cmd}' in: {arm_command}"
 
-    # Check for mandatory flags (only for top-level commands we know about)
-    if first_cmd in MANDATORY_FLAGS:
+    # Check for mandatory flags. Look up by the full subcommand chain first
+    # (e.g. "sources add"), falling back to the top-level command name, so
+    # both flat commands (e.g. "transition") and nested ones (e.g.
+    # "sources add") can be covered.
+    full_chain = " ".join(subcommands)
+    mandatory_key = full_chain if full_chain in MANDATORY_FLAGS else first_cmd
+    if mandatory_key in MANDATORY_FLAGS:
         flags = extract_flags(args)
         missing_flags = []
-        for mandatory_flag in MANDATORY_FLAGS[first_cmd]:
+        for mandatory_flag in MANDATORY_FLAGS[mandatory_key]:
             if mandatory_flag not in flags:
                 missing_flags.append(mandatory_flag)
 

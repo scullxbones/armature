@@ -622,9 +622,9 @@ arm validate
 
 If `validate` shows `uncited node: ID`, run:
 ```bash
-arm source-link --issue ID --source SOURCE-UUID   # if a source doc exists
+arm source-link --issue ID --source-id SOURCE-UUID   # if a source doc exists
 # or
-arm accept-citation --issue ID --ci               # if no source, mark as self-citing
+arm accept-citation --issue ID --rationale "No external source; self-citing" --ci  # if no source, mark as self-citing
 ```
 
 ### f. Clean up worktrees
