@@ -3072,3 +3072,4 @@
 ["claim","NXTTN-S2-T1",1784051207,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["transition","NXTTN-S2",1784051209,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["claim","NXTTN-S2-T2",1784051209,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
+["note","NXTTN-S2-T1",1784051303,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Gathering evidence of surface usage from tests and code","note_id":"note-1784051303313972643"}]
