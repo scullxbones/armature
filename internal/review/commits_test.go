@@ -60,6 +60,12 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	run(t, repo, "git", "add", "chore.txt")
 	run(t, repo, "git", "commit", "-m", "chore(TOPTIER-S1-T3): update dependencies")
 
+	// Create a commit using the breaking-change syntax `feat(ISSUE-ID)!: ...`
+	// for TOPTIER-S1-T3
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "breaking.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "breaking.go")
+	run(t, repo, "git", "commit", "-m", "feat(TOPTIER-S1-T3)!: breaking change")
+
 	// Create commits for a different issue (should not be included)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "other.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "git", "add", "other.go")
@@ -78,7 +84,7 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	require.NoError(t, err, "ReviewCommits should succeed")
 
 	// Verify all expected commits are found
-	assert.Equal(t, 6, len(commits), "should find exactly 6 commits for TOPTIER-S1-T3")
+	assert.Equal(t, 7, len(commits), "should find exactly 7 commits for TOPTIER-S1-T3")
 
 	// Extract subjects for verification
 	subjects := make(map[string]bool)
@@ -93,6 +99,7 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	assert.True(t, subjects["test(TOPTIER-S1-T3): add tests"], "test commit should be found")
 	assert.True(t, subjects["docs(TOPTIER-S1-T3): update documentation"], "docs commit should be found")
 	assert.True(t, subjects["chore(TOPTIER-S1-T3): update dependencies"], "chore commit should be found")
+	assert.True(t, subjects["feat(TOPTIER-S1-T3)!: breaking change"], "breaking-change (feat(ID)!:) commit should be found")
 
 	// Verify that commits for other issues are not included
 	assert.False(t, subjects["feat(OTHER-ISSUE): unrelated feature"], "commits for other issues should not be included")
