@@ -71,6 +71,10 @@ def add_acceptance_fields(example):
                 "All child tasks have dod, scope, and acceptance fields",
                 "arm validate passes with no errors",
             ]
+            if not issue.get("dod"):
+                issue["dod"] = (
+                    "Decomposition plan for the story is created, reviewed, and passes arm validate"
+                )
         else:
             # Tasks need test-based acceptance criteria
             # Keep the generated plan valid while clearly marking its example paths

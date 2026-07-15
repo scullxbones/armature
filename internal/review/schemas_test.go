@@ -110,6 +110,31 @@ func validateAgainstSchema(t *testing.T, schemaFile string, docJSON string) {
 	require.NoError(t, err, "example should validate against %s", schemaFile)
 }
 
+// validateSchemaRejects compiles the named schema file (relative to
+// docs/schemas) and asserts that the given JSON document fails validation
+// against it, proving the schema actually rejects invalid input rather than
+// accepting anything.
+func validateSchemaRejects(t *testing.T, schemaFile string, docJSON string) {
+	t.Helper()
+
+	repoRoot := findRepoRoot(t)
+	schemaPath := filepath.Join(repoRoot, "docs", "schemas", schemaFile)
+
+	schemaData, err := os.ReadFile(schemaPath)
+	require.NoError(t, err, "should be able to read schema file")
+
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource(schemaFile, bytes.NewReader(schemaData)))
+	sch, err := compiler.Compile(schemaFile)
+	require.NoError(t, err, "schema should compile: %s", schemaFile)
+
+	var doc interface{}
+	require.NoError(t, json.Unmarshal([]byte(docJSON), &doc), "example JSON should be valid JSON")
+
+	err = sch.Validate(doc)
+	require.Error(t, err, "invalid example should be rejected by %s", schemaFile)
+}
+
 // TestReviewBundleSchema_ValidExample_REQ_TOPTIER_S2_T1 validates that the
 // review-bundle schema accepts a valid ReviewBundle example.
 func TestReviewBundleSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
@@ -233,4 +258,111 @@ func TestPlanSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
 }`
 
 	validateAgainstSchema(t, "plan.schema.json", planJSON)
+}
+
+// TestPlanSchema_InvalidExample_REQ_TOPTIER_S2_T1 asserts that the plan
+// schema rejects an issue that is missing the required "type" field, proving
+// the schema's required-fields constraint is actually enforced.
+func TestPlanSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	planJSON := `{
+  "version": 1,
+  "title": "Feature decomposition",
+  "issues": [
+    {
+      "id": "FEATURE-S1-T1",
+      "title": "Implement core logic"
+    }
+  ]
+}`
+
+	validateSchemaRejects(t, "plan.schema.json", planJSON)
+}
+
+// TestReviewBundleSchema_InvalidExample_REQ_TOPTIER_S2_T1 asserts that the
+// review-bundle schema rejects a bundle_id missing the required
+// "sha256:" prefix, proving the pattern constraint is actually enforced.
+func TestReviewBundleSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	bundleJSON := `{
+  "schema_version": 1,
+  "bundle_id": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "issue": {
+    "id": "TASK-001",
+    "type": "task",
+    "title": "Test task",
+    "outcome": "Implemented feature X"
+  },
+  "contract": {
+    "definition_of_done": "Feature is implemented and tested",
+    "acceptance": ["Passes unit tests", "Code is documented"]
+  },
+  "delivery": {
+    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "changed_files": ["src/main.go", "src/main_test.go"]
+  },
+  "fingerprints": {
+    "contract": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "delivery": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}`
+
+	validateSchemaRejects(t, "review-bundle.schema.json", bundleJSON)
+}
+
+// TestConformanceAssessmentSchema_InvalidExample_REQ_TOPTIER_S2_T1 asserts
+// that the conformance-assessment schema rejects a result with a status
+// value outside the enum, proving the enum constraint is actually enforced.
+func TestConformanceAssessmentSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "mostly_satisfied",
+      "rationale": "Feature is fully implemented and tested",
+      "citations": [
+        {"path": "src/main.go", "line": 10}
+      ]
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
+// TestActivityIndexSchema_InvalidExample_REQ_TOPTIER_S2_T1 asserts that the
+// activity-index schema rejects a document missing the required
+// "entry_count" field, proving the required-fields constraint is actually
+// enforced.
+func TestActivityIndexSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	indexJSON := `{
+  "schema_version": 1,
+  "log_path": "/path/to/armature-activity.log",
+  "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "delivery_head_count": 2,
+  "earlier_count": 0,
+  "entries": [
+    {
+      "id": "0",
+      "command": "go test ./...",
+      "exit_status": 0,
+      "head_anchor": true,
+      "category": "test",
+      "log_pointer": "0"
+    }
+  ]
+}`
+
+	validateSchemaRejects(t, "activity-index.schema.json", indexJSON)
 }

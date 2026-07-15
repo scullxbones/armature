@@ -20,7 +20,7 @@
       "description": "List of issues to be created or modified by this plan",
       "items": {
         "type": "object",
-        "required": ["id", "title", "type", "scope", "priority", "dod", "parent", "blocked_by", "notes"],
+        "required": ["id", "title", "type"],
         "properties": {
           "id": {
             "type": "string",

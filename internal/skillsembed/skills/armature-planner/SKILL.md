@@ -224,7 +224,7 @@ if not needed.
       "type": "story",
       "scope": "",
       "priority": "",
-      "dod": "",
+      "dod": "Decomposition plan for the story is created, reviewed, and passes arm validate",
       "parent": "",
       "blocked_by": null,
       "notes": [],
