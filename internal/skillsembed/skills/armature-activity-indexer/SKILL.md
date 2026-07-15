@@ -11,7 +11,7 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 # Armature Activity Indexer
 
 The Activity Indexer reads a worktree's activity log and emits a schema-constrained
-JSON Activity Index carrying the log digest and an ordered entry summary. The index
+JSON [Activity Index](https://github.com/scullxbones/armature/blob/main/docs/schemas/activity-index.schema.json) carrying the log digest and an ordered entry summary. The index
 is a **finding aid only** — it routes reviewers to raw log entries for behavioral
 evidence but is **never citable**. Citations against the index are rejected by
 `arm review record`.
@@ -96,16 +96,16 @@ are skipped.
 
 ## Output: Activity Index
 
-Emit a JSON Activity Index with the following schema:
+Emit a JSON [Activity Index](https://github.com/scullxbones/armature/blob/main/docs/schemas/activity-index.schema.json) with the following schema:
 
-```json
+```json artifact_type=activity-index
 {
   "schema_version": 1,
-  "log_path": "<path to armature-activity.log>",
-  "log_digest": "<SHA-256 of log file content>",
-  "entry_count": <total entries>,
-  "delivery_head_count": <entries at delivery HEAD>,
-  "earlier_count": <entries at earlier commits>,
+  "log_path": ".armature/ops/armature-activity.log",
+  "log_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "entry_count": 2,
+  "delivery_head_count": 2,
+  "earlier_count": 0,
   "entries": [
     {
       "id": "0",
@@ -385,4 +385,3 @@ arm review prepare --issue TASK-ID --base "$BASE_SHA" --head "$HEAD_SHA" --outpu
 # Coordinator: record assessment
 arm review record --issue TASK-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
 ```
-

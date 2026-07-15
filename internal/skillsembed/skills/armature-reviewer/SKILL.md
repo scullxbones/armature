@@ -185,8 +185,9 @@ The rating is computed automatically by `arm review record` from the results.
 ### 5. Produce ConformanceAssessment JSON
 
 Assemble all criterion results into a ConformanceAssessment. See `templates/conformance-assessment.json`
-for a complete verbatim template. Validate the result against `docs/schemas/review-bundle.schema.json`
-(and `docs/schemas/conformance-assessment.schema.json`); see `docs/json-schema-examples.md` for worked examples.
+for a complete verbatim template. Validate the result against the [conformance-assessment schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/conformance-assessment.schema.json);
+the input ReviewBundle is validated separately against the [review-bundle schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/review-bundle.schema.json). See
+`docs/json-schema-examples.md` for worked examples.
 
 ```json artifact_type=conformance-assessment
 {
@@ -475,4 +476,3 @@ arm review record --issue TASK-42 --assessment "$RESULT_FILE" --bundle "$BUNDLE_
 # Show commits included in the bundle's diff range (done by coordinator)
 arm review commits TASK-42 --branch task/TASK-42
 ```
-

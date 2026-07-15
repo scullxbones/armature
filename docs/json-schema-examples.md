@@ -2,7 +2,7 @@
 
 This document provides examples of Armature's JSON artifact types for reference and validation testing.
 
-## Plan Schema
+## [Plan Schema](schemas/plan.schema.json)
 
 A plan file describes issues to be created or modified by decomposition.
 
@@ -27,7 +27,7 @@ A plan file describes issues to be created or modified by decomposition.
 }
 ```
 
-## Review Bundle Schema
+## [Review Bundle Schema](schemas/review-bundle.schema.json)
 
 A review bundle is the input prepared by `arm review prepare` and consumed by the reviewer.
 
@@ -59,7 +59,7 @@ A review bundle is the input prepared by `arm review prepare` and consumed by th
 }
 ```
 
-## Conformance Assessment Schema
+## [Conformance Assessment Schema](schemas/conformance-assessment.schema.json)
 
 A conformance assessment is the detailed result returned by a reviewer evaluating a delivery against its contract.
 
@@ -107,7 +107,7 @@ A conformance assessment is the detailed result returned by a reviewer evaluatin
 }
 ```
 
-## Activity Index Schema
+## [Activity Index Schema](schemas/activity-index.schema.json)
 
 An activity index summarizes the execution activity log for reviewer navigation.
 
