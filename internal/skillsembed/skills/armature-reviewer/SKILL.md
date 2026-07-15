@@ -185,7 +185,8 @@ The rating is computed automatically by `arm review record` from the results.
 ### 5. Produce ConformanceAssessment JSON
 
 Assemble all criterion results into a ConformanceAssessment. See `templates/conformance-assessment.json`
-for a complete verbatim template.
+for a complete verbatim template. Validate the result against `docs/schemas/review-bundle.schema.json`
+(and `docs/schemas/conformance-assessment.schema.json`); see `docs/json-schema-examples.md` for worked examples.
 
 ```json artifact_type=conformance-assessment
 {

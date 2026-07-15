@@ -155,27 +155,28 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
 | `validate` | main.go:197, validate.go | Check DAG health | **kept-evidence** | Linter. Runs citation and structure checks. |
-| `render-context` | main.go:201, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
-| `log` | main.go:205, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
-| `workers` | main.go:209, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
-| `sources` | main.go:213, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. |
+| `validate-doc-examples` | main.go:201-203, validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Hidden. Used by `make validate-doc-examples`/`make check`. |
+| `render-context` | main.go:207, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
+| `log` | main.go:211, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
+| `workers` | main.go:215, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
+| `sources` | main.go:219, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. |
 | `sources add` | sources.go:34 | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
 | `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
 | `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
-| `source-link` | main.go:217, source_link.go | Link issue to source | **kept-evidence** | Citation. Creates source-link ops. |
-| `accept-citation` | main.go:221, accept_citation.go | Accept source citation | **kept-evidence** | Citation workflow. Sets citation_acceptances. |
-| `show` | main.go:225, show.go | Display issue details | **kept-evidence** | Query tool. Supports --field for extraction. |
-| `list` | main.go:229, list.go | List issues | **kept-evidence** | Query tool. Supports filtering and grouping. |
-| `scope-rename` | main.go:233, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
-| `scope-delete` | main.go:237, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
-| `doctor` | main.go:241, doctor.go | Diagnose DAG health | **kept-evidence** | Validator. Checks for broken refs, cycles, orphans. |
-| `completion` | main.go:245, cmd_completion.go | Bash/zsh completion | **kept-evidence** | Shell integration. Cobra-generated. |
-| `hook` | main.go:249, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
+| `source-link` | main.go:223, source_link.go | Link issue to source | **kept-evidence** | Citation. Creates source-link ops. |
+| `accept-citation` | main.go:227, accept_citation.go | Accept source citation | **kept-evidence** | Citation workflow. Sets citation_acceptances. |
+| `show` | main.go:231, show.go | Display issue details | **kept-evidence** | Query tool. Supports --field for extraction. |
+| `list` | main.go:235, list.go | List issues | **kept-evidence** | Query tool. Supports filtering and grouping. |
+| `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
+| `scope-delete` | main.go:243, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
+| `doctor` | main.go:247, doctor.go | Diagnose DAG health | **kept-evidence** | Validator. Checks for broken refs, cycles, orphans. |
+| `completion` | main.go:251, cmd_completion.go | Bash/zsh completion | **kept-evidence** | Shell integration. Cobra-generated. |
+| `hook` | main.go:255, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
-| `tui` | main.go:253, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
-| `context-history` | main.go:257, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
-| `harness-hook` | main.go:261, harness_hook.go | Harness hook runner (internal) | **kept-evidence** | Internal. Runs on pre-commit and post-merge. |
-| `review` | main.go:265, review.go | Manage conformance reviews for issues | **kept-evidence** | Review infrastructure. |
+| `tui` | main.go:259, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
+| `context-history` | main.go:263, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
+| `harness-hook` | main.go:267, harness_hook.go | Harness hook runner (internal) | **kept-evidence** | Internal. Runs on pre-commit and post-merge. |
+| `review` | main.go:271, review.go | Manage conformance reviews for issues | **kept-evidence** | Review infrastructure. |
 | `review prepare` | review.go:33 | Prepare a review bundle for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --base, --head, --output. |
 | `review record` | review.go:157 | Record a conformance assessment for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --assessment, --bundle. |
 | `review commits` | review.go:185 | List delivery commits for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --branch (default HEAD). |
@@ -286,7 +287,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
-| `--repo` | worker-init | string | Command-local repository path override (worker_init.go:42). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
+| `--repo` | worker-init, validate-doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |

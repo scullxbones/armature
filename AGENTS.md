@@ -43,3 +43,4 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 - `docs/harness-hook.md` — harness integration
 - `docs/design/architecture.md` — architecture and repo model
 - `CONTEXT.md` — domain glossary
+- `docs/schemas/` and `docs/json-schema-examples.md` — JSON schemas (plan, review-bundle, conformance-assessment) and worked examples
