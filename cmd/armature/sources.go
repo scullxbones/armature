@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -40,7 +41,15 @@ func newSourcesAddCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
-			lc := sources.NewLifecycle(dir)
+
+			// Create lifecycle with auto-commit support
+			var lc *sources.Lifecycle
+			if appCtx.WorktreePath != "" {
+				gc := adapters.New(appCtx.WorktreePath)
+				lc = sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
+			} else {
+				lc = sources.NewLifecycle(dir)
+			}
 
 			entry := sources.SourceEntry{
 				ID:           uuid.New().String(),
@@ -82,7 +91,15 @@ func newSourcesSyncCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
-			lc := sources.NewLifecycle(dir)
+
+			// Create lifecycle with auto-commit support
+			var lc *sources.Lifecycle
+			if appCtx.WorktreePath != "" {
+				gc := adapters.New(appCtx.WorktreePath)
+				lc = sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
+			} else {
+				lc = sources.NewLifecycle(dir)
+			}
 
 			entries, err := lc.ListAll()
 			if err != nil {
@@ -139,7 +156,15 @@ func newSourcesVerifyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
-			lc := sources.NewLifecycle(dir)
+
+			// Create lifecycle with auto-commit support (though verify doesn't write)
+			var lc *sources.Lifecycle
+			if appCtx.WorktreePath != "" {
+				gc := adapters.New(appCtx.WorktreePath)
+				lc = sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
+			} else {
+				lc = sources.NewLifecycle(dir)
+			}
 
 			entries, err := lc.ListAll()
 			if err != nil {
