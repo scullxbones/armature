@@ -720,6 +720,70 @@ func TestLifecycleSyncAllWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	}
 }
 
+func TestLifecycleSyncWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	worktreeDir := t.TempDir()
+	fc := &MockFileCommitter{}
+
+	registry := &MockRegistry{
+		providers: map[string]Provider{
+			"mock": &MockProvider{data: []byte("test content")},
+		},
+	}
+	lc := NewLifecycleWithCommitter(dir, registry, worktreeDir, fc)
+
+	// Register a source
+	entry := SourceEntry{
+		ID:           "test-1",
+		URL:          "https://example.com/doc",
+		Title:        "Test Document",
+		ProviderType: "mock",
+	}
+	_, err := lc.Register(entry)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	// Clear the commits from Register
+	fc.commits = nil
+
+	// Sync the single source
+	ctx := context.Background()
+	result := lc.Sync(ctx, "test-1")
+	if result.Error != nil {
+		t.Fatalf("Sync failed: %v", result.Error)
+	}
+
+	// Verify both manifest.json and cache file were committed
+	if len(fc.commits) != 2 {
+		t.Fatalf("expected 2 commits (manifest + cache), got %d", len(fc.commits))
+	}
+
+	hasManifest := false
+	hasCache := false
+	for _, commit := range fc.commits {
+		if strings.Contains(commit.relPath, "manifest.json") {
+			hasManifest = true
+			if commit.message != "sources: update manifest.json" {
+				t.Errorf("manifest commit message mismatch: got %q", commit.message)
+			}
+		} else if strings.Contains(commit.relPath, ".cache") {
+			hasCache = true
+			if !strings.Contains(commit.message, "sources: update cache") {
+				t.Errorf("cache commit message mismatch: got %q", commit.message)
+			}
+		}
+	}
+
+	if !hasManifest {
+		t.Error("expected manifest.json commit")
+	}
+	if !hasCache {
+		t.Error("expected cache file commit")
+	}
+}
+
 func TestLifecycleNoAutoCommitWhenWorktreePathEmpty_REQ_LNGHZN_B1(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
