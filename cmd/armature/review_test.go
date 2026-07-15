@@ -823,7 +823,7 @@ func TestReviewRecordCommand_ValidationError(t *testing.T) {
 
 	// Write assessment missing required fields
 	assessmentFile := filepath.Join(repo, "assessment.json")
-	invalidAssessment := map[string]interface{}{
+	invalidAssessment := map[string]any{
 		"schema_version": review.SchemaVersion,
 		// Missing: bundle_id, contract_fingerprint, delivery_fingerprint, results
 	}

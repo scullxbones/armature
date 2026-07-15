@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,13 +68,8 @@ func TestMandatoryFlagsMatchMarkFlagRequired(t *testing.T) {
 				if !useWords[keyFirstWord] {
 					continue
 				}
-				for _, f := range flags {
-					if f == flag {
-						found = true
-						break
-					}
-				}
-				if found {
+				if slices.Contains(flags, flag) {
+					found = true
 					break
 				}
 			}
