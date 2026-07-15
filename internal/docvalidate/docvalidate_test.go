@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func writeFile(t *testing.T, root, name, content string) {
@@ -93,4 +95,28 @@ func TestValidateRepositoryExamples(t *testing.T) {
 	if err := Validate(root); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
+}
+
+// TestRepositoryDiscoversCanonicalPlanAndActivityIndexExamples guards the
+// customer-facing plan and embedded activity-index examples that make the
+// documentation validator useful in practice.
+func TestRepositoryDiscoversCanonicalPlanAndActivityIndexExamples(t *testing.T) {
+	t.Parallel()
+
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	examples, err := findExamples(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := make(map[string]string, len(examples))
+	for _, example := range examples {
+		found[example.path] = example.artifactType
+	}
+	require.Equal(t, "plan", found["docs/commands.md"])
+	require.Equal(t, "activity-index", found["internal/skillsembed/skills/armature-activity-indexer/SKILL.md"])
 }

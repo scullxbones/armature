@@ -54,7 +54,8 @@
                 },
                 "activity_entry_id": {
                   "type": "string",
-                  "description": "Entry ID from activity log (mutually exclusive with path)"
+                  "description": "Numeric raw entry ID from activity log (mutually exclusive with path)",
+                  "pattern": "^[0-9]+$"
                 },
                 "activity_entry_details": {
                   "type": "string",

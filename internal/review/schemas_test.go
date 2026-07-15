@@ -505,6 +505,32 @@ func TestConformanceAssessmentSchema_RejectsEmptyCitation_REQ_TOPTIER_S2_T1(t *t
 	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
 }
 
+// TestConformanceAssessmentSchema_RejectsNonNumericActivityEntryID_REQ_TOPTIER_S2_T1
+// asserts that activity citations use the numeric raw entry IDs required by
+// ValidateActivityCitations.
+func TestConformanceAssessmentSchema_RejectsNonNumericActivityEntryID_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "Implemented",
+      "citations": [
+        {"activity_entry_id": "index:0"}
+      ]
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
 // TestReviewBundleSchema_AllowsEmptyDefinitionOfDone_REQ_TOPTIER_S2_T1 asserts
 // that the review-bundle schema does not require definition_of_done to be
 // non-empty, matching the CLI which never enforces that (ReviewBundle.Valid()

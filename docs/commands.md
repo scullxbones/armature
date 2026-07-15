@@ -195,7 +195,7 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ## decompose-apply
 
-Apply a decomposition plan to the issue graph.
+Apply a [decomposition plan](schemas/plan.schema.json) to the issue graph.
 
 **Synopsis:**
 `arm decompose-apply [flags]`
@@ -215,7 +215,7 @@ arm decompose-apply --plan plan.json
 ```
 
 **Example Plan JSON (`--example` output):**
-```json
+```json artifact_type=plan
 {
   "version": 1,
   "title": "Example Decomposition Plan",
@@ -559,7 +559,7 @@ Render assembled context for an issue.
 
 ## review prepare
 
-Create a semantic review bundle for an issue from its issue contract and delivery diff.
+Create a semantic [review bundle](schemas/review-bundle.schema.json) for an issue from its issue contract and delivery diff.
 
 **Synopsis:**
 `arm review prepare [flags]`
@@ -582,7 +582,7 @@ arm review prepare --issue TASK-001 --base abc123 --head def456
 
 ## review record
 
-Record a semantic conformance assessment for a completed task.
+Record a semantic [conformance assessment](schemas/conformance-assessment.schema.json) for a completed task.
 
 **Synopsis:**
 `arm review record [flags]`
