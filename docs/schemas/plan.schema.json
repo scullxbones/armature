@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Armature Plan Schema",
+  "description": "Schema for Armature decomposition plan files (arm decompose-apply input)",
+  "type": "object",
+  "required": ["version", "title", "issues"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Plan schema version (currently 1)",
+      "enum": [1]
+    },
+    "title": {
+      "type": "string",
+      "description": "Title of the plan",
+      "minLength": 1
+    },
+    "issues": {
+      "type": "array",
+      "description": "List of issues to be created or modified by this plan",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "type", "scope", "priority", "dod", "parent", "blocked_by", "notes", "acceptance"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Issue identifier (e.g., FEATURE-S1-T1 or a UUID)",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Issue title",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "description": "Issue type",
+            "enum": ["epic", "story", "task"]
+          },
+          "scope": {
+            "type": "string",
+            "description": "Scope of the issue (file paths, modules, or areas affected)"
+          },
+          "context_files": {
+            "type": "array",
+            "description": "Additional context files relevant to this issue",
+            "items": {
+              "type": "string"
+            }
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority level",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "dod": {
+            "type": "string",
+            "description": "Definition of Done for this issue",
+            "minLength": 1
+          },
+          "parent": {
+            "type": "string",
+            "description": "Parent issue ID (empty string if root)"
+          },
+          "blocked_by": {
+            "type": "array",
+            "description": "List of issue IDs that block this issue",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "description": "Additional notes for this issue",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance": {
+            "description": "Acceptance criteria (can be a string array or object)"
+          }
+        }
+      },
+      "minItems": 1
+    }
+  }
+}

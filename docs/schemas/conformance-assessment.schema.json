@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Armature Conformance Assessment Schema",
+  "description": "Schema for semantic review results (armature-reviewer skill output, arm review record input)",
+  "type": "object",
+  "required": ["schema_version", "bundle_id", "results", "contract_fingerprint", "delivery_fingerprint"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "Assessment schema version (currently 1)",
+      "enum": [1]
+    },
+    "bundle_id": {
+      "type": "string",
+      "description": "Bundle ID from the prepared review bundle (must match)",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "results": {
+      "type": "array",
+      "description": "Assessment results for each criterion",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "rationale"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Criterion identifier (e.g., 'definition_of_done', 'acceptance[0]')",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "Reviewer's assessment of criterion fulfillment",
+            "enum": ["satisfied", "partially_satisfied", "not_satisfied", "indeterminate"]
+          },
+          "citations": {
+            "type": "array",
+            "description": "Structured evidence from the delivery (diff or activity citations)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "File path within the delivery range (for diff citations)"
+                },
+                "line": {
+                  "type": "integer",
+                  "description": "Line number (optional, for precision in diff citations)",
+                  "minimum": 1
+                },
+                "column": {
+                  "type": "integer",
+                  "description": "Column number (optional, for precision in diff citations)",
+                  "minimum": 1
+                },
+                "activity_entry_id": {
+                  "type": "string",
+                  "description": "Entry ID from activity log (mutually exclusive with path)"
+                },
+                "activity_entry_details": {
+                  "type": "string",
+                  "description": "Pre-rendered activity entry information (populated at record time)"
+                }
+              }
+            }
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Concise explanation of the assessment",
+            "minLength": 1
+          },
+          "missing_evidence": {
+            "type": "string",
+            "description": "Explicit statement of missing evidence when citations are absent (required for non-satisfied criteria without citations)"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "contract_fingerprint": {
+      "type": "string",
+      "description": "SHA-256 fingerprint of the contract (must match bundle)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "delivery_fingerprint": {
+      "type": "string",
+      "description": "SHA-256 fingerprint of the delivery metadata (must match bundle)",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}
