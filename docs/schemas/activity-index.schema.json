@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Armature Activity Index Schema",
+  "description": "Schema for activity log summaries (armature-activity-indexer skill output, finding aid for reviewer)",
+  "type": "object",
+  "required": ["schema_version", "log_path", "log_digest", "entry_count", "delivery_head_count", "earlier_count", "entries"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "Activity index schema version (currently 1)",
+      "enum": [1]
+    },
+    "log_path": {
+      "type": "string",
+      "description": "Path to the armature-activity.log file"
+    },
+    "log_digest": {
+      "type": "string",
+      "description": "SHA-256 digest of the activity log file content",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "entry_count": {
+      "type": "integer",
+      "description": "Total number of entries in the activity log",
+      "minimum": 0
+    },
+    "delivery_head_count": {
+      "type": "integer",
+      "description": "Number of entries at the delivery HEAD commit",
+      "minimum": 0
+    },
+    "earlier_count": {
+      "type": "integer",
+      "description": "Number of entries at commits before the delivery HEAD",
+      "minimum": 0
+    },
+    "entries": {
+      "type": "array",
+      "description": "Ordered list of classified activity entries",
+      "items": {
+        "type": "object",
+        "required": ["id", "command", "exit_status", "head_anchor", "category", "log_pointer"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Entry ID: 0-based physical line number in the activity log (as string, not zero-padded)"
+          },
+          "command": {
+            "type": "string",
+            "description": "First 100 characters of the executed command",
+            "minLength": 1
+          },
+          "exit_status": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "description": "Exit code (0 = success, non-zero = failure)",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "description": "String 'unknown' when exit code is not available",
+                "enum": ["unknown"]
+              }
+            ]
+          },
+          "head_anchor": {
+            "type": "boolean",
+            "description": "True if this entry's head_sha equals the delivery HEAD commit SHA"
+          },
+          "category": {
+            "type": "string",
+            "description": "Classification of the command",
+            "enum": ["build", "test", "lint", "run", "other"]
+          },
+          "log_pointer": {
+            "type": "string",
+            "description": "Reference to locate the entry in the raw log (same as id)"
+          }
+        }
+      },
+      "minItems": 0
+    }
+  }
+}

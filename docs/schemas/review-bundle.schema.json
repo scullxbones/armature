@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Armature Review Bundle Schema",
+  "description": "Schema for Armature semantic review bundles (arm review prepare output)",
+  "type": "object",
+  "required": ["schema_version", "bundle_id", "issue", "contract", "delivery", "fingerprints"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "Review bundle schema version (currently 1)",
+      "enum": [1]
+    },
+    "bundle_id": {
+      "type": "string",
+      "description": "Canonical bundle identifier (format: sha256:...)",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "issue": {
+      "type": "object",
+      "description": "Information about the issue being reviewed",
+      "required": ["id", "type", "title", "outcome"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Issue identifier",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "description": "Issue type",
+          "enum": ["epic", "story", "task"]
+        },
+        "title": {
+          "type": "string",
+          "description": "Issue title",
+          "minLength": 1
+        },
+        "outcome": {
+          "type": "string",
+          "description": "Recorded delivery outcome"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "description": "Contractual requirements for the delivery",
+      "required": ["definition_of_done", "acceptance"],
+      "properties": {
+        "definition_of_done": {
+          "type": "string",
+          "description": "Primary Definition of Done criterion",
+          "minLength": 1
+        },
+        "scope": {
+          "type": "array",
+          "description": "List of files or areas in scope for the delivery",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptance": {
+          "type": "array",
+          "description": "Ordered list of acceptance criteria",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "description": "Metadata about the completed delivery",
+      "required": ["base_sha", "head_sha", "changed_files"],
+      "properties": {
+        "base_sha": {
+          "type": "string",
+          "description": "Parent commit SHA",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "head_sha": {
+          "type": "string",
+          "description": "Delivery commit SHA",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "changed_files": {
+          "type": "array",
+          "description": "Files modified in the delivery range",
+          "items": {
+            "type": "string"
+          }
+        },
+        "diff": {
+          "type": "string",
+          "description": "Unified diff for the delivery range (may be omitted for large diffs)"
+        }
+      }
+    },
+    "fingerprints": {
+      "type": "object",
+      "description": "Canonical fingerprints for reproducibility",
+      "required": ["contract", "delivery"],
+      "properties": {
+        "contract": {
+          "type": "string",
+          "description": "SHA-256 fingerprint of the contract",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "delivery": {
+          "type": "string",
+          "description": "SHA-256 fingerprint of the delivery metadata",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "description": "Execution evidence from worktree activity log (optional)",
+      "required": ["digest", "entry_count", "log_path"],
+      "properties": {
+        "digest": {
+          "type": "string",
+          "description": "SHA-256 fingerprint of the activity log file content",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "entry_count": {
+          "type": "integer",
+          "description": "Total number of entries in the activity log",
+          "minimum": 0
+        },
+        "delivery_head_count": {
+          "type": "integer",
+          "description": "Number of entries at the delivery HEAD commit",
+          "minimum": 0
+        },
+        "earlier_count": {
+          "type": "integer",
+          "description": "Number of entries at commits before the delivery HEAD",
+          "minimum": 0
+        },
+        "log_path": {
+          "type": "string",
+          "description": "Absolute path to the activity log file"
+        }
+      }
+    }
+  }
+}

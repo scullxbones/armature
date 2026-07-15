@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills deploy-skills trace-report skill-lint census-drift-check test-census-drift-check
+.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check
 
 # Variables
 GO ?= go
@@ -12,23 +12,24 @@ INSTALL_DIR ?= $(HOME)/.local/bin
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check      - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, census-drift-check, build"
-	@echo "  make test       - Run all tests"
-	@echo "  make coverage   - Generate coverage report (coverage.html)"
-	@echo "  make coverage-check - Check coverage meets 80% threshold (fails build if not)"
-	@echo "  make lint       - Run golangci-lint and ADR doc lint"
-	@echo "  make mutate     - Run mutation testing on core packages"
-	@echo "  make validate-skills - Validate embedded skill source"
-	@echo "  make census-drift-check - Verify code surfaces match docs/design/surface-census.md"
+	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build"
+	@echo "  make test                - Run all tests"
+	@echo "  make coverage            - Generate coverage report (coverage.html)"
+	@echo "  make coverage-check      - Check coverage meets 80% threshold (fails build if not)"
+	@echo "  make lint                - Run golangci-lint and ADR doc lint"
+	@echo "  make mutate              - Run mutation testing on core packages"
+	@echo "  make validate-skills     - Validate embedded skill source"
+	@echo "  make validate-doc-examples - Validate JSON examples in docs/skills against schemas"
+	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
-	@echo "  make trace-report - Scan test files for spec traceability patterns"
-	@echo "  make clean      - Remove build artifacts and test outputs"
-	@echo "  make build      - Build CLI binary to ./bin/arm"
-	@echo "  make skill      - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
-	@echo "  make dist-skills - Package skills for distribution (no binaries) into dist/"
-	@echo "  make install    - Build binary and install to ~/.local/bin/arm (adds to PATH)"
+	@echo "  make trace-report        - Scan test files for spec traceability patterns"
+	@echo "  make clean               - Remove build artifacts and test outputs"
+	@echo "  make build               - Build CLI binary to ./bin/arm"
+	@echo "  make skill               - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
+	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
+	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build test coverage-check mutate validate-skills census-drift-check test-census-drift-check
+check: lint build test coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
@@ -97,6 +98,9 @@ validate-skills: skill-lint
 		exit 1; \
 	fi
 	@echo "Skills validated: no 'make install' references"
+
+validate-doc-examples:
+	@$(PYTHON) scripts/validate_doc_examples.py
 
 skill-lint: build
 	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/skill_lint.py .
