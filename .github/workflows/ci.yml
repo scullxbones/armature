@@ -41,14 +41,6 @@ jobs:
       - name: Validate skills
         run: make validate-skills
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install jsonschema
-        run: pip install jsonschema
-
       - name: Validate doc examples
         run: make validate-doc-examples
 
