@@ -260,6 +260,28 @@ func TestPlanSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
 	validateAgainstSchema(t, "plan.schema.json", planJSON)
 }
 
+func TestPlanAndReviewBundleSchemasAcceptAllIssueTypes_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	for _, issueType := range []string{"feature", "bug"} {
+		t.Run(issueType, func(t *testing.T) {
+			t.Parallel()
+
+			planJSON := `{"version":1,"title":"Issue type coverage","issues":[{"id":"TYPE-1","title":"Accepted type","type":"` + issueType + `"}]}`
+			validateAgainstSchema(t, "plan.schema.json", planJSON)
+
+			bundleJSON := `{"schema_version":1,"bundle_id":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",` +
+				`"issue":{"id":"TYPE-1","type":"` + issueType + `","title":"Accepted type","outcome":"Implemented"},` +
+				`"contract":{"definition_of_done":"Done","acceptance":[]},` +
+				`"delivery":{"base_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+				`"head_sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","changed_files":[]},` +
+				`"fingerprints":{"contract":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+				`"delivery":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}`
+			validateAgainstSchema(t, "review-bundle.schema.json", bundleJSON)
+		})
+	}
+}
+
 // TestPlanSchema_InvalidExample_REQ_TOPTIER_S2_T1 asserts that the plan
 // schema rejects an issue that is missing the required "type" field, proving
 // the schema's required-fields constraint is actually enforced.

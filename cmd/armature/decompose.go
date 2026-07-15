@@ -103,8 +103,11 @@ plan, or --schema to view the JSON schema.`,
 									"acceptance": map[string]any{
 										"type":        "array",
 										"description": "Array of acceptance criteria for this issue (passed to issue state as-is)",
-										"items":       map[string]any{"type": "string"},
-										"nullable":    true,
+										"items": map[string]any{"oneOf": []map[string]any{
+											{"type": "string"},
+											{"type": "object"},
+										}},
+										"nullable": true,
 									},
 									"priority": map[string]any{
 										"type":        "string",
