@@ -522,6 +522,15 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
 	preMigrationSHA := ""
 
+	// A repoPath/.armature that is already a git worktree (its ".git" is a
+	// worktree-pointer file, not a directory) is the collapsed-layout ops
+	// worktree, not legacy flat data — treating it as legacy would rename
+	// the real, current ops history away. Same hazard the .arm-worktree
+	// pre-flight check above guards against, for the collapsed case.
+	if gitMarker, err := os.Stat(filepath.Join(legacyArmatureDir, ".git")); err == nil && !gitMarker.IsDir() {
+		return false, "", "", false, nil
+	}
+
 	// If the legacy layout doesn't exist, no migration needed
 	info, err := os.Stat(legacyOpsDir)
 	if err != nil {
@@ -659,13 +668,12 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 	armWorktreePath := filepath.Join(repoPath, ".arm")
 	innerArmaturePath := filepath.Join(armWorktreePath, config.StateDirName)
 
-	// Check if .arm worktree exists
+	// Check if .arm worktree exists. Any error here (missing, or .arm exists
+	// but isn't a directory containing a worktree pointer) means there is no
+	// dual-branch layout to migrate — leave diagnosing a malformed .arm to
+	// whatever step tries to use it next (e.g. AddWorktree), not this check.
 	if _, err := os.Stat(filepath.Join(armWorktreePath, ".git")); err != nil {
-		if os.IsNotExist(err) {
-			// No .arm worktree exists, no migration needed
-			return false, "", nil
-		}
-		return false, "", fmt.Errorf("check for .arm worktree: %w", err)
+		return false, "", nil
 	}
 
 	// Check if the inner .armature/ directory exists within .arm/
@@ -729,7 +737,7 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 	legacyInnerArmaturePath := filepath.Join(backupDir, config.StateDirName)
 	if _, err := os.Stat(legacyInnerArmaturePath); err == nil {
 		// Legacy inner .armature/ exists in backup, merge its contents
-		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, newWorktreePath)
+		skippedCount, err := copyLegacyOpsToNewWorktree(legacyInnerArmaturePath, newWorktreePath)
 		if err != nil {
 			// Rollback: remove new worktree and restore old one
 			if removeErr := gitClient.RemoveWorktree(newWorktreePath); removeErr != nil {
@@ -755,6 +763,35 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		}
 		if skippedCount > 0 {
 			// Note: we'll surface this to the user in runRepoSetup
+		}
+
+		// config.json lives directly under the legacy inner .armature/, not one
+		// of the legacyDirs subdirectories copyLegacyOpsToNewWorktree handles;
+		// copy it too so migration doesn't silently reset the user's config.
+		legacyConfigPath := filepath.Join(legacyInnerArmaturePath, "config.json")
+		if _, err := os.Stat(legacyConfigPath); err == nil {
+			if _, err := copyRecursive(legacyConfigPath, filepath.Join(newWorktreePath, "config.json")); err != nil {
+				if removeErr := gitClient.RemoveWorktree(newWorktreePath); removeErr != nil {
+					return false, "", fmt.Errorf(
+						"copy legacy config.json from backup: %w; remove failed .armature worktree: %w (backup at %s)",
+						err, removeErr, backupDir,
+					)
+				}
+				restoreErr := os.Rename(backupDir, armWorktreePath)
+				if restoreErr != nil {
+					return false, "", fmt.Errorf(
+						"copy legacy config.json from backup: %w; restore .arm from backup: %w (backup at %s)",
+						err, restoreErr, backupDir,
+					)
+				}
+				if reregisterErr := gitClient.AddWorktree("_armature", armWorktreePath); reregisterErr != nil {
+					return false, "", fmt.Errorf(
+						"copy legacy config.json from backup: %w; restore .arm from backup: %w (backup at %s); re-register .arm worktree: %w",
+						err, restoreErr, backupDir, reregisterErr,
+					)
+				}
+				return false, "", fmt.Errorf("copy legacy config.json from backup: %w (migration rolled back)", err)
+			}
 		}
 	}
 
@@ -809,6 +846,9 @@ func copyLegacyOpsToNewWorktree(backupDir string, newIssuesDir string) (int, err
 		}
 
 		newDir := filepath.Join(newIssuesDir, dirName)
+		if err := os.MkdirAll(newDir, 0o750); err != nil {
+			return skippedCount, fmt.Errorf("create %s directory: %w", dirName, err)
+		}
 		for _, entry := range entries {
 			srcPath := filepath.Join(legacyDir, entry.Name())
 			dstPath := filepath.Join(newDir, entry.Name())
@@ -1112,38 +1152,56 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	var worktreePath string
 	var isCollapsedLayout bool
 
-	if dualMigrated {
+	// alreadyCollapsedWorktreePath returns whether repoPath/StateDirName is
+	// itself the _armature ops worktree (its ".git" is a worktree-pointer file,
+	// not a directory). This distinguishes an already-migrated repo (bootstrap
+	// must keep using the collapsed path) from a repo that has never had a
+	// worktree there (fresh init still defaults to the .arm/ layout below).
+	alreadyCollapsed := false
+	if gitMarker, statErr := os.Stat(filepath.Join(repoPath, config.StateDirName, ".git")); statErr == nil && !gitMarker.IsDir() {
+		alreadyCollapsed = true
+	}
+
+	switch {
+	case dualMigrated, alreadyCollapsed:
 		worktreePath = filepath.Join(repoPath, config.StateDirName) // .armature/
 		isCollapsedLayout = true
-	} else {
+	default:
 		worktreePath = filepath.Join(repoPath, ".arm")
 		isCollapsedLayout = false
 	}
 
 	// Create worktree if not already exists (idempotent)
+	worktreeLabel := filepath.Base(worktreePath)
 	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
 		if migrated {
 			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
 				return RepoSetupResult{}, fmt.Errorf(
-					"add worktree at %s: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
-					worktreePath, err, rbErr, backupDir,
+					"add %s worktree: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
+					worktreeLabel, err, rbErr, backupDir,
 				)
 			}
 			if migrationCommitted && preMigrationSHA != "" {
 				// The reset restored tracked files, but the backup is the only copy of
 				// any legacy files that were untracked at migration time.
-				return RepoSetupResult{}, fmt.Errorf("add worktree at %s: %w (migration rolled back; backup left at %s)", worktreePath, err, backupDir)
+				return RepoSetupResult{}, fmt.Errorf("add %s worktree: %w (migration rolled back; backup left at %s)", worktreeLabel, err, backupDir)
 			}
 		}
-		return RepoSetupResult{}, fmt.Errorf("add worktree at %s: %w", worktreePath, err)
+		return RepoSetupResult{}, fmt.Errorf("add %s worktree: %w", worktreeLabel, err)
 	}
 
-	// Exclude worktree from git tracking
-	// For collapsed layout, exclude .armature/; for dual-branch, exclude .arm/
-	if !isCollapsedLayout {
-		// Exclude .arm/ from git tracking (dual-branch layout only)
-		if err := excludeArmWorktreeFromGit(repoPath); err != nil {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
+	// Exclude worktree from git tracking.
+	// The dualMigrated path already updated the exclude file (.arm/ -> .armature/)
+	// above; this covers the fresh-init and pre-existing-.arm cases.
+	if !dualMigrated {
+		if isCollapsedLayout {
+			if err := updateGitExclude(repoPath, config.StateDirName+"/", ""); err != nil {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude %s/ from git tracking: %v\n", config.StateDirName, err)
+			}
+		} else {
+			if err := excludeArmWorktreeFromGit(repoPath); err != nil {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
+			}
 		}
 	}
 
@@ -1238,28 +1296,37 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 		// Commit the migrated ops files and config to the _armature branch so they're preserved for other clones.
 		// Use a gitClient scoped to the worktree to commit within that working tree.
-		// Scoped to .armature/* so it structurally cannot sweep in unrelated staged changes.
 		worktreeGitClient := adapters.New(worktreePath)
+
+		// In collapsed layout, worktreePath == issuesDir, so paths are relative
+		// to the worktree root directly. In dual-branch layout, issuesDir is the
+		// inner config.StateDirName subdirectory of worktreePath, so paths need
+		// that prefix.
+		stagePrefix := ""
+		commitScope := "."
+		if !isCollapsedLayout {
+			stagePrefix = config.StateDirName + "/"
+			commitScope = config.StateDirName
+		}
 
 		// Stage the copied ops/templates/hooks/review files and config
 		filesToStage := []string{
-			config.StateDirName + "/ops",
-			config.StateDirName + "/templates",
-			config.StateDirName + "/hooks",
-			config.StateDirName + "/review",
+			stagePrefix + "ops",
+			stagePrefix + "templates",
+			stagePrefix + "hooks",
+			stagePrefix + "review",
 		}
 		if configToWrite != nil {
-			filesToStage = append(filesToStage, config.StateDirName+"/config.json")
+			filesToStage = append(filesToStage, stagePrefix+"config.json")
 		}
 		if err := worktreeGitClient.AddPaths(filesToStage); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("stage migrated data (legacy data preserved at %s): %w", backupDir, err)
 		}
 
-		// Commit the staged files (scoped to .armature paths)
-		// Use ".armature" as the scoped path to cover both ops and config.json
+		// Commit the staged files (scoped to cover both ops and config.json)
 		if err := worktreeGitClient.CommitPathsNoVerify(
 			"chore: commit migrated legacy ops and config from single-branch layout",
-			config.StateDirName,
+			commitScope,
 		); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("commit migrated data to _armature branch (legacy data preserved at %s): %w", backupDir, err)
 		}
@@ -1328,15 +1395,24 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		// config.json committed, or it's silently unpreserved outside this worktree.
 		worktreeGitClient := adapters.New(worktreePath)
 
+		// In collapsed layout, worktreePath == issuesDir, so config.json lives
+		// at the worktree root. In dual-branch layout it's nested a level down.
+		configRelPath := "config.json"
+		commitScope := "."
+		if !isCollapsedLayout {
+			configRelPath = config.StateDirName + "/config.json"
+			commitScope = config.StateDirName
+		}
+
 		// Stage the config file
-		if err := worktreeGitClient.AddPaths([]string{config.StateDirName + "/config.json"}); err != nil {
+		if err := worktreeGitClient.AddPaths([]string{configRelPath}); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("stage config: %w", err)
 		}
 
 		// Commit the config to _armature branch
 		if err := worktreeGitClient.CommitPathsNoVerify(
 			"chore: init armature config",
-			config.StateDirName,
+			commitScope,
 		); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("commit config to _armature branch: %w", err)
 		}
