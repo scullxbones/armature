@@ -18,11 +18,11 @@ type ContextParams struct {
 }
 
 type ContextOutput struct {
-	PromptTemplate string                 `json:"prompt_template"`
-	Sources        []SourceContent        `json:"sources"`
-	ExistingDAG    []interface{}          `json:"existing_dag,omitempty"`
-	Constraints    map[string]interface{} `json:"constraints"`
-	PlanSchema     map[string]interface{} `json:"plan_schema"`
+	PromptTemplate string          `json:"prompt_template"`
+	Sources        []SourceContent `json:"sources"`
+	ExistingDAG    []any           `json:"existing_dag,omitempty"`
+	Constraints    map[string]any  `json:"constraints"`
+	PlanSchema     map[string]any  `json:"plan_schema"`
 }
 
 type SourceContent struct {
@@ -72,8 +72,11 @@ func buildSourcesBlock(srcs []SourceContent) string {
 	}
 	var sb strings.Builder
 	for _, s := range srcs {
-		sb.WriteString("--- Source: " + s.ID + " ---\n")
-		sb.WriteString(s.Content + "\n")
+		sb.WriteString("--- Source: ")
+		sb.WriteString(s.ID)
+		sb.WriteString(" ---\n")
+		sb.WriteString(s.Content)
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
@@ -103,8 +106,8 @@ func defaultTemplate() string {
 	return "{{SOURCES}}\n\n{{EXISTING_DAG}}\n\n{{CONSTRAINTS}}\n\n{{PLAN_SCHEMA}}"
 }
 
-func defaultConstraints() map[string]interface{} {
-	return map[string]interface{}{
+func defaultConstraints() map[string]any {
+	return map[string]any{
 		"node_id_format":   "EPIC|STORY|TSK-N",
 		"max_tasks_per_pr": 1,
 		"scope_required":   true,
@@ -116,8 +119,8 @@ func PlanContext(plan *Plan) string {
 	return fmt.Sprintf("Plan: %s (%d issues)", plan.Title, len(plan.Issues))
 }
 
-func defaultPlanSchema() map[string]interface{} {
-	return map[string]interface{}{
+func defaultPlanSchema() map[string]any {
+	return map[string]any{
 		"version": 1,
 		"fields": map[string]string{
 			"id":         "string",
