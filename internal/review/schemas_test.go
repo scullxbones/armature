@@ -42,12 +42,12 @@ func TestArtifactSchemas_REQ_TOPTIER_S2_T1(t *testing.T) {
 			data, err := os.ReadFile(schemaPath)
 			require.NoError(t, err, "should be able to read schema file")
 
-			var schemaObj interface{}
+			var schemaObj any
 			err = json.Unmarshal(data, &schemaObj)
 			require.NoError(t, err, "schema file should contain valid JSON")
 
 			// Verify it's an object with required schema-level fields
-			schema, ok := schemaObj.(map[string]interface{})
+			schema, ok := schemaObj.(map[string]any)
 			require.True(t, ok, "schema should be a JSON object")
 
 			// Check for required schema fields
@@ -74,7 +74,7 @@ func findRepoRoot(t *testing.T) string {
 	require.NoError(t, err, "should be able to get working directory")
 
 	// Try up to 10 levels up
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		schemasDir := filepath.Join(cwd, "docs", "schemas")
 		if _, err := os.Stat(schemasDir); err == nil {
 			return cwd
@@ -103,7 +103,7 @@ func validateAgainstSchema(t *testing.T, schemaFile string, docJSON string) {
 	sch, err := compiler.Compile(schemaFile)
 	require.NoError(t, err, "schema should compile: %s", schemaFile)
 
-	var doc interface{}
+	var doc any
 	require.NoError(t, json.Unmarshal([]byte(docJSON), &doc), "example JSON should be valid")
 
 	err = sch.Validate(doc)
@@ -128,7 +128,7 @@ func validateSchemaRejects(t *testing.T, schemaFile string, docJSON string) {
 	sch, err := compiler.Compile(schemaFile)
 	require.NoError(t, err, "schema should compile: %s", schemaFile)
 
-	var doc interface{}
+	var doc any
 	require.NoError(t, json.Unmarshal([]byte(docJSON), &doc), "example JSON should be valid JSON")
 
 	err = sch.Validate(doc)
