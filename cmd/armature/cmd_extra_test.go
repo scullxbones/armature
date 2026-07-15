@@ -1385,6 +1385,13 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 		map[string]any{"type": "string"},
 		map[string]any{"type": "object"},
 	}, acceptanceOneOf, "schema must preserve string and structured acceptance criteria")
+
+	for _, field := range []string{"context_files", "acceptance", "blocked_by", "notes"} {
+		fieldSchema, ok := issueProperties[field].(map[string]any)
+		require.True(t, ok, "%s must be an object", field)
+		assert.Equal(t, []any{"array", "null"}, fieldSchema["type"], "%s must allow null", field)
+		assert.NotContains(t, fieldSchema, "nullable", "%s must use standard JSON Schema null types", field)
+	}
 }
 
 // TestReadyParentFilter verifies that trls ready --parent ISSUE-ID returns only

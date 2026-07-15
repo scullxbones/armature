@@ -42,8 +42,8 @@
             "description": "Scope of the issue (file paths, modules, or areas affected)"
           },
           "context_files": {
-            "type": "array",
-            "description": "Additional context files relevant to this issue",
+            "type": ["array", "null"],
+            "description": "Additional context files relevant to this issue (may be null)",
             "items": {
               "type": "string"
             }
@@ -68,15 +68,15 @@
             }
           },
           "notes": {
-            "type": "array",
-            "description": "Additional notes for this issue",
+            "type": ["array", "null"],
+            "description": "Additional notes for this issue (may be null)",
             "items": {
               "type": "string"
             }
           },
           "acceptance": {
-            "description": "Acceptance criteria (can be a string array or object)",
-            "type": "array",
+            "description": "Acceptance criteria (can be a string array or object, or null)",
+            "type": ["array", "null"],
             "items": {
               "oneOf": [
                 {"type": "string"},

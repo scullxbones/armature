@@ -196,6 +196,27 @@ func TestConformanceAssessmentSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T
 	validateAgainstSchema(t, "conformance-assessment.schema.json", assessmentJSON)
 }
 
+// TestConformanceAssessmentSchema_AllowsPathLevelCitation_REQ_TOPTIER_S2_T1
+// verifies that line zero is accepted as the documented path-level citation.
+func TestConformanceAssessmentSchema_AllowsPathLevelCitation_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [{
+    "id": "definition_of_done",
+    "status": "satisfied",
+    "rationale": "Path-level evidence is sufficient",
+    "citations": [{"path": "src/main.go", "line": 0}]
+  }],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateAgainstSchema(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
 // TestActivityIndexSchema_ValidExample_REQ_TOPTIER_S2_T1 validates that the
 // activity-index schema accepts a valid index example.
 func TestActivityIndexSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
@@ -253,6 +274,31 @@ func TestPlanSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
       "blocked_by": [],
       "notes": [],
       "acceptance": ["Tests pass", "Code reviewed"]
+    }
+  ]
+}`
+
+	validateAgainstSchema(t, "plan.schema.json", planJSON)
+}
+
+// TestPlanSchema_AllowsNullOptionalLists_REQ_TOPTIER_S2_T1 verifies that the
+// nullable list fields emitted by the planner validate when absent data is
+// encoded as null.
+func TestPlanSchema_AllowsNullOptionalLists_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	planJSON := `{
+  "version": 1,
+  "title": "Feature decomposition",
+  "issues": [
+    {
+      "id": "FEATURE-S1-T1",
+      "title": "Implement core logic",
+      "type": "task",
+      "context_files": null,
+      "blocked_by": null,
+      "notes": null,
+      "acceptance": null
     }
   ]
 }`
