@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check
+.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples
 
 # Variables
 GO ?= go
@@ -18,7 +18,8 @@ help:
 	@echo "  make coverage-check      - Check coverage meets 80% threshold (fails build if not)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
-	@echo "  make validate-skills     - Validate embedded skill source"
+	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
+	@echo "  make validate-skills     - Validate embedded skill source (runs embed-examples check)"
 	@echo "  make validate-doc-examples - Validate JSON examples in docs/skills against schemas"
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
@@ -92,12 +93,15 @@ mutate:
 	fi; \
 	exit $$status
 
-validate-skills: skill-lint
+embed-examples: build
+	@$(PYTHON) scripts/embed_examples.py check
+
+validate-skills: skill-lint embed-examples
 	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md 2>/dev/null; then \
 		echo "FAIL: 'make install' found in skill bodies — remove it or replace with: 'If arm is not found, stop and resolve this before proceeding'"; \
 		exit 1; \
 	fi
-	@echo "Skills validated: no 'make install' references"
+	@echo "Skills validated: no 'make install' references and no example drift"
 
 validate-doc-examples:
 	@$(PYTHON) scripts/validate_doc_examples.py

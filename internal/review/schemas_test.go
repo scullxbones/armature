@@ -30,6 +30,7 @@ func TestArtifactSchemas_REQ_TOPTIER_S2_T1(t *testing.T) {
 
 	for _, schemaFile := range schemaFiles {
 		t.Run(schemaFile, func(t *testing.T) {
+			t.Parallel()
 			schemaPath := filepath.Join(schemasDir, schemaFile)
 
 			// Verify the file exists
