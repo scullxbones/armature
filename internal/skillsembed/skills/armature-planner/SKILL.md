@@ -238,7 +238,7 @@ if not needed.
       "id": "TASK-001",
       "title": "Implement login endpoint",
       "type": "task",
-      "scope": "",
+      "scope": "internal/auth/login.go (new)",
       "context_files": [
         "docs/auth-architecture.md"
       ],
@@ -249,7 +249,7 @@ if not needed.
       "notes": [],
       "acceptance": [
         "Implementation complete per dod",
-        "Test_TASK_001 passes",
+        "TestImplementLoginEndpoint_REQ_TASK_001 passes",
         "make check green"
       ]
     },
@@ -257,7 +257,7 @@ if not needed.
       "id": "TASK-002",
       "title": "Write login integration tests",
       "type": "task",
-      "scope": "",
+      "scope": "internal/auth/login_test.go (new)",
       "priority": "medium",
       "dod": "Integration tests cover happy path and error cases",
       "parent": "STORY-001",
@@ -267,7 +267,7 @@ if not needed.
       "notes": [],
       "acceptance": [
         "Implementation complete per dod",
-        "Test_TASK_002 passes",
+        "TestWriteLoginIntegrationTests_REQ_TASK_002 passes",
         "make check green"
       ]
     }

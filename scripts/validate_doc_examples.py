@@ -2,9 +2,9 @@
 """
 Validate JSON examples in docs and skills against their schemas.
 
-Scans all Markdown files in docs/ and .claude/skills/ for fenced JSON code blocks
-that declare an artifact type. Validates each example against the corresponding
-JSON Schema under docs/schemas/.
+Scans canonical Markdown sources in docs/ and internal/skillsembed/skills/ for
+fenced JSON code blocks that declare an artifact type. Validates each example
+against the corresponding JSON Schema under docs/schemas/.
 
 Usage:
     python3 scripts/validate_doc_examples.py [--repo /path/to/repo]
@@ -53,14 +53,12 @@ def find_json_examples(repo_root):
     """
     examples = []
 
-    # Directories to scan. internal/skillsembed/skills is the real source of
-    # truth for skill content (.claude/skills and .gemini/skills are gitignored
-    # deploy targets that only exist after `arm bootstrap`/`make deploy-skills`).
+    # Scan only tracked canonical sources. The .claude/skills, .gemini/skills,
+    # and .codex/skills directories are gitignored deployment targets and may
+    # contain stale copies of these skills.
     scan_dirs = [
         repo_root / "docs",
         repo_root / "internal" / "skillsembed" / "skills",
-        repo_root / ".claude" / "skills",
-        repo_root / ".gemini" / "skills",
     ]
 
     for scan_dir in scan_dirs:

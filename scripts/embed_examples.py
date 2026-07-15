@@ -73,11 +73,21 @@ def add_acceptance_fields(example):
             ]
         else:
             # Tasks need test-based acceptance criteria
-            # Use story parent to construct REQ pattern (e.g., TASK-001 -> REQ_TASK_001)
+            # Keep the generated plan valid while clearly marking its example paths
+            # as files the adopter will add to their own repository.
+            issue["scope"] = (
+                "internal/auth/login_test.go (new)"
+                if "test" in issue.get("title", "").lower()
+                else "internal/auth/login.go (new)"
+            )
+            issue.setdefault("priority", "medium")
+            issue.setdefault("dod", "Implement the task and verify its acceptance criteria")
+
+            # Use the task ID to construct the required traceability suffix.
             req_id = issue_id.replace("-", "_")
             issue["acceptance"] = [
                 "Implementation complete per dod",
-                f"Test_{req_id} passes",
+                f"Test{issue.get('title', '').title().replace(' ', '')}_REQ_{req_id} passes",
                 "make check green",
             ]
 
