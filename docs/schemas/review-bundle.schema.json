@@ -59,12 +59,11 @@
           }
         },
         "acceptance": {
-          "type": "array",
-          "description": "Ordered list of acceptance criteria",
+          "description": "Ordered list of acceptance criteria (may be null or empty when an issue legitimately has none)",
+          "type": ["array", "null"],
           "items": {
             "type": "string"
-          },
-          "minItems": 1
+          }
         }
       }
     },

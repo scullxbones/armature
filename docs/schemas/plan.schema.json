@@ -20,7 +20,7 @@
       "description": "List of issues to be created or modified by this plan",
       "items": {
         "type": "object",
-        "required": ["id", "title", "type", "scope", "priority", "dod", "parent", "blocked_by", "notes", "acceptance"],
+        "required": ["id", "title", "type", "scope", "priority", "dod", "parent", "blocked_by", "notes"],
         "properties": {
           "id": {
             "type": "string",
@@ -50,21 +50,20 @@
           },
           "priority": {
             "type": "string",
-            "description": "Priority level",
-            "enum": ["low", "medium", "high", "critical"]
+            "description": "Priority level (empty string permitted; the CLI treats it as unset)",
+            "enum": ["", "low", "medium", "high", "critical"]
           },
           "dod": {
             "type": "string",
-            "description": "Definition of Done for this issue",
-            "minLength": 1
+            "description": "Definition of Done for this issue (may be empty; the CLI does not require it to be non-empty)"
           },
           "parent": {
             "type": "string",
             "description": "Parent issue ID (empty string if root)"
           },
           "blocked_by": {
-            "type": "array",
-            "description": "List of issue IDs that block this issue",
+            "description": "List of issue IDs that block this issue (may be null)",
+            "type": ["array", "null"],
             "items": {
               "type": "string"
             }
