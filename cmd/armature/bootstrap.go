@@ -518,7 +518,7 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 // or (false, "", false, error) if an error occurred.
 func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, error) {
 	// Check if .armature/ops exists in the main working tree (legacy single-branch layout)
-	legacyArmatureDir := filepath.Join(repoPath, ".armature")
+	legacyArmatureDir := filepath.Join(repoPath, config.StateDirName)
 	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
 	preMigrationSHA := ""
 
@@ -560,7 +560,7 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 
 	// Before renaming, check if .armature is tracked in git
 	gitClient := adapters.New(repoPath)
-	isTracked := gitClient.IsTracked(".armature")
+	isTracked := gitClient.IsTracked(config.StateDirName)
 	if isTracked {
 		preMigrationSHA, err = gitClient.HeadSHA()
 		if err != nil {
@@ -570,14 +570,14 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 
 	// If tracked, remove from index to avoid leaving a dirty working tree after rename
 	if isTracked {
-		_ = gitClient.RemoveFromIndex(".armature") //nolint:errcheck // path might not be tracked
+		_ = gitClient.RemoveFromIndex(config.StateDirName) //nolint:errcheck // path might not be tracked
 	}
 
 	if err := os.Rename(legacyArmatureDir, backupDir); err != nil {
 		// If the deletion was already staged, re-stage .armature so the index isn't
 		// left pointing at a removal that never happened on disk.
 		if isTracked {
-			if addErr := gitClient.AddPaths([]string{".armature"}); addErr != nil {
+			if addErr := gitClient.AddPaths([]string{config.StateDirName}); addErr != nil {
 				return false, "", preMigrationSHA, false, fmt.Errorf("backup legacy .armature directory: %w; re-stage .armature after failed rename: %w", err, addErr)
 			}
 		}
@@ -588,7 +588,7 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 	// Scoped to the .armature path so it structurally cannot sweep in unrelated staged
 	// changes; a real commit failure (not "nothing to commit") is propagated as an error.
 	if isTracked {
-		if err := gitClient.CommitPathsNoVerify("chore: migrate legacy .armature to dual-branch layout", ".armature"); err != nil {
+		if err := gitClient.CommitPathsNoVerify("chore: migrate legacy .armature to dual-branch layout", config.StateDirName); err != nil {
 			// Rollback on commit failure: restore the original .armature directory from the backup
 			// and restore the index to its original state so the migration is atomic.
 			if restoreErr := os.Rename(backupDir, legacyArmatureDir); restoreErr != nil {
@@ -601,7 +601,7 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 			}
 
 			// Re-add .armature to the index to restore the tracked state before the failed migration
-			if restoreIndexErr := gitClient.AddPaths([]string{".armature"}); restoreIndexErr != nil {
+			if restoreIndexErr := gitClient.AddPaths([]string{config.StateDirName}); restoreIndexErr != nil {
 				// Directory is restored (the critical part); still surface the index
 				// re-add failure alongside the original commit error.
 				return false, "", preMigrationSHA, false, fmt.Errorf(
@@ -640,7 +640,7 @@ func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, commit
 		return nil
 	}
 
-	legacyArmatureDir := filepath.Join(repoPath, ".armature")
+	legacyArmatureDir := filepath.Join(repoPath, config.StateDirName)
 	if err := os.Rename(backupDir, legacyArmatureDir); err != nil {
 		return fmt.Errorf("restore .armature from backup %s: %w", backupDir, err)
 	}
@@ -966,7 +966,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		return RepoSetupResult{}, fmt.Errorf("set armature.ops-worktree-path: %w", err)
 	}
 
-	issuesDir := filepath.Join(worktreePath, ".armature")
+	issuesDir := filepath.Join(worktreePath, config.StateDirName)
 
 	// Detect whether this is a fresh init or an idempotent re-run before writing anything.
 	opsDir := filepath.Join(issuesDir, "ops")
@@ -1046,9 +1046,14 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		worktreeGitClient := adapters.New(worktreePath)
 
 		// Stage the copied ops/templates/hooks/review files and config
-		filesToStage := []string{".armature/ops", ".armature/templates", ".armature/hooks", ".armature/review"}
+		filesToStage := []string{
+			config.StateDirName + "/ops",
+			config.StateDirName + "/templates",
+			config.StateDirName + "/hooks",
+			config.StateDirName + "/review",
+		}
 		if configToWrite != nil {
-			filesToStage = append(filesToStage, ".armature/config.json")
+			filesToStage = append(filesToStage, config.StateDirName+"/config.json")
 		}
 		if err := worktreeGitClient.AddPaths(filesToStage); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("stage migrated data (legacy data preserved at %s): %w", backupDir, err)
@@ -1058,7 +1063,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		// Use ".armature" as the scoped path to cover both ops and config.json
 		if err := worktreeGitClient.CommitPathsNoVerify(
 			"chore: commit migrated legacy ops and config from single-branch layout",
-			".armature",
+			config.StateDirName,
 		); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("commit migrated data to _armature branch (legacy data preserved at %s): %w", backupDir, err)
 		}
@@ -1067,7 +1072,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// Write .gitignore to prevent state/ from being committed
 	gitignorePath := filepath.Join(issuesDir, ".gitignore")
 	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0o600); err != nil {
-		return RepoSetupResult{}, fmt.Errorf("write .armature/.gitignore: %w", err)
+		return RepoSetupResult{}, fmt.Errorf("write %s/.gitignore: %w", config.StateDirName, err)
 	}
 
 	// Write SCHEMA file
@@ -1128,14 +1133,14 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		worktreeGitClient := adapters.New(worktreePath)
 
 		// Stage the config file
-		if err := worktreeGitClient.AddPaths([]string{".armature/config.json"}); err != nil {
+		if err := worktreeGitClient.AddPaths([]string{config.StateDirName + "/config.json"}); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("stage config: %w", err)
 		}
 
 		// Commit the config to _armature branch
 		if err := worktreeGitClient.CommitPathsNoVerify(
 			"chore: init armature config",
-			".armature",
+			config.StateDirName,
 		); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("commit config to _armature branch: %w", err)
 		}

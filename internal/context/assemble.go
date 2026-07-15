@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 )
@@ -95,7 +96,7 @@ func inferRepoRootByPath(stateDir string) string {
 	clean := filepath.Clean(stateDir)
 	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
 		base := filepath.Base(dir)
-		if base == ".arm" || base == ".armature" {
+		if base == ".arm" || base == config.StateDirName {
 			return filepath.Dir(dir)
 		}
 	}

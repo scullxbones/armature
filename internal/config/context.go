@@ -8,6 +8,9 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
+// StateDirName is the name of the state directory (issues directory) within the ops worktree.
+const StateDirName = ".armature"
+
 // Context holds resolved paths and config for the current armature session.
 type Context struct {
 	RepoPath     string // resolved repo root
@@ -91,7 +94,7 @@ func ResolveContext(repoPath string) (*Context, error) {
 		return nil, err
 	}
 
-	cfg, err := LoadConfig(filepath.Join(probeResult.WorktreePath, ".armature", "config.json"))
+	cfg, err := LoadConfig(filepath.Join(probeResult.WorktreePath, StateDirName, "config.json"))
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
@@ -112,7 +115,7 @@ func ResolveContextWithProbe(repoPath string, probe RepoProbe, cfg Config) (*Con
 		return nil, fmt.Errorf("armature.ops-worktree-path must be set")
 	}
 
-	issuesDir := filepath.Join(probeResult.WorktreePath, ".armature")
+	issuesDir := filepath.Join(probeResult.WorktreePath, StateDirName)
 
 	return &Context{
 		RepoPath:     probeResult.RepoPath,

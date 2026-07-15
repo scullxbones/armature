@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/config"
 )
 
 // GitAdapter is an interface for git operations required by the Prepare function.
@@ -185,7 +187,7 @@ func Prepare(
 	}
 
 	// Filter out armature coordination paths (.armature/** and .arm/**)
-	excludePrefixes := []string{".armature/", ".arm/"}
+	excludePrefixes := []string{config.StateDirName + "/", ".arm/"}
 	changedFiles = filterExcludedPaths(changedFiles, excludePrefixes)
 
 	// A delivery with no changed files is not reviewable — reject it regardless of
