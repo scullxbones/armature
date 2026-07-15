@@ -196,6 +196,8 @@ a new test function.
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
 
+See [docs/conventions.md](../../docs/conventions.md#test-naming-and-traceability) for comprehensive documentation of test naming and all other naming conventions.
+
 **`notes` — Optional Free-Text Notes**
 
 JSON array of strings (`[]string`) containing optional extended notes or guidance
