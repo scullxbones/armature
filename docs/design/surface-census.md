@@ -44,13 +44,13 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `type` | string | state.go:15 | create | **kept-evidence** | Issue type (epic, story, feature, task, bug). Set at creation, amendable via amend. |
 | `status` | string | state.go:16 | create (open), transition, claim | **kept-evidence** | Current lifecycle state. Primary index for queries. |
 | `title` | string | state.go:17 | create | **kept-evidence** | Human-readable label. Set at creation. |
-| `parent` | string | state.go:18 | create, reparent | **kept-evidence** | Parent issue ID for hierarchy. Amendable. |
+| `parent` | string | state.go:18 | create, reparent | **kept-evidence** | Parent issue ID for hierarchy. Set at creation, changed via `reparent` (not `amend` — amend registers no `--parent` flag and applyAmend never touches Parent). |
 | `children` | []string | state.go:19 | derived from parent links | **kept-evidence** | Materialized inverse of parent. Read-only. |
 | `blocked_by` | []string | state.go:20 | link op (rel=blocked_by) | **kept-evidence** | Issues that must complete first. Used by ready queue logic. |
-| `blocks` | []string | state.go:21 | derived automatically as the inverse of a `link` op with rel=blocked_by applied to the other issue (engine.go applyLink) | **kept-evidence** | Issues blocked by this one. Inverse of blocked_by. Never set directly by a `rel=blocks` op — that input is rejected. |
+| `blocks` | []string | state.go:21 | derived automatically as the inverse of a `link` op with rel=blocked_by applied to the other issue (engine.go applyLink) | **kept-evidence** | Issues blocked by this one. Inverse of blocked_by. Never set directly by a `rel=blocks` op — invalid `--rel` values are rejected at the CLI layer (link.go RunE) before the op is ever appended to the log. |
 | `assignee` | string | state.go:22 | (no writer found) | **parked** | Dead field: no code path sets `Issue.Assignee` anywhere in internal/ or cmd/ (verified via `grep -rn '\.Assignee *=' internal/ cmd/`). The `assign` command sets `AssignedWorker` (internal/materialize/engine.go, applyAssign), not `Assignee`. Re-entry criterion: a writer is added and exercised by a test, or the field is removed from state.go. |
-| `priority` | string | state.go:23 | create payload, amend | **kept-evidence** | Priority level (critical, high, medium, low). Set via --priority flag. Used in diagnostics. |
-| `estimated_complexity` | string | state.go:24 | create payload | **kept-evidence** | Complexity estimate. Set via --complexity (if exposed) or inferred from acceptance criteria. |
+| `priority` | string | state.go:23 | create payload | **kept-evidence** | Priority level (critical, high, medium, low). Set via --priority flag on create. `amend` registers no `--priority` flag and `applyAmend` never touches `Priority`. Used in diagnostics. |
+| `estimated_complexity` | string | state.go:24 | create payload | **kept-justified** | Complexity estimate. No CLI flag or decompose plan field currently sets it — nothing in cmd/ or internal/decompose/ produces `EstComplexity`; it is only ever copied through from whatever the create payload already contains. See the Estimated Complexity Levels section below for what actually reads/interprets this field (validate.go's small/large enum checks). |
 | `definition_of_done` | string | state.go:25 | create, amend | **kept-evidence** | Completion criteria. Required for task type (issuetype.go:90). |
 | `scope` | []string | state.go:26 | create, amend | **kept-evidence** | File scope globs. Used by overlap detection and scope-rename/delete commands. |
 | `context_files` | []string | state.go:27 | create, amend | **kept-evidence** | Stable reference files. Set via --context-file flag. Used by harness hook to render context. |
@@ -73,7 +73,7 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `branch` | string | state.go:44 | transition op (branch field) | **kept-evidence** | Feature branch name. Set by transition on completion. Used by merged flow. |
 | `pr` | string | state.go:45 | transition op (pr field), merged op | **kept-evidence** | PR number or URL. Set by transition or merged command. |
 | `assigned_worker` | string | state.go:46 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
-| `preferred_model` | string | state.go:47 | create (preferred_model) | **kept-evidence** | LLM model hint for the assigned agent. Set via --preferred-model at creation. |
+| `preferred_model` | string | state.go:47 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
 | `updated` | int64 | state.go:48 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
 
 ## Operation Types (OpTypes)
@@ -88,7 +88,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `transition` | internal/ops/types.go:11 | engine.go | **kept-evidence** | Changes issue status. Payload: to (status), outcome, branch, pr. |
 | `note` | internal/ops/types.go:12 | engine.go | **kept-evidence** | Adds worker note. Payload: msg, note_id for deletion. |
 | `note-delete` | internal/ops/types.go:13 | engine.go | **kept-evidence** | Soft-deletes note by ID. Marks note.deleted=true. |
-| `link` | internal/ops/types.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Only rel=blocked_by is a supported input; engine.go's applyLink returns an error for any other rel value. `blocks` is derived automatically as the inverse and is never a valid input. |
+| `link` | internal/ops/types.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Only rel=blocked_by is a supported input; invalid `--rel` values are rejected at the CLI layer (link.go's RunE) before the op is appended to the log, not at replay/materialize time. `blocks` is derived automatically as the inverse and is never a valid input. For backward compatibility, engine.go's `applyLink` silently no-ops on any non-blocked_by rel it encounters during replay, so historical op-log entries predating this validation still replay cleanly (see `TestApplyLinkOp_LegacyNonBlockedByRelIsNoOp`). |
 | `unlink` | internal/ops/types.go:15 | engine.go | **kept-evidence** | Removes dependency. Payload: dep (target). |
 | `source-link` | internal/ops/types.go:16 | engine.go | **kept-evidence** | Links external source. Payload: source_id, source_url. Creates source_links entries. |
 | `source-fingerprint` | internal/ops/types.go:17 | engine.go | **kept-evidence** | Records source version. Payload: sha, version_id, provider. Used for staleness detection. |
@@ -335,14 +335,17 @@ enforces them at write time.
 ## Relationship Types (for link/unlink)
 
 Defined in the `rel` field of link operations (types.go:97) and link command flag (link.go). The only
-accepted input value is `blocked_by`: internal/materialize/engine.go's `applyLink` returns an error for
-any other `Rel` value, since `blocks` is a derived/output-only field (see below), never a valid `--rel`
-input.
+accepted input value is `blocked_by`: link.go's RunE rejects any other `--rel` value before the op is
+ever appended to the log, since `blocks` is a derived/output-only field (see below), never a valid
+`--rel` input. This validation happens at the CLI layer, not at replay/materialize time — engine.go's
+`applyLink` silently no-ops on any non-blocked_by rel it encounters during replay, preserving backward
+compatibility with historical op-log entries written before this validation existed (see
+`TestApplyLinkOp_LegacyNonBlockedByRelIsNoOp`).
 
 | Type | Used By | Status | Notes |
 |------|---------|--------|-------|
-| `blocked_by` | link.go:55 (default), link.go RunE (rejects any other value before the op is written), engine.go applyLink (only accepted input), ready queue logic | **kept-evidence** | The only valid `--rel` input. Used to block ready queue eligibility. |
-| `blocks` | state.go Issue.Blocks field, engine.go applyLink (auto-derived) | **kept-evidence** | Derived/output-only. Automatically populated as the inverse when a `blocked_by` link is applied to the *other* issue. Never a valid `--rel` input — `applyLink` rejects `rel=blocks` with an error. |
+| `blocked_by` | link.go:55 (default), link.go RunE (rejects any other value before the op is written), engine.go applyLink (only value handled during replay), ready queue logic | **kept-evidence** | The only valid `--rel` input. Used to block ready queue eligibility. |
+| `blocks` | state.go Issue.Blocks field, engine.go applyLink (auto-derived) | **kept-evidence** | Derived/output-only. Automatically populated as the inverse when a `blocked_by` link is applied to the *other* issue. Never a valid `--rel` input — `link.go`'s RunE rejects `rel=blocks` before the op is written. If a non-blocked_by rel is present in a historical op log (predating this validation), `applyLink` replays it as a no-op rather than erroring. |
 
 ## Provider Types (for sources)
 
@@ -359,11 +362,11 @@ Enumerated in sources.go flag description:
 - **Issue Types**: 5 (all kept-evidence)
 - **Statuses**: 7 (all kept-evidence)
 - **Confidence States**: 3 (all kept-evidence)
-- **Issue Fields**: 35 (34 kept-evidence, 1 parked)
+- **Issue Fields**: 35 (31 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 19 (all kept-evidence)
-- **CLI Commands**: 47 (all kept-evidence, 6 groups)
+- **CLI Commands**: 47 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Parked Surfaces**: 1 (`assignee` field — see Issue Fields)
+- **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
 ## Query Recipe (Reproducibility)

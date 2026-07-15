@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +26,11 @@ func newAmendCmd() *cobra.Command {
 			}
 			if issueID == "" {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+
+			if nodeType != "" && !issuetype.IsValid(nodeType) {
+				return fmt.Errorf("invalid type %q: valid types are %s",
+					nodeType, strings.Join(issuetype.All(), ", "))
 			}
 
 			state := mustState(cmd)
