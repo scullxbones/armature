@@ -19,6 +19,16 @@ func sourcesDir(ctx *config.Context) string {
 	return filepath.Join(ctx.IssuesDir, "sources")
 }
 
+// sourcesLifecycle constructs a Lifecycle for the given sources directory,
+// wiring in an auto-commit committer when a worktree path is available.
+func sourcesLifecycle(appCtx *config.Context, dir string) *sources.Lifecycle {
+	if appCtx.WorktreePath != "" {
+		gc := adapters.New(appCtx.WorktreePath)
+		return sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
+	}
+	return sources.NewLifecycle(dir)
+}
+
 func newSourcesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sources",
@@ -43,13 +53,7 @@ func newSourcesAddCmd() *cobra.Command {
 			dir := sourcesDir(appCtx)
 
 			// Create lifecycle with auto-commit support
-			var lc *sources.Lifecycle
-			if appCtx.WorktreePath != "" {
-				gc := adapters.New(appCtx.WorktreePath)
-				lc = sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
-			} else {
-				lc = sources.NewLifecycle(dir)
-			}
+			lc := sourcesLifecycle(appCtx, dir)
 
 			entry := sources.SourceEntry{
 				ID:           uuid.New().String(),
@@ -93,13 +97,7 @@ func newSourcesSyncCmd() *cobra.Command {
 			dir := sourcesDir(appCtx)
 
 			// Create lifecycle with auto-commit support
-			var lc *sources.Lifecycle
-			if appCtx.WorktreePath != "" {
-				gc := adapters.New(appCtx.WorktreePath)
-				lc = sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
-			} else {
-				lc = sources.NewLifecycle(dir)
-			}
+			lc := sourcesLifecycle(appCtx, dir)
 
 			entries, err := lc.ListAll()
 			if err != nil {
@@ -157,14 +155,8 @@ func newSourcesVerifyCmd() *cobra.Command {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
 
-			// Create lifecycle with auto-commit support (though verify doesn't write)
-			var lc *sources.Lifecycle
-			if appCtx.WorktreePath != "" {
-				gc := adapters.New(appCtx.WorktreePath)
-				lc = sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
-			} else {
-				lc = sources.NewLifecycle(dir)
-			}
+			// verify never writes, so no committer is needed.
+			lc := sources.NewLifecycle(dir)
 
 			entries, err := lc.ListAll()
 			if err != nil {

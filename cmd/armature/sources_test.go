@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -196,6 +199,66 @@ func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, verifyOut2.String(), "STALE")
 	assert.NotContains(t, verifyOut2.String(), "OK")
+}
+
+// gitWorktreeStatus returns `git status --porcelain` for the _armature
+// worktree at <repo>/.arm, so tests can assert the auto-commit left it clean.
+func gitWorktreeStatus(t *testing.T, repo string) string {
+	t.Helper()
+	worktreeDir := filepath.Join(repo, ".arm")
+	cmd := exec.CommandContext(context.Background(), "git", "status", "--porcelain")
+	cmd.Dir = worktreeDir
+	out, err := cmd.Output()
+	require.NoError(t, err, "git status in _armature worktree should succeed")
+	return strings.TrimSpace(string(out))
+}
+
+// TestSourcesAdd_AutoCommits_REQ_LNGHZN_B1 exercises the `arm sources add`
+// cobra command end-to-end against a temp git worktree and verifies the
+// manifest write is auto-committed to the _armature branch, leaving the
+// worktree clean.
+func TestSourcesAdd_AutoCommits_REQ_LNGHZN_B1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	tmpfile := filepath.Join(t.TempDir(), "source.txt")
+	require.NoError(t, os.WriteFile(tmpfile, []byte("auto-commit content"), 0600))
+
+	addCmd := newRootCmd()
+	addCmd.SetOut(new(bytes.Buffer))
+	addCmd.SetErr(new(bytes.Buffer))
+	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
+		"--url", tmpfile, "--type", "filesystem", "--title", "Auto Commit"})
+	require.NoError(t, addCmd.Execute())
+
+	status := gitWorktreeStatus(t, repo)
+	assert.NotContains(t, status, "sources", "manifest write should be auto-committed, leaving no pending sources changes; got status:\n%s", status)
+}
+
+// TestSourcesSync_AutoCommits_REQ_LNGHZN_B1 exercises the `arm sources sync`
+// cobra command end-to-end against a temp git worktree and verifies the
+// manifest and cache writes are auto-committed to the _armature branch,
+// leaving the worktree clean.
+func TestSourcesSync_AutoCommits_REQ_LNGHZN_B1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	tmpfile := filepath.Join(t.TempDir(), "source.txt")
+	require.NoError(t, os.WriteFile(tmpfile, []byte("auto-commit sync content"), 0600))
+
+	addCmd := newRootCmd()
+	addCmd.SetOut(new(bytes.Buffer))
+	addCmd.SetErr(new(bytes.Buffer))
+	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
+		"--url", tmpfile, "--type", "filesystem"})
+	require.NoError(t, addCmd.Execute())
+
+	syncCmd := newRootCmd()
+	syncCmd.SetOut(new(bytes.Buffer))
+	syncCmd.SetErr(new(bytes.Buffer))
+	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
+	require.NoError(t, syncCmd.Execute())
+
+	status := gitWorktreeStatus(t, repo)
+	assert.NotContains(t, status, "sources", "manifest+cache writes should be auto-committed, leaving no pending sources changes; got status:\n%s", status)
 }
 
 // TestSourcesCommandOutputParity_REQ_ARCHIMP_S18_T2 pins the human-facing
