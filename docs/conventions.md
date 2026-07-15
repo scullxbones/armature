@@ -19,6 +19,8 @@ Where `<ISSUE-ID>` is the task or story ID (e.g., `ARCHIMP-S14-T6`, `TOPTIER-S2-
 
 The `_REQ_<ISSUE-ID>` suffix is mandatory for any test that verifies an acceptance criterion from the task definition of done. Tests that verify general correctness or regression testing do not require the suffix, but doing so will make them visible in trace reports and is encouraged.
 
+See [armature-worker SKILL.md](../internal/skillsembed/skills/armature-worker/SKILL.md#test-naming-and-traceability) for additional context on test naming.
+
 ## Commit Format
 
 All commits must follow the conventional commit format with an issue-ID scope:
@@ -52,8 +54,6 @@ The scope (the `<ISSUE-ID>` in parentheses) is mandatory for all commits except 
 
 **Per-task commits:**
 Each task must be completed with a single focused commit. Do not leave partial work uncommitted. Immediately after `arm transition ISSUE-ID --to done`, stage the scoped files and commit with the format above.
-
-See [armature-worker SKILL.md](../internal/skillsembed/skills/armature-worker/SKILL.md#test-naming-and-traceability) for additional context on test naming.
 
 ## Branch Naming
 
