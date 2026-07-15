@@ -17,7 +17,6 @@ Exit codes:
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -54,9 +53,12 @@ def find_json_examples(repo_root):
     """
     examples = []
 
-    # Directories to scan
+    # Directories to scan. internal/skillsembed/skills is the real source of
+    # truth for skill content (.claude/skills and .gemini/skills are gitignored
+    # deploy targets that only exist after `arm bootstrap`/`make deploy-skills`).
     scan_dirs = [
         repo_root / "docs",
+        repo_root / "internal" / "skillsembed" / "skills",
         repo_root / ".claude" / "skills",
         repo_root / ".gemini" / "skills",
     ]
@@ -77,7 +79,6 @@ def find_json_examples(repo_root):
             # Pattern: ```json artifact_type=<type>
             pattern = r'```json\s+artifact_type=(\w+)\s*\n(.*?)```'
 
-            line_num = 1
             for match in re.finditer(pattern, content, re.DOTALL):
                 # Count lines up to this match for accurate line numbers
                 before_match = content[:match.start()]

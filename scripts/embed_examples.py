@@ -12,7 +12,9 @@ Usage:
   python3 scripts/embed_examples.py check    # Validate embedded examples match CLI
 """
 
+import argparse
 import json
+import os
 import subprocess
 import sys
 import re
@@ -23,15 +25,21 @@ def get_example_from_cli():
     """
     Run `arm decompose-apply --example` and return the parsed JSON.
 
+    Uses the ARM_BIN environment variable to locate the arm binary (set by
+    the Makefile to the freshly built ./bin/arm), falling back to bare "arm"
+    on PATH if unset.
+
     Returns:
         dict: Parsed example plan
 
     Raises:
         subprocess.CalledProcessError: If arm command fails
         json.JSONDecodeError: If output is not valid JSON
+        FileNotFoundError: If the arm binary cannot be found
     """
+    arm_bin = os.environ.get("ARM_BIN", "arm")
     result = subprocess.run(
-        ["arm", "decompose-apply", "--example"],
+        [arm_bin, "decompose-apply", "--example"],
         capture_output=True,
         text=True,
         check=True,
@@ -68,7 +76,7 @@ def add_acceptance_fields(example):
             # Use story parent to construct REQ pattern (e.g., TASK-001 -> REQ_TASK_001)
             req_id = issue_id.replace("-", "_")
             issue["acceptance"] = [
-                f"Implementation complete per dod",
+                "Implementation complete per dod",
                 f"Test_{req_id} passes",
                 "make check green",
             ]
@@ -116,7 +124,7 @@ def find_example_block(content):
         tuple: (start_pos, end_pos, matched_text) or None if not found
     """
     # Pattern to match ```json ... ``` blocks that contain our example structure
-    pattern = r"```json\n(.*?)```"
+    pattern = r"```json[^\n]*\n(.*?)```"
     matches = list(re.finditer(pattern, content, re.DOTALL))
 
     if not matches:
@@ -127,9 +135,6 @@ def find_example_block(content):
     for match in matches:
         try:
             json_text = match.group(1)
-            # Try to parse it
-            json.loads(json_text)
-            # Check if it has the right structure
             data = json.loads(json_text)
             if "version" in data and "title" in data and "issues" in data:
                 return match.start(1), match.end(1), json_text
@@ -215,19 +220,28 @@ def check_example_drift(skill_path, example_plan):
 
 def main():
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python3 scripts/embed_examples.py [embed|check]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Embed or validate CLI-generated canonical examples in skills"
+    )
+    parser.add_argument("mode", choices=["embed", "check"], help="embed or check")
+    parser.add_argument(
+        "--repo",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root directory (default: current directory)",
+    )
+    args = parser.parse_args()
 
-    mode = sys.argv[1]
-
-    if mode not in ("embed", "check"):
-        print(f"Error: Unknown mode '{mode}'. Use 'embed' or 'check'")
-        sys.exit(1)
+    mode = args.mode
+    repo_root = args.repo.resolve()
 
     # Get the example from CLI
     try:
         example = get_example_from_cli()
+    except FileNotFoundError as e:
+        print(f"Error: arm binary not found: {e}")
+        print("Set ARM_BIN to the path of a built arm binary, or ensure 'arm' is on PATH.")
+        sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to run 'arm decompose-apply --example': {e}")
         print(f"stderr: {e.stderr}")
@@ -240,7 +254,7 @@ def main():
     example_with_acceptance = add_acceptance_fields(example)
 
     # Find the planner skill
-    skill_path = Path("internal/skillsembed/skills/armature-planner/SKILL.md")
+    skill_path = repo_root / "internal/skillsembed/skills/armature-planner/SKILL.md"
 
     if not skill_path.exists():
         print(f"Error: Skill file not found: {skill_path}")
