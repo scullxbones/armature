@@ -68,12 +68,12 @@ The `_armature` branch is an orphan branch with no common ancestor with `main`. 
 At `worker-init`, the CLI creates a secondary git worktree:
 
 ```
-git worktree add --no-checkout .arm/ origin/_armature
-cd .arm/
-git sparse-checkout set .armature/ops .armature/state
+git worktree add --no-checkout .armature/ origin/_armature
+cd .armature/
+git sparse-checkout set ops state
 ```
 
-The worktree directory is `.arm/` in the repository root. This is the default location; it can be overridden via git config (`armature.ops-worktree-path`). The `.arm/` directory is added to `.gitignore` on all branches.
+The worktree directory is `.armature/` in the repository root. This is the default location; it can be overridden via git config (`armature.ops-worktree-path`). The `.armature/` directory is added to `.gitignore` on all branches.
 
 Sparse checkout limits the ops worktree to essential directories (`ops/` and `state/`). `sources/cache/` remains on the ops branch but is excluded from the default sparse checkout to minimize disk usage. Workers needing source content (e.g., `arm sources sync`, `arm decompose-context`) expand the sparse checkout on demand.
 
@@ -82,11 +82,11 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 | Event | Action |
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .arm --force`, then re-run `arm bootstrap` |
+| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
-| Worktree corruption | Manually remove the stale worktree (`git worktree remove .arm --force`), then re-run `arm bootstrap` to recreate it from remote |
+| Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
-### Directory Structure (within `.arm/` worktree)
+### Directory Structure (within `.armature/` worktree)
 
 ```
 .armature/
@@ -105,8 +105,12 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
     checkpoint.json            # {"last_materialized_commit": "<sha>", "byte_offsets": {...}}
     traceability.json          # {node-id → [source_citations]}
     sources-fingerprint.json   # {source-id → {sha, version_id, last_verified}}
-    issues/
-      <uuid>.json              # full materialized state per issue
+    <worker-id>/
+      index.json               # materialized index per worker
+      ready.json               # precomputed ready-task queue per worker
+      checkpoint.json          # checkpoint per worker
+      issues/
+        <uuid>.json            # full materialized state per issue
   templates/
     bug.json                   # issue type templates with required fields
     story.json
@@ -372,7 +376,7 @@ Rebase always succeeds because each worker only modifies its own file. The retry
 
 Converts each invocation from O(all ops) to O(new ops since last run).
 
-**State files are local-only caches.** Checkpoint and state files (`state/index.json`, `state/ready.json`, `state/checkpoint.json`, etc.) are produced by each worker's local materialization and are NOT committed to the ops branch. This preserves the MRDT merge-conflict-free guarantee — only per-worker log files are committed. Each worker materializes independently from the append-only logs. The first invocation after a fresh clone performs a full materialization; subsequent invocations are incremental from the local checkpoint. State files are listed in `.arm/.gitignore` (or excluded via sparse checkout) to prevent accidental commits.
+**State files are local-only caches.** Checkpoint and state files (`state/index.json`, `state/ready.json`, `state/checkpoint.json`, etc.) are produced by each worker's local materialization and are NOT committed to the ops branch. This preserves the MRDT merge-conflict-free guarantee — only per-worker log files are committed. Each worker materializes independently from the append-only logs. The first invocation after a fresh clone performs a full materialization; subsequent invocations are incremental from the local checkpoint. State files are listed in `.armature/.gitignore` (or excluded via sparse checkout) to prevent accidental commits.
 
 ### Merged Status Auto-Detection
 
@@ -1331,7 +1335,7 @@ arm bootstrap [flags]
 
 Behavior:
   1. Create _armature orphan branch (if needed)
-  2. Set up ops worktree at .arm/
+  2. Set up ops worktree at .armature/
   3. Auto-detect project type
   4. Write .armature/config.json
   5. Install git hooks from templates
@@ -1410,7 +1414,7 @@ This is a hard requirement, not a recommendation. Each worker (human or AI) must
 Part of `worker-init`. The CLI creates the ops worktree via `git worktree add`, configures sparse checkout, and stores the ops worktree path in git config:
 
 ```
-git config --local armature.ops-worktree-path .arm/
+git config --local armature.ops-worktree-path .armature/
 ```
 
 ### Multi-Machine Workers
@@ -1725,7 +1729,7 @@ The transition op records `branch` and `pr` fields, bridging the ops history (on
 
 ```
 git config --local armature.worker-id a1b2c3d4-5678-90ab-cdef-1234567890ab
-git config --local armature.ops-worktree-path .arm/
+git config --local armature.ops-worktree-path .armature/
 ```
 
 ### User Configuration
@@ -1749,7 +1753,7 @@ auth_method = "device_flow"
 
 ### Persona-Driven Feature Matrix
 
-All deployments use the ops-branch architecture (`_armature` orphan branch + `.arm/` worktree). Feature variations reflect team size and coordination needs, not branching strategy.
+All deployments use the ops-branch architecture (`_armature` orphan branch + `.armature/` worktree). Feature variations reflect team size and coordination needs, not branching strategy.
 
 | Feature | Solo Freelance | Solo Enterprise | Team (Monorepo) | Team (Multi-Repo) |
 |---|---|---|---|---|
