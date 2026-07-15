@@ -3098,3 +3098,4 @@
 ["claim","LNGHZN-B1",1784149954,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90}]
 ["transition","LNGHZN",1784149956,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["transition","LNGHZN-B1",1784153115,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["assessment-attested","LNGHZN-B1",1784153369,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"assessment":{"schema_version":1,"bundle_id":"sha256:8dd8bd4dc27d48f9fa9f015e862ad1a0999ea052043cae5f5f7fdd42349bced6","contract_fingerprint":"c33503bbc9d05ff12fdabbde964787c5e0d5cecb439739d303ba220912ef6c84","delivery_fingerprint":"d5d3bd090022a079d5ce73048ea9f4bc0250354acdb4026e10946b7d50457047","base_sha":"af9068cc5d53fa463340e46058e92bea2eda039c","head_sha":"2416c81412d005c42665055fea1e85db0970d923","rating":"yellow","result_fingerprint":"5430c088c5b070823057d76b314f9573359a0aa2868bc3a59fb798de4b3fb475","satisfied_count":2,"partially_satisfied_count":2,"not_satisfied_count":0,"indeterminate_count":1}}]
