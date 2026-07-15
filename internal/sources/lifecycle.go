@@ -10,8 +10,10 @@ import (
 // Lifecycle manages the full lifecycle of sources: registration, persistence,
 // fingerprinting, synchronization, and freshness checks.
 type Lifecycle struct {
-	manifestPath string
-	provider     ProviderRegistry
+	manifestPath  string
+	provider      ProviderRegistry
+	fileCommitter FileCommitter // optional: if set, auto-commit manifest and cache changes
+	worktreePath  string        // required when fileCommitter is set; root of the worktree
 }
 
 // ProviderRegistry is responsible for creating providers based on type.
@@ -51,6 +53,18 @@ func NewLifecycleWithRegistry(manifestPath string, registry ProviderRegistry) *L
 	}
 }
 
+// NewLifecycleWithCommitter creates a new source lifecycle manager that auto-commits
+// manifest and cache changes to the worktree's _armature branch.
+// Pass worktreePath="" to disable auto-commit.
+func NewLifecycleWithCommitter(manifestPath string, registry ProviderRegistry, worktreePath string, fc FileCommitter) *Lifecycle {
+	return &Lifecycle{
+		manifestPath:  manifestPath,
+		provider:      registry,
+		fileCommitter: fc,
+		worktreePath:  worktreePath,
+	}
+}
+
 // Register adds a new source to the manifest and returns the updated entry.
 func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 	manifest, err := ReadManifest(l.manifestPath)
@@ -60,7 +74,7 @@ func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 
 	manifest.Upsert(entry)
 
-	if err := WriteManifest(l.manifestPath, manifest); err != nil {
+	if err := l.writeManifest(manifest); err != nil {
 		return SourceEntry{}, fmt.Errorf("write manifest: %w", err)
 	}
 
@@ -89,7 +103,7 @@ func (l *Lifecycle) Sync(ctx context.Context, id string) SyncResult {
 
 	result := l.syncEntry(ctx, &manifest, id)
 
-	if writeErr := WriteManifest(l.manifestPath, manifest); writeErr != nil && result.Error == nil {
+	if writeErr := l.writeManifest(manifest); writeErr != nil && result.Error == nil {
 		result.Error = fmt.Errorf("write manifest: %w", writeErr)
 	}
 
@@ -133,7 +147,7 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 
 	fp := Fingerprint(data)
 
-	if err := WriteCache(l.manifestPath, id, data); err != nil {
+	if err := l.writeCache(id, data); err != nil {
 		entry.SyncFailed = true
 		manifest.Upsert(*entry)
 		return SyncResult{
@@ -175,7 +189,7 @@ func (l *Lifecycle) SyncAll(ctx context.Context) ([]SyncResult, error) {
 		}
 	}
 
-	if writeErr := WriteManifest(l.manifestPath, manifest); writeErr != nil {
+	if writeErr := l.writeManifest(manifest); writeErr != nil {
 		return results, fmt.Errorf("write manifest: %w", writeErr)
 	}
 
@@ -375,4 +389,20 @@ func (l *Lifecycle) GetByURL(url string) (*SourceEntry, error) {
 	}
 
 	return entry, nil
+}
+
+// writeManifest writes the manifest and commits it if a file committer is configured.
+func (l *Lifecycle) writeManifest(manifest Manifest) error {
+	if l.fileCommitter != nil && l.worktreePath != "" {
+		return WriteManifestAndCommit(l.manifestPath, l.worktreePath, manifest, l.fileCommitter)
+	}
+	return WriteManifest(l.manifestPath, manifest)
+}
+
+// writeCache writes a cache file and commits it if a file committer is configured.
+func (l *Lifecycle) writeCache(id string, data []byte) error {
+	if l.fileCommitter != nil && l.worktreePath != "" {
+		return WriteCacheAndCommit(l.manifestPath, l.worktreePath, id, data, l.fileCommitter)
+	}
+	return WriteCache(l.manifestPath, id, data)
 }

@@ -600,3 +600,148 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Errorf("Content mismatch: %q err=%v", content, err)
 	}
 }
+
+// MockFileCommitter tracks commits for testing.
+type MockFileCommitter struct {
+	commits []struct {
+		relPath string
+		message string
+	}
+	commitErr error
+}
+
+func (m *MockFileCommitter) CommitWorktreeOp(relPath, message string) error {
+	if m.commitErr != nil {
+		return m.commitErr
+	}
+	m.commits = append(m.commits, struct {
+		relPath string
+		message string
+	}{relPath, message})
+	return nil
+}
+
+func TestLifecycleRegisterWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	worktreeDir := t.TempDir()
+	fc := &MockFileCommitter{}
+
+	lc := NewLifecycleWithCommitter(dir, &DefaultProviderRegistry{}, worktreeDir, fc)
+
+	entry := SourceEntry{
+		ID:           "test-1",
+		URL:          "https://example.com/doc",
+		Title:        "Test Document",
+		ProviderType: "filesystem",
+	}
+
+	_, err := lc.Register(entry)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	// Verify manifest.json was committed
+	if len(fc.commits) != 1 {
+		t.Fatalf("expected 1 commit, got %d", len(fc.commits))
+	}
+	if fc.commits[0].message != "sources: update manifest.json" {
+		t.Errorf("commit message mismatch: got %q", fc.commits[0].message)
+	}
+	if !strings.Contains(fc.commits[0].relPath, "manifest.json") {
+		t.Errorf("commit relPath should contain manifest.json, got %q", fc.commits[0].relPath)
+	}
+}
+
+func TestLifecycleSyncAllWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	worktreeDir := t.TempDir()
+	fc := &MockFileCommitter{}
+
+	registry := &MockRegistry{
+		providers: map[string]Provider{
+			"mock": &MockProvider{data: []byte("test content")},
+		},
+	}
+	lc := NewLifecycleWithCommitter(dir, registry, worktreeDir, fc)
+
+	// Register a source
+	entry := SourceEntry{
+		ID:           "test-1",
+		URL:          "https://example.com/doc",
+		Title:        "Test Document",
+		ProviderType: "mock",
+	}
+	_, err := lc.Register(entry)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	// Clear the commits from Register
+	fc.commits = nil
+
+	// Sync all sources
+	ctx := context.Background()
+	results, err := lc.SyncAll(ctx)
+	if err != nil {
+		t.Fatalf("SyncAll failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Error != nil {
+		t.Fatalf("SyncAll had unexpected result: %v", results[0].Error)
+	}
+
+	// Verify both manifest.json and cache file were committed
+	if len(fc.commits) != 2 {
+		t.Fatalf("expected 2 commits (manifest + cache), got %d", len(fc.commits))
+	}
+
+	hasManifest := false
+	hasCache := false
+	for _, commit := range fc.commits {
+		if strings.Contains(commit.relPath, "manifest.json") {
+			hasManifest = true
+			if commit.message != "sources: update manifest.json" {
+				t.Errorf("manifest commit message mismatch: got %q", commit.message)
+			}
+		} else if strings.Contains(commit.relPath, ".cache") {
+			hasCache = true
+			if !strings.Contains(commit.message, "sources: update cache") {
+				t.Errorf("cache commit message mismatch: got %q", commit.message)
+			}
+		}
+	}
+
+	if !hasManifest {
+		t.Error("expected manifest.json commit")
+	}
+	if !hasCache {
+		t.Error("expected cache file commit")
+	}
+}
+
+func TestLifecycleNoAutoCommitWhenWorktreePathEmpty_REQ_LNGHZN_B1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	fc := &MockFileCommitter{}
+
+	// Create lifecycle with empty worktreePath (should not commit)
+	lc := NewLifecycleWithCommitter(dir, &DefaultProviderRegistry{}, "", fc)
+
+	entry := SourceEntry{
+		ID:           "test-1",
+		URL:          "https://example.com/doc",
+		Title:        "Test Document",
+		ProviderType: "filesystem",
+	}
+
+	_, err := lc.Register(entry)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	// Verify no commits were made (single-branch mode)
+	if len(fc.commits) != 0 {
+		t.Fatalf("expected no commits in single-branch mode, got %d", len(fc.commits))
+	}
+}
