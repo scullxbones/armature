@@ -1,12 +1,13 @@
 package review_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,10 +51,16 @@ func TestArtifactSchemas_REQ_TOPTIER_S2_T1(t *testing.T) {
 			require.True(t, ok, "schema should be a JSON object")
 
 			// Check for required schema fields
-			assert.Contains(t, schema, "$schema", "schema should have $schema field")
-			assert.Contains(t, schema, "title", "schema should have title field")
-			assert.Contains(t, schema, "type", "schema should have type field")
-			assert.Contains(t, schema, "properties", "schema should have properties field")
+			require.Contains(t, schema, "$schema", "schema should have $schema field")
+			require.Contains(t, schema, "title", "schema should have title field")
+			require.Contains(t, schema, "type", "schema should have type field")
+			require.Contains(t, schema, "properties", "schema should have properties field")
+
+			// Verify the schema itself compiles as a valid JSON Schema document.
+			compiler := jsonschema.NewCompiler()
+			require.NoError(t, compiler.AddResource(schemaFile, bytes.NewReader(data)))
+			_, err = compiler.Compile(schemaFile)
+			require.NoError(t, err, "schema should compile as valid JSON Schema: %s", schemaFile)
 		})
 	}
 }
@@ -79,12 +86,38 @@ func findRepoRoot(t *testing.T) string {
 	return ""
 }
 
+// validateAgainstSchema compiles the named schema file (relative to docs/schemas)
+// and validates the given JSON document against it, failing the test with the
+// full validation error on mismatch.
+func validateAgainstSchema(t *testing.T, schemaFile string, docJSON string) {
+	t.Helper()
+
+	repoRoot := findRepoRoot(t)
+	schemaPath := filepath.Join(repoRoot, "docs", "schemas", schemaFile)
+
+	schemaData, err := os.ReadFile(schemaPath)
+	require.NoError(t, err, "should be able to read schema file")
+
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource(schemaFile, bytes.NewReader(schemaData)))
+	sch, err := compiler.Compile(schemaFile)
+	require.NoError(t, err, "schema should compile: %s", schemaFile)
+
+	var doc interface{}
+	require.NoError(t, json.Unmarshal([]byte(docJSON), &doc), "example JSON should be valid")
+
+	err = sch.Validate(doc)
+	require.NoError(t, err, "example should validate against %s", schemaFile)
+}
+
 // TestReviewBundleSchema_ValidExample_REQ_TOPTIER_S2_T1 validates that the
 // review-bundle schema accepts a valid ReviewBundle example.
 func TestReviewBundleSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
 	t.Parallel()
 
-	// Valid minimal review bundle example
+	// Valid minimal review bundle example. SHAs and fingerprints use the
+	// lengths the schema actually requires: head/base SHA = 40 hex chars
+	// (git commit SHA), fingerprints = 64 hex chars (SHA-256).
 	bundleJSON := `{
   "schema_version": 1,
   "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -99,30 +132,17 @@ func TestReviewBundleSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
     "acceptance": ["Passes unit tests", "Code is documented"]
   },
   "delivery": {
-    "base_sha": "abc1234567890abcdef1234567890abcdef123456",
-    "head_sha": "def4567890abcdef1234567890abcdef1234567890",
+    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "changed_files": ["src/main.go", "src/main_test.go"]
   },
   "fingerprints": {
-    "contract": "5d41402abc4b2a76b9719d911017c592",
-    "delivery": "098f6bcd4621d373cade4e832627b4f6"
+    "contract": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "delivery": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   }
 }`
 
-	var bundle interface{}
-	err := json.Unmarshal([]byte(bundleJSON), &bundle)
-	require.NoError(t, err, "example JSON should be valid")
-
-	// Verify it has the expected top-level structure
-	bundleObj, ok := bundle.(map[string]interface{})
-	require.True(t, ok, "bundle should be a JSON object")
-
-	assert.Equal(t, float64(1), bundleObj["schema_version"])
-	assert.NotEmpty(t, bundleObj["bundle_id"])
-	assert.NotEmpty(t, bundleObj["issue"])
-	assert.NotEmpty(t, bundleObj["contract"])
-	assert.NotEmpty(t, bundleObj["delivery"])
-	assert.NotEmpty(t, bundleObj["fingerprints"])
+	validateAgainstSchema(t, "review-bundle.schema.json", bundleJSON)
 }
 
 // TestConformanceAssessmentSchema_ValidExample_REQ_TOPTIER_S2_T1 validates that
@@ -144,23 +164,11 @@ func TestConformanceAssessmentSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T
       ]
     }
   ],
-  "contract_fingerprint": "5d41402abc4b2a76b9719d911017c592",
-  "delivery_fingerprint": "098f6bcd4621d373cade4e832627b4f6"
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 }`
 
-	var assessment interface{}
-	err := json.Unmarshal([]byte(assessmentJSON), &assessment)
-	require.NoError(t, err, "example JSON should be valid")
-
-	// Verify it has the expected top-level structure
-	assessmentObj, ok := assessment.(map[string]interface{})
-	require.True(t, ok, "assessment should be a JSON object")
-
-	assert.Equal(t, float64(1), assessmentObj["schema_version"])
-	assert.NotEmpty(t, assessmentObj["bundle_id"])
-	assert.NotEmpty(t, assessmentObj["results"])
-	assert.NotEmpty(t, assessmentObj["contract_fingerprint"])
-	assert.NotEmpty(t, assessmentObj["delivery_fingerprint"])
+	validateAgainstSchema(t, "conformance-assessment.schema.json", assessmentJSON)
 }
 
 // TestActivityIndexSchema_ValidExample_REQ_TOPTIER_S2_T1 validates that the
@@ -196,19 +204,7 @@ func TestActivityIndexSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
   ]
 }`
 
-	var index interface{}
-	err := json.Unmarshal([]byte(indexJSON), &index)
-	require.NoError(t, err, "example JSON should be valid")
-
-	// Verify it has the expected top-level structure
-	indexObj, ok := index.(map[string]interface{})
-	require.True(t, ok, "index should be a JSON object")
-
-	assert.Equal(t, float64(1), indexObj["schema_version"])
-	assert.NotEmpty(t, indexObj["log_path"])
-	assert.NotEmpty(t, indexObj["log_digest"])
-	assert.Equal(t, float64(2), indexObj["entry_count"])
-	assert.NotEmpty(t, indexObj["entries"])
+	validateAgainstSchema(t, "activity-index.schema.json", indexJSON)
 }
 
 // TestPlanSchema_ValidExample_REQ_TOPTIER_S2_T1 validates that the plan schema
@@ -236,15 +232,5 @@ func TestPlanSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
   ]
 }`
 
-	var plan interface{}
-	err := json.Unmarshal([]byte(planJSON), &plan)
-	require.NoError(t, err, "example JSON should be valid")
-
-	// Verify it has the expected top-level structure
-	planObj, ok := plan.(map[string]interface{})
-	require.True(t, ok, "plan should be a JSON object")
-
-	assert.Equal(t, float64(1), planObj["version"])
-	assert.NotEmpty(t, planObj["title"])
-	assert.NotEmpty(t, planObj["issues"])
+	validateAgainstSchema(t, "plan.schema.json", planJSON)
 }

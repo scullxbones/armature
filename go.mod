@@ -11,6 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.1.2
 	github.com/leanovate/gopter v0.2.10
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/term v0.43.0
