@@ -3797,3 +3797,30 @@ func TestManagedExecutionCommandsAreNotRegistered(t *testing.T) {
 		assert.NotContains(t, err.Error(), "unknown command", "worker-init must still be registered")
 	}
 }
+
+// TestValidateDocExamplesCommand_NoArmatureConfig verifies that `arm validate-doc-examples`
+// runs successfully in a fresh checkout with no .armature directory at all — i.e. its
+// PersistentPreRunE no-op (mirroring bootstrap.go's pattern) skips root config resolution.
+// This pins the fix for PR review thread PRRT_kwDORnVQE86RLMsv.
+func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
+	repo := t.TempDir() // no git init, no .armature — config resolution would fail here
+	writeFile := func(name, content string) {
+		path := filepath.Join(repo, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	writeFile("docs/schemas/plan.schema.json", `{"type":"object"}`)
+	writeFile("docs/schemas/review-bundle.schema.json", `{"type":"object"}`)
+	writeFile("docs/schemas/conformance-assessment.schema.json", `{"type":"object"}`)
+	writeFile("docs/schemas/activity-index.schema.json", `{"type":"object"}`)
+	writeFile("docs/example.md", "```json artifact_type=plan\n{}\n```\n")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"validate-doc-examples", "--repo", repo})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "Documentation JSON examples are valid")
+}

@@ -155,7 +155,9 @@ Only release to the Coordinator after both commands are clean.
 ## Writing Good Plan JSON
 
 This section is critical. **Every task in the plan MUST have `dod`, `scope`, and
-`acceptance` fields or `arm validate` will ERROR.**
+`acceptance` fields or `arm validate` will ERROR.** Validate the plan JSON against
+`docs/schemas/plan.schema.json` before submitting; see `docs/json-schema-examples.md`
+for worked examples.
 
 ### The Three Mandatory Fields
 

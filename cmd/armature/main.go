@@ -198,7 +198,9 @@ func newRootCmd() *cobra.Command {
 	validateCmd.GroupID = "admin"
 	root.AddCommand(validateCmd)
 
-	root.AddCommand(newValidateDocExamplesCmd())
+	validateDocExamplesCmd := newValidateDocExamplesCmd()
+	validateDocExamplesCmd.GroupID = "admin"
+	root.AddCommand(validateDocExamplesCmd)
 
 	renderContextCmd := newRenderContextCmd()
 	renderContextCmd.GroupID = "admin"
