@@ -1192,7 +1192,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	// Exclude worktree from git tracking.
 	// The dualMigrated path already updated the exclude file (.arm/ -> .armature/)
-	// above; this covers the fresh-init and pre-existing-.arm cases.
+	// below; this covers the fresh-init and pre-existing-.arm cases.
 	if !dualMigrated {
 		if isCollapsedLayout {
 			if err := updateGitExclude(repoPath, config.StateDirName+"/", ""); err != nil {
@@ -1425,13 +1425,54 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 	}
 
+	// If we just migrated a legacy single-branch layout and created a .arm worktree,
+	// immediately migrate the dual-branch layout to collapsed layout in the same call.
+	// This chains both migrations in a single bootstrap invocation (LNGHZN-S1-T3).
+	// At this point, the directory structure exists, so migrateDualBranchToCollapsed
+	// will find it and proceed with the migration.
+	if migrated && !dualMigrated && !isCollapsedLayout {
+		chainedDualMigrated, chainedDualBackupDir, err := migrateDualBranchToCollapsed(repoPath)
+		if err != nil {
+			return RepoSetupResult{}, fmt.Errorf("chain dual-branch to collapsed migration after legacy migration: %w", err)
+		}
+		if chainedDualMigrated {
+			// Update tracking variables and paths after successful migration
+			dualMigrated = true
+			isCollapsedLayout = true
+			worktreePath = filepath.Join(repoPath, config.StateDirName)
+			issuesDir = worktreePath // In collapsed layout, issuesDir == worktreePath
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated dual-branch .arm/.armature layout to collapsed .armature at timestamped backup %s\n", chainedDualBackupDir)
+			// Update git config with the new collapsed worktree path
+			if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update git config after migration: %v\n", err)
+			}
+			// Update git exclude to use .armature/ instead of .arm/
+			if err := updateGitExclude(repoPath, config.StateDirName+"/", ".arm/"); err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update .git/info/exclude after migration: %v\n", err)
+			}
+			// Recreate state directories in the new collapsed worktree (they were created in .arm/ before migration)
+			stateDir := filepath.Join(issuesDir, "state")
+			if err := os.MkdirAll(filepath.Join(stateDir, "issues"), 0o750); err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to recreate state directories after migration: %v\n", err)
+			}
+		}
+	}
+
 	var status string
 	if freshInit {
 		status = "initialized"
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in dual-branch mode at %s\n", issuesDir)
+		if isCollapsedLayout {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in collapsed layout at %s\n", issuesDir)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Armature in dual-branch mode at %s\n", issuesDir)
+		}
 	} else {
 		status = "already_initialized"
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in dual-branch mode at %s\n", issuesDir)
+		if isCollapsedLayout {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in collapsed layout at %s\n", issuesDir)
+		} else {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Armature already initialized in dual-branch mode at %s\n", issuesDir)
+		}
 	}
 
 	result := RepoSetupResult{
