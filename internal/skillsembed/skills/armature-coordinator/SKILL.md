@@ -256,6 +256,8 @@ Each worker's context package must contain:
    ```
    Working branch: (task-specific branch from render-context)  — do not run `git checkout feat/STORY-ID`
    ```
+   
+   See [docs/conventions.md](../../docs/conventions.md#branch-naming) for the full branch naming convention (feature branches, task branches, and ops branches).
 
 6. **Commit instruction** — instruct the worker to stage files explicitly using
    the task's `scope` field, not `git commit -am`:

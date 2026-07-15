@@ -166,7 +166,9 @@ delivered separately.
 Stage only the scoped code files (those listed in the task's `scope` field):
 
 **Commit message format:** `<type>(<ISSUE-ID>): <description>`
-Types: `feat`, `fix`, `refactor`, `test`, `docs`
+Types: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `polish`
+
+See [docs/conventions.md](../../docs/conventions.md#commit-format) for the full commit format specification and examples.
 
 **Branch discipline:** `arm transition --to done` will fail if you are on the
 main or master branch (unless you use `--force`). The `--force` flag should only
@@ -212,6 +214,8 @@ motivated it.
 Examples:
 - `TestParseTokenTypes_REQ_STORY_T1`
 - `TestEdgeCases_REQ_DF_S5_T5`
+
+**Full details:** See [docs/conventions.md](../../docs/conventions.md#test-naming-and-traceability) for comprehensive documentation of all naming and formatting conventions.
 
 ## Common Mistakes
 
