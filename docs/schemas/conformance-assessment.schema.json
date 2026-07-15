@@ -45,7 +45,7 @@
                 "line": {
                   "type": "integer",
                   "description": "Line number (optional, for precision in diff citations)",
-                  "minimum": 1
+                  "minimum": 0
                 },
                 "column": {
                   "type": "integer",
