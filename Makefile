@@ -94,6 +94,7 @@ mutate:
 	exit $$status
 
 embed-examples: build
+	@$(PYTHON) -m unittest scripts/test_embed_examples.py
 	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/embed_examples.py check
 
 validate-skills: skill-lint embed-examples
@@ -104,6 +105,7 @@ validate-skills: skill-lint embed-examples
 	@echo "Skills validated: no 'make install' references and no example drift"
 
 validate-doc-examples:
+	@$(PYTHON) -m unittest scripts/test_validate_doc_examples.py
 	@$(PYTHON) scripts/validate_doc_examples.py
 
 skill-lint: build
