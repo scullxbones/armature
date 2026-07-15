@@ -35,7 +35,7 @@
           "type": {
             "type": "string",
             "description": "Issue type",
-            "enum": ["epic", "story", "task"]
+            "enum": ["epic", "story", "feature", "task", "bug"]
           },
           "scope": {
             "type": "string",

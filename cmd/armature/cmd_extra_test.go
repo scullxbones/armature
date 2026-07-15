@@ -1362,6 +1362,29 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 	require.True(t, ok, "schema must have a properties object")
 	assert.Contains(t, properties, "version", "properties must include version")
 	assert.Contains(t, properties, "issues", "properties must include issues")
+
+	issues, ok := properties["issues"].(map[string]any)
+	require.True(t, ok, "issues must be an object")
+	items, ok := issues["items"].(map[string]any)
+	require.True(t, ok, "issues must define item schema")
+	issueProperties, ok := items["properties"].(map[string]any)
+	require.True(t, ok, "issue items must define properties")
+	issueType, ok := issueProperties["type"].(map[string]any)
+	require.True(t, ok, "issue type must be an object")
+	issueTypeEnum, ok := issueType["enum"].([]any)
+	require.True(t, ok, "issue type enum must be an array")
+	assert.ElementsMatch(t, issuetype.All(), issueTypeEnum, "schema must accept every CLI issue type")
+
+	acceptance, ok := issueProperties["acceptance"].(map[string]any)
+	require.True(t, ok, "acceptance must be an object")
+	acceptanceItems, ok := acceptance["items"].(map[string]any)
+	require.True(t, ok, "acceptance must define item schema")
+	acceptanceOneOf, ok := acceptanceItems["oneOf"].([]any)
+	require.True(t, ok, "acceptance item schema must define oneOf")
+	assert.Equal(t, []any{
+		map[string]any{"type": "string"},
+		map[string]any{"type": "object"},
+	}, acceptanceOneOf, "schema must preserve string and structured acceptance criteria")
 }
 
 // TestReadyParentFilter verifies that trls ready --parent ISSUE-ID returns only
