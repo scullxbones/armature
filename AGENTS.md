@@ -38,6 +38,7 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 
 ## Canonical references
 
+- `docs/conventions.md` — test naming, commit format, branch naming conventions (required reading for workers)
 - `docs/commands.md` — CLI surface
 - `docs/harness-hook.md` — harness integration
 - `docs/design/architecture.md` — architecture and repo model
