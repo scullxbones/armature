@@ -114,6 +114,9 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 	if err := exec.Command("git", "-C", tmpDir, "config", "user.name", "Test User").Run(); err != nil {
 		t.Fatalf("failed to set git name: %v", err)
 	}
+	if err := exec.Command("git", "-C", tmpDir, "config", "commit.gpgsign", "false").Run(); err != nil {
+		t.Fatalf("failed to disable gpgsign: %v", err)
+	}
 	readmeFile := filepath.Join(tmpDir, "README.md")
 	if err := os.WriteFile(readmeFile, []byte("# Test Repo\n"), 0o600); err != nil {
 		t.Fatalf("failed to write README: %v", err)

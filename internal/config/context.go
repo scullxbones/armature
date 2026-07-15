@@ -31,6 +31,17 @@ type RepoProbe interface {
 	Probe(repoPath string) (RepoProbeResult, error)
 }
 
+// issuesDirFor derives the issues directory from the ops worktree path. In the
+// collapsed layout, the worktree root IS the issues directory (its basename is
+// already StateDirName); in the legacy dual-branch layout, the issues directory
+// is a StateDirName subdirectory nested inside the worktree.
+func issuesDirFor(worktreePath string) string {
+	if filepath.Base(worktreePath) == StateDirName {
+		return worktreePath
+	}
+	return filepath.Join(worktreePath, StateDirName)
+}
+
 // isGitWorktree checks if the given path is a git worktree by verifying if .git is a file (not a directory).
 // In git worktrees, .git is a file containing "gitdir: <path>".
 func isGitWorktree(path string) (bool, error) {
@@ -94,7 +105,7 @@ func ResolveContext(repoPath string) (*Context, error) {
 		return nil, err
 	}
 
-	cfg, err := LoadConfig(filepath.Join(probeResult.WorktreePath, StateDirName, "config.json"))
+	cfg, err := LoadConfig(filepath.Join(issuesDirFor(probeResult.WorktreePath), "config.json"))
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
@@ -115,7 +126,7 @@ func ResolveContextWithProbe(repoPath string, probe RepoProbe, cfg Config) (*Con
 		return nil, fmt.Errorf("armature.ops-worktree-path must be set")
 	}
 
-	issuesDir := filepath.Join(probeResult.WorktreePath, StateDirName)
+	issuesDir := issuesDirFor(probeResult.WorktreePath)
 
 	return &Context{
 		RepoPath:     probeResult.RepoPath,
