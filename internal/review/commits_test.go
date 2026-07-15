@@ -25,6 +25,11 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 
 	// Initialize git repo
 	run(t, repo, "git", "init")
+	// Background Git maintenance can keep writing pack files after git commit
+	// exits, racing t.TempDir cleanup. This ephemeral repository needs neither
+	// automatic maintenance nor garbage collection.
+	run(t, repo, "git", "config", "maintenance.auto", "false")
+	run(t, repo, "git", "config", "gc.auto", "0")
 	run(t, repo, "git", "config", "user.email", "test@example.com")
 	run(t, repo, "git", "config", "user.name", "Test User")
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
