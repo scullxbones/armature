@@ -1174,13 +1174,13 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
 
-	// Verify new dual-branch layout was created
-	assert.DirExists(t, filepath.Join(repo, ".arm"), ".arm worktree should exist")
-	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature"), ".armature should be in worktree")
-	assert.DirExists(t, filepath.Join(repo, ".arm", ".armature", "ops"), "new ops should be in worktree")
+	// Verify the legacy layout chained through to collapsed layout in one bootstrap call (LNGHZN-S1-T3)
+	assert.False(t, pathExists(filepath.Join(repo, ".arm")), ".arm worktree should not exist after chaining to collapsed")
+	assert.DirExists(t, filepath.Join(repo, ".armature"), ".armature collapsed worktree should exist")
+	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "new ops should be in collapsed worktree")
 
-	// CRITICAL: Verify that legacy ops files are COPIED to the new worktree ops, not just in backup
-	newWorktreeOpsPath := filepath.Join(repo, ".arm", ".armature", "ops")
+	// CRITICAL: Verify that legacy ops files are COPIED to the new collapsed worktree ops, not just in backup
+	newWorktreeOpsPath := filepath.Join(repo, ".armature", "ops")
 
 	// Check that the first issue file was copied to the new worktree
 	newFile1 := filepath.Join(newWorktreeOpsPath, "issue001.json")
@@ -2362,4 +2362,59 @@ func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
 	combined := buf.String() + errBuf.String()
 	assert.Contains(t, combined, "config", "user should be warned that legacy config was not migrated")
 	assert.Contains(t, combined, "default", "warning should say defaults are used instead")
+}
+
+// TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3 verifies that a repo with the original
+// single-branch .armature/ layout converges to the collapsed layout in one arm bootstrap invocation.
+// The chaining behavior (legacy -> dual-branch -> collapsed) happens automatically in a single
+// runRepoSetup() call, so a legacy repo does not require two separate bootstrap invocations.
+func TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Set up a repo with ONLY the original single-branch .armature/ops layout
+	// (matching how other legacy-migration tests set up their fixtures)
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+
+	// Create a test ops file to verify data survives the migration
+	testOpsFile := filepath.Join(legacyOpsPath, "test.json")
+	testContent := []byte(`{"test": "data"}`)
+	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
+
+	// Call runRepoSetup() ONCE
+	buf := new(strings.Builder)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	result, err := runRepoSetup(cmd, repo)
+
+	// Verify: (a) no error
+	require.NoError(t, err, "bootstrap should complete without error")
+
+	// Verify: (b) repo ends up with collapsed layout
+	// After chaining through both migrations in one pass, .armature/ should be a git worktree.
+	// Check that .armature/.git exists and is NOT a directory (it's the worktree pointer file).
+	gitMarkerPath := filepath.Join(repo, ".armature", ".git")
+	gitMarkerInfo, statErr := os.Stat(gitMarkerPath)
+	require.NoError(t, statErr, ".armature/.git should exist after collapsed migration")
+	assert.False(t, gitMarkerInfo.IsDir(), ".armature/.git should be a worktree pointer file, not a directory")
+
+	// Verify the collapsed layout has the expected directory structure
+	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "collapsed layout should have .armature/ops/")
+	assert.DirExists(t, filepath.Join(repo, ".armature", "state"), "collapsed layout should have .armature/state/")
+
+	// Verify: (c) original test file's content survived
+	newOpsFile := filepath.Join(repo, ".armature", "ops", "test.json")
+	newContent, readErr := os.ReadFile(newOpsFile)
+	require.NoError(t, readErr, "original ops file should be preserved in collapsed layout")
+	assert.Equal(t, testContent, newContent, "original ops file content should be unchanged")
+
+	// Verify: (d) there is NO .arm/ directory left behind
+	armWorktreePath := filepath.Join(repo, ".arm")
+	_, armStatErr := os.Stat(armWorktreePath)
+	assert.True(t, os.IsNotExist(armStatErr), ".arm/ worktree should not exist after chaining to collapsed layout")
+
+	// Verify the result reports "initialized" (fresh init status)
+	assert.Equal(t, "initialized", result.Status, "result should report fresh initialization")
 }
