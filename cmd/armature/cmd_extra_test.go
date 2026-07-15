@@ -211,6 +211,31 @@ func TestImportCommand_WithSource(t *testing.T) {
 	assert.Contains(t, out, "imported 1 items")
 }
 
+// TestImportCommand_InvalidType verifies that an import batch containing an
+// invalid issue type anywhere in the file is rejected atomically, before any
+// op from the batch is written — otherwise import would be a second ingress
+// (besides amend) for writing unvalidated types straight into the op log.
+func TestImportCommand_InvalidType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	jsonFile := filepath.Join(t.TempDir(), "issues.json")
+	require.NoError(t, os.WriteFile(jsonFile, []byte(`[
+		{"id": "imp-ok-1", "title": "Valid item", "type": "task"},
+		{"id": "imp-bad-1", "title": "Bad item", "type": "nonsense"}
+	]`), 0644))
+
+	_, err = runTrls(t, repo, "import", jsonFile)
+	require.Error(t, err, "import with an invalid type anywhere in the batch should be rejected")
+	assert.Contains(t, err.Error(), "invalid type")
+
+	out, err := runTrls(t, repo, "log")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "imp-ok-1", "no ops from the rejected batch should have been written")
+	assert.NotContains(t, out, "imp-bad-1")
+}
+
 func TestStaleReviewCommand_NoStale(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

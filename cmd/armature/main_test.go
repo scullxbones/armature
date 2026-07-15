@@ -395,6 +395,25 @@ func TestClaimCommand(t *testing.T) {
 	assert.Contains(t, buf.String(), "task-01")
 }
 
+// TestAmendCommand_RejectsInvalidType verifies that --type is validated before
+// the amend op is written. Without this, `arm amend --type` would write an
+// invalid type straight into the permanent op log, bypassing the same
+// validation NXTTN-S2-T2 enforces on create.
+func TestAmendCommand_RejectsInvalidType(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "amend", "--issue", "task-01", "--type", "nonsense")
+	require.Error(t, err, "amend --type with an invalid type should be rejected before the op is written")
+	assert.Contains(t, err.Error(), "invalid type")
+
+	out, err := runTrls(t, repo, "show", "--issue", "task-01", "--field", "type")
+	require.NoError(t, err)
+	assert.Contains(t, out, "task")
+	assert.NotContains(t, out, "nonsense")
+}
+
 func TestRenderContextCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
