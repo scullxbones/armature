@@ -111,8 +111,7 @@ plan, or --schema to view the JSON schema.`,
 									},
 									"priority": map[string]any{
 										"type":        "string",
-										"enum":        []string{"critical", "high", "medium", "low", ""},
-										"description": "Issue priority",
+										"description": "Issue priority (any string is accepted; the CLI does not validate priority values)",
 									},
 									"dod": map[string]any{
 										"type":        "string",

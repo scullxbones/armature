@@ -361,6 +361,183 @@ func TestConformanceAssessmentSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing
 	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
 }
 
+// TestConformanceAssessmentSchema_RequiresMissingEvidenceWhenNoCitations_REQ_TOPTIER_S2_T1
+// asserts that the conformance-assessment schema rejects a non-satisfied
+// result that has no citations and no missing_evidence, matching the runtime
+// rule enforced by CriterionResult.Valid() in internal/review/types.go.
+func TestConformanceAssessmentSchema_RequiresMissingEvidenceWhenNoCitations_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "acceptance[0]",
+      "status": "not_satisfied",
+      "rationale": "Not implemented"
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
+// TestConformanceAssessmentSchema_AllowsMissingEvidenceWhenNoCitations_REQ_TOPTIER_S2_T1
+// asserts that the same shape is accepted once missing_evidence is supplied.
+func TestConformanceAssessmentSchema_AllowsMissingEvidenceWhenNoCitations_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "acceptance[0]",
+      "status": "not_satisfied",
+      "rationale": "Not implemented",
+      "missing_evidence": "No code found implementing this criterion"
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateAgainstSchema(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
+// TestConformanceAssessmentSchema_RejectsCitationWithBothPathAndActivityEntryID_REQ_TOPTIER_S2_T1
+// asserts that a citation setting both path and activity_entry_id is rejected,
+// matching CriterionResult.Valid()'s mutual-exclusivity check.
+func TestConformanceAssessmentSchema_RejectsCitationWithBothPathAndActivityEntryID_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "Implemented",
+      "citations": [
+        {"path": "src/main.go", "activity_entry_id": "0"}
+      ]
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
+// TestConformanceAssessmentSchema_RejectsEmptyCitation_REQ_TOPTIER_S2_T1 asserts
+// that a citation object with neither path nor activity_entry_id is rejected.
+func TestConformanceAssessmentSchema_RejectsEmptyCitation_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "Implemented",
+      "citations": [
+        {}
+      ]
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
+// TestReviewBundleSchema_AllowsEmptyDefinitionOfDone_REQ_TOPTIER_S2_T1 asserts
+// that the review-bundle schema does not require definition_of_done to be
+// non-empty, matching the CLI which never enforces that (ReviewBundle.Valid()
+// doesn't check it; apply.go only warns advisory).
+func TestReviewBundleSchema_AllowsEmptyDefinitionOfDone_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	bundleJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "issue": {
+    "id": "TASK-001",
+    "type": "task",
+    "title": "Test task",
+    "outcome": "Implemented feature X"
+  },
+  "contract": {
+    "definition_of_done": "",
+    "acceptance": []
+  },
+  "delivery": {
+    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "changed_files": []
+  },
+  "fingerprints": {
+    "contract": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "delivery": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}`
+
+	validateAgainstSchema(t, "review-bundle.schema.json", bundleJSON)
+}
+
+// TestPlanSchema_AllowsArbitraryPriorityString_REQ_TOPTIER_S2_T1 asserts that
+// the plan schema accepts any string for priority, matching the CLI which
+// never validates priority values anywhere.
+func TestPlanSchema_AllowsArbitraryPriorityString_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	planJSON := `{
+  "version": 1,
+  "title": "Feature decomposition",
+  "issues": [
+    {
+      "id": "FEATURE-S1-T1",
+      "title": "Implement core logic",
+      "type": "task",
+      "priority": "urgent-ish"
+    }
+  ]
+}`
+
+	validateAgainstSchema(t, "plan.schema.json", planJSON)
+}
+
+// TestPlanSchema_RejectsNonArrayAcceptance_REQ_TOPTIER_S2_T1 asserts that the
+// plan schema now constrains acceptance to an array of string-or-object,
+// matching the constraint already declared by cmd/armature/decompose.go
+// --schema output.
+func TestPlanSchema_RejectsNonArrayAcceptance_REQ_TOPTIER_S2_T1(t *testing.T) {
+	t.Parallel()
+
+	planJSON := `{
+  "version": 1,
+  "title": "Feature decomposition",
+  "issues": [
+    {
+      "id": "FEATURE-S1-T1",
+      "title": "Implement core logic",
+      "type": "task",
+      "acceptance": "not an array"
+    }
+  ]
+}`
+
+	validateSchemaRejects(t, "plan.schema.json", planJSON)
+}
+
 // TestActivityIndexSchema_InvalidExample_REQ_TOPTIER_S2_T1 asserts that the
 // activity-index schema rejects a document missing the required
 // "entry_count" field, proving the required-fields constraint is actually

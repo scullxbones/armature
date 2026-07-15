@@ -120,14 +120,13 @@ func defaultPlanSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"version": 1,
 		"fields": map[string]string{
-			"id":                 "string",
-			"title":              "string",
-			"type":               "epic|story|task",
-			"parent":             "string (optional)",
-			"scope":              "[]string",
-			"acceptance":         "[]object",
-			"definition_of_done": "string",
-			"source_citation":    "object (optional)",
+			"id":         "string",
+			"title":      "string",
+			"type":       "epic|story|feature|task|bug",
+			"parent":     "string (optional)",
+			"scope":      "string",
+			"acceptance": "array of string-or-object (optional)",
+			"dod":        "string",
 		},
 	}
 }

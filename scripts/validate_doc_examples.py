@@ -75,7 +75,7 @@ def find_json_examples(repo_root):
 
             # Find JSON code blocks with explicit artifact_type declaration
             # Pattern: ```json artifact_type=<type>
-            pattern = r'```json\s+artifact_type=(\w+)\s*\n(.*?)```'
+            pattern = r'```json\s+artifact_type=([\w-]+)\s*\n(.*?)```'
 
             for match in re.finditer(pattern, content, re.DOTALL):
                 # Count lines up to this match for accurate line numbers
@@ -126,7 +126,14 @@ def validate_json_example(json_text, schema):
 
 
 def format_validation_error(error):
-    """Format a jsonschema validation error for display."""
+    """Format a validation error for display.
+
+    Most errors are jsonschema ValidationError objects with .path/.message
+    attributes, but validate_json_example() returns plain strings for
+    malformed JSON (which never made it to schema validation). Handle both.
+    """
+    if isinstance(error, str):
+        return error
     path = " -> ".join(str(p) for p in error.path) if error.path else "<root>"
     return f"{path}: {error.message}"
 

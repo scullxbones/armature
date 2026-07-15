@@ -59,10 +59,10 @@ You receive the full ReviewBundle as input (typically via stdin or a JSON file).
 
 ### ReviewBundle Example
 
-```json
+```json artifact_type=review-bundle
 {
   "schema_version": 1,
-  "bundle_id": "bundle-abc123",
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "issue": {
     "id": "TASK-42",
     "type": "task",
@@ -78,14 +78,14 @@ You receive the full ReviewBundle as input (typically via stdin or a JSON file).
     ]
   },
   "delivery": {
-    "base_sha": "abc123",
-    "head_sha": "def456",
+    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "changed_files": ["pkg/parser/parser.go", "pkg/parser/parser_test.go"],
     "diff": "... unified diff (may be empty if large) ..."
   },
   "fingerprints": {
-    "contract": "sha256-contract-hash",
-    "delivery": "sha256-delivery-hash"
+    "contract": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "delivery": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   }
 }
 ```
@@ -132,9 +132,6 @@ assigning status.
 ```
 
 > **Note:** `line` is optional. Omitting it (or setting it to `0`) creates a **path-level citation** that validates against file presence in the diff rather than a specific line number. Use path-level citations when the evidence spans an entire file or no specific line is more relevant than another.
-
-```json
-```
 
 ### 3. Evaluate Each Acceptance Criterion
 
@@ -190,26 +187,30 @@ The rating is computed automatically by `arm review record` from the results.
 Assemble all criterion results into a ConformanceAssessment. See `templates/conformance-assessment.json`
 for a complete verbatim template.
 
-```json
+```json artifact_type=conformance-assessment
 {
   "schema_version": 1,
-  "bundle_id": "bundle-abc123",
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "results": [
     {
       "id": "definition_of_done",
       "status": "satisfied",
-      "rationale": "...",
-      "citations": [...]
+      "rationale": "TokenParser.Parse() handles all 8 token types without panicking, per parser.go and its tests.",
+      "citations": [
+        {"path": "pkg/parser/parser.go", "line": 42}
+      ]
     },
     {
       "id": "acceptance[0]",
       "status": "satisfied",
-      "rationale": "...",
-      "citations": [...]
+      "rationale": "All 8 token types parse correctly per parser_test.go.",
+      "citations": [
+        {"path": "pkg/parser/parser_test.go", "line": 120}
+      ]
     }
   ],
-  "contract_fingerprint": "sha256-contract-hash",
-  "delivery_fingerprint": "sha256-delivery-hash"
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 }
 ```
 

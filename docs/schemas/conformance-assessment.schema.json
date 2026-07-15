@@ -60,7 +60,14 @@
                   "type": "string",
                   "description": "Pre-rendered activity entry information (populated at record time)"
                 }
-              }
+              },
+              "not": {
+                "required": ["path", "activity_entry_id"]
+              },
+              "anyOf": [
+                {"required": ["path"]},
+                {"required": ["activity_entry_id"]}
+              ]
             }
           },
           "rationale": {
@@ -70,7 +77,29 @@
           },
           "missing_evidence": {
             "type": "string",
-            "description": "Explicit statement of missing evidence when citations are absent (required for non-satisfied criteria without citations)"
+            "description": "Explicit statement of missing evidence when citations are absent (required for non-satisfied criteria without citations)",
+            "minLength": 1
+          }
+        },
+        "if": {
+          "properties": {
+            "status": {
+              "enum": ["not_satisfied", "partially_satisfied", "indeterminate"]
+            },
+            "citations": {
+              "type": "array",
+              "maxItems": 0
+            }
+          },
+          "required": ["status"]
+        },
+        "then": {
+          "required": ["missing_evidence"],
+          "properties": {
+            "missing_evidence": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       },

@@ -50,8 +50,7 @@
           },
           "priority": {
             "type": "string",
-            "description": "Priority level (empty string permitted; the CLI treats it as unset)",
-            "enum": ["", "low", "medium", "high", "critical"]
+            "description": "Priority level (any string is accepted; the CLI does not validate priority values)"
           },
           "dod": {
             "type": "string",
@@ -76,7 +75,14 @@
             }
           },
           "acceptance": {
-            "description": "Acceptance criteria (can be a string array or object)"
+            "description": "Acceptance criteria (can be a string array or object)",
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            }
           }
         }
       },

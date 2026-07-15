@@ -48,8 +48,7 @@
       "properties": {
         "definition_of_done": {
           "type": "string",
-          "description": "Primary Definition of Done criterion",
-          "minLength": 1
+          "description": "Primary Definition of Done criterion (may be empty; the CLI does not require it to be non-empty)"
         },
         "scope": {
           "type": "array",
