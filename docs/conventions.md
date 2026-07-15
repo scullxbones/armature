@@ -1,6 +1,6 @@
 # Conventions
 
-This document defines the naming and formatting conventions that all workers must follow when implementing tasks in this repository. These conventions are enforced by `make check` and are load-bearing for traceability and integration.
+This document defines the naming and formatting conventions that all workers must follow when implementing tasks in this repository. Test naming is surfaced by `make trace-report` (report-only, not a `make check` dependency); commit format and branch naming are checked by review, not enforced by tooling today. These conventions are load-bearing for traceability and integration regardless of enforcement mechanism.
 
 ## Test Naming and Traceability
 
