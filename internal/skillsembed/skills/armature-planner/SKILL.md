@@ -196,7 +196,7 @@ a new test function.
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
 
-See [docs/conventions.md](../../docs/conventions.md#test-naming-and-traceability) for comprehensive documentation of test naming and all other naming conventions.
+See `docs/conventions.md` (test naming and traceability section) in the armature repo for comprehensive documentation of test naming and all other naming conventions.
 
 **`notes` — Optional Free-Text Notes**
 
@@ -213,7 +213,7 @@ if not needed.
 
 > **WARNING:** The plan JSON must be wrapped in the required `{ "version": 1, "title": "...", "issues": [...] }` top-level structure. Omitting the wrapper or using an unsupported plan version will cause `arm decompose-apply` to fail with a validation error.
 
-```json
+```json artifact_type=plan
 {
   "version": 1,
   "title": "Example Decomposition Plan",

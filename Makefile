@@ -94,7 +94,7 @@ mutate:
 	exit $$status
 
 embed-examples: build
-	@$(PYTHON) scripts/embed_examples.py check
+	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/embed_examples.py check
 
 validate-skills: skill-lint embed-examples
 	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md 2>/dev/null; then \
