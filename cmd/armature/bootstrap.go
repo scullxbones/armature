@@ -647,6 +647,145 @@ func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, commit
 	return nil
 }
 
+// migrateDualBranchToCollapsed detects and migrates the current dual-branch .arm/.armature/
+// layout to the collapsed .armature/ layout. The ops worktree is renamed from .arm/ to
+// .armature/, and its inner .armature/ subdirectory contents move up to the root.
+// Returns (true, backupDirPath) if migration was performed, (false, "") if no migration
+// was needed, or (false, "", error) if an error occurred.
+func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
+	gitClient := adapters.New(repoPath)
+
+	// Check if the dual-branch layout exists (.arm worktree with inner .armature/)
+	armWorktreePath := filepath.Join(repoPath, ".arm")
+	innerArmaturePath := filepath.Join(armWorktreePath, config.StateDirName)
+
+	// Check if .arm worktree exists
+	if _, err := os.Stat(filepath.Join(armWorktreePath, ".git")); err != nil {
+		if os.IsNotExist(err) {
+			// No .arm worktree exists, no migration needed
+			return false, "", nil
+		}
+		return false, "", fmt.Errorf("check for .arm worktree: %w", err)
+	}
+
+	// Check if the inner .armature/ directory exists within .arm/
+	if _, err := os.Stat(innerArmaturePath); err != nil {
+		if os.IsNotExist(err) {
+			// Dual-branch layout doesn't exist, no migration needed
+			return false, "", nil
+		}
+		return false, "", fmt.Errorf("check for inner .armature/ directory: %w", err)
+	}
+
+	// Check if the _armature worktree has uncommitted changes (reject if it does)
+	armtreeGitClient := adapters.New(armWorktreePath)
+	dirty, err := armtreeGitClient.IsWorkingTreeDirty()
+	if err != nil {
+		return false, "", fmt.Errorf("check _armature worktree for uncommitted changes: %w", err)
+	}
+	if dirty {
+		return false, "", fmt.Errorf(
+			"_armature worktree has uncommitted changes; please commit or stash them before running bootstrap",
+		)
+	}
+
+	// Dual-branch layout detected: back up .arm/ to a timestamped directory
+	timestamp := time.Now().Format("20060102150405")
+	backupDir := filepath.Join(repoPath, fmt.Sprintf(".arm.collapsed-%s", timestamp))
+	for i := 2; ; i++ {
+		if _, err := os.Lstat(backupDir); os.IsNotExist(err) {
+			break
+		}
+		backupDir = filepath.Join(repoPath, fmt.Sprintf(".arm.collapsed-%s-%d", timestamp, i))
+	}
+
+	// Rename .arm/ to the timestamped backup
+	if err := os.Rename(armWorktreePath, backupDir); err != nil {
+		return false, "", fmt.Errorf("backup .arm worktree to %s: %w", backupDir, err)
+	}
+
+	// Remove the old .arm worktree from git's worktree registry
+	// The worktree has already been moved, so this may fail, but we try anyway
+	_ = gitClient.RemoveWorktree(armWorktreePath) //nolint:errcheck // already moved, may fail
+
+	// Add the new collapsed .armature/ worktree
+	newWorktreePath := filepath.Join(repoPath, config.StateDirName)
+	if err := gitClient.AddWorktree("_armature", newWorktreePath); err != nil {
+		// Rollback: restore .arm/ from backup
+		if restoreErr := os.Rename(backupDir, armWorktreePath); restoreErr != nil {
+			return false, "", fmt.Errorf(
+				"add .armature worktree: %w; restore .arm from backup: %w (backup at %s)",
+				err, restoreErr, backupDir,
+			)
+		}
+		// Try to re-register the restored .arm worktree (best effort)
+		_ = gitClient.AddWorktree("_armature", armWorktreePath) //nolint:errcheck
+		return false, "", fmt.Errorf("add .armature worktree: %w (migration rolled back)", err)
+	}
+
+	// Copy contents from backup's inner .armature/ to the new collapsed .armature/
+	// The new .armature/ worktree already has its own ops/ structure from the _armature branch,
+	// so we merge legacy ops/templates/hooks/review if they exist in the backup
+	legacyInnerArmaturePath := filepath.Join(backupDir, config.StateDirName)
+	if _, err := os.Stat(legacyInnerArmaturePath); err == nil {
+		// Legacy inner .armature/ exists in backup, merge its contents
+		skippedCount, err := copyLegacyOpsToNewWorktree(backupDir, newWorktreePath)
+		if err != nil {
+			// Rollback: remove new worktree and restore old one
+			if removeErr := gitClient.RemoveWorktree(newWorktreePath); removeErr != nil {
+				return false, "", fmt.Errorf(
+					"copy legacy ops from backup: %w; remove failed .armature worktree: %w (backup at %s)",
+					err, removeErr, backupDir,
+				)
+			}
+			restoreErr := os.Rename(backupDir, armWorktreePath)
+			if restoreErr != nil {
+				return false, "", fmt.Errorf(
+					"copy legacy ops from backup: %w; restore .arm from backup: %w (backup at %s)",
+					err, restoreErr, backupDir,
+				)
+			}
+			if reregisterErr := gitClient.AddWorktree("_armature", armWorktreePath); reregisterErr != nil {
+				return false, "", fmt.Errorf(
+					"copy legacy ops from backup: %w; restore .arm from backup: %w (backup at %s); re-register .arm worktree: %w",
+					err, restoreErr, backupDir, reregisterErr,
+				)
+			}
+			return false, "", fmt.Errorf("copy legacy ops from backup: %w (migration rolled back)", err)
+		}
+		if skippedCount > 0 {
+			// Note: we'll surface this to the user in runRepoSetup
+		}
+	}
+
+	// Update git config to point to the new worktree path
+	if err := gitClient.SetGitConfig("armature.ops-worktree-path", newWorktreePath); err != nil {
+		// Rollback: remove new worktree and restore old one
+		if removeErr := gitClient.RemoveWorktree(newWorktreePath); removeErr != nil {
+			return false, "", fmt.Errorf(
+				"set git config: %w; remove failed .armature worktree: %w (backup at %s)",
+				err, removeErr, backupDir,
+			)
+		}
+		restoreErr := os.Rename(backupDir, armWorktreePath)
+		if restoreErr != nil {
+			return false, "", fmt.Errorf(
+				"set git config: %w; restore .arm from backup: %w (backup at %s)",
+				err, restoreErr, backupDir,
+			)
+		}
+		if reregisterErr := gitClient.AddWorktree("_armature", armWorktreePath); reregisterErr != nil {
+			return false, "", fmt.Errorf(
+				"set git config: %w; restore .arm from backup: %w (backup at %s); re-register .arm worktree: %w",
+				err, restoreErr, backupDir, reregisterErr,
+			)
+		}
+		return false, "", fmt.Errorf("set git config: %w (migration rolled back)", err)
+	}
+
+	return true, backupDir, nil
+}
+
 // copyLegacyOpsToNewWorktree copies the ops/, templates/, hooks/, and review/ directory
 // contents from the backup (created during migration) into the corresponding directories
 // of the new worktree's .armature/, preserving all legacy data, not just ops/.
@@ -830,6 +969,13 @@ func copyRecursive(src string, dst string) (int, error) {
 // excludeArmWorktreeFromGit adds .arm/ to .git/info/exclude so the worktree is not tracked by git.
 // This is idempotent: if .arm/ is already in the exclude file, it won't be duplicated.
 func excludeArmWorktreeFromGit(repoPath string) error {
+	return updateGitExclude(repoPath, ".arm/", "")
+}
+
+// updateGitExclude adds an exclude pattern to .git/info/exclude and optionally removes another.
+// This is idempotent: if the pattern to add is already present, it won't be duplicated.
+// If removePattern is non-empty and present, it will be removed before the new pattern is added.
+func updateGitExclude(repoPath string, addPattern, removePattern string) error {
 	excludePath := filepath.Join(repoPath, ".git", "info", "exclude")
 
 	// Create the info directory if it doesn't exist
@@ -846,21 +992,36 @@ func excludeArmWorktreeFromGit(repoPath string) error {
 		return fmt.Errorf("read .git/info/exclude: %w", err)
 	}
 
-	// Check if .arm/ is already in the exclude file as an exact line match (not a
-	// substring match, which would false-positive on e.g. "vendor.arm/" or false-negative
-	// on a commented-out "#.arm/").
-	for line := range strings.SplitSeq(currentContent, "\n") {
-		if strings.TrimSpace(line) == ".arm/" {
-			return nil // Already excluded, idempotent
+	// Remove the pattern to remove (if specified)
+	var newContent string
+	if removePattern != "" {
+		var filteredLines []string
+		for line := range strings.SplitSeq(currentContent, "\n") {
+			if strings.TrimSpace(line) != removePattern {
+				filteredLines = append(filteredLines, line)
+			}
+		}
+		newContent = strings.Join(filteredLines, "\n")
+	} else {
+		newContent = currentContent
+	}
+
+	// Check if the pattern to add is already in the exclude file
+	found := false
+	for line := range strings.SplitSeq(newContent, "\n") {
+		if strings.TrimSpace(line) == addPattern {
+			found = true
+			break
 		}
 	}
 
-	// Append .arm/ to the exclude file
-	newContent := currentContent
-	if len(newContent) > 0 && !strings.HasSuffix(newContent, "\n") {
-		newContent += "\n"
+	// If not found, append it
+	if !found {
+		if len(newContent) > 0 && !strings.HasSuffix(newContent, "\n") {
+			newContent += "\n"
+		}
+		newContent += addPattern + "\n"
 	}
-	newContent += ".arm/\n"
 
 	if err := os.WriteFile(excludePath, []byte(newContent), 0o600); err != nil { //nolint:gosec // G703: path is constructed from repo/.git/info/exclude
 		return fmt.Errorf("write .git/info/exclude: %w", err)
@@ -913,6 +1074,19 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated legacy single-branch .armature layout to timestamped backup at %s\n", backupDir)
 	}
 
+	// Attempt to migrate dual-branch layout to collapsed layout if it exists
+	dualMigrated, dualBackupDir, err := migrateDualBranchToCollapsed(repoPath)
+	if err != nil {
+		return RepoSetupResult{}, fmt.Errorf("migrate dual-branch layout to collapsed: %w", err)
+	}
+	if dualMigrated {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated dual-branch .arm/.armature layout to collapsed .armature at timestamped backup %s\n", dualBackupDir)
+		// Update git exclude to use .armature/ instead of .arm/
+		if err := updateGitExclude(repoPath, config.StateDirName+"/", ".arm/"); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update .git/info/exclude after migration: %v\n", err)
+		}
+	}
+
 	// Always use dual-branch mode: create orphan branch _armature and .arm worktree
 	// Create orphan branch _armature (idempotent)
 	if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
@@ -932,41 +1106,63 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w", err)
 	}
 
-	// Create .arm/ worktree (idempotent)
-	worktreePath := filepath.Join(repoPath, ".arm")
+	// Determine the correct worktree path based on layout
+	// After dual-branch to collapsed migration, worktree is at .armature/
+	// Otherwise, worktree is at .arm/
+	var worktreePath string
+	var isCollapsedLayout bool
+
+	if dualMigrated {
+		worktreePath = filepath.Join(repoPath, config.StateDirName) // .armature/
+		isCollapsedLayout = true
+	} else {
+		worktreePath = filepath.Join(repoPath, ".arm")
+		isCollapsedLayout = false
+	}
+
+	// Create worktree if not already exists (idempotent)
 	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
 		if migrated {
 			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
 				return RepoSetupResult{}, fmt.Errorf(
-					"add .arm worktree: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
-					err, rbErr, backupDir,
+					"add worktree at %s: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
+					worktreePath, err, rbErr, backupDir,
 				)
 			}
 			if migrationCommitted && preMigrationSHA != "" {
 				// The reset restored tracked files, but the backup is the only copy of
 				// any legacy files that were untracked at migration time.
-				return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w (migration rolled back; backup left at %s)", err, backupDir)
+				return RepoSetupResult{}, fmt.Errorf("add worktree at %s: %w (migration rolled back; backup left at %s)", worktreePath, err, backupDir)
 			}
 		}
-		return RepoSetupResult{}, fmt.Errorf("add .arm worktree: %w", err)
+		return RepoSetupResult{}, fmt.Errorf("add worktree at %s: %w", worktreePath, err)
 	}
 
-	// Exclude .arm/ from git tracking to prevent it from showing up in `git status`
-	// or being staged by `git add .`. Use .git/info/exclude (local-only, doesn't require
-	// committing a change to the repo's .gitignore). This is a cosmetic nicety, not
-	// essential functionality, so a failure here should not abort bootstrap.
-	if err := excludeArmWorktreeFromGit(repoPath); err != nil {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
+	// Exclude worktree from git tracking
+	// For collapsed layout, exclude .armature/; for dual-branch, exclude .arm/
+	if !isCollapsedLayout {
+		// Exclude .arm/ from git tracking (dual-branch layout only)
+		if err := excludeArmWorktreeFromGit(repoPath); err != nil {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
+		}
 	}
 
-	// Set git config keys for dual-branch mode.
+	// Set git config keys for current layout
 	// Note: armature.mode is intentionally not written here; nothing reads it anymore
-	// (dual-branch is the only mode), so it would be dead legacy-compat state.
+	// (dual-branch is the only mode for now; collapsed is T3+), so it would be dead legacy-compat state.
 	if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
 		return RepoSetupResult{}, fmt.Errorf("set armature.ops-worktree-path: %w", err)
 	}
 
-	issuesDir := filepath.Join(worktreePath, config.StateDirName)
+	// Determine issuesDir based on layout
+	// In collapsed layout, WorktreePath == IssuesDir
+	// In dual-branch layout, IssuesDir == WorktreePath/.armature/
+	var issuesDir string
+	if isCollapsedLayout {
+		issuesDir = worktreePath
+	} else {
+		issuesDir = filepath.Join(worktreePath, config.StateDirName)
+	}
 
 	// Detect whether this is a fresh init or an idempotent re-run before writing anything.
 	opsDir := filepath.Join(issuesDir, "ops")
