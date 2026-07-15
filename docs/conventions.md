@@ -93,4 +93,4 @@ These conventions serve three purposes:
 
 3. **Workflow isolation:** Branch naming separates feature-level work (one shared `feat/` branch) from task-level work (one `task/` branch per worker), enabling parallel execution while maintaining merge-conflict-free DAG integrity.
 
-Workers that violate these conventions will fail review. Enforce these in code review and CI—they are not suggestions.
+Workers that violate these conventions will fail review. Enforce these in code review—they are not suggestions.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "bundle_id": "bundle-abc123",
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "results": [
     {
       "id": "definition_of_done",
@@ -58,6 +58,6 @@
       "missing_evidence": "Example: 'Diff truncated after 1000 lines; cannot verify test coverage completely. Outcome states \"tests added\" but full test file not visible.'"
     }
   ],
-  "contract_fingerprint": "sha256-contract-hash",
-  "delivery_fingerprint": "sha256-delivery-hash"
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 }

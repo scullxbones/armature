@@ -105,6 +105,7 @@ validate-skills: skill-lint embed-examples
 	@echo "Skills validated: no 'make install' references and no example drift"
 
 validate-doc-examples:
+	@$(PYTHON) -c "import jsonschema" 2>/dev/null || $(PYTHON) -m pip install -q jsonschema
 	@$(PYTHON) -m unittest scripts/test_validate_doc_examples.py
 	@$(PYTHON) scripts/validate_doc_examples.py
 
