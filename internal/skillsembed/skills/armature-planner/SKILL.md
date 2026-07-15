@@ -214,22 +214,59 @@ if not needed.
 ```json
 {
   "version": 1,
-  "title": "Parser implementation plan",
+  "title": "Example Decomposition Plan",
   "issues": [
     {
-      "id": "STORY-T1",
-      "title": "Add token parser",
-      "type": "task",
-      "parent": "STORY-ID",
-      "priority": "high",
-      "blocked_by": [],
-      "dod": "Parser handles all five token types from spec §3.2. Returns typed AST nodes. All existing tests pass; new tests cover added branches.",
-      "scope": "cmd/parse/main.go, internal/ast/node.go (new), internal/ast/node_test.go (new)",
+      "id": "STORY-001",
+      "title": "User authentication story",
+      "type": "story",
+      "scope": "",
+      "priority": "",
+      "dod": "",
+      "parent": "",
+      "blocked_by": null,
+      "notes": [],
       "acceptance": [
-        "TestParseTokenTypes_REQ_STORY_T1 passes",
-        "TestParseEdgeCases_REQ_STORY_T1 passes",
-        "make check green",
-        "no new lint errors"
+        "Decomposition plan created for STORY-001",
+        "All child tasks have dod, scope, and acceptance fields",
+        "arm validate passes with no errors"
+      ]
+    },
+    {
+      "id": "TASK-001",
+      "title": "Implement login endpoint",
+      "type": "task",
+      "scope": "",
+      "context_files": [
+        "docs/auth-architecture.md"
+      ],
+      "priority": "high",
+      "dod": "Login endpoint returns JWT on valid credentials",
+      "parent": "STORY-001",
+      "blocked_by": [],
+      "notes": [],
+      "acceptance": [
+        "Implementation complete per dod",
+        "Test_TASK_001 passes",
+        "make check green"
+      ]
+    },
+    {
+      "id": "TASK-002",
+      "title": "Write login integration tests",
+      "type": "task",
+      "scope": "",
+      "priority": "medium",
+      "dod": "Integration tests cover happy path and error cases",
+      "parent": "STORY-001",
+      "blocked_by": [
+        "TASK-001"
+      ],
+      "notes": [],
+      "acceptance": [
+        "Implementation complete per dod",
+        "Test_TASK_002 passes",
+        "make check green"
       ]
     }
   ]
