@@ -84,8 +84,7 @@ More info.
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		// Run skill-lint
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
@@ -125,8 +124,7 @@ More info.
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		// Run skill-lint
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
@@ -311,8 +309,7 @@ More info.
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		// Run skill-lint
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
@@ -356,8 +353,7 @@ arm invalid-subcommand-after-json --some-flag value
 `
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
@@ -394,8 +390,7 @@ blocks = skill_lint.extract_code_blocks(content)
 commands = [c for b in blocks for c in skill_lint.extract_arm_commands(b)]
 assert any("arm review commits" in c for c in commands), commands
 `
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, "-c", script) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Dir = projectRoot
 		output := new(bytes.Buffer)
@@ -537,8 +532,7 @@ More info.
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		// Run skill-lint
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
