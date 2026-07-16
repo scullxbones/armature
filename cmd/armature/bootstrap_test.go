@@ -559,10 +559,13 @@ exec "$real_git" "$@"
 	assert.Empty(t, status, "rollback must restore a clean legacy worktree")
 }
 
-// TestMigrateDualBranchToCollapsedRollbackPreservesExistingRootState verifies
-// that a failure after the collapse commit does not delete valid root-level
-// state that existed in the legacy worktree before migration began.
-func TestMigrateDualBranchToCollapsedRollbackPreservesExistingRootState(t *testing.T) {
+// TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure verifies
+// that a failure occurring after the collapse commit (the SetGitConfig step) does
+// NOT reset --hard the _armature branch back to its pre-migration SHA: doing so
+// would rewind already-committed history, violating the append-only invariant
+// (AGENTS.md I2/T2). Instead the migration is left committed at its new worktree
+// path and the error instructs a manual config fix.
+func TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -589,9 +592,11 @@ func TestMigrateDualBranchToCollapsedRollbackPreservesExistingRootState(t *testi
 	require.NoError(t, armGitClient.AddPaths([]string{"ops", "templates", "config.json", ".armature"}))
 	require.NoError(t, armGitClient.CommitWorktreeOp(".", "chore: create mixed legacy layout"))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
+	preCollapseSHA, err := armGitClient.HeadSHA()
+	require.NoError(t, err)
 
 	// Fail only the final config update. This occurs after the flattening commit,
-	// exercising the rollback path that previously removed root-level artifacts.
+	// exercising the post-commit failure path that must not rewind _armature.
 	wrapperDir := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
@@ -614,16 +619,20 @@ exec "$real_git" "$@"
 
 	_, _, err = migrateDualBranchToCollapsed(repo)
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "committed successfully")
 
-	for path, want := range preexisting {
-		// The stale nested tree is intentionally restored too: rollback promises
-		// the exact pre-migration checkout, not a partially-collapsed variant.
-		got, readErr := os.ReadFile(filepath.Join(armWorktreePath, path))
-		require.NoError(t, readErr, "restore %s", path)
-		assert.Equal(t, want, string(got), "restore exact contents for %s", path)
+	newWorktreePath := filepath.Join(repo, config.StateDirName)
+	newGitClient := adapters.New(newWorktreePath)
+	postCommitSHA, err := newGitClient.HeadSHA()
+	require.NoError(t, err)
+	assert.NotEqual(t, preCollapseSHA, postCommitSHA, "collapse commit must remain on _armature, not be reset away")
+
+	// The collapsed layout landed at the new worktree path; the flattened root-level
+	// content (not the stale nested copy) is what's present there now.
+	for _, path := range []string{"ops/root-op.json", "templates/root-template.md", "config.json"} {
+		_, statErr := os.Stat(filepath.Join(newWorktreePath, path))
+		assert.NoError(t, statErr, "expected %s to remain in collapsed worktree", path)
 	}
-	status := strings.TrimSpace(runOutput(t, armWorktreePath, "status", "--porcelain"))
-	assert.Empty(t, status, "rollback must restore a clean legacy worktree")
 }
 
 // TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo verifies that a real
@@ -2731,4 +2740,37 @@ func TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3(t *testing.T) {
 
 	// Verify the result reports "initialized" (fresh init status)
 	assert.Equal(t, "initialized", result.Status, "result should report fresh initialization")
+}
+
+// TestBootstrapHonorsConfiguredCustomCollapsedWorktree verifies that a repo which
+// already has a valid collapsed layout at a custom armature.ops-worktree-path
+// (e.g. .ops, not .arm or .armature) is left alone by a second bootstrap run
+// instead of being treated as unmigrated and having a second worktree added at
+// the default .armature/ path, which git would reject since the branch is
+// already checked out elsewhere.
+func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	customWorktreePath := filepath.Join(repo, ".ops")
+	require.NoError(t, gitClient.AddWorktree("_armature", customWorktreePath))
+
+	opsGitClient := adapters.New(customWorktreePath)
+	require.NoError(t, os.MkdirAll(filepath.Join(customWorktreePath, "ops"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(customWorktreePath, "config.json"), []byte(`{"project_type":"go"}`), 0o600))
+	require.NoError(t, opsGitClient.AddPaths([]string{"ops", "config.json"}))
+	require.NoError(t, opsGitClient.CommitWorktreeOp(".", "chore: collapsed custom worktree"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err, "bootstrap should be idempotent against an existing custom collapsed worktree")
+
+	configuredPath, err := adapters.GitConfig(repo, "armature.ops-worktree-path")
+	require.NoError(t, err)
+	assert.Equal(t, customWorktreePath, configuredPath, "bootstrap should keep using the configured custom worktree path")
+	assert.NoDirExists(t, filepath.Join(repo, ".armature"), "bootstrap must not create a default .armature/ worktree alongside a valid custom one")
 }
