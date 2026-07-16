@@ -56,7 +56,11 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 			}
 
 			if tc.injectWorktreeBad {
-				require.NoError(t, os.WriteFile(filepath.Join(repo, ".arm"), []byte("not a directory"), 0o600))
+				wrapperDir := installWorktreeAddFailureWrapper(t, filepath.Join(repo, ".armature"))
+				t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+				t.Cleanup(func() {
+					require.NoError(t, os.Setenv("PATH", originalPath))
+				})
 			}
 
 			buf := new(bytes.Buffer)
@@ -73,9 +77,6 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 			assertLegacyContentFindable(t, repo, legacyContent, tc.tracked)
 
 			if tc.injectCommitFail || tc.injectWorktreeBad {
-				if tc.injectWorktreeBad {
-					require.NoError(t, os.Remove(filepath.Join(repo, ".arm")))
-				}
 				require.NoError(t, os.Setenv("PATH", originalPath))
 				buf2 := new(bytes.Buffer)
 				cmd2 := newRootCmd()
@@ -131,10 +132,35 @@ exec "$real_git" "$@"
 	return wrapperDir
 }
 
+func installWorktreeAddFailureWrapper(t *testing.T, target string) string {
+	t.Helper()
+
+	wrapperDir := t.TempDir()
+	wrapperPath := filepath.Join(wrapperDir, "git")
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+
+	script := `#!/bin/sh
+real_git=%q
+target=%q
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "add" ] && [ "$arg" = "$target" ]; then
+    exit 1
+  fi
+  prev="$arg"
+done
+exec "$real_git" "$@"
+`
+	content := strings.ReplaceAll(fmt.Sprintf(script, realGit, target), "\r\n", "\n")
+	require.NoError(t, os.WriteFile(wrapperPath, []byte(content), 0o755))
+	return wrapperDir
+}
+
 func assertLegacyContentFindable(t *testing.T, repo string, legacyContent []byte, tracked bool) {
 	t.Helper()
 
-	worktreeContent, err := os.ReadFile(filepath.Join(repo, ".arm", ".armature", "ops", "matrix.jsonl"))
+	worktreeContent, err := os.ReadFile(filepath.Join(repo, ".armature", "ops", "matrix.jsonl"))
 	if err == nil {
 		assert.Equal(t, legacyContent, worktreeContent)
 		return

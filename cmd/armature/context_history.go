@@ -38,7 +38,16 @@ func newContextHistoryCmd() *cobra.Command {
 				return fmt.Errorf("log branch: %w", err)
 			}
 
-			opsPrefix := filepath.Join(".armature", "ops")
+			// In the collapsed layout, IssuesDir == WorktreePath, so the ops
+			// prefix relative to the worktree root is just "ops"; in the
+			// legacy dual-branch layout, IssuesDir is nested a level down.
+			issuesRel := "."
+			if appCtx.IssuesDir != "" && opsRepoPath != "" {
+				if rel, relErr := filepath.Rel(opsRepoPath, appCtx.IssuesDir); relErr == nil {
+					issuesRel = rel
+				}
+			}
+			opsPrefix := filepath.Join(issuesRel, "ops")
 
 			// Reverse entries to walk oldest-first
 			for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {

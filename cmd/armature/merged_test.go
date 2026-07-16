@@ -588,7 +588,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		// Make the ops log directory read-only so appendOp cannot write a new log entry.
 		// This simulates a disk-full or permission error during the op write.
 		// In dual-branch mode, ops live in the .arm worktree: <repo>/.arm/.armature/ops/.
-		opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+		opsDir := filepath.Join(repo, ".armature", "ops")
 		require.NoError(t, os.Chmod(opsDir, 0o444))
 		defer func() {
 			if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {

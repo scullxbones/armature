@@ -674,7 +674,7 @@ func TestResolverErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 
 	// Corrupt the materialized issue JSON so resolver.Resolve fails to decode it.
 	// State lives under .arm/state/<worker-id>/issues/; glob for the worker id.
-	matches, err := filepath.Glob(filepath.Join(repo, ".arm", "state", "*", "issues", "task-01.json"))
+	matches, err := filepath.Glob(filepath.Join(repo, ".armature", "state", "*", "issues", "task-01.json"))
 	require.NoError(t, err)
 	require.NotEmpty(t, matches, "materialized issue JSON must exist")
 	for _, issuePath := range matches {
@@ -766,7 +766,7 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 
 	// Make the ops directory unreadable to force snapshot load to fail.
 	// This makes os.ReadDir fail when ListLogFiles is called.
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	require.DirExists(t, opsDir, "opsDir should exist")
 
 	// Make the directory unreadable by removing all permissions
