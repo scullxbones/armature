@@ -641,7 +641,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 	assert.NotEqual(t, ops.StatusClaimed, issue.Status,
 		"task must not be stuck in claimed state after worktree setup failure in dual-branch mode")
 
-	// Verify the ops log in the _armature worktree (.arm/.armature/ops/) contains a
+	// Verify the ops log in the _armature worktree (.armature/ops/) contains a
 	// transition-to-open (release) op, proving appendHighStakesOp committed the rollback.
 	// If checkExistingWorktreeBinding rejected the fake worktree before the claim op was
 	// written, no rollback op is needed (task stays open from the start), so we only look
@@ -650,7 +650,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 	entries, readErr := os.ReadDir(armOpsDir)
 	if readErr != nil {
 		// Ops dir not readable — skip the log check (bootstrap may have put ops elsewhere).
-		t.Logf("Note: .arm/.armature/ops not readable: %v; skipping ops log check", readErr)
+		t.Logf("Note: .armature/ops not readable: %v; skipping ops log check", readErr)
 		return
 	}
 

@@ -82,10 +82,6 @@ func bootstrapRepoForTest(t *testing.T, repo string) {
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute(), "bootstrap failed")
-
-	// After bootstrap creates .arm/.armature/, migrate to the new .armature/ layout
-	// so that subsequent commands can run (they refuse the old layout)
-	migrateBootstrapLayoutForTest(t, repo)
 }
 
 func TestStateDirFor(t *testing.T) {
@@ -300,45 +296,6 @@ func setupArmatureLayout(t *testing.T, repo string) string {
 	run(t, repo, "git", "config", "armature.worker-id", "test-worker-"+fmt.Sprintf("%d", time.Now().UnixNano()))
 
 	return armatureDir
-}
-
-// migrateBootstrapLayoutForTest converts a repo from the dual-branch .arm/.armature/ layout
-// (created by bootstrap) to the collapsed .armature/ layout that commands expect.
-// This is a test helper for existing tests that use bootstrap but need to run commands afterward.
-// After bootstrap creates .arm/.armature/, this helper re-points the git config to a new
-// .armature/ directory and copies necessary files.
-func migrateBootstrapLayoutForTest(t *testing.T, repo string) {
-	t.Helper()
-	oldArm := filepath.Join(repo, ".arm")
-	oldArmature := filepath.Join(oldArm, ".armature")
-	newArmature := filepath.Join(repo, ".armature")
-
-	// Only migrate if the old layout exists and the new one doesn't
-	if _, err := os.Stat(oldArmature); os.IsNotExist(err) {
-		return // Nothing to migrate
-	}
-	if _, err := os.Stat(newArmature); err == nil {
-		return // New layout already exists
-	}
-
-	// Copy from old layout to new layout
-	require.NoError(t, os.MkdirAll(newArmature, 0o755))
-
-	// Copy config.json
-	oldConfig := filepath.Join(oldArmature, "config.json")
-	newConfig := filepath.Join(newArmature, "config.json")
-	if _, err := os.Stat(oldConfig); err == nil {
-		content, err := os.ReadFile(oldConfig)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(newConfig, content, 0o644))
-	}
-
-	// Create ops and state directories
-	require.NoError(t, os.MkdirAll(filepath.Join(newArmature, "ops"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(newArmature, "state"), 0o755))
-
-	// Update git config to point to new layout
-	run(t, repo, "git", "config", "armature.ops-worktree-path", newArmature)
 }
 
 // setupRepoWithTask creates a temp repo, sets up the collapsed .armature/ layout, and creates a test task.
