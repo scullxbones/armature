@@ -979,7 +979,7 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
 	// Capture ops dir state before dry-run
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entriesBefore, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 
@@ -1288,7 +1288,7 @@ func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	// Directly inject a create op with a non-existent parent into the ops log,
 	// bypassing the arm create validation layer.
 	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
-	logPath := filepath.Join(repo, ".arm", ".armature", "ops", workerID+".log")
+	logPath := filepath.Join(repo, ".armature", "ops", workerID+".log")
 	brokenOp := ops.Op{
 		Type:      ops.OpCreate,
 		TargetID:  "orphan-01",
@@ -1431,7 +1431,7 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	// Find the worker ID from the ops log filename.
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, readErr := os.ReadDir(opsDir)
 	require.NoError(t, readErr)
 	var workerID string

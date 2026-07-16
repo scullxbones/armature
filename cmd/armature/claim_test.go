@@ -368,7 +368,7 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 
 	// Inject a claim op for task-01 from a DIFFERENT worker, simulating a concurrent claim.
 	otherWorker := "other-worker-uuid"
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	logPath := filepath.Join(opsDir, otherWorker+".log")
 	claimOp := ops.Op{
 		Type:      ops.OpClaim,
@@ -646,7 +646,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 	// If checkExistingWorktreeBinding rejected the fake worktree before the claim op was
 	// written, no rollback op is needed (task stays open from the start), so we only look
 	// for the release op when the task actually transitioned through claimed.
-	armOpsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	armOpsDir := filepath.Join(repo, ".armature", "ops")
 	entries, readErr := os.ReadDir(armOpsDir)
 	if readErr != nil {
 		// Ops dir not readable — skip the log check (bootstrap may have put ops elsewhere).
@@ -874,7 +874,7 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 
 	// Inject a stale claim op from another worker with an old timestamp
 	otherWorker := "other-worker-uuid"
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	logPath := filepath.Join(opsDir, otherWorker+".log")
 
 	// Claim timestamp 2 hours ago, TTL 1 minute — definitely stale
@@ -1026,8 +1026,8 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 	// We'll inject ops from that same worker with a stale timestamp
 	workerID, logPath, err := resolveWorkerAndLog(&config.Context{
 		RepoPath:  repo,
-		IssuesDir: filepath.Join(repo, ".arm", ".armature"),
-		StateDir:  filepath.Join(repo, ".arm", ".armature", "state"),
+		IssuesDir: filepath.Join(repo, ".armature"),
+		StateDir:  filepath.Join(repo, ".armature", "state"),
 	})
 	require.NoError(t, err, "should resolve worker ID and log path")
 
@@ -1117,8 +1117,8 @@ func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
 	// Resolve the current worker ID (set by bootstrap/worker-init)
 	workerID, logPath, err := resolveWorkerAndLog(&config.Context{
 		RepoPath:  repo,
-		IssuesDir: filepath.Join(repo, ".arm", ".armature"),
-		StateDir:  filepath.Join(repo, ".arm", ".armature", "state"),
+		IssuesDir: filepath.Join(repo, ".armature"),
+		StateDir:  filepath.Join(repo, ".armature", "state"),
 	})
 	require.NoError(t, err, "should resolve worker ID and log path")
 

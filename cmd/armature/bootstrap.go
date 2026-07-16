@@ -1162,13 +1162,24 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		alreadyCollapsed = true
 	}
 
+	// A repo with neither a legacy .arm/ worktree nor an already-collapsed
+	// .armature/ worktree is a fresh init: it goes straight to the collapsed
+	// layout, matching the design target that dual-branch is never the resting
+	// state for a repo bootstrap creates from scratch (only a pre-existing
+	// dual-branch repo transits through it, via the dualMigrated path above).
+	_, armWorktreeStatErr := os.Stat(filepath.Join(repoPath, ".arm", ".git"))
+	hasPreExistingArmWorktree := armWorktreeStatErr == nil
+
 	switch {
 	case dualMigrated, alreadyCollapsed:
 		worktreePath = filepath.Join(repoPath, config.StateDirName) // .armature/
 		isCollapsedLayout = true
-	default:
+	case hasPreExistingArmWorktree:
 		worktreePath = filepath.Join(repoPath, ".arm")
 		isCollapsedLayout = false
+	default:
+		worktreePath = filepath.Join(repoPath, config.StateDirName) // .armature/
+		isCollapsedLayout = true
 	}
 
 	// Create worktree if not already exists (idempotent)

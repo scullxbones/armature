@@ -202,10 +202,10 @@ func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
 }
 
 // gitWorktreeStatus returns `git status --porcelain` for the _armature
-// worktree at <repo>/.arm, so tests can assert the auto-commit left it clean.
+// worktree at <repo>/.armature, so tests can assert the auto-commit left it clean.
 func gitWorktreeStatus(t *testing.T, repo string) string {
 	t.Helper()
-	worktreeDir := filepath.Join(repo, ".arm")
+	worktreeDir := filepath.Join(repo, ".armature")
 	cmd := exec.CommandContext(context.Background(), "git", "status", "--porcelain")
 	cmd.Dir = worktreeDir
 	out, err := cmd.Output()

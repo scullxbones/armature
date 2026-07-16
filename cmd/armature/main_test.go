@@ -56,8 +56,9 @@ func getTestContext(t *testing.T, repo string) *config.Context {
 }
 
 // getTestStateDir returns the absolute path to the worker-specific state directory.
-// In dual-branch mode, state lives at the worktree root (.arm/state/); in single-branch,
-// it lives inside .armature/state/.
+// In dual-branch mode (unmigrated .arm/.armature/ layout), state lives at the
+// .arm worktree root (.arm/state/); in the collapsed layout, it lives inside
+// .armature/state/.
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
 	workerID, _ := worker.GetWorkerID(repo) //nolint:errcheck // best-effort in test setup
@@ -66,8 +67,8 @@ func getTestStateDir(t *testing.T, repo string) string {
 	}
 	// Apply the slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
 	workerID = workerIdentityWithSlot(workerID)
-	if _, err := os.Stat(filepath.Join(repo, ".arm", ".armature", "config.json")); err == nil {
-		return filepath.Join(repo, ".arm", "state", workerID)
+	if _, err := os.Stat(filepath.Join(repo, ".arm", ".git")); err == nil {
+		return filepath.Join(repo, ".armature", "state", workerID)
 	}
 	return filepath.Join(repo, ".armature", "state", workerID)
 }
@@ -210,7 +211,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 
  bootstrapRepoForTest(t, repo)
 
-	gitignorePath := filepath.Join(repo, ".arm", ".armature", ".gitignore")
+	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
 	assert.FileExists(t, gitignorePath)
 	content, err := os.ReadFile(gitignorePath)
 	require.NoError(t, err)
@@ -633,21 +634,21 @@ func TestInitCommand_DualBranch(t *testing.T) {
 
 	err := cmd.Execute()
 	require.NoError(t, err)
-	assert.Contains(t, buf.String(), "dual-branch")
+	assert.Contains(t, buf.String(), "collapsed")
 
-	// Worktree should exist at .arm/
-	assert.DirExists(t, filepath.Join(repo, ".arm"))
+	// A fresh init goes straight to the collapsed .armature/ worktree
+	// (LNGHZN-S1-T2); no .arm/ worktree is created.
+	assert.False(t, pathExists(filepath.Join(repo, ".arm")))
+	assert.DirExists(t, filepath.Join(repo, ".armature"))
 
-	// .armature/ inside worktree should have a config.json (mode is not stored
-	// anywhere; dual-branch is the only supported mode).
-	cfgPath := filepath.Join(repo, ".arm", ".armature", "config.json")
+	cfgPath := filepath.Join(repo, ".armature", "config.json")
 	assert.FileExists(t, cfgPath)
 
 	// Git config should have worktree path set
 	wtCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path")
 	wtOut, err := wtCmd.Output()
 	require.NoError(t, err)
-	assert.Contains(t, string(wtOut), ".arm")
+	assert.Contains(t, string(wtOut), ".armature")
 }
 
 func TestDecomposeContextCommand(t *testing.T) {
@@ -687,7 +688,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the commit appeared on _armature branch (inside the worktree)
-	worktreePath := filepath.Join(repo, ".arm")
+	worktreePath := filepath.Join(repo, ".armature")
 	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "log", "--oneline", "-3")
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -785,7 +786,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
 
 	// Count ops before dry-run
-	issuesDir := filepath.Join(repo, ".arm", ".armature")
+	issuesDir := filepath.Join(repo, ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	// Apply slot suffix if ARM_LOG_SLOT is set, matching the behavior in main.go
@@ -848,7 +849,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Count ops before dry-run
-	issuesDir := filepath.Join(repo, ".arm", ".armature")
+	issuesDir := filepath.Join(repo, ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
@@ -943,7 +944,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".arm", ".armature", "hooks", "post-merge.sh.template")
+	hookPath := filepath.Join(repo, ".armature", "hooks", "post-merge.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "arm sync")
@@ -956,7 +957,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".arm", ".armature", "hooks", "post-commit.sh.template")
+	hookPath := filepath.Join(repo, ".armature", "hooks", "post-commit.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
@@ -971,7 +972,7 @@ func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	hookPath := filepath.Join(repo, ".arm", ".armature", "hooks", "prepare-commit-msg.sh.template")
+	hookPath := filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template")
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
@@ -1169,7 +1170,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	// Verify state dir is resolved correctly by checking that the expected path exists
 	defaultID := "default"
 	defaultID = workerIdentityWithSlot(defaultID) // Apply slot suffix if ARM_LOG_SLOT is set
-	expectedDefault := filepath.Join(repo, ".arm", "state", defaultID)
+	expectedDefault := filepath.Join(repo, ".armature", "state", defaultID)
 	// Check that state files exist in the expected location (verifying StateDir was set correctly)
 	_, err = os.Stat(expectedDefault)
 	assert.NoError(t, err, "StateDir should exist at %s when no worker ID is set", expectedDefault)
@@ -1184,7 +1185,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	require.NoError(t, err)
 	// Verify state dir is resolved correctly for the configured worker ID
 	workerID = workerIdentityWithSlot(workerID) // Apply slot suffix if ARM_LOG_SLOT is set
-	expectedWorker := filepath.Join(repo, ".arm", "state", workerID)
+	expectedWorker := filepath.Join(repo, ".armature", "state", workerID)
 	// Check that state files exist in the expected location
 	_, err = os.Stat(expectedWorker)
 	assert.NoError(t, err, "StateDir should exist at %s for configured worker ID", expectedWorker)
@@ -1573,7 +1574,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	// Get the worker log path so we can inject ops directly
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	logPath := filepath.Join(repo, ".arm", ".armature", "ops", fmt.Sprintf("%s.log", workerID))
+	logPath := filepath.Join(repo, ".armature", "ops", fmt.Sprintf("%s.log", workerID))
 
 	t.Run("simple format when accepted_risk_nodes is zero", func(t *testing.T) {
 		// Inject a source-link op for COV-001; COV-002 remains uncited (no accepted-risk either)
@@ -1674,7 +1675,7 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 	// This verifies claim.go emits a durable op (not just relies on state engine inference).
 	issuesDir := filepath.Join(repo, ".armature")
 	if _, err := os.Stat(filepath.Join(repo, ".arm")); err == nil {
-		issuesDir = filepath.Join(repo, ".arm", ".armature")
+		issuesDir = filepath.Join(repo, ".armature")
 	}
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
@@ -1728,7 +1729,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 	// Verify a transition → open op was emitted
 	issuesDir := filepath.Join(repo, ".armature")
 	if _, err := os.Stat(filepath.Join(repo, ".arm")); err == nil {
-		issuesDir = filepath.Join(repo, ".arm", ".armature")
+		issuesDir = filepath.Join(repo, ".armature")
 	}
 	opsDir := filepath.Join(issuesDir, "ops")
 	entries, readErr := os.ReadDir(opsDir)
@@ -2185,7 +2186,7 @@ func TestLogSlot_EnvVar(t *testing.T) {
 	require.NoError(t, err)
 
 	// The slotted file must exist; the plain file must NOT contain this note
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 
@@ -2217,7 +2218,7 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Clear the ops directory that was created with the global ARM_LOG_SLOT setting
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 	for _, e := range entries {
@@ -2255,7 +2256,7 @@ func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
 
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 	for _, e := range entries {
@@ -2843,7 +2844,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load ops and count dismissal notes for task-02
-	opsDir := filepath.Join(repo, ".arm", ".armature", "ops")
+	opsDir := filepath.Join(repo, ".armature", "ops")
 	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
 	require.NoError(t, err)
 
