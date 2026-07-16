@@ -1410,3 +1410,44 @@ func TestCreateOrphanBranch_RestoresDetachedHEAD(t *testing.T) {
 	currentSHA := strings.TrimSpace(string(currentSHAOut))
 	assert.Equal(t, originalSHA, currentSHA, "HEAD should be back at the original commit SHA")
 }
+
+// TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths verifies that
+// DirtyEntries (unlike IsWorkingTreeDirty, which ignores untracked files)
+// surfaces every dirty path in the working tree with its tracked/untracked
+// classification. Callers that need to classify dirty paths (e.g. an
+// allow-list for known-safe debris) need the full set, not just a yes/no
+// signal.
+func TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	// Clean worktree: no dirty entries.
+	entries, err := c.DirtyEntries()
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+
+	// Modify a tracked file.
+	trackedFile := filepath.Join(repo, "tracked.txt")
+	require.NoError(t, os.WriteFile(trackedFile, []byte("v1"), 0o600))
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("add", "tracked.txt")
+	gitRun("commit", "-m", "add tracked file")
+	require.NoError(t, os.WriteFile(trackedFile, []byte("v2"), 0o600))
+
+	// Add an untracked file.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("new"), 0o600))
+
+	entries, err = c.DirtyEntries()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []adapters.DirtyEntry{
+		{Path: "tracked.txt", Untracked: false},
+		{Path: "untracked.txt", Untracked: true},
+	}, entries,
+		"DirtyEntries must report the modified tracked file and the untracked file with correct classification")
+}
