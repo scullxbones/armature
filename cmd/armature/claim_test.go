@@ -22,10 +22,7 @@ func setupRepoWithEpic(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -41,10 +38,7 @@ func setupRepoWithParentAndTask(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	// Create parent story
 	cmd2 := newRootCmd()
@@ -947,10 +941,7 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 	repoA := initTempRepo(t)
 	run(t, repoA, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repoA})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repoA)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))

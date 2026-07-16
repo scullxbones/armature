@@ -45,6 +45,16 @@ func newRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Detect old unmigrated dual-branch layout (.arm/.armature/) and refuse
+			// with clear guidance to run bootstrap. This check applies to all non-bootstrap
+			// commands; bootstrap has its own PersistentPreRunE override that bypasses this.
+			if config.DetectUnmigratedLayout(ctx.WorktreePath) {
+				return fmt.Errorf(
+					"repo uses the pre-collapse .arm/.armature/ worktree layout; run `arm bootstrap` to migrate to the current layout",
+				)
+			}
+
 			workerID, _ := worker.GetWorkerID(repoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
 			if workerID == "" {
 				workerID = "default"
