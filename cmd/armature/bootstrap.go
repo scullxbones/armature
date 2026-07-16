@@ -700,6 +700,10 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 			"_armature worktree has uncommitted changes; please commit or stash them before running bootstrap",
 		)
 	}
+	preCollapseSHA, err := armtreeGitClient.HeadSHA()
+	if err != nil {
+		return false, "", fmt.Errorf("snapshot _armature worktree before collapse: %w", err)
+	}
 
 	// Dual-branch layout detected. Snapshot a timestamped backup copy of .arm/
 	// before mutating anything, purely for user-visible recovery: the live
@@ -732,10 +736,38 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		)
 	}
 
-	// rollback moves the (still fully valid) worktree back to .arm and wraps
-	// cause with the resulting outcome. Because MoveWorktree is atomic, this
-	// is the only rollback step ever needed after the move above succeeds.
+	// rollback restores the moved checkout before putting it back at .arm. The
+	// flattening step can have staged removals and created root-level copies, so
+	// moving the worktree alone would leave the recovered legacy checkout dirty.
+	//
+	// ResetHard restores tracked paths, but it does not remove untracked files
+	// created by flattening. We must remove those copies. Do not simply remove
+	// every candidate root path, though: a legacy worktree may already have had
+	// valid root-level ops, templates, or config.json. The backup was captured
+	// before any mutation, so use it to put precisely those original paths back.
+	migrationRootPaths := []string{"ops", "templates", "hooks", "review", "sources", "config.json"}
 	rollback := func(cause error) error {
+		worktreeGitClient := adapters.New(newWorktreePath)
+		if resetErr := worktreeGitClient.ResetHard(preCollapseSHA); resetErr != nil {
+			return fmt.Errorf("%w; additionally, reset collapsed worktree failed: %w (backup at %s)", cause, resetErr, backupDir)
+		}
+		for _, path := range migrationRootPaths {
+			if removeErr := os.RemoveAll(filepath.Join(newWorktreePath, path)); removeErr != nil {
+				return fmt.Errorf("%w; additionally, remove flattened %s during rollback: %w (backup at %s)", cause, path, removeErr, backupDir)
+			}
+		}
+		for _, path := range migrationRootPaths {
+			snapshotPath := filepath.Join(backupDir, path)
+			if _, statErr := os.Lstat(snapshotPath); statErr != nil {
+				if os.IsNotExist(statErr) {
+					continue
+				}
+				return fmt.Errorf("%w; additionally, inspect pre-migration %s during rollback: %w (backup at %s)", cause, path, statErr, backupDir)
+			}
+			if _, copyErr := copyRecursive(snapshotPath, filepath.Join(newWorktreePath, path)); copyErr != nil {
+				return fmt.Errorf("%w; additionally, restore pre-migration %s during rollback: %w (backup at %s)", cause, path, copyErr, backupDir)
+			}
+		}
 		if moveErr := gitClient.MoveWorktree(newWorktreePath, armWorktreePath); moveErr != nil {
 			return fmt.Errorf(
 				"%w; additionally, restore .arm worktree failed: %w (backup at %s)", cause, moveErr, backupDir,
@@ -774,12 +806,14 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		if err := worktreeGitClient.RemoveTree(config.StateDirName); err != nil {
 			return false, "", rollback(fmt.Errorf("remove stale nested %s subtree: %w", config.StateDirName, err))
 		}
+		if err := os.RemoveAll(legacyInnerArmaturePath); err != nil {
+			return false, "", rollback(fmt.Errorf("remove untracked stale nested %s subtree: %w", config.StateDirName, err))
+		}
 
 		// Stage whichever root-level directories/files actually exist after copying
 		// (git add errors on a pathspec that matches nothing, so only stage what's there).
-		candidatePaths := []string{"ops", "templates", "hooks", "review", "sources", "config.json"}
 		var filesToStage []string
-		for _, p := range candidatePaths {
+		for _, p := range migrationRootPaths {
 			if _, err := os.Stat(filepath.Join(newWorktreePath, p)); err == nil {
 				filesToStage = append(filesToStage, p)
 			}
