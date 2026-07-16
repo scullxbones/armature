@@ -543,6 +543,24 @@ func (c *Client) AddPaths(paths []string) error {
 	return nil
 }
 
+// RemoveTree removes a path from both the git index and the working tree using
+// "git rm -r". Unlike RemoveFromIndex (which uses --cached to preserve the
+// working-tree copy), this deletes the files on disk too — used to clear a
+// stale tracked subtree whose contents have already been copied elsewhere.
+// Returns nil (no-op) if the path is not tracked.
+func (c *Client) RemoveTree(path string) error {
+	cmd := c.cmd("rm", "-r", "--quiet", "--", path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "did not match any files") ||
+			strings.Contains(string(out), "pathspec") {
+			return nil
+		}
+		return fmt.Errorf("git rm -r %s: %w\n%s", path, err, out)
+	}
+	return nil
+}
+
 // RemoveFromIndex removes a path from the git index using "git rm --cached".
 // This is used to mark tracked files/directories for deletion without deleting
 // the working tree files. Returns nil if the path is not tracked.
