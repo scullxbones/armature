@@ -136,6 +136,13 @@ func ResolveContextWithProbe(repoPath string, probe RepoProbe, cfg Config) (*Con
 	}, nil
 }
 
+// DetectUnmigratedLayout checks if the given WorktreePath is on the old unmigrated
+// dual-branch layout (.arm/.armature/). Returns true if the layout is old (worktree
+// basename is ".arm"), false if it's the new collapsed layout.
+func DetectUnmigratedLayout(worktreePath string) bool {
+	return filepath.Base(worktreePath) == ".arm"
+}
+
 type staticRepoProbe struct {
 	result RepoProbeResult
 }

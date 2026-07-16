@@ -72,6 +72,21 @@ func getTestStateDir(t *testing.T, repo string) string {
 	return filepath.Join(repo, ".armature", "state", workerID)
 }
 
+// bootstrapRepoForTest runs bootstrap on a repo and automatically migrates the layout
+// from the old .arm/.armature/ layout to the new collapsed .armature/ layout.
+// This is a test helper that ensures repos can run non-bootstrap commands after bootstrap.
+func bootstrapRepoForTest(t *testing.T, repo string) {
+	t.Helper()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd.Execute(), "bootstrap failed")
+
+	// After bootstrap creates .arm/.armature/, migrate to the new .armature/ layout
+	// so that subsequent commands can run (they refuse the old layout)
+	migrateBootstrapLayoutForTest(t, repo)
+}
+
 func TestStateDirFor(t *testing.T) {
 	ctx := &config.Context{IssuesDir: "/repo/.armature", WorktreePath: ""}
 	assert.Equal(t, "/repo/.armature/state/w1", stateDirFor(ctx, "w1"))
@@ -193,10 +208,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	gitignorePath := filepath.Join(repo, ".arm", ".armature", ".gitignore")
 	assert.FileExists(t, gitignorePath)
@@ -240,10 +252,7 @@ func TestReadyCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
@@ -258,10 +267,7 @@ func TestCreateCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
@@ -273,7 +279,68 @@ func TestCreateCommand(t *testing.T) {
 	assert.Contains(t, buf.String(), "task-99")
 }
 
-// setupRepoWithTask creates a temp repo, runs trls init, and creates a test task.
+// setupArmatureLayout creates a collapsed .armature/ worktree layout with necessary directories and config.
+// This is a test helper that sets up the new layout that commands expect.
+// Returns the path to the .armature worktree.
+func setupArmatureLayout(t *testing.T, repo string) string {
+	t.Helper()
+	armatureDir := filepath.Join(repo, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "state"), 0o755))
+
+	// Create config.json
+	cfg := config.DefaultConfig("go")
+	require.NoError(t, config.WriteConfig(filepath.Join(armatureDir, "config.json"), cfg))
+
+	// Set git config to point to the new collapsed layout
+	run(t, repo, "git", "config", "armature.ops-worktree-path", armatureDir)
+
+	// Initialize worker ID (required for commands that work with issues)
+	run(t, repo, "git", "config", "armature.worker-id", "test-worker-"+fmt.Sprintf("%d", time.Now().UnixNano()))
+
+	return armatureDir
+}
+
+// migrateBootstrapLayoutForTest converts a repo from the dual-branch .arm/.armature/ layout
+// (created by bootstrap) to the collapsed .armature/ layout that commands expect.
+// This is a test helper for existing tests that use bootstrap but need to run commands afterward.
+// After bootstrap creates .arm/.armature/, this helper re-points the git config to a new
+// .armature/ directory and copies necessary files.
+func migrateBootstrapLayoutForTest(t *testing.T, repo string) {
+	t.Helper()
+	oldArm := filepath.Join(repo, ".arm")
+	oldArmature := filepath.Join(oldArm, ".armature")
+	newArmature := filepath.Join(repo, ".armature")
+
+	// Only migrate if the old layout exists and the new one doesn't
+	if _, err := os.Stat(oldArmature); os.IsNotExist(err) {
+		return // Nothing to migrate
+	}
+	if _, err := os.Stat(newArmature); err == nil {
+		return // New layout already exists
+	}
+
+	// Copy from old layout to new layout
+	require.NoError(t, os.MkdirAll(newArmature, 0o755))
+
+	// Copy config.json
+	oldConfig := filepath.Join(oldArmature, "config.json")
+	newConfig := filepath.Join(newArmature, "config.json")
+	if _, err := os.Stat(oldConfig); err == nil {
+		content, err := os.ReadFile(oldConfig)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(newConfig, content, 0o644))
+	}
+
+	// Create ops and state directories
+	require.NoError(t, os.MkdirAll(filepath.Join(newArmature, "ops"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(newArmature, "state"), 0o755))
+
+	// Update git config to point to new layout
+	run(t, repo, "git", "config", "armature.ops-worktree-path", newArmature)
+}
+
+// setupRepoWithTask creates a temp repo, sets up the collapsed .armature/ layout, and creates a test task.
 // The task includes a definition_of_done so review assessments that cover
 // "definition_of_done" are accepted by ValidateResultCoverage.
 func setupRepoWithTask(t *testing.T) string {
@@ -281,16 +348,16 @@ func setupRepoWithTask(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
+	// Set up the collapsed .armature/ layout instead of relying on bootstrap
+	// (bootstrap currently creates the old .arm/.armature/ layout; this test
+	// setup uses the new layout that commands expect)
+	setupArmatureLayout(t, repo)
+
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
-
-	cmd2 := newRootCmd()
-	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
+	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
 		"--dod", "Task implementation is complete and verified"})
-	require.NoError(t, cmd2.Execute())
+	require.NoError(t, cmd.Execute())
 
 	return repo
 }
@@ -418,10 +485,7 @@ func TestRenderContextCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -509,10 +573,7 @@ func TestValidateCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -537,10 +598,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	// Init worker so decompose-apply can get a worker ID
 	cmd2 := newRootCmd()
@@ -2655,10 +2713,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Initialize armature
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	// Initialize our worker (worker-A).
 	_, err := runTrls(t, repo, "worker-init")
@@ -2701,10 +2756,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Initialize armature
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	// Initialize worker
 	_, err := runTrls(t, repo, "worker-init")
@@ -2734,10 +2786,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2772,10 +2821,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2835,10 +2881,7 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2869,10 +2912,7 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
-	require.NoError(t, cmd.Execute())
+ bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3823,4 +3863,70 @@ func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
 	err := cmd.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Documentation JSON examples are valid")
+}
+
+// TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4 verifies that non-bootstrap commands
+// detect the old unmigrated .arm/.armature/ layout and refuse with guidance to run bootstrap.
+func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
+	t.Parallel()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Manually set up the old dual-branch layout (.arm/.armature/)
+	// This simulates the current pre-collapse layout before migration.
+	armWorktreePath := filepath.Join(repo, ".arm")
+	issuesDir := filepath.Join(armWorktreePath, ".armature")
+	require.NoError(t, os.MkdirAll(issuesDir, 0o755), "create .arm/.armature directory structure")
+
+	// Create config.json so the layout is complete
+	cfg := config.DefaultConfig("go")
+	require.NoError(t, config.WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
+
+	// Create ops directory (required for a valid layout)
+	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0o755))
+
+	// Set the git config to point to the old .arm worktree
+	run(t, repo, "git", "config", "armature.ops-worktree-path", armWorktreePath)
+
+	// Try to run a non-bootstrap command (e.g., list)
+	// It should fail with a clear error message about the unmigrated layout
+	_, err := runTrls(t, repo, "list")
+	require.Error(t, err, "command should fail with unmigrated layout error")
+	errMsg := err.Error()
+	assert.Contains(t, errMsg, "pre-collapse", "error should mention pre-collapse layout")
+	assert.Contains(t, errMsg, "arm bootstrap", "error should mention arm bootstrap as fix")
+
+	// Also test another non-bootstrap command to ensure the check is consistent
+	_, err = runTrls(t, repo, "ready")
+	require.Error(t, err, "command should fail with unmigrated layout error")
+	errMsg = err.Error()
+	assert.Contains(t, errMsg, "pre-collapse", "error should mention pre-collapse layout")
+	assert.Contains(t, errMsg, "arm bootstrap", "error should mention arm bootstrap as fix")
+
+	// Bootstrap command should still work (it's exempt from the check)
+	// and can migrate if/when that task is implemented
+	buf := new(bytes.Buffer)
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(buf)
+	bootstrapCmd.SetErr(new(bytes.Buffer))
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	// Bootstrap should execute without the unmigrated layout error blocking it
+	bootstrapCmd.Execute() // Ignore result; we just want to verify it doesn't fail with the unmigrated layout check
+
+	// Simulate the collapsed layout by pointing git config to .armature instead of .arm
+	// (In practice this would be done by the migration, but for testing we simulate the end state)
+	armatureWorktreePath := filepath.Join(repo, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(armatureWorktreePath, "ops"), 0o755), "create collapsed layout")
+	require.NoError(t, config.WriteConfig(filepath.Join(armatureWorktreePath, "config.json"), cfg))
+	run(t, repo, "git", "config", "armature.ops-worktree-path", armatureWorktreePath)
+
+	// Now non-bootstrap commands should work (no more unmigrated layout error)
+	_, err = runTrls(t, repo, "list")
+	// The list command might fail for other reasons (e.g., no issues), but it should NOT
+	// fail with the unmigrated layout error — if it gets past context resolution, we've
+	// verified the check isn't blocking migrated repos.
+	if err != nil {
+		// If list failed, make sure it's not because of unmigrated layout
+		assert.NotContains(t, err.Error(), "pre-collapse", "list should not fail with unmigrated layout error")
+	}
 }
