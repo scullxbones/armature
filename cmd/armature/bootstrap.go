@@ -726,8 +726,11 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 				err, restoreErr, backupDir,
 			)
 		}
-		// Try to re-register the restored .arm worktree (best effort)
-		_ = gitClient.AddWorktree("_armature", armWorktreePath) //nolint:errcheck
+		// AddWorktree recognizes and repairs the stale .git pointer left by the
+		// removed old worktree registration before re-registering this checkout.
+		if reregisterErr := gitClient.AddWorktree("_armature", armWorktreePath); reregisterErr != nil {
+			return false, "", fmt.Errorf("add .armature worktree: %w; re-register .arm worktree: %w", err, reregisterErr)
+		}
 		return false, "", fmt.Errorf("add .armature worktree: %w (migration rolled back)", err)
 	}
 
@@ -1200,6 +1203,19 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		)
 	}
 
+	// The built-in migration can relocate only the historical .arm worktree.
+	// Refuse a configured custom legacy worktree rather than creating a new
+	// collapsed worktree and silently leaving its nested ops history behind.
+	if existingCtx, resolveErr := config.ResolveContext(repoPath); resolveErr == nil &&
+		config.DetectUnmigratedLayout(existingCtx.WorktreePath, existingCtx.IssuesDir) &&
+		filepath.Base(existingCtx.WorktreePath) != ".arm" {
+		return RepoSetupResult{}, fmt.Errorf(
+			"repo uses a pre-collapse custom ops worktree at %s; automatic migration supports only .arm. "+
+				"Move it to .arm or migrate it manually before running `arm bootstrap`",
+			existingCtx.WorktreePath,
+		)
+	}
+
 	// Attempt to migrate legacy single-branch layout if it exists
 	migrated, backupDir, preMigrationSHA, migrationCommitted, err := migrateLegacySingleBranchOps(repoPath)
 	if err != nil {
@@ -1549,7 +1565,6 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 		if chainedDualMigrated {
 			// Update tracking variables and paths after successful migration
-			dualMigrated = true
 			isCollapsedLayout = true
 			worktreePath = filepath.Join(repoPath, config.StateDirName)
 			issuesDir = worktreePath // In collapsed layout, issuesDir == worktreePath

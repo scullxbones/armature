@@ -247,10 +247,18 @@ func (c *Client) CreateBranchFrom(branch, baseBranch string) error {
 }
 
 // AddWorktree adds a linked worktree for an existing branch at the given path.
-// If the worktree already exists at that path (has a .git file), this is a no-op.
+// A live worktree at that path is a no-op. A stale .git pointer left behind by a
+// failed rollback is removed so Git can register a usable replacement.
 func (c *Client) AddWorktree(branch, path string) error {
-	if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
-		return nil // already a worktree
+	gitFile := filepath.Join(path, ".git")
+	if _, err := os.Stat(gitFile); err == nil {
+		check := c.cmd("-C", path, "rev-parse", "--is-inside-work-tree")
+		if err := check.Run(); err == nil {
+			return nil // already a usable worktree
+		}
+		if err := os.Remove(gitFile); err != nil {
+			return fmt.Errorf("remove stale worktree pointer %s: %w", gitFile, err)
+		}
 	}
 	cmd := c.cmd("worktree", "add", path, branch)
 	if out, err := cmd.CombinedOutput(); err != nil {

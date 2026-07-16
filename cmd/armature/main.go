@@ -49,7 +49,7 @@ func newRootCmd() *cobra.Command {
 			// Detect old unmigrated dual-branch layout (.arm/.armature/) and refuse
 			// with clear guidance to run bootstrap. This check applies to all non-bootstrap
 			// commands; bootstrap has its own PersistentPreRunE override that bypasses this.
-			if config.DetectUnmigratedLayout(ctx.WorktreePath) {
+			if config.DetectUnmigratedLayout(ctx.WorktreePath, ctx.IssuesDir) {
 				return fmt.Errorf(
 					"repo uses the pre-collapse .arm/.armature/ worktree layout; run `arm bootstrap` to migrate to the current layout",
 				)

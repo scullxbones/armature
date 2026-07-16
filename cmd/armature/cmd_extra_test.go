@@ -864,7 +864,7 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))

@@ -23,7 +23,7 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -194,7 +194,7 @@ func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)

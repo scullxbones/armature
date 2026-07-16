@@ -465,7 +465,7 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	// ops/SCHEMA are scaffolding runRepoSetup regenerates on every run (fresh init or
 	// not) and were never committed even before this fix, so they're out of scope here.
 	collapsedWorktreePath := filepath.Join(repo, ".armature")
-	statusOut := runOutput(t, collapsedWorktreePath, "git", "status", "--porcelain")
+	statusOut := runOutput(t, collapsedWorktreePath, "status", "--porcelain")
 	for _, line := range strings.Split(strings.TrimSpace(statusOut), "\n") {
 		if line == "" {
 			continue
@@ -476,7 +476,7 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 		t.Errorf("migrated data left untracked/uncommitted after migration: %s", line)
 	}
 
-	lsTreeOut := runOutput(t, repo, "git", "ls-tree", "-r", "--name-only", "_armature")
+	lsTreeOut := runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature")
 	for _, line := range strings.Split(strings.TrimSpace(lsTreeOut), "\n") {
 		assert.False(t, strings.HasPrefix(line, ".armature/"), "branch tree must not contain nested .armature/ paths, got %q", line)
 		assert.False(t, strings.HasPrefix(line, ".arm/"), "branch tree must not contain .arm/ paths, got %q", line)
@@ -488,8 +488,8 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	// migration commit actually preserved history for other collaborators, not just the
 	// machine that ran the migration in place.
 	cloneDir := filepath.Join(t.TempDir(), "fresh-clone")
-	runOutput(t, filepath.Dir(cloneDir), "git", "clone", "--quiet", "--no-local", repo, cloneDir)
-	runOutput(t, cloneDir, "git", "checkout", "--quiet", "_armature")
+	runOutput(t, filepath.Dir(cloneDir), "clone", "--quiet", "--no-local", repo, cloneDir)
+	runOutput(t, cloneDir, "checkout", "--quiet", "_armature")
 	assert.FileExists(t, filepath.Join(cloneDir, "ops", "existing-issue.json"),
 		"a fresh clone checked out to _armature must show ops data at the root-level path, not nested under .armature/")
 
@@ -502,6 +502,47 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops directory should still exist after idempotent run")
 }
 
+func TestMigrateDualBranchToCollapsedRestoresUsableWorktreeAfterAddFailure_REQ_LNGHZN_S1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	armWorktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
+	require.NoError(t, os.MkdirAll(filepath.Join(armWorktreePath, ".armature", "ops"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, ".armature", "ops", "issue.json"), []byte(`{"id":"1"}`), 0o600))
+	armGitClient := adapters.New(armWorktreePath)
+	require.NoError(t, armGitClient.AddPaths([]string{".armature"}))
+	require.NoError(t, armGitClient.CommitWorktreeOp(".armature", "chore: create legacy layout"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
+
+	wrapperDir := t.TempDir()
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+target=%q
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "add" ] && [ "$arg" = "$target" ]; then
+    exit 1
+  fi
+  prev="$arg"
+done
+exec "$real_git" "$@"
+`, realGit, filepath.Join(repo, ".armature"))
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, _, err = migrateDualBranchToCollapsed(repo)
+	require.Error(t, err)
+
+	// The restored .arm checkout must be a registered, usable Git worktree, not
+	// merely a directory containing a stale pointer to a removed worktree entry.
+	runOutput(t, armWorktreePath, "status", "--porcelain")
+}
+
 // pathExists is a helper to check if a path exists without error
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
@@ -509,12 +550,12 @@ func pathExists(path string) bool {
 }
 
 // runOutput runs a command in dir and returns its combined stdout+stderr, failing the test on error.
-func runOutput(t *testing.T, dir string, name string, args ...string) string {
+func runOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.CommandContext(context.Background(), name, args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "command %s %v failed: %s", name, args, out)
+	require.NoError(t, err, "command git %v failed: %s", args, out)
 	return string(out)
 }
 
@@ -561,7 +602,7 @@ func TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1(t *testin
 	assert.Contains(t, string(content), "deadbeef")
 
 	// Must also be committed to _armature, not just left on disk (BLOCKING #1's fix).
-	lsTreeOut := runOutput(t, repo, "git", "ls-tree", "-r", "--name-only", "_armature")
+	lsTreeOut := runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature")
 	assert.Contains(t, lsTreeOut, "sources/manifest.json", "migrated sources/ data must be committed to _armature")
 }
 

@@ -31,15 +31,22 @@ type RepoProbe interface {
 	Probe(repoPath string) (RepoProbeResult, error)
 }
 
-// issuesDirFor derives the issues directory from the ops worktree path. In the
-// collapsed layout, the worktree root IS the issues directory (its basename is
-// already StateDirName); in the legacy dual-branch layout, the issues directory
-// is a StateDirName subdirectory nested inside the worktree.
+// issuesDirFor derives the issues directory for callers that cannot probe the
+// filesystem. Collapsed worktrees conventionally use the .armature basename;
+// ResolveContext additionally recognizes collapsed custom paths from config.json.
 func issuesDirFor(worktreePath string) string {
 	if filepath.Base(worktreePath) == StateDirName {
 		return worktreePath
 	}
 	return filepath.Join(worktreePath, StateDirName)
+}
+
+func resolveIssuesDir(worktreePath string) string {
+	rootConfig := filepath.Join(worktreePath, "config.json")
+	if info, err := adapters.Stat(rootConfig); err == nil && info != nil {
+		return worktreePath
+	}
+	return issuesDirFor(worktreePath)
 }
 
 // isGitWorktree checks if the given path is a git worktree by verifying if .git is a file (not a directory).
@@ -105,12 +112,18 @@ func ResolveContext(repoPath string) (*Context, error) {
 		return nil, err
 	}
 
-	cfg, err := LoadConfig(filepath.Join(issuesDirFor(probeResult.WorktreePath), "config.json"))
+	issuesDir := resolveIssuesDir(probeResult.WorktreePath)
+	cfg, err := LoadConfig(filepath.Join(issuesDir, "config.json"))
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
-	return ResolveContextWithProbe(repoPath, staticRepoProbe{result: probeResult}, cfg)
+	ctx, err := ResolveContextWithProbe(repoPath, staticRepoProbe{result: probeResult}, cfg)
+	if err != nil {
+		return nil, err
+	}
+	ctx.IssuesDir = issuesDir
+	return ctx, nil
 }
 
 // ResolveContextWithProbe derives a Context from probe results and config without
@@ -136,11 +149,11 @@ func ResolveContextWithProbe(repoPath string, probe RepoProbe, cfg Config) (*Con
 	}, nil
 }
 
-// DetectUnmigratedLayout checks if the given WorktreePath is on the old unmigrated
-// dual-branch layout (.arm/.armature/). Returns true if the layout is old (worktree
-// basename is ".arm"), false if it's the new collapsed layout.
-func DetectUnmigratedLayout(worktreePath string) bool {
-	return filepath.Base(worktreePath) == ".arm"
+// DetectUnmigratedLayout checks if the issues directory is nested below the ops
+// worktree, which identifies the old dual-branch layout regardless of a custom
+// ops worktree path.
+func DetectUnmigratedLayout(worktreePath, issuesDir string) bool {
+	return filepath.Clean(worktreePath) != filepath.Clean(issuesDir)
 }
 
 type staticRepoProbe struct {
