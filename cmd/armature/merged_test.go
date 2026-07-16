@@ -91,7 +91,7 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -137,7 +137,7 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -168,7 +168,7 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -212,7 +212,7 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -256,7 +256,7 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -472,7 +472,7 @@ func TestMergedRejectsNonDoneStatus(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Bootstrap in dual-branch mode
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))

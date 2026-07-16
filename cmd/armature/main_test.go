@@ -205,7 +205,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	gitignorePath := filepath.Join(repo, ".armature", ".gitignore")
 	assert.FileExists(t, gitignorePath)
@@ -249,7 +249,7 @@ func TestReadyCommand_EmptyRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
@@ -264,7 +264,7 @@ func TestCreateCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
@@ -443,7 +443,7 @@ func TestRenderContextCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -531,7 +531,7 @@ func TestValidateCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
@@ -556,7 +556,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	// Init worker so decompose-apply can get a worker ID
 	cmd2 := newRootCmd()
@@ -2671,7 +2671,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Initialize armature
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	// Initialize our worker (worker-A).
 	_, err := runTrls(t, repo, "worker-init")
@@ -2714,7 +2714,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	// Initialize armature
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	// Initialize worker
 	_, err := runTrls(t, repo, "worker-init")
@@ -2744,7 +2744,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2779,7 +2779,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2839,7 +2839,7 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2870,7 +2870,7 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3869,7 +3869,10 @@ func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	bootstrapCmd.SetErr(new(bytes.Buffer))
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	// Bootstrap should execute without the unmigrated layout error blocking it
-	bootstrapCmd.Execute() // Ignore result; we just want to verify it doesn't fail with the unmigrated layout check
+	err = bootstrapCmd.Execute()
+	if err != nil {
+		assert.NotContains(t, err.Error(), "pre-collapse", "bootstrap must bypass the unmigrated-layout guard")
+	}
 
 	// Simulate the collapsed layout by pointing git config to .armature instead of .arm
 	// (In practice this would be done by the migration, but for testing we simulate the end state)
@@ -3886,5 +3889,42 @@ func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	if err != nil {
 		// If list failed, make sure it's not because of unmigrated layout
 		assert.NotContains(t, err.Error(), "pre-collapse", "list should not fail with unmigrated layout error")
+	}
+}
+
+func TestCommand_CustomOpsWorktreeLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
+	t.Parallel()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	customWorktree := filepath.Join(repo, ".custom-ops")
+	legacyIssuesDir := filepath.Join(customWorktree, config.StateDirName)
+	cfg := config.DefaultConfig("go")
+	require.NoError(t, os.MkdirAll(filepath.Join(legacyIssuesDir, "ops"), 0o755))
+	require.NoError(t, config.WriteConfig(filepath.Join(legacyIssuesDir, "config.json"), cfg))
+	run(t, repo, "git", "config", "armature.ops-worktree-path", customWorktree)
+
+	_, err := runTrls(t, repo, "list")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-collapse")
+	assert.Contains(t, err.Error(), "arm bootstrap")
+
+	// Bootstrap cannot safely relocate an arbitrary custom worktree, so it must
+	// refuse rather than creating a second layout and leaving legacy ops behind.
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	err = bootstrapCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "custom ops worktree")
+
+	// A custom path whose root is the issues directory is already collapsed and
+	// must remain usable; the path name itself is not the layout discriminator.
+	require.NoError(t, os.RemoveAll(legacyIssuesDir))
+	require.NoError(t, os.MkdirAll(filepath.Join(customWorktree, "ops"), 0o755))
+	require.NoError(t, config.WriteConfig(filepath.Join(customWorktree, "config.json"), cfg))
+
+	_, err = runTrls(t, repo, "list")
+	if err != nil {
+		assert.NotContains(t, err.Error(), "pre-collapse")
 	}
 }

@@ -146,7 +146,7 @@ func TestHookPostCommit_InitialCommit(t *testing.T) {
 	// arm init requires at least one commit; make a bare commit then immediately run arm init.
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	// Create a task with scope so detection has something to work with.
 	_, err := runTrls(t, repo, "create", "--title", "Scoped task", "--type", "task", "--id", "task-scope-01", "--scope", "src/foo.go")
@@ -397,7 +397,7 @@ func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
- bootstrapRepoForTest(t, repo)
+	bootstrapRepoForTest(t, repo)
 
 	_, err := runTrls(t, repo, "create", "--title", "Scoped task", "--type", "task", "--id", taskID, "--scope", scopePath)
 	require.NoError(t, err)

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
@@ -99,32 +102,32 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 	gitClient := adapters.New(tmpDir)
 
 	// Configure git for testing (use environment variables for commits)
-	os.Setenv("GIT_AUTHOR_NAME", "Test User")
-	os.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
-	os.Setenv("GIT_COMMITTER_NAME", "Test User")
-	os.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+	require.NoError(t, os.Setenv("GIT_AUTHOR_NAME", "Test User"))
+	require.NoError(t, os.Setenv("GIT_AUTHOR_EMAIL", "test@example.com"))
+	require.NoError(t, os.Setenv("GIT_COMMITTER_NAME", "Test User"))
+	require.NoError(t, os.Setenv("GIT_COMMITTER_EMAIL", "test@example.com"))
 
 	// Initialize git repo with initial commit on main branch
-	if err := exec.Command("git", "-C", tmpDir, "init").Run(); err != nil {
+	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "init").Run(); err != nil {
 		t.Fatalf("failed to init git repo: %v", err)
 	}
-	if err := exec.Command("git", "-C", tmpDir, "config", "user.email", "test@example.com").Run(); err != nil {
+	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "config", "user.email", "test@example.com").Run(); err != nil {
 		t.Fatalf("failed to set git email: %v", err)
 	}
-	if err := exec.Command("git", "-C", tmpDir, "config", "user.name", "Test User").Run(); err != nil {
+	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "config", "user.name", "Test User").Run(); err != nil {
 		t.Fatalf("failed to set git name: %v", err)
 	}
-	if err := exec.Command("git", "-C", tmpDir, "config", "commit.gpgsign", "false").Run(); err != nil {
+	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "config", "commit.gpgsign", "false").Run(); err != nil {
 		t.Fatalf("failed to disable gpgsign: %v", err)
 	}
 	readmeFile := filepath.Join(tmpDir, "README.md")
 	if err := os.WriteFile(readmeFile, []byte("# Test Repo\n"), 0o600); err != nil {
 		t.Fatalf("failed to write README: %v", err)
 	}
-	if err := exec.Command("git", "-C", tmpDir, "add", "README.md").Run(); err != nil {
+	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "add", "README.md").Run(); err != nil {
 		t.Fatalf("failed to git add: %v", err)
 	}
-	if err := exec.Command("git", "-C", tmpDir, "commit", "-m", "initial commit").Run(); err != nil {
+	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "commit", "-m", "initial commit").Run(); err != nil {
 		t.Fatalf("failed to git commit: %v", err)
 	}
 
