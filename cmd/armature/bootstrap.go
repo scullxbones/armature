@@ -782,6 +782,13 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 	// then remove the now-stale nested copy and commit, mirroring the commit pattern the
 	// legacy single-branch migration uses after copying its data (see the
 	// AddPaths/CommitPathsNoVerify call in runRepoSetup after migrateLegacySingleBranchOps).
+	// Tracks whether the flatten-and-commit block below has already committed to the
+	// _armature branch. Once true, rollback must never reset --hard past that commit:
+	// doing so would move the branch backward and drop already-visible history, violating
+	// the append-only invariant (AGENTS.md I2/T2). Any failure after that point is reported
+	// without rewriting history instead of routed through rollback.
+	collapseCommitted := false
+
 	legacyInnerArmaturePath := filepath.Join(newWorktreePath, config.StateDirName)
 	if _, err := os.Stat(legacyInnerArmaturePath); err == nil {
 		skippedCount, err := copyLegacyOpsToNewWorktree(legacyInnerArmaturePath, newWorktreePath)
@@ -833,10 +840,23 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		); err != nil {
 			return false, "", rollback(fmt.Errorf("commit collapsed layout: %w", err))
 		}
+		collapseCommitted = true
 	}
 
 	// Update git config to point to the new worktree path
 	if err := gitClient.SetGitConfig("armature.ops-worktree-path", newWorktreePath); err != nil {
+		if collapseCommitted {
+			// The collapse commit already landed on the _armature branch; rolling back
+			// via reset --hard here would rewind the branch and lose that commit, which
+			// AGENTS.md I2 (append-only) forbids. The migration itself succeeded, so
+			// leave the worktree at its new location and surface a manual remediation
+			// instead of mutating history.
+			return false, "", fmt.Errorf(
+				"collapse migration committed successfully but set git config failed: %w; "+
+					"run 'git config armature.ops-worktree-path %s' to complete migration (backup at %s)",
+				err, newWorktreePath, backupDir,
+			)
+		}
 		return false, "", rollback(fmt.Errorf("set git config: %w", err))
 	}
 
@@ -1128,14 +1148,24 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// The built-in migration can relocate only the historical .arm worktree.
 	// Refuse a configured custom legacy worktree rather than creating a new
 	// collapsed worktree and silently leaving its nested ops history behind.
-	if existingCtx, resolveErr := config.ResolveContext(repoPath); resolveErr == nil &&
-		config.DetectUnmigratedLayout(existingCtx.WorktreePath, existingCtx.IssuesDir) &&
-		filepath.Base(existingCtx.WorktreePath) != ".arm" {
-		return RepoSetupResult{}, fmt.Errorf(
-			"repo uses a pre-collapse custom ops worktree at %s; automatic migration supports only .arm. "+
-				"Move it to .arm or migrate it manually before running `arm bootstrap`",
-			existingCtx.WorktreePath,
-		)
+	// If the configured worktree is instead already a valid collapsed layout at a
+	// custom path (e.g. armature.ops-worktree-path pointing at .ops), remember it so
+	// the layout switch below reuses it instead of falling through to the .arm/.armature
+	// defaults and trying to add a worktree where one is already checked out.
+	var customCollapsedWorktreePath string
+	if existingCtx, resolveErr := config.ResolveContext(repoPath); resolveErr == nil {
+		base := filepath.Base(existingCtx.WorktreePath)
+		if config.DetectUnmigratedLayout(existingCtx.WorktreePath, existingCtx.IssuesDir) {
+			if base != ".arm" {
+				return RepoSetupResult{}, fmt.Errorf(
+					"repo uses a pre-collapse custom ops worktree at %s; automatic migration supports only .arm. "+
+						"Move it to .arm or migrate it manually before running `arm bootstrap`",
+					existingCtx.WorktreePath,
+				)
+			}
+		} else if base != ".arm" && base != config.StateDirName {
+			customCollapsedWorktreePath = existingCtx.WorktreePath
+		}
 	}
 
 	// Attempt to migrate legacy single-branch layout if it exists
@@ -1206,6 +1236,9 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	switch {
+	case customCollapsedWorktreePath != "":
+		worktreePath = customCollapsedWorktreePath
+		isCollapsedLayout = true
 	case dualMigrated, alreadyCollapsed:
 		worktreePath = filepath.Join(repoPath, config.StateDirName) // .armature/
 		isCollapsedLayout = true
