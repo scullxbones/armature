@@ -213,6 +213,35 @@ func TestMaterializeAtSHA_SlottedWorkerLogPreserved(t *testing.T) {
 	assert.Contains(t, state.Issues, "E1-SLOT")
 }
 
+// TestMaterializeAtSHA_MultiplePrefixes_PreAndPostCollapse verifies that
+// passing both the legacy nested prefix and the collapsed root prefix lets a
+// single replay see ops committed under either layout, since a repo migrated
+// by migrateDualBranchToCollapsed has pre-collapse commits storing logs under
+// ".armature/ops" and post-collapse commits storing them under "ops".
+func TestMaterializeAtSHA_MultiplePrefixes_PreAndPostCollapse(t *testing.T) {
+	t.Parallel()
+	dir, gc := initAtSHATestRepo(t)
+
+	preOp := ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "E1-PRE",
+		Timestamp: 1000,
+		WorkerID:  "worker-alpha",
+		Payload:   ops.Payload{NodeType: "task", Title: "Pre-collapse task"},
+	}
+	preSHA := writeAndCommitOp(t, dir, ".armature/ops", preOp)
+
+	// A commit at preSHA only has the legacy nested prefix; the collapsed
+	// prefix alone must not see it, but passing both must.
+	state, err := MaterializeAtSHA(gc, preSHA, "ops")
+	require.NoError(t, err)
+	assert.NotContains(t, state.Issues, "E1-PRE", "collapsed-only prefix should not see pre-collapse ops")
+
+	state, err = MaterializeAtSHA(gc, preSHA, "ops", ".armature/ops")
+	require.NoError(t, err)
+	assert.Contains(t, state.Issues, "E1-PRE", "passing both prefixes should see pre-collapse ops")
+}
+
 func TestMaterializeAtSHA_SlottedWorkerLogAcceptsLegacyWorkerID(t *testing.T) {
 	t.Parallel()
 	dir, gc := initAtSHATestRepo(t)

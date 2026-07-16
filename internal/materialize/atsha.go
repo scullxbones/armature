@@ -11,9 +11,12 @@ import (
 )
 
 // MaterializeAtSHA replays all op log files at the given commit SHA and returns
-// the resulting materialized state. opsPrefix is the path within the git tree
-// where log files are stored (e.g., "ops" or ".armature/ops").
-func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*State, error) {
+// the resulting materialized state. opsPrefixes are the paths within the git
+// tree where log files are stored (e.g., "ops" or ".armature/ops") — a file is
+// included if it falls under any of them. Multiple prefixes let a single
+// replay span a repo's collapse migration, where commits before the collapse
+// store logs under a nested prefix and commits after it store them at the root.
+func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) (*State, error) {
 	files, err := history.ListFilesAtCommit(sha)
 	if err != nil {
 		return nil, fmt.Errorf("list files at %s: %w", sha, err)
@@ -21,9 +24,13 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 
 	var allOps []ops.Op
 
-	prefix := opsPrefix + "/"
+	prefixes := make([]string, len(opsPrefixes))
+	for i, p := range opsPrefixes {
+		prefixes[i] = p + "/"
+	}
+
 	for _, f := range files {
-		if !strings.HasPrefix(f, prefix) {
+		if !hasAnyPrefix(f, prefixes) {
 			continue
 		}
 		if !strings.HasSuffix(f, ".log") {
@@ -73,4 +80,14 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefix string) (*Sta
 	}
 
 	return state, nil
+}
+
+// hasAnyPrefix reports whether f starts with any of prefixes.
+func hasAnyPrefix(f string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(f, p) {
+			return true
+		}
+	}
+	return false
 }

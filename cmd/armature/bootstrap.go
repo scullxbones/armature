@@ -668,11 +668,15 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 	armWorktreePath := filepath.Join(repoPath, ".arm")
 	innerArmaturePath := filepath.Join(armWorktreePath, config.StateDirName)
 
-	// Check if .arm worktree exists. Any error here (missing, or .arm exists
-	// but isn't a directory containing a worktree pointer) means there is no
-	// dual-branch layout to migrate — leave diagnosing a malformed .arm to
-	// whatever step tries to use it next (e.g. AddWorktree), not this check.
-	if _, err := os.Stat(filepath.Join(armWorktreePath, ".git")); err != nil {
+	// Check if .arm worktree exists. A linked worktree's .git is a pointer
+	// *file* (containing "gitdir: ..."), not a directory — a real nested repo
+	// (e.g. a submodule or accidental nested clone) has .git as a directory
+	// and must not be mistaken for the legacy layout and moved aside. Any
+	// other stat error (missing, etc.) means there is no dual-branch layout
+	// to migrate — leave diagnosing a malformed .arm to whatever step tries
+	// to use it next (e.g. AddWorktree), not this check.
+	gitInfo, err := os.Stat(filepath.Join(armWorktreePath, ".git"))
+	if err != nil || gitInfo.IsDir() {
 		return false, "", nil
 	}
 

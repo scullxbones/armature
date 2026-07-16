@@ -50,9 +50,13 @@ func newRenderContextCmd() *cobra.Command {
 						issuesRel = rel
 					}
 				}
+				// Include the legacy nested prefix alongside the current one so
+				// a commit predating a dual-branch-to-collapsed migration
+				// still replays its ops.
 				opsPrefix := filepath.Join(issuesRel, "ops")
+				legacyOpsPrefix := filepath.Join(".armature", "ops")
 				var err error
-				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix)
+				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix, legacyOpsPrefix)
 				if err != nil {
 					return fmt.Errorf("materialize at %s: %w", rcAt, err)
 				}

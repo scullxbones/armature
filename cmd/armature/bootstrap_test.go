@@ -543,6 +543,31 @@ exec "$real_git" "$@"
 	runOutput(t, armWorktreePath, "status", "--porcelain")
 }
 
+// TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo verifies that a real
+// nested Git checkout at .arm/ (e.g. a submodule or accidental nested clone)
+// is not mistaken for the legacy linked-worktree layout: its .git is a
+// directory, not the pointer file a linked worktree has, so migration must
+// leave it untouched (review finding #2).
+func TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	armPath := filepath.Join(repo, ".arm")
+	require.NoError(t, os.MkdirAll(armPath, 0o750))
+	run(t, armPath, "git", "init")
+	run(t, armPath, "git", "config", "user.email", "test@test.com")
+	run(t, armPath, "git", "config", "user.name", "Test")
+	run(t, armPath, "git", "config", "commit.gpgsign", "false")
+	require.NoError(t, os.MkdirAll(filepath.Join(armPath, ".armature", "ops"), 0o750))
+	run(t, armPath, "git", "commit", "--allow-empty", "-m", "unrelated nested repo")
+
+	migrated, _, err := migrateDualBranchToCollapsed(repo)
+	require.NoError(t, err)
+	assert.False(t, migrated, "a real nested repo at .arm/ must not be mistaken for a linked worktree")
+	assert.DirExists(t, armPath, ".arm/ must be left in place, not renamed into a backup")
+	assert.DirExists(t, filepath.Join(armPath, ".git"), ".arm/.git must remain a real repo directory")
+}
+
 // pathExists is a helper to check if a path exists without error
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
