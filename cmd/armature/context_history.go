@@ -47,7 +47,11 @@ func newContextHistoryCmd() *cobra.Command {
 					issuesRel = rel
 				}
 			}
+			// Include the legacy nested prefix alongside the current one so
+			// history spanning a dual-branch-to-collapsed migration replays
+			// ops committed under either layout.
 			opsPrefix := filepath.Join(issuesRel, "ops")
+			legacyOpsPrefix := filepath.Join(".armature", "ops")
 
 			// Reverse entries to walk oldest-first
 			for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
@@ -64,7 +68,7 @@ func newContextHistoryCmd() *cobra.Command {
 			prevRendered := ""
 
 			for _, entry := range entries {
-				state, err := materialize.MaterializeAtSHA(gc, entry.SHA, opsPrefix)
+				state, err := materialize.MaterializeAtSHA(gc, entry.SHA, opsPrefix, legacyOpsPrefix)
 				if err != nil {
 					// Skip commits where materialization fails (e.g. before .armature existed)
 					continue
