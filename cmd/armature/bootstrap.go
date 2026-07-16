@@ -672,6 +672,25 @@ func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, commit
 	return nil
 }
 
+// isPreB1SourcesDebrisPath reports whether path (a repo-relative path as
+// reported by `git status --porcelain` inside an ops worktree) is exactly
+// armature-owned sources state: <StateDirName>/sources/<name>, where name is
+// "manifest.json" or ends in ".cache". Before the LNGHZN-B1 fix (commit
+// 217022ea), `arm sources add/sync` wrote these files directly into the ops
+// worktree without committing them (no FileCommitter wired), leaving
+// pre-fix clones with permanently uncommitted debris under sources/. The fix
+// itself was forward-only: it auto-commits future writes but never reconciles
+// debris already on disk. migrateDualBranchToCollapsed uses this to recognize
+// that debris and reconcile it instead of refusing to migrate forever.
+func isPreB1SourcesDebrisPath(path string) bool {
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	if len(parts) != 3 || parts[0] != config.StateDirName || parts[1] != "sources" {
+		return false
+	}
+	name := parts[2]
+	return name == "manifest.json" || strings.HasSuffix(name, ".cache")
+}
+
 // migrateDualBranchToCollapsed detects and migrates the current dual-branch .arm/.armature/
 // layout to the collapsed .armature/ layout. The ops worktree is renamed from .arm/ to
 // .armature/, and its inner .armature/ subdirectory contents move up to the root.
@@ -705,16 +724,42 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		return false, "", fmt.Errorf("check for inner .armature/ directory: %w", err)
 	}
 
-	// Check if the _armature worktree has uncommitted changes (reject if it does)
+	// Check if the _armature worktree has uncommitted changes (reject if it does),
+	// with one carve-out: pre-LNGHZN-B1 builds of `arm sources add/sync` left
+	// .armature/sources/*.cache and manifest.json uncommitted in this worktree
+	// (see isPreB1SourcesDebrisPath). If every dirty path is either that kind of
+	// armature-owned sources debris, or an untracked file outside sources/ (the
+	// same tolerance IsWorkingTreeDirty already grants elsewhere in this flow —
+	// e.g. runRepoSetup's chained migration call runs after writing fresh,
+	// not-yet-committed .gitignore/SCHEMA/hook-template scaffolding into this
+	// same worktree, which must not itself block convergence), reconcile the
+	// sources debris with a single commit and proceed. Any tracked (modified or
+	// staged) dirty path outside sources/ still refuses exactly as before.
 	armtreeGitClient := adapters.New(armWorktreePath)
-	dirty, err := armtreeGitClient.IsWorkingTreeDirty()
+	dirtyEntries, err := armtreeGitClient.DirtyEntries()
 	if err != nil {
 		return false, "", fmt.Errorf("check _armature worktree for uncommitted changes: %w", err)
 	}
-	if dirty {
+	var sourcesDebrisPaths []string
+	for _, entry := range dirtyEntries {
+		if isPreB1SourcesDebrisPath(entry.Path) {
+			sourcesDebrisPaths = append(sourcesDebrisPaths, entry.Path)
+			continue
+		}
+		if entry.Untracked {
+			continue
+		}
 		return false, "", fmt.Errorf(
 			"_armature worktree has uncommitted changes; please commit or stash them before running bootstrap",
 		)
+	}
+	if len(sourcesDebrisPaths) > 0 {
+		if err := armtreeGitClient.AddPaths(sourcesDebrisPaths); err != nil {
+			return false, "", fmt.Errorf("stage pre-LNGHZN-B1 sources debris for reconciliation: %w", err)
+		}
+		if err := armtreeGitClient.CommitWithMessage("sources: reconcile pre-LNGHZN-B1 uncommitted sources state"); err != nil {
+			return false, "", fmt.Errorf("commit pre-LNGHZN-B1 sources debris: %w", err)
+		}
 	}
 	preCollapseSHA, err := armtreeGitClient.HeadSHA()
 	if err != nil {
@@ -875,6 +920,15 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		}
 		return false, "", rollback(fmt.Errorf("set git config: %w", err))
 	}
+
+	// armature.mode is dead legacy-compat state: nothing in the current codebase
+	// reads it (see the "Set git config keys for current layout" comment in
+	// runRepoSetup), but older builds wrote it as "dual-branch" and nothing ever
+	// cleared it, so real pre-collapse repos can carry it forward indefinitely
+	// even once they're on the collapsed layout. Best-effort clear it here;
+	// failure is not fatal since the migration itself has already succeeded and
+	// nothing depends on this key being absent.
+	_ = gitClient.UnsetGitConfig("armature.mode") //nolint:errcheck // best-effort cleanup of dead legacy-compat state; migration already succeeded
 
 	return true, backupDir, nil
 }

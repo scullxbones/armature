@@ -117,6 +117,50 @@ func (c *Client) IsWorkingTreeDirty() (bool, error) {
 	return false, nil
 }
 
+// DirtyEntry is a single parsed line of `git status --porcelain` output: the
+// repo-relative path and whether it is untracked (status code "??") as
+// opposed to a tracked file with staged or unstaged changes.
+type DirtyEntry struct {
+	Path      string
+	Untracked bool
+}
+
+// DirtyEntries returns every working-tree change, tracked or untracked
+// (unlike IsWorkingTreeDirty, which treats untracked files as never dirty).
+// Callers that need to classify dirty paths against an allow-list — e.g.
+// reconciling known-safe debris before refusing a dirty worktree outright —
+// need the Untracked flag too, since tolerating incidental untracked
+// scaffolding while still refusing on tracked changes is exactly
+// IsWorkingTreeDirty's existing contract; this exposes the same information
+// per-path instead of collapsing it to a single bool. Renamed paths report
+// the destination path. Returns an empty (nil) slice for a clean working tree.
+func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
+	cmd := c.cmd("status", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git status: %w", err)
+	}
+
+	var entries []DirtyEntry
+	// Only trim the trailing newline here, not leading whitespace: the porcelain
+	// status code's first column is often a literal space (e.g. " M file.txt"
+	// for an unstaged modification), and strings.TrimSpace on the whole blob
+	// would eat that space off the very first line, shifting every subsequent
+	// index-based slice by one and corrupting the parsed path.
+	for line := range strings.SplitSeq(strings.TrimRight(string(out), "\n"), "\n") {
+		if line == "" || len(line) < 4 {
+			continue
+		}
+		// Porcelain v1 format: "XY PATH" or "XY ORIG_PATH -> PATH" for renames.
+		path := line[3:]
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = path[idx+len(" -> "):]
+		}
+		entries = append(entries, DirtyEntry{Path: path, Untracked: strings.HasPrefix(line, "??")})
+	}
+	return entries, nil
+}
+
 // isBenignEmptyRepoRmError reports whether output from `git rm -rf --quiet .`
 // reflects the expected, harmless failure on an empty repo (no tracked files
 // to remove) rather than a real error that could leave stale index entries.
@@ -284,6 +328,21 @@ func (c *Client) ReadGitConfig(key string) (string, error) {
 		return "", fmt.Errorf("git config get %s: %w", key, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// UnsetGitConfig removes a local git config key. It is a no-op (returns nil)
+// if the key is not currently set, so callers can use it to opportunistically
+// clear stale config without needing to check existence first.
+func (c *Client) UnsetGitConfig(key string) error {
+	cmd := c.cmd("config", "--local", "--unset", key)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 5 {
+		return nil // git config --unset exits 5 when the key was never set
+	}
+	return fmt.Errorf("git config unset %s: %w\n%s", key, err, out)
 }
 
 // CommitWorktreeOp stages and commits a single file change within a worktree.

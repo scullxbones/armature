@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -201,4 +202,157 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 	if _, err := os.Stat(filepath.Join(newWorktreePath, ".git")); err == nil {
 		t.Error("expected new .armature/ worktree to not exist after failed migration")
 	}
+}
+
+// setupDualBranchFixtureForSourcesDebris creates a dual-branch .arm/.armature
+// worktree with a committed ops/ file (so migration has real legacy ops data
+// to carry forward) and returns the repo root and the ops worktree path. The
+// caller is responsible for introducing whatever dirty state the test needs
+// on top of this clean, committed baseline.
+func setupDualBranchFixtureForSourcesDebris(t *testing.T) (repo string, armWorktreePath string) {
+	t.Helper()
+	repo = initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	armWorktreePath = filepath.Join(repo, ".arm")
+	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
+
+	innerArmaturePath := filepath.Join(armWorktreePath, config.StateDirName)
+	opsDir := filepath.Join(innerArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(opsDir, "existing-issue.json"), []byte(`{"id":"existing"}`), 0o600))
+
+	sourcesDir := filepath.Join(innerArmaturePath, "sources")
+	require.NoError(t, os.MkdirAll(sourcesDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "manifest.json"), []byte(`{"sources":{}}`), 0o600))
+
+	armGitClient := adapters.New(armWorktreePath)
+	require.NoError(t, armGitClient.AddPaths([]string{config.StateDirName}))
+	require.NoError(t, armGitClient.CommitWorktreeOp(config.StateDirName, "chore: simulate pre-existing dual-branch layout"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
+	return repo, armWorktreePath
+}
+
+// TestMigrateDualBranchToCollapsedReconcilesSourcesOnlyDebris verifies the
+// LNGHZN-B1 RCA remediation: an ops worktree that is dirty ONLY under
+// .armature/sources/ (the debris pre-LNGHZN-B1 `arm sources add/sync` left
+// uncommitted) is reconciled with a commit instead of refusing to migrate
+// forever. Without this, real clones that ran `arm sources add/sync` before
+// commit 217022ea are permanently blocked from the dual-branch->collapsed
+// migration.
+func TestMigrateDualBranchToCollapsedReconcilesSourcesOnlyDebris(t *testing.T) {
+	repo, armWorktreePath := setupDualBranchFixtureForSourcesDebris(t)
+
+	sourcesDir := filepath.Join(armWorktreePath, config.StateDirName, "sources")
+
+	// Simulate pre-LNGHZN-B1 debris: cache files written directly to disk,
+	// never committed (no FileCommitter wired before the fix).
+	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "src-a.cache"), []byte("cached content a"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "src-b.cache"), []byte("cached content b"), 0o600))
+	// And a modification to the already-committed manifest.json, also never
+	// committed — matching the RCA's "10 untracked .cache files + modified
+	// manifest.json" description of real debris.
+	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "manifest.json"), []byte(`{"sources":{"a":{}}}`), 0o600))
+
+	migrated, backupDir, err := migrateDualBranchToCollapsed(repo)
+	require.NoError(t, err, "migration must reconcile pure sources debris instead of refusing")
+	require.True(t, migrated)
+	require.NotEmpty(t, backupDir)
+
+	// Migration must have actually happened: collapsed worktree exists with
+	// both the reconciled sources files and the pre-existing ops data.
+	newWorktreePath := filepath.Join(repo, config.StateDirName)
+	assert.DirExists(t, newWorktreePath)
+	assert.FileExists(t, filepath.Join(newWorktreePath, "sources", "src-a.cache"))
+	assert.FileExists(t, filepath.Join(newWorktreePath, "sources", "src-b.cache"))
+	assert.FileExists(t, filepath.Join(newWorktreePath, "ops", "existing-issue.json"))
+
+	// The reconciliation commit must be visible in the _armature branch's
+	// history, not merely present on disk uncommitted.
+	logOut := runOutput(t, repo, "log", "_armature", "--oneline")
+	assert.Contains(t, logOut, "reconcile pre-LNGHZN-B1 uncommitted sources state",
+		"the sources debris reconciliation must be committed to the _armature branch")
+
+	// The collapsed worktree must end up clean (the reconciled files, plus the
+	// migration's own flatten commit, leave nothing uncommitted).
+	status := strings.TrimSpace(runOutput(t, newWorktreePath, "status", "--porcelain"))
+	assert.Empty(t, status, "collapsed worktree must be clean after reconciling sources debris")
+}
+
+// TestMigrateDualBranchToCollapsedRefusesWhenNonSourcesPathAlsoDirty verifies
+// that the sources-debris reconciliation carve-out is narrow: if a *tracked*
+// dirty path falls outside .armature/sources/ — even alongside genuine sources
+// debris — migration still refuses with the original message, rather than
+// silently committing unrelated uncommitted work. (An untracked non-sources
+// path, by contrast, is tolerated: see
+// TestMigrateDualBranchToCollapsedTreatsUntrackedNonSourcesDebrisTheSameAsBefore
+// for why that tolerance must be preserved.)
+func TestMigrateDualBranchToCollapsedRefusesWhenNonSourcesPathAlsoDirty(t *testing.T) {
+	repo, armWorktreePath := setupDualBranchFixtureForSourcesDebris(t)
+
+	sourcesDir := filepath.Join(armWorktreePath, config.StateDirName, "sources")
+	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "src-a.cache"), []byte("cached content a"), 0o600))
+
+	// Modify the already-committed ops/existing-issue.json without committing:
+	// a tracked, non-sources dirty path.
+	opsFile := filepath.Join(armWorktreePath, config.StateDirName, "ops", "existing-issue.json")
+	require.NoError(t, os.WriteFile(opsFile, []byte(`{"id":"existing","modified":true}`), 0o600))
+
+	migrated, backupDir, err := migrateDualBranchToCollapsed(repo)
+	require.Error(t, err, "migration must still refuse when a tracked non-sources path is dirty")
+	assert.Contains(t, err.Error(), "uncommitted changes")
+	assert.False(t, migrated)
+	assert.Empty(t, backupDir)
+
+	// The .arm/ worktree must remain untouched: no new .armature/ worktree, and
+	// the sources debris must still be sitting there uncommitted (not silently
+	// swept up into a partial commit).
+	newWorktreePath := filepath.Join(repo, config.StateDirName)
+	assert.False(t, pathExists(filepath.Join(newWorktreePath, ".git")), "no collapsed worktree should be created on refusal")
+	status := strings.TrimSpace(runOutput(t, armWorktreePath, "status", "--porcelain"))
+	assert.Contains(t, status, "src-a.cache")
+	assert.Contains(t, status, "existing-issue.json")
+}
+
+// TestMigrateDualBranchToCollapsedTreatsUntrackedNonSourcesDebrisTheSameAsBefore
+// verifies that an untracked file outside .armature/sources/ does not itself
+// block migration, preserving IsWorkingTreeDirty's pre-existing behavior of
+// never treating untracked files as dirty. This matters beyond the sources
+// carve-out: runRepoSetup's own chained migrateDualBranchToCollapsed call
+// (LNGHZN-S1-T3) runs immediately after writing fresh, not-yet-committed
+// .gitignore/SCHEMA/hook-template scaffolding into this same worktree, so
+// treating any untracked path as refusal-worthy would break that convergence.
+func TestMigrateDualBranchToCollapsedTreatsUntrackedNonSourcesDebrisTheSameAsBefore(t *testing.T) {
+	repo, armWorktreePath := setupDualBranchFixtureForSourcesDebris(t)
+
+	// An untracked file outside sources/, mirroring the untracked scaffolding
+	// runRepoSetup leaves behind before its chained migration call.
+	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, "SCHEMA-like-scaffolding.txt"), []byte("scaffold"), 0o600))
+
+	migrated, backupDir, err := migrateDualBranchToCollapsed(repo)
+	require.NoError(t, err, "an untracked non-sources path must not block migration")
+	assert.True(t, migrated)
+	assert.NotEmpty(t, backupDir)
+}
+
+// TestMigrateDualBranchToCollapsedClearsStaleArmatureModeConfig verifies that
+// a stale "armature.mode = dual-branch" git config value (written by older
+// builds; nothing in the current codebase reads or writes this key anymore)
+// is cleared once the migration to the collapsed layout succeeds, so a
+// collapsed repo doesn't carry forward a config key describing a layout it no
+// longer has.
+func TestMigrateDualBranchToCollapsedClearsStaleArmatureModeConfig(t *testing.T) {
+	repo, _ := setupDualBranchFixtureForSourcesDebris(t)
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.SetGitConfig("armature.mode", "dual-branch"))
+
+	migrated, _, err := migrateDualBranchToCollapsed(repo)
+	require.NoError(t, err)
+	require.True(t, migrated)
+
+	_, err = gitClient.ReadGitConfig("armature.mode")
+	assert.Error(t, err, "armature.mode should be cleared after a successful collapse migration")
 }
