@@ -502,6 +502,74 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops directory should still exist after idempotent run")
 }
 
+// TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration verifies that a
+// successful dual-branch->collapsed migration prints a user-facing explanation of the
+// .arm.collapsed-<timestamp> backup directory left behind: its path, that it is a safety
+// snapshot of the pre-migration ops worktree, that its contents are committed on the
+// _armature branch, and that it is safe to delete once the collapsed layout is verified.
+// Without this, users are left with an unexplained multi-megabyte directory and no way to
+// know whether it's needed (see the dogfood finding this fixes).
+func TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	run(t, repo, "git", "config", "commit.gpgsign", "false")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+
+	armWorktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
+
+	innerArmaturePath := filepath.Join(armWorktreePath, config.StateDirName)
+	opsDir := filepath.Join(innerArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(opsDir, "existing-issue.json"), []byte(`{"id":"existing"}`), 0o600))
+	armGitClient := adapters.New(armWorktreePath)
+	require.NoError(t, armGitClient.AddPaths([]string{config.StateDirName}))
+	require.NoError(t, armGitClient.CommitWorktreeOp(config.StateDirName, "chore: simulate pre-existing dual-branch layout"))
+
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(repo)
+	require.NoError(t, err)
+	var backupDirName string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".arm.collapsed-") {
+			backupDirName = entry.Name()
+			break
+		}
+	}
+	require.NotEmpty(t, backupDirName, "expected a .arm.collapsed-<timestamp> backup directory to be left behind")
+
+	output := buf.String()
+	assert.Contains(t, output, backupDirName, "output should mention the backup directory path")
+	assert.Contains(t, output, "safety snapshot", "output should explain the backup is a safety snapshot")
+	assert.Contains(t, output, "_armature branch", "output should say the backup's contents are committed on _armature")
+	assert.Contains(t, output, "safe to delete", "output should say the backup is safe to delete once verified")
+}
+
+// TestRunRepoSetupFreshInitDoesNotPrintBackupSafetyGuidance verifies that an ordinary
+// bootstrap of a fresh repo (no migration performed) never prints the backup safety
+// message; it must appear only when migrateDualBranchToCollapsed actually ran.
+func TestRunRepoSetupFreshInitDoesNotPrintBackupSafetyGuidance(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	assert.NotContains(t, buf.String(), "safety snapshot", "fresh init performed no migration and must not print backup guidance")
+}
+
 func TestMigrateDualBranchToCollapsedRestoresUsableWorktreeAfterAddFailure_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

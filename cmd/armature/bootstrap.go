@@ -1122,6 +1122,17 @@ func excludeArmWorktreeFromGit(repoPath string) error {
 	return updateGitExclude(repoPath, ".arm/", "")
 }
 
+// printCollapseMigrationBackupGuidance explains the .arm.collapsed-<timestamp> backup
+// directory left behind by a successful dual-branch->collapsed migration: by design it is
+// never needed for rollback (the git worktree move is atomic), so users are otherwise left
+// with an unexplained directory and no indication of whether it's safe to remove.
+func printCollapseMigrationBackupGuidance(cmd *cobra.Command, backupDir string) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		"safety snapshot of the pre-migration ops worktree left at %s; "+
+			"its contents are committed on the _armature branch — safe to delete once you've verified the collapsed layout\n",
+		backupDir)
+}
+
 // updateGitExclude adds an exclude pattern to .git/info/exclude and optionally removes another.
 // This is idempotent: if the pattern to add is already present, it won't be duplicated.
 // If removePattern is non-empty and present, it will be removed before the new pattern is added.
@@ -1267,6 +1278,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 	if dualMigrated {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated dual-branch .arm/.armature layout to collapsed .armature at timestamped backup %s\n", dualBackupDir)
+		printCollapseMigrationBackupGuidance(cmd, dualBackupDir)
 		// Update git exclude to use .armature/ instead of .arm/
 		if err := updateGitExclude(repoPath, config.StateDirName+"/", ".arm/"); err != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update .git/info/exclude after migration: %v\n", err)
@@ -1619,6 +1631,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			worktreePath = filepath.Join(repoPath, config.StateDirName)
 			issuesDir = worktreePath // In collapsed layout, issuesDir == worktreePath
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated dual-branch .arm/.armature layout to collapsed .armature at timestamped backup %s\n", chainedDualBackupDir)
+			printCollapseMigrationBackupGuidance(cmd, chainedDualBackupDir)
 			// Update git config with the new collapsed worktree path
 			if err := gitClient.SetGitConfig("armature.ops-worktree-path", worktreePath); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to update git config after migration: %v\n", err)
