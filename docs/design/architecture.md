@@ -1618,7 +1618,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Transition-code desync (done before code reviewed) | Downstream premature start | Two-phase done/merged model; downstream requires `merged` |
 | Ops branch force-push or deletion | Loss of coordination state | Configure force-push protection separately from PR requirements; local worktrees retain full history for recovery |
 | Squash-merge breaks commit ancestry checks | Merge detection miss | Commit-message scan (not ancestry) as primary detection; branch-name and explicit fallbacks |
-| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .arm --force` then re-run `arm bootstrap` |
+| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .armature --force` then re-run `arm bootstrap` |
 | Verify phase reads code worktree, record phase writes ops worktree | Cross-worktree corruption | Strict phase separation: verify(code) then record(ops); no cross-worktree operations within a phase |
 | Task stuck at done if PR abandoned | Downstream permanently blocked | Staleness check (no merge within N days of done); surfaced via `arm status` |
 | Manual commits to ops branch | Unexpected state | CLI ignores non-.armature/ files; contributing guide documents convention |

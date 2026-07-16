@@ -1994,6 +1994,21 @@ func TestListMigrationBackupsSortsAndIgnoresUnreadableRepo_P3(t *testing.T) {
 	require.Nil(t, listMigrationBackups(filepath.Join(repo, "missing")))
 }
 
+// TestListMigrationBackupsIncludesCollapsedBackups_REQ_LNGHZN_S1 verifies that
+// listMigrationBackups also surfaces .arm.collapsed-* backups created by
+// migrateDualBranchToCollapsed, not just the legacy .armature.migrated-* ones,
+// so a stranded dual-branch-to-collapsed backup isn't silently omitted from the
+// "stranded migration backups" note.
+func TestListMigrationBackupsIncludesCollapsedBackups_REQ_LNGHZN_S1(t *testing.T) {
+	repo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".arm.collapsed-20260703010101"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703000101"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "unrelated"), 0o750))
+
+	backups := listMigrationBackups(repo)
+	require.Equal(t, []string{".arm.collapsed-20260703010101", ".armature.migrated-20260703000101"}, backups)
+}
+
 func TestRunRepoSetupNotesStrandedMigrationBackups_P3(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2773,4 +2788,194 @@ func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, customWorktreePath, configuredPath, "bootstrap should keep using the configured custom worktree path")
 	assert.NoDirExists(t, filepath.Join(repo, ".armature"), "bootstrap must not create a default .armature/ worktree alongside a valid custom one")
+}
+
+// TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1 verifies
+// that rollbackLegacyMigration refuses to `reset --hard` when HEAD is parked on the
+// _armature branch. CreateOrphanBranch can fail after `git checkout --orphan
+// _armature` if its own restore-checkout also fails, leaving HEAD on the unborn
+// _armature branch; resetting --hard in that state would point _armature at the
+// code branch's pre-migration SHA, corrupting the ops branch and violating the
+// append-only invariant (AGENTS.md I2/T2).
+func TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	preSHA := strings.TrimSpace(runOutput(t, repo, "rev-parse", "HEAD"))
+
+	// Simulate the migration commit that renamed/committed .armature away.
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "chore: migrate legacy .armature to dual-branch layout")
+
+	// Simulate CreateOrphanBranch failing mid-way: its own restore-checkout also
+	// failed, leaving HEAD parked on the unborn _armature branch.
+	run(t, repo, "git", "checkout", "--orphan", "_armature")
+	run(t, repo, "git", "commit", "--no-verify", "--allow-empty", "-m", "chore: init armature issues branch")
+	armatureSHABefore := strings.TrimSpace(runOutput(t, repo, "rev-parse", "_armature"))
+
+	backupDir := t.TempDir()
+	err := rollbackLegacyMigration(repo, backupDir, preSHA, true)
+	require.Error(t, err, "rollback must refuse to reset --hard while HEAD is on _armature")
+	assert.Contains(t, err.Error(), "_armature")
+	assert.Contains(t, err.Error(), backupDir, "error must name the backup dir for manual recovery")
+
+	armatureSHAAfter := strings.TrimSpace(runOutput(t, repo, "rev-parse", "_armature"))
+	assert.Equal(t, armatureSHABefore, armatureSHAAfter, "_armature ref must be untouched by the refused reset")
+}
+
+// TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGHZN_S1
+// verifies the chain from a successful legacy single-branch migration straight into
+// a failing dual-branch-to-collapsed migration is rolled back, not left stranded.
+// Without this, a successful migrateLegacySingleBranchOps followed by a failing
+// migrateDualBranchToCollapsed would leave the legacy ops history sitting in a
+// backup dir forever: a retry sees migrated == false and never attempts the merge
+// again.
+func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGHZN_S1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Legacy single-branch layout at the root: migrateLegacySingleBranchOps will
+	// succeed and commit its removal.
+	legacyArmaturePath := filepath.Join(repo, ".armature")
+	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
+	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
+	testContent := []byte(`{"id": "001", "title": "Test issue"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "test-issue.json"), testContent, 0o600))
+	run(t, repo, "git", "add", ".armature")
+	run(t, repo, "git", "commit", "-m", "legacy setup")
+
+	// A separate, pre-existing dual-branch .arm worktree with a dirty working tree:
+	// migrateDualBranchToCollapsed detects the dual-branch layout and refuses
+	// because of the uncommitted changes, failing right after the legacy migration
+	// committed successfully.
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	armWorktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
+	require.NoError(t, os.MkdirAll(filepath.Join(armWorktreePath, ".armature", "ops"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, ".armature", "ops", "issue.json"), []byte(`{"id":"1"}`), 0o600))
+	armGitClient := adapters.New(armWorktreePath)
+	require.NoError(t, armGitClient.AddPaths([]string{".armature"}))
+	require.NoError(t, armGitClient.CommitWorktreeOp(".armature", "chore: create legacy dual-branch layout"))
+	// Modify a tracked file without committing so migrateDualBranchToCollapsed's
+	// dirty check fails (untracked-only changes don't count as dirty there).
+	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, ".armature", "ops", "issue.json"), []byte(`{"id":"1","modified":true}`), 0o600))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err, "runRepoSetup should fail because the dual-branch worktree is dirty")
+	assert.Contains(t, err.Error(), "migrate dual-branch layout to collapsed")
+
+	// The legacy migration must have been rolled back: .armature restored and tracked.
+	assert.DirExists(t, legacyArmaturePath, ".armature should be restored after rollback")
+	restoredContent, readErr := os.ReadFile(filepath.Join(legacyOpsPath, "test-issue.json"))
+	require.NoError(t, readErr, "legacy ops file should still exist after rollback")
+	assert.Equal(t, testContent, restoredContent)
+	assert.True(t, gitClient.IsTracked(".armature"), ".armature should be tracked again after rollback")
+
+	dirty, err := gitClient.IsWorkingTreeDirty()
+	require.NoError(t, err)
+	assert.False(t, dirty, "working tree at repo root should be clean after rollback")
+}
+
+// TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1 verifies
+// that bootstrapping against a custom collapsed ops worktree (e.g. .ops, not the
+// default .armature/) adds an exclude entry for the worktree's own basename, not
+// the hardcoded .armature/ constant. Without this, a repo using a custom worktree
+// path shows the worktree directory as untracked instead of excluded.
+func TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	customWorktreePath := filepath.Join(repo, ".ops")
+	require.NoError(t, gitClient.AddWorktree("_armature", customWorktreePath))
+
+	opsGitClient := adapters.New(customWorktreePath)
+	require.NoError(t, os.MkdirAll(filepath.Join(customWorktreePath, "ops"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(customWorktreePath, "config.json"), []byte(`{"project_type":"go"}`), 0o600))
+	require.NoError(t, opsGitClient.AddPaths([]string{"ops", "config.json"}))
+	require.NoError(t, opsGitClient.CommitWorktreeOp(".", "chore: collapsed custom worktree"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	excludeContent, readErr := os.ReadFile(filepath.Join(repo, ".git", "info", "exclude"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(excludeContent), ".ops/", ".git/info/exclude should exclude the custom worktree by its own basename")
+	assert.NotContains(t, string(excludeContent), ".armature/", ".git/info/exclude should not exclude the unused default .armature/ path")
+}
+
+// TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1 verifies that
+// a custom ops worktree (e.g. .ops) containing a nested, unmigrated .armature/
+// subtree (dual-branch-style, pre-collapse) is refused rather than silently
+// producing a new collapsed worktree that leaves the nested ops history behind.
+func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	customWorktreePath := filepath.Join(repo, ".ops")
+	require.NoError(t, gitClient.AddWorktree("_armature", customWorktreePath))
+
+	// Nested, unmigrated .armature/ subtree under the custom worktree: dual-branch
+	// style, pre-collapse layout.
+	opsGitClient := adapters.New(customWorktreePath)
+	nestedArmaturePath := filepath.Join(customWorktreePath, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(nestedArmaturePath, "ops"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(nestedArmaturePath, "ops", "issue.json"), []byte(`{"id":"1"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(nestedArmaturePath, "config.json"), []byte(`{"project_type":"go"}`), 0o600))
+	require.NoError(t, opsGitClient.AddPaths([]string{".armature"}))
+	require.NoError(t, opsGitClient.CommitWorktreeOp(".armature", "chore: nested pre-collapse layout"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.Error(t, err, "bootstrap should refuse a pre-collapse custom ops worktree")
+	assert.Contains(t, err.Error(), "pre-collapse custom ops worktree")
+	assert.Contains(t, err.Error(), "supports only .arm")
+}
+
+// TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ_LNGHZN_S1
+// verifies that a custom collapsed worktree whose config.json is missing/corrupt
+// (so config.ResolveContext fails) does not corrupt repo state: bootstrap either
+// falls through to its normal fresh/legacy handling or fails clearly, but must not
+// leave the repo in a state where the existing worktree's git registration is
+// damaged.
+func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ_LNGHZN_S1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	customWorktreePath := filepath.Join(repo, ".ops")
+	require.NoError(t, gitClient.AddWorktree("_armature", customWorktreePath))
+
+	opsGitClient := adapters.New(customWorktreePath)
+	require.NoError(t, os.MkdirAll(filepath.Join(customWorktreePath, "ops"), 0o750))
+	// Corrupt config.json so config.ResolveContext fails to parse it.
+	require.NoError(t, os.WriteFile(filepath.Join(customWorktreePath, "config.json"), []byte(`{not valid json`), 0o600))
+	require.NoError(t, opsGitClient.AddPaths([]string{"ops", "config.json"}))
+	require.NoError(t, opsGitClient.CommitWorktreeOp(".", "chore: collapsed custom worktree with bad config"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
+
+	preSHA := strings.TrimSpace(runOutput(t, customWorktreePath, "rev-parse", "HEAD"))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, _ = runRepoSetup(cmd, repo) //nolint:errcheck // outcome (success or clear failure) is asserted via git state below, not the return value
+
+	// Whether it succeeded or failed, the existing worktree's git registration must
+	// remain valid and its history must not have been rewound (append-only, I2/T2).
+	gitDir := strings.TrimSpace(runOutput(t, customWorktreePath, "rev-parse", "--git-dir"))
+	assert.Contains(t, gitDir, filepath.Join(".git", "worktrees"),
+		"custom worktree must remain a genuinely registered worktree")
+	postSHA := strings.TrimSpace(runOutput(t, customWorktreePath, "rev-parse", "HEAD"))
+	assert.Equal(t, preSHA, postSHA, "custom worktree history must not be rewound")
 }

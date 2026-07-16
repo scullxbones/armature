@@ -639,6 +639,22 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, committed bool) error {
 	if committed {
 		gitClient := adapters.New(repoPath)
+		// CreateOrphanBranch can fail after `git checkout --orphan _armature` if its
+		// own restore-checkout also fails, leaving HEAD parked on the unborn
+		// _armature branch. Resetting --hard in that state would point _armature at
+		// the code branch's SHA, corrupting the ops branch (AGENTS.md I2/T2:
+		// _armature history must never be rewritten). Refuse instead and point at
+		// the backup dir for manual recovery.
+		currentBranch, err := gitClient.CurrentBranch()
+		if err != nil {
+			return fmt.Errorf("determine current branch before rollback reset: %w (backup left at %s)", err, backupDir)
+		}
+		if currentBranch == "_armature" {
+			return fmt.Errorf(
+				"refusing to reset --hard while HEAD is on _armature (would corrupt ops branch history); "+
+					"backup left at %s for manual recovery", backupDir,
+			)
+		}
 		target := preMigrationSHA
 		if target == "" {
 			target = "HEAD~1"
@@ -926,7 +942,7 @@ func listMigrationBackups(repoPath string) []string {
 	var backups []string
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.HasPrefix(name, ".armature.migrated-") {
+		if strings.HasPrefix(name, ".armature.migrated-") || strings.HasPrefix(name, ".arm.collapsed-") {
 			backups = append(backups, name)
 		}
 	}
@@ -1180,6 +1196,19 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// Attempt to migrate dual-branch layout to collapsed layout if it exists
 	dualMigrated, dualBackupDir, err := migrateDualBranchToCollapsed(repoPath)
 	if err != nil {
+		if migrated {
+			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
+				return RepoSetupResult{}, fmt.Errorf(
+					"migrate dual-branch layout to collapsed: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
+					err, rbErr, backupDir,
+				)
+			}
+			if migrationCommitted && preMigrationSHA != "" {
+				// The reset restored tracked files, but the backup is the only copy of
+				// any legacy files that were untracked at migration time.
+				return RepoSetupResult{}, fmt.Errorf("migrate dual-branch layout to collapsed: %w (legacy migration rolled back; backup left at %s)", err, backupDir)
+			}
+		}
 		return RepoSetupResult{}, fmt.Errorf("migrate dual-branch layout to collapsed: %w", err)
 	}
 	if dualMigrated {
@@ -1274,7 +1303,19 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// below; this covers the fresh-init and pre-existing-.arm cases.
 	if !dualMigrated {
 		if isCollapsedLayout {
-			if err := updateGitExclude(repoPath, config.StateDirName+"/", ""); err != nil {
+			if customCollapsedWorktreePath != "" {
+				// A custom collapsed worktree path (e.g. .ops) must be excluded by its
+				// own basename, not the hardcoded .armature/ constant, or it shows up
+				// as untracked. Only add an exclude entry when the worktree actually
+				// lives under repoPath — a worktree outside the repo has nothing to
+				// exclude here.
+				if rel, relErr := filepath.Rel(repoPath, customCollapsedWorktreePath); relErr == nil && !strings.HasPrefix(rel, "..") {
+					excludeName := filepath.Base(customCollapsedWorktreePath) + "/"
+					if err := updateGitExclude(repoPath, excludeName, ""); err != nil {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude %s from git tracking: %v\n", excludeName, err)
+					}
+				}
+			} else if err := updateGitExclude(repoPath, config.StateDirName+"/", ""); err != nil {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude %s/ from git tracking: %v\n", config.StateDirName, err)
 			}
 		} else {
