@@ -4,7 +4,7 @@ The `.armature/config.json` file stores Armature's configuration for your reposi
 
 ## Configuration File Location
 
-The `.armature/config.json` file is stored on the `_armature` branch and accessed via the `.arm/` ops worktree at `.arm/.armature/config.json`.
+The `.armature/config.json` file is stored on the `_armature` branch and accessed via the `.armature/` ops worktree at `.armature/config.json`.
 
 ## Configuration Fields
 
@@ -50,7 +50,7 @@ Each hook in the `hooks` array has this structure:
 - **Execution:** Hooks run sequentially in array order before the transition is materialized.
 - **Required hooks:** If a required hook exits with non-zero status, the transition is rejected and the op is not appended.
 - **Optional hooks:** If an optional hook fails, a warning is logged but the transition proceeds.
-- **Environment:** Hooks run in the context of the ops worktree (`.arm/`).
+- **Environment:** Hooks run in the context of the ops worktree (`.armature/`).
 
 ### Example: Require Tests Before Done
 

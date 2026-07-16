@@ -555,6 +555,75 @@ exec "$real_git" "$@"
 	gitDir := strings.TrimSpace(runOutput(t, armWorktreePath, "rev-parse", "--git-dir"))
 	assert.Contains(t, gitDir, filepath.Join(".git", "worktrees"),
 		"resolved git-dir must be .arm's own worktree entry, not a fallthrough to the outer repo: %s", gitDir)
+	status := strings.TrimSpace(runOutput(t, armWorktreePath, "status", "--porcelain"))
+	assert.Empty(t, status, "rollback must restore a clean legacy worktree")
+}
+
+// TestMigrateDualBranchToCollapsedRollbackPreservesExistingRootState verifies
+// that a failure after the collapse commit does not delete valid root-level
+// state that existed in the legacy worktree before migration began.
+func TestMigrateDualBranchToCollapsedRollbackPreservesExistingRootState(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	gitClient := adapters.New(repo)
+	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
+	armWorktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
+
+	// These root-level artifacts are legitimate pre-collapse state. The nested
+	// equivalents are the legacy layout inputs which migration will flatten.
+	preexisting := map[string]string{
+		"ops/root-op.json":             `{"id":"root"}`,
+		"templates/root-template.md":   "root template\n",
+		"config.json":                  `{"project_type":"go"}`,
+		".armature/ops/legacy-op.json": `{"id":"legacy"}`,
+		".armature/config.json":        `{"project_type":"legacy"}`,
+	}
+	for path, content := range preexisting {
+		fullPath := filepath.Join(armWorktreePath, path)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o750))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0o600))
+	}
+	armGitClient := adapters.New(armWorktreePath)
+	require.NoError(t, armGitClient.AddPaths([]string{"ops", "templates", "config.json", ".armature"}))
+	require.NoError(t, armGitClient.CommitWorktreeOp(".", "chore: create mixed legacy layout"))
+	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
+
+	// Fail only the final config update. This occurs after the flattening commit,
+	// exercising the rollback path that previously removed root-level artifacts.
+	wrapperDir := t.TempDir()
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+target=%q
+sawTarget=0
+for arg in "$@"; do
+  if [ "$arg" = "$target" ]; then
+    sawTarget=1
+  fi
+  if [ "$sawTarget" = "1" ] && [ "$arg" = "config" ]; then
+    exit 1
+  fi
+done
+exec "$real_git" "$@"
+`, realGit, repo)
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, _, err = migrateDualBranchToCollapsed(repo)
+	require.Error(t, err)
+
+	for path, want := range preexisting {
+		// The stale nested tree is intentionally restored too: rollback promises
+		// the exact pre-migration checkout, not a partially-collapsed variant.
+		got, readErr := os.ReadFile(filepath.Join(armWorktreePath, path))
+		require.NoError(t, readErr, "restore %s", path)
+		assert.Equal(t, want, string(got), "restore exact contents for %s", path)
+	}
+	status := strings.TrimSpace(runOutput(t, armWorktreePath, "status", "--porcelain"))
+	assert.Empty(t, status, "rollback must restore a clean legacy worktree")
 }
 
 // TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo verifies that a real

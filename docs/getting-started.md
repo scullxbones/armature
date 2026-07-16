@@ -28,7 +28,7 @@ arm bootstrap
 ```
 
 ### Initialization Details
-Armature creates an orphan `_armature` branch for coordination data, storing all state in `.armature/` (accessible via the `.arm/` worktree). This separation ensures code and coordination state never conflict, enabling reliable multi-agent coordination.
+Armature creates an orphan `_armature` branch for coordination data, storing all state in the `.armature/` worktree. This separation ensures code and coordination state never conflict, enabling reliable multi-agent coordination.
 
 For detailed configuration options (TTL, token budget, hooks), see [Configuration Reference](configuration.md).
 
