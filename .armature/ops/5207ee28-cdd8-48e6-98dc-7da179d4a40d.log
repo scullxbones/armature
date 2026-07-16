@@ -3119,3 +3119,4 @@
 ["note","LNGHZN-S1",1784159217,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with LNGHZN-S1-T5 detected at claim time"}]
 ["claim","LNGHZN-S1-T5",1784159217,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90}]
 ["transition","LNGHZN-S1-T3",1784161846,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","LNGHZN-S1-T4",1784161846,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
