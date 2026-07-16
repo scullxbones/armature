@@ -42,6 +42,17 @@ func issuesDirFor(worktreePath string) string {
 }
 
 func resolveIssuesDir(worktreePath string) string {
+	// A nested StateDirName subdirectory is the structural signature of the
+	// legacy dual-branch layout: collapsed worktrees never have that nested
+	// subdirectory by construction. Check for it first so a stray config.json
+	// that happens to sit at the worktree root (e.g. an accidental copy) can't
+	// be mistaken for an already-collapsed layout and suppress the "run
+	// arm bootstrap" refusal that unmigrated layouts must get.
+	nestedStateDir := filepath.Join(worktreePath, StateDirName)
+	if info, err := adapters.Stat(nestedStateDir); err == nil && info != nil && info.IsDir() {
+		return nestedStateDir
+	}
+
 	rootConfig := filepath.Join(worktreePath, "config.json")
 	if info, err := adapters.Stat(rootConfig); err == nil && info != nil {
 		return worktreePath
