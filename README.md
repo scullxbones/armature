@@ -85,7 +85,7 @@ From your project root, run:
 arm bootstrap
 ```
 
-Armature will create an orphan `_armature` branch for coordination data and an ops worktree at `.arm/`, enabling safe separation of code and coordination state.
+Armature will create an orphan `_armature` branch for coordination data and an ops worktree at `.armature/`, enabling safe separation of code and coordination state.
 
 ### 2. Register Worker (Once Per Clone)
 
