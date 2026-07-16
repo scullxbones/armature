@@ -517,21 +517,29 @@ func TestMigrateDualBranchToCollapsedRestoresUsableWorktreeAfterAddFailure_REQ_L
 	require.NoError(t, armGitClient.CommitWorktreeOp(".armature", "chore: create legacy layout"))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
+	// Fail the commit step that runs inside the newly-relocated .armature/ worktree
+	// (git -C <newWorktreePath> ... commit ...), after the worktree has already been
+	// moved from .arm to .armature via `git worktree move` and its stale nested
+	// .armature/ subtree flattened. This exercises the rollback path: MoveWorktree
+	// moving .armature back to .arm.
+	newWorktreePath := filepath.Join(repo, ".armature")
 	wrapperDir := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
 	script := fmt.Sprintf(`#!/bin/sh
 real_git=%q
 target=%q
-prev=""
+sawTarget=0
 for arg in "$@"; do
-  if [ "$prev" = "add" ] && [ "$arg" = "$target" ]; then
+  if [ "$arg" = "$target" ]; then
+    sawTarget=1
+  fi
+  if [ "$sawTarget" = "1" ] && [ "$arg" = "commit" ]; then
     exit 1
   fi
-  prev="$arg"
 done
 exec "$real_git" "$@"
-`, realGit, filepath.Join(repo, ".armature"))
+`, realGit, newWorktreePath)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -540,7 +548,13 @@ exec "$real_git" "$@"
 
 	// The restored .arm checkout must be a registered, usable Git worktree, not
 	// merely a directory containing a stale pointer to a removed worktree entry.
-	runOutput(t, armWorktreePath, "status", "--porcelain")
+	// A stale/broken .git pointer file still lets `git status` exit 0 by silently
+	// falling through to the enclosing outer repo, so assert on the resolved
+	// git-dir path instead: it must resolve to something under .git/worktrees/,
+	// proving .arm is genuinely its own registered worktree, not a fallthrough.
+	gitDir := strings.TrimSpace(runOutput(t, armWorktreePath, "rev-parse", "--git-dir"))
+	assert.Contains(t, gitDir, filepath.Join(".git", "worktrees"),
+		"resolved git-dir must be .arm's own worktree entry, not a fallthrough to the outer repo: %s", gitDir)
 }
 
 // TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo verifies that a real
@@ -661,6 +675,8 @@ func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), "a single bootstrap pass must migrate away the empty .arm worktree")
 	assert.DirExists(t, filepath.Join(repo, ".armature"), "collapsed .armature worktree should exist after one pass")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops directory should exist in the collapsed worktree")
+	assert.FileExists(t, filepath.Join(repo, ".armature", ".gitignore"),
+		"chained migration must (re-)write .gitignore into the final collapsed worktree so state/ stays ignored")
 }
 
 // TestInstallHooksReturnsSkippedHooks verifies that installHooks returns the list of skipped hook names

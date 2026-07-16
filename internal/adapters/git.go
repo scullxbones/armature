@@ -475,6 +475,19 @@ func (c *Client) HeadSHA() (string, error) {
 // "git worktree remove --force <path>" so that it works even if the worktree
 // has uncommitted changes. Returns an error if git reports a failure (e.g.
 // the path is not a registered worktree).
+// MoveWorktree relocates a linked worktree's directory and updates git's worktree
+// registration atomically via `git worktree move`. Unlike a manual rename paired
+// with RemoveWorktree/AddWorktree, this cannot leave a partially-registered
+// worktree behind: if it fails, the worktree remains fully valid at its original
+// path, so rollback is simply calling MoveWorktree again with the paths reversed.
+func (c *Client) MoveWorktree(oldPath, newPath string) error {
+	cmd := c.cmd("worktree", "move", oldPath, newPath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git worktree move %s %s: %w\n%s", oldPath, newPath, err, out)
+	}
+	return nil
+}
+
 func (c *Client) RemoveWorktree(path string) error {
 	cmd := c.cmd("worktree", "remove", "--force", path)
 	if out, err := cmd.CombinedOutput(); err != nil {

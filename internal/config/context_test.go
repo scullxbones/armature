@@ -65,6 +65,41 @@ func TestResolveContext_UsesOpsWorktree(t *testing.T) {
 	assert.Equal(t, worktreePath, ctx.WorktreePath)
 }
 
+// TestResolveContext_DualBranchWithStrayConfigJSONStillDetectedAsUnmigrated_REQ_LNGHZN_S1
+// guards against resolveIssuesDir's layout heuristic being fooled by a stray
+// config.json sitting at the .arm/ worktree root alongside the real nested
+// .armature/ directory. A collapsed worktree never has that nested
+// subdirectory by construction, so its presence must take priority over a
+// config.json probe when deciding whether the layout is dual-branch/unmigrated.
+func TestResolveContext_DualBranchWithStrayConfigJSONStillDetectedAsUnmigrated_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+
+	worktreePath := filepath.Join(repo, ".arm")
+	issuesDir := filepath.Join(worktreePath, ".armature")
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
+	cfg := DefaultConfig("go")
+	require.NoError(t, WriteConfig(filepath.Join(issuesDir, "config.json"), cfg))
+
+	// Stray config.json at the .arm/ worktree root itself (not the nested one),
+	// which should NOT be mistaken for an already-collapsed layout.
+	require.NoError(t, WriteConfig(filepath.Join(worktreePath, "config.json"), cfg))
+
+	runGit := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	runGit("config", "armature.ops-worktree-path", worktreePath)
+
+	ctx, err := ResolveContext(repo)
+	require.NoError(t, err)
+	assert.Equal(t, issuesDir, ctx.IssuesDir,
+		"nested .armature/ must win over a stray root config.json when detecting dual-branch layout")
+	assert.True(t, DetectUnmigratedLayout(ctx.WorktreePath, ctx.IssuesDir),
+		"a stray config.json at .arm/ root must not suppress the unmigrated-layout refusal")
+}
+
 func TestResolveContext_ErrorWhenOpsWorktreePathNotSet_REQ_SB_T5(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
