@@ -3139,3 +3139,4 @@
 ["citation-accepted","NXTTN-S5-T5",1784308706,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"Requirement captured in the PR #78 closeout discussion; no standalone source document exists yet."}]
 ["amend","NXTTN-S5-T5",1784308714,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"context_files":["docs/design/cli-grammar-contract.md"]}]
 ["transition","NXTTN-S5",1784308965,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress","outcome":"Reopened to complete previously unexecuted NXTTN-S5-T5 canonical documentation example validation."}]
+["claim","NXTTN-S5-T5",1784308975,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
