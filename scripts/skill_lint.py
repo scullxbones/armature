@@ -23,19 +23,25 @@ _REDIRECT_OPS = {">", ">>", "<"}
 # sync with the actual Cobra command definitions.
 MANDATORY_FLAGS = {
     "claim": ["--worktree"],
-    "transition": ["--to"],
+    "transition": ["--to", "--issue"],  # covers both workflow transition (--to) and dag transition (--issue)
     "assign": ["--worker"],
     "accept-citation": ["--rationale"],
-    "dag-transition": ["--issue"],
+    "source-link": ["--source-id"],
+    "decompose-revert": ["--plan"],
     "link": ["--source", "--dep"],
     "unlink": ["--source", "--dep"],
     "decision": ["--topic", "--choice"],
     "merged": ["--issue"],
     "create": ["--title"],
     "context-history": ["--issue"],
-    "decompose-revert": ["--plan"],
     "reparent": ["--issue", "--parent"],
-    "source-link": ["--source-id"],
+    # Subcommands / dag group
+    "apply": ["--plan"],
+    "context": [],  # no mandatory flags
+    "revert": ["--plan"],
+    # sources group subcommands
+    "sources accept-citation": ["--rationale"],
+    "sources link": ["--source-id"],
     "sources add": ["--url", "--type"],
 }
 

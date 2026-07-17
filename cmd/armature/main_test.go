@@ -572,7 +572,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd3 := newRootCmd()
 	cmd3.SetOut(buf)
-	cmd3.SetArgs([]string{"decompose-apply", "--repo", repo, "--plan", planFile})
+	cmd3.SetArgs([]string{"dag", "apply", "--repo", repo, "--plan", planFile})
 
 	err := cmd3.Execute()
 	assert.NoError(t, err)
@@ -616,7 +616,7 @@ func TestDecomposeContextCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"decompose-context", "--plan", planFile})
+	cmd.SetArgs([]string{"dag", "context", "--plan", planFile})
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -800,7 +800,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, os.WriteFile(planPath, []byte(planContent), 0o644))
 
 	// Apply plan first
-	_, err = runTrls(t, repo, "decompose-apply", "--plan", planPath)
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planPath)
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -814,7 +814,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run decompose-revert --dry-run: should print removal plan and exit 0
-	out, err := runTrls(t, repo, "decompose-revert", "--plan", planPath, "--dry-run")
+	out, err := runTrls(t, repo, "dag", "revert", "--plan", planPath, "--dry-run")
 	require.NoError(t, err)
 	assert.Contains(t, out, "PLAN-001")
 	assert.Contains(t, out, "PLAN-002")
@@ -1478,7 +1478,7 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 	assert.NotContains(t, out, "task-draft-01")
 
 	// Run dag-transition to promote task-draft-01's subtree (just itself here)
-	out, err = runTrls(t, repo, "dag-transition", "--issue", "task-draft-01")
+	out, err = runTrls(t, repo, "dag", "transition", "--issue", "task-draft-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-draft-01")
 
@@ -1500,7 +1500,7 @@ func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "dag-transition")
+	_, err = runTrls(t, repo, "dag", "transition")
 	assert.Error(t, err)
 }
 
@@ -1544,7 +1544,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 		}
 		require.NoError(t, ops.AppendOp(logPath, sourceLinkOp))
 
-		out, err := runTrls(t, repo, "validate")
+		out, err := runTrls(t, repo, "validate", "graph")
 		require.NoError(t, err)
 		// 1 source-linked out of 2 total, 0 accepted-risk → simple format
 		assert.Contains(t, out, "COVERAGE: 1/2 cited")
@@ -1563,7 +1563,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 		}
 		require.NoError(t, ops.AppendOp(logPath, citationAcceptedOp))
 
-		out, err := runTrls(t, repo, "validate")
+		out, err := runTrls(t, repo, "validate", "graph")
 		require.NoError(t, err)
 		// 1 source-linked + 1 accepted-risk = 2/2 total cited → extended format
 		assert.Contains(t, out, "COVERAGE: 2/2 cited (1 source-linked, 1 accepted-risk)")
@@ -2961,11 +2961,11 @@ func TestCommandGroups(t *testing.T) {
 
 	// Expected commands per group (subset of all commands)
 	workflowExpected := []string{"ready", "claim", "transition", "unassign", "reopen", "heartbeat", "note", "decision", "amend", "confirm", "assign"}
-	dagExpected := []string{"dag-summary", "dag-transition", "link"}
-	syncExpected := []string{"sync", "merged", "materialize", "import", "stale-review"}
+	dagExpected := []string{"dag", "link", "unlink"}
+	syncExpected := []string{"sync", "merged", "materialize", "import", "push-ops"}
 	adminExpected := []string{
 		"worker-init", "workers", "bootstrap", "create", "validate", "doctor", "version",
-		"show", "list", "log", "render-context", "source-link", "sources", "accept-citation", "context-history",
+		"show", "list", "log", "render-context", "sources", "context-history", "hook", "completion", "tui", "reparent", "scope-rename", "scope-delete",
 	}
 
 	for groupID, expectedCmds := range map[string][]string{
@@ -3394,7 +3394,7 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 		require.NoError(t, err)
 
 		// Validate: the issue should NOT appear as "uncited node" — it is source-linked.
-		validateOut, err := runTrls(t, repo, "validate")
+		validateOut, err := runTrls(t, repo, "validate", "graph")
 		require.NoError(t, err)
 		assert.NotContains(t, validateOut, "uncited node: src-id-01", "source-linked issue should not appear as uncited")
 		assert.Contains(t, validateOut, "COVERAGE: ", "coverage line should be present")
@@ -3414,7 +3414,7 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 		_, err = runTrls(t, repo, "materialize")
 		require.NoError(t, err)
 
-		validateOut, err := runTrls(t, repo, "validate")
+		validateOut, err := runTrls(t, repo, "validate", "graph")
 		require.NoError(t, err)
 		assert.NotContains(t, validateOut, "uncited node: src-url-01", "source-linked issue should not appear as uncited")
 		assert.NotContains(t, validateOut, "COVERAGE: 0/", "at least one issue should be cited")
@@ -3456,8 +3456,8 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 	require.NoError(t, err, "transition should succeed (exit 0) even for uncited issue")
 	assert.Contains(t, stderr, "WARNING", "should print WARNING on stderr for uncited issue")
 	assert.Contains(t, stderr, "source citation", "warning should mention source citation")
-	assert.Contains(t, stderr, "source-link", "warning should direct user to arm source-link")
-	assert.Contains(t, stderr, "accept-citation", "warning should direct user to arm accept-citation")
+	assert.Contains(t, stderr, "sources", "link", "warning should direct user to arm source-link")
+	assert.Contains(t, stderr, "sources", "accept-citation", "warning should direct user to arm accept-citation")
 }
 
 // TestTransitionToDone_UncitedIssue_ForceSupportsWarning verifies that --force suppresses
@@ -3499,7 +3499,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 	require.NoError(t, err)
 
 	// Accept citation so the issue is cited
-	_, err = runTrls(t, repo, "accept-citation", "--issue", "cited-01", "--rationale", "no source doc exists for this task", "--ci")
+	_, err = runTrls(t, repo, "sources", "accept-citation", "--issue", "cited-01", "--rationale", "no source doc exists for this task", "--ci")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "materialize")
@@ -3541,7 +3541,7 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 	require.NoError(t, err)
 
 	// Link both issues in one invocation.
-	out, err = runTrls(t, repo, "source-link",
+	out, err = runTrls(t, repo, "sources", "link",
 		"--issue", "ml-a",
 		"--issue", "ml-b",
 		"--source-id", sourceID,
@@ -3554,7 +3554,7 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 	// Materialize and confirm both issues are cited.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, err := runTrls(t, repo, "validate")
+	validateOut, err := runTrls(t, repo, "validate", "graph")
 	require.NoError(t, err)
 	assert.NotContains(t, validateOut, "uncited node: ml-a")
 	assert.NotContains(t, validateOut, "uncited node: ml-b")
@@ -3582,14 +3582,14 @@ func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Single --issue flag (existing flag path).
-	out, err = runTrls(t, repo, "source-link", "--issue", "sl-01", "--source-id", sourceID)
+	out, err = runTrls(t, repo, "sources", "link", "--issue", "sl-01", "--source-id", sourceID)
 	require.NoError(t, err)
 	assert.Contains(t, out, "sl-01")
 	assert.Contains(t, out, sourceID)
 
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, err := runTrls(t, repo, "validate")
+	validateOut, err := runTrls(t, repo, "validate", "graph")
 	require.NoError(t, err)
 	assert.NotContains(t, validateOut, "uncited node: sl-01")
 }
@@ -3816,7 +3816,7 @@ func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"validate-doc-examples", "--repo", repo})
+	cmd.SetArgs([]string{"validate", "doc-examples", "--repo", repo})
 
 	err := cmd.Execute()
 	require.NoError(t, err)

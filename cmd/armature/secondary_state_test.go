@@ -49,7 +49,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	out, err = runTrls(t, repo, "dag-summary", "--format", "json")
+	out, err = runTrls(t, repo, "dag", "summary", "--format", "json")
 	require.NoError(t, err)
 	require.Contains(t, out, "TASK-2")
 
