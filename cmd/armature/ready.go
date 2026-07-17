@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
@@ -20,6 +21,7 @@ func newReadyCmd() *cobra.Command {
 	var filterParent string
 	var assignedTo string
 	var explain bool
+	var waves bool
 
 	cmd := &cobra.Command{
 		Use:   "ready",
@@ -97,8 +99,33 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			format, _ := cmd.Flags().GetString("format")
 			switch {
 			case format == "json" || format == "agent" || tui.IsNonInteractive():
-				if err := output.RenderReady(cmd.OutOrStdout(), entries, true); err != nil {
-					return err
+				if waves {
+					// Partition ready entries into scope-disjoint waves
+					nodeIndex := make(map[string]*dag.Node)
+					for id, entry := range index {
+						node := &dag.Node{
+							ID:        id,
+							Title:     entry.Title,
+							Type:      entry.Type,
+							Parent:    entry.Parent,
+							Children:  make([]string, len(entry.Children)),
+							BlockedBy: make([]string, len(entry.BlockedBy)),
+							Blocks:    make([]string, len(entry.Blocks)),
+						}
+						copy(node.Children, entry.Children)
+						copy(node.BlockedBy, entry.BlockedBy)
+						copy(node.Blocks, entry.Blocks)
+						nodeIndex[id] = node
+					}
+					graph := dag.FromIndex(nodeIndex)
+					wavesData := ready.PartitionWaves(entries, index, graph)
+					if err := output.RenderReadyWaves(cmd.OutOrStdout(), wavesData); err != nil {
+						return err
+					}
+				} else {
+					if err := output.RenderReady(cmd.OutOrStdout(), entries, true); err != nil {
+						return err
+					}
 				}
 			case tui.IsInteractive():
 				m := readytui.New(entries)
@@ -159,5 +186,6 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().StringVar(&filterParent, "parent", "", "filter to descendants of this issue ID")
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "filter to tasks assigned to this worker ID")
 	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
+	cmd.Flags().BoolVar(&waves, "waves", false, "partition ready entries into scope-disjoint waves (JSON/agent output only)")
 	return cmd
 }

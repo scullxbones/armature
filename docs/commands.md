@@ -501,6 +501,33 @@ Show tasks ready to be claimed.
 **Flags:**
 - `--parent string`: Filter to descendants of this issue ID.
 - `--worker string`: Worker ID for assignment-aware sorting.
+- `--assigned-to string`: Filter to tasks assigned to this worker ID.
+- `--explain`: Diagnose why open tasks are not in the ready queue.
+- `--waves`: Partition ready entries into scope-disjoint waves (JSON/agent output only).
+
+**Description:**
+The `--waves` flag partitions ready-eligible entries using a greedy first-fit algorithm that respects priority boundaries:
+- Priority tier is a hard boundary: items from different priority tiers are never placed in the same wave.
+- Within a tier, items are ordered by scope-conflict degree (how many other ready items share scope with them), placing high-conflict items first for better partitioning.
+- Ancestor/descendant pairs are excluded from the same wave (e.g., a parent story and its child task cannot be in the same wave).
+- Overlap detection uses glob-pattern matching on file scopes.
+
+**Output Format (with --waves):**
+When `--format json` or `--format agent` is used with `--waves`, the output is:
+```json
+{
+  "waves": [
+    [
+      {"issue": "TASK-001", "type": "task", "title": "...", "priority": "high", "scope": [...], ...},
+      {"issue": "TASK-002", "type": "task", "title": "...", "priority": "high", "scope": [...], ...}
+    ],
+    [
+      {"issue": "TASK-003", "type": "task", "title": "...", "priority": "high", "scope": [...], ...}
+    ]
+  ]
+}
+```
+Each inner array is a wave of ready issues that can be executed in parallel without scope conflicts.
 
 ---
 
