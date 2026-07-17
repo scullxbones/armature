@@ -13,8 +13,17 @@ func newDAGTransitionCmd() *cobra.Command {
 	var to string
 
 	cmd := &cobra.Command{
-		Use:   "dag-transition",
+		Use:   "transition",
 		Short: "Promote all draft nodes in a subtree to verified",
+		Long: `Promote the confidence of nodes from draft to verified.
+
+This command transitions nodes in a subtree from draft (unverified) confidence
+to verified confidence, setting the dag_confirmed flag.`,
+		Example: `  # Promote a subtree to verified
+  $ arm dag transition --issue STORY-001
+
+  # Transition back to draft (if needed)
+  $ arm dag transition --issue STORY-001 --to draft`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state := mustState(cmd)
 			ctx := state.ctx

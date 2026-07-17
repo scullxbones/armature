@@ -25,7 +25,7 @@ func newDecomposeApplyCmd() *cobra.Command {
 	var rootFlag string
 
 	cmd := &cobra.Command{
-		Use:   "decompose-apply",
+		Use:   "apply",
 		Short: "Apply a decomposition plan to the issue graph",
 		Long: `Create multiple related issues from a structured decomposition plan (JSON file).
 
@@ -34,14 +34,14 @@ and creates them in the issue graph with proper parent-child relationships, depe
 and metadata. Use --dry-run to preview what would be created, --example to see a sample
 plan, or --schema to view the JSON schema.`,
 		Example: `  # Apply a decomposition plan from a file
-  $ arm decompose-apply --plan path/to/plan.json
+  $ arm dag apply --plan path/to/plan.json
 
   # Preview what would be created (dry-run)
-  $ arm decompose-apply --plan plan.json --dry-run
+  $ arm dag apply --plan plan.json --dry-run
 
   # Display an example plan and schema
-  $ arm decompose-apply --example
-  $ arm decompose-apply --schema`,
+  $ arm dag apply --example
+  $ arm dag apply --schema`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if exampleFlag || schemaFlag {
 				return nil
@@ -252,8 +252,17 @@ func newDecomposeRevertCmd() *cobra.Command {
 	var dryRunFlag bool
 
 	cmd := &cobra.Command{
-		Use:   "decompose-revert",
+		Use:   "revert",
 		Short: "Revert a decomposition plan from the issue graph",
+		Long: `Undo the creation of issues from a decomposition plan.
+
+This command removes issues that were created by a plan application, in reverse order.
+It validates that no new children exist under the planned issues before removal.`,
+		Example: `  # Revert a plan application
+  $ arm dag revert --plan plan.json
+
+  # Preview what would be reverted (dry-run)
+  $ arm dag revert --plan plan.json --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			issuesDir := appCtx.IssuesDir
@@ -317,8 +326,20 @@ func newDecomposeContextCmd() *cobra.Command {
 	var existingDAGFlag bool
 
 	cmd := &cobra.Command{
-		Use:               "decompose-context",
-		Short:             "Build decomposition context with template interpolation",
+		Use:   "context",
+		Short: "Build decomposition context with template interpolation",
+		Long: `Build decomposition context from existing DAG and sources.
+
+This command renders context for LLM-based plan generation, including existing
+issues, source content, and template interpolation.`,
+		Example: `  # Build context from a template
+  $ arm dag context --template "Plan for: {{ .Sources }}"
+
+  # Include existing DAG in context
+  $ arm dag context --existing-dag --sources <source-id>
+
+  # Output to file
+  $ arm dag context --output context.txt`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var plan *decompose.Plan

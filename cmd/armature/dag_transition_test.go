@@ -19,7 +19,7 @@ func TestDAGTransitionCmd_RejectsInvalidToValue(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(buf)
-	root.SetArgs([]string{"dag-transition", "--repo", repo, "--issue", "draft-task-01", "--to", "done"})
+	root.SetArgs([]string{"dag", "transition", "--repo", repo, "--issue", "draft-task-01", "--to", "done"})
 	err := root.Execute()
 	require.Error(t, err, "dag-transition --to done should be rejected: done is a status, not a confidence value")
 	assert.Contains(t, err.Error(), "confidence")
@@ -33,6 +33,6 @@ func TestDAGTransitionCmd_AcceptsValidToValue(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-transition", "--repo", repo, "--issue", "draft-task-01", "--to", "verified"})
+	root.SetArgs([]string{"dag", "transition", "--repo", repo, "--issue", "draft-task-01", "--to", "verified"})
 	require.NoError(t, root.Execute())
 }

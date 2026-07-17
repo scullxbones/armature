@@ -20,7 +20,7 @@ func TestStaleReviewCmd_NoStaleSources(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo})
 	require.NoError(t, root.Execute())
 
 	assert.Contains(t, buf.String(), "No stale sources detected.")
@@ -48,7 +48,7 @@ func TestStaleReviewCmd_StaleSource_NoCacheFile(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--format", "json"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -86,7 +86,7 @@ func TestStaleReviewCmd_StaleSource_FingerprintMismatch(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--format", "json"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -117,7 +117,7 @@ func TestStaleReviewCmd_MultipleStaleSources(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--format", "json"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -151,7 +151,7 @@ func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
 	require.NoError(t, sources.WriteManifest(srcDir, m))
 
 	// Link task-01 to this source.
-	_, err = runTrls(t, repo, "source-link",
+	_, err = runTrls(t, repo, "sources", "link",
 		"--issue", "task-01",
 		"--source-id", "src-cite-01",
 	)
@@ -168,7 +168,7 @@ func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--format", "json"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -207,7 +207,7 @@ func TestStaleReviewCmd_StaleSource_SyncFailed(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--format", "json"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -240,7 +240,7 @@ func TestStaleReviewCmd_CorruptManifest(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs([]string{"stale-review", "--repo", repo})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo})
 
 	err := root.Execute()
 	require.Error(t, err, "expected stale-review to fail with corrupt manifest")

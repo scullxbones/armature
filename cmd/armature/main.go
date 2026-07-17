@@ -141,26 +141,10 @@ func newRootCmd() *cobra.Command {
 	assignCmd.GroupID = "workflow"
 	root.AddCommand(assignCmd)
 
-	// DAG commands
-	dagSummaryCmd := newDAGSummaryCmd()
-	dagSummaryCmd.GroupID = "dag"
-	root.AddCommand(dagSummaryCmd)
-
-	dagTransitionCmd := newDAGTransitionCmd()
-	dagTransitionCmd.GroupID = "dag"
-	root.AddCommand(dagTransitionCmd)
-
-	decomposeApplyCmd := newDecomposeApplyCmd()
-	decomposeApplyCmd.GroupID = "dag"
-	root.AddCommand(decomposeApplyCmd)
-
-	decomposeRevertCmd := newDecomposeRevertCmd()
-	decomposeRevertCmd.GroupID = "dag"
-	root.AddCommand(decomposeRevertCmd)
-
-	decomposeContextCmd := newDecomposeContextCmd()
-	decomposeContextCmd.GroupID = "dag"
-	root.AddCommand(decomposeContextCmd)
+	// DAG commands (group with subcommands)
+	dagCmd := newDAGCmd()
+	dagCmd.GroupID = "dag"
+	root.AddCommand(dagCmd)
 
 	linkCmd := newLinkCmd()
 	linkCmd.GroupID = "dag"
@@ -191,10 +175,6 @@ func newRootCmd() *cobra.Command {
 	importCmd.GroupID = "sync"
 	root.AddCommand(importCmd)
 
-	staleReviewCmd := newStaleReviewCmd()
-	staleReviewCmd.GroupID = "sync"
-	root.AddCommand(staleReviewCmd)
-
 	// Admin commands
 	createCmd := newCreateCmd()
 	createCmd.GroupID = "admin"
@@ -207,10 +187,6 @@ func newRootCmd() *cobra.Command {
 	validateCmd := newValidateCmd()
 	validateCmd.GroupID = "admin"
 	root.AddCommand(validateCmd)
-
-	validateDocExamplesCmd := newValidateDocExamplesCmd()
-	validateDocExamplesCmd.GroupID = "admin"
-	root.AddCommand(validateDocExamplesCmd)
 
 	renderContextCmd := newRenderContextCmd()
 	renderContextCmd.GroupID = "admin"
@@ -227,14 +203,6 @@ func newRootCmd() *cobra.Command {
 	sourcesCmd := newSourcesCmd()
 	sourcesCmd.GroupID = "admin"
 	root.AddCommand(sourcesCmd)
-
-	sourceLinkCmd := newSourceLinkCmd()
-	sourceLinkCmd.GroupID = "admin"
-	root.AddCommand(sourceLinkCmd)
-
-	acceptCitationCmd := newAcceptCitationCmd()
-	acceptCitationCmd.GroupID = "admin"
-	root.AddCommand(acceptCitationCmd)
 
 	showCmd := newShowCmd()
 	showCmd.GroupID = "admin"

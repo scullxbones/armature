@@ -50,7 +50,7 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `blocks` | []string | state.go:21 | derived automatically as the inverse of a `link` op with rel=blocked_by applied to the other issue (engine.go applyLink) | **kept-evidence** | Issues blocked by this one. Inverse of blocked_by. Never set directly by a `rel=blocks` op — invalid `--rel` values are rejected at the CLI layer (link.go RunE) before the op is ever appended to the log. |
 | `assignee` | string | state.go:22 | (no writer found) | **parked** | Dead field: no code path sets `Issue.Assignee` anywhere in internal/ or cmd/ (verified via `grep -rn '\.Assignee *=' internal/ cmd/`). The `assign` command sets `AssignedWorker` (internal/materialize/engine.go, applyAssign), not `Assignee`. Re-entry criterion: a writer is added and exercised by a test, or the field is removed from state.go. |
 | `priority` | string | state.go:23 | create payload | **kept-evidence** | Priority level (critical, high, medium, low). Set via --priority flag on create. `amend` registers no `--priority` flag and `applyAmend` never touches `Priority`. Used in diagnostics. |
-| `estimated_complexity` | string | state.go:24 | create payload | **kept-justified** | Complexity estimate. No CLI flag or decompose plan field currently sets it — nothing in cmd/ or internal/decompose/ produces `EstComplexity`; it is only ever copied through from whatever the create payload already contains. See the Estimated Complexity Levels section below for what actually reads/interprets this field (validate.go's small/large enum checks). |
+| `estimated_complexity` | string | state.go:24 | create payload | **kept-justified** | Complexity estimate. No CLI flag or plan field currently sets it — nothing in cmd/ or internal/decompose/ produces `EstComplexity`; it is only ever copied through from whatever the create payload already contains. See the Estimated Complexity Levels section below for what actually reads/interprets this field (validate.go's small/large enum checks). |
 | `definition_of_done` | string | state.go:25 | create, amend | **kept-evidence** | Completion criteria. Required for task type (issuetype.go:90). |
 | `scope` | []string | state.go:26 | create, amend | **kept-evidence** | File scope globs. Used by overlap detection and scope-rename/delete commands. |
 | `context_files` | []string | state.go:27 | create, amend | **kept-evidence** | Stable reference files. Set via --context-file flag. Used by harness hook to render context. |
@@ -126,24 +126,24 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
-| `dag-summary` | main.go:135, dagsum.go | Summarize draft nodes | **kept-evidence** | Diagnostic and planning tool. Lists unconfirmed nodes in a subtree. |
-| `dag-transition` | main.go:139, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. |
-| `decompose-apply` | main.go:143, decompose.go | Create issues from plan JSON | **kept-evidence** | Bulk creation from structured plan. Validates hierarchy. |
-| `decompose-revert` | main.go:147, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
-| `decompose-context` | main.go:151, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
-| `link` | main.go:155, link.go | Add dependency | **kept-evidence** | Couples issues. Only `--rel blocked_by` is a valid input; `blocks` is derived automatically as the inverse. |
-| `unlink` | main.go:159, unlink.go | Remove dependency | **kept-evidence** | Uncouples issues. Removes from blocked_by/blocks. |
+| `dag` | main.go, dag.go | DAG group command | **kept-evidence** | Container for DAG-related subcommands. |
+| `dag apply` | dag.go, decompose.go | Create issues from plan JSON | **kept-evidence** | Bulk creation from structured plan. Validates hierarchy. |
+| `dag context` | dag.go, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
+| `dag revert` | dag.go, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
+| `dag summary` | dag.go, dagsum.go | Summarize draft nodes | **kept-evidence** | Diagnostic and planning tool. Lists unconfirmed nodes in a subtree. |
+| `dag transition` | dag.go, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. |
+| `link` | main.go, link.go | Add dependency | **kept-evidence** | Couples issues. Only `--rel blocked_by` is a valid input; `blocks` is derived automatically as the inverse. |
+| `unlink` | main.go, unlink.go | Remove dependency | **kept-evidence** | Uncouples issues. Removes from blocked_by/blocks. |
 
 ### Sync Commands (sync group)
 
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
-| `sync` | main.go:164, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
-| `push-ops` | main.go:168, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Called before PR or manually. |
-| `merged` | main.go:172, merged.go | Manually transition to merged | **kept-evidence** | Explicit merge record. Sets PR and branch fields. |
-| `materialize` | main.go:176, materialize.go | Regenerate state from ops log | **kept-evidence** | Diagnostic/recovery. Rebuilds snapshot from scratch. |
-| `import` | main.go:180, import.go | Import issues from external source | **kept-evidence** | Onboarding tool. Creates issues with source links. |
-| `stale-review` | main.go:184, stalereview.go | Detect stale claims | **kept-evidence** | Hygiene/monitoring. Alerts on expired TTLs. |
+| `sync` | main.go, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
+| `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Called before PR or manually. |
+| `merged` | main.go, merged.go | Manually transition to merged | **kept-evidence** | Explicit merge record. Sets PR and branch fields. |
+| `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Diagnostic/recovery. Rebuilds snapshot from scratch. |
+| `import` | main.go, import.go | Import issues from external source | **kept-evidence** | Onboarding tool. Creates issues with source links. |
 
 ### Admin Commands (admin group)
 
@@ -154,17 +154,19 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `bootstrap` | main.go:86, bootstrap.go | Deploy harness hook to project | **kept-evidence** | Setup command. Installs pre-commit or post-merge hooks. |
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
-| `validate` | main.go:197, validate.go | Check DAG health | **kept-evidence** | Linter. Runs citation and structure checks. |
-| `validate-doc-examples` | main.go:201-203, validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Hidden. Used by `make validate-doc-examples`/`make check`. |
-| `render-context` | main.go:207, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
-| `log` | main.go:211, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
-| `workers` | main.go:215, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
-| `sources` | main.go:219, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. |
-| `sources add` | sources.go:34 | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
+| `validate` | main.go, validate.go | Validate commands | **kept-evidence** | Group command for graph and documentation validation. |
+| `validate graph` | validate.go | Check DAG health | **kept-evidence** | Linter. Runs citation and structure checks. |
+| `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Hidden subcommand. Used by `make check`. |
+| `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
+| `log` | main.go, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
+| `workers` | main.go, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
+| `sources` | main.go, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. |
+| `sources accept-citation` | sources.go, accept_citation.go | Accept source citation | **kept-evidence** | Subcommand of `sources`. Citation workflow. |
+| `sources add` | sources.go | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
+| `sources link` | sources.go, source_link.go | Link issue to source | **kept-evidence** | Subcommand of `sources`. Citation. |
+| `sources stale-review` | sources.go, stalereview.go | Detect stale sources | **kept-evidence** | Subcommand of `sources`. Hygiene/monitoring. |
 | `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
 | `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
-| `source-link` | main.go:223, source_link.go | Link issue to source | **kept-evidence** | Citation. Creates source-link ops. |
-| `accept-citation` | main.go:227, accept_citation.go | Accept source citation | **kept-evidence** | Citation workflow. Sets citation_acceptances. |
 | `show` | main.go:231, show.go | Display issue details | **kept-evidence** | Query tool. Supports --field for extraction. |
 | `list` | main.go:235, list.go | List issues | **kept-evidence** | Query tool. Supports filtering and grouping. |
 | `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
@@ -190,7 +192,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Type | Default | Usage | Status | Notes |
 |------|------|---------|-------|--------|-------|
 | `--debug` | bool | false | Dump stack traces on error | **kept-evidence** | Diagnostic. Always available. |
-| `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. Inherited by every command except `decompose-context`, which defines its own command-local `--format` (see DAG/Decompose Flags below). |
+| `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. Inherited by every command except `dag context`, which defines its own command-local `--format` (see DAG/Decompose Flags below). |
 | `--repo` | string | "" (current directory) | Repository path | **kept-evidence** | Allows multi-repo operation. |
 | `--non-interactive` | bool | false | Skip TUI, use structured output | **kept-evidence** | Auto-set in CI. |
 
@@ -217,43 +219,43 @@ The following flags are defined across all commands. Grouped by usage pattern.
 |------|-----------|------|-------|--------|
 | `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
 | `--worktree` | claim | string | Path to task worktree (required) | **kept-evidence** |
-| `--force` | claim, merged, accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
+| `--force` | claim, merged, sources accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
-| `--to` | dag-transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag-transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. | **kept-evidence** |
+| `--to` | dag transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
-| `--rationale` | decision, accept-citation | string | Why this choice | **kept-evidence** |
+| `--rationale` | decision, sources accept-citation | string | Why this choice | **kept-evidence** |
 | `--affects` | decision | string[] | Affected scope globs | **kept-evidence** |
 
 ### Synchronization/Sync Flags
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--dry-run` | sync, decompose-apply, decompose-revert, import | bool | Preview without writing ops | **kept-evidence** |
+| `--dry-run` | sync, dag apply, dag revert, import | bool | Preview without writing ops | **kept-evidence** |
 | `--into` | sync | string | Target branch for merge checks | **kept-evidence** |
 
 ### DAG/Decompose Flags
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--plan` | decompose-apply, decompose-revert, decompose-context | string | Path to plan JSON file | **kept-evidence** |
-| `--example` | decompose-apply | bool | Print minimal plan example | **kept-evidence** |
-| `--schema` | decompose-apply | bool | Print JSON Schema | **kept-evidence** |
-| `--strict` | decompose-apply, doctor, validate | bool | Treat warnings as errors | **kept-evidence** |
-| `--generate-ids` | decompose-apply | bool | Replace plan IDs with UUIDs | **kept-evidence** |
-| `--root` | decompose-apply | string | Override inferred root | **kept-evidence** |
-| `--sources` | decompose-context | string | Comma-separated source IDs to include | **kept-evidence** |
-| `--template` | decompose-context | string | Prompt template with placeholders | **kept-evidence** |
-| `--output` | decompose-context, review prepare | string | Output file (default: stdout) | **kept-evidence** |
-| `--format` | decompose-context | string | Command-local output format override (text or json; decompose.go:383). All other commands listed here read the inherited root persistent `--format` flag (see Universal/Root Flags above) rather than defining their own — they do not appear in this row. | **kept-evidence** |
-| `--existing-dag` | decompose-context | bool | Include existing DAG in context | **kept-evidence** |
-| `--approve-all` | dag-summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
+| `--plan` | dag apply, dag revert, dag context | string | Path to plan JSON file | **kept-evidence** |
+| `--example` | dag apply | bool | Print minimal plan example | **kept-evidence** |
+| `--schema` | dag apply | bool | Print JSON Schema | **kept-evidence** |
+| `--strict` | dag apply, doctor, validate | bool | Treat warnings as errors | **kept-evidence** |
+| `--generate-ids` | dag apply | bool | Replace plan IDs with UUIDs | **kept-evidence** |
+| `--root` | dag apply | string | Override inferred root | **kept-evidence** |
+| `--sources` | dag context | string | Comma-separated source IDs to include | **kept-evidence** |
+| `--template` | dag context | string | Prompt template with placeholders | **kept-evidence** |
+| `--output` | dag context, review prepare | string | Output file (default: stdout) | **kept-evidence** |
+| `--format` | dag context | string | Command-local output format override (text or json; decompose.go:383). All other commands listed here read the inherited root persistent `--format` flag (see Universal/Root Flags above) rather than defining their own — they do not appear in this row. | **kept-evidence** |
+| `--existing-dag` | dag context | bool | Include existing DAG in context | **kept-evidence** |
+| `--approve-all` | dag summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
 | `--dep` | link, unlink | string | Dependency issue ID | **kept-evidence** |
 | `--rel` | link | string | Relationship type (default blocked_by) | **kept-evidence** |
 | `--source` | link, unlink | string | Source issue ID | **kept-evidence** |
@@ -262,9 +264,9 @@ The following flags are defined across all commands. Grouped by usage pattern.
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--source-id` | source-link | string | UUID of source entry in manifest | **kept-evidence** |
-| `--ci` | accept-citation, validate | bool | Non-interactive mode / bypass prompt | **kept-evidence** |
-| `--non-interactive` | accept-citation | bool | Alias for --ci on this command | **kept-evidence** |
+| `--source-id` | sources link | string | UUID of source entry in manifest | **kept-evidence** |
+| `--ci` | sources accept-citation, validate | bool | Non-interactive mode / bypass prompt | **kept-evidence** |
+| `--non-interactive` | sources accept-citation | bool | Alias for --ci on this command | **kept-evidence** |
 | `--url` | sources add | string | URL or path of source | **kept-evidence** |
 | `--type` | sources add | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
 
@@ -287,7 +289,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
-| `--repo` | worker-init, validate-doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
+| `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |

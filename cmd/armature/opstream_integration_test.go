@@ -115,7 +115,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, badOp))
 
 	// Run validate and check output (which internally calls materialize)
-	validateOut, err := runTrls(t, repo, "validate", "--format", "json")
+	validateOut, err := runTrls(t, repo, "validate", "graph", "--format", "json")
 	require.NoError(t, err)
 
 	// Parse JSON output

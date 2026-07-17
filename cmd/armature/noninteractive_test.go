@@ -55,7 +55,7 @@ func TestDAGSummaryCmd_NonInteractiveFlag(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--non-interactive"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--non-interactive"})
 	err := root.Execute()
 	require.NoError(t, err)
 
@@ -71,7 +71,7 @@ func TestDAGSummaryCmd_ApproveAllFlag(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--non-interactive", "--approve-all"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--non-interactive", "--approve-all"})
 	err := root.Execute()
 	require.NoError(t, err, "--approve-all should succeed and exit 0")
 }
@@ -83,7 +83,7 @@ func TestDAGSummaryCmd_ApproveAllFlag_JSON(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--non-interactive", "--approve-all", "--format", "json"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--non-interactive", "--approve-all", "--format", "json"})
 	err := root.Execute()
 	require.NoError(t, err)
 
@@ -98,7 +98,7 @@ func TestStaleReviewCmd_NonInteractiveFlag(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--non-interactive"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--non-interactive"})
 	err := root.Execute()
 	require.NoError(t, err)
 
@@ -114,7 +114,7 @@ func TestStaleReviewCmd_NonInteractiveFlag_EmitsJSON(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"stale-review", "--repo", repo, "--non-interactive", "--format", "json"})
+	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--non-interactive", "--format", "json"})
 	err := root.Execute()
 	require.NoError(t, err)
 
