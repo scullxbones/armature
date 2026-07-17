@@ -516,7 +516,7 @@ The hook reads the task's `scope` field (a list of file path globs or exact path
 When the harness stops (model completes task), the hook runs verification:
 
 1. **Check acceptance criteria:** The task's `acceptance` field contains JSON-encoded acceptance rules. The verification service evaluates them.
-2. **Check citation state:** If the task has `source_links`, all linked sources must be accepted (recorded via `arm accept-citation`).
+2. **Check citation state:** If the task has `source_links`, all linked sources must be accepted (recorded via `arm sources accept-citation`).
 3. **Block if failed:** If any criterion or citation is not met, the hook blocks completion with a reason message.
 
 ### Example: Acceptance Criteria
@@ -588,7 +588,7 @@ export ARMATURE_HOOK_PLATFORM=claude
 **Fix:**
 1. Review which criteria failed in the error message
 2. Update implementation to satisfy the failing criteria
-3. For citation failures, run `arm accept-citation <task-id>` to accept all sources
+3. For citation failures, run `arm sources accept-citation <task-id>` to accept all sources
 
 ## Manual Configuration Without an Installer
 
