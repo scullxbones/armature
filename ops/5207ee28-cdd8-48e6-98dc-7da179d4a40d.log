@@ -3162,3 +3162,4 @@
 ["transition","TOPTIER-S17-T4",1784315471,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","TOPTIER-S17-T5",1784315475,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with TOPTIER-S17 detected at claim time"}]
 ["note","TOPTIER-S17",1784315475,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Scope overlap with TOPTIER-S17-T5 detected at claim time"}]
+["claim","TOPTIER-S17-T5",1784315475,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
