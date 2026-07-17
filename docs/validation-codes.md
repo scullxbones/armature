@@ -208,9 +208,9 @@ arm amend TASK-001 --scope 'cmd/**/*.go'  # fixes invalid patterns
 
 **Fix:**
 1. Verify the source exists: `arm sources list` or check `.armature/sources/manifest.json`
-2. If source was deleted, remove the citation: `arm source-link <issue-id>` (no --source-id)
+2. If source was deleted, remove the citation: `arm sources link <issue-id>` (no --source-id)
 3. If you need to cite a source, add it first: `arm sources add --url <url> --type <type>`
-4. Then link: `arm source-link <issue-id> --source-id <source-id>`
+4. Then link: `arm sources link <issue-id> --source-id <source-id>`
 
 ---
 
@@ -536,10 +536,10 @@ arm doctor --format json
 **Context:** Uncited issues have no documented origin, which reduces traceability. They may be undocumented work or exploratory.
 
 **Fix:**
-1. Link to a source: `arm source-link <issue-id> --source-id <source-uuid>`
+1. Link to a source: `arm sources link <issue-id> --source-id <source-uuid>`
    - First add the source: `arm sources add --url <url> --type filesystem`
-   - Then link: `arm source-link <issue-id> --source-id <source-uuid>`
-2. Or accept citation risk: `arm accept-citation <issue-id> --rationale "Exploratory work; no external source available."`
+   - Then link: `arm sources link <issue-id> --source-id <source-uuid>`
+2. Or accept citation risk: `arm sources accept-citation <issue-id> --rationale "Exploratory work; no external source available."`
 
 ---
 

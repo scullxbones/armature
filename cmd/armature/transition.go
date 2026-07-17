@@ -76,8 +76,8 @@ This enforces branch + PR discipline.`,
 				if uncited := isIssueUncited(issueID, appCtx); uncited {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"WARNING: issue %s has no source citation.\n"+
-							"Run 'arm source-link --issue %s --source-id <UUID>' to link to a source document,\n"+
-							"or 'arm accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
+							"Run 'arm sources link --issue %s --source-id <UUID>' to link to a source document,\n"+
+							"or 'arm sources accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
 							"Use --force to suppress this warning.\n",
 						issueID, issueID, issueID)
 				}

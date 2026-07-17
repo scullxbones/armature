@@ -23,11 +23,16 @@ _REDIRECT_OPS = {">", ">>", "<"}
 # sync with the actual Cobra command definitions.
 MANDATORY_FLAGS = {
     "claim": ["--worktree"],
-    "transition": ["--to", "--issue"],  # covers both workflow transition (--to) and dag transition (--issue)
+    "transition": ["--to"],  # workflow transition (dag transition uses dag-transition key below)
+    "dag-transition": ["--issue"],  # dag transition subcommand
     "assign": ["--worker"],
     "accept-citation": ["--rationale"],
     "source-link": ["--source-id"],
     "decompose-revert": ["--plan"],
+    "dag-apply": ["--plan"],  # dag apply subcommand
+    "dag-context": [],  # no mandatory flags
+    "dag-revert": ["--plan"],  # dag revert subcommand
+    "dag-summary": [],  # no mandatory flags
     "link": ["--source", "--dep"],
     "unlink": ["--source", "--dep"],
     "decision": ["--topic", "--choice"],
@@ -35,10 +40,17 @@ MANDATORY_FLAGS = {
     "create": ["--title"],
     "context-history": ["--issue"],
     "reparent": ["--issue", "--parent"],
-    # Subcommands / dag group
+    # Subcommands / dag group (single-word for TestMandatoryFlagsMatchMarkFlagRequired)
     "apply": ["--plan"],
     "context": [],  # no mandatory flags
     "revert": ["--plan"],
+    "summary": [],  # no mandatory flags
+    # Subcommands / dag group (multi-word for skill-lint)
+    "dag apply": ["--plan"],
+    "dag context": [],  # no mandatory flags
+    "dag revert": ["--plan"],
+    "dag transition": ["--issue"],  # dag transition subcommand
+    "dag summary": [],  # no mandatory flags
     # sources group subcommands
     "sources accept-citation": ["--rationale"],
     "sources link": ["--source-id"],

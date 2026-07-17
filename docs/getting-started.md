@@ -76,13 +76,13 @@ Use an AI agent to break down your requirements into a Task DAG.
 
 ```bash
 # 1. Generate context for the AI agent
-arm decompose-context --sources all > context.json
+arm dag context --sources all > context.json
 
 # 2. Provide context.json to your AI agent (e.g., Claude, Gemini) 
 # and ask it to produce a `plan.json`.
 
 # 3. Apply the plan to create the tasks
-arm decompose-apply plan.json
+arm dag apply plan.json
 ```
 
 ## 5. Dispatch Work

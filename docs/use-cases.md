@@ -27,9 +27,9 @@ Register your requirements document as a source and generate your task plan.
 arm sources add --url docs/requirements.md --type filesystem
 arm sources sync
 
-arm decompose-context --sources all > context.json
+arm dag context --sources all > context.json
 # Feed context.json to your AI agent, get back plan.json
-arm decompose-apply plan.json
+arm dag apply plan.json
 ```
 
 ### Daily Workflow
@@ -138,19 +138,19 @@ arm sources sync
 Generate the context bundle for your AI agent to analyze.
 
 ```bash
-arm decompose-context --sources all > context.json
+arm dag context --sources all > context.json
 ```
 
 Feed `context.json` to your AI agent (Claude, Gemini, etc.) and instruct it to produce a `plan.json` describing the task DAG. Then apply the plan.
 
 ```bash
-arm decompose-apply plan.json
+arm dag apply plan.json
 ```
 
 Review the task graph before any agents start working.
 
 ```bash
-arm dag-summary
+arm dag summary
 # Shows tasks, their dependencies, and current status
 ```
 
@@ -172,7 +172,7 @@ arm list --group
 Check for tasks that have been claimed but have not had a heartbeat in a while (stale tasks).
 
 ```bash
-arm stale-review
+arm sources stale-review
 ```
 
 Validate that no issues are in impossible states (e.g., in-progress without a worker, blocked with all dependencies resolved).
@@ -189,9 +189,9 @@ arm show TASK-031
 
 ### Notes for Conductor
 
-- Run `arm dag-summary` after `decompose-apply` to verify the dependency graph looks correct before unleashing orchestrators.
+- Run `arm dag summary` after `decompose-apply` to verify the dependency graph looks correct before unleashing orchestrators.
 - Use `arm validate` regularly — it catches data inconsistencies before they cascade.
-- `arm stale-review` surfaces tasks where a run may have stalled before completion.
+- `arm sources stale-review` surfaces tasks where a run may have stalled before completion.
 
 ---
 
@@ -292,7 +292,7 @@ arm list --group
 Review stale claims and decide whether to release them.
 
 ```bash
-arm stale-review
+arm sources stale-review
 ```
 
 If an agent crashed and left a task in `in-progress`, you can release the claim so another agent can pick it up.
@@ -400,6 +400,6 @@ Armature uses a Merge-CRDT (MRDT) approach where each agent appends to its own l
 |---|---|
 | P1 Lone Wolf | `arm bootstrap`, `arm ready`, `arm claim`, `arm render-context`, `arm transition` |
 | P2 Gatekeeper | same as P1, plus commit-message scan for `merged` promotion |
-| P3 Conductor | `arm sources add/sync`, `arm decompose-context`, `arm decompose-apply`, `arm dag-summary`, `arm validate`, `arm stale-review` |
-| P4 Wrangler | `arm bootstrap`, config editing, `arm validate`, `arm stale-review` |
+| P3 Conductor | `arm sources add/sync`, `arm dag context`, `arm dag apply`, `arm dag summary`, `arm validate`, `arm sources stale-review` |
+| P4 Wrangler | `arm bootstrap`, config editing, `arm validate`, `arm sources stale-review` |
 | P5 Agent Fleet | `arm ready`, `arm claim`, `arm render-context`, `arm merged`, `arm list --group` |

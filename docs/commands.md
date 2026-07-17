@@ -206,6 +206,51 @@ arm dag apply --plan plan.json
 arm dag apply --plan plan.json --dry-run
 ```
 
+**Example Plan JSON:**
+```json artifact_type=plan
+{
+  "version": 1,
+  "title": "Example Decomposition Plan",
+  "issues": [
+    {
+      "id": "STORY-001",
+      "title": "User authentication story",
+      "type": "story",
+      "scope": "",
+      "priority": "",
+      "dod": "",
+      "parent": "",
+      "blocked_by": null,
+      "notes": null
+    },
+    {
+      "id": "TASK-001",
+      "title": "Implement login endpoint",
+      "type": "task",
+      "scope": "",
+      "priority": "high",
+      "dod": "Login endpoint returns JWT on valid credentials",
+      "parent": "STORY-001",
+      "blocked_by": [],
+      "notes": null
+    },
+    {
+      "id": "TASK-002",
+      "title": "Write login integration tests",
+      "type": "task",
+      "scope": "",
+      "priority": "medium",
+      "dod": "Integration tests cover happy path and error cases",
+      "parent": "STORY-001",
+      "blocked_by": [
+        "TASK-001"
+      ],
+      "notes": null
+    }
+  ]
+}
+```
+
 ---
 
 ### dag context
