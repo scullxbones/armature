@@ -68,7 +68,7 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	warnings = append(warnings, checkW11VagueOutcomes(targets)...)
 
 	if opts.PreExpandedScopes != nil {
-		infos = append(infos, checkW10PhantomScope(targets, opts.PreExpandedScopes)...)
+		infos = append(infos, checkW10PhantomScope(targets, opts.PreExpandedScopes, state.Issues)...)
 	}
 
 	if opts.Strict {
@@ -278,15 +278,22 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	for i, task1 := range tasks {
 		for j := i + 1; j < len(tasks); j++ {
 			task2 := tasks[j]
-			overlap := scopeIntersection(task1.Scope, task2.Scope)
-			if len(overlap) == 0 {
+			matchedA, matchedB, overlaps := firstGlobOverlapPair(task1.Scope, task2.Scope)
+			if !overlaps {
 				continue
 			}
 			if hasSerialDependency(task1, task2, blocksTransitive) {
 				continue
 			}
+			overlap := scopeIntersection(task1.Scope, task2.Scope)
+			var detail string
+			if len(overlap) > 0 {
+				detail = strings.Join(overlap, ", ")
+			} else {
+				detail = fmt.Sprintf("%s <-> %s", matchedA, matchedB)
+			}
 			warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
-				task1.ID, task2.ID, strings.Join(overlap, ", ")))
+				task1.ID, task2.ID, detail))
 		}
 	}
 	return warns
@@ -356,6 +363,53 @@ func computeBlocksTransitive(issues map[string]*materialize.Issue) map[string]ma
 // blocksTransitive should be the output of computeBlocksTransitive.
 func hasSerialDependency(a, b *materialize.Issue, blocksTransitive map[string]map[string]bool) bool {
 	return blocksTransitive[a.ID][b.ID] || blocksTransitive[b.ID][a.ID]
+}
+
+// firstGlobOverlapPair returns the first pair of patterns (one from a, one from
+// b) found to overlap via globOverlaps, matching claim-time semantics
+// (claim.ScopesOverlap) rather than exact string equality: a glob like
+// "cmd/armature/*.go" and a literal "cmd/armature/claim.go" must be recognized
+// as overlapping so validate can't pass a claim that would later be rejected
+// by claim.ScopesOverlap. Duplicated locally rather than imported from
+// internal/claim because the validate-boundary depguard rule forbids validate
+// from depending on the orchestration-layer claim package.
+// b) found to overlap via globOverlaps, along with whether any overlap was
+// found at all. Used so warning messages can report the specific pattern pair
+// that matched, rather than dumping both full scope lists when the overlap
+// was only detected via glob matching (scopeIntersection's exact-string
+// comparison found nothing).
+func firstGlobOverlapPair(a, b []string) (patternA, patternB string, overlaps bool) {
+	for _, x := range a {
+		for _, y := range b {
+			if globOverlaps(x, y) {
+				return x, y, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func globOverlaps(a, b string) bool {
+	if matched, _ := filepath.Match(a, b); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+		return true
+	}
+	if matched, _ := filepath.Match(b, a); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+		return true
+	}
+	dirA := globOverlapDir(a)
+	dirB := globOverlapDir(b)
+	if dirA == "" || dirB == "" {
+		return false
+	}
+	return dirA == dirB || strings.HasPrefix(dirA, dirB+"/") || strings.HasPrefix(dirB, dirA+"/")
+}
+
+func globOverlapDir(pattern string) string {
+	i := strings.LastIndexByte(pattern, '/')
+	if i < 0 {
+		return ""
+	}
+	return pattern[:i]
 }
 
 func scopeIntersection(a, b []string) []string {
@@ -524,7 +578,7 @@ func isTerminalStatus(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusDone || status == ops.StatusCancelled
 }
 
-func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string) []string {
+func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string, allIssues map[string]*materialize.Issue) []string {
 	var warns []string
 	for id, issue := range issues {
 		// Terminal-status issues have already been delivered; their scope no longer needs to exist.
@@ -541,8 +595,11 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 		// If it's empty, no globs matched any files
 		hasMatches := len(expandedFiles) > 0
 
-		// Collect all "(new)" files declared by blocking tasks
-		blockerNewFiles := collectBlockerNewFiles(issue, issues)
+		// Collect all "(new)" files declared by blocking tasks. Traverse from the
+		// full issue set, not the possibly scope-narrowed `issues` subset, so a
+		// legitimate blocker outside the selected subtree (e.g. via `arm validate
+		// --scope`/`--parent`) is still found.
+		blockerNewFiles := collectBlockerNewFiles(issue, allIssues)
 
 		// Check each scope entry against the expanded files
 		for _, entry := range issue.Scope {
