@@ -3142,3 +3142,4 @@
 ["claim","NXTTN-S5-T5",1784308975,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["transition","NXTTN-S5-T5",1784309378,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["claim","TOPTIER-S17-T1",1784312409,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":180}]
+["transition","TOPTIER-S17",1784312411,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
