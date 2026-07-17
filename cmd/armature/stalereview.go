@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/stalereview"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +21,10 @@ func newStaleReviewCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			execState := mustState(cmd)
 			appCtx := execState.ctx
+
+			// Read the --non-interactive flag (auto-set by main.go based on TTY/format detection)
+			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
+			format, _ := cmd.Flags().GetString("format")
 
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
@@ -105,8 +107,7 @@ func newStaleReviewCmd() *cobra.Command {
 				return nil
 			}
 
-			format, _ := cmd.Flags().GetString("format")
-			if format == "json" || format == "agent" || tui.IsNonInteractive() {
+			if format == "json" || format == "agent" || nonInteractive {
 				type staleSource struct {
 					SourceID      string   `json:"source_id"`
 					ChangeSummary string   `json:"change_summary"`
@@ -129,19 +130,6 @@ func newStaleReviewCmd() *cobra.Command {
 					"count":         len(staleSources),
 				}, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-				return nil
-			}
-
-			if !tui.IsTerminal() {
-				// Human-readable summary for non-TTY (format == "human")
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Stale Sources:")
-				for _, item := range reviewItems {
-					var ids []string
-					for _, issue := range item.CitedIssues {
-						ids = append(ids, issue.ID)
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s) cites: %s\n", item.SourceID, item.ChangeSummary, strings.Join(ids, ", "))
-				}
 				return nil
 			}
 
