@@ -1,4 +1,4 @@
-.PHONY: test coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples
+.PHONY: test test-skill-transcript coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples
 
 # Variables
 GO ?= go
@@ -14,6 +14,7 @@ help:
 	@echo "Armature Go build targets:"
 	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build"
 	@echo "  make test                - Run all tests"
+	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check      - Check coverage meets 80% threshold (fails build if not)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
@@ -41,6 +42,9 @@ test: build
 	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
 	rm -f "$$tmp"; \
 	exit $$status
+
+test-skill-transcript: build
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/skilltranscript/...
 
 coverage: build
 	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out ./...
