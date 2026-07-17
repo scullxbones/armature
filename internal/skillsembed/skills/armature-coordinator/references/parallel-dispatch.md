@@ -5,7 +5,7 @@
 Before attempting manual scope analysis, use `arm ready --waves` to compute scope-disjoint wave partitions automatically:
 
 ```bash
-arm ready --waves
+arm ready --waves --format json
 ```
 
 This produces a JSON output grouping ready-eligible issues into waves based on file-level scope disjointness (respecting priority-tier boundaries and excluding ancestor/descendant pairs):
@@ -13,8 +13,8 @@ This produces a JSON output grouping ready-eligible issues into waves based on f
 ```json
 {
   "waves": [
-    [{"id": "STORY-S1-T1", "title": "...", "scope": [...]}, ...],
-    [{"id": "STORY-S1-T2", "title": "...", "scope": [...]}, ...],
+    [{"issue": "STORY-S1-T1", "title": "...", "scope": [...]}, ...],
+    [{"issue": "STORY-S1-T2", "title": "...", "scope": [...]}, ...],
     ...
   ]
 }

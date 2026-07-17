@@ -1,9 +1,9 @@
 package ready
 
 import (
-	"slices"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
@@ -58,6 +58,42 @@ func TestComputeWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
 	}
 }
 
+// TestComputeWaves_CustomPriorityTiersAreDeterministicAndComplete verifies that
+// unknown priority tiers are emitted after known tiers, in lexical order, with
+// every ready entry appearing exactly once.
+func TestComputeWaves_CustomPriorityTiersAreDeterministicAndComplete(t *testing.T) {
+	t.Parallel()
+
+	entries := []ReadyEntry{
+		{Issue: "custom-zeta", Priority: "zeta", Scope: []string{"zeta/**"}},
+		{Issue: "known-high", Priority: "high", Scope: []string{"high/**"}},
+		{Issue: "custom-alpha", Priority: "alpha", Scope: []string{"alpha/**"}},
+		{Issue: "default", Scope: []string{"default/**"}},
+		{Issue: "custom-beta", Priority: "beta", Scope: []string{"beta/**"}},
+	}
+
+	waves := PartitionWaves(entries, materialize.Index{}, nil)
+
+	var got []string
+	for _, wave := range waves {
+		for _, entry := range wave {
+			got = append(got, entry.Issue)
+		}
+	}
+
+	assert.Equal(t, []string{"known-high", "default", "custom-alpha", "custom-beta", "custom-zeta"}, got)
+	assert.Len(t, got, len(entries), "each input entry must be emitted exactly once")
+
+	reversed := []ReadyEntry{entries[4], entries[3], entries[2], entries[1], entries[0]}
+	var gotReversed []string
+	for _, wave := range PartitionWaves(reversed, materialize.Index{}, nil) {
+		for _, entry := range wave {
+			gotReversed = append(gotReversed, entry.Issue)
+		}
+	}
+	assert.Equal(t, got, gotReversed, "wave output must be independent of input order")
+}
+
 // TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1 verifies that within a tier,
 // items are ordered by scope-conflict degree (how many other ready items share scope with them).
 func TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T) {
@@ -95,16 +131,7 @@ func TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T)
 				if i == j {
 					continue
 				}
-				// Should not have scope overlap within a wave
-				hasOverlap := false
-				for _, s1 := range e1.Scope {
-					if slices.Contains(e2.Scope, s1) {
-						hasOverlap = true
-						break
-					}
-				}
-				// Use basic string check for matching
-				assert.False(t, hasOverlap, "Wave should not have conflicting scopes: %s and %s", e1.Issue, e2.Issue)
+				assert.False(t, claim.ScopesOverlap(e1.Scope, e2.Scope), "Wave should not have conflicting scopes: %s and %s", e1.Issue, e2.Issue)
 			}
 		}
 	}

@@ -50,8 +50,9 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	}
 	runCmd(tmpDir, "add", "-A")
 	runCmd(tmpDir, "commit", "-m", "initial: setup test repo")
-	// Modern git creates main by default, so just ensure we're on it
-	runCmd(tmpDir, "checkout", "main")
+	// Git's default initial branch is configurable; normalize it explicitly so
+	// worktree-based transcript tests are independent of the runner's config.
+	runCmd(tmpDir, "branch", "-M", "main")
 
 	// Bootstrap armature
 	runCmdWithEnv(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "bootstrap")
