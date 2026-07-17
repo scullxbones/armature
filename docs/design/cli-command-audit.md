@@ -1,7 +1,7 @@
 # CLI Command Audit: Deep-Module Correspondence and Flag Conventions
 
-**Date:** 2026-07-17  
-**Scope:** Complete enumeration of surviving commands (post-NXTTN-S2 subtractive release)  
+**Date:** 2026-07-17
+**Scope:** Complete enumeration of surviving commands (post-NXTTN-S2 subtractive release)
 **Basis:** ADR 0011 (CLI groups are discovered from deep-module boundaries), ADR 0004 (deep-module designations)
 
 ## Audit Table

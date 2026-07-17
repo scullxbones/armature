@@ -29,7 +29,7 @@ arm sources sync
 
 arm dag context --sources all > context.json
 # Feed context.json to your AI agent, get back plan.json
-arm dag apply plan.json
+arm dag apply --plan plan.json
 ```
 
 ### Daily Workflow
@@ -144,7 +144,7 @@ arm dag context --sources all > context.json
 Feed `context.json` to your AI agent (Claude, Gemini, etc.) and instruct it to produce a `plan.json` describing the task DAG. Then apply the plan.
 
 ```bash
-arm dag apply plan.json
+arm dag apply --plan plan.json
 ```
 
 Review the task graph before any agents start working.

@@ -122,9 +122,9 @@ arm sources verify   # note the UUID shown — you'll need it in the next step
 Generate a decomposition context for your AI agent to break down requirements into a task DAG:
 
 ```bash
-arm decompose-context --sources <uuid-from-sources-verify> > context.json
+arm dag context --sources <uuid-from-sources-verify> > context.json
 # Feed context.json to your AI agent to produce plan.json
-arm decompose-apply plan.json
+arm dag apply --plan plan.json
 ```
 
 ### 6. Dispatch Work

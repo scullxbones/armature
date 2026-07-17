@@ -82,7 +82,7 @@ arm dag context --sources all > context.json
 # and ask it to produce a `plan.json`.
 
 # 3. Apply the plan to create the tasks
-arm dag apply plan.json
+arm dag apply --plan plan.json
 ```
 
 ## 5. Dispatch Work
