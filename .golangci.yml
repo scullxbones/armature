@@ -194,6 +194,16 @@ linters:
       - linters:
           - paralleltest
         path: 'cmd/'
+      # golden_test.go's t.Run subtests build sequential state within a single shared
+      # TestRepo fixture (worktreePath, baseCommit, headCommit, bundleFile carry from one
+      # subtest to the next; the whole point is to replay the coordinator's documented
+      # command sequence step by step) — parallelizing them would break that ordering.
+      # The top-level Test funcs themselves do use independent fixtures and are marked
+      # t.Parallel().
+      - linters:
+          - paralleltest
+          - tparallel
+        path: 'internal/skilltranscript/golden_test\.go'
 
 formatters:
   enable:

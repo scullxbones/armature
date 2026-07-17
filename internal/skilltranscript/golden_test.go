@@ -1,3 +1,4 @@
+// Package skilltranscript provides golden-transcript e2e tests for the coordinator skill's documented command sequence.
 package skilltranscript
 
 import (
@@ -17,6 +18,7 @@ import (
 // If any command's real behavior diverges from what's documented in the
 // armature-coordinator skill, the test reflects the REAL behavior (that's the point).
 func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping golden transcript test in short mode")
 	}
@@ -29,8 +31,8 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 		persistentTmpDir := t.TempDir()
 
 		// Step 0: Create a feature branch for the story (required before dispatch)
-		storyBranch := fmt.Sprintf("feat/test-story")
-		runCmd(repo.Path(), "git", "checkout", "-b", storyBranch)
+		storyBranch := "feat/test-story"
+		runCmd(repo.Path(), "checkout", "-b", storyBranch)
 
 		// Step 1: Create a story and task
 		storyID := repo.CreateStory(t, "Golden Transcript Story")
@@ -94,6 +96,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
 			issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
 
+			// #nosec G703 -- path derived from worktree .git file created by the test
 			content, err := os.ReadFile(issueIDFile)
 			if err != nil {
 				t.Fatalf("failed to read armature-issue-id: %v", err)
@@ -144,7 +147,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 		t.Run("capture commit range for review", func(t *testing.T) {
 			// Base is the current HEAD in the main repo (where we started)
 			// Head is the latest commit in the worktree
-			baseCommit = runCmd(repo.Path(), "git", "rev-parse", "HEAD")
+			baseCommit = runCmd(repo.Path(), "rev-parse", "HEAD")
 
 			// Make a commit in the worktree to have something to review
 			testFilePath := filepath.Join(worktreePath, "test_output.txt")
@@ -153,10 +156,10 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			}
 
 			// Stage and commit in the worktree
-			runCmd(worktreePath, "git", "add", "test_output.txt")
-			runCmd(worktreePath, "git", "commit", "-m", fmt.Sprintf("feat(%s): add test output", taskID))
+			runCmd(worktreePath, "add", "test_output.txt")
+			runCmd(worktreePath, "commit", "-m", fmt.Sprintf("feat(%s): add test output", taskID))
 
-			headCommit = runCmd(worktreePath, "git", "rev-parse", "HEAD")
+			headCommit = runCmd(worktreePath, "rev-parse", "HEAD")
 
 			t.Logf("Base commit: %s, Head commit: %s", baseCommit, headCommit)
 		})
@@ -264,6 +267,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 // TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2 verifies that documented coordinator
 // commands exist and respond with expected output shapes.
 func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping command surface test in short mode")
 	}
@@ -312,6 +316,7 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 
 		gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
 		issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
+		// #nosec G703 -- path derived from worktree .git file created by the test
 		content, err := os.ReadFile(issueIDFile)
 		if err != nil {
 			t.Errorf("armature-issue-id file not found: %v", err)

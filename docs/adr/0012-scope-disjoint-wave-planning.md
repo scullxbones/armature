@@ -18,6 +18,8 @@ A wave manifest computed by `arm ready --waves` is published at query time, but 
 
 Finally, `arm ready --waves` is a pure query over existing ready-issue data with no new persisted operations. It groups issues identically to `arm ready`, just organized differently — no new op type is introduced.
 
+This feature originates from LH F2 in `docs/design/next-work-sequencing.md`; see that document's "F2 grilling session — resolved decisions" section for the prior decisions this ADR formalizes, including that `blocked_by` adds nothing to the partition rule (scope-disjointness is the sole criterion), that `--waves` is advisory pre-dispatch guidance rather than the coordinator's authoritative wave manifest, and that scope-disjoint is explicitly not equivalent to contract-safe.
+
 ## Decision
 
 `arm ready --waves` guarantees freedom from *file-level scope conflict only*. It does NOT guarantee freedom from shared-contract drift or other semantic conflicts that arise from shared dependencies between tasks touching different files.

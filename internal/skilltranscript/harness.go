@@ -1,6 +1,7 @@
 package skilltranscript
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,12 +27,12 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	tmpDir := t.TempDir()
 
 	// Initialize as git repo
-	runCmd(tmpDir, "git", "init")
+	runCmd(tmpDir, "init")
 
 	// Configure git user and disable GPG signing
-	runCmd(tmpDir, "git", "config", "user.email", "test@example.com")
-	runCmd(tmpDir, "git", "config", "user.name", "Test User")
-	runCmd(tmpDir, "git", "config", "commit.gpgsign", "false")
+	runCmd(tmpDir, "config", "user.email", "test@example.com")
+	runCmd(tmpDir, "config", "user.name", "Test User")
+	runCmd(tmpDir, "config", "commit.gpgsign", "false")
 
 	// Initialize worker
 	armBin := getArmBinary(t)
@@ -44,20 +45,20 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	// Create initial commit before bootstrap
 	// (bootstrap expects at least one commit to exist)
 	readmeFile := filepath.Join(tmpDir, "README.md")
-	if err := os.WriteFile(readmeFile, []byte("# Test Repository\n"), 0644); err != nil {
+	if err := os.WriteFile(readmeFile, []byte("# Test Repository\n"), 0600); err != nil {
 		t.Fatalf("failed to create README: %v", err)
 	}
-	runCmd(tmpDir, "git", "add", "-A")
-	runCmd(tmpDir, "git", "commit", "-m", "initial: setup test repo")
+	runCmd(tmpDir, "add", "-A")
+	runCmd(tmpDir, "commit", "-m", "initial: setup test repo")
 	// Modern git creates main by default, so just ensure we're on it
-	runCmd(tmpDir, "git", "checkout", "main")
+	runCmd(tmpDir, "checkout", "main")
 
 	// Bootstrap armature
 	runCmdWithEnv(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "bootstrap")
 
 	// Commit bootstrap files
-	runCmd(tmpDir, "git", "add", "-A")
-	runCmd(tmpDir, "git", "commit", "-m", "initial: bootstrap armature")
+	runCmd(tmpDir, "add", "-A")
+	runCmd(tmpDir, "commit", "-m", "initial: bootstrap armature")
 
 	return &TestRepo{
 		path:   tmpDir,
@@ -205,6 +206,7 @@ func (tr *TestRepo) ReviewPrepare(t *testing.T, issueID, baseSha, headSha, outpu
 		"--output", bundleFile)
 
 	// Verify the file exists and contains valid JSON
+	// #nosec G304 -- test reads a file path it just wrote under t.TempDir()
 	content, err := os.ReadFile(bundleFile)
 	if err != nil {
 		t.Fatalf("failed to read bundle file: %v", err)
@@ -260,7 +262,8 @@ func getArmBinary(t *testing.T) string {
 	}
 
 	binPath := filepath.Join(repoRoot, "bin", "arm")
-	buildCmd := exec.Command("go", "build", "-ldflags", "-X main.Version=test", "-o", binPath, "./cmd/armature")
+	// #nosec G204 -- test helper builds the local binary with a fixed command line
+	buildCmd := exec.CommandContext(context.Background(), "go", "build", "-ldflags", "-X main.Version=test", "-o", binPath, "./cmd/armature")
 	buildCmd.Dir = repoRoot
 
 	if output, err := buildCmd.CombinedOutput(); err != nil {
@@ -291,16 +294,17 @@ func findRepoRoot() (string, error) {
 	}
 }
 
-// runCmd runs a command in the given directory and returns its combined output.
+// runCmd runs a git command in the given directory and returns its combined output.
 // It panics if the command exits with a non-zero status.
-func runCmd(dir string, name string, args ...string) string {
-	return runCmdWithEnv(dir, nil, name, args...)
+func runCmd(dir string, args ...string) string {
+	return runCmdWithEnv(dir, nil, "git", args...)
 }
 
 // runCmdWithEnv runs a command in the given directory with environment variables
 // and returns its combined output. It panics if the command exits with a non-zero status.
 func runCmdWithEnv(dir string, env map[string]string, name string, args ...string) string {
-	cmd := exec.Command(name, args...)
+	// #nosec G204 -- test helper invokes git/arm with test-controlled args
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 
 	// Inherit existing environment and add/override with test env vars
@@ -319,7 +323,8 @@ func runCmdWithEnv(dir string, env map[string]string, name string, args ...strin
 
 // runCmdSafely runs a command and returns an error if it fails (does not panic).
 func runCmdSafely(dir string, env map[string]string, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	// #nosec G204 -- test helper invokes git/arm with test-controlled args
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 
 	// Inherit existing environment and add/override with test env vars

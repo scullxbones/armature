@@ -274,6 +274,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--group` | list | bool | Group by status with headers | **kept-evidence** |
 | `--assigned-to` | ready | string | Filter to tasks assigned to worker | **kept-evidence** |
 | `--explain` | ready | bool | Diagnose why tasks aren't ready | **kept-evidence** |
+| `--waves` | ready | bool | Partition ready queue into scope-disjoint dispatch waves (JSON/agent output only) | **kept-evidence** |
 | `--field` | show, transition | string | Extract specific fields | **kept-evidence** |
 | `--json` | workers, log | bool | Output as JSONL | **kept-evidence** |
 | `--worker` | log | string | Filter ops by worker ID | **kept-evidence** |
