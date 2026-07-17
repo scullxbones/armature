@@ -258,30 +258,33 @@ func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []string {
 
 func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State) []string {
 	var warns []string
-	byParent := make(map[string][]*materialize.Issue)
+
+	// Collect all active (non-terminal) tasks across all stories
+	var tasks []*materialize.Issue
 	for _, issue := range issues {
 		if issue.Type != "task" || isTerminalStatus(issue.Status) {
 			continue
 		}
-		byParent[issue.Parent] = append(byParent[issue.Parent], issue)
+		tasks = append(tasks, issue)
 	}
 
 	// Compute transitive closure of blocks relationship
 	blocksTransitive := computeBlocksTransitive(issues)
 
-	for _, siblings := range byParent {
-		for i, sib := range siblings {
-			for _, other := range siblings[i+1:] {
-				overlap := scopeIntersection(sib.Scope, other.Scope)
-				if len(overlap) == 0 {
-					continue
-				}
-				if hasSerialDependency(sib, other, blocksTransitive) {
-					continue
-				}
-				warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
-					sib.ID, other.ID, strings.Join(overlap, ", ")))
+	// Compare all pairs of tasks (including cross-story pairs).
+	// Use i < j to avoid duplicate reporting of the same pair.
+	for i, task1 := range tasks {
+		for j := i + 1; j < len(tasks); j++ {
+			task2 := tasks[j]
+			overlap := scopeIntersection(task1.Scope, task2.Scope)
+			if len(overlap) == 0 {
+				continue
 			}
+			if hasSerialDependency(task1, task2, blocksTransitive) {
+				continue
+			}
+			warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
+				task1.ID, task2.ID, strings.Join(overlap, ", ")))
 		}
 	}
 	_ = state
