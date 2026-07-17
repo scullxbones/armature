@@ -45,7 +45,7 @@ arm ready
 Claim, dispatch, and complete each task.
 
 ```bash
-arm claim TASK-001
+arm claim TASK-001 --worktree ./task-001-work
 arm render-context TASK-001 --format agent
 # dispatch agent with the render-context output
 arm transition TASK-001 --to done --outcome "Implemented auth middleware"
@@ -95,8 +95,8 @@ Downstream tasks only unblock after `merged`. This prevents agents from starting
 
 ```bash
 arm ready                                      # find unblocked tasks
-arm claim <task-id>
-arm render-context <task-id> --format agent    # get task spec for agent
+arm claim TASK-ID --worktree ./task-worktree
+arm render-context TASK-ID --format agent       # get task spec for agent
 # dispatch agent — agent implements, transitions to done
 ```
 
@@ -329,8 +329,8 @@ arm ready
 Pre-claim and render context for each task in the wave, then dispatch agents concurrently:
 
 ```bash
-arm claim TASK-042 && arm render-context TASK-042 --format agent > ctx-042.json
-arm claim TASK-043 && arm render-context TASK-043 --format agent > ctx-043.json
+arm claim TASK-042 --worktree ./task-042-work && arm render-context TASK-042 --format agent > ctx-042.json
+arm claim TASK-043 --worktree ./task-043-work && arm render-context TASK-043 --format agent > ctx-043.json
 # dispatch agents with their context packages; agents transition to done when complete
 ```
 
@@ -349,7 +349,7 @@ When multiple agents are dispatched concurrently, two can both see the same task
 
 ### How It Happens
 
-1. Agent A runs `arm claim TASK-099`; Agent B runs `arm claim TASK-099` at nearly the same time.
+1. Agent A runs `arm claim TASK-099 --worktree ./task-099-a`; Agent B runs `arm claim TASK-099 --worktree ./task-099-b` at nearly the same time.
 2. Both claim ops are appended to their respective log files.
 3. On the next materialization cycle, claim race resolution runs — one claim wins, one loses.
 4. Both writes are merge-safe (MRDT guarantee).
@@ -368,7 +368,7 @@ The losing agent discovers it no longer holds the claim and calls `arm ready` ag
 arm ready
 # TASK-099 is no longer listed as ready (Agent A holds it)
 # TASK-100  Add pagination support   [ready]
-arm claim TASK-100 && arm render-context TASK-100 --format agent
+arm claim TASK-100 --worktree ./task-100-work && arm render-context TASK-100 --format agent
 ```
 
 ### Observing Conflicts as the Conductor
@@ -383,7 +383,7 @@ arm list --group
 If a conflict resolution produced an unexpected outcome (e.g., the wrong agent won), the Conductor can intervene by releasing the claim and re-queuing the task.
 
 ```bash
-arm transition --issue TASK-099 --to ready \
+arm transition TASK-099 --to ready \
   --outcome "Releasing claim for manual reassignment."
 # the task will appear in the next arm ready output for any available agent
 ```

@@ -122,7 +122,7 @@ arm sources verify   # note the UUID shown — you'll need it in the next step
 Generate a decomposition context for your AI agent to break down requirements into a task DAG:
 
 ```bash
-arm dag context --sources <uuid-from-sources-verify> > context.json
+arm dag context --sources SOURCE-UUID > context.json
 # Feed context.json to your AI agent to produce plan.json
 arm dag apply --plan plan.json
 ```
@@ -133,10 +133,10 @@ Find ready tasks and dispatch a worker agent for each one:
 
 ```bash
 arm ready                                      # list unblocked tasks
-arm claim <issue-id>                           # claim a task
-arm render-context <issue-id> --format agent   # get task context for the agent
+arm claim ISSUE-ID --worktree ./issue-worktree  # claim a task
+arm render-context ISSUE-ID --format agent      # get task context for the agent
 # dispatch agent with render-context output
-arm transition <issue-id> --to done --outcome "what was done"
+arm transition ISSUE-ID --to done --outcome "what was done"
 ```
 
 ### 7. Complete and Verify
@@ -144,7 +144,7 @@ arm transition <issue-id> --to done --outcome "what was done"
 Once you've finished the code changes, transition the task to `done`:
 
 ```bash
-arm transition <issue-id> --to done --outcome "Brief summary of work"
+arm transition ISSUE-ID --to done --outcome "Brief summary of work"
 ```
 
 Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.

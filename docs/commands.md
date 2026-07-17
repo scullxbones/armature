@@ -889,5 +889,5 @@ Export before invoking any `arm` command:
 
 ```bash
 export ARM_LOG_SLOT=<n>
-arm <command> [flags]
+# See the concrete, copyable examples above for command syntax.
 ```
