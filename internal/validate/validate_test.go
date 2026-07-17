@@ -2,6 +2,7 @@ package validate
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1183,6 +1184,27 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 		assert.NotContains(t, w, "scope overlap",
 			"scope overlap should be suppressed when the transitive blocked_by chain passes through an out-of-scope issue: %s", w)
 	}
+}
+
+func TestDirectBlocks_DoesNotMaterializeTransitiveClosure(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		// The only A -> B edge is the legacy/asymmetric BlockedBy form.
+		&materialize.Issue{ID: "TSK-A"},
+		&materialize.Issue{ID: "TSK-B", BlockedBy: []string{"TSK-A"}, Blocks: []string{"TSK-C"}},
+		&materialize.Issue{ID: "TSK-C"},
+	)
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("UNRELATED-%d", i)
+		state.Issues[id] = &materialize.Issue{ID: id}
+	}
+
+	blocks := directBlocks(state.Issues)
+	assert.Equal(t, []string{"TSK-B"}, blocks["TSK-A"])
+	assert.Equal(t, []string{"TSK-C"}, blocks["TSK-B"])
+	assert.NotContains(t, blocks["TSK-A"], "TSK-C", "index must contain only direct edges")
+	assert.Len(t, blocks, 2, "unrelated issues must not allocate closure entries")
+	assert.True(t, blocksReachable("TSK-A", "TSK-C", blocks), "candidate traversal must still find transitive ordering")
 }
 
 func TestCheckW10PhantomScope_SuppressesForTwoHopBlockerCreatedFiles(t *testing.T) {

@@ -268,10 +268,11 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		tasks = append(tasks, issue)
 	}
 
-	// Compute transitive closure of blocks relationship from the full issue set
-	// (not the possibly scope-narrowed `issues` subset) so that chains passing
-	// through an out-of-scope issue still suppress the overlap warning.
-	blocksTransitive := computeBlocksTransitive(state.Issues)
+	// Index direct ordering edges from the full issue set (not the possibly
+	// scope-narrowed `issues` subset). Reachability is then traversed only for
+	// overlapping task pairs, so chains through an out-of-scope issue still
+	// suppress a warning without materializing an all-pairs transitive closure.
+	blocks := directBlocks(state.Issues)
 
 	// Compare all pairs of tasks (including cross-story pairs).
 	// Use i < j to avoid duplicate reporting of the same pair.
@@ -282,7 +283,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 			if !overlaps {
 				continue
 			}
-			if hasSerialDependency(task1, task2, blocksTransitive) {
+			if hasSerialDependency(task1, task2, blocks) {
 				continue
 			}
 			overlap := scopeIntersection(task1.Scope, task2.Scope)
@@ -299,70 +300,49 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	return warns
 }
 
-// computeBlocksTransitive computes the transitive closure of the blocks relationship.
-// For each issue in the issues map, it determines all issues that it directly or
-// transitively blocks. Returns a map where blocksTransitive[a][b] is true if a
-// blocks b (directly or transitively).
-func computeBlocksTransitive(issues map[string]*materialize.Issue) map[string]map[string]bool {
-	// For each issue, track which issues it transitively blocks
-	result := make(map[string]map[string]bool)
-	for id := range issues {
-		result[id] = make(map[string]bool)
-	}
-
-	ensure := func(id string) {
-		if result[id] == nil {
-			result[id] = make(map[string]bool)
-		}
-	}
-
-	// Seed direct edges from both Blocks and the inverse BlockedBy relation.
-	// Legacy/asymmetric data may have a blocked_by link recorded without the
-	// corresponding reverse Blocks edge (e.g. if the blocker didn't exist yet
-	// when the link was applied); seeding from both sides makes the closure
-	// robust to that, matching the traversal style in collectBlockerNewFiles.
+// directBlocks indexes the direct blocks relationship. It accepts both Blocks
+// and BlockedBy because legacy materialized state can contain only one side of
+// an otherwise equivalent ordering edge.
+func directBlocks(issues map[string]*materialize.Issue) map[string][]string {
+	blocks := make(map[string][]string)
 	for id, issue := range issues {
 		for _, blockedID := range issue.Blocks {
-			if _, ok := issues[blockedID]; !ok {
-				continue
+			if _, ok := issues[blockedID]; ok {
+				blocks[id] = append(blocks[id], blockedID)
 			}
-			ensure(id)
-			result[id][blockedID] = true
 		}
-		for _, b := range issue.BlockedBy {
-			if _, ok := issues[b]; !ok {
-				continue
-			}
-			ensure(b)
-			result[b][id] = true
-		}
-	}
-
-	// Keep iterating until no new edges are added (fixed-point computation)
-	changed := true
-	for changed {
-		changed = false
-		for id := range result {
-			for blockedID := range result[id] {
-				// Transitively add all issues blocked by blockedID
-				for transitiveID := range result[blockedID] {
-					if !result[id][transitiveID] {
-						result[id][transitiveID] = true
-						changed = true
-					}
-				}
+		for _, blockerID := range issue.BlockedBy {
+			if _, ok := issues[blockerID]; ok {
+				blocks[blockerID] = append(blocks[blockerID], id)
 			}
 		}
 	}
-
-	return result
+	return blocks
 }
 
-// hasSerialDependency returns true if a blocks b or b blocks a (directly or transitively),
-// meaning the two tasks execute serially and a shared scope is intentional.
-// blocksTransitive should be the output of computeBlocksTransitive.
-func hasSerialDependency(a, b *materialize.Issue, blocksTransitive map[string]map[string]bool) bool {
-	return blocksTransitive[a.ID][b.ID] || blocksTransitive[b.ID][a.ID]
+// hasSerialDependency returns true if a blocks b or b blocks a, directly or
+// transitively. It traverses only the candidate pair's reachable subgraph.
+func hasSerialDependency(a, b *materialize.Issue, blocks map[string][]string) bool {
+	return blocksReachable(a.ID, b.ID, blocks) || blocksReachable(b.ID, a.ID, blocks)
+}
+
+func blocksReachable(start, target string, blocks map[string][]string) bool {
+	visited := map[string]bool{start: true}
+	queue := []string{start}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		for _, blockedID := range blocks[current] {
+			if blockedID == target {
+				return true
+			}
+			if !visited[blockedID] {
+				visited[blockedID] = true
+				queue = append(queue, blockedID)
+			}
+		}
+	}
+	return false
 }
 
 // firstGlobOverlapPair returns the first pair of patterns (one from a, one from
