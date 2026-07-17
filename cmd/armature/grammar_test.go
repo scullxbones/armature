@@ -222,13 +222,12 @@ func checkStructuredOutputFormat(root *cobra.Command) []string {
 }
 
 // checkTTYDetectionPolicy returns violations for tui.IsTerminal() calls outside allowed files.
-// Only main.go and allowlisted bootstrap.go are permitted to call tui.IsTerminal().
+// Only main.go is permitted to call tui.IsTerminal() directly (via the shared
+// autoDetectTTYPolicy helper). bootstrap.go used to hand-roll its own check but now
+// calls autoDetectTTYPolicy(cmd.Root()) instead, so it no longer needs an allowlist entry.
 func checkTTYDetectionPolicy() []string {
-	// TODO: bootstrap.go calls tui.IsTerminal() at line 95; out of scope per task guidance;
-	// pending refactoring to use --non-interactive flag
 	allowedFiles := map[string]bool{
-		"main.go":      true,
-		"bootstrap.go": true,
+		"main.go": true,
 	}
 
 	var violations []string
@@ -284,7 +283,7 @@ func checkTTYDetectionPolicy() []string {
 		if strings.Contains(string(content), "tui.IsTerminal(") {
 			// File contains the call; check if it's allowed
 			if !allowedFiles[name] {
-				violations = append(violations, name+" calls tui.IsTerminal() but is not in allowlist (main.go, bootstrap.go only)")
+				violations = append(violations, name+" calls tui.IsTerminal() but is not in allowlist (main.go only)")
 			}
 		}
 	}
