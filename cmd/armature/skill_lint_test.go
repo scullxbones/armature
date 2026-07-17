@@ -155,6 +155,27 @@ More info.
 		require.Contains(t, output.String(), "invalid-reference-command")
 	})
 
+	// Canonical public workflow documentation is copyable guidance, so it uses
+	// the same CLI and required-flag checks as shipped skills. Archive material
+	// is deliberately excluded because it may document a historic surface.
+	t.Run("CanonicalDocumentationIsLintedButArchiveIsExcluded", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "docs", "archive"), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("```bash\narm claim TASK-01\n```\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "docs", "archive", "old-workflow.md"), []byte("```bash\narm removed-command\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+
+		require.Error(t, err)
+		require.Contains(t, output.String(), "README.md")
+		require.Contains(t, output.String(), "missing mandatory flags: --worktree")
+		require.NotContains(t, output.String(), "removed-command")
+	})
+
 	// Optional flags in square brackets are Cobra synopsis notation, not
 	// copyable shell syntax. Lint must reject them before they ship in an
 	// executable example.
