@@ -14,7 +14,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/dagsummary"
 	"github.com/spf13/cobra"
 )
@@ -43,6 +42,10 @@ mode (agents) to auto-approve all pending draft items.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			execState := mustState(cmd)
 			appCtx := execState.ctx
+
+			// Read the --non-interactive flag (auto-set by main.go based on TTY/format detection)
+			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
+			format, _ := cmd.Flags().GetString("format")
 
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
@@ -85,8 +88,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			})
 
 			if len(draftIssues) == 0 {
-				format, _ := cmd.Flags().GetString("format")
-				if format == "json" || format == "agent" || tui.IsNonInteractive() {
+				if format == "json" || format == "agent" || nonInteractive {
 					data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
@@ -99,8 +101,7 @@ mode (agents) to auto-approve all pending draft items.`,
 				return nil
 			}
 
-			format, _ := cmd.Flags().GetString("format")
-			if format == "json" || format == "agent" || tui.IsNonInteractive() {
+			if format == "json" || format == "agent" || nonInteractive {
 				// In non-interactive mode, --approve-all emits ops for all draft items.
 				if approveAll && len(draftIssues) > 0 {
 					approvedIDs := make([]string, 0, len(draftIssues))
@@ -146,23 +147,6 @@ mode (agents) to auto-approve all pending draft items.`,
 					"approve_all":              approveAll,
 				}, "", "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-				return nil
-			}
-
-			if !tui.IsTerminal() {
-				// Human-readable summary for non-TTY (format == "human")
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-					"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
-					cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Pending DAG Confirmation:")
-				for _, issue := range draftIssues {
-					_, isUncited := uncitedSet[issue.ID]
-					cited := "cited"
-					if isUncited {
-						cited = "uncited"
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s (%s)\n", issue.ID, issue.Title, cited)
-				}
 				return nil
 			}
 
