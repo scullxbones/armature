@@ -1,6 +1,7 @@
 package ready
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/dag"
@@ -9,9 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPartitionWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1 verifies that priority tier
+// TestComputeWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1 verifies that priority tier
 // is a hard boundary — entries from different priority tiers are never placed in the same wave.
-func TestPartitionWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
+func TestComputeWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	// Create entries with different priorities
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "critical", Scope: []string{"src/auth/**"}},
@@ -55,14 +58,16 @@ func TestPartitionWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
 	}
 }
 
-// TestPartitionWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1 verifies that within a tier,
+// TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1 verifies that within a tier,
 // items are ordered by scope-conflict degree (how many other ready items share scope with them).
-func TestPartitionWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T) {
+func TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	// Create entries where some have high scope conflict
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/**"}},
-		{Issue: "task-2", Title: "Task 2", Priority: "high", Scope: []string{"src/auth/login.go"}}, // conflicts with task-1
-		{Issue: "task-3", Title: "Task 3", Priority: "high", Scope: []string{"src/api/**"}},       // no conflict with task-1
+		{Issue: "task-2", Title: "Task 2", Priority: "high", Scope: []string{"src/auth/login.go"}},  // conflicts with task-1
+		{Issue: "task-3", Title: "Task 3", Priority: "high", Scope: []string{"src/api/**"}},         // no conflict with task-1
 		{Issue: "task-4", Title: "Task 4", Priority: "high", Scope: []string{"src/auth/logout.go"}}, // conflicts with task-1
 	}
 
@@ -83,37 +88,33 @@ func TestPartitionWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.
 	// task-3 has a disjoint scope
 	// We expect task-1/2/4 to be in earlier waves than task-3 would be in a different wave
 
-	allEntries := []ReadyEntry{}
-	for _, wave := range waves {
-		allEntries = append(allEntries, wave...)
-	}
-
 	// Verify no wave has conflicting scopes
 	for _, wave := range waves {
 		for i, e1 := range wave {
 			for j, e2 := range wave {
-				if i != j {
-					// Should not have scope overlap within a wave
-					hasOverlap := false
-					for _, s1 := range e1.Scope {
-						for _, s2 := range e2.Scope {
-							if s1 == s2 {
-								hasOverlap = true
-								break
-							}
-						}
-					}
-					// Use basic string check for matching
-					assert.False(t, hasOverlap, "Wave should not have conflicting scopes: %s and %s", e1.Issue, e2.Issue)
+				if i == j {
+					continue
 				}
+				// Should not have scope overlap within a wave
+				hasOverlap := false
+				for _, s1 := range e1.Scope {
+					if slices.Contains(e2.Scope, s1) {
+						hasOverlap = true
+						break
+					}
+				}
+				// Use basic string check for matching
+				assert.False(t, hasOverlap, "Wave should not have conflicting scopes: %s and %s", e1.Issue, e2.Issue)
 			}
 		}
 	}
 }
 
-// TestPartitionWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1 verifies that
+// TestComputeWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1 verifies that
 // ancestor/descendant pairs are excluded from being placed in the same wave.
-func TestPartitionWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1(t *testing.T) {
+func TestComputeWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	// Create a hierarchy: story-1 is parent of task-1
 	entries := []ReadyEntry{
 		{Issue: "story-1", Title: "Story 1", Priority: "high", Scope: []string{"src/**"}},
@@ -168,9 +169,11 @@ func TestPartitionWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1(t *testing.
 	}
 }
 
-// TestPartitionWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1 verifies that the greedy
+// TestComputeWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1 verifies that the greedy
 // first-fit algorithm places items into the first available wave without scope conflicts.
-func TestPartitionWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1(t *testing.T) {
+func TestComputeWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	// Create entries that can be packed efficiently with greedy first-fit
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/**"}},
@@ -203,7 +206,7 @@ func TestPartitionWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1(t *testing.T) {
 	// Verify no wave has scope conflicts
 	for i, wave := range waves {
 		// Check that no two entries in the same wave have overlapping scopes
-		for entryIdx := 0; entryIdx < len(wave); entryIdx++ {
+		for entryIdx := range wave {
 			for otherIdx := entryIdx + 1; otherIdx < len(wave); otherIdx++ {
 				e1 := wave[entryIdx]
 				e2 := wave[otherIdx]
@@ -219,8 +222,10 @@ func TestPartitionWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1(t *testing.T) {
 	}
 }
 
-// TestPartitionWaves_EmptyInput_REQ_LNGHZN_S2_T1 verifies that empty input produces empty output
-func TestPartitionWaves_EmptyInput_REQ_LNGHZN_S2_T1(t *testing.T) {
+// TestComputeWaves_EmptyInput_REQ_LNGHZN_S2_T1 verifies that empty input produces empty output
+func TestComputeWaves_EmptyInput_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	entries := []ReadyEntry{}
 	index := materialize.Index{}
 	nodeIndex := materializeIndexToNodeIndex(index)
@@ -231,8 +236,10 @@ func TestPartitionWaves_EmptyInput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	assert.Empty(t, waves, "Empty input should produce empty output")
 }
 
-// TestPartitionWaves_SingleEntry_REQ_LNGHZN_S2_T1 verifies that a single entry forms a single wave
-func TestPartitionWaves_SingleEntry_REQ_LNGHZN_S2_T1(t *testing.T) {
+// TestComputeWaves_SingleEntry_REQ_LNGHZN_S2_T1 verifies that a single entry forms a single wave
+func TestComputeWaves_SingleEntry_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/**"}},
 	}
@@ -251,9 +258,11 @@ func TestPartitionWaves_SingleEntry_REQ_LNGHZN_S2_T1(t *testing.T) {
 	assert.Equal(t, "task-1", waves[0][0].Issue)
 }
 
-// TestPartitionWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1 verifies that entries with
+// TestComputeWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1 verifies that entries with
 // completely disjoint scopes can all go into the same wave
-func TestPartitionWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
+func TestComputeWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/**"}},
 		{Issue: "task-2", Title: "Task 2", Priority: "high", Scope: []string{"src/api/**"}},
@@ -276,9 +285,11 @@ func TestPartitionWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 	require.Len(t, waves[0], 3, "All three entries should be in the same wave")
 }
 
-// TestPartitionWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1 verifies that entries with
+// TestComputeWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1 verifies that entries with
 // all conflicting scopes create separate waves
-func TestPartitionWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
+func TestComputeWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
+	t.Parallel()
+
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/**"}},
 		{Issue: "task-2", Title: "Task 2", Priority: "high", Scope: []string{"src/auth/login.go"}},

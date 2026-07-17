@@ -1,6 +1,8 @@
 package ready
 
 import (
+	"slices"
+
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -16,12 +18,6 @@ import (
 func PartitionWaves(entries []ReadyEntry, index materialize.Index, graph *dag.Graph) [][]ReadyEntry {
 	if len(entries) == 0 {
 		return [][]ReadyEntry{}
-	}
-
-	// Build a map of entry IDs to their index for quick lookups
-	entryMap := make(map[string]ReadyEntry)
-	for _, e := range entries {
-		entryMap[e.Issue] = e
 	}
 
 	// Group entries by priority tier
@@ -44,7 +40,7 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index, graph *dag.Gr
 
 		// Sort entries in this tier by scope-conflict degree (descending)
 		// Items with higher conflict degree are considered first for placement
-		sortByConflictDegree(tierEntries, entryMap)
+		sortByConflictDegree(tierEntries)
 
 		// Greedy first-fit: for each candidate, try to place it into the first existing
 		// wave where it has no scope overlap and no ancestor/descendant relationship
@@ -77,7 +73,7 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index, graph *dag.Gr
 
 // sortByConflictDegree sorts entries by their scope-conflict degree in descending order.
 // Items with more conflicts (shared scopes with other ready items) are sorted first.
-func sortByConflictDegree(entries []ReadyEntry, entryMap map[string]ReadyEntry) {
+func sortByConflictDegree(entries []ReadyEntry) {
 	// Compute conflict degree for each entry
 	conflictDegrees := make(map[string]int)
 	for _, entry := range entries {
@@ -124,12 +120,6 @@ func canAddToWave(candidate ReadyEntry, wave []ReadyEntry, graph *dag.Graph) boo
 			return false
 		}
 
-		// Check ancestor/descendant relationship using ScopesOverlapEx
-		// which already excludes ancestor/descendant pairs from overlap
-		if claim.ScopesOverlapEx(candidate.Scope, existing.Scope, graph, candidate.Issue, existing.Issue) {
-			return false
-		}
-
 		// Also check if they are direct ancestors/descendants (even if scopes don't overlap)
 		if isAncestorOrDescendant(candidate.Issue, existing.Issue, graph) {
 			return false
@@ -145,19 +135,13 @@ func isAncestorOrDescendant(issueA, issueB string, graph *dag.Graph) bool {
 	}
 
 	// Check if issueA is an ancestor of issueB (issueB is a descendant of issueA)
-	descendants := graph.Descendants(issueA)
-	for _, desc := range descendants {
-		if desc == issueB {
-			return true
-		}
+	if slices.Contains(graph.Descendants(issueA), issueB) {
+		return true
 	}
 
 	// Check if issueB is an ancestor of issueA (issueA is a descendant of issueB)
-	descendants = graph.Descendants(issueB)
-	for _, desc := range descendants {
-		if desc == issueA {
-			return true
-		}
+	if slices.Contains(graph.Descendants(issueB), issueA) {
+		return true
 	}
 
 	return false
