@@ -299,7 +299,8 @@ or updates the armature-issue-id file if the worktree exists.`,
 
 			// Create store and load before first issue read
 			store := newSnapshotStore(ctx)
-			if _, err := store.Load(context.Background()); err != nil {
+			snapshot, err := store.Load(context.Background())
+			if err != nil {
 				return fmt.Errorf("load store: %w", err)
 			}
 
@@ -363,11 +364,14 @@ or updates the armature-issue-id file if the worktree exists.`,
 			priorClaimTTL := issue.ClaimTTL
 
 			index := store.Index()
+			// Build a graph from the materialized state for ancestor/descendant checking
+			graph := materialize.GraphFromState(snapshot.State)
+
 			for id, entry := range index {
 				if id == issueID || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
 					continue
 				}
-				if claimPkg.ScopesOverlap(issue.Scope, entry.Scope) {
+				if claimPkg.ScopesOverlapEx(issue.Scope, entry.Scope, graph, issueID, id) {
 					msg := fmt.Sprintf("scope overlap with %s (%s)", id, entry.Title)
 					// Same worker claiming serially: auto-dismiss — log a note, no error or warning.
 					if entry.Assignee == workerID {
