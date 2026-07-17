@@ -89,7 +89,7 @@ arm sources add --url /path/to/source --type filesystem
 If source content changed and you need to review the delta before accepting it:
 
 ```bash
-arm stale-review        # interactive review of sources whose content changed
+arm sources stale-review        # interactive review of sources whose content changed
 ```
 
 ### Step 3 — Outcome Quality Review
@@ -195,7 +195,7 @@ Doctor checks reference:
 | D3 | error | Op files reference issue IDs not in graph |
 | D4 | error | Issues whose parent points to non-existent ID |
 | D5 | error | `blocked_by` chains forming a dependency cycle |
-| D6 | warning | Issues without `source-link` or `accept-citation` (field-presence only — see caveat below) |
+| D6 | warning | Issues without `sources link` or `sources accept-citation` (field-presence only — see caveat below) |
 
 ## Pre-Merge Gate
 

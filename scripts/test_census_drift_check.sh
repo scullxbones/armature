@@ -97,7 +97,7 @@ if [[ ! -f "$COMMAND_FILE" ]]; then
     echo "  FAIL: fixture missing $COMMAND_FILE"
     FAILURES=$((FAILURES + 1))
 else
-    sed -i 's/Use:   "dag-summary"/Use:   "fake-drift-command"/' "$COMMAND_FILE"
+    sed -i 's/Use:   "summary"/Use:   "fake-drift-command"/' "$COMMAND_FILE"
 
     set +e
     OUTPUT=$("$SCRIPT" "$FIXTURE" 2>&1)
@@ -108,7 +108,7 @@ else
         echo "  FAIL: expected non-zero exit when an undocumented command is injected"
         echo "$OUTPUT"
         FAILURES=$((FAILURES + 1))
-    elif ! grep -q "CLI command 'fake-drift-command' in code but not in census" <<< "$OUTPUT"; then
+    elif ! grep -q "CLI command 'dag fake-drift-command' in code but not in census" <<< "$OUTPUT"; then
         echo "  FAIL: expected command drift message not found in output"
         echo "$OUTPUT"
         FAILURES=$((FAILURES + 1))

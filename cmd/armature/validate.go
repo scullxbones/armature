@@ -14,31 +14,6 @@ import (
 )
 
 func newValidateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "validate",
-		Short: "Validate the issue graph and documentation",
-		Long: `Check the issue graph for structural consistency and traceability coverage.
-
-This command group provides tools for validating the issue DAG and documentation.
-Use 'validate graph' to check structural consistency, or 'validate doc-examples' to
-validate JSON examples in documentation.`,
-		Example: `  # Validate the full issue graph
-  $ arm validate graph
-
-  # Validate with strict mode (warnings become errors)
-  $ arm validate graph --strict
-
-  # Exit non-zero in CI if any errors found
-  $ arm validate graph --ci`,
-	}
-
-	cmd.AddCommand(newValidateGraphCmd())
-	cmd.AddCommand(newValidateDocExamplesCmd())
-
-	return cmd
-}
-
-func newValidateGraphCmd() *cobra.Command {
 	var (
 		ci     bool
 		strict bool
@@ -48,7 +23,7 @@ func newValidateGraphCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "graph",
+		Use:   "validate",
 		Short: "Validate the issue graph for consistency",
 		Long: `Check the issue graph for structural consistency and traceability coverage.
 
@@ -159,5 +134,9 @@ COVERAGE and OK lines.`,
 	cmd.Flags().StringVar(&scope, "scope", "", "Validate only the subtree rooted at this node ID")
 	cmd.Flags().StringVar(&parent, "parent", "", "Validate only direct children of this parent node ID")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines; still prints COVERAGE and OK lines")
+
+	// Add doc-examples as a subcommand
+	cmd.AddCommand(newValidateDocExamplesCmd())
+
 	return cmd
 }

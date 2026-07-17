@@ -89,9 +89,9 @@ another worker may steal the claim. Issue heartbeat calls at natural checkpoints
 Before completing work, cite every issue you touched or created:
 
 ```
-arm source-link ISSUE-ID --source-id SOURCE-UUID        # if a source doc exists
+arm sources link ISSUE-ID --source-id SOURCE-UUID        # if a source doc exists
 # or
-arm accept-citation ISSUE-ID --rationale "No external source; self-citing" --ci  # if no source exists
+arm sources accept-citation ISSUE-ID --rationale "No external source; self-citing" --ci  # if no source exists
 ```
 
 Do not leave issues uncited.
@@ -231,7 +231,7 @@ Examples:
 | Skipping commit after task | Small commits make review and revert tractable |
 | Using `git commit -am` | `-a` only stages tracked files — new files and directories are silently skipped; always use explicit `git add <scope files>` |
 | Including `.armature/` in `git add` | Stages stale data; ops are already on `_armature` branch — omit `.armature/` from code commits |
-| Leave issues uncited | Run `arm source-link` or `arm accept-citation --ci` before returning |
+| Leave issues uncited | Run `arm sources link` or `arm sources accept-citation --ci` before returning |
 | Repeating `transition` then `commit` manually | Use a bundled command: `arm transition ID ... && git add . .armature/ && git commit -m ...` |
 | Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |
 | Scope overlap WARNING on `arm validate` | Add `arm link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |

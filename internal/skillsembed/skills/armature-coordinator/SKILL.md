@@ -624,9 +624,9 @@ arm validate
 
 If `validate` shows `uncited node: ID`, run:
 ```bash
-arm source-link --issue ID --source-id SOURCE-UUID   # if a source doc exists
+arm sources link --issue ID --source-id SOURCE-UUID   # if a source doc exists
 # or
-arm accept-citation --issue ID --rationale "No external source; self-citing" --ci  # if no source, mark as self-citing
+arm sources accept-citation --issue ID --rationale "No external source; self-citing" --ci  # if no source, mark as self-citing
 ```
 
 ### f. Clean up worktrees
@@ -709,5 +709,5 @@ git push -u origin HEAD
 | Parallel agents share one log, attribution lost | Forgot to embed `ARM_LOG_SLOT` in each agent's prompt | Include `export ARM_LOG_SLOT=<slot>` as the first instruction in each agent's prompt before dispatch |
 | Build breaks after merging parallel branches | Skipped integration verification | After each wave, run `make check` before claiming the next wave |
 | Semantic revert when merging parallel task branches | Multiple parallel tasks touched the same file; merge did not account for interdependencies | After each parallel wave, run the Parallel Branch Overlap Audit (section a.3); review semantic compatibility of overlapping files before marking tasks `merged`; add integration tests if needed to exercise combined changes |
-| `arm transition STORY-ID --to done` errors with uncited nodes | Story transitioned before all issues were cited | Run `arm validate`; for each `uncited node: ID`, run `arm source-link` or `arm accept-citation --ci`; then retry transition |
+| `arm transition STORY-ID --to done` errors with uncited nodes | Story transitioned before all issues were cited | Run `arm validate`; for each `uncited node: ID`, run `arm sources link` or `arm sources accept-citation --ci`; then retry transition |
 | Armature ops not committed | Forgot mop-up commit before push | After story transition, run `git status`; if `.armature/` has changes, commit them (single-branch mode only) |
