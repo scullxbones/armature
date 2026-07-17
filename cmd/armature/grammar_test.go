@@ -173,22 +173,22 @@ func checkSingleIssuePositionalArg(root *cobra.Command) []string {
 }
 
 // checkStructuredOutputFormat returns violations for structured-output commands without --format.
-// Structured-output commands inherit --format from root persistent flags or define it locally.
+// Structured-output commands must expose the root's persistent --format flag at their command path.
 func checkStructuredOutputFormat(root *cobra.Command) []string {
-	// Commands that produce structured output; must support --format
-	structuredOutputCommands := map[string]bool{
-		"list":           true,
-		"log":            true,
-		"show":           true,
-		"ready":          true,
-		"validate":       true,
-		"render-context": true,
-		"workers":        true,
-		"review":         true, // Group; subcommands (prepare, record, commits) have --format
-		"prepare":        true, // review prepare
-		"record":         true, // review record
-		"commits":        true, // review commits
-		"sources":        true, // Group with subcommands
+	// These are user-invocable command paths with structured-output contracts.
+	// Paths, rather than command names, prevent an unrelated subcommand with the same
+	// name (for example another "prepare") from satisfying the check by accident.
+	structuredOutputCommands := [][]string{
+		{"list"},
+		{"log"},
+		{"show"},
+		{"ready"},
+		{"validate"},
+		{"render-context"},
+		{"workers"},
+		{"review", "prepare"},
+		{"review", "record"},
+		{"review", "commits"},
 	}
 
 	var violations []string
@@ -197,26 +197,19 @@ func checkStructuredOutputFormat(root *cobra.Command) []string {
 	rootFormatFlag := root.PersistentFlags().Lookup("format")
 	if rootFormatFlag == nil {
 		violations = append(violations, "root command missing --format persistent flag (required for all structured-output commands)")
-		return violations
 	}
 
-	walkCommandTree(root, func(cmd *cobra.Command, parent *cobra.Command) {
-		cmdName := cmd.Name()
-
-		// Only check commands in the structured-output list
-		if !structuredOutputCommands[cmdName] {
-			return
+	for _, path := range structuredOutputCommands {
+		cmd, _, err := root.Find(path)
+		pathName := strings.Join(path, " ")
+		if err != nil || cmd == root {
+			violations = append(violations, "structured-output command not registered: "+pathName)
+			continue
 		}
-
-		// Skip group commands that only dispatch to subcommands
-		if len(cmd.Commands()) > 0 && cmd.RunE == nil && cmd.Run == nil {
-			// This is a group; subcommands must define or inherit --format
-			return
+		if cmd.Flags().Lookup("format") == nil && cmd.InheritedFlags().Lookup("format") == nil {
+			violations = append(violations, "structured-output command missing --format support: "+pathName)
 		}
-
-		// Structured-output commands inherit root persistent --format flag
-		// No need for local definition, but root must have it (already checked above)
-	})
+	}
 
 	return violations
 }
@@ -366,6 +359,26 @@ func testNegativeCase(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("checkStructuredOutputFormat violations should mention --format: %v", violations)
+		}
+	})
+
+	t.Run("DetectMissingStructuredCommand", func(t *testing.T) {
+		root := &cobra.Command{Use: "test-root"}
+		root.PersistentFlags().String("format", "human", "output format")
+
+		violations := checkStructuredOutputFormat(root)
+		if len(violations) == 0 {
+			t.Error("checkStructuredOutputFormat should detect missing structured commands")
+		}
+		found := false
+		for _, violation := range violations {
+			if strings.Contains(violation, "list") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("checkStructuredOutputFormat should report the missing list command: %v", violations)
 		}
 	})
 }

@@ -25,6 +25,7 @@ func newValidateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate the issue graph for consistency",
+		Args:  cobra.NoArgs,
 		Long: `Check the issue graph for structural consistency and traceability coverage.
 
 This command validates parent-child relationships, dependency links, field requirements,

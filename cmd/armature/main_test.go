@@ -3823,6 +3823,18 @@ func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
 	assert.Contains(t, buf.String(), "Documentation JSON examples are valid")
 }
 
+// TestValidateRejectsUnexpectedArguments verifies that the graph validator remains
+// the bare `arm validate` command; `graph` is documentation-only terminology, not a
+// registered subcommand. The hidden `validate doc-examples` subcommand remains valid.
+func TestValidateRejectsUnexpectedArguments(t *testing.T) {
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{"validate", "graph"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown command \"graph\" for \"arm validate\"")
+}
+
 // TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4 verifies that non-bootstrap commands
 // detect the old unmigrated .arm/.armature/ layout and refuse with guidance to run bootstrap.
 func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {

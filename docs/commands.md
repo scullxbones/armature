@@ -808,16 +808,9 @@ Remove a dependency link between issues.
 Validate the issue graph and documentation.
 
 **Synopsis:**
-`arm validate [command]`
+`arm validate [flags]`
 
 **Subcommands:**
-
-### validate graph
-
-Validate the issue graph for consistency.
-
-**Synopsis:**
-`arm validate graph [flags]`
 
 **Flags:**
 - `--ci`: Exit non-zero if errors found.
