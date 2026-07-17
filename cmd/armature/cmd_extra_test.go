@@ -134,7 +134,7 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"dag-summary", "--repo", repo, "--format", "agent"})
+	cmd.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "agent"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -242,7 +242,7 @@ func TestStaleReviewCommand_NoStale(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "stale-review", "--format", "agent")
+	out, err := runTrls(t, repo, "sources", "stale-review", "--format", "agent")
 	require.NoError(t, err)
 	assert.Contains(t, out, "No stale sources detected")
 }
@@ -260,10 +260,10 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
-	_, err = runTrls(t, repo, "decompose-apply", "--plan", planFile)
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "decompose-revert", "--plan", planFile)
+	out, err := runTrls(t, repo, "dag", "revert", "--plan", planFile)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Reverted")
 }
@@ -289,7 +289,7 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
 	// Apply the plan — all nodes should be created as draft
-	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile)
+	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
 	require.NoError(t, err)
 	assert.Contains(t, out, "Applied 3 issues")
 
@@ -301,11 +301,11 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 	assert.NotContains(t, readyOut, "DRF-003")
 
 	// Promote via dag-transition on each root node (they have no parent so promote each)
-	_, err = runTrls(t, repo, "dag-transition", "--issue", "DRF-001")
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "DRF-001")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "dag-transition", "--issue", "DRF-002")
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "DRF-002")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "dag-transition", "--issue", "DRF-003")
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "DRF-003")
 	require.NoError(t, err)
 
 	// After promotion trls ready should show the tasks
@@ -611,7 +611,7 @@ func TestAmendCmd_PatchesAcceptance(t *testing.T) {
 	// Re-materialize and check validate no longer reports missing acceptance
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
+	validateOut, _ := runTrls(t, repo, "validate", "graph") //nolint:errcheck // test helper; errors checked via output assertions
 	// After amendment the task should not report missing acceptance
 	assert.NotContains(t, validateOut, "missing required field: acceptance on task task-01")
 }
@@ -660,7 +660,7 @@ func setupRepoWithSource(t *testing.T) (string, string) {
 func TestSourceLinkCmd_HappyPath(t *testing.T) {
 	repo, sourceID := setupRepoWithSource(t)
 
-	out, err := runTrls(t, repo, "source-link", "--issue", "task-01", "--source-id", sourceID)
+	out, err := runTrls(t, repo, "sources", "link", "--issue", "task-01", "--source-id", sourceID)
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.Contains(t, out, sourceID)
@@ -669,7 +669,7 @@ func TestSourceLinkCmd_HappyPath(t *testing.T) {
 func TestSourceLinkCmd_UnknownSourceID(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	_, err := runTrls(t, repo, "source-link", "--issue", "task-01", "--source-id", "00000000-0000-0000-0000-000000000000")
+	_, err := runTrls(t, repo, "sources", "link", "--issue", "task-01", "--source-id", "00000000-0000-0000-0000-000000000000")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found in manifest")
 }
@@ -677,21 +677,21 @@ func TestSourceLinkCmd_UnknownSourceID(t *testing.T) {
 func TestSourceLinkCmd_MissingIssue(t *testing.T) {
 	repo, sourceID := setupRepoWithSource(t)
 
-	_, err := runTrls(t, repo, "source-link", "--source-id", sourceID)
+	_, err := runTrls(t, repo, "sources", "link", "--source-id", sourceID)
 	require.Error(t, err)
 }
 
 func TestSourceLinkCmd_MissingSourceID(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	_, err := runTrls(t, repo, "source-link", "--issue", "task-01")
+	_, err := runTrls(t, repo, "sources", "link", "--issue", "task-01")
 	require.Error(t, err)
 }
 
 func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
 	repo, sourceID := setupRepoWithSource(t)
 
-	_, err := runTrls(t, repo, "source-link", "--issue", "task-01", "--source-id", sourceID)
+	_, err := runTrls(t, repo, "sources", "link", "--issue", "task-01", "--source-id", sourceID)
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "materialize")
@@ -710,7 +710,7 @@ func TestAcceptCitationCmd_CI_HappyPath(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--rationale", "cited because it matches",
 		"--ci")
@@ -724,7 +724,7 @@ func TestAcceptCitationCmd_RationaleTooShort(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "accept-citation",
+	_, err = runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--rationale", "too short",
 		"--ci")
@@ -737,7 +737,7 @@ func TestAcceptCitationCmd_TwoWords_Rejected(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "accept-citation",
+	_, err = runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--rationale", "only two",
 		"--ci")
@@ -750,7 +750,7 @@ func TestAcceptCitationCmd_ThreeWords_Accepted(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--rationale", "exactly three words",
 		"--ci")
@@ -763,7 +763,7 @@ func TestAcceptCitationCmd_MissingIssue(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "accept-citation",
+	_, err = runTrls(t, repo, "sources", "accept-citation",
 		"--rationale", "some valid rationale here",
 		"--ci")
 	require.Error(t, err)
@@ -774,7 +774,7 @@ func TestAcceptCitationCmd_MissingRationale(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "accept-citation",
+	_, err = runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--ci")
 	require.Error(t, err)
@@ -785,7 +785,7 @@ func TestAcceptCitationCmd_Force_SkipsPrompt(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--rationale", "cited because it matches",
 		"--force")
@@ -799,7 +799,7 @@ func TestAcceptCitationCmd_NonInteractive_SkipsPrompt(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--rationale", "cited because it matches",
 		"--non-interactive")
@@ -828,7 +828,7 @@ func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--issue", "task-02",
 		"--rationale", "bulk citation no source",
@@ -847,7 +847,7 @@ func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"--issue", "task-01",
 		"--issue", "task-02",
 		"--issue", "task-03",
@@ -941,7 +941,7 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"decompose-apply", "--example", "--repo", repo})
+	cmd.SetArgs([]string{"dag", "apply", "--example", "--repo", repo})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -983,7 +983,7 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	entriesBefore, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile, "--dry-run")
+	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--dry-run")
 	require.NoError(t, err)
 
 	// Output must mention the issue IDs (what would be created)
@@ -1089,7 +1089,7 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
 	// Without --strict, apply should succeed (warnings are advisory).
-	_, err = runTrls(t, repo, "decompose-apply", "--plan", planFile)
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
 	require.NoError(t, err, "apply without --strict should succeed even with warnings")
 
 	// With --strict, the same plan applied to a fresh repo should fail.
@@ -1100,7 +1100,7 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	_, err = runTrls(t, repo2, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo2, "decompose-apply", "--plan", planFile, "--strict")
+	_, err = runTrls(t, repo2, "dag", "apply", "--plan", planFile, "--strict")
 	assert.Error(t, err, "--strict should cause non-zero exit when warnings exist")
 }
 
@@ -1122,7 +1122,7 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
-	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile, "--generate-ids")
+	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--generate-ids")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Applied 2 issues")
 
@@ -1164,7 +1164,7 @@ func TestDecomposeApplyRoot(t *testing.T) {
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
-	out, err := runTrls(t, repo, "decompose-apply", "--plan", planFile, "--root", "root-story-01")
+	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--root", "root-story-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Applied 1 issues")
 
@@ -1328,7 +1328,7 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"decompose-apply", "--schema", "--repo", repo})
+	cmd.SetArgs([]string{"dag", "apply", "--schema", "--repo", repo})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -1536,8 +1536,11 @@ func TestCommandLongAndExampleFields(t *testing.T) {
 		{"ready", newReadyCmd()},
 		{"claim", newClaimCmd()},
 		{"transition", newTransitionCmd()},
-		{"dag-summary", newDAGSummaryCmd()},
-		{"decompose-apply", newDecomposeApplyCmd()},
+		{"dag summary", newDAGSummaryCmd()},
+		{"dag apply", newDecomposeApplyCmd()},
+		{"dag context", newDecomposeContextCmd()},
+		{"dag revert", newDecomposeRevertCmd()},
+		{"dag transition", newDAGTransitionCmd()},
 		{"link", newLinkCmd()},
 		{"sync", newSyncCmd()},
 		{"validate", newValidateCmd()},
@@ -1629,7 +1632,7 @@ func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(outBuf)
 	root.SetIn(stdin)
-	root.SetArgs([]string{"accept-citation", "--repo", repo,
+	root.SetArgs([]string{"sources", "accept-citation", "--repo", repo,
 		"--issue", "task-01",
 		"--rationale", "cited because it matches",
 	})
@@ -1643,7 +1646,7 @@ func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "accept-citation",
+	out, err := runTrls(t, repo, "sources", "accept-citation",
 		"task-01",
 		"--rationale", "cited because it matches here",
 		"--ci",
@@ -1721,7 +1724,7 @@ func TestDecomposeContextCmd_BasicOutput(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"decompose-context"})
+	root.SetArgs([]string{"dag", "context"})
 	require.NoError(t, root.Execute())
 	// Should output the default prompt template (non-empty).
 	assert.NotEmpty(t, buf.String())
@@ -1732,7 +1735,7 @@ func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"decompose-context", "--format", "json"})
+	root.SetArgs([]string{"dag", "context", "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -1745,7 +1748,7 @@ func TestDecomposeContextCmd_WithSources(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	// Pass comma-separated sources with an empty segment to exercise the `if s != "" {` guard.
-	root.SetArgs([]string{"decompose-context", "--format", "json", "--sources", "src-01,,src-02"})
+	root.SetArgs([]string{"dag", "context", "--format", "json", "--sources", "src-01,,src-02"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any

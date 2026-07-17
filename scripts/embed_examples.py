@@ -3,7 +3,7 @@
 Embed CLI-generated canonical examples into skills at build time.
 
 This script:
-1. Runs `arm decompose-apply --example` to get the canonical example
+1. Runs `arm dag apply --example` to get the canonical example
 2. Augments it with acceptance fields for each issue
 3. Embeds or validates the example in skill SKILL.md files
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 def get_example_from_cli():
     """
-    Run `arm decompose-apply --example` and return the parsed JSON.
+    Run `arm dag apply --example` and return the parsed JSON.
 
     Uses the ARM_BIN environment variable to locate the arm binary (set by
     the Makefile to the freshly built ./bin/arm), falling back to bare "arm"
@@ -39,7 +39,7 @@ def get_example_from_cli():
     """
     arm_bin = os.environ.get("ARM_BIN", "arm")
     result = subprocess.run(
-        [arm_bin, "decompose-apply", "--example"],
+        [arm_bin, "dag", "apply", "--example"],
         capture_output=True,
         text=True,
         check=True,
@@ -257,11 +257,11 @@ def main():
         print("Set ARM_BIN to the path of a built arm binary, or ensure 'arm' is on PATH.")
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to run 'arm decompose-apply --example': {e}")
+        print(f"Error: Failed to run 'arm dag apply --example': {e}")
         print(f"stderr: {e.stderr}")
         sys.exit(1)
     except json.JSONDecodeError as e:
-        print(f"Error: Failed to parse 'arm decompose-apply --example' output: {e}")
+        print(f"Error: Failed to parse 'arm dag apply --example' output: {e}")
         sys.exit(1)
 
     # Add acceptance fields

@@ -10,7 +10,7 @@ import (
 func newValidateDocExamplesCmd() *cobra.Command {
 	var repo string
 	cmd := &cobra.Command{
-		Use:               "validate-doc-examples",
+		Use:               "doc-examples",
 		Short:             "Validate typed JSON examples in canonical documentation",
 		Hidden:            true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },

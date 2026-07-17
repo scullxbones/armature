@@ -8,16 +8,16 @@
 ERROR: uncited node: ISSUE-ID
 ```
 
-An issue has neither a `source-link` nor an `accept-citation`. It is completely untraced.
+An issue has neither a `sources link` nor an `sources accept-citation`. It is completely untraced.
 
 **Fix:**
 
 ```bash
 # Link to a source document
-arm source-link ISSUE-ID --source-id SOURCE-UUID
+arm sources link ISSUE-ID --source-id SOURCE-UUID
 
 # Or accept the citation risk explicitly (for issues with no recoverable source)
-arm accept-citation --ci ISSUE-ID --rationale "No recoverable source remains"
+arm sources accept-citation --ci ISSUE-ID --rationale "No recoverable source remains"
 ```
 
 ### E8 — Unknown Source
@@ -26,7 +26,7 @@ arm accept-citation --ci ISSUE-ID --rationale "No recoverable source remains"
 ERROR: unknown source: UUID in citation for ISSUE-ID
 ```
 
-An issue's `source-link` points to a UUID that no longer exists in the sources manifest. This happens when a source was registered, used in a citation, then deleted from the manifest.
+An issue's `sources link` points to a UUID that no longer exists in the sources manifest. This happens when a source was registered, used in a citation, then deleted from the manifest.
 
 **Fix:**
 
@@ -40,7 +40,7 @@ If the source is gone permanently, register a replacement and re-link:
 
 ```bash
 arm sources add --url /path/to/replacement --type filesystem
-arm source-link ISSUE-ID --source-id SOURCE-UUID  # link to the new source UUID
+arm sources link ISSUE-ID --source-id SOURCE-UUID  # link to the new source UUID
 arm validate              # confirm E8 is resolved
 ```
 
@@ -66,7 +66,7 @@ Workflow when sources are stale:
 arm sources verify        # identify MISSING or changed sources
 arm sources sync          # re-fingerprint
 arm sources verify        # confirm all OK
-arm stale-review          # if content changed, review delta before accepting
+arm sources stale-review  # if content changed, review delta before accepting
 arm validate              # confirm no new E8 errors from stale UUIDs
 ```
 

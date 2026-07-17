@@ -38,6 +38,9 @@ func newSourcesCmd() *cobra.Command {
 	cmd.AddCommand(newSourcesAddCmd())
 	cmd.AddCommand(newSourcesSyncCmd())
 	cmd.AddCommand(newSourcesVerifyCmd())
+	cmd.AddCommand(newSourcesLinkCmd())
+	cmd.AddCommand(newSourcesAcceptCitationCmd())
+	cmd.AddCommand(newSourcesStaleReviewCmd())
 
 	return cmd
 }
@@ -209,4 +212,22 @@ func providerForType(providerType string) (sources.Provider, error) {
 	default:
 		return nil, fmt.Errorf("unknown provider type %q", providerType)
 	}
+}
+
+func newSourcesLinkCmd() *cobra.Command {
+	cmd := newSourceLinkCmd()
+	cmd.Use = "link [issue-id]"
+	return cmd
+}
+
+func newSourcesAcceptCitationCmd() *cobra.Command {
+	cmd := newAcceptCitationCmd()
+	cmd.Use = "accept-citation [issue-id]"
+	return cmd
+}
+
+func newSourcesStaleReviewCmd() *cobra.Command {
+	cmd := newStaleReviewCmd()
+	cmd.Use = "stale-review"
+	return cmd
 }

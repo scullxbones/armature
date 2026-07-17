@@ -30,7 +30,7 @@ func TestDAGSummaryCmd_WithDraftNodes_EmitsJSON(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--format", "json"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -47,7 +47,7 @@ func TestDAGSummaryCmd_ApproveAll_WithDraftNodes(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--format", "json", "--approve-all"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json", "--approve-all"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -83,7 +83,7 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--format", "json", "--issue", "epic-draft-01"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json", "--issue", "epic-draft-01"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any
@@ -101,7 +101,7 @@ func TestDAGSummaryCmd_IssueFlag_UnknownID(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	root.SetArgs([]string{"dag-summary", "--repo", repo, "--format", "json", "--issue", "nonexistent-id"})
+	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json", "--issue", "nonexistent-id"})
 	require.NoError(t, root.Execute())
 
 	var result map[string]any

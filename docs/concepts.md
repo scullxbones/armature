@@ -117,7 +117,7 @@ arm create --type task --title "Write login middleware" --parent STORY-001
 arm link TASK-001 --dep TASK-002 --rel blocks
 
 # View the DAG interactively
-arm dag-summary
+arm dag summary
 
 # Detect cycles (none should exist)
 arm doctor   # checks for cycles
@@ -139,7 +139,7 @@ arm doctor   # checks for cycles
   - **E7:** Every epic must cite a source (error if missing)
   - **E8:** Citations must reference sections that exist in the source document (error if invalid)
   - **E12:** A source citation cannot reference a section that conflicts with other requirements (citation conflict)
-- **Citation acceptance:** Before completing a task, you may need to `arm accept-citation <task-id> --rationale "..."` to confirm the citation is valid
+- **Citation acceptance:** Before completing a task, you may need to `arm sources accept-citation <task-id> --rationale "..."` to confirm the citation is valid
 
 **Command examples:**
 ```bash
@@ -155,7 +155,7 @@ arm create --title "Task X" --parent STORY-001 \
   --source <source-uuid>
 
 # Accept a citation with rationale
-arm accept-citation TASK-001 --rationale "Requirement reviewed and approved by stakeholders"
+arm sources accept-citation TASK-001 --rationale "Requirement reviewed and approved by stakeholders"
 
 # Validate citations across all tasks
 arm validate
@@ -186,10 +186,10 @@ arm validate
 arm create --title "Task X" --parent STORY-001 --confidence draft
 
 # Review draft tasks
-arm dag-summary   # filter by provenance.confidence manually or via `jq`
+arm dag summary   # filter by provenance.confidence manually or via `jq`
 
 # Promote a draft to verified
-arm dag-transition --issue TASK-001 --confidence verified
+arm dag transition --issue TASK-001 --confidence verified
 
 # View confidence in task details
 arm show TASK-001 | jq '.provenance.confidence'
@@ -246,10 +246,10 @@ arm list   # auto-detects merge via commit-message scan, transitions to "merged"
 **How it works:**
 - **Source registration:** `arm sources add` registers a document by URL (filesystem, GitHub, Confluence, etc.)
 - **Fingerprinting:** `arm sources sync` fetches the document and records a fingerprint (SHA hash) to detect changes
-- **Decomposition context:** `arm decompose-context --sources <uuid>` generates a JSON context document summarizing the source
+- **Decomposition context:** `arm dag context --sources <uuid>` generates a JSON context document summarizing the source
 - **AI decomposition:** The context is fed to an AI agent (e.g., Claude, Gemini) with instructions to produce a `plan.json`
 - **Plan structure:** A plan is a JSON array of issue objects (id, type, title, parent, acceptance, definition_of_done, scope, source_citation)
-- **Plan application:** `arm decompose-apply --plan plan.json` creates the DAG from the plan
+- **Plan application:** `arm dag apply --plan plan.json` creates the DAG from the plan
 - **Idempotency:** Re-running decomposition on the same source can yield new/updated tasks or detect conflicts
 
 **Source providers:**
@@ -271,7 +271,7 @@ arm sources verify
 # SOURCE-UUID  docs/requirements.md              [fingerprint: abc123...]
 
 # Generate decomposition context for the AI agent
-arm decompose-context --sources SOURCE-UUID > context.json
+arm dag context --sources SOURCE-UUID > context.json
 
 # The context.json contains:
 # - Document title and source URL
@@ -280,7 +280,7 @@ arm decompose-context --sources SOURCE-UUID > context.json
 # - Instructions for decomposition
 
 # Feed to AI agent and get back plan.json, then apply:
-arm decompose-apply --plan plan.json
+arm dag apply --plan plan.json
 
 # List tasks created by decomposition
 arm list --confidence draft   # newly created draft tasks

@@ -134,5 +134,9 @@ COVERAGE and OK lines.`,
 	cmd.Flags().StringVar(&scope, "scope", "", "Validate only the subtree rooted at this node ID")
 	cmd.Flags().StringVar(&parent, "parent", "", "Validate only direct children of this parent node ID")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines; still prints COVERAGE and OK lines")
+
+	// Add doc-examples as a subcommand
+	cmd.AddCommand(newValidateDocExamplesCmd())
+
 	return cmd
 }

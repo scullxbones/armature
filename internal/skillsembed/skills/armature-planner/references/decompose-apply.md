@@ -5,7 +5,7 @@ Use this for any work involving more than one or two tasks.
 ## 1. Inspect the Schema
 
 ```bash
-arm decompose-apply --example
+arm dag apply --example
 ```
 
 This prints a minimal plan JSON. Use it as a starting template but remember to
@@ -53,7 +53,7 @@ Create a file (e.g. `plan.json`) following this structure:
 ## 3. Dry-Run First
 
 ```bash
-arm decompose-apply --plan plan.json --dry-run
+arm dag apply --plan plan.json --dry-run
 ```
 
 This validates the plan and prints what would be created without writing
@@ -68,7 +68,7 @@ Common dry-run errors:
 ## 4. Apply the Plan
 
 ```bash
-arm decompose-apply --plan plan.json
+arm dag apply --plan plan.json
 ```
 
 All issues are created in `draft` state.
@@ -76,7 +76,7 @@ All issues are created in `draft` state.
 ## 5. Promote from Draft
 
 ```bash
-arm dag-transition --issue STORY-ID   # promotes the story and all its tasks
+arm dag transition --issue STORY-ID   # promotes the story and all its tasks
 ```
 
 Verify promotion:
