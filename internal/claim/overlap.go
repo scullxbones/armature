@@ -69,7 +69,7 @@ func globOverlaps(a, b string) bool {
 	if dirA == "" || dirB == "" {
 		return false
 	}
-	return hasPrefix(dirA, dirB) || hasPrefix(dirB, dirA)
+	return dirA == dirB || hasPrefix(dirA, dirB+"/") || hasPrefix(dirB, dirA+"/")
 }
 
 func extractDir(pattern string) string {

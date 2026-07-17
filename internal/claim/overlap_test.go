@@ -104,3 +104,53 @@ func TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1(t *tes
 	result := ScopesOverlapEx(scopeA, scopeB, graph, "task-a", "task-b")
 	assert.True(t, result, "unrelated tasks with overlapping scopes should conflict")
 }
+
+func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
+	t.Parallel()
+	// internal/claimx has internal/claim as a *string* prefix but is not nested
+	// under it as a path segment. A naive hasPrefix(dirA, dirB) check falsely
+	// treats these as overlapping. Regression coverage for the bug found in
+	// fable's holistic review of PR #79.
+	assert.False(t, globOverlaps("internal/claimx/foo.go", "internal/claim/*.go"),
+		"internal/claimx and internal/claim share a string prefix but are sibling directories, not nested — must not overlap")
+	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claimx/foo.go"),
+		"overlap check must be symmetric")
+
+	assert.True(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
+		"internal/claim/sub is genuinely nested under internal/claim and should still overlap")
+	assert.True(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
+		"overlap check must be symmetric")
+
+	assert.True(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"))
+}
+
+// globOverlapParityCases mirrors the identically-named table in
+// internal/validate/validate_test.go. The two globOverlaps implementations
+// are intentionally duplicated (validate cannot import claim per the
+// validate-boundary depguard rule in .golangci.yml) and must be kept
+// behaviorally identical — if you change this package's matching semantics,
+// update this table AND the matching table in
+// internal/validate/validate_test.go so the parity test there catches drift.
+var globOverlapParityCases = []struct {
+	name string
+	a, b string
+	want bool
+}{
+	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
+	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
+	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
+	{"nested dir overlap", "internal/claim/sub/*.go", "internal/claim/*.go", true},
+	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
+	{"root-level files, no dir", "a.go", "b.go", false},
+}
+
+func TestGlobOverlaps_ParityWithValidatePackage_PR79(t *testing.T) {
+	t.Parallel()
+	for _, c := range globOverlapParityCases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, c.want, globOverlaps(c.a, c.b), "globOverlaps(%q, %q)", c.a, c.b)
+			assert.Equal(t, c.want, globOverlaps(c.b, c.a), "globOverlaps(%q, %q) (symmetric)", c.b, c.a)
+		})
+	}
+}

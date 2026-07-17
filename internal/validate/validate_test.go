@@ -1226,3 +1226,167 @@ func TestCheckW10PhantomScope_SuppressesForTwoHopBlockerCreatedFiles(t *testing.
 			"phantom scope for new_file.go should be suppressed via the 2-hop blocked_by chain to TSK-BLOCKER: %s", info)
 	}
 }
+
+func TestCheckW1ScopeOverlap_FlagsGlobAwareCrossStoryOverlap_PR79(t *testing.T) {
+	t.Parallel()
+	// Two tasks in different stories scope the same file through different
+	// valid glob patterns (a directory wildcard vs. a literal file inside that
+	// directory). scopeIntersection's exact-string comparison misses this, but
+	// claim.ScopesOverlap (used at claim time) recognizes it. Validate must use
+	// the same glob-aware primitive so it can't pass a claim that will later fail.
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story"},
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/*.go"}},
+		&materialize.Issue{ID: "STORY-2", Type: "story"},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"cmd/armature/claim.go"}},
+	)
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	assert.True(t, containsWarning(result, "scope overlap"),
+		"cross-story tasks whose scopes overlap only via glob-vs-literal matching should still produce a scope overlap warning")
+}
+
+func TestCheckW10PhantomScope_ConsultsFullStateForCrossSubtreeBlocker_PR79(t *testing.T) {
+	t.Parallel()
+	// Mirrors `arm validate --scope`/`--parent`: the downstream task is inside
+	// the selected subtree, but its blocker lives in a sibling story outside
+	// the scoped `targets` map passed to checkW10PhantomScope. The blocker
+	// legitimately declares the file as "(new)", so the phantom-scope INFO
+	// must still be suppressed by consulting the full issue map for blocker
+	// traversal, not just the scope-narrowed subset.
+	state := makeState(
+		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"STORY-BLOCKER", "STORY-DOWNSTREAM"}},
+		&materialize.Issue{ID: "STORY-BLOCKER", Type: "story", Parent: "EPIC-1", Children: []string{"TSK-BLOCKER"}},
+		&materialize.Issue{ID: "STORY-DOWNSTREAM", Type: "story", Parent: "EPIC-1", Children: []string{"TSK-DOWNSTREAM"}},
+		&materialize.Issue{
+			ID:     "TSK-BLOCKER",
+			Type:   "task",
+			Parent: "STORY-BLOCKER",
+			Status: "open",
+			Scope:  []string{"internal/new_file.go (new)"},
+			Blocks: []string{"TSK-DOWNSTREAM"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-DOWNSTREAM",
+			Type:      "task",
+			Parent:    "STORY-DOWNSTREAM",
+			Status:    "open",
+			Scope:     []string{"internal/new_file.go"},
+			BlockedBy: []string{"TSK-BLOCKER"},
+		},
+	)
+	graph := graphFromState(state)
+
+	// Scoped subset the way `arm validate --scope STORY-DOWNSTREAM` would build it:
+	// STORY-DOWNSTREAM plus its descendants. TSK-BLOCKER is intentionally excluded.
+	targets := issueSubset(state, "STORY-DOWNSTREAM", graph)
+	require.NotContains(t, targets, "TSK-BLOCKER", "test setup: TSK-BLOCKER must be outside the scoped subset")
+
+	preExpandedScopes := map[string][]string{
+		"TSK-DOWNSTREAM": {},
+	}
+	warns := checkW10PhantomScope(targets, preExpandedScopes, state.Issues)
+	for _, w := range warns {
+		assert.NotContains(t, w, "new_file.go",
+			"phantom scope should be suppressed when the blocker declaring (new) lives outside the scoped subset but exists in full state: %s", w)
+	}
+}
+
+func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
+	t.Parallel()
+	// internal/claimx has internal/claim as a *string* prefix but is not nested
+	// under it as a path segment. A naive strings.HasPrefix(dirA, dirB) check
+	// falsely treats these as overlapping. Regression coverage for the bug
+	// found in fable's holistic review of PR #79.
+	assert.False(t, globOverlaps("internal/claimx/foo.go", "internal/claim/*.go"),
+		"internal/claimx and internal/claim share a string prefix but are sibling directories, not nested — must not overlap")
+	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claimx/foo.go"),
+		"overlap check must be symmetric")
+
+	// Genuine nested-directory overlap (dirB is a real path-segment prefix of
+	// dirA) must still be detected.
+	assert.True(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
+		"internal/claim/sub is genuinely nested under internal/claim and should still overlap")
+	assert.True(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
+		"overlap check must be symmetric")
+
+	// Identical directories must overlap.
+	assert.True(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"))
+}
+
+func TestFirstGlobOverlapPair_ReportsMatchedPatterns_PR79(t *testing.T) {
+	t.Parallel()
+	a, b, overlaps := firstGlobOverlapPair(
+		[]string{"cmd/other/*.go", "cmd/armature/*.go"},
+		[]string{"cmd/armature/claim.go", "cmd/unrelated/x.go"},
+	)
+	require.True(t, overlaps)
+	assert.Equal(t, "cmd/armature/*.go", a)
+	assert.Equal(t, "cmd/armature/claim.go", b)
+
+	_, _, overlaps = firstGlobOverlapPair([]string{"a/*.go"}, []string{"b/*.go"})
+	assert.False(t, overlaps)
+}
+
+func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T) {
+	t.Parallel()
+	// When the only overlap is via glob matching (scopeIntersection's
+	// exact-string comparison finds nothing), the warning message must name
+	// the specific pattern pair that matched, not dump both full scope lists —
+	// otherwise the message isn't actionable for tasks with many scope entries.
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story"},
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/other/*.go", "cmd/armature/*.go"}},
+		&materialize.Issue{ID: "STORY-2", Type: "story"},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"cmd/armature/claim.go", "cmd/unrelated/x.go"}},
+	)
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+
+	var msg string
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "scope overlap") {
+			msg = w
+			break
+		}
+	}
+	require.NotEmpty(t, msg, "expected a scope overlap warning")
+	assert.Contains(t, msg, "cmd/armature/*.go")
+	assert.Contains(t, msg, "cmd/armature/claim.go")
+	assert.NotContains(t, msg, "cmd/other/*.go",
+		"message should report only the matched pattern pair, not the full scope lists: %s", msg)
+	assert.NotContains(t, msg, "cmd/unrelated/x.go",
+		"message should report only the matched pattern pair, not the full scope lists: %s", msg)
+}
+
+// globOverlapParityCases is a table of (patternA, patternB, wantOverlap) cases
+// run against both internal/validate's globOverlaps and internal/claim's
+// globOverlaps (see internal/claim/overlap_test.go's identical table). The two
+// implementations are intentionally duplicated (validate cannot import claim
+// per the validate-boundary depguard rule in .golangci.yml) and must be kept
+// behaviorally identical — if you change one copy's matching semantics, update
+// this table AND the matching table in internal/claim/overlap_test.go so the
+// parity test there catches the drift.
+var globOverlapParityCases = []struct {
+	name string
+	a, b string
+	want bool
+}{
+	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
+	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
+	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
+	{"nested dir overlap", "internal/claim/sub/*.go", "internal/claim/*.go", true},
+	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
+	{"root-level files, no dir", "a.go", "b.go", false},
+}
+
+func TestGlobOverlaps_ParityWithClaimPackage_PR79(t *testing.T) {
+	t.Parallel()
+	for _, c := range globOverlapParityCases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, c.want, globOverlaps(c.a, c.b), "globOverlaps(%q, %q)", c.a, c.b)
+			assert.Equal(t, c.want, globOverlaps(c.b, c.a), "globOverlaps(%q, %q) (symmetric)", c.b, c.a)
+		})
+	}
+}
