@@ -268,8 +268,10 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		tasks = append(tasks, issue)
 	}
 
-	// Compute transitive closure of blocks relationship
-	blocksTransitive := computeBlocksTransitive(issues)
+	// Compute transitive closure of blocks relationship from the full issue set
+	// (not the possibly scope-narrowed `issues` subset) so that chains passing
+	// through an out-of-scope issue still suppress the overlap warning.
+	blocksTransitive := computeBlocksTransitive(state.Issues)
 
 	// Compare all pairs of tasks (including cross-story pairs).
 	// Use i < j to avoid duplicate reporting of the same pair.
@@ -287,7 +289,6 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 				task1.ID, task2.ID, strings.Join(overlap, ", ")))
 		}
 	}
-	_ = state
 	return warns
 }
 
@@ -302,21 +303,40 @@ func computeBlocksTransitive(issues map[string]*materialize.Issue) map[string]ma
 		result[id] = make(map[string]bool)
 	}
 
+	ensure := func(id string) {
+		if result[id] == nil {
+			result[id] = make(map[string]bool)
+		}
+	}
+
+	// Seed direct edges from both Blocks and the inverse BlockedBy relation.
+	// Legacy/asymmetric data may have a blocked_by link recorded without the
+	// corresponding reverse Blocks edge (e.g. if the blocker didn't exist yet
+	// when the link was applied); seeding from both sides makes the closure
+	// robust to that, matching the traversal style in collectBlockerNewFiles.
+	for id, issue := range issues {
+		for _, blockedID := range issue.Blocks {
+			if _, ok := issues[blockedID]; !ok {
+				continue
+			}
+			ensure(id)
+			result[id][blockedID] = true
+		}
+		for _, b := range issue.BlockedBy {
+			if _, ok := issues[b]; !ok {
+				continue
+			}
+			ensure(b)
+			result[b][id] = true
+		}
+	}
+
 	// Keep iterating until no new edges are added (fixed-point computation)
 	changed := true
 	for changed {
 		changed = false
-		for id, issue := range issues {
-			for _, blockedID := range issue.Blocks {
-				// Skip blocked issues not in scope
-				if _, ok := issues[blockedID]; !ok {
-					continue
-				}
-				// Record direct edge
-				if !result[id][blockedID] {
-					result[id][blockedID] = true
-					changed = true
-				}
+		for id := range result {
+			for blockedID := range result[id] {
 				// Transitively add all issues blocked by blockedID
 				for transitiveID := range result[blockedID] {
 					if !result[id][transitiveID] {
@@ -548,7 +568,7 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 					// Check if a blocker declares this file with "(new)" suffix
 					// If yes, suppress the phantom scope warning since the file is legitimately
 					// pending upstream creation
-					if !blockerDeclaredNewFile(path, blockerNewFiles) {
+					if !blockerNewFiles[path] {
 						warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id))
 					}
 				}
@@ -600,11 +620,6 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 	}
 
 	return result
-}
-
-// blockerDeclaredNewFile checks if a file was declared with "(new)" suffix by any of the blocking tasks.
-func blockerDeclaredNewFile(path string, blockerNewFiles map[string]bool) bool {
-	return blockerNewFiles[path]
 }
 
 // isGlobPattern checks if a string contains glob characters

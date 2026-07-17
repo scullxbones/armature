@@ -1131,3 +1131,98 @@ func TestCheckW10PhantomScope_SuppressesForBlockerCreatedFiles_REQ_TOPTIER_S17_T
 	assert.False(t, containsPhantomScopeInfo(result),
 		"phantom scope should be suppressed when a blocking task declares the file with (new) suffix")
 }
+
+func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfScopeIssue(t *testing.T) {
+	t.Parallel()
+	// Models `arm validate --scope STORY-AC`: the scoped subset passed to
+	// checkW1ScopeOverlap contains only TSK-A and TSK-C (via STORY-AC's
+	// descendants); TSK-B — the middle link in the A->B->C blocked_by chain —
+	// lives under a sibling story and falls outside the subset. Even though
+	// the subset itself doesn't contain B, the transitive closure must still
+	// be computed from the full state so that A and C are recognized as
+	// serially ordered and the overlap warning is suppressed.
+	state := makeState(
+		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"STORY-AC", "STORY-B"}},
+		&materialize.Issue{ID: "STORY-AC", Type: "story", Parent: "EPIC-1", Children: []string{"TSK-A", "TSK-C"}},
+		&materialize.Issue{ID: "STORY-B", Type: "story", Parent: "EPIC-1", Children: []string{"TSK-B"}},
+		&materialize.Issue{
+			ID:     "TSK-A",
+			Type:   "task",
+			Parent: "STORY-AC",
+			Scope:  []string{"internal/ops/*.go"},
+			Blocks: []string{"TSK-B"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-B",
+			Type:      "task",
+			Parent:    "STORY-B",
+			Scope:     []string{"internal/other/*.go"},
+			BlockedBy: []string{"TSK-A"},
+			Blocks:    []string{"TSK-C"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-C",
+			Type:      "task",
+			Parent:    "STORY-AC",
+			Scope:     []string{"internal/ops/*.go"}, // overlaps with TSK-A
+			BlockedBy: []string{"TSK-B"},
+		},
+	)
+
+	// Build the scoped subset the way issueSubset(state, "STORY-AC", graph) would:
+	// STORY-AC plus its descendants (TSK-A, TSK-C). TSK-B is intentionally excluded.
+	scoped := map[string]*materialize.Issue{
+		"STORY-AC": state.Issues["STORY-AC"],
+		"TSK-A":    state.Issues["TSK-A"],
+		"TSK-C":    state.Issues["TSK-C"],
+	}
+	require.NotContains(t, scoped, "TSK-B", "test setup: TSK-B must be outside the scoped subset")
+
+	warns := checkW1ScopeOverlap(scoped, state)
+	for _, w := range warns {
+		assert.NotContains(t, w, "scope overlap",
+			"scope overlap should be suppressed when the transitive blocked_by chain passes through an out-of-scope issue: %s", w)
+	}
+}
+
+func TestCheckW10PhantomScope_SuppressesForTwoHopBlockerCreatedFiles(t *testing.T) {
+	t.Parallel()
+	// Same as the 1-hop suppression case, but the file-creating task is two
+	// blocked_by hops upstream (TSK-DOWNSTREAM <- TSK-MID <- TSK-BLOCKER),
+	// exercising collectBlockerNewFiles' transitive traversal.
+	state := makeState(
+		&materialize.Issue{
+			ID:     "TSK-BLOCKER",
+			Type:   "task",
+			Status: "open",
+			Scope:  []string{"internal/new_file.go (new)"},
+			Blocks: []string{"TSK-MID"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-MID",
+			Type:      "task",
+			Status:    "open",
+			Scope:     []string{"internal/unrelated.go"},
+			BlockedBy: []string{"TSK-BLOCKER"},
+			Blocks:    []string{"TSK-DOWNSTREAM"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-DOWNSTREAM",
+			Type:      "task",
+			Status:    "open",
+			Scope:     []string{"internal/new_file.go"},
+			BlockedBy: []string{"TSK-MID"},
+		},
+	)
+	preExpandedScopes := map[string][]string{
+		"TSK-BLOCKER":    {},
+		"TSK-MID":        {},
+		"TSK-DOWNSTREAM": {},
+	}
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	for _, info := range result.Infos {
+		assert.NotContains(t, info, "new_file.go",
+			"phantom scope for new_file.go should be suppressed via the 2-hop blocked_by chain to TSK-BLOCKER: %s", info)
+	}
+}
