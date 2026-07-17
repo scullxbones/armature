@@ -1255,3 +1255,54 @@ func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) 
 	require.Error(t, err, "a permission-denied binding file must fail closed, not be silently treated as unbound")
 	assert.Contains(t, err.Error(), "read existing binding")
 }
+
+// TestClaimCommand_NoFalsePositiveAgainstParentStory_REQ_TOPTIER_S17_T1 verifies that
+// claiming a child task does not produce a false-positive "scope overlap" error against its parent story.
+// A story's scope is by design the union of its children's scopes, so parent/child scope overlap
+// is not a conflict and should not be reported.
+//
+// Scenario:
+// 1. Create a parent story with scope ["src/**"]
+// 2. Create a child task with scope ["src/auth/**"]
+// 3. Claim the parent story first (if not already claimed by another)
+// 4. Try to claim the child task — should succeed without scope overlap warning
+func TestClaimCommand_NoFalsePositiveAgainstParentStory_REQ_TOPTIER_S17_T1(t *testing.T) {
+	t.Parallel()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	bootstrapRepoForTest(t, repo)
+
+	// Create parent story with broad scope
+	_, err := runTrls(t, repo, "create", "--title", "Parent Story", "--type", "story", "--id", "story-01")
+	require.NoError(t, err)
+
+	// Materialize so story-01 exists
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Create child task with narrower scope
+	_, err = runTrls(t, repo, "create", "--title", "Child Task", "--type", "task", "--id", "task-01", "--parent", "story-01")
+	require.NoError(t, err)
+
+	// Set scope on parent story
+	_, err = runTrls(t, repo, "amend", "--issue", "story-01", "--scope", "src/**")
+	require.NoError(t, err)
+
+	// Set scope on child task (subset of parent's scope)
+	_, err = runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "src/auth/**")
+	require.NoError(t, err)
+
+	// Claim the parent story
+	worktreePath1 := filepath.Join(t.TempDir(), "story-01-worktree")
+	_, err = runTrls(t, repo, "claim", "--issue", "story-01", "--worktree", worktreePath1)
+	require.NoError(t, err, "claiming parent story should succeed")
+
+	// Claim the child task — should NOT give false-positive scope overlap error
+	worktreePath2 := filepath.Join(t.TempDir(), "task-01-worktree")
+	stdout, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath2)
+	assert.NoError(t, claimErr, "claiming child task should succeed without scope overlap error. stdout: %s, stderr: %s", stdout, stderr)
+
+	// Verify worktree was created (claim succeeded)
+	assert.DirExists(t, worktreePath2, "worktree should be created when claiming child task against parent")
+}
