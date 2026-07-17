@@ -189,7 +189,7 @@ arm show TASK-031
 
 ### Notes for Conductor
 
-- Run `arm dag summary` after `decompose-apply` to verify the dependency graph looks correct before unleashing orchestrators.
+- Run `arm dag summary` after `dag apply` to verify the dependency graph looks correct before unleashing orchestrators.
 - Use `arm validate` regularly — it catches data inconsistencies before they cascade.
 - `arm sources stale-review` surfaces tasks where a run may have stalled before completion.
 

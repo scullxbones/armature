@@ -71,6 +71,8 @@ CANONICAL_DOCS = (
     "docs/getting-started.md",
     "docs/use-cases.md",
     "docs/commands.md",
+    "docs/design/architecture.md",
+    "docs/design/roles.md",
 )
 
 

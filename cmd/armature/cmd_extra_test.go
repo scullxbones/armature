@@ -611,7 +611,7 @@ func TestAmendCmd_PatchesAcceptance(t *testing.T) {
 	// Re-materialize and check validate no longer reports missing acceptance
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, _ := runTrls(t, repo, "validate", "graph") //nolint:errcheck // test helper; errors checked via output assertions
+	validateOut, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
 	// After amendment the task should not report missing acceptance
 	assert.NotContains(t, validateOut, "missing required field: acceptance on task task-01")
 }
