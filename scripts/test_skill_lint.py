@@ -28,7 +28,14 @@ class TestFindLintFiles(unittest.TestCase):
             root = Path(tmp_dir)
             (root / "internal/skillsembed/skills/example").mkdir(parents=True)
             (root / "internal/skillsembed/skills/example/SKILL.md").write_text("# skill\n")
-            for name in ("README.md", "docs/getting-started.md", "docs/use-cases.md", "docs/commands.md"):
+            for name in (
+                "README.md",
+                "docs/getting-started.md",
+                "docs/use-cases.md",
+                "docs/commands.md",
+                "docs/design/architecture.md",
+                "docs/design/roles.md",
+            ):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("# canonical\n")
@@ -44,6 +51,8 @@ class TestFindLintFiles(unittest.TestCase):
                 "docs/getting-started.md",
                 "docs/use-cases.md",
                 "docs/commands.md",
+                "docs/design/architecture.md",
+                "docs/design/roles.md",
             })
 
 

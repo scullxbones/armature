@@ -14,13 +14,13 @@ Each role has a corresponding skill that provides a workflow-oriented guide from
 
 **Key responsibilities:**
 - Create epics, stories, and tasks with complete `dod`, `scope`, and `acceptance` fields
-- Decompose stories using `arm decompose-apply` with properly formed plan JSON
+- Decompose stories using `arm dag apply` with properly formed plan JSON
 - Register source documents and link every created issue at creation time (not as a remediation pass)
 - Set priorities and `blocked_by` dependencies before workers start
-- Promote issues from `draft` to visible using `arm dag-transition`
+- Promote issues from `draft` to visible using `arm dag transition`
 - Validate the DAG is structurally sound before releasing work (`arm doctor`, `arm validate`)
 
-**Key commands:** `create`, `decompose-apply`, `decompose-apply --dry-run`, `dag-transition`, `sources add`, `sources sync`, `source-link`, `accept-citation`, `validate`, `link`, `doctor`
+**Key commands:** `create`, `dag apply`, `dag apply --dry-run`, `dag transition`, `sources add`, `sources sync`, `sources link`, `sources accept-citation`, `validate`, `link`, `doctor`
 
 **Skill:** `arm-planner` _(to be written — highest-priority gap)_
 
@@ -66,10 +66,10 @@ Each role has a corresponding skill that provides a workflow-oriented guide from
 - Implement the work satisfying the task's `acceptance` criteria
 - Record progress with `arm note` and design decisions with `arm decision`
 - Issue `arm heartbeat` periodically on long-running tasks to prevent claim expiry
-- Cite every issue touched before completing (`arm source-link` or `arm accept-citation --ci`)
+- Cite every issue touched before completing (`arm sources link` or `arm sources accept-citation --ci`)
 - Transition to `done` with a concrete `--outcome` and commit all changes
 
-**Key commands:** `worker-init`, `note`, `decision`, `heartbeat`, `source-link`, `accept-citation`, `transition` (task-level)
+**Key commands:** `worker-init`, `note`, `decision`, `heartbeat`, `sources link`, `sources accept-citation`, `transition` (task-level)
 
 **Skill:** `arm-worker`
 
@@ -109,10 +109,10 @@ Each role has a corresponding skill that provides a workflow-oriented guide from
 | Command | Planner | Coordinator | Worker | Auditor |
 |---|:---:|:---:|:---:|:---:|
 | `create` | ✓ | | | |
-| `decompose-apply` | ✓ | | | |
-| `dag-transition` | ✓ | | | |
+| `dag apply` | ✓ | | | |
+| `dag transition` | ✓ | | | |
 | `sources add/sync` | ✓ | | | ✓ |
-| `source-link` / `accept-citation` | ✓ | | ✓ | |
+| `sources link` / `sources accept-citation` | ✓ | | ✓ | |
 | `link` | ✓ | ✓ | | |
 | `ready` | | ✓ | | |
 | `assign` / `unassign` | | ✓ | | |

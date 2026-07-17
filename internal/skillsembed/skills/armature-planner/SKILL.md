@@ -335,8 +335,8 @@ later.
 
 - Register sources **before** creating issues, not after.
 - Do not leave any issue uncited. Check coverage with `arm validate`.
-- If `arm validate` reports `uncited node: ID`, either `source-link` or
-  use `sources accept-citation` on that issue before releasing to workers.
+- If `arm validate` reports `uncited node: ID`, either `sources link` the
+  issue or use `sources accept-citation` on that issue before releasing to workers.
 - If `arm validate` reports `unknown source: UUID`, the source UUID is not in
   the manifest — re-run `arm sources sync` then `arm sources verify`.
 
@@ -390,7 +390,7 @@ Do not release until all seven checks pass.
 | Failure | Symptom | Prevention |
 |---|---|---|
 | Tasks missing `dod`, `scope`, or `acceptance` | Workers cannot self-verify completion; `arm validate` ERRORs | Write all three fields for every task; use the complete example in this skill as a template |
-| Issues created without source links | `arm validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `source-link` every issue at creation time |
+| Issues created without source links | `arm validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `sources link` every issue at creation time |
 | Scope overlaps not resolved with `arm link` | Workers collide on the same files; merge conflicts during story close | Run `arm validate` after dag apply; resolve every scope overlap WARNING before releasing |
 | context_files WARNINGs not addressed | `arm validate` reports context_files WARNINGs, indicating tasks exceed context budget | Treat context_files WARNINGs as decomposition signals; break large tasks into smaller subtasks or add blocking dependencies; re-run `arm validate` until clear |
 | Draft issues not promoted | Workers see an empty ready queue; work never starts | Always run `arm dag transition --issue ROOT-ID` after `dag apply` |
