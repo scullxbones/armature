@@ -17,7 +17,6 @@ import (
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/skillsembed"
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -73,7 +72,15 @@ Use --with-hooks to also write harness hook configuration (both require --platfo
 Use --platform to restrict bootstrap to specific platforms (can be repeated); default is all verified platforms.
 
 The command is idempotent: running it multiple times has the same effect as running it once.`,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		// bootstrap intentionally bypasses the root PersistentPreRunE (config.ResolveContext
+		// would fail on an unbootstrapped repo), so it applies the same --non-interactive/
+		// --format auto-detection via the shared autoDetectTTYPolicy helper in main.go
+		// instead of hand-rolling its own TTY check. That keeps direct terminal-detection
+		// calls confined to main.go per the CLI Grammar Contract (docs/design/cli-grammar-contract.md).
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			autoDetectTTYPolicy(cmd.Root())
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Read repo path from the root persistent flag
 			repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
@@ -88,14 +95,8 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 			repoPath = absRepoPath
 
-			// Read format from the root persistent flag
+			// Read format from the root persistent flag (auto-set above by PersistentPreRunE)
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-
-			// Detect non-TTY and auto-set format to JSON when --format is not explicitly set
-			if !cmd.Root().PersistentFlags().Changed("format") && format == "human" && !tui.IsTerminal() {
-				format = "json"
-				_ = cmd.Root().PersistentFlags().Set("format", "json")
-			}
 
 			platformList := bootstrap.DefaultPlatforms()
 			if len(platforms) > 0 {

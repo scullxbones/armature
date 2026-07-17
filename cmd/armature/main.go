@@ -16,25 +16,40 @@ import (
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
+// autoDetectTTYPolicy is the single TTY-detection mechanism for the CLI (per the
+// CLI Grammar Contract, docs/design/cli-grammar-contract.md § TTY detection). It reads
+// the --format and --non-interactive flags off cmd's flag set (root persistent flags,
+// or the flag set of a command whose PersistentPreRunE bypasses root's, such as
+// bootstrap.go) and auto-upgrades them to agent/non-interactive when running non-TTY.
+// No other file in cmd/armature may call tui.IsTerminal() directly; callers that need
+// TTY-aware behavior go through this function instead.
+func autoDetectTTYPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
+	flags := cmd.Flags()
+
+	format, _ = flags.GetString("format")
+	if !flags.Changed("format") && format == "human" &&
+		(os.Getenv("GEMINI_CLI") != "" || os.Getenv("TERM") == "dumb" || !tui.IsTerminal()) {
+		format = "agent"
+		_ = flags.Set("format", "agent")
+	}
+
+	nonInteractive, _ = flags.GetBool("non-interactive")
+	if !nonInteractive && (format == "agent" || !tui.IsTerminal()) {
+		nonInteractive = true
+		_ = flags.Set("non-interactive", "true")
+	}
+
+	return format, nonInteractive
+}
+
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:          "arm",
 		Short:        "Armature — git-native work orchestration",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			format, _ := cmd.Flags().GetString("format")
-			if !cmd.Flags().Changed("format") && format == "human" && (os.Getenv("GEMINI_CLI") != "" || os.Getenv("TERM") == "dumb" || !tui.IsTerminal()) {
-				format = "agent"
-				_ = cmd.Flags().Set("format", "agent")
-			}
+			format, nonInteractive := autoDetectTTYPolicy(cmd)
 			tui.SetFormat(format)
-
-			// Auto-set --non-interactive when --format=agent or non-TTY.
-			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
-			if !nonInteractive && (format == "agent" || !tui.IsTerminal()) {
-				nonInteractive = true
-				_ = cmd.Flags().Set("non-interactive", "true")
-			}
 			tui.SetNonInteractive(nonInteractive)
 
 			repoPath, _ := cmd.Flags().GetString("repo")

@@ -6,7 +6,7 @@
 
 ## Audit Table
 
-All 47 commands are listed in canonical form (current name in use). The **Proposed Name** column shows the renamed form if the command fails deep-module correspondence or flag conventions; otherwise it matches **Current Name**.
+All 47 commands are listed in canonical form (current name in use) — the ADR 0011 issue title cited an estimate of 46 taken before the post-`NXTTN-S2` census landed; the correct, current count is 47, matching `docs/design/surface-census.md`'s "CLI Commands: 47" tally. The **Proposed Name** column shows the renamed form if the command fails deep-module correspondence or flag conventions; otherwise it matches **Current Name**.
 
 | Current Name | Proposed Name | Deep Module Correspondence | Corresponding Module(s) | Flag Convention | Positional Arg | --format Support | Status | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -29,6 +29,7 @@ All 47 commands are listed in canonical form (current name in use). The **Propos
 | `harness-hook` | `harness-hook` | (none; internal integration) | (none) | compliant: hyphenated, internal = keep | (none) | no | **keep-internal** | Internal harness integration entry point (pre-commit/post-merge). Not user-facing command; stays hyphenated without deep-module correspondence. ADR 0011 rule applies to user-facing CLI; this is internal scaffolding. |
 | `heartbeat` | `heartbeat` | claim (deep module; refreshes claim TTL) | claim | compliant: positional | positional [issue-id] or --issue | no | **keep** | Keeps a claim alive by refreshing TTL. Relates to claim deep module. Plain verb; top-level is appropriate. No --format support (TTL refresh is a side effect). |
 | `hook` | `hook` | (none; harness hook config) | (none) | compliant | (none) | no | **keep** | User-facing harness hook configuration tool. No deep module; plain verb. Has subcommand `hook run`. |
+| `hook run` | `hook run` | (none; harness hook config) | (none) | compliant: group already exists | (none) | no | **keep** | Runs a named harness hook. Subcommand of `hook`. No deep module; matches how peer subcommands (`sources add/sync/verify`, `review prepare/record/commits`) each get their own audit row. |
 | `import` | `import` | materialize (deep module; creates issues from external source) | materialize, sources | compliant | (none) | no | **keep** | Bulk issue creation from CSV/JSON. Relates to materialize (state reconstruction) and sources (source linking). Plain verb; top-level. |
 | `link` | `link` | dag (pure package; dependency coupling) | dag | compliant | (none) | no | **keep** | Adds dependency edges in DAG. No hyphenated command; plain verb. Relates to dag but dag module doesn't justify separate group (link is fundamental enough to stand alone). |
 | `list` | `list` | (none; query/filter) | (none) | compliant | (none) | no | **keep** | Query tool; no deep module. Plain verb. |
@@ -78,9 +79,6 @@ Commands requiring renames after NXTTN-S5 conformance work. All renames break im
 | `decompose-context` | `dag context` | ADR 0011: deep-module grouping under dag; context generation is a DAG operation. | ✓ breaking | Update scripts/docs to use `arm dag context --plan <file>` |
 | `decompose-revert` | `dag revert` | ADR 0011: deep-module grouping under dag; plan undo is a DAG operation. | ✓ breaking | Update scripts/docs to use `arm dag revert --plan <file>` |
 | `source-link` | `sources link` | ADR 0011 early guidance: deep-module group alignment under sources; citation infrastructure. | ✓ breaking | Update scripts/docs to use `arm sources link [issue-id]` |
-| `sources add` | `sources add` | No change; already a subcommand of sources group. | ✗ non-breaking | No user action required. |
-| `sources sync` | `sources sync` | No change; already a subcommand of sources group. | ✗ non-breaking | No user action required. |
-| `sources verify` | `sources verify` | No change; already a subcommand of sources group. | ✗ non-breaking | No user action required. |
 | `stale-review` | `sources stale-review` | ADR 0011: group under sources (staleness review for source/claim lifecycle). Relates to both sources and claim deep modules; sources is more specific. | ✓ breaking | Update scripts/docs to use `arm sources stale-review` |
 | `validate-doc-examples` | `validate doc-examples` | ADR 0011: group under validate deep module (conformance check for documented examples). | ✓ breaking | Update scripts/docs/Makefile to use `arm validate doc-examples` |
 
