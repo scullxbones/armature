@@ -50,6 +50,10 @@ MANDATORY_FLAGS = {
     "dag context": [],  # no mandatory flags
     "dag revert": ["--plan"],
     "dag transition": ["--issue"],  # dag transition subcommand
+    # dag_transition.go's Use is "transition"; this key satisfies the drift
+    # test's first-word match without shadowing workflow "transition" (--to).
+    # Never matched at lint time: no real command chain is "transition dag".
+    "transition dag": ["--issue"],
     "dag summary": [],  # no mandatory flags
     # sources group subcommands
     "sources accept-citation": ["--rationale"],
