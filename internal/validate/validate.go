@@ -265,6 +265,10 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		}
 		byParent[issue.Parent] = append(byParent[issue.Parent], issue)
 	}
+
+	// Compute transitive closure of blocks relationship
+	blocksTransitive := computeBlocksTransitive(issues)
+
 	for _, siblings := range byParent {
 		for i, sib := range siblings {
 			for _, other := range siblings[i+1:] {
@@ -272,7 +276,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 				if len(overlap) == 0 {
 					continue
 				}
-				if hasSerialDependency(sib, other) {
+				if hasSerialDependency(sib, other, blocksTransitive) {
 					continue
 				}
 				warns = append(warns, fmt.Sprintf("scope overlap: %s and %s both modify %s",
@@ -284,10 +288,51 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	return warns
 }
 
-// hasSerialDependency returns true if a blocks b or b blocks a,
+// computeBlocksTransitive computes the transitive closure of the blocks relationship.
+// For each issue in the issues map, it determines all issues that it directly or
+// transitively blocks. Returns a map where blocksTransitive[a][b] is true if a
+// blocks b (directly or transitively).
+func computeBlocksTransitive(issues map[string]*materialize.Issue) map[string]map[string]bool {
+	// For each issue, track which issues it transitively blocks
+	result := make(map[string]map[string]bool)
+	for id := range issues {
+		result[id] = make(map[string]bool)
+	}
+
+	// Keep iterating until no new edges are added (fixed-point computation)
+	changed := true
+	for changed {
+		changed = false
+		for id, issue := range issues {
+			for _, blockedID := range issue.Blocks {
+				// Skip blocked issues not in scope
+				if _, ok := issues[blockedID]; !ok {
+					continue
+				}
+				// Record direct edge
+				if !result[id][blockedID] {
+					result[id][blockedID] = true
+					changed = true
+				}
+				// Transitively add all issues blocked by blockedID
+				for transitiveID := range result[blockedID] {
+					if !result[id][transitiveID] {
+						result[id][transitiveID] = true
+						changed = true
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// hasSerialDependency returns true if a blocks b or b blocks a (directly or transitively),
 // meaning the two tasks execute serially and a shared scope is intentional.
-func hasSerialDependency(a, b *materialize.Issue) bool {
-	return slices.Contains(a.Blocks, b.ID) || slices.Contains(b.Blocks, a.ID)
+// blocksTransitive should be the output of computeBlocksTransitive.
+func hasSerialDependency(a, b *materialize.Issue, blocksTransitive map[string]map[string]bool) bool {
+	return blocksTransitive[a.ID][b.ID] || blocksTransitive[b.ID][a.ID]
 }
 
 func scopeIntersection(a, b []string) []string {

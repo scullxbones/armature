@@ -311,6 +311,43 @@ func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
 	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when B blocks A")
 }
 
+func TestCheckW1ScopeOverlap_SuppressesTransitivelyOrderedPairs_REQ_TOPTIER_S17_T2(t *testing.T) {
+	t.Parallel()
+	// Test transitive closure: A blocks B blocks C
+	// Therefore A and C are transitively ordered (A ultimately blocks C)
+	// and should NOT produce a scope-overlap warning.
+	state := makeState(
+		&materialize.Issue{
+			ID:     "TSK-A",
+			Type:   "task",
+			Parent: "STORY-1",
+			Scope:  []string{"internal/ops/*.go"},
+			Blocks: []string{"TSK-B"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-B",
+			Type:      "task",
+			Parent:    "STORY-1",
+			Scope:     []string{"internal/other/*.go"},
+			BlockedBy: []string{"TSK-A"},
+			Blocks:    []string{"TSK-C"},
+		},
+		&materialize.Issue{
+			ID:        "TSK-C",
+			Type:      "task",
+			Parent:    "STORY-1",
+			Scope:     []string{"internal/ops/*.go"}, // overlaps with TSK-A
+			BlockedBy: []string{"TSK-B"},
+		},
+	)
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	// TSK-A and TSK-C should NOT trigger scope-overlap warning
+	// because TSK-A transitively blocks TSK-C through TSK-B
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"scope overlap should be suppressed when tasks are transitively ordered via blocked_by chain")
+}
+
 func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
 	t.Parallel()
 	// Context field pushes estimated token count over the 4000-token budget
