@@ -3124,3 +3124,4 @@
 ["claim","NXTTN-S5-T1",1784290256,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","NXTTN-S5",1784290259,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["claim","NXTTN-S5-T2",1784290259,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
+["assessment-attested","NXTTN-S5-T2",1784290831,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"assessment":{"schema_version":1,"bundle_id":"sha256:279d863664d6f1bf81837208a43fa9186600175cb78b697b2318eeee043ed3f5","contract_fingerprint":"9ccbe0aa729a20c7af54e66eafc15ce5b8d52844f360d293020cffeffbea1204","delivery_fingerprint":"959455a44891fd273e0ba5847393ac188c9bc7ea9eca6e621fea5cd791e2dcaa","base_sha":"dba1a84795d2f30ec6ea26cf6c55a7bedd8ecee9","head_sha":"b642ca98e08c936f11c9357354b37192b7fd2311","rating":"yellow","result_fingerprint":"b315cca4c765c7639301d2897c8d1a2c49796c3f00af106488e31d5a2419e3f9","satisfied_count":1,"partially_satisfied_count":1,"not_satisfied_count":0,"indeterminate_count":1}}]
