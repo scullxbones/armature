@@ -105,7 +105,7 @@ validate-skills: skill-lint embed-examples
 	@echo "Skills validated: no 'make install' references and no example drift"
 
 validate-doc-examples:
-	@go run ./cmd/armature validate-doc-examples --repo .
+	@go run ./cmd/armature validate doc-examples --repo .
 
 skill-lint: build
 	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/skill_lint.py .

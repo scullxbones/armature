@@ -154,17 +154,14 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `bootstrap` | main.go:86, bootstrap.go | Deploy harness hook to project | **kept-evidence** | Setup command. Installs pre-commit or post-merge hooks. |
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
-| `validate` | main.go, validate.go | Validate commands | **kept-evidence** | Group command for graph and documentation validation. |
-| `validate graph` | validate.go | Check DAG health | **kept-evidence** | Linter. Runs citation and structure checks. |
-| `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Hidden subcommand. Used by `make check`. |
+| `validate` | main.go:249, validate.go | Validate issue graph | **kept-evidence** | Linter. Runs citation and structure checks. Supports --ci, --strict, --scope, --quiet. |
+| `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Subcommand of `validate`. Used by `make check`. |
 | `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
 | `log` | main.go, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
 | `workers` | main.go, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
-| `sources` | main.go, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. |
-| `sources accept-citation` | sources.go, accept_citation.go | Accept source citation | **kept-evidence** | Subcommand of `sources`. Citation workflow. |
+| `sources` | main.go, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. Subcommands: accept-citation, add, link, stale-review, sync, verify. |
 | `sources add` | sources.go | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
-| `sources link` | sources.go, source_link.go | Link issue to source | **kept-evidence** | Subcommand of `sources`. Citation. |
-| `sources stale-review` | sources.go, stalereview.go | Detect stale sources | **kept-evidence** | Subcommand of `sources`. Hygiene/monitoring. |
+| `sources stale-review` | sources.go, stalereview.go | Review stale sources | **kept-evidence** | Subcommand of `sources`. |
 | `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
 | `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
 | `show` | main.go:231, show.go | Display issue details | **kept-evidence** | Query tool. Supports --field for extraction. |
@@ -219,7 +216,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 |------|-----------|------|-------|--------|
 | `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
 | `--worktree` | claim | string | Path to task worktree (required) | **kept-evidence** |
-| `--force` | claim, merged, sources accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
+| `--force` | claim, merged, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
@@ -230,7 +227,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
-| `--rationale` | decision, sources accept-citation | string | Why this choice | **kept-evidence** |
+| `--rationale` | decision | string | Why this choice | **kept-evidence** |
 | `--affects` | decision | string[] | Affected scope globs | **kept-evidence** |
 
 ### Synchronization/Sync Flags
@@ -264,9 +261,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--source-id` | sources link | string | UUID of source entry in manifest | **kept-evidence** |
-| `--ci` | sources accept-citation, validate | bool | Non-interactive mode / bypass prompt | **kept-evidence** |
-| `--non-interactive` | sources accept-citation | bool | Alias for --ci on this command | **kept-evidence** |
+| `--ci` | validate | bool | Non-interactive mode / bypass prompt | **kept-evidence** |
 | `--url` | sources add | string | URL or path of source | **kept-evidence** |
 | `--type` | sources add | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
 

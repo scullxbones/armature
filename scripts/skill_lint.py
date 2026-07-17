@@ -516,13 +516,16 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
             break
     if mandatory_key in MANDATORY_FLAGS:
         flags = extract_flags(args)
-        missing_flags = []
-        for mandatory_flag in MANDATORY_FLAGS[mandatory_key]:
-            if mandatory_flag not in flags:
-                missing_flags.append(mandatory_flag)
+        # Some flags (--example, --schema) make mandatory flags optional
+        bypass_flags = {"--example", "--schema"}
+        if not (flags & bypass_flags):  # If no bypass flags are present
+            missing_flags = []
+            for mandatory_flag in MANDATORY_FLAGS[mandatory_key]:
+                if mandatory_flag not in flags:
+                    missing_flags.append(mandatory_flag)
 
-        if missing_flags:
-            return False, f"Command '{first_cmd}' missing mandatory flags: {', '.join(missing_flags)} in: {arm_command}"
+            if missing_flags:
+                return False, f"Command '{first_cmd}' missing mandatory flags: {', '.join(missing_flags)} in: {arm_command}"
 
     # Validate flags for this subcommand chain
     # Use the full subcommand chain as the cache key

@@ -372,7 +372,7 @@ func TestSourcesVerifyCommand_AfterSync_OK(t *testing.T) {
 func TestValidateCommand_JSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	out, err := runTrls(t, repo, "validate", "graph", "--format", "json")
+	out, err := runTrls(t, repo, "validate", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, out, "{")
 }
@@ -539,7 +539,7 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
 	require.NoError(t, err)
 
-	out, _ := runTrls(t, repo, "validate", "graph") //nolint:errcheck // test helper; errors checked via output assertions
+	out, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
 	assert.Contains(t, out, "INFO: phantom scope", "phantom scope should appear as INFO")
 	assert.NotContains(t, out, "WARNING: phantom scope", "phantom scope should not appear as WARNING")
 }
@@ -550,7 +550,7 @@ func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "validate", "graph", "--format", "json")
+	out, err := runTrls(t, repo, "validate", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"infos"`, "JSON output should include infos field")
 }
@@ -566,7 +566,7 @@ func TestValidateQuiet(t *testing.T) {
 		"--dod", "Tests pass and feature works")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "validate", "graph", "--quiet")
+	out, err := runTrls(t, repo, "validate", "--quiet")
 	require.NoError(t, err)
 	assert.NotContains(t, out, "INFO:", "--quiet should suppress INFO lines")
 	assert.Contains(t, out, "COVERAGE:", "--quiet should still print COVERAGE lines")
@@ -1544,7 +1544,6 @@ func TestCommandLongAndExampleFields(t *testing.T) {
 		{"link", newLinkCmd()},
 		{"sync", newSyncCmd()},
 		{"validate", newValidateCmd()},
-		{"validate graph", newValidateGraphCmd()},
 	}
 
 	for _, tt := range tests {

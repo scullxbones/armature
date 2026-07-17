@@ -42,8 +42,8 @@ Valid `--to` values: `in-progress`, `done`, `cancelled`, `blocked`
 arm create --title "X" --type task --parent ID          # create sub-issue
 arm list --parent ID --type TYPE --status STATUS        # list issues
 arm show ISSUE-ID                                       # show issue details
-arm decompose-apply --plan plan.json --dry-run          # bulk load issues
-arm dag-transition --issue ID                           # promote draft issues
+arm dag apply --plan plan.json --dry-run          # bulk load issues
+arm dag transition --issue ID                           # promote draft issues
 arm validate --ci                                       # validate citation coverage
 arm doctor --strict                                     # repo health check
 ```
@@ -53,8 +53,8 @@ arm doctor --strict                                     # repo health check
 ```
 arm sources add --url PATH --title "TEXT" --type filesystem
 arm sources sync && arm sources verify
-arm source-link ID --source-id UUID
-arm accept-citation ID --rationale TEXT --ci
+arm sources link ID --source-id UUID
+arm sources accept-citation ID --rationale TEXT --ci
 ```
 
 ## Scope Management

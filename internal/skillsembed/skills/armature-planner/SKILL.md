@@ -2,8 +2,8 @@
 name: armature-planner
 description: >
   Use when creating a new story or epic — translates objectives into a
-  well-structured DAG of actionable work. Covers decompose-apply (with dry-run),
-  dag-transition, source registration, dependency linking, and validation before
+  well-structured DAG of actionable work. Covers dag apply (with dry-run),
+  dag transition, source registration, dependency linking, and validation before
   releasing work to workers.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
@@ -21,7 +21,7 @@ issues ready for workers to claim.
   identity. Skip that step entirely.
 - Have a source document, spec, or design doc before you start. Every issue you
   create must be citable. If no source exists yet, write one first or be
-  prepared to use `arm accept-citation` with a clear rationale.
+  prepared to use `arm sources accept-citation` with a clear rationale.
 
 ## DAG Hygiene Mandate
 
@@ -47,12 +47,12 @@ digraph planner_loop {
     "Single task?" [shape=diamond];
     "arm create" [shape=box];
     "Write plan.json" [shape=box];
-    "decompose-apply --dry-run" [shape=box];
+    "dag apply --dry-run" [shape=box];
     "OK?" [shape=diamond];
-    "decompose-apply --plan plan.json" [shape=box];
-    "dag-transition" [shape=box];
+    "dag apply --plan plan.json" [shape=box];
+    "dag transition" [shape=box];
     "sources add/sync/verify" [shape=box];
-    "source-link / accept-citation" [shape=box];
+    "sources link / sources accept-citation" [shape=box];
     "arm link (deps)" [shape=box];
     "arm validate" [shape=box];
     "arm doctor" [shape=box];
@@ -62,14 +62,14 @@ digraph planner_loop {
     "Single task?" -> "arm create" [label="yes"];
     "Single task?" -> "Write plan.json" [label="no"];
     "arm create" -> "sources add/sync/verify";
-    "Write plan.json" -> "decompose-apply --dry-run";
-    "decompose-apply --dry-run" -> "OK?" ;
+    "Write plan.json" -> "dag apply --dry-run";
+    "dag apply --dry-run" -> "OK?" ;
     "OK?" -> "Write plan.json" [label="fix errors"];
-    "OK?" -> "decompose-apply --plan plan.json" [label="yes"];
-    "decompose-apply --plan plan.json" -> "dag-transition";
-    "dag-transition" -> "sources add/sync/verify";
-    "sources add/sync/verify" -> "source-link / accept-citation";
-    "source-link / accept-citation" -> "arm link (deps)";
+    "OK?" -> "dag apply --plan plan.json" [label="yes"];
+    "dag apply --plan plan.json" -> "dag transition";
+    "dag transition" -> "sources add/sync/verify";
+    "sources add/sync/verify" -> "sources link / sources accept-citation";
+    "sources link / sources accept-citation" -> "arm link (deps)";
     "arm link (deps)" -> "arm validate";
     "arm validate" -> "arm doctor";
     "arm doctor" -> "Release to Coordinator";
@@ -103,15 +103,15 @@ Valid types: `task`, `feature`, `bug`, `story`
 
 **For a full decomposition (most common):**
 
-See `references/decompose-apply.md` for the full workflow.
+See `references/decompose-apply.md` for the full dag apply workflow.
 
 ### 3. Promote from Draft
 
-After `decompose-apply`, all created issues are in `draft` state. Promote them
+After `dag apply`, all created issues are in `draft` state. Promote them
 so workers can see them:
 
 ```bash
-arm dag-transition --issue ROOT-ID   # promotes ROOT-ID and all children draft → verified
+arm dag transition --issue ROOT-ID   # promotes ROOT-ID and all children draft → verified
 ```
 
 Workers cannot claim draft issues. Do not skip this step.
@@ -122,10 +122,10 @@ Every issue must be cited before `arm validate` will pass.
 
 ```bash
 # Link each issue to a registered source
-arm source-link --issue ISSUE-ID --source-id UUID
+arm sources link --issue ISSUE-ID --source-id UUID
 
 # If no source document exists for this issue
-arm accept-citation --issue ISSUE-ID --rationale "No external spec; requirements captured in issue body" --ci
+arm sources accept-citation --issue ISSUE-ID --rationale "No external spec; requirements captured in issue body" --ci
 ```
 
 Do this at creation time — not as a post-hoc remediation pass. Citation debt
@@ -213,7 +213,7 @@ if not needed.
 
 ### Complete Well-Formed Task Example
 
-> **WARNING:** The plan JSON must be wrapped in the required `{ "version": 1, "title": "...", "issues": [...] }` top-level structure. Omitting the wrapper or using an unsupported plan version will cause `arm decompose-apply` to fail with a validation error.
+> **WARNING:** The plan JSON must be wrapped in the required `{ "version": 1, "title": "...", "issues": [...] }` top-level structure. Omitting the wrapper or using an unsupported plan version will cause `arm dag apply` to fail with a validation error.
 
 ```json artifact_type=plan
 {
@@ -286,10 +286,10 @@ if not needed.
 | `"acceptance": []` | No pass/fail signal | Name at least one test or command |
 | `"scope": "internal/"` | Too broad, causes overlaps | Name the specific files |
 | Missing `acceptance` field entirely | `arm validate` ERRORs | Add the field, even if `--example` omits it |
-| Plan without `version: 1, title, issues` wrapper | `arm decompose-apply` fails validation; bare task objects not accepted | Wrap all issues in `{ "version": 1, "title": "...", "issues": [...] }` |
+| Plan without `version: 1, title, issues` wrapper | `arm dag apply` fails validation; bare task objects not accepted | Wrap all issues in `{ "version": 1, "title": "...", "issues": [...] }` |
 | `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
 
-> **Note:** `arm decompose-apply --example` omits `acceptance` in its output.
+> **Note:** `arm dag apply --example` omits `acceptance` in its output.
 > Always add it manually to every task in your plan JSON.
 
 ---
@@ -311,21 +311,21 @@ arm sources sync
 arm sources verify
 
 # 4. Link each issue (get UUID from sources verify output)
-arm source-link --issue ISSUE-ID --source-id UUID
+arm sources link --issue ISSUE-ID --source-id UUID
 ```
 
 ### Path B: No source document exists
 
 ```bash
-arm accept-citation --issue ISSUE-ID --rationale "Requirements captured in issue body; no external spec exists" --ci
+arm sources accept-citation --issue ISSUE-ID --rationale "Requirements captured in issue body; no external spec exists" --ci
 ```
 
 To bulk-cite multiple issues at once, pass `--issue` multiple times:
 ```bash
-arm accept-citation --issue A --issue B --issue C --rationale "same rationale applies to all" --ci
+arm sources accept-citation --issue A --issue B --issue C --rationale "same rationale applies to all" --ci
 ```
 
-`source-link` also accepts multiple issues in one invocation. Use bulk forms to
+`sources link` also accepts multiple issues in one invocation. Use bulk forms to
 reduce citation debt in large plan loads.
 
 Use a specific rationale — vague rationales like "no docs" are harder to audit
@@ -336,7 +336,7 @@ later.
 - Register sources **before** creating issues, not after.
 - Do not leave any issue uncited. Check coverage with `arm validate`.
 - If `arm validate` reports `uncited node: ID`, either `source-link` or
-  `accept-citation` that issue before releasing to workers.
+  use `sources accept-citation` on that issue before releasing to workers.
 - If `arm validate` reports `unknown source: UUID`, the source UUID is not in
   the manifest — re-run `arm sources sync` then `arm sources verify`.
 
@@ -391,9 +391,9 @@ Do not release until all seven checks pass.
 |---|---|---|
 | Tasks missing `dod`, `scope`, or `acceptance` | Workers cannot self-verify completion; `arm validate` ERRORs | Write all three fields for every task; use the complete example in this skill as a template |
 | Issues created without source links | `arm validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `source-link` every issue at creation time |
-| Scope overlaps not resolved with `arm link` | Workers collide on the same files; merge conflicts during story close | Run `arm validate` after decompose-apply; resolve every scope overlap WARNING before releasing |
+| Scope overlaps not resolved with `arm link` | Workers collide on the same files; merge conflicts during story close | Run `arm validate` after dag apply; resolve every scope overlap WARNING before releasing |
 | context_files WARNINGs not addressed | `arm validate` reports context_files WARNINGs, indicating tasks exceed context budget | Treat context_files WARNINGs as decomposition signals; break large tasks into smaller subtasks or add blocking dependencies; re-run `arm validate` until clear |
-| Draft issues not promoted | Workers see an empty ready queue; work never starts | Always run `arm dag-transition --issue ROOT-ID` after `decompose-apply` |
+| Draft issues not promoted | Workers see an empty ready queue; work never starts | Always run `arm dag transition --issue ROOT-ID` after `dag apply` |
 
 ---
 
@@ -404,19 +404,19 @@ Do not release until all seven checks pass.
 arm create --title "X" --type task --parent STORY-ID
 
 # Decomposition
-arm decompose-apply --example                         # inspect schema
-arm decompose-apply --plan plan.json --dry-run        # preview without writing
-arm decompose-apply --plan plan.json                  # apply the plan
+arm dag apply --example                         # inspect schema
+arm dag apply --plan plan.json --dry-run        # preview without writing
+arm dag apply --plan plan.json                  # apply the plan
 
 # Draft promotion
-arm dag-transition --issue ROOT-ID                    # promote root + all children
+arm dag transition --issue ROOT-ID                    # promote root + all children
 
 # Source management
 arm sources add --url PATH --title "TEXT" --type filesystem
 arm sources sync                                      # fetch and fingerprint
 arm sources verify                                    # confirm all show OK
-arm source-link --issue ID --source-id UUID           # link issue to source
-arm accept-citation --issue ID --rationale "..." --ci # accept risk (no source)
+arm sources link --issue ID --source-id UUID           # link issue to source
+arm sources accept-citation --issue ID --rationale "..." --ci # accept risk (no source)
 
 # Dependency management
 arm link --source A --dep B                           # A runs after B
