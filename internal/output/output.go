@@ -301,6 +301,20 @@ func renderReadyJSON(w io.Writer, entries []ready.ReadyEntry) error {
 	return err
 }
 
+// RenderReadyWaves renders the ready queue partitioned into waves.
+// Output format: {"waves": [[...], [...], ...]}
+func RenderReadyWaves(w io.Writer, waves [][]ready.ReadyEntry) error {
+	wavesOutput := map[string]interface{}{
+		"waves": waves,
+	}
+	data, err := json.MarshalIndent(wavesOutput, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal waves JSON: %w", err)
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
+}
+
 func renderReadyHuman(w io.Writer, entries []ready.ReadyEntry) error {
 	if len(entries) == 0 {
 		_, err := fmt.Fprintln(w, "No tasks ready.")
