@@ -3172,3 +3172,4 @@
 ["transition","LNGHZN-S2",1784325573,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["note","LNGHZN-S2-T2",1784325581,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with LNGHZN-S2-T1 (same worker, dismissed)"}]
 ["claim","LNGHZN-S2-T2",1784325581,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
+["transition","LNGHZN-S2-T1",1784326149,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
