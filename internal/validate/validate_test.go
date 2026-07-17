@@ -1060,3 +1060,36 @@ func TestW4BroadScope_SkipsTerminalStatus(t *testing.T) {
 		assert.NotContains(t, w, "broad scope", "done tasks must not produce broad scope warning")
 	}
 }
+
+func TestCheckW1ScopeOverlap_FlagsCrossStoryOverlap_REQ_TOPTIER_S17_T3(t *testing.T) {
+	t.Parallel()
+	// Two tasks in DIFFERENT stories (different parents) with overlapping scope
+	// and no ordering edge should produce a scope-overlap warning.
+	// This is the "most dangerous, currently silent" case being fixed by TOPTIER-S17-T3.
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story"},
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
+		&materialize.Issue{ID: "STORY-2", Type: "story"},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"internal/ops/*.go"}},
+	)
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	assert.True(t, containsWarning(result, "scope overlap"),
+		"cross-story tasks with overlapping scope and no ordering edge should produce scope overlap warning")
+}
+
+func TestCheckW1ScopeOverlap_SuppressesCrossStoryWhenOrdered_REQ_TOPTIER_S17_T3(t *testing.T) {
+	t.Parallel()
+	// Two tasks in different stories with overlapping scope but with an ordering edge
+	// should NOT produce a scope-overlap warning, as they execute serially.
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story"},
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-B"}},
+		&materialize.Issue{ID: "STORY-2", Type: "story"},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-A"}},
+	)
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{})
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"cross-story tasks with overlapping scope but with ordering edge should not warn")
+}
