@@ -98,7 +98,7 @@ arm ready
 
 ### Claim and Dispatch
 ```bash
-arm claim TASK-001
+arm claim TASK-001 --worktree ./task-001-work
 arm render-context TASK-001 --format agent
 # Pass the render-context output to your AI agent as its task spec
 ```

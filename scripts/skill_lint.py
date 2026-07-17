@@ -66,17 +66,35 @@ MANDATORY_FLAGS = {
 ARM_BIN = os.environ.get("ARM_BIN", "arm")
 
 
-def find_skill_files(root_dir):
-    """Find every shipped Markdown file in the embedded skills directory."""
-    skills_dir = Path(root_dir) / "internal" / "skillsembed" / "skills"
-    if not skills_dir.exists():
-        return []
+CANONICAL_DOCS = (
+    "README.md",
+    "docs/getting-started.md",
+    "docs/use-cases.md",
+    "docs/commands.md",
+)
 
-    skill_files = []
-    for skill_path in skills_dir.rglob("*.md"):
-        if skill_path.is_file():
-            skill_files.append(skill_path)
-    return sorted(skill_files)
+
+def find_lint_files(root_dir):
+    """Find shipped skills and canonical public documentation to lint.
+
+    Documentation is intentionally an allowlist: historical and archived
+    material records old CLI surfaces and is not presented as copyable current
+    workflow guidance.
+    """
+    skills_dir = Path(root_dir) / "internal" / "skillsembed" / "skills"
+    lint_files = []
+    if skills_dir.exists():
+        lint_files.extend(path for path in skills_dir.rglob("*.md") if path.is_file())
+
+    root = Path(root_dir)
+    lint_files.extend(path for relative_path in CANONICAL_DOCS
+                      if (path := root / relative_path).is_file())
+    return sorted(lint_files)
+
+
+def find_skill_files(root_dir):
+    """Backward-compatible alias for callers that only know the old name."""
+    return find_lint_files(root_dir)
 
 
 FENCE_RE = re.compile(r"^\s*```(\w*)\s*$")
@@ -621,8 +639,8 @@ def main(argv):
         print("ERROR: Cannot determine valid arm subcommands", file=sys.stderr)
         return 1
 
-    # Find all skill files
-    skill_files = find_skill_files(root_dir)
+    # Find all shipped skill and canonical documentation files.
+    skill_files = find_lint_files(root_dir)
 
     if not skill_files:
         # No skill files found - this is OK, just skip
@@ -641,7 +659,7 @@ def main(argv):
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    print(f"Skill lint passed: validated {len(skill_files)} skill files")
+    print(f"Skill lint passed: validated {len(skill_files)} skill/documentation files")
     return 0
 
 

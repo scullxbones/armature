@@ -9,14 +9,42 @@ binary.
 """
 
 import unittest
+import tempfile
+from pathlib import Path
 
 from skill_lint import (
     extract_arm_commands,
     extract_flags,
+    find_lint_files,
     has_angle_bracket_placeholder,
     strip_redirects,
     tokenize_shell_line,
 )
+
+
+class TestFindLintFiles(unittest.TestCase):
+    def test_includes_canonical_docs_but_excludes_archived_docs(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "internal/skillsembed/skills/example").mkdir(parents=True)
+            (root / "internal/skillsembed/skills/example/SKILL.md").write_text("# skill\n")
+            for name in ("README.md", "docs/getting-started.md", "docs/use-cases.md", "docs/commands.md"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# canonical\n")
+            archive = root / "docs/archive"
+            archive.mkdir()
+            (archive / "old-workflow.md").write_text("```bash\narm removed-command\n```\n")
+
+            found = {path.relative_to(root).as_posix() for path in find_lint_files(root)}
+
+            self.assertEqual(found, {
+                "internal/skillsembed/skills/example/SKILL.md",
+                "README.md",
+                "docs/getting-started.md",
+                "docs/use-cases.md",
+                "docs/commands.md",
+            })
 
 
 class TestTokenizeShellLine(unittest.TestCase):

@@ -19,7 +19,7 @@ help:
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
-	@echo "  make validate-skills     - Validate embedded skill source (runs embed-examples check)"
+	@echo "  make validate-skills     - Validate embedded skills and canonical CLI documentation"
 	@echo "  make validate-doc-examples - Validate JSON examples in docs/skills against schemas"
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
@@ -102,7 +102,7 @@ validate-skills: skill-lint embed-examples
 		echo "FAIL: 'make install' found in skill bodies — remove it or replace with: 'If arm is not found, stop and resolve this before proceeding'"; \
 		exit 1; \
 	fi
-	@echo "Skills validated: no 'make install' references and no example drift"
+	@echo "Skills and canonical documentation validated: no 'make install' references and no example drift"
 
 validate-doc-examples:
 	@go run ./cmd/armature validate doc-examples --repo .
