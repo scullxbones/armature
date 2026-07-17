@@ -164,7 +164,8 @@ func checkSingleIssuePositionalArg(root *cobra.Command) []string {
 
 		// Check for --issue flag; if present on a single-issue command not in allowlist, record violation
 		if cmd.Flags().Lookup("issue") != nil && hasSingleIssueDoc && !allowedToHaveIssueFlag[cmdName] {
-			violations = append(violations, cmdName+" documented as single-issue ("+use+") but uses --issue flag (not in audit-sanctioned allowlist)")
+			msg := cmdName + " documented as single-issue (" + use + ") but uses --issue flag (not in audit-sanctioned allowlist)"
+			violations = append(violations, msg)
 		}
 	})
 
@@ -223,9 +224,11 @@ func checkStructuredOutputFormat(root *cobra.Command) []string {
 // checkTTYDetectionPolicy returns violations for tui.IsTerminal() calls outside allowed files.
 // Only main.go and allowlisted bootstrap.go are permitted to call tui.IsTerminal().
 func checkTTYDetectionPolicy() []string {
+	// TODO: bootstrap.go calls tui.IsTerminal() at line 95; out of scope per task guidance;
+	// pending refactoring to use --non-interactive flag
 	allowedFiles := map[string]bool{
 		"main.go":      true,
-		"bootstrap.go": true, // TODO: bootstrap.go calls tui.IsTerminal() at line 95; out of scope per task guidance; pending refactoring to use --non-interactive flag
+		"bootstrap.go": true,
 	}
 
 	var violations []string
