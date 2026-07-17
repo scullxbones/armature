@@ -2,6 +2,7 @@ package ready
 
 import (
 	"slices"
+	"sort"
 
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/dag"
@@ -31,8 +32,24 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index, graph *dag.Gr
 
 	var allWaves [][]ReadyEntry
 
-	// Process each priority tier in order, ensuring hard boundaries between tiers
+	// Process known priority tiers first, then all custom tiers in lexical order.
+	// This preserves hard boundaries while ensuring every input entry is emitted.
+	orderedTiers := append([]string(nil), priorityOrder...)
+	knownTiers := make(map[string]bool, len(priorityOrder))
 	for _, tier := range priorityOrder {
+		knownTiers[tier] = true
+	}
+	var customTiers []string
+	for tier := range tierMap {
+		if !knownTiers[tier] {
+			customTiers = append(customTiers, tier)
+		}
+	}
+	sort.Strings(customTiers)
+	orderedTiers = append(orderedTiers, customTiers...)
+
+	// Process each priority tier in order, ensuring hard boundaries between tiers.
+	for _, tier := range orderedTiers {
 		tierEntries, ok := tierMap[tier]
 		if !ok || len(tierEntries) == 0 {
 			continue

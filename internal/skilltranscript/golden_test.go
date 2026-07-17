@@ -328,6 +328,30 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 	})
 }
 
+// TestCoordinatorWavePlanningReference_REQ_TOPTIER_S1_T2 verifies that the
+// coordinator's wave-planning instructions use the machine-readable command
+// and the same issue field emitted by arm ready --waves.
+func TestCoordinatorWavePlanningReference_REQ_TOPTIER_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	referencePath := filepath.Join("..", "skillsembed", "skills", "armature-coordinator", "references", "parallel-dispatch.md")
+	content, err := os.ReadFile(referencePath)
+	if err != nil {
+		t.Fatalf("read coordinator wave-planning reference: %v", err)
+	}
+
+	reference := string(content)
+	if !strings.Contains(reference, "arm ready --waves --format json") {
+		t.Error("coordinator reference must request JSON waves output")
+	}
+	if !strings.Contains(reference, `"issue": "STORY-S1-T1"`) {
+		t.Error("coordinator reference must use the waves output issue field")
+	}
+	if strings.Contains(reference, `"id": "STORY-S1-T1"`) {
+		t.Error("coordinator reference must not document a nonexistent waves id field")
+	}
+}
+
 // getMapKeys returns the keys of a map as a slice of strings for debugging output.
 func getMapKeys(m map[string]interface{}) []string {
 	var keys []string
