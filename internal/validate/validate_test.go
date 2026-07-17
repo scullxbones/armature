@@ -1093,3 +1093,41 @@ func TestCheckW1ScopeOverlap_SuppressesCrossStoryWhenOrdered_REQ_TOPTIER_S17_T3(
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"cross-story tasks with overlapping scope but with ordering edge should not warn")
 }
+
+func TestCheckW10PhantomScope_SuppressesForBlockerCreatedFiles_REQ_TOPTIER_S17_T4(t *testing.T) {
+	t.Parallel()
+	// A downstream task references a file that doesn't yet exist (phantom scope),
+	// but an upstream blocking task has declared in its scope that it will create
+	// that file (marked with "(new)" suffix). The phantom scope info should be
+	// suppressed for this file/task pair, since the file is legitimately expected
+	// to not exist yet pending upstream creation.
+	state := makeState(
+		// Upstream blocking task declares it will create internal/new_file.go
+		&materialize.Issue{
+			ID:     "TSK-BLOCKER",
+			Type:   "task",
+			Status: "open",
+			Scope:  []string{"internal/new_file.go (new)"},
+			Blocks: []string{"TSK-DOWNSTREAM"},
+		},
+		// Downstream task references internal/new_file.go but it doesn't exist yet
+		&materialize.Issue{
+			ID:        "TSK-DOWNSTREAM",
+			Type:      "task",
+			Status:    "open",
+			Scope:     []string{"internal/new_file.go"},
+			BlockedBy: []string{"TSK-BLOCKER"},
+		},
+	)
+	// Pre-expanded scopes show no files exist yet
+	preExpandedScopes := map[string][]string{
+		"TSK-BLOCKER":    {},
+		"TSK-DOWNSTREAM": {},
+	}
+	graph := graphFromState(state)
+	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	// Should NOT report phantom scope for TSK-DOWNSTREAM since TSK-BLOCKER
+	// declares it will create the file
+	assert.False(t, containsPhantomScopeInfo(result),
+		"phantom scope should be suppressed when a blocking task declares the file with (new) suffix")
+}

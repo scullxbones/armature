@@ -521,6 +521,9 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 		// If it's empty, no globs matched any files
 		hasMatches := len(expandedFiles) > 0
 
+		// Collect all "(new)" files declared by blocking tasks
+		blockerNewFiles := collectBlockerNewFiles(issue, issues)
+
 		// Check each scope entry against the expanded files
 		for _, entry := range issue.Scope {
 			// Legacy ops may store multiple comma-separated paths as one entry; check each individually.
@@ -542,12 +545,66 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 				// If it's a glob pattern and we have matches, assume it matched (can't validate further without the glob)
 
 				if isPhantom {
-					warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id))
+					// Check if a blocker declares this file with "(new)" suffix
+					// If yes, suppress the phantom scope warning since the file is legitimately
+					// pending upstream creation
+					if !blockerDeclaredNewFile(path, blockerNewFiles) {
+						warns = append(warns, fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id))
+					}
 				}
 			}
 		}
 	}
 	return warns
+}
+
+// collectBlockerNewFiles gathers all "(new)"-annotated files declared by an issue's blocking tasks.
+// It returns a map where the key is the filename (without " (new)") and the value indicates it was found.
+func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materialize.Issue) map[string]bool {
+	result := make(map[string]bool)
+	// Use a simple queue-based approach to handle transitive blockers
+	toVisit := make([]string, len(issue.BlockedBy))
+	copy(toVisit, issue.BlockedBy)
+	visited := make(map[string]bool)
+
+	for len(toVisit) > 0 {
+		blockerID := toVisit[0]
+		toVisit = toVisit[1:]
+
+		// Skip if already visited (avoid cycles)
+		if visited[blockerID] {
+			continue
+		}
+		visited[blockerID] = true
+
+		blocker, ok := issues[blockerID]
+		if !ok {
+			// Blocker not in scope; skip
+			continue
+		}
+
+		// Collect all "(new)"-suffixed files from this blocker's scope
+		for _, entry := range blocker.Scope {
+			for _, path := range splitSeq(entry, ", ") {
+				path = strings.TrimSpace(path)
+				if hasNewSuffix(path) {
+					// Remove the " (new)" suffix to get the base filename
+					basePath := strings.TrimSuffix(path, " (new)")
+					result[basePath] = true
+				}
+			}
+		}
+
+		// Transitively visit this blocker's blockers
+		toVisit = append(toVisit, blocker.BlockedBy...)
+	}
+
+	return result
+}
+
+// blockerDeclaredNewFile checks if a file was declared with "(new)" suffix by any of the blocking tasks.
+func blockerDeclaredNewFile(path string, blockerNewFiles map[string]bool) bool {
+	return blockerNewFiles[path]
 }
 
 // isGlobPattern checks if a string contains glob characters
