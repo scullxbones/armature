@@ -3,6 +3,7 @@
 package review
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -171,9 +172,14 @@ type CriterionResult struct {
 	MissingEvidence string `json:"missing_evidence,omitempty"`
 }
 
-// UnmarshalJSON detects a missing "status" key and returns an error. This prevents
-// silent acceptance of malformed results where the status field is omitted entirely.
+// UnmarshalJSON detects a missing "status" key and rejects unknown fields.
+// This prevents silent acceptance of malformed results where the status field is omitted
+// or unknown fields are present.
 func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
+	// Use a decoder to detect unknown fields early
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
 	// detect absent key via raw map
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -182,10 +188,11 @@ func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
 	if _, ok := raw["status"]; !ok {
 		return fmt.Errorf("criterion result: missing required field \"status\"")
 	}
+
 	// use type alias to avoid infinite recursion
 	type Alias CriterionResult
 	var alias Alias
-	if err := json.Unmarshal(data, &alias); err != nil {
+	if err := decoder.Decode(&alias); err != nil {
 		return err
 	}
 	*cr = CriterionResult(alias)
