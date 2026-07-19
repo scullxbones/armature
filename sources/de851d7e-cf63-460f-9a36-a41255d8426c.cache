@@ -4,6 +4,10 @@
 
 Accepted
 
+## Principles touched
+
+I1
+
 ## Context
 
 `docs/design/the-next-ten.html`, item №02 ("The Subtractive Release"), proposes an evidence-based census of every user-facing surface — issue types, statuses, confidence states, fields, commands, flags — ahead of `v0.1.0`, ruling each as kept or cut. The proposal's own language is emphatic that a cut is "parked, not purged": the surface leaves the product but stays in git history with a re-entry criterion. That language leaves open *how* a park is mechanically implemented, and the obvious options carry an ongoing-cost trade-off:
