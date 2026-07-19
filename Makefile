@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples
 
 # Variables
 GO ?= go
@@ -15,6 +15,7 @@ help:
 	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build"
 	@echo "  make test                - Run all tests"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
+	@echo "  make test-e2eharness     - Run end-to-end harness lifecycle tests (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check      - Check coverage meets 80% threshold (fails build if not)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
@@ -45,6 +46,9 @@ test: build
 
 test-skill-transcript: build
 	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/skilltranscript/...
+
+test-e2eharness: build
+	$(GO) test -v -count=1 ./internal/e2eharness/... -run TestHappyPathLifecycle
 
 coverage: build
 	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out ./...
