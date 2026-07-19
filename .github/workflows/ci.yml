@@ -63,5 +63,5 @@ jobs:
       - name: Build arm binary
         run: make build
 
-      - name: Run e2eharness lifecycle tests
+      - name: Run full e2eharness suite
         run: make test-e2eharness

@@ -159,9 +159,9 @@ func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), cmdName, args...) //nolint:gosec // G204: cmdName is from harness configuration
 	cmd.Dir = dir
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
 	err := cmd.Run()
-	return stdout.String(), err
+	return output.String(), err
 }

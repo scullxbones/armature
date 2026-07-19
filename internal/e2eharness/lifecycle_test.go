@@ -26,6 +26,9 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 
 	// Create harness with bare origin and work directory
 	h := e2eharness.New(t, armBinPath)
+	// Capture the integration branch before any feature/worktree checkout. The
+	// merge below must be into main, never a feature branch merged into itself.
+	mainBranch := gitGetCurrentBranch(t, h.WorkDir)
 
 	// Step 1: Bootstrap the repository
 	t.Logf("Step 1: Bootstrap")
@@ -71,71 +74,70 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	out, err = h.RunArm("dag", "transition", "--repo", h.WorkDir, "--issue", "TEST-001")
 	require.NoError(t, err, "dag transition failed: %s", out)
 	assert.Contains(t, out, "verified", "dag transition should promote to verified")
+	assertMaterializedField(t, h, "status", "open")
 
-	// Step 4: Materialize state (populate index)
-	t.Logf("Step 4: Materialize state")
-	out, err = h.RunArm("materialize", "--repo", h.WorkDir)
-	require.NoError(t, err, "materialize failed: %s", out)
-
-	// Step 4b: Transition issue to in-progress state
-	t.Logf("Step 4b: Transition to in-progress")
-	out, err = h.RunArm("transition", "--repo", h.WorkDir, "--issue", "TEST-001", "--to", "in-progress")
-	require.NoError(t, err, "transition to in-progress failed: %s", out)
-
-	// Materialize state after transition
-	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
-	require.NoError(t, err)
-
-	// Step 5: Claim the issue (create a worker worktree and task branch)
-	t.Logf("Step 5: Claim issue")
+	// Step 4: Claim the issue before recording progress. Claim creates the real
+	// worker worktree and branch that the later merge will promote to merged.
+	t.Logf("Step 4: Claim issue")
 	worktreePath := filepath.Join(h.TempDir, "task-worktree")
 
 	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "TEST-001",
 		"--worktree", worktreePath)
 	require.NoError(t, err, "claim failed: %s", out)
 	assert.Contains(t, out, "TEST-001", "claim should output issue ID")
+	assertMaterializedField(t, h, "status", "claimed")
+	claimedBy := materializedField(t, h, "TEST-001", "claimed_by")
+	assert.NotEmpty(t, claimedBy, "claim must have a materialized owner")
 
-	// Step 6: Transition to done with feature branch for merge detection
-	// DAG path is verified via dag transition, but transition still requires --force when specifying custom branch
+	// Step 5: The worker makes progress only after the claim has succeeded.
+	t.Logf("Step 5: Transition to in-progress")
+	out, err = h.RunArmIn(worktreePath, "transition", "--repo", worktreePath, "--issue", "TEST-001", "--to", "in-progress")
+	require.NoError(t, err, "transition to in-progress failed: %s", out)
+	assertMaterializedField(t, h, "status", "in-progress")
+
+	// Step 6: Complete work on the branch created by claim, then record done
+	// with that actual branch for merge detection.
 	t.Logf("Step 6: Transition to done")
-	out, err = h.RunArm("transition", "--repo", h.WorkDir, "--issue", "TEST-001", "--to", "done",
-		"--force", "--branch", "feature/test-task", "--outcome", "Implementation complete")
+	featureBranch := gitGetCurrentBranch(t, worktreePath)
+	gitRunInDir(t, worktreePath, "commit", "--allow-empty", "-m", "feat: test task work")
+	out, err = h.RunArmIn(worktreePath, "transition", "--repo", worktreePath, "--issue", "TEST-001", "--to", "done",
+		"--force", "--branch", featureBranch, "--outcome", "Implementation complete")
 	require.NoError(t, err, "transition to done failed: %s", out)
+	assertMaterializedField(t, h, "status", "done")
+	assertMaterializedField(t, h, "outcome", "Implementation complete")
 
-	// Materialize and verify state
-	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
-	require.NoError(t, err)
-
-	// Step 7: Simulate merge detection with sync
-	t.Logf("Step 7: Sync (merge detection)")
-	// Create feature branch and merge to simulate PR merge
-	gitRunInDir(t, h.WorkDir, "checkout", "-b", "feature/test-task")
-	gitRunInDir(t, h.WorkDir, "commit", "--allow-empty", "-m", "feat: test task work")
-
-	currentBranch := gitGetCurrentBranch(t, h.WorkDir)
-	gitRunInDir(t, h.WorkDir, "checkout", currentBranch)
+	// Step 7: Simulate a real PR merge into the branch captured before feature
+	// checkout. The issue remains done until sync observes that merge (I6).
+	t.Logf("Step 7: Merge into %s and sync", mainBranch)
+	gitRunInDir(t, h.WorkDir, "checkout", mainBranch)
 	gitRunInDir(t, h.WorkDir, "-c", "core.hooksPath=/dev/null", "merge", "--no-ff",
-		"feature/test-task", "-m", "Merge feature/test-task")
+		featureBranch, "-m", "Merge "+featureBranch)
 
 	// Push to origin to simulate PR merge being merged
-	gitRunInDir(t, h.WorkDir, "push", "-u", "origin", currentBranch)
+	gitRunInDir(t, h.WorkDir, "push", "-u", "origin", mainBranch)
+	assertMaterializedField(t, h, "status", "done")
 
 	// Run sync to detect merge
-	out, err = h.RunArm("sync", "--repo", h.WorkDir)
+	out, err = h.RunArm("sync", "--repo", h.WorkDir, "--into", mainBranch)
 	require.NoError(t, err, "sync failed: %s", out)
-
-	// Materialize final state
-	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
-	require.NoError(t, err)
-
-	// Final verification: show the issue to confirm terminal state is merged
-	out, err = h.RunArm("show", "--repo", h.WorkDir, "--issue", "TEST-001", "--field", "status")
-	require.NoError(t, err)
-	// Issue must be "merged" after successful sync (merge detection must have run)
-	assert.Contains(t, out, "merged",
-		"final status must be merged (merge detection must have executed), got: %s", out)
+	assertMaterializedField(t, h, "status", "merged")
 
 	t.Logf("Happy-path lifecycle test completed successfully")
+}
+
+func assertMaterializedField(t *testing.T, h *e2eharness.Harness, field, want string) {
+	t.Helper()
+	got := materializedField(t, h, "TEST-001", field)
+	assert.Equal(t, want, got, "materialized %s", field)
+}
+
+func materializedField(t *testing.T, h *e2eharness.Harness, issueID, field string) string {
+	t.Helper()
+	out, err := h.RunArm("materialize", "--repo", h.WorkDir)
+	require.NoError(t, err, "materialize failed: %s", out)
+	out, err = h.RunArm("show", "--repo", h.WorkDir, "--issue", issueID, "--field", field)
+	require.NoError(t, err, "show %s failed: %s", field, out)
+	return strings.TrimSpace(out)
 }
 
 // buildArmBinary compiles the arm binary for use in tests. It returns the path
@@ -181,5 +183,25 @@ func gitGetCurrentBranch(t *testing.T, dir string) string {
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
+	return strings.TrimSpace(string(out))
+}
+
+func gitConfigValue(t *testing.T, dir, key string) string {
+	t.Helper()
+
+	cmd := exec.CommandContext(context.Background(), "git", "config", "--local", "--get", key)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err, "read git config %s", key)
+	return strings.TrimSpace(string(out))
+}
+
+func gitRevision(t *testing.T, dir string) string {
+	t.Helper()
+
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err, "resolve HEAD")
 	return strings.TrimSpace(string(out))
 }

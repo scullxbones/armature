@@ -1,6 +1,7 @@
 package e2eharness_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,9 +13,10 @@ import (
 )
 
 // TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2 proves
-// that every possible torn-write point in an op append is ignored on recovery;
-// once the writer retries the complete op, replay converges to the same state as
-// an uninterrupted append.
+// that every possible torn-write point in an op append is delimited by the
+// production append path. Once the writer retries the complete op, replay
+// converges to the same state as an uninterrupted append without truncating the
+// append-only log tail.
 func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *testing.T) {
 	t.Parallel()
 
@@ -29,21 +31,35 @@ func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *tes
 	encodedCreate, err := ops.MarshalOp(create)
 	require.NoError(t, err)
 
-	baseline := replayState(t, []byte{}, create, transition)
-	for interruptedAt := 0; interruptedAt < len(encodedCreate); interruptedAt++ {
+	baseline, _, _ := replayState(t, nil, create, transition)
+	for interruptedAt := 0; interruptedAt <= len(encodedCreate); interruptedAt++ {
 		t.Run("write-point-"+strconv.Itoa(interruptedAt), func(t *testing.T) {
 			t.Parallel()
 
-			// A recovery newline delimits the torn record, so the parser rejects only
-			// that record instead of joining it to the writer's retry.
-			torn := append(append([]byte{}, encodedCreate[:interruptedAt]...), '\n')
-			actual := replayState(t, torn, create, transition)
+			// Write the exact bytes a killed append can leave behind: there is no
+			// synthetic newline. AppendOp must delimit that tail before retrying.
+			torn := append([]byte{}, encodedCreate[:interruptedAt]...)
+			actual, logBytes, opCount := replayState(t, torn, create, transition)
+			assertAppendOnlyTail(t, torn, logBytes)
+			if interruptedAt == len(encodedCreate) {
+				// A complete JSON value without its delimiter is already durable.
+				// Retrying it is safe because replay remains idempotent.
+				require.Equal(t, 3, opCount)
+			}
 			require.Equal(t, baseline, actual)
 		})
 	}
 }
 
-func replayState(t *testing.T, tornPrefix []byte, recovered ...ops.Op) *materialize.Issue {
+func assertAppendOnlyTail(t *testing.T, torn, logBytes []byte) {
+	t.Helper()
+	require.True(t, bytes.HasPrefix(logBytes, torn), "recovery must preserve the interrupted tail")
+	if len(torn) > 0 {
+		require.Equal(t, byte('\n'), logBytes[len(torn)], "recovery must delimit rather than join the retry")
+	}
+}
+
+func replayState(t *testing.T, tornPrefix []byte, recovered ...ops.Op) (*materialize.Issue, []byte, int) {
 	t.Helper()
 	root := t.TempDir()
 	logPath := filepath.Join(root, "ops", "worker-a.log")
@@ -60,5 +76,7 @@ func replayState(t *testing.T, tornPrefix []byte, recovered ...ops.Op) *material
 	require.NoError(t, err)
 	issue := state.Issues["REPLAY-001"]
 	require.NotNil(t, issue)
-	return issue
+	logBytes, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	return issue, logBytes, len(allOps)
 }
