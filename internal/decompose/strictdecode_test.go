@@ -88,6 +88,17 @@ func TestPlanDisallowUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 		"expected error to mention unknown field, got: %s", err.Error())
 }
 
+func TestParsePlanRejectsTrailingJSON_REQ_TOPTIER_S3_T3(t *testing.T) {
+	t.Parallel()
+
+	tmpFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(tmpFile, []byte(`{"version":1,"title":"plan","issues":[]} {"extra":true}`), 0o644))
+
+	_, err := ParsePlan(tmpFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing")
+}
+
 // TestPlanValidRoundTrip_REQ_TOPTIER_S3_T3 verifies that a valid Plan
 // parses successfully and maintains all field values through a complete round-trip.
 func TestPlanValidRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {

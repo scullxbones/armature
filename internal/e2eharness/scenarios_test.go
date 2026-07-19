@@ -1,10 +1,8 @@
 package e2eharness_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,17 +23,18 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	h := scenarioHarness(t, "RACE-001", "STALE-001")
 	seedExpiredClaim(t, h, "STALE-001")
 	workerA, workerB := scenarioWorkers(t, h)
+	workers := []string{workerA, workerB}
 
 	var raceResults [2]struct {
 		out string
 		err error
 	}
 	var wg sync.WaitGroup
-	for i, worker := range []string{workerA, workerB} {
+	for i, worker := range workers {
 		wg.Add(1)
 		go func(i int, worker string) {
 			defer wg.Done()
-			raceResults[i].out, raceResults[i].err = scenarioRunArmIn(h, worker,
+			raceResults[i].out, raceResults[i].err = h.RunArmIn(worker,
 				"claim", "--repo", worker, "--issue", "RACE-001", "--worktree", filepath.Join(h.TempDir, "race-worktree-"+string(rune('a'+i))))
 		}(i, worker)
 	}
@@ -44,8 +43,15 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	for _, result := range raceResults {
 		require.NoError(t, result.err, "concurrent claim must fail only by losing the race: %s", result.out)
 	}
-	// Each command may report a provisional local win before it sees the other
-	// log. Recovery is the authoritative race resolution point.
+	workerIDs := []string{
+		gitConfigValue(t, workerA, "armature.worker-id"),
+		gitConfigValue(t, workerB, "armature.worker-id"),
+	}
+	require.NotEqual(t, workerIDs[0], workerIDs[1], "the race needs two distinct workers")
+
+	// Concurrent commands may each make a provisional local claim. The durable
+	// contract is the recovered materialized state: exactly one of those two
+	// workers is authoritative, and independent replays choose the same owner.
 	recoveryDir := filepath.Join(h.TempDir, "race-recovery")
 	require.NoError(t, h.Clone("race-recovery", recoveryDir))
 	out, err := h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)
@@ -54,59 +60,67 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	require.NoError(t, err, "race recovery materialization failed: %s", out)
 	out, err = h.RunArmIn(recoveryDir, "show", "--repo", recoveryDir, "--issue", "RACE-001", "--field", "claimed_by")
 	require.NoError(t, err, "race recovery show failed: %s", out)
-	assert.NotEmpty(t, strings.TrimSpace(out), "replay must converge to exactly one claim owner")
+	authoritativeOwner := strings.TrimSpace(out)
+	require.Contains(t, workerIDs, authoritativeOwner, "replay must choose exactly one race participant as owner")
+
+	secondRecoveryDir := filepath.Join(h.TempDir, "race-recovery-second")
+	require.NoError(t, h.Clone("race-recovery-second", secondRecoveryDir))
+	out, err = h.RunArmIn(secondRecoveryDir, "bootstrap", "--repo", secondRecoveryDir)
+	require.NoError(t, err, "second race recovery bootstrap failed: %s", out)
+	out, err = h.RunArmIn(secondRecoveryDir, "materialize", "--repo", secondRecoveryDir)
+	require.NoError(t, err, "second race recovery materialization failed: %s", out)
+	out, err = h.RunArmIn(secondRecoveryDir, "show", "--repo", secondRecoveryDir, "--issue", "RACE-001", "--field", "claimed_by")
+	require.NoError(t, err, "second race recovery show failed: %s", out)
+	assert.Equal(t, authoritativeOwner, strings.TrimSpace(out), "independent replays must retain one authoritative winner")
 
 	out, err = h.RunArmIn(workerB, "claim", "--repo", workerB, "--issue", "STALE-001", "--worktree", filepath.Join(h.TempDir, "stale-worktree-b"))
 	require.NoError(t, err, "reclaim after TTL expiry failed: %s", out)
 	assert.Contains(t, out, "STALE-001")
 }
 
-// TestCoordinatorRecoveryAndConcurrentOpsPushes_REQ_TOPTIER_S3_T2 simulates a
-// coordinator stopping after dispatching a wave. A fresh coordinator clone must
-// recover both worker transitions after simultaneous _armature pushes.
-func TestCoordinatorRecoveryAndConcurrentOpsPushes_REQ_TOPTIER_S3_T2(t *testing.T) {
+// TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2 simulates a
+// coordinator crash after dispatching only the first item in a wave. A fresh
+// coordinator must observe that partial state and dispatch only the remaining
+// item instead of recreating the entire wave.
+func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	t.Parallel()
 
 	h := scenarioHarness(t, "WAVE-001", "WAVE-002")
-	workerA, workerB := scenarioWorkers(t, h)
+	out, err := h.RunArm("worker-init", "--repo", h.WorkDir)
+	require.NoError(t, err, "initial coordinator worker-init failed: %s", out)
 
-	var results [2]struct {
-		out string
-		err error
-	}
-	var wg sync.WaitGroup
-	for i, run := range []struct {
-		worker string
-		issue  string
-	}{
-		{workerA, "WAVE-001"},
-		{workerB, "WAVE-002"},
-	} {
-		wg.Add(1)
-		go func(i int, run struct{ worker, issue string }) {
-			defer wg.Done()
-			results[i].out, results[i].err = h.RunArmIn(run.worker,
-				"transition", "--repo", run.worker, "--issue", run.issue, "--to", "in-progress")
-		}(i, run)
-	}
-	wg.Wait()
-	for _, result := range results {
-		require.NoError(t, result.err, "concurrent ops-branch transition failed: %s", result.out)
-	}
+	// The first coordinator gets only the first work item out before it crashes.
+	firstWorktree := filepath.Join(h.TempDir, "wave-one-worktree")
+	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "WAVE-001", "--worktree", firstWorktree)
+	require.NoError(t, err, "initial wave dispatch failed: %s", out)
+	assertScenarioStatus(t, h, h.WorkDir, "WAVE-001", "claimed")
+	assertScenarioStatus(t, h, h.WorkDir, "WAVE-002", "open")
 
-	// The original coordinator is intentionally not used again. Recovery starts
-	// from a new clone, as it would after an interruption mid-wave.
+	// Do not reuse h.WorkDir: this is the interruption boundary. The new clone
+	// must observe the partial wave and dispatch only the remaining item.
 	recoveryDir := filepath.Join(h.TempDir, "recovery-coordinator")
 	require.NoError(t, h.Clone("recovery", recoveryDir))
-	out, err := h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)
+	out, err = h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)
 	require.NoError(t, err, "recovery bootstrap failed: %s", out)
-	out, err = h.RunArmIn(recoveryDir, "materialize", "--repo", recoveryDir)
-	require.NoError(t, err, "recovery materialization failed: %s", out)
-	for _, issueID := range []string{"WAVE-001", "WAVE-002"} {
-		out, err = h.RunArmIn(recoveryDir, "show", "--repo", recoveryDir, "--issue", issueID, "--field", "status")
-		require.NoError(t, err, "recovered coordinator could not show %s: %s", issueID, out)
-		assert.Contains(t, out, "in-progress", "recovery must preserve dispatched worker state for %s", issueID)
-	}
+	out, err = h.RunArmIn(recoveryDir, "worker-init", "--repo", recoveryDir)
+	require.NoError(t, err, "recovery worker-init failed: %s", out)
+	assertScenarioStatus(t, h, recoveryDir, "WAVE-001", "claimed")
+	assertScenarioStatus(t, h, recoveryDir, "WAVE-002", "open")
+
+	secondWorktree := filepath.Join(h.TempDir, "wave-two-worktree")
+	out, err = h.RunArmIn(recoveryDir, "claim", "--repo", recoveryDir, "--issue", "WAVE-002", "--worktree", secondWorktree)
+	require.NoError(t, err, "recovered coordinator must dispatch remaining wave item: %s", out)
+	assertScenarioStatus(t, h, recoveryDir, "WAVE-002", "claimed")
+	assertScenarioStatus(t, h, recoveryDir, "WAVE-001", "claimed")
+}
+
+func assertScenarioStatus(t *testing.T, h *e2eharness.Harness, repo, issueID, want string) {
+	t.Helper()
+	out, err := h.RunArmIn(repo, "materialize", "--repo", repo)
+	require.NoError(t, err, "materialize %s failed: %s", issueID, out)
+	out, err = h.RunArmIn(repo, "show", "--repo", repo, "--issue", issueID, "--field", "status")
+	require.NoError(t, err, "show status for %s failed: %s", issueID, out)
+	assert.Equal(t, want, strings.TrimSpace(out), "materialized status for %s", issueID)
 }
 
 func scenarioHarness(t *testing.T, issueIDs ...string) *e2eharness.Harness {
@@ -172,11 +186,4 @@ func seedExpiredClaim(t *testing.T, h *e2eharness.Harness, issueID string) {
 	gitRunInDir(t, opsWorktree, "add", "ops/abandoned-worker.log")
 	gitRunInDir(t, opsWorktree, "commit", "-m", "test: seed expired claim")
 	gitRunInDir(t, opsWorktree, "push", "origin", "_armature")
-}
-
-func scenarioRunArmIn(h *e2eharness.Harness, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), h.ArmBinPath, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	return string(out), err
 }
