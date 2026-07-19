@@ -82,7 +82,7 @@ The project's own top documented dogfood theme: plan JSON envelope missing from 
 Incremental changes:
 
 - **D2.1 Published JSON Schemas**: in-repo schemas for plan, review bundle, conformance assessment, and activity index; every doc that mentions an artifact links its schema; CI validates all doc examples against the schemas.
-- **D2.2 Canonical examples from the CLI**: embed `arm decompose-apply --example` (and equivalents) output into the skills at build time so examples cannot drift.
+- **D2.2 Canonical examples from the CLI**: embed `arm dag apply --example` (and equivalents) output into the skills at build time so examples cannot drift.
 - **D2.3 Conventions page**: test naming (`_REQ_<ID>`), commit message format, branch naming — linked from worker/planner/coordinator skills.
 
 ### D3. No adopter-facing positioning
