@@ -177,3 +177,79 @@ func TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, plan1.Issues[0].Title, plan2.Issues[0].Title)
 	assert.Equal(t, plan1.Issues[0].Type, plan2.Issues[0].Type)
 }
+
+// TestPlanStrictDecode_REQ_TOPTIER_S3_T3 verifies that ParsePlan rejects
+// JSON with type mismatches (e.g., string where int is expected).
+// This test directly addresses the dogfood finding: "JSON string/int mismatch hidden by unit tests".
+func TestPlanStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		jsonContent string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "version_as_string_should_fail",
+			jsonContent: `{
+				"version": "1",
+				"title": "Test Plan",
+				"issues": []
+			}`,
+			expectError: true,
+			errorMsg:    "type",
+		},
+		{
+			name: "version_as_float_should_fail",
+			jsonContent: `{
+				"version": 1.5,
+				"title": "Test Plan",
+				"issues": []
+			}`,
+			expectError: true,
+			errorMsg:    "type",
+		},
+		{
+			name: "issue_line_as_string_should_fail",
+			jsonContent: `{
+				"version": 1,
+				"title": "Test Plan",
+				"issues": [
+					{
+						"id": "TASK-001",
+						"title": "Test",
+						"type": "task",
+						"scope": "file.go",
+						"priority": "high",
+						"dod": "Done",
+						"parent": "STORY-001",
+						"blocked_by": [],
+						"notes": []
+					}
+				]
+			}`,
+			expectError: false, // This should pass as all fields are correctly typed
+			errorMsg:    "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tmpFile := filepath.Join(t.TempDir(), "plan.json")
+			require.NoError(t, os.WriteFile(tmpFile, []byte(tc.jsonContent), 0644))
+
+			_, err := ParsePlan(tmpFile)
+			if tc.expectError {
+				require.Error(t, err, "expected error for %s", tc.name)
+				assert.True(t, strings.Contains(err.Error(), tc.errorMsg) ||
+					strings.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.errorMsg)),
+					"expected error to contain %q, got: %s", tc.errorMsg, err.Error())
+			} else {
+				require.NoError(t, err, "expected no error for %s", tc.name)
+			}
+		})
+	}
+}

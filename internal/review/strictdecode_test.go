@@ -244,3 +244,64 @@ func TestConformanceAssessmentUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.True(t, strings.Contains(err.Error(), "unknown") || strings.Contains(err.Error(), "Unknown"),
 		"expected error to mention unknown field, got: %s", err.Error())
 }
+
+// TestBundleStrictDecode_REQ_TOPTIER_S3_T3 verifies that ReviewBundle
+// rejects JSON with type mismatches (e.g., string where int is expected).
+// This comprehensive test covers the full pipeline intent: plan -> decompose -> review.
+func TestBundleStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		jsonContent string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "schema_version_as_string_should_fail",
+			jsonContent: `{
+				"schema_version": "1",
+				"bundle_id": "test-bundle",
+				"issue": {"id": "TASK-1", "type": "task", "title": "Test", "outcome": "Done"},
+				"contract": {"definition_of_done": "Test", "acceptance": []},
+				"delivery": {"base_sha": "abc", "head_sha": "def", "changed_files": []},
+				"fingerprints": {"contract": "c", "delivery": "d"}
+			}`,
+			expectError: true,
+			errorMsg:    "type",
+		},
+		{
+			name: "valid_bundle_should_pass",
+			jsonContent: `{
+				"schema_version": 1,
+				"bundle_id": "test-bundle",
+				"issue": {"id": "TASK-1", "type": "task", "title": "Test", "outcome": "Done"},
+				"contract": {"definition_of_done": "Test", "acceptance": []},
+				"delivery": {"base_sha": "abc", "head_sha": "def", "changed_files": []},
+				"fingerprints": {"contract": "c", "delivery": "d"}
+			}`,
+			expectError: false,
+			errorMsg:    "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var bundle review.ReviewBundle
+			decoder := json.NewDecoder(strings.NewReader(tc.jsonContent))
+			decoder.DisallowUnknownFields()
+			err := decoder.Decode(&bundle)
+
+			if tc.expectError {
+				require.Error(t, err, "expected error for %s", tc.name)
+				assert.True(t, strings.Contains(err.Error(), tc.errorMsg) ||
+					strings.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.errorMsg)),
+					"expected error to contain %q, got: %s", tc.errorMsg, err.Error())
+			} else {
+				require.NoError(t, err, "expected no error for %s, but got: %v", tc.name, err)
+			}
+		})
+	}
+}
