@@ -1,6 +1,9 @@
 package e2eharness_test
 
 import (
+	"context"
+	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -39,17 +42,43 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	require.NoError(t, err, "worker-init failed: %s", out)
 	assert.Contains(t, out, "Worker ID", "worker-init should output Worker ID")
 
-	// Step 3: Create an issue
-	t.Logf("Step 3: Create issue")
-	out, err = h.RunArm("create", "--repo", h.WorkDir, "--type", "task", "--id", "TEST-001",
-		"--title", "Test task", "--dod", "Task implementation is complete")
-	require.NoError(t, err, "create failed: %s", out)
-	assert.Contains(t, out, "TEST-001", "create should output issue ID")
+	// Step 3: Create a plan and apply it via decompose-apply (dag apply)
+	t.Logf("Step 3: Apply plan via dag apply")
+	planData := map[string]interface{}{
+		"version": 1,
+		"title":   "E2E Test Plan",
+		"issues": []map[string]interface{}{
+			{
+				"id":    "TEST-001",
+				"title": "Test task",
+				"type":  "task",
+				"dod":   "Task implementation is complete",
+			},
+		},
+	}
+	planJSON, err := json.Marshal(planData)
+	require.NoError(t, err)
+	planFile := filepath.Join(h.TempDir, "test-plan.json")
+	err = os.WriteFile(planFile, planJSON, 0o600)
+	require.NoError(t, err)
+
+	out, err = h.RunArm("dag", "apply", "--repo", h.WorkDir, "--plan", planFile)
+	require.NoError(t, err, "dag apply failed: %s", out)
+	assert.Contains(t, out, "Applied", "dag apply should report applied issues")
 
 	// Step 4: Materialize state (populate index)
 	t.Logf("Step 4: Materialize state")
 	out, err = h.RunArm("materialize", "--repo", h.WorkDir)
 	require.NoError(t, err, "materialize failed: %s", out)
+
+	// Step 4b: Transition issue to in-progress state
+	t.Logf("Step 4b: Transition to in-progress")
+	out, err = h.RunArm("transition", "--repo", h.WorkDir, "--issue", "TEST-001", "--to", "in-progress")
+	require.NoError(t, err, "transition to in-progress failed: %s", out)
+
+	// Materialize state after transition
+	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
+	require.NoError(t, err)
 
 	// Step 5: Claim the issue (create a worker worktree and task branch)
 	t.Logf("Step 5: Claim issue")
@@ -60,27 +89,18 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	require.NoError(t, err, "claim failed: %s", out)
 	assert.Contains(t, out, "TEST-001", "claim should output issue ID")
 
-	// Step 6: Transition to in-progress
-	t.Logf("Step 6: Transition to in-progress")
-	out, err = h.RunArm("transition", "--repo", h.WorkDir, "--issue", "TEST-001", "--to", "in-progress")
-	require.NoError(t, err, "transition to in-progress failed: %s", out)
-
-	// Materialize and verify state
-	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
-	require.NoError(t, err)
-
-	// Step 7: Transition to done
-	t.Logf("Step 7: Transition to done")
+	// Step 6: Transition to done with feature branch for merge detection
+	t.Logf("Step 6: Transition to done")
 	out, err = h.RunArm("transition", "--repo", h.WorkDir, "--issue", "TEST-001", "--to", "done",
-		"--force", "--outcome", "Implementation complete")
+		"--force", "--branch", "feature/test-task", "--outcome", "Implementation complete")
 	require.NoError(t, err, "transition to done failed: %s", out)
 
 	// Materialize and verify state
 	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
 	require.NoError(t, err)
 
-	// Step 8: Simulate merge detection with sync
-	t.Logf("Step 8: Sync (merge detection)")
+	// Step 7: Simulate merge detection with sync
+	t.Logf("Step 7: Sync (merge detection)")
 	// Create feature branch and merge to simulate PR merge
 	gitRunInDir(t, h.WorkDir, "checkout", "-b", "feature/test-task")
 	gitRunInDir(t, h.WorkDir, "commit", "--allow-empty", "-m", "feat: test task work")
@@ -101,12 +121,12 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	_, err = h.RunArm("materialize", "--repo", h.WorkDir)
 	require.NoError(t, err)
 
-	// Final verification: show the issue to confirm terminal state
+	// Final verification: show the issue to confirm terminal state is merged
 	out, err = h.RunArm("show", "--repo", h.WorkDir, "--issue", "TEST-001", "--field", "status")
 	require.NoError(t, err)
-	// Issue should be either "done" or "merged" depending on whether merge was detected
-	assert.True(t, strings.Contains(out, "done") || strings.Contains(out, "merged"),
-		"final status should be done or merged, got: %s", out)
+	// Issue must be "merged" after successful sync (merge detection must have run)
+	assert.Contains(t, out, "merged",
+		"final status must be merged (merge detection must have executed), got: %s", out)
 
 	t.Logf("Happy-path lifecycle test completed successfully")
 }
@@ -117,7 +137,7 @@ func buildArmBinary(t *testing.T) string {
 	t.Helper()
 
 	// Find the repo root by looking for go.mod
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
 	rootOutput, err := cmd.Output()
 	require.NoError(t, err, "failed to find repo root")
 
@@ -125,7 +145,7 @@ func buildArmBinary(t *testing.T) string {
 	binPath := filepath.Join(repoRoot, "bin", "arm")
 
 	// Build the binary
-	buildCmd := exec.Command("make", "-C", repoRoot, "build")
+	buildCmd := exec.CommandContext(context.Background(), "make", "-C", repoRoot, "build")
 	buildCmd.Dir = repoRoot
 	buildOut, err := buildCmd.CombinedOutput()
 	require.NoError(t, err, "failed to build arm binary: %s", buildOut)
@@ -139,7 +159,7 @@ func buildArmBinary(t *testing.T) string {
 func gitRunInDir(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed in %s: %s", args, dir, out)
@@ -149,7 +169,7 @@ func gitRunInDir(t *testing.T, dir string, args ...string) {
 func gitGetCurrentBranch(t *testing.T, dir string) string {
 	t.Helper()
 
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	require.NoError(t, err)
