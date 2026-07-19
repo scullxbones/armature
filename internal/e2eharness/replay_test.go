@@ -41,14 +41,54 @@ func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *tes
 			torn := append([]byte{}, encodedCreate[:interruptedAt]...)
 			actual, logBytes, opCount := replayState(t, torn, create, transition)
 			assertAppendOnlyTail(t, torn, logBytes)
-			if interruptedAt == len(encodedCreate) {
-				// A complete JSON value without its delimiter is already durable.
-				// Retrying it is safe because replay remains idempotent.
-				require.Equal(t, 3, opCount)
-			}
+			// A complete JSON value without its delimiter is already durable. Its
+			// retry must be recognized so non-idempotent ops cannot be duplicated.
+			require.Equal(t, 2, opCount)
 			require.Equal(t, baseline, actual)
 		})
 	}
+}
+
+// TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2 proves
+// that retrying after recovery has written a delimiter does not append a second
+// copy of the operation. Scope rename is deliberately non-idempotent for this
+// input: replaying it twice would turn "src" into "src22".
+func TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2(t *testing.T) {
+	t.Parallel()
+
+	create := ops.Op{
+		Type: ops.OpCreate, TargetID: "REPLAY-001", Timestamp: 100, WorkerID: "worker-a",
+		Payload: ops.Payload{
+			NodeType: "task", Title: "replay scenario", DefinitionOfDone: "recover",
+			Scope: []string{"src"},
+		},
+	}
+	rename := ops.Op{
+		Type: ops.OpScopeRename, TargetID: "REPLAY-001", Timestamp: 101, WorkerID: "worker-a",
+		Payload: ops.Payload{OldPath: "src", NewPath: "src2"},
+	}
+	transition := ops.Op{
+		Type: ops.OpTransition, TargetID: "REPLAY-001", Timestamp: 102, WorkerID: "worker-a",
+		Payload: ops.Payload{To: ops.StatusDone, Outcome: "recovered after delimiter crash"},
+	}
+
+	baseline, _, _ := replayState(t, nil, create, rename, transition)
+	encodedCreate, err := ops.MarshalOp(create)
+	require.NoError(t, err)
+	encodedRename, err := ops.MarshalOp(rename)
+	require.NoError(t, err)
+
+	// This is the durable state if the first recovery delimits the complete
+	// rename tail and then crashes before it can return. The next retry must
+	// recognize that newline-terminated final record as an exact retry.
+	delimiterCrashPrefix := append(append(append([]byte{}, encodedCreate...), '\n'), encodedRename...)
+	delimiterCrashPrefix = append(delimiterCrashPrefix, '\n')
+	actual, logBytes, opCount := replayState(t, delimiterCrashPrefix, rename, transition)
+
+	require.True(t, bytes.HasPrefix(logBytes, delimiterCrashPrefix), "recovery must preserve the delimiter-crash tail")
+	require.Equal(t, 3, opCount, "retry must not append a second scope rename")
+	require.Equal(t, baseline, actual)
+	require.Equal(t, []string{"src2"}, actual.Scope, "a duplicate rename would yield src22")
 }
 
 func assertAppendOnlyTail(t *testing.T, torn, logBytes []byte) {

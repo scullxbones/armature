@@ -56,6 +56,21 @@ func AppendRawLines(logPath string, buf []byte) error {
 	if err != nil {
 		return fmt.Errorf("stat log %s: %w", logPath, err)
 	}
+	firstLineEnd := bytes.IndexByte(buf, '\n')
+	firstLine := buf
+	remaining := []byte(nil)
+	if firstLineEnd >= 0 {
+		firstLine = buf[:firstLineEnd]
+		remaining = buf[firstLineEnd+1:]
+	}
+
+	duplicate, err := lastRecordMatches(f, info.Size(), firstLine)
+	if err != nil {
+		return fmt.Errorf("read final log record %s: %w", logPath, err)
+	}
+	if !duplicate {
+		remaining = buf
+	}
 	if info.Size() > 0 {
 		var tail [1]byte
 		if _, err := f.ReadAt(tail[:], info.Size()-1); err != nil {
@@ -68,10 +83,62 @@ func AppendRawLines(logPath string, buf []byte) error {
 		}
 	}
 
-	if _, err := f.Write(buf); err != nil {
+	if len(remaining) == 0 {
+		return nil
+	}
+	if _, err := f.Write(remaining); err != nil {
 		return fmt.Errorf("write to log %s: %w", logPath, err)
 	}
 	return nil
+}
+
+// lastRecordMatches reports whether the final record, whether newline-terminated
+// or not, is line. It scans backwards in bounded chunks so appending an op does
+// not load the whole append-only log into memory.
+func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {
+	if size == 0 {
+		return false, nil
+	}
+
+	end := size
+	var tail [1]byte
+	if _, err := f.ReadAt(tail[:], size-1); err != nil {
+		return false, err
+	}
+	if tail[0] == '\n' {
+		end--
+	}
+	if end == 0 {
+		return false, nil
+	}
+
+	const scanChunkSize = 4 << 10
+
+	tailStart := int64(0)
+	for scanEnd := end; scanEnd > 0; {
+		start := scanEnd - scanChunkSize
+		if start < 0 {
+			start = 0
+		}
+		chunk := make([]byte, scanEnd-start)
+		if _, err := f.ReadAt(chunk, start); err != nil {
+			return false, err
+		}
+		if newline := bytes.LastIndexByte(chunk, '\n'); newline >= 0 {
+			tailStart = start + int64(newline) + 1
+			break
+		}
+		scanEnd = start
+	}
+
+	if end-tailStart != int64(len(line)) {
+		return false, nil
+	}
+	record := make([]byte, len(line))
+	if _, err := f.ReadAt(record, tailStart); err != nil {
+		return false, err
+	}
+	return bytes.Equal(record, line), nil
 }
 
 // ReadLog reads all lines from a log file as raw JSON lines.

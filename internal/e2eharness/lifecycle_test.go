@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/e2eharness"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,6 +81,7 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	// worker worktree and branch that the later merge will promote to merged.
 	t.Logf("Step 4: Claim issue")
 	worktreePath := filepath.Join(h.TempDir, "task-worktree")
+	deliveryBase := gitRevision(t, h.WorkDir)
 
 	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "TEST-001",
 		"--worktree", worktreePath)
@@ -99,6 +101,8 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	// with that actual branch for merge detection.
 	t.Logf("Step 6: Transition to done")
 	featureBranch := gitGetCurrentBranch(t, worktreePath)
+	require.NoError(t, os.WriteFile(filepath.Join(worktreePath, "task.go"), []byte("package task\n"), 0o600))
+	gitRunInDir(t, worktreePath, "add", "task.go")
 	gitRunInDir(t, worktreePath, "commit", "--allow-empty", "-m", "feat: test task work")
 	out, err = h.RunArmIn(worktreePath, "transition", "--repo", worktreePath, "--issue", "TEST-001", "--to", "done",
 		"--force", "--branch", featureBranch, "--outcome", "Implementation complete")
@@ -106,9 +110,46 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	assertMaterializedField(t, h, "status", "done")
 	assertMaterializedField(t, h, "outcome", "Implementation complete")
 
-	// Step 7: Simulate a real PR merge into the branch captured before feature
+	// Step 7: Prepare, strictly decode, and record the review assessment before
+	// merge detection. This keeps review attestation in the same composed happy
+	// path rather than testing it only as an isolated artifact pipeline.
+	t.Logf("Step 7: Prepare and record review assessment")
+	deliveryHead := gitRevision(t, worktreePath)
+	bundlePath := filepath.Join(h.TempDir, "review-bundle.json")
+	out, err = h.RunArmIn(worktreePath, "review", "prepare", "--repo", worktreePath,
+		"--issue", "TEST-001", "--base", deliveryBase, "--head", deliveryHead, "--output", bundlePath)
+	require.NoError(t, err, "review prepare failed: %s", out)
+	bundleJSON, err := os.ReadFile(bundlePath)
+	require.NoError(t, err)
+	bundle, err := review.DecodeReviewBundle(bundleJSON)
+	require.NoError(t, err, "prepared bundle must satisfy strict decoding")
+
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{{
+			ID:        "definition_of_done",
+			Status:    review.Satisfied,
+			Rationale: "The task completed the declared happy-path lifecycle.",
+		}},
+	}
+	assessmentJSON, err := json.Marshal(assessment)
+	require.NoError(t, err)
+	_, err = review.DecodeConformanceAssessment(assessmentJSON)
+	require.NoError(t, err, "assessment must satisfy strict decoding before record")
+	assessmentPath := filepath.Join(h.TempDir, "assessment.json")
+	require.NoError(t, os.WriteFile(assessmentPath, assessmentJSON, 0o600))
+
+	out, err = h.RunArmIn(worktreePath, "review", "record", "--repo", worktreePath,
+		"--issue", "TEST-001", "--assessment", assessmentPath, "--bundle", bundlePath)
+	require.NoError(t, err, "review record failed: %s", out)
+	assert.Contains(t, out, "recorded", "review record must durably attest the assessment")
+
+	// Step 8: Simulate a real PR merge into the branch captured before feature
 	// checkout. The issue remains done until sync observes that merge (I6).
-	t.Logf("Step 7: Merge into %s and sync", mainBranch)
+	t.Logf("Step 8: Merge into %s and sync", mainBranch)
 	gitRunInDir(t, h.WorkDir, "checkout", mainBranch)
 	gitRunInDir(t, h.WorkDir, "-c", "core.hooksPath=/dev/null", "merge", "--no-ff",
 		featureBranch, "-m", "Merge "+featureBranch)

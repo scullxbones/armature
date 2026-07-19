@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAppendRawLines_and_ReadLog(t *testing.T) {
@@ -21,6 +23,47 @@ func TestAppendRawLines_and_ReadLog(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
 	}
+}
+
+func TestAppendRawLines_DeduplicatesCompleteRetry(t *testing.T) {
+	t.Parallel()
+	line := []byte(`{"op":"scope-rename"}`)
+	retry := append(append([]byte{}, line...), '\n')
+
+	for _, initial := range [][]byte{line, append(append([]byte{}, line...), '\n')} {
+		t.Run(string(initial), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			logPath := filepath.Join(dir, "test.log")
+
+			require.NoError(t, os.WriteFile(logPath, initial, 0o600))
+			require.NoError(t, AppendRawLines(logPath, retry))
+
+			lines, err := ReadLog(logPath)
+			require.NoError(t, err)
+			require.Equal(t, [][]byte{line}, lines)
+			contents, err := os.ReadFile(logPath)
+			require.NoError(t, err)
+			require.Equal(t, append(line, '\n'), contents)
+		})
+	}
+}
+
+func TestAppendRawLines_DeduplicatesOnlyFinalRecord(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	line := []byte(`{"op":"scope-rename"}`)
+	other := []byte(`{"op":"transition"}`)
+
+	initial := append(append(append([]byte{}, line...), '\n'), other...)
+	initial = append(initial, '\n')
+	require.NoError(t, os.WriteFile(logPath, initial, 0o600))
+	require.NoError(t, AppendRawLines(logPath, append(append([]byte{}, line...), '\n')))
+
+	lines, err := ReadLog(logPath)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{line, other, line}, lines)
 }
 
 func TestReadLogFromOffset(t *testing.T) {
