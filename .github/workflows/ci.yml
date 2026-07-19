@@ -49,3 +49,19 @@ jobs:
 
       - name: Census drift-check regression tests
         run: make test-census-drift-check
+
+  e2eharness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+
+      - name: Build arm binary
+        run: make build
+
+      - name: Run e2eharness lifecycle tests
+        run: make test-e2eharness
