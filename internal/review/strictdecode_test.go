@@ -77,8 +77,8 @@ func TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
 	originalAssessment := review.ConformanceAssessment{
-		SchemaVersion:      review.SchemaVersion,
-		BundleID:           "bundle-123",
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            "bundle-123",
 		ContractFingerprint: "contract-fp",
 		DeliveryFingerprint: "delivery-fp",
 		Results: []review.CriterionResult{
@@ -330,15 +330,15 @@ func TestPipelineRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 		Title:   "Pipeline Test Plan",
 		Issues: []decompose.PlanIssue{
 			{
-				ID:       "TOPTIER-S3-T3",
-				Title:    "Strict-decode round-trip suite",
-				Type:     "task",
-				Scope:    "internal/decompose/strictdecode_test.go, internal/review/strictdecode_test.go",
-				Priority: "medium",
-				DoD:      "All JSON artifact decoders use DisallowUnknownFields",
-				Parent:   "TOPTIER-S3",
+				ID:        "TOPTIER-S3-T3",
+				Title:     "Strict-decode round-trip suite",
+				Type:      "task",
+				Scope:     "internal/decompose/strictdecode_test.go, internal/review/strictdecode_test.go",
+				Priority:  "medium",
+				DoD:       "All JSON artifact decoders use DisallowUnknownFields",
+				Parent:    "TOPTIER-S3",
 				BlockedBy: []string{},
-				Notes:    []string{"Dogfood finding: JSON string/int mismatch"},
+				Notes:     []string{"Dogfood finding: JSON string/int mismatch"},
 			},
 		},
 	}
