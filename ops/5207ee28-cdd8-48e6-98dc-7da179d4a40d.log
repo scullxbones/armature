@@ -3356,3 +3356,4 @@
 ["transition","TOPTIER-S3-T1",1784486655,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
 ["claim","TOPTIER-S3-T1",1784486664,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["claim","TOPTIER-S3-T3",1784486666,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
+["assessment-attested","TOPTIER-S3-T3",1784487305,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"assessment":{"schema_version":1,"bundle_id":"sha256:5804f112683971159ef0eddfbb129046e011ee42ed913a6ed9ad2ce1e951cf4c","contract_fingerprint":"00ad8492559495e91ed23564da33f72d1d4fa61e25f4a857b54466714f716dfd","delivery_fingerprint":"86bc08d86ee5fe2b047363553a29ed554742b52709267498be2a4bc004e71115","base_sha":"1be384eff6b6103a36be36b9af1845e9c62d2dee","head_sha":"54714fff0da44b8a86e0f2a707ddcc27f3573f57","rating":"red","result_fingerprint":"24161654c52217c1ca1372d34280558c697e5101f864736f10e118532ff90fbc","satisfied_count":0,"partially_satisfied_count":3,"not_satisfied_count":1,"indeterminate_count":0}}]
