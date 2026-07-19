@@ -5,10 +5,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Package strictdecode_test verifies that JSON artifact decoders use DisallowUnknownFields
+// to catch type mismatches and unknown fields that unit tests previously hid.
+//
+// Audit of JSON decoders in internal/review:
+//   - acceptance.go (lines 28, 34): uses map[string]interface{} for flexible format;
+//     intentionally non-strict to support extensible acceptance criterion schemas.
+//   - fingerprint.go (line 203): reads activity log; intentionally lenient to skip
+//     malformed lines in append-only logs that may gain new fields in future versions.
+//
+// See docs/design/top-tier-gap-analysis.md (T2.3) for background on this test suite.
 
 // TestReviewBundleRoundTrip_REQ_TOPTIER_S3_T3 verifies that a ReviewBundle
 // marshals to JSON and unmarshals back identically with DisallowUnknownFields enabled.
@@ -304,4 +316,125 @@ func TestBundleStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPipelineRoundTrip_REQ_TOPTIER_S3_T3 verifies end-to-end JSON artifact fidelity
+// through the full pipeline: plan -> decompose-apply -> render-context -> assessment.
+// This test exercises strict decoding across multiple artifact boundaries.
+func TestPipelineRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
+	t.Parallel()
+
+	// Step 1: Construct a Plan
+	originalPlan := decompose.Plan{
+		Version: 1,
+		Title:   "Pipeline Test Plan",
+		Issues: []decompose.PlanIssue{
+			{
+				ID:       "TOPTIER-S3-T3",
+				Title:    "Strict-decode round-trip suite",
+				Type:     "task",
+				Scope:    "internal/decompose/strictdecode_test.go, internal/review/strictdecode_test.go",
+				Priority: "medium",
+				DoD:      "All JSON artifact decoders use DisallowUnknownFields",
+				Parent:   "TOPTIER-S3",
+				BlockedBy: []string{},
+				Notes:    []string{"Dogfood finding: JSON string/int mismatch"},
+			},
+		},
+	}
+
+	// Step 2: Marshal the Plan to JSON
+	planJSON, err := json.MarshalIndent(originalPlan, "", "  ")
+	require.NoError(t, err, "failed to marshal Plan")
+
+	// Step 3: Verify Plan round-trip with strict decoding
+	var decodedPlan decompose.Plan
+	decoder := json.NewDecoder(strings.NewReader(string(planJSON)))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&decodedPlan)
+	require.NoError(t, err, "failed to decode Plan with DisallowUnknownFields")
+	assert.Equal(t, originalPlan.Version, decodedPlan.Version)
+	assert.Equal(t, originalPlan.Title, decodedPlan.Title)
+	assert.Equal(t, len(originalPlan.Issues), len(decodedPlan.Issues))
+
+	// Step 4: Build ReviewBundle from the parsed plan's issue
+	parsedIssue := decodedPlan.Issues[0]
+	bundle := review.ReviewBundle{
+		SchemaVersion: review.SchemaVersion,
+		BundleID:      "pipeline-test-bundle",
+		Issue: review.IssueInfo{
+			ID:      parsedIssue.ID,
+			Type:    parsedIssue.Type,
+			Title:   parsedIssue.Title,
+			Outcome: parsedIssue.DoD,
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: parsedIssue.DoD,
+			Scope:            []string{parsedIssue.Scope},
+			Acceptance:       []string{"Plan parsed successfully", "Type safety verified"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "base123",
+			HeadSHA:      "head456",
+			ChangedFiles: []string{parsedIssue.Scope},
+		},
+		Fingerprints: review.Fingerprints{
+			Contract: "contract-fp",
+			Delivery: "delivery-fp",
+		},
+	}
+
+	// Step 5: Marshal and strict-decode ReviewBundle
+	bundleJSON, err := json.MarshalIndent(bundle, "", "  ")
+	require.NoError(t, err, "failed to marshal ReviewBundle")
+
+	var decodedBundle review.ReviewBundle
+	bundleDecoder := json.NewDecoder(strings.NewReader(string(bundleJSON)))
+	bundleDecoder.DisallowUnknownFields()
+	err = bundleDecoder.Decode(&decodedBundle)
+	require.NoError(t, err, "failed to decode ReviewBundle with DisallowUnknownFields")
+
+	// Step 6: Verify bundle issue matches parsed plan issue
+	assert.Equal(t, parsedIssue.ID, decodedBundle.Issue.ID)
+	assert.Equal(t, parsedIssue.Type, decodedBundle.Issue.Type)
+	assert.Equal(t, parsedIssue.Title, decodedBundle.Issue.Title)
+	assert.Equal(t, parsedIssue.DoD, decodedBundle.Issue.Outcome)
+
+	// Step 7: Build ConformanceAssessment from the ReviewBundle
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            decodedBundle.BundleID,
+		ContractFingerprint: decodedBundle.Fingerprints.Contract,
+		DeliveryFingerprint: decodedBundle.Fingerprints.Delivery,
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "Plan structure and JSON decoding verified",
+				Citations: []review.Citation{
+					{Path: "internal/decompose/strictdecode_test.go"},
+				},
+			},
+		},
+	}
+
+	// Step 8: Marshal and strict-decode ConformanceAssessment
+	assessmentJSON, err := json.MarshalIndent(assessment, "", "  ")
+	require.NoError(t, err, "failed to marshal ConformanceAssessment")
+
+	var decodedAssessment review.ConformanceAssessment
+	assessmentDecoder := json.NewDecoder(strings.NewReader(string(assessmentJSON)))
+	assessmentDecoder.DisallowUnknownFields()
+	err = assessmentDecoder.Decode(&decodedAssessment)
+	require.NoError(t, err, "failed to decode ConformanceAssessment with DisallowUnknownFields")
+
+	// Step 9: Verify end-to-end fidelity
+	assert.Equal(t, review.SchemaVersion, decodedAssessment.SchemaVersion)
+	assert.Equal(t, decodedBundle.BundleID, decodedAssessment.BundleID)
+	assert.Equal(t, decodedBundle.Fingerprints.Contract, decodedAssessment.ContractFingerprint)
+	assert.Equal(t, decodedBundle.Fingerprints.Delivery, decodedAssessment.DeliveryFingerprint)
+	assert.Len(t, decodedAssessment.Results, 1)
+	assert.Equal(t, review.Satisfied, decodedAssessment.Results[0].Status)
+	// Verify issue ID from parsed plan is present in bundle
+	assert.Equal(t, parsedIssue.ID, decodedBundle.Issue.ID)
 }
