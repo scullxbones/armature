@@ -15,12 +15,12 @@ import (
 
 // Harness manages a test repository lifecycle with a bare origin and clones.
 type Harness struct {
-	t           *testing.T
-	TempDir     string // Root temporary directory for all test artifacts
-	OriginDir   string // Bare git repository (origin)
-	WorkDir     string // Primary working clone (coordinator perspective)
-	WorkerDirs  map[string]string // Named worker directories (indexed by worker ID)
-	ArmBinPath  string // Path to the built arm binary
+	t          *testing.T
+	TempDir    string            // Root temporary directory for all test artifacts
+	OriginDir  string            // Bare git repository (origin)
+	WorkDir    string            // Primary working clone (coordinator perspective)
+	WorkerDirs map[string]string // Named worker directories (indexed by worker ID)
+	ArmBinPath string            // Path to the built arm binary
 }
 
 // New creates a new harness with a temporary directory and bare origin repo.
@@ -42,11 +42,21 @@ func New(t *testing.T, armBinPath string) *Harness {
 	}
 
 	configGit(t, initClone)
-	gitRun(t, initClone, "commit", "--allow-empty", "-m", "init")
-	gitRun(t, initClone, "remote", "add", "origin", originDir)
-	gitRun(t, initClone, "branch", "-M", "main")
-	gitRun(t, initClone, "push", "-u", "origin", "main")
-	gitRun(t, originDir, "symbolic-ref", "HEAD", "refs/heads/main")
+	if err := gitRun(t, initClone, "commit", "--allow-empty", "-m", "init"); err != nil {
+		t.Fatalf("failed to create init commit: %v", err)
+	}
+	if err := gitRun(t, initClone, "remote", "add", "origin", originDir); err != nil {
+		t.Fatalf("failed to add origin remote: %v", err)
+	}
+	if err := gitRun(t, initClone, "branch", "-M", "main"); err != nil {
+		t.Fatalf("failed to rename branch to main: %v", err)
+	}
+	if err := gitRun(t, initClone, "push", "-u", "origin", "main"); err != nil {
+		t.Fatalf("failed to push to origin: %v", err)
+	}
+	if err := gitRun(t, originDir, "symbolic-ref", "HEAD", "refs/heads/main"); err != nil {
+		t.Fatalf("failed to set origin HEAD: %v", err)
+	}
 
 	h := &Harness{
 		t:          t,
@@ -67,7 +77,9 @@ func New(t *testing.T, armBinPath string) *Harness {
 
 // Clone creates a new clone of the origin repository at the specified path.
 func (h *Harness) Clone(name, path string) error {
-	gitRun(h.t, h.TempDir, "clone", h.OriginDir, path)
+	if err := gitRun(h.t, h.TempDir, "clone", h.OriginDir, path); err != nil {
+		h.t.Fatalf("failed to clone: %v", err)
+	}
 	configGit(h.t, path)
 
 	if name != "work" {
@@ -100,7 +112,7 @@ func (h *Harness) GetWorkerDir(name string) string {
 func gitInit(t *testing.T, dir string, bare bool) error {
 	t.Helper()
 
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 
@@ -114,16 +126,26 @@ func gitInit(t *testing.T, dir string, bare bool) error {
 
 func configGit(t *testing.T, dir string) {
 	t.Helper()
-	gitRun(t, dir, "config", "user.email", "test@test.com")
-	gitRun(t, dir, "config", "user.name", "Test")
-	gitRun(t, dir, "config", "commit.gpgsign", "false")
-	gitRun(t, dir, "config", "gc.auto", "0")
-	gitRun(t, dir, "config", "maintenance.auto", "false")
+	if err := gitRun(t, dir, "config", "user.email", "test@test.com"); err != nil {
+		t.Fatalf("failed to configure git email: %v", err)
+	}
+	if err := gitRun(t, dir, "config", "user.name", "Test"); err != nil {
+		t.Fatalf("failed to configure git name: %v", err)
+	}
+	if err := gitRun(t, dir, "config", "commit.gpgsign", "false"); err != nil {
+		t.Fatalf("failed to configure gpgsign: %v", err)
+	}
+	if err := gitRun(t, dir, "config", "gc.auto", "0"); err != nil {
+		t.Fatalf("failed to configure gc.auto: %v", err)
+	}
+	if err := gitRun(t, dir, "config", "maintenance.auto", "false"); err != nil {
+		t.Fatalf("failed to configure maintenance.auto: %v", err)
+	}
 }
 
 func gitRun(t *testing.T, dir string, args ...string) error {
 	t.Helper()
-	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // G204: git is a fixed constant
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -135,7 +157,7 @@ func gitRun(t *testing.T, dir string, args ...string) error {
 
 func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 	t.Helper()
-	cmd := exec.CommandContext(context.Background(), cmdName, args...)
+	cmd := exec.CommandContext(context.Background(), cmdName, args...) //nolint:gosec // G204: cmdName is from harness configuration
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
