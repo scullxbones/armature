@@ -6,6 +6,7 @@ PYTHON ?= python3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS ?= -X main.Version=$(VERSION)
 INSTALL_DIR ?= $(HOME)/.local/bin
+UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2eharness$$')
 
 # Default target
 .DEFAULT_GOAL := help
@@ -13,9 +14,9 @@ INSTALL_DIR ?= $(HOME)/.local/bin
 help:
 	@echo "Armature Go build targets:"
 	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build"
-	@echo "  make test                - Run all tests"
+	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
-	@echo "  make test-e2eharness     - Run end-to-end harness lifecycle tests (separate CI job)"
+	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check      - Check coverage meets 80% threshold (fails build if not)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
@@ -39,7 +40,7 @@ trace-report:
 
 test: build
 	@tmp=$$(mktemp); \
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -json -count=1 ./... > "$$tmp"; status=$$?; \
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -json -count=1 $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
 	rm -f "$$tmp"; \
 	exit $$status
@@ -48,15 +49,15 @@ test-skill-transcript: build
 	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/skilltranscript/...
 
 test-e2eharness: build
-	$(GO) test -v -count=1 ./internal/e2eharness/... -run TestHappyPathLifecycle
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/e2eharness/...
 
 coverage: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out ./...
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out $(UNIT_PACKAGES)
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
 coverage-check: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out ./...
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out $(UNIT_PACKAGES)
 	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
 	echo "Total coverage: $${COVERAGE}%"; \
 	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 85) }'; then \

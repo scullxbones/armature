@@ -38,11 +38,35 @@ func ListLogFiles(opsDir string) ([]string, error) {
 
 // AppendRawLines appends raw bytes to a log file (for pre-formatted JSONL lines).
 func AppendRawLines(logPath string, buf []byte) error {
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: internal state path
+	if len(buf) == 0 {
+		return nil
+	}
+
+	// A process can die after writing part (or all) of an operation but before
+	// writing its JSONL delimiter. Preserve that tail and delimit it before the
+	// retry: truncating would violate the append-only log contract, while blindly
+	// appending would join the tail to the retry and make both unreplayable.
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return fmt.Errorf("open log %s: %w", logPath, err)
 	}
 	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
+
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat log %s: %w", logPath, err)
+	}
+	if info.Size() > 0 {
+		var tail [1]byte
+		if _, err := f.ReadAt(tail[:], info.Size()-1); err != nil {
+			return fmt.Errorf("read log tail %s: %w", logPath, err)
+		}
+		if tail[0] != '\n' {
+			if _, err := f.Write([]byte{'\n'}); err != nil {
+				return fmt.Errorf("delimit interrupted log record %s: %w", logPath, err)
+			}
+		}
+	}
 
 	if _, err := f.Write(buf); err != nil {
 		return fmt.Errorf("write to log %s: %w", logPath, err)

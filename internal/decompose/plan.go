@@ -2,11 +2,11 @@
 package decompose
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/strictjson"
 )
 
 // PlanIssue represents a single issue in a plan file.
@@ -40,9 +40,7 @@ func ParsePlan(path string) (*Plan, error) {
 	}
 
 	var plan Plan
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&plan); err != nil {
+	if err := strictjson.Decode(data, &plan); err != nil {
 		return nil, fmt.Errorf("parse plan file %s: %w", path, err)
 	}
 

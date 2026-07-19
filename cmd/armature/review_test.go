@@ -814,6 +814,52 @@ func TestReviewRecordCommand_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse")
 }
 
+func TestReviewRecordCommand_RejectsUnknownAssessmentRootField_REQ_TOPTIER_S3(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	assessmentFile := filepath.Join(repo, "assessment.json")
+	require.NoError(t, os.WriteFile(assessmentFile, []byte(`{"unexpected":true}`), 0o644))
+
+	_, err := runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown field")
+}
+
+func TestReviewRecordCommand_RejectsUnknownBundleRootField_REQ_TOPTIER_S3(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	assessmentFile := filepath.Join(repo, "assessment.json")
+	assessment := review.ConformanceAssessment{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            "bundle",
+		ContractFingerprint: "contract",
+		DeliveryFingerprint: "delivery",
+		Results: []review.CriterionResult{{
+			ID: "definition_of_done", Status: review.Satisfied, Rationale: "strict decoding is enforced",
+		}},
+	}
+	assessmentJSON, err := json.Marshal(assessment)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
+	bundleFile := filepath.Join(repo, "bundle.json")
+	require.NoError(t, os.WriteFile(bundleFile, []byte(`{"unexpected":true}`), 0o644))
+
+	_, err = runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile, "--bundle", bundleFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown field")
+}
+
+func TestReviewRecordCommand_RejectsTrailingAssessmentJSON_REQ_TOPTIER_S3(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	assessmentFile := filepath.Join(repo, "assessment.json")
+	require.NoError(t, os.WriteFile(assessmentFile, []byte(`{"schema_version":1} {"extra":true}`), 0o644))
+
+	_, err := runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing")
+}
+
 func TestReviewRecordCommand_ValidationError(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

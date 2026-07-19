@@ -292,8 +292,8 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		return fmt.Errorf("read assessment file: %w", err)
 	}
 
-	var assessment review.ConformanceAssessment
-	if err := json.Unmarshal(assessmentData, &assessment); err != nil {
+	assessment, err := review.DecodeConformanceAssessment(assessmentData)
+	if err != nil {
 		return fmt.Errorf("parse assessment JSON: %w", err)
 	}
 
@@ -304,8 +304,8 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		if err != nil {
 			return fmt.Errorf("read bundle file: %w", err)
 		}
-		var bundle review.ReviewBundle
-		if err := json.Unmarshal(bundleData, &bundle); err != nil {
+		bundle, err := review.DecodeReviewBundle(bundleData)
+		if err != nil {
 			return fmt.Errorf("parse bundle JSON: %w", err)
 		}
 		bundlePtr = &bundle
