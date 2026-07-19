@@ -66,6 +66,12 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	require.NoError(t, err, "dag apply failed: %s", out)
 	assert.Contains(t, out, "Applied", "dag apply should report applied issues")
 
+	// Step 3b: Promote applied draft subtree to verified via dag transition
+	t.Logf("Step 3b: Promote to verified via dag transition")
+	out, err = h.RunArm("dag", "transition", "--repo", h.WorkDir, "--issue", "TEST-001")
+	require.NoError(t, err, "dag transition failed: %s", out)
+	assert.Contains(t, out, "verified", "dag transition should promote to verified")
+
 	// Step 4: Materialize state (populate index)
 	t.Logf("Step 4: Materialize state")
 	out, err = h.RunArm("materialize", "--repo", h.WorkDir)
@@ -90,6 +96,7 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	assert.Contains(t, out, "TEST-001", "claim should output issue ID")
 
 	// Step 6: Transition to done with feature branch for merge detection
+	// DAG path is verified via dag transition, but transition still requires --force when specifying custom branch
 	t.Logf("Step 6: Transition to done")
 	out, err = h.RunArm("transition", "--repo", h.WorkDir, "--issue", "TEST-001", "--to", "done",
 		"--force", "--branch", "feature/test-task", "--outcome", "Implementation complete")
