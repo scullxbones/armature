@@ -2,6 +2,7 @@
 package decompose
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -31,6 +32,7 @@ type Plan struct {
 }
 
 // ParsePlan parses a plan JSON file from the given path.
+// It uses DisallowUnknownFields to catch malformed or deprecated input.
 func ParsePlan(path string) (*Plan, error) {
 	data, err := adapters.ReadPlanFile(path)
 	if err != nil {
@@ -38,7 +40,9 @@ func ParsePlan(path string) (*Plan, error) {
 	}
 
 	var plan Plan
-	if err := json.Unmarshal(data, &plan); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&plan); err != nil {
 		return nil, fmt.Errorf("parse plan file %s: %w", path, err)
 	}
 
