@@ -68,25 +68,25 @@ The `_armature` branch is an orphan branch with no common ancestor with `main`. 
 At `worker-init`, the CLI creates a secondary git worktree:
 
 ```
-git worktree add --no-checkout .arm/ origin/_armature
-cd .arm/
-git sparse-checkout set .armature/ops .armature/state
+git worktree add --no-checkout .armature/ origin/_armature
+cd .armature/
+git sparse-checkout set ops state
 ```
 
-The worktree directory is `.arm/` in the repository root. This is the default location; it can be overridden via git config (`armature.ops-worktree-path`). The `.arm/` directory is added to `.gitignore` on all branches.
+The worktree directory is `.armature/` in the repository root. This is the default location; it can be overridden via git config (`armature.ops-worktree-path`). The `.armature/` directory is added to `.gitignore` on all branches.
 
-Sparse checkout limits the ops worktree to essential directories (`ops/` and `state/`). `sources/cache/` remains on the ops branch but is excluded from the default sparse checkout to minimize disk usage. Workers needing source content (e.g., `arm sources sync`, `arm decompose-context`) expand the sparse checkout on demand.
+Sparse checkout limits the ops worktree to essential directories (`ops/` and `state/`). `sources/cache/` remains on the ops branch but is excluded from the default sparse checkout to minimize disk usage. Workers needing source content (e.g., `arm sources sync`, `arm dag context`) expand the sparse checkout on demand.
 
 ### Worktree Lifecycle
 
 | Event | Action |
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
-| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .arm --force`, then re-run `arm bootstrap` |
+| Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
 | Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
-| Worktree corruption | Manually remove the stale worktree (`git worktree remove .arm --force`), then re-run `arm bootstrap` to recreate it from remote |
+| Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
-### Directory Structure (within `.arm/` worktree)
+### Directory Structure (within `.armature/` worktree)
 
 ```
 .armature/
@@ -105,13 +105,17 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
     checkpoint.json            # {"last_materialized_commit": "<sha>", "byte_offsets": {...}}
     traceability.json          # {node-id → [source_citations]}
     sources-fingerprint.json   # {source-id → {sha, version_id, last_verified}}
-    issues/
-      <uuid>.json              # full materialized state per issue
+    <worker-id>/
+      index.json               # materialized index per worker
+      ready.json               # precomputed ready-task queue per worker
+      checkpoint.json          # checkpoint per worker
+      issues/
+        <uuid>.json            # full materialized state per issue
   templates/
     bug.json                   # issue type templates with required fields
     story.json
     task.json
-    decomposition-prompt.md    # prompt template for decompose-context
+    decomposition-prompt.md    # prompt template for dag context
   config.json                  # repository-level configuration
   hooks/
     post-commit                # hook templates installed to .git/hooks/
@@ -171,7 +175,7 @@ Positional JSON arrays (JSONL), one per line, approximately 40% smaller than key
 
 ### Decision Conflict Resolution
 
-When multiple `decision` ops target the same `topic`, **last-write-wins by timestamp**. During materialization, the decision with the latest timestamp takes precedence. Earlier decisions for the same topic are preserved in the log for auditability but do not appear in the active context (Layer 5). `arm validate` surfaces a warning (W8) when conflicting decisions exist for the same topic, and `arm dag-summary` displays all conflicting decisions for human resolution.
+When multiple `decision` ops target the same `topic`, **last-write-wins by timestamp**. During materialization, the decision with the latest timestamp takes precedence. Earlier decisions for the same topic are preserved in the log for auditability but do not appear in the active context (Layer 5). `arm validate` surfaces a warning (W8) when conflicting decisions exist for the same topic, and `arm dag summary` displays all conflicting decisions for human resolution.
 
 All ops route through the issuing worker's own log file. There is no shared `source-events.log` — this preserves the one-writer-per-file invariant unconditionally.
 
@@ -201,7 +205,7 @@ The transition op records metadata needed for merge detection:
 | `done` | Worker believes work is complete, PR submitted | `transition` op |
 | `merged` | Code confirmed on main via PR merge | CLI auto-detection during materialization |
 | `blocked` | Worker unable to complete, needs resolution | `transition` op |
-| `cancelled` | Reverted or discarded | `transition` op (e.g., `decompose-revert`) |
+| `cancelled` | Reverted or discarded | `transition` op (e.g., `dag revert`) |
 
 **Reverse transitions:** The following reverse transitions are permitted:
 - `claimed` → `open`: Worker unclaims (wrong task, rebalancing).
@@ -333,7 +337,7 @@ Every CLI command follows one of two process flows. Sync is implicit — workers
 3. Execute command                      (read from state/ files)
 ```
 
-**Read-write commands** (`arm claim`, `arm transition`, `arm heartbeat`, `arm note`, `arm create`, `arm link`, `arm decompose-apply`):
+**Read-write commands** (`arm claim`, `arm transition`, `arm heartbeat`, `arm note`, `arm create`, `arm link`, `arm dag apply`):
 
 ```
 1. cd ops-worktree && git pull          (sync ops)
@@ -372,7 +376,7 @@ Rebase always succeeds because each worker only modifies its own file. The retry
 
 Converts each invocation from O(all ops) to O(new ops since last run).
 
-**State files are local-only caches.** Checkpoint and state files (`state/index.json`, `state/ready.json`, `state/checkpoint.json`, etc.) are produced by each worker's local materialization and are NOT committed to the ops branch. This preserves the MRDT merge-conflict-free guarantee — only per-worker log files are committed. Each worker materializes independently from the append-only logs. The first invocation after a fresh clone performs a full materialization; subsequent invocations are incremental from the local checkpoint. State files are listed in `.arm/.gitignore` (or excluded via sparse checkout) to prevent accidental commits.
+**State files are local-only caches.** Checkpoint and state files (`state/index.json`, `state/ready.json`, `state/checkpoint.json`, etc.) are produced by each worker's local materialization and are NOT committed to the ops branch. This preserves the MRDT merge-conflict-free guarantee — only per-worker log files are committed. Each worker materializes independently from the append-only logs. The first invocation after a fresh clone performs a full materialization; subsequent invocations are incremental from the local checkpoint. State files are listed in `.armature/.gitignore` (or excluded via sparse checkout) to prevent accidental commits.
 
 ### Merged Status Auto-Detection
 
@@ -694,12 +698,12 @@ Blocker outcomes are included in the context when the blocker's status is `done`
 
 Decomposition transforms registered source documents (PRD, architecture doc, etc.) into a typed DAG of actionable work items. The CLI provides scaffolding — prompt generation, structural validation, atomic batch creation — but does not embed LLM calls. The intelligence lives in the external AI agent or human operator.
 
-### `arm decompose-context`
+### `arm dag context`
 
 Generates a structured context package for an external AI to perform decomposition.
 
-```
-arm decompose-context [flags]
+```text
+arm dag context [flags]
 
 Flags:
   --sources <id,...>     Comma-separated source IDs (default: all registered)
@@ -733,12 +737,12 @@ Output (JSON):
 Exit codes: 0 success, 1 no sources registered, 2 source cache missing (run arm sources sync).
 ```
 
-### `arm decompose-apply`
+### `arm dag apply`
 
 Validates and atomically creates all nodes from a plan file. One invocation, one commit, one push.
 
-```
-arm decompose-apply <plan.json> [flags]
+```text
+arm dag apply --plan <plan.json> [flags]
 
 Flags:
   --dry-run              Validate only, do not write ops
@@ -761,13 +765,13 @@ Exit codes: 0 success, 1 validation errors (nothing written), 2 plan file parse 
 
 **Atomicity guarantee:** All ops are appended to the worker's log file in a single file write. If validation passes but push fails after max retries, the local log is rolled back to pre-apply state.
 
-**Idempotency protection:** Each `decompose-apply` invocation generates a batch ID (UUID) recorded in every created op's payload, along with a SHA of the plan file. Before writing ops, the CLI scans existing logs for ops with a matching plan file hash. If a prior batch from the same plan is detected (indicating a partial push that may have succeeded), the CLI warns and requires `--force` to proceed. This prevents duplicate node creation from network-timeout retries. The `--generate-ids` flag generates new UUIDs for nodes but preserves the batch-level deduplication check.
+**Idempotency protection:** Each `dag apply` invocation generates a batch ID (UUID) recorded in every created op's payload, along with a SHA of the plan file. Before writing ops, the CLI scans existing logs for ops with a matching plan file hash. If a prior batch from the same plan is detected (indicating a partial push that may have succeeded), the CLI warns and requires `--force` to proceed. This prevents duplicate node creation from network-timeout retries. The `--generate-ids` flag generates new UUIDs for nodes but preserves the batch-level deduplication check.
 
 ### `arm doctor`
 
 Checks structural integrity of the local repo state. Intended as a **pre-work gate** — run once after `worker-init` and before claiming any issue to confirm the repo is in a coherent state.
 
-```
+```text
 arm doctor [flags]
 
 Flags:
@@ -800,7 +804,7 @@ This separation keeps the pre-work gate cheap and the pre-push gate thorough. Ru
 
 Checks semantic integrity of the current materialized DAG. Intended as a **pre-push gate** — run after all story tasks are done and before transitioning the story and opening a PR.
 
-```
+```text
 arm validate [flags]
 
 Flags:
@@ -827,7 +831,7 @@ Exit codes: 0 clean, 1 errors found, 0 warnings-only (unless --ci).
 
 Brownfield import from external sources.
 
-```
+```text
 arm import <file> [flags]
 
 Flags:
@@ -842,7 +846,7 @@ Imported nodes with `inferred` confidence appear in `ready.json` with `requires_
 
 ### Structural Validation Rules
 
-`decompose-apply` enforces these checks before writing any ops. All checks also run in `--dry-run` mode.
+`dag apply` enforces these checks before writing any ops. All checks also run in `--dry-run` mode.
 
 **Errors (block creation):**
 
@@ -879,7 +883,7 @@ Imported nodes with `inferred` confidence appear in `ready.json` with `requires_
 
 ### Plan File Format
 
-The plan file is the contract between the decomposing agent and `arm decompose-apply`:
+The plan file is the contract between the decomposing agent and `arm dag apply`:
 
 ```json
 {
@@ -927,34 +931,34 @@ The plan file is the contract between the decomposing agent and `arm decompose-a
 
 ### Greenfield Flow
 
-```
+```text
 1. arm sources add <prd-url>
 2. arm sources add <arch-doc-url>
 3. arm sources sync
-4. arm decompose-context > context.json
+4. arm dag context > context.json
 5. <AI agent reads context.json, produces plan.json>
-6. arm decompose-apply plan.json --dry-run
+6. arm dag apply --plan plan.json --dry-run
 7. <Fix validation errors, re-run AI if needed>
-8. arm decompose-apply plan.json
-9. arm dag-summary          # human reviews, interactive sign-off
+8. arm dag apply --plan plan.json
+9. arm dag summary          # human reviews, interactive sign-off
 ```
 
-Sign-off via `arm dag-summary` is the governance gate for DAG structure. There is no PR on the ops branch — the ops branch must remain unprotected for low-latency coordination.
+Sign-off via `arm dag summary` is the governance gate for DAG structure. There is no PR on the ops branch — the ops branch must remain unprotected for low-latency coordination.
 
 ### Brownfield Flow
 
-```
+```text
 1. arm import existing-tasks.csv --format csv --source src-001
    # Creates nodes with confidence=inferred
 2. arm sources add <prd-url>
 3. arm sources sync
-4. arm decompose-context --existing-dag > context.json
+4. arm dag context --existing-dag > context.json
    # Context includes imported nodes for AI to reconcile
 5. <AI produces plan.json, referencing or extending imported nodes>
-6. arm decompose-apply plan.json --dry-run
-7. arm decompose-apply plan.json
+6. arm dag apply --plan plan.json --dry-run
+7. arm dag apply --plan plan.json
    # New nodes are confidence=draft, imported remain inferred
-8. arm dag-summary
+8. arm dag summary
    # Summary distinguishes draft (new) vs inferred (imported, needs confirmation)
 9. <Human reviews, confirms imported nodes individually>
 10. arm confirm <node-id>    # promotes inferred → verified
@@ -962,39 +966,39 @@ Sign-off via `arm dag-summary` is the governance gate for DAG structure. There i
 
 ### Partial and Failed Decomposition
 
-**AI produces invalid plan:** `arm decompose-apply --dry-run` reports all errors. The operator fixes the plan (or re-prompts the AI with error messages) and retries. No state is written until validation passes.
+**AI produces invalid plan:** `arm dag apply --dry-run` reports all errors. The operator fixes the plan (or re-prompts the AI with error messages) and retries. No state is written until validation passes.
 
-**AI produces partial plan (subset of requirements):** Valid. `arm decompose-apply` creates whatever is in the plan. `arm dag-summary` shows uncited source sections (requirements not covered by any node). The reviewer flags gaps. A second decomposition pass can add nodes to an existing DAG.
+**AI produces partial plan (subset of requirements):** Valid. `arm dag apply` creates whatever is in the plan. `arm dag summary` shows uncited source sections (requirements not covered by any node). The reviewer flags gaps. A second decomposition pass can add nodes to an existing DAG.
 
-**AI hallucinates source citations:** E8 validation catches references to non-existent source IDs. Citations to real sources with wrong sections are not caught structurally — this is the reviewer's responsibility at the `dag-summary` gate.
+**AI hallucinates source citations:** E8 validation catches references to non-existent source IDs. Citations to real sources with wrong sections are not caught structurally — this is the reviewer's responsibility at the `dag summary` gate.
 
 **Push fails after retries:** Local log is rolled back. The operator diagnoses the git issue and re-runs. No partial state leaks to the remote.
 
-### `arm decompose-revert`
+### `arm dag revert`
 
 Discards a decomposition while preserving the audit trail. This follows double-entry accounting principles: rather than deleting ops (which would require history rewriting), the command emits cancellation ops.
 
-```
-arm decompose-revert <root-id>
+```text
+arm dag revert --plan <plan.json>
 
 Behavior:
-  1. Walks the subtree rooted at <root-id>
-  2. For each node under the root, emits a transition op: {"to": "cancelled"}
+  1. Resolves the nodes created by the plan file
+  2. For each of those nodes, emits a transition op: {"to": "cancelled"}
   3. All cancellation ops are appended to the current worker's log
   4. Single commit, single push
 
 Effect:
-  - All nodes under <root-id> transition to 'cancelled' status
+  - All nodes created by the plan transition to 'cancelled' status
   - Cancelled nodes are excluded from ready.json
   - The original create ops and the cancellation ops both remain in the log
   - Full audit trail preserved: who created, who cancelled, when
 ```
 
-The alternative is `git reset --hard` on the ops branch, which is a standard git operation but destroys the audit trail. `arm decompose-revert` is preferred when traceability matters.
+The alternative is `git reset --hard` on the ops branch, which is a standard git operation but destroys the audit trail. `arm dag revert` is preferred when traceability matters.
 
 ### Decomposition Prompt Template
 
-Ships as `.armature/templates/decomposition-prompt.md`, overridable per-repo. The `arm decompose-context` command interpolates source content, constraints, and existing DAG into template markers (`{{SOURCES}}`, `{{EXISTING_DAG}}`, `{{PLAN_SCHEMA}}`, `{{CONSTRAINTS}}`).
+Ships as `.armature/templates/decomposition-prompt.md`, overridable per-repo. The `arm dag context` command interpolates source content, constraints, and existing DAG into template markers (`{{SOURCES}}`, `{{EXISTING_DAG}}`, `{{PLAN_SCHEMA}}`, `{{CONSTRAINTS}}`).
 
 The template specifies: hierarchy rules (epic → story → task), task granularity targets (1–4 hours, 1–3 files), source traceability requirements (every node must cite a source), acceptance criteria standards, context snippet guidelines, dependency rules, scope isolation, and anti-patterns to avoid.
 
@@ -1064,7 +1068,7 @@ File-level SHA fingerprinting. Section-level SHA was rejected — the section pa
 
 During `arm sources sync`, the CLI compares the provider's current version metadata against the cached version. If changed, the CLI fetches the new content, recomputes the SHA, and emits a new `source-fingerprint` op.
 
-**Cross-document consistency:** If a PRD version timestamp is newer than an architecture document version timestamp by more than a configurable threshold (default: 7 days), `arm dag-summary` surfaces a warning. Resolution is human responsibility.
+**Cross-document consistency:** If a PRD version timestamp is newer than an architecture document version timestamp by more than a configurable threshold (default: 7 days), `arm dag summary` surfaces a warning. Resolution is human responsibility.
 
 ### Credential Management
 
@@ -1094,11 +1098,11 @@ MCP is the transport layer for provider communication. The integration surface i
 
 ## 9. Governance Model
 
-### DAG Governance: `dag-summary` Interactive Sign-Off
+### DAG Governance: `dag summary` Interactive Sign-Off
 
 With ops on an unprotected branch, the original governance model ("merge to protected branch = approval") cannot apply to DAG structure. The ops branch must remain unprotected for low-latency coordination.
 
-The `dag-summary` interactive sign-off IS the governance gate for DAG structure. The interactive TUI checklist requires per-item acknowledgment, records log ops with worker attribution, and is mechanically impossible to bulk-approve.
+The `dag summary` interactive sign-off IS the governance gate for DAG structure. The interactive TUI checklist requires per-item acknowledgment, records log ops with worker attribution, and is mechanically impossible to bulk-approve.
 
 ### Code Governance: PR/MR on Protected Main
 
@@ -1108,14 +1112,14 @@ PRs on `main` remain the governance gate for code changes. This is unchanged fro
 
 | What | Gate | Where |
 |---|---|---|
-| DAG structure (decomposition approval) | `dag-summary` interactive sign-off | ops branch |
+| DAG structure (decomposition approval) | `dag summary` interactive sign-off | ops branch |
 | Code changes | PR/MR review on protected main | main branch |
-| Source document registration | `dag-summary` coverage check | ops branch |
+| Source document registration | `dag summary` coverage check | ops branch |
 | Worker behavior | SKILL.md + pre-transition hooks | enforced by CLI |
 
 ### Draft Confidence Promotion
 
-Nodes created via `arm decompose-apply` have `provenance.confidence: "draft"`. Draft nodes are not claimable. The `dag-summary` sign-off promotes `draft` to `verified` by recording a `dag-transition` op with the signing worker's ID.
+Nodes created via `arm dag apply` have `provenance.confidence: "draft"`. Draft nodes are not claimable. The `dag summary` sign-off promotes `draft` to `verified` by recording a `dag-transition` op with the signing worker's ID.
 
 ### Inferred Confidence
 
@@ -1123,13 +1127,13 @@ Nodes created via `arm import` have `provenance.confidence: "inferred"`. These r
 
 ### Sign-Off Attribution
 
-Each checklist item in `dag-summary` generates a log op with the signing worker's ID. This creates an audit trail: who approved which part of the DAG, when.
+Each checklist item in `dag summary` generates a log op with the signing worker's ID. This creates an audit trail: who approved which part of the DAG, when.
 
 ### Traceability
 
-`arm dag-summary` surfaces coverage metrics: cited nodes / total nodes. Uncited nodes are named individually (not just counted). The reviewer must acknowledge each uncited node by name in the sign-off, creating attribution in the audit log.
+`arm dag summary` surfaces coverage metrics: cited nodes / total nodes. Uncited nodes are named individually (not just counted). The reviewer must acknowledge each uncited node by name in the sign-off, creating attribution in the audit log.
 
-`dag-summary.md` is committed to the ops branch as an audit artifact. It is generated by `arm dag-summary` and committed alongside the sign-off ops.
+`dag-summary.md` is committed to the ops branch as an audit artifact. It is generated by `arm dag summary` and committed alongside the sign-off ops.
 
 ---
 
@@ -1278,8 +1282,8 @@ No cross-worktree operations occur within a single phase.
 |---|---|---|---|
 | Agent-invoked (scriptable) | `create`, `claim`, `transition`, `heartbeat`, `note`, `link`, `decision`, `reopen` | Plain one-line or JSON | Never |
 | Read-only query | `ready`, `render-context`, `validate`, `status`, `metrics`, `context-history` | JSON (pipe) or Glamour (TTY) | Never |
-| Human interactive | `dag-summary`, `stale-review` | Interactive TUI | Always |
-| Workflow | `decompose-context`, `decompose-apply`, `decompose-revert`, `import`, `confirm` | JSON | Never |
+| Human interactive | `dag summary`, `sources stale-review` | Interactive TUI | Always |
+| Workflow | `dag context`, `dag apply`, `dag revert`, `import`, `confirm` | JSON | Never |
 | Infrastructure | `init`, `sync`, `merged`, `sources add/sync/verify`, `worker-init` | Plain | Never |
 
 **Hard rule:** Agent-invoked commands never require a TUI. Human review commands always get interactive treatment.
@@ -1288,8 +1292,8 @@ No cross-worktree operations occur within a single phase.
 
 | Commands | Reads | Writes |
 |---|---|---|
-| `claim`, `transition`, `heartbeat`, `note`, `create`, `link`, `decision`, `reopen`, `decompose-apply`, `decompose-revert`, `merged`, `confirm` | ops worktree | ops worktree |
-| `ready`, `render-context`, `validate`, `status`, `metrics`, `context-history`, `dag-summary`, `stale-review` | ops worktree | (none) |
+| `claim`, `transition`, `heartbeat`, `note`, `create`, `link`, `decision`, `reopen`, `dag apply`, `dag revert`, `merged`, `confirm` | ops worktree | ops worktree |
+| `ready`, `render-context`, `validate`, `status`, `metrics`, `context-history`, `dag summary`, `sources stale-review` | ops worktree | (none) |
 | `transition` (with verification hooks) | ops worktree + code worktree | ops worktree |
 | `init`, `worker-init` | both | both (setup) |
 | `sources add/sync/verify` | ops worktree + external providers | ops worktree |
@@ -1299,7 +1303,7 @@ No cross-worktree operations occur within a single phase.
 
 #### `arm sync`
 
-```
+```text
 arm sync [flags]
 
 Behavior:
@@ -1326,12 +1330,12 @@ Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting,
 
 #### `arm bootstrap`
 
-```
+```text
 arm bootstrap [flags]
 
 Behavior:
   1. Create _armature orphan branch (if needed)
-  2. Set up ops worktree at .arm/
+  2. Set up ops worktree at .armature/
   3. Auto-detect project type
   4. Write .armature/config.json
   5. Install git hooks from templates
@@ -1353,7 +1357,7 @@ Output:
 
 #### `arm merged`
 
-```
+```text
 arm merged <issue-id>
 
 Behavior:
@@ -1368,7 +1372,7 @@ Exit codes:
 
 #### `arm reopen`
 
-```
+```text
 arm reopen <issue-id> [flags]
 
 Flags:
@@ -1410,7 +1414,7 @@ This is a hard requirement, not a recommendation. Each worker (human or AI) must
 Part of `worker-init`. The CLI creates the ops worktree via `git worktree add`, configures sparse checkout, and stores the ops worktree path in git config:
 
 ```
-git config --local armature.ops-worktree-path .arm/
+git config --local armature.ops-worktree-path .armature/
 ```
 
 ### Multi-Machine Workers
@@ -1448,19 +1452,19 @@ ActionRequired  = bold + white on red   // explicit operator action box
 
 | Command | Mode | Reason |
 |---|---|---|
-| `dag-summary` | Interactive TUI | Sign-off requires per-item interaction |
-| `stale-review` | Interactive TUI | Per-node decision flow |
+| `dag summary` | Interactive TUI | Sign-off requires per-item interaction |
+| `sources stale-review` | Interactive TUI | Per-node decision flow |
 | `ready` | Interactive TUI (human) / JSON (agent) | Claim action follows selection |
 | `render-context` | Plain (Glamour) | Read-only, pipeable |
 | `sources sync` | Plain + spinner | Progress indication, no interaction needed |
 | `validate` | Plain structured | CI-friendly, machine-parseable |
 | Agent-invoked commands | Plain one-line | Must be scriptable |
 
-### `dag-summary` Interactive Checklist
+### `dag summary` Interactive Checklist
 
 The sign-off checklist is interactive — approval is mechanically impossible without completing all checklist items. Each check generates a log op with the worker ID. This creates attribution without adding process friction beyond the review itself. The TUI displays: node title, source citation, coverage status, and a per-item confirm/reject prompt.
 
-### `stale-review` Per-Node Flow
+### `sources stale-review` Per-Node Flow
 
 Displays per affected node: the source change summary (section-level diff from provider version history where available), the node's citation, and the full `arm render-context` output. Options per node: confirm citation valid, flag for re-decomposition, skip. Each response is a log op.
 
@@ -1614,14 +1618,14 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Transition-code desync (done before code reviewed) | Downstream premature start | Two-phase done/merged model; downstream requires `merged` |
 | Ops branch force-push or deletion | Loss of coordination state | Configure force-push protection separately from PR requirements; local worktrees retain full history for recovery |
 | Squash-merge breaks commit ancestry checks | Merge detection miss | Commit-message scan (not ancestry) as primary detection; branch-name and explicit fallbacks |
-| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .arm --force` then re-run `arm bootstrap` |
+| Worktree setup failure during worker-init | Worker cannot operate | CLI creates ops branch from orphan if missing; for stale worktree state, manually remove with `git worktree remove .armature --force` then re-run `arm bootstrap` |
 | Verify phase reads code worktree, record phase writes ops worktree | Cross-worktree corruption | Strict phase separation: verify(code) then record(ops); no cross-worktree operations within a phase |
 | Task stuck at done if PR abandoned | Downstream permanently blocked | Staleness check (no merge within N days of done); surfaced via `arm status` |
 | Manual commits to ops branch | Unexpected state | CLI ignores non-.armature/ files; contributing guide documents convention |
 | Runaway agent emitting excessive ops | Materialization slowdown for all workers | CLI-side rate limiter: heartbeats capped at 1/min/issue, notes at 10/issue/session, creates at 500/commit. Materialization logs per-worker processing time; warns if single worker contributes >80% |
 | Worker impersonation (ops in wrong log file) | Incorrect state attribution | Filename-worker-ID validation during materialization; mismatched ops excluded with warning (section 3) |
-| Conflicting decisions on same topic | Agents receive contradictory guidance | Last-write-wins by timestamp; W8 validation warning; surfaced in dag-summary for human resolution (section 3) |
-| `decompose-apply` partial push (network timeout) | Potential duplicate nodes on re-run | Batch ID (UUID) recorded in each op's payload; re-run detects existing batch by plan file hash; requires `--force` to proceed |
+| Conflicting decisions on same topic | Agents receive contradictory guidance | Last-write-wins by timestamp; W8 validation warning; surfaced in `dag summary` for human resolution (section 3) |
+| `dag apply` partial push (network timeout) | Potential duplicate nodes on re-run | Batch ID (UUID) recorded in each op's payload; re-run detects existing batch by plan file hash; requires `--force` to proceed |
 
 ### Offline Mode
 
@@ -1643,7 +1647,7 @@ The append-only JSONL-in-git architecture enables forensic capabilities as emerg
 
 ### Forensic Reconstruction
 
-```
+```text
 arm render-context <issue-id> --at <sha>
 ```
 
@@ -1651,7 +1655,7 @@ Reconstructs the exact context a worker would have received at a specific ops br
 
 ### Context Drift Tracking
 
-```
+```text
 arm context-history <issue-id>
 ```
 
@@ -1659,7 +1663,7 @@ Shows how a task's rendered context changed over time: which ops modified the co
 
 ### Selective Replay
 
-```
+```text
 arm materialize --exclude-worker <worker-id>
 ```
 
@@ -1667,7 +1671,7 @@ Rebuilds state excluding one worker's ops. Useful for diagnosing whether a speci
 
 ### Bisect
 
-```
+```text
 arm validate
 ```
 
@@ -1725,7 +1729,7 @@ The transition op records `branch` and `pr` fields, bridging the ops history (on
 
 ```
 git config --local armature.worker-id a1b2c3d4-5678-90ab-cdef-1234567890ab
-git config --local armature.ops-worktree-path .arm/
+git config --local armature.ops-worktree-path .armature/
 ```
 
 ### User Configuration
@@ -1749,7 +1753,7 @@ auth_method = "device_flow"
 
 ### Persona-Driven Feature Matrix
 
-All deployments use the ops-branch architecture (`_armature` orphan branch + `.arm/` worktree). Feature variations reflect team size and coordination needs, not branching strategy.
+All deployments use the ops-branch architecture (`_armature` orphan branch + `.armature/` worktree). Feature variations reflect team size and coordination needs, not branching strategy.
 
 | Feature | Solo Freelance | Solo Enterprise | Team (Monorepo) | Team (Multi-Repo) |
 |---|---|---|---|---|
@@ -1823,7 +1827,7 @@ These decisions are locked and should not be revisited without significant new e
 - Two-phase completion: `done` (self-reported) then `merged` (auto-detected)
 - Downstream unblocking requires `merged`, not `done`
 - Commit-message scan as primary merge detection method
-- `dag-summary` interactive sign-off as DAG governance gate (not PR on ops branch)
+- `dag summary` interactive sign-off as DAG governance gate (not PR on ops branch)
 - PR/MR as the governance gate for code changes
 - Git hooks for heartbeat, merge promotion, commit-message stamping — convenience only
 - Committed source cache, workers never fetch live documents
@@ -1837,7 +1841,7 @@ These decisions are locked and should not be revisited without significant new e
 - Adversarial decomposition deferred, human gate is sufficient
 - Language: Go. Distribution: single static binary.
 - Token proxy: `chars/4`, advisory only
-- `decompose-revert` via cancellation ops (double-entry), not history rewriting
+- `dag revert` via cancellation ops (double-entry), not history rewriting
 - `arm doctor` = structural pre-work gate (D1–D6, field presence only); `arm validate` = semantic pre-push gate (citation UUID integrity, scope overlap, coverage). They are distinct commands with distinct invocation points — do not merge. D6 in doctor intentionally checks only field presence; source UUID validation belongs in validate (E8).
 
 ## Appendix B: Scope Boundaries
@@ -1857,12 +1861,12 @@ These decisions are locked and should not be revisited without significant new e
 | L1 | Token proxy `chars/4` is inaccurate for code-heavy or non-English content | Low | Advisory only; real tokens not available without a tokenizer binary. |
 | L2 | Sibling scope overlap detection uses glob matching, which is approximate for complex patterns | Low | Go's `filepath.Match` handles standard globs. Exotic patterns not supported. |
 | L3 | Plan file schema is not formally specified as JSON Schema in v1 | Low | Documented by example. Formal schema added when a second consumer needs it. |
-| L4 | `decompose-context` prompt template quality is load-bearing | Low | Template ships with tested defaults and is overridable. `dag-summary` gate catches structural issues. |
+| L4 | `dag context` prompt template quality is load-bearing | Low | Template ships with tested defaults and is overridable. `dag summary` gate catches structural issues. |
 | L5 | Brownfield `import` format support (Jira, Linear) requires per-provider parsers | Low | CSV/JSON are baseline. Jira/Linear parsers added on demand. |
-| L6 | `decompose-revert` emitting cancellation ops adds noise to the log | Low | Preferable to `git reset --hard` which loses audit trail. Noise is bounded (one op per reverted node). |
+| L6 | `dag revert` emitting cancellation ops adds noise to the log | Low | Preferable to `git reset --hard` which loses audit trail. Noise is bounded (one op per reverted node). |
 | L7 | Advisory budget truncation order may remove a critical decision | Low | Decisions are priority 3 (above notes and siblings). Core spec and snippets never truncated. `--raw` bypasses all truncation. |
 | L8 | Cold-start materialization on fresh clone requires full log replay | Low | Under 1 second for 10,000 ops at Go speeds. Compaction (deferred) addresses long-term growth. Progress indicator shown. |
 | L9 | Worker impersonation via spoofed log filename (new file with fake UUID) | Low | Requires repo push access (git host ACL is primary control). Optional worker-registry.json cross-references git committer identity. |
-| L10 | Scope path validation (W10) cannot distinguish "create new file" from "typo in path" | Low | Warning only. Decomposition reviewers verify scope correctness at `dag-summary` gate. |
+| L10 | Scope path validation (W10) cannot distinguish "create new file" from "typo in path" | Low | Warning only. Decomposition reviewers verify scope correctness at `dag summary` gate. |
 | L11 | Claim-time scope overlap check uses glob matching, which is approximate | Low | Same as L2. Advisory only — warns but does not block. |
 | L12 | Merge detection coverage degrades silently without `prepare-commit-msg` hook | Low | W9 validation warning monitors coverage. `arm validate` surfaces low coverage rate. Fallback detection methods remain available. |
