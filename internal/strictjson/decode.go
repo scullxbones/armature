@@ -9,12 +9,16 @@ import (
 	"io"
 )
 
-// Decode decodes exactly one JSON value, rejecting unknown object fields and any
-// trailing JSON data. Versioned artifacts use this policy so a permissive
-// decoder cannot silently accept a malformed or stale protocol payload.
+// Decode decodes exactly one JSON value, rejecting any trailing JSON data.
+// Versioned artifacts use this policy so a permissive decoder cannot silently
+// accept a malformed or stale protocol payload composed of multiple
+// concatenated values. Unknown object fields are intentionally allowed: the
+// canonical validators (docs/schemas/*.schema.json) do not set
+// additionalProperties: false, so a schema-valid plan, review bundle, or
+// conformance assessment may legitimately carry extension/metadata fields.
+// Rejecting them here would fail artifacts the published contract accepts.
 func Decode(data []byte, value any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {
 		return err
 	}

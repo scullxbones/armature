@@ -814,7 +814,15 @@ func TestReviewRecordCommand_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse")
 }
 
-func TestReviewRecordCommand_RejectsUnknownAssessmentRootField_REQ_TOPTIER_S3(t *testing.T) {
+// TestReviewRecordCommand_AllowsUnknownAssessmentRootField_REQ_TOPTIER_S3
+// verifies that an assessment with an unrecognized root field is not
+// rejected purely for that reason. The canonical validator
+// (docs/schemas/conformance-assessment.schema.json) does not set
+// additionalProperties: false, so a schema-valid assessment may legitimately
+// carry an extension/metadata field. The payload below is still missing
+// required fields, so recording still fails, but not with a "field" decode
+// error.
+func TestReviewRecordCommand_AllowsUnknownAssessmentRootField_REQ_TOPTIER_S3(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithTask(t)
 	assessmentFile := filepath.Join(repo, "assessment.json")
@@ -822,10 +830,14 @@ func TestReviewRecordCommand_RejectsUnknownAssessmentRootField_REQ_TOPTIER_S3(t 
 
 	_, err := runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown field")
+	assert.NotContains(t, err.Error(), "unknown field")
 }
 
-func TestReviewRecordCommand_RejectsUnknownBundleRootField_REQ_TOPTIER_S3(t *testing.T) {
+// TestReviewRecordCommand_AllowsUnknownBundleRootField_REQ_TOPTIER_S3 mirrors
+// the assessment case for review bundles: docs/schemas/review-bundle.schema.json
+// does not set additionalProperties: false either, so an unrecognized root
+// field alone must not be rejected as an "unknown field" decode error.
+func TestReviewRecordCommand_AllowsUnknownBundleRootField_REQ_TOPTIER_S3(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithTask(t)
 	assessmentFile := filepath.Join(repo, "assessment.json")
@@ -846,7 +858,7 @@ func TestReviewRecordCommand_RejectsUnknownBundleRootField_REQ_TOPTIER_S3(t *tes
 
 	_, err = runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile, "--bundle", bundleFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown field")
+	assert.NotContains(t, err.Error(), "unknown field")
 }
 
 func TestReviewRecordCommand_RejectsTrailingAssessmentJSON_REQ_TOPTIER_S3(t *testing.T) {
