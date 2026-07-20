@@ -1,10 +1,14 @@
 // Package decompose provides plan parsing and decomposition.
-// This strictdecode_test.go file verifies JSON artifact decoders use DisallowUnknownFields
-// to catch type mismatches and unknown fields that unit tests previously hid.
+// This strictdecode_test.go file verifies JSON artifact decoders follow the
+// shared strict-decode policy (internal/strictjson.Decode): trailing JSON
+// data after a valid value is rejected, while unknown/extra object fields
+// are intentionally accepted, since the canonical validators
+// (docs/schemas/*.schema.json) do not set additionalProperties: false.
 //
 // Audit of JSON decoders in internal/decompose:
-//   - ParsePlan (plan.go, line 43): uses json.Decoder with DisallowUnknownFields;
-//     strict to catch malformed or deprecated plan input early.
+//   - ParsePlan (plan.go, line 43): uses the strictjson decode policy;
+//     rejects trailing JSON to catch malformed or deprecated plan input
+//     early, while still tolerating unknown fields.
 //
 // See docs/design/top-tier-gap-analysis.md (T2.3) for background on this test suite.
 package decompose
