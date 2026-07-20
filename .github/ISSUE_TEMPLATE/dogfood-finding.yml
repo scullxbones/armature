@@ -7,10 +7,19 @@ body:
     attributes:
       value: |
         # Dogfood Finding
-        
-        Use this form to report friction, usability issues, or unexpected behavior you encounter while using Armature tools and workflows. These findings help us improve the developer experience.
-        
+
+        Use this form to report friction, usability issues, or unexpected behavior you encounter while using Armature tools and workflows. This mirrors the internal raw-finding format used under `docs/dogfood/findings/raw/`, so external reports feed the same triage pipeline as internal ones.
+
         See [docs/agents/dogfood-findings.md](../../docs/agents/dogfood-findings.md) for more context on how we use dogfood findings.
+
+  - type: input
+    id: agent
+    attributes:
+      label: Agent / Writer identity
+      description: Who (or what agent/tool) observed this? For AI agents, use the worker identity (e.g. from `arm worker-init --check`); for humans, your name or handle.
+      placeholder: claude / codex / jane-doe
+    validations:
+      required: true
 
   - type: dropdown
     id: area
@@ -31,36 +40,32 @@ body:
     validations:
       required: true
 
-  - type: textarea
-    id: friction-description
+  - type: input
+    id: task
     attributes:
-      label: Friction Description
-      description: What friction did you encounter? What was confusing or didn't work as expected?
+      label: Task
+      description: The issue/task ID or activity you were doing when you hit this (if applicable)
+      placeholder: TOPTIER-S9-T1 coordination
+    validations:
+      required: false
+
+  - type: textarea
+    id: user-goal
+    attributes:
+      label: User Goal
+      description: What were you trying to do when you hit this?
       placeholder: |
-        Describe the friction you experienced:
-        - What were you trying to do?
-        - Where did the friction occur?
-        - What made it confusing or difficult?
+        e.g. Coordinator claiming wave-1 tasks with `arm claim --worktree ...` per the coordinator skill's dispatch protocol.
     validations:
       required: true
 
   - type: textarea
-    id: expected-behavior
+    id: observed
     attributes:
-      label: Expected Behavior
-      description: What did you expect to happen?
+      label: Observed
+      description: What actually happened? Include exact commands, error messages, and output where possible.
       placeholder: |
-        What should have happened instead?
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual-behavior
-    attributes:
-      label: Actual Behavior
-      description: What actually happened?
-      placeholder: |
-        What actually occurred?
+        e.g. `git worktree add` failed with `fatal: could not create leading directories ... Read-only file system`.
     validations:
       required: true
 
@@ -68,34 +73,27 @@ body:
     id: impact
     attributes:
       label: Impact
-      description: How did this friction impact your work?
+      description: How did this friction affect the work? Did it block you, cause confusion, or require a workaround?
       placeholder: |
-        - Did it block you?
-        - Did it cause confusion?
-        - Did it require workarounds?
+        e.g. Two failed claim attempts and a sandbox bypass before wave dispatch could start.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-follow-up
+    attributes:
+      label: Suggested Follow-Up
+      description: Any ideas for how this could be fixed or improved?
+      placeholder: |
+        e.g. Coordinator skill could recommend a repo-adjacent worktree root, and/or `arm claim` could fall back to a configurable worktree root.
     validations:
       required: false
 
-  - type: textarea
-    id: reproduction-steps
+  - type: input
+    id: tags
     attributes:
-      label: Steps to Reproduce
-      description: If applicable, provide steps to reproduce the issue
-      placeholder: |
-        1. Run `arm ...`
-        2. Observe that ...
-        3. Expected ...
-    validations:
-      required: false
-
-  - type: textarea
-    id: additional-context
-    attributes:
-      label: Additional Context
-      description: Any other information that might be helpful
-      placeholder: |
-        - Armature version: (run `arm --version`)
-        - OS and environment details
-        - Related documentation or commands
+      label: Tags
+      description: Optional comma-separated tags for grouping related findings
+      placeholder: worktree, sandbox, claim
     validations:
       required: false
