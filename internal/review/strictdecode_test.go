@@ -10,8 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Package strictdecode_test verifies that JSON artifact decoders use DisallowUnknownFields
-// to catch type mismatches and unknown fields that unit tests previously hid.
+// Package strictdecode_test verifies the JSON decoding strictness of artifact
+// types in internal/review. ReviewBundle and ConformanceAssessment are decoded
+// with DisallowUnknownFields (by callers using json.Decoder) to catch type
+// mismatches and unknown fields that unit tests previously hid. CriterionResult
+// is the exception: its custom UnmarshalJSON allows unknown/extension fields on
+// results[] entries and citations (since the published schema does not set
+// additionalProperties: false there), but it still strictly enforces the
+// required "status" field.
 //
 // Audit of JSON decoders in internal/review:
 //   - acceptance.go (lines 28, 34): uses map[string]interface{} for flexible format;
@@ -187,26 +193,79 @@ func TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	}
 }
 
-// TestCriterionResultUnknownFields_REQ_TOPTIER_S3_T3 verifies that
-// CriterionResult rejects unknown fields during unmarshaling.
-func TestCriterionResultUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
+// TestCriterionResultAllowsSchemaValidExtensionFields_REQ_TOPTIER_S3_T3 verifies
+// that CriterionResult does NOT reject unknown fields during unmarshaling.
+// docs/schemas/conformance-assessment.schema.json does not set
+// additionalProperties: false on results[] entries, so a schema-valid reviewer
+// payload may legitimately carry extension/metadata fields; CriterionResult's
+// decoder must not be stricter than the published schema (see PR #82 review
+// comment https://github.com/scullxbones/armature/pull/82#discussion_r3611714461).
+func TestCriterionResultAllowsSchemaValidExtensionFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	// JSON with an unknown field
+	// JSON with an extension field not declared by CriterionResult's Go
+	// struct but permitted by the published schema.
 	jsonStr := `{
 		"id": "test_criterion",
 		"status": "satisfied",
 		"rationale": "Test passes",
-		"unknown_field": "should cause error"
+		"extension_field": "schema-valid metadata"
 	}`
 
 	var result review.CriterionResult
-	decoder := json.NewDecoder(strings.NewReader(jsonStr))
-	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&result)
-	require.Error(t, err, "expected error for unknown field in CriterionResult")
-	assert.True(t, strings.Contains(err.Error(), "unknown") || strings.Contains(err.Error(), "Unknown"),
-		"expected error to mention unknown field, got: %s", err.Error())
+	err := json.Unmarshal([]byte(jsonStr), &result)
+	require.NoError(t, err, "schema-valid extension field must not be rejected")
+	assert.Equal(t, "test_criterion", result.ID)
+	assert.Equal(t, review.Satisfied, result.Status)
+}
+
+// TestCriterionResultAllowsSchemaValidExtensionFieldsOnCitation_REQ_TOPTIER_S3_T3
+// verifies that a schema-valid extension field on a nested citations[] entry is
+// also accepted (not rejected) by CriterionResult's decoder, mirroring the
+// results[] entry case above. The original review comment covered both forms:
+// "results[] entry or nested citation" (see PR #82 review comment
+// https://github.com/scullxbones/armature/pull/82#discussion_r3611714461).
+func TestCriterionResultAllowsSchemaValidExtensionFieldsOnCitation_REQ_TOPTIER_S3_T3(t *testing.T) {
+	t.Parallel()
+
+	// JSON with an extension field on a citations[] entry not declared by
+	// Citation's Go struct but permitted by the published schema.
+	jsonStr := `{
+		"id": "test_criterion",
+		"status": "satisfied",
+		"rationale": "Test passes",
+		"citations": [
+			{
+				"path": "internal/review/types.go",
+				"line": 42,
+				"confidence": "high"
+			}
+		]
+	}`
+
+	var result review.CriterionResult
+	err := json.Unmarshal([]byte(jsonStr), &result)
+	require.NoError(t, err, "schema-valid extension field on citation must not be rejected")
+	require.Len(t, result.Citations, 1)
+	assert.Equal(t, "internal/review/types.go", result.Citations[0].Path)
+	assert.Equal(t, 42, result.Citations[0].Line)
+}
+
+// TestCriterionResultMissingStatusRejected_REQ_TOPTIER_S3_T3 verifies that
+// CriterionResult still rejects a missing required "status" field, even
+// though unknown/extension fields are now allowed.
+func TestCriterionResultMissingStatusRejected_REQ_TOPTIER_S3_T3(t *testing.T) {
+	t.Parallel()
+
+	jsonStr := `{
+		"id": "test_criterion",
+		"rationale": "Test passes"
+	}`
+
+	var result review.CriterionResult
+	err := json.Unmarshal([]byte(jsonStr), &result)
+	require.Error(t, err, "expected error for missing required status field")
+	assert.Contains(t, err.Error(), "status")
 }
 
 // TestReviewBundleUnknownFields_REQ_TOPTIER_S3_T3 verifies that

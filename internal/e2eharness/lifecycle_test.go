@@ -3,10 +3,12 @@ package e2eharness_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/e2eharness"
@@ -48,10 +50,10 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 
 	// Step 3: Create a plan and apply it via decompose-apply (dag apply)
 	t.Logf("Step 3: Apply plan via dag apply")
-	planData := map[string]interface{}{
+	planData := map[string]any{
 		"version": 1,
 		"title":   "E2E Test Plan",
-		"issues": []map[string]interface{}{
+		"issues": []map[string]any{
 			{
 				"id":    "TEST-001",
 				"title": "Test task",
@@ -181,28 +183,59 @@ func materializedField(t *testing.T, h *e2eharness.Harness, issueID, field strin
 	return strings.TrimSpace(out)
 }
 
+// buildArmBinaryOnce caches the result of the first buildArmBinary invocation
+// so parallel tests in this package share a single build rather than racing
+// `make build` writes to the same repo-level bin/arm path.
+var buildArmBinaryOnce struct {
+	sync.Once
+	path string
+	err  error
+}
+
 // buildArmBinary compiles the arm binary for use in tests. It returns the path
 // to the built binary or fails the test if compilation fails.
+//
+// Several tests that call this helper (TestArtifactPipelineUsesCLI,
+// TestHappyPathLifecycle, and the scenario tests) run with t.Parallel(). Each
+// invocation used to run its own `make build`, all writing the same
+// repo-level bin/arm path concurrently, which could corrupt the binary or
+// race with an in-flight execution. sync.Once ensures the build happens
+// exactly once per test binary run, and every caller (parallel or not)
+// observes the same completed build.
 func buildArmBinary(t *testing.T) string {
 	t.Helper()
 
-	// Find the repo root by looking for go.mod
-	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
-	rootOutput, err := cmd.Output()
-	require.NoError(t, err, "failed to find repo root")
+	buildArmBinaryOnce.Do(func() {
+		// Find the repo root by looking for go.mod
+		cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
+		rootOutput, err := cmd.Output()
+		if err != nil {
+			buildArmBinaryOnce.err = fmt.Errorf("failed to find repo root: %w", err)
+			return
+		}
 
-	repoRoot := strings.TrimSpace(string(rootOutput))
-	binPath := filepath.Join(repoRoot, "bin", "arm")
+		repoRoot := strings.TrimSpace(string(rootOutput))
+		binPath := filepath.Join(repoRoot, "bin", "arm")
 
-	// Build the binary
-	buildCmd := exec.CommandContext(context.Background(), "make", "-C", repoRoot, "build")
-	buildCmd.Dir = repoRoot
-	buildOut, err := buildCmd.CombinedOutput()
-	require.NoError(t, err, "failed to build arm binary: %s", buildOut)
+		// Build the binary
+		buildCmd := exec.CommandContext(context.Background(), "make", "-C", repoRoot, "build")
+		buildCmd.Dir = repoRoot
+		buildOut, err := buildCmd.CombinedOutput()
+		if err != nil {
+			buildArmBinaryOnce.err = fmt.Errorf("failed to build arm binary: %s: %w", buildOut, err)
+			return
+		}
 
-	require.FileExists(t, binPath, "built arm binary not found at %s", binPath)
+		if _, statErr := os.Stat(binPath); statErr != nil {
+			buildArmBinaryOnce.err = fmt.Errorf("built arm binary not found at %s: %w", binPath, statErr)
+			return
+		}
 
-	return binPath
+		buildArmBinaryOnce.path = binPath
+	})
+
+	require.NoError(t, buildArmBinaryOnce.err)
+	return buildArmBinaryOnce.path
 }
 
 // gitRunInDir runs a git command in a specified directory.

@@ -3,7 +3,6 @@
 package review
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -172,14 +171,15 @@ type CriterionResult struct {
 	MissingEvidence string `json:"missing_evidence,omitempty"`
 }
 
-// UnmarshalJSON detects a missing "status" key and rejects unknown fields.
-// This prevents silent acceptance of malformed results where the status field is omitted
-// or unknown fields are present.
+// UnmarshalJSON detects a missing "status" key. Unknown fields are
+// intentionally allowed here: the published conformance-assessment schema
+// (docs/schemas/conformance-assessment.schema.json) does not set
+// additionalProperties: false on results[] entries or citations, so a
+// schema-valid reviewer payload may legitimately carry extension/metadata
+// fields. This mirrors the policy strictjson.Decode documents and applies
+// package-wide — rejecting unknown fields here would fail artifacts the
+// published contract accepts.
 func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
-	// Use a decoder to detect unknown fields early
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-
 	// detect absent key via raw map
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -192,7 +192,7 @@ func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
 	// use type alias to avoid infinite recursion
 	type Alias CriterionResult
 	var alias Alias
-	if err := decoder.Decode(&alias); err != nil {
+	if err := json.Unmarshal(data, &alias); err != nil {
 		return err
 	}
 	*cr = CriterionResult(alias)
