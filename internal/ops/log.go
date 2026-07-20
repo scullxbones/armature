@@ -20,7 +20,7 @@ func AppendOps(logPath string, ops []Op) error {
 		buf = append(buf, line...)
 		buf = append(buf, '\n')
 	}
-	return adapters.AppendRawLines(logPath, buf)
+	return adapters.NewAppendLog(logPath).Append(buf)
 }
 
 // ReadLog reads all ops from a log file.

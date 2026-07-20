@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAppendRawLines_and_ReadLog(t *testing.T) {
+func TestAppendLogAppend_REQ_ARCHIMP_S19_T2(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 
-	if err := AppendRawLines(logPath, []byte("{\"a\":1}\n{\"b\":2}\n")); err != nil {
+	if err := NewAppendLog(logPath).Append([]byte("{\"a\":1}\n{\"b\":2}\n")); err != nil {
 		t.Fatal(err)
 	}
 	lines, err := ReadLog(logPath)
@@ -26,7 +26,7 @@ func TestAppendRawLines_and_ReadLog(t *testing.T) {
 	}
 }
 
-func TestAppendRawLines_DeduplicatesCompleteRetry(t *testing.T) {
+func TestAppendLogTornWriteRecovery_REQ_ARCHIMP_S19_T2(t *testing.T) {
 	t.Parallel()
 	line := []byte(`{"op":"scope-rename"}`)
 	retry := append(append([]byte{}, line...), '\n')
@@ -39,7 +39,7 @@ func TestAppendRawLines_DeduplicatesCompleteRetry(t *testing.T) {
 	logPath := filepath.Join(dir, "test.log")
 
 	require.NoError(t, os.WriteFile(logPath, line, 0o600))
-	require.NoError(t, AppendRawLines(logPath, retry))
+	require.NoError(t, NewAppendLog(logPath).Append(retry))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
@@ -49,14 +49,14 @@ func TestAppendRawLines_DeduplicatesCompleteRetry(t *testing.T) {
 	require.Equal(t, append(line, '\n'), contents)
 }
 
-// TestAppendRawLines_PreservesLegitimateRepeatedCompleteRecord guards against
+// TestAppendLog_PreservesLegitimateRepeatedCompleteRecord guards against
 // silently losing history when a legitimate append happens to repeat the same
 // serialized bytes as the current final record (e.g. two identical notes from
 // the same worker within the same nowEpoch() second). Unlike a torn tail, the
 // prior record here is already newline-delimited, so it was already
 // successfully persisted: appending an identical record afterward is
 // indistinguishable from a genuine second op and must not be dropped.
-func TestAppendRawLines_PreservesLegitimateRepeatedCompleteRecord(t *testing.T) {
+func TestAppendLog_PreservesLegitimateRepeatedCompleteRecord(t *testing.T) {
 	t.Parallel()
 	line := []byte(`{"op":"scope-rename"}`)
 	initial := append(append([]byte{}, line...), '\n')
@@ -66,14 +66,14 @@ func TestAppendRawLines_PreservesLegitimateRepeatedCompleteRecord(t *testing.T) 
 	logPath := filepath.Join(dir, "test.log")
 
 	require.NoError(t, os.WriteFile(logPath, initial, 0o600))
-	require.NoError(t, AppendRawLines(logPath, repeat))
+	require.NoError(t, NewAppendLog(logPath).Append(repeat))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line, line}, lines)
 }
 
-func TestAppendRawLines_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *testing.T) {
+func TestAppendLog_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -84,19 +84,15 @@ func TestAppendRawLines_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *tes
 
 	// Simulate a crash after the marker is durable but before its append wrote
 	// any bytes. The prior committed record is coincidentally identical.
-	metaDir, err := appendMetaDir(logPath)
-	require.NoError(t, err)
-	require.NoError(t, writePendingMarker(filepath.Join(metaDir, filepath.Base(logPath))+pendingMarkerSuffix, pendingAppend{
-		Start: int64(len(initial)), Data: repeat,
-	}))
-	require.NoError(t, AppendRawLines(logPath, repeat))
+	require.NoError(t, SimulatePendingMarker(logPath, int64(len(initial)), repeat))
+	require.NoError(t, NewAppendLog(logPath).Append(repeat))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line, line}, lines)
 }
 
-// TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
+// TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 // reproduces a crash that lands after the marker is written and after the
 // JSON bytes are appended, but before the trailing '\n' delimiter. Before the
 // fix, recoverPendingAppend patched the missing '\n' into the log but never
@@ -104,7 +100,7 @@ func TestAppendRawLines_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *tes
 // always reported the retry as unrecognized and the full record was appended
 // a second time. For non-idempotent ops (e.g. scope renames) that meant the
 // op replayed twice during materialization.
-func TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
+func TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -115,13 +111,9 @@ func TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t
 	// except the final delimiter, and a surviving marker describes the full
 	// (delimited) buf as the pending append starting at offset 0.
 	require.NoError(t, os.WriteFile(logPath, buf[:len(buf)-1], 0o600))
-	metaDir, err := appendMetaDir(logPath)
-	require.NoError(t, err)
-	require.NoError(t, writePendingMarker(filepath.Join(metaDir, filepath.Base(logPath))+pendingMarkerSuffix, pendingAppend{
-		Start: 0, Data: buf,
-	}))
+	require.NoError(t, SimulatePendingMarker(logPath, 0, buf))
 
-	require.NoError(t, AppendRawLines(logPath, buf))
+	require.NoError(t, NewAppendLog(logPath).Append(buf))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
@@ -131,14 +123,14 @@ func TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t
 	require.Equal(t, buf, contents)
 }
 
-// TestAppendRawLines_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
+// TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 // covers the same delimiter-only-torn crash, but for a multi-op buffer of the
-// kind ops.AppendOps writes ("op1\nop2\n"). Per-record dedup in AppendRawLines
+// kind ops.AppendOps writes ("op1\nop2\n"). Per-record dedup in AppendLog.Append
 // (wasTorn/lastRecordMatches) only ever compares the buffer's first line
 // against the log's last record, so it cannot recognize a multi-line buffer
 // as a duplicate; recovery must recognize the retry itself by comparing the
 // whole marker buffer.
-func TestAppendRawLines_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
+func TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -147,13 +139,9 @@ func TestAppendRawLines_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDupl
 	buf := append(append(append(append([]byte{}, line1...), '\n'), line2...), '\n')
 
 	require.NoError(t, os.WriteFile(logPath, buf[:len(buf)-1], 0o600))
-	metaDir, err := appendMetaDir(logPath)
-	require.NoError(t, err)
-	require.NoError(t, writePendingMarker(filepath.Join(metaDir, filepath.Base(logPath))+pendingMarkerSuffix, pendingAppend{
-		Start: 0, Data: buf,
-	}))
+	require.NoError(t, SimulatePendingMarker(logPath, 0, buf))
 
-	require.NoError(t, AppendRawLines(logPath, buf))
+	require.NoError(t, NewAppendLog(logPath).Append(buf))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
@@ -163,7 +151,7 @@ func TestAppendRawLines_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDupl
 	require.Equal(t, buf, contents)
 }
 
-func TestAppendRawLines_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
+func TestAppendLog_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -175,7 +163,7 @@ func TestAppendRawLines_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	for range 2 {
 		wg.Go(func() {
 			<-start
-			errs <- AppendRawLines(logPath, line)
+			errs <- NewAppendLog(logPath).Append(line)
 		})
 	}
 	close(start)
@@ -190,7 +178,7 @@ func TestAppendRawLines_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	require.Equal(t, [][]byte{line[:len(line)-1], line[:len(line)-1]}, lines)
 }
 
-func TestAppendRawLines_DeduplicatesOnlyFinalRecord(t *testing.T) {
+func TestAppendLog_DeduplicatesOnlyFinalRecord(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -200,7 +188,7 @@ func TestAppendRawLines_DeduplicatesOnlyFinalRecord(t *testing.T) {
 	initial := append(append(append([]byte{}, line...), '\n'), other...)
 	initial = append(initial, '\n')
 	require.NoError(t, os.WriteFile(logPath, initial, 0o600))
-	require.NoError(t, AppendRawLines(logPath, append(append([]byte{}, line...), '\n')))
+	require.NoError(t, NewAppendLog(logPath).Append(append(append([]byte{}, line...), '\n')))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)

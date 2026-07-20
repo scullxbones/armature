@@ -37,7 +37,20 @@ func ListLogFiles(opsDir string) ([]string, error) {
 	return logFiles, nil
 }
 
-// AppendRawLines appends raw bytes to a log file (for pre-formatted JSONL lines).
+// AppendLog appends raw, pre-formatted JSONL lines to a single log file,
+// guarding against crash-induced corruption with a .pending marker
+// protocol (see Append). Construct one fresh per call site with
+// NewAppendLog; it holds no state beyond the target path.
+type AppendLog struct {
+	Path string
+}
+
+// NewAppendLog constructs an AppendLog for the given log file path.
+func NewAppendLog(path string) *AppendLog {
+	return &AppendLog{Path: path}
+}
+
+// Append appends raw bytes to the log file (for pre-formatted JSONL lines).
 //
 // A process can die mid-append: after writing part (or all) of an operation
 // but before writing its JSONL delimiter, or even after the delimiter but
@@ -51,7 +64,8 @@ func ListLogFiles(opsDir string) ([]string, error) {
 // identify the exact attempted byte range rather than mistaking an earlier,
 // identical record for a retry. Calls for one log are serialized with an
 // advisory lock so they cannot overwrite or remove each other's marker.
-func AppendRawLines(logPath string, buf []byte) error {
+func (a *AppendLog) Append(buf []byte) error {
+	logPath := a.Path
 	if len(buf) == 0 {
 		return nil
 	}
@@ -144,13 +158,13 @@ func AppendRawLines(logPath string, buf []byte) error {
 // pendingMarkerSuffix names the sidecar file that records the record
 // currently being appended, so a crash between the marker write and log
 // durability can be recognized as a retry on the next call. See
-// AppendRawLines for the reasoning.
+// AppendLog.Append for the reasoning.
 const pendingMarkerSuffix = ".pending"
 
 // appendMetaSubdir holds lock and pending-marker sidecar files for
-// AppendRawLines, kept out of the log's own directory so directory listings
-// of ops files (which may match log names by substring, e.g. a slot suffix)
-// never pick up a sidecar file instead of the log itself.
+// AppendLog.Append, kept out of the log's own directory so directory
+// listings of ops files (which may match log names by substring, e.g. a
+// slot suffix) never pick up a sidecar file instead of the log itself.
 const appendMetaSubdir = ".arm-append-meta"
 
 // appendMetaDir returns (creating if needed) the sidecar directory for logPath.
