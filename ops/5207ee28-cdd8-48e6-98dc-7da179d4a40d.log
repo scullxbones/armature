@@ -3379,3 +3379,4 @@
 ["amend","ARCHIMP-S19-T3",1784509932,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"definition_of_done":"replay_test.go moves from internal/e2eharness to internal/materialize, package clause changed from e2eharness_test to materialize (white-box), matching the dominant convention there. Uses the shared torn-write fixture helper from ARCHIMP-S19-T2 instead of hand-rolled construction. No cross-referencing doc note added — out of scope. See notes for detail."}]
 ["claim","TOPTIER-S9-T1",1784510755,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","TOPTIER-S9-T1",1784510760,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
+["claim","TOPTIER-S9-T1",1784510767,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
