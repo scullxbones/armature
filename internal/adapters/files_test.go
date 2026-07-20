@@ -99,11 +99,11 @@ func TestAppendRawLines_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *tes
 // TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 // reproduces a crash that lands after the marker is written and after the
 // JSON bytes are appended, but before the trailing '\n' delimiter. Before the
-// fix, recoverPendingAppend patched the missing '\n' into the log itself,
-// which made the subsequent wasTorn check in AppendRawLines read false and
-// skip content-based dedup, so the full record was appended a second time.
-// For non-idempotent ops (e.g. scope renames) that meant the op replayed
-// twice during materialization.
+// fix, recoverPendingAppend patched the missing '\n' into the log but never
+// recomputed its completeness verdict against the full marker buffer, so it
+// always reported the retry as unrecognized and the full record was appended
+// a second time. For non-idempotent ops (e.g. scope renames) that meant the
+// op replayed twice during materialization.
 func TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -126,6 +126,38 @@ func TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line}, lines)
+	contents, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	require.Equal(t, buf, contents)
+}
+
+// TestAppendRawLines_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
+// covers the same delimiter-only-torn crash, but for a multi-op buffer of the
+// kind ops.AppendOps writes ("op1\nop2\n"). Per-record dedup in AppendRawLines
+// (wasTorn/lastRecordMatches) only ever compares the buffer's first line
+// against the log's last record, so it cannot recognize a multi-line buffer
+// as a duplicate; recovery must recognize the retry itself by comparing the
+// whole marker buffer.
+func TestAppendRawLines_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	line1 := []byte(`{"op":"scope-rename","id":1}`)
+	line2 := []byte(`{"op":"scope-rename","id":2}`)
+	buf := append(append(append(append([]byte{}, line1...), '\n'), line2...), '\n')
+
+	require.NoError(t, os.WriteFile(logPath, buf[:len(buf)-1], 0o600))
+	metaDir, err := appendMetaDir(logPath)
+	require.NoError(t, err)
+	require.NoError(t, writePendingMarker(filepath.Join(metaDir, filepath.Base(logPath))+pendingMarkerSuffix, pendingAppend{
+		Start: 0, Data: buf,
+	}))
+
+	require.NoError(t, AppendRawLines(logPath, buf))
+
+	lines, err := ReadLog(logPath)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{line1, line2}, lines)
 	contents, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 	require.Equal(t, buf, contents)

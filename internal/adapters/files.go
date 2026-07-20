@@ -259,6 +259,17 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 		}
 	}
 	complete := available == int64(len(marker.Data))
+	// A crash can land with everything durable except the final delimiter
+	// byte. Patching that single byte in and re-checking completeness against
+	// the whole marker buffer (not just the last record) keeps multi-op
+	// AppendOps buffers ("op1\n op2\n") correctly recognized as complete,
+	// which per-record dedup below (wasTorn/lastRecordMatches) cannot do.
+	if !complete && available == int64(len(marker.Data))-1 && marker.Data[len(marker.Data)-1] == '\n' {
+		if _, err := f.Write([]byte{'\n'}); err != nil {
+			return false, fmt.Errorf("delimit interrupted log record %s: %w", f.Name(), err)
+		}
+		complete = true
+	}
 	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
 	}
