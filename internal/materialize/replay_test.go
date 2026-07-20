@@ -107,7 +107,7 @@ func assertAppendOnlyTail(t *testing.T, torn, logBytes []byte) {
 // pendingMarker, when non-nil, simulates a crash after AppendLog.Append wrote
 // its pending marker (recording the record about to become durable) but
 // before that marker was removed on completion — see AppendLog.Append in
-// internal/adapters/append_log.go for why the marker, not raw content
+// internal/adapters/files.go for why the marker, not raw content
 // comparison, is what makes such a retry safely recognizable.
 func replayState(t *testing.T, tornPrefix []byte, pendingMarker []byte, pendingStart int64, recovered ...ops.Op) (*Issue, []byte, int) {
 	t.Helper()
