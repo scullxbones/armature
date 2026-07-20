@@ -96,6 +96,41 @@ func TestAppendRawLines_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *tes
 	require.Equal(t, [][]byte{line, line}, lines)
 }
 
+// TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
+// reproduces a crash that lands after the marker is written and after the
+// JSON bytes are appended, but before the trailing '\n' delimiter. Before the
+// fix, recoverPendingAppend patched the missing '\n' into the log itself,
+// which made the subsequent wasTorn check in AppendRawLines read false and
+// skip content-based dedup, so the full record was appended a second time.
+// For non-idempotent ops (e.g. scope renames) that meant the op replayed
+// twice during materialization.
+func TestAppendRawLines_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	line := []byte(`{"op":"scope-rename"}`)
+	buf := append(append([]byte{}, line...), '\n')
+
+	// Simulate the crash state directly: the log contains every byte of buf
+	// except the final delimiter, and a surviving marker describes the full
+	// (delimited) buf as the pending append starting at offset 0.
+	require.NoError(t, os.WriteFile(logPath, buf[:len(buf)-1], 0o600))
+	metaDir, err := appendMetaDir(logPath)
+	require.NoError(t, err)
+	require.NoError(t, writePendingMarker(filepath.Join(metaDir, filepath.Base(logPath))+pendingMarkerSuffix, pendingAppend{
+		Start: 0, Data: buf,
+	}))
+
+	require.NoError(t, AppendRawLines(logPath, buf))
+
+	lines, err := ReadLog(logPath)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{line}, lines)
+	contents, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	require.Equal(t, buf, contents)
+}
+
 func TestAppendRawLines_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
