@@ -259,11 +259,6 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 		}
 	}
 	complete := available == int64(len(marker.Data))
-	if !complete && available > 0 {
-		if _, err := f.Write([]byte{'\n'}); err != nil {
-			return false, fmt.Errorf("delimit interrupted log record %s: %w", f.Name(), err)
-		}
-	}
 	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
 	}
