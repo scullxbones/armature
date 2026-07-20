@@ -4,7 +4,7 @@ Please include a summary of the changes and why they were made.
 
 ## Related Issue
 
-Closes #(issue number)
+Closes ARMATURE-ISSUE-ID (e.g. `TOPTIER-S9-T1`) — see docs/conventions.md for commit/branch naming.
 
 ## Type of Change
 
@@ -17,14 +17,11 @@ Closes #(issue number)
 
 ## Quality Checklist
 
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] Commit messages follow `<type>(<ISSUE-ID>): ...` (see docs/conventions.md)
+- [ ] New/changed tests follow the `_REQ_<ISSUE-ID>` naming convention (see docs/conventions.md)
+- [ ] TDD followed — failing test written before the implementation (see docs/agents/quality-gates.md)
 - [ ] I have made corresponding changes to the documentation
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
-- [ ] `make check` passes (lint + test + coverage + mutation testing + validation)
-- [ ] My changes do not introduce new warnings
+- [ ] `make check` passes (lint + test + coverage ≥85% + mutation testing + skill validation + build — see docs/agents/quality-gates.md)
 
 ## Test Plan
 
@@ -33,7 +30,6 @@ Please describe how you tested your changes:
 - [ ] Unit tests added/updated
 - [ ] Integration tests (if applicable)
 - [ ] Manual testing performed
-- [ ] `make check` run successfully
 
 ## Breaking Changes
 
