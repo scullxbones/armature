@@ -1,14 +1,13 @@
-package e2eharness_test
+package materialize
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/require"
 )
@@ -81,7 +80,7 @@ func TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2(t *testin
 
 	// This is the durable state if the first recovery delimits the complete
 	// rename tail and then crashes before it can return. The pending marker
-	// AppendRawLines writes before a record becomes durable is still present
+	// AppendLog.Append writes before a record becomes durable is still present
 	// in that scenario (it is only removed after the append fully succeeds),
 	// so the next retry can recognize that newline-terminated final record as
 	// an exact retry rather than confusing it with an unrelated legitimate
@@ -105,12 +104,12 @@ func assertAppendOnlyTail(t *testing.T, torn, logBytes []byte) {
 	}
 }
 
-// pendingMarker, when non-nil, simulates a crash after AppendRawLines wrote
+// pendingMarker, when non-nil, simulates a crash after AppendLog.Append wrote
 // its pending marker (recording the record about to become durable) but
-// before that marker was removed on completion — see AppendRawLines in
-// internal/adapters/files.go for why the marker, not raw content comparison,
-// is what makes such a retry safely recognizable.
-func replayState(t *testing.T, tornPrefix []byte, pendingMarker []byte, pendingStart int64, recovered ...ops.Op) (*materialize.Issue, []byte, int) {
+// before that marker was removed on completion — see AppendLog.Append in
+// internal/adapters/append_log.go for why the marker, not raw content
+// comparison, is what makes such a retry safely recognizable.
+func replayState(t *testing.T, tornPrefix []byte, pendingMarker []byte, pendingStart int64, recovered ...ops.Op) (*Issue, []byte, int) {
 	t.Helper()
 	root := t.TempDir()
 	logPath := filepath.Join(root, "ops", "worker-a.log")
@@ -119,22 +118,14 @@ func replayState(t *testing.T, tornPrefix []byte, pendingMarker []byte, pendingS
 		require.NoError(t, os.WriteFile(logPath, tornPrefix, 0o600))
 	}
 	if len(pendingMarker) > 0 {
-		marker, err := json.Marshal(struct {
-			Start int64  `json:"start"`
-			Data  []byte `json:"data"`
-		}{Start: pendingStart, Data: pendingMarker})
-		require.NoError(t, err)
-		metaDir := filepath.Join(filepath.Dir(logPath), ".arm-append-meta")
-		require.NoError(t, os.MkdirAll(metaDir, 0o700))
-		markerPath := filepath.Join(metaDir, filepath.Base(logPath)+".pending")
-		require.NoError(t, os.WriteFile(markerPath, marker, 0o600))
+		require.NoError(t, adapters.SimulatePendingMarker(logPath, pendingStart, pendingMarker))
 	}
 	for _, op := range recovered {
 		require.NoError(t, ops.AppendOp(logPath, op))
 	}
 	allOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	state, _, err := materialize.MaterializeAndReturnQuiet(filepath.Join(root, "state"), allOps, map[string]int64{"worker-a.log": 1})
+	state, _, err := MaterializeAndReturnQuiet(filepath.Join(root, "state"), allOps, map[string]int64{"worker-a.log": 1})
 	require.NoError(t, err)
 	issue := state.Issues["REPLAY-001"]
 	require.NotNil(t, issue)
