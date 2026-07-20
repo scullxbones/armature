@@ -66,9 +66,12 @@ func TestPlanRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, originalPlan.Issues[0].Priority, roundTrippedPlan.Issues[0].Priority)
 }
 
-// TestPlanDisallowUnknownFields_REQ_TOPTIER_S3_T3 verifies that ParsePlan
-// rejects JSON with unknown fields to catch malformed or deprecated input.
-func TestPlanDisallowUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
+// TestPlanAllowsUnknownFields_REQ_TOPTIER_S3_T3 verifies that ParsePlan
+// accepts JSON with unknown fields. The canonical validator
+// (docs/schemas/plan.schema.json) does not set additionalProperties: false,
+// so a schema-valid plan may legitimately carry extension/metadata fields;
+// rejecting them here would fail artifacts the published contract accepts.
+func TestPlanAllowsUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
 	// JSON with an unknown field "unknown_field"
@@ -76,16 +79,15 @@ func TestPlanDisallowUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 		"version": 1,
 		"title": "Test Plan",
 		"issues": [],
-		"unknown_field": "should cause error"
+		"unknown_field": "should not cause error"
 	}`
 
 	tmpFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte(planJSON), 0644))
 
-	_, err := ParsePlan(tmpFile)
-	require.Error(t, err, "expected error for unknown field, but got nil")
-	assert.True(t, strings.Contains(err.Error(), "unknown") || strings.Contains(err.Error(), "Unknown"),
-		"expected error to mention unknown field, got: %s", err.Error())
+	plan, err := ParsePlan(tmpFile)
+	require.NoError(t, err, "expected unknown field to be accepted")
+	assert.Equal(t, "Test Plan", plan.Title)
 }
 
 func TestParsePlanRejectsTrailingJSON_REQ_TOPTIER_S3_T3(t *testing.T) {

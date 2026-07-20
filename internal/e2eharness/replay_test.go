@@ -2,6 +2,7 @@ package e2eharness_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,7 +32,7 @@ func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *tes
 	encodedCreate, err := ops.MarshalOp(create)
 	require.NoError(t, err)
 
-	baseline, _, _ := replayState(t, nil, create, transition)
+	baseline, _, _ := replayState(t, nil, nil, 0, create, transition)
 	for interruptedAt := 0; interruptedAt <= len(encodedCreate); interruptedAt++ {
 		t.Run("write-point-"+strconv.Itoa(interruptedAt), func(t *testing.T) {
 			t.Parallel()
@@ -39,7 +40,7 @@ func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *tes
 			// Write the exact bytes a killed append can leave behind: there is no
 			// synthetic newline. AppendOp must delimit that tail before retrying.
 			torn := append([]byte{}, encodedCreate[:interruptedAt]...)
-			actual, logBytes, opCount := replayState(t, torn, create, transition)
+			actual, logBytes, opCount := replayState(t, torn, nil, 0, create, transition)
 			assertAppendOnlyTail(t, torn, logBytes)
 			// A complete JSON value without its delimiter is already durable. Its
 			// retry must be recognized so non-idempotent ops cannot be duplicated.
@@ -72,18 +73,23 @@ func TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2(t *testin
 		Payload: ops.Payload{To: ops.StatusDone, Outcome: "recovered after delimiter crash"},
 	}
 
-	baseline, _, _ := replayState(t, nil, create, rename, transition)
+	baseline, _, _ := replayState(t, nil, nil, 0, create, rename, transition)
 	encodedCreate, err := ops.MarshalOp(create)
 	require.NoError(t, err)
 	encodedRename, err := ops.MarshalOp(rename)
 	require.NoError(t, err)
 
 	// This is the durable state if the first recovery delimits the complete
-	// rename tail and then crashes before it can return. The next retry must
-	// recognize that newline-terminated final record as an exact retry.
+	// rename tail and then crashes before it can return. The pending marker
+	// AppendRawLines writes before a record becomes durable is still present
+	// in that scenario (it is only removed after the append fully succeeds),
+	// so the next retry can recognize that newline-terminated final record as
+	// an exact retry rather than confusing it with an unrelated legitimate
+	// append of identical bytes.
 	delimiterCrashPrefix := append(append(append([]byte{}, encodedCreate...), '\n'), encodedRename...)
 	delimiterCrashPrefix = append(delimiterCrashPrefix, '\n')
-	actual, logBytes, opCount := replayState(t, delimiterCrashPrefix, rename, transition)
+	pendingRename := append(append([]byte{}, encodedRename...), '\n')
+	actual, logBytes, opCount := replayState(t, delimiterCrashPrefix, pendingRename, int64(len(encodedCreate)+1), rename, transition)
 
 	require.True(t, bytes.HasPrefix(logBytes, delimiterCrashPrefix), "recovery must preserve the delimiter-crash tail")
 	require.Equal(t, 3, opCount, "retry must not append a second scope rename")
@@ -99,13 +105,29 @@ func assertAppendOnlyTail(t *testing.T, torn, logBytes []byte) {
 	}
 }
 
-func replayState(t *testing.T, tornPrefix []byte, recovered ...ops.Op) (*materialize.Issue, []byte, int) {
+// pendingMarker, when non-nil, simulates a crash after AppendRawLines wrote
+// its pending marker (recording the record about to become durable) but
+// before that marker was removed on completion — see AppendRawLines in
+// internal/adapters/files.go for why the marker, not raw content comparison,
+// is what makes such a retry safely recognizable.
+func replayState(t *testing.T, tornPrefix []byte, pendingMarker []byte, pendingStart int64, recovered ...ops.Op) (*materialize.Issue, []byte, int) {
 	t.Helper()
 	root := t.TempDir()
 	logPath := filepath.Join(root, "ops", "worker-a.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o750))
 	if len(tornPrefix) > 0 {
 		require.NoError(t, os.WriteFile(logPath, tornPrefix, 0o600))
+	}
+	if len(pendingMarker) > 0 {
+		marker, err := json.Marshal(struct {
+			Start int64  `json:"start"`
+			Data  []byte `json:"data"`
+		}{Start: pendingStart, Data: pendingMarker})
+		require.NoError(t, err)
+		metaDir := filepath.Join(filepath.Dir(logPath), ".arm-append-meta")
+		require.NoError(t, os.MkdirAll(metaDir, 0o700))
+		markerPath := filepath.Join(metaDir, filepath.Base(logPath)+".pending")
+		require.NoError(t, os.WriteFile(markerPath, marker, 0o600))
 	}
 	for _, op := range recovered {
 		require.NoError(t, ops.AppendOp(logPath, op))

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // ===== Log File Operations (from ops/log.go) =====
@@ -37,59 +38,239 @@ func ListLogFiles(opsDir string) ([]string, error) {
 }
 
 // AppendRawLines appends raw bytes to a log file (for pre-formatted JSONL lines).
+//
+// A process can die mid-append: after writing part (or all) of an operation
+// but before writing its JSONL delimiter, or even after the delimiter but
+// before the caller learns the append succeeded and retries. Byte content
+// alone cannot safely tell such a retry apart from a legitimate second append
+// that happens to serialize to the same bytes (e.g. two identical notes from
+// one worker within the same nowEpoch() second) — both leave an identical
+// final record. So retry intent is tracked explicitly with a marker file
+// written before the record is durable and removed once it is. The marker
+// records both the append offset and the complete buffer, so recovery can
+// identify the exact attempted byte range rather than mistaking an earlier,
+// identical record for a retry. Calls for one log are serialized with an
+// advisory lock so they cannot overwrite or remove each other's marker.
 func AppendRawLines(logPath string, buf []byte) error {
 	if len(buf) == 0 {
 		return nil
 	}
 
-	// A process can die after writing part (or all) of an operation but before
-	// writing its JSONL delimiter. Preserve that tail and delimit it before the
-	// retry: truncating would violate the append-only log contract, while blindly
-	// appending would join the tail to the retry and make both unreplayable.
+	metaDir, err := appendMetaDir(logPath)
+	if err != nil {
+		return err
+	}
+	metaBase := filepath.Join(metaDir, filepath.Base(logPath))
+
+	lock, err := lockLog(metaBase)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Close() }() //nolint:errcheck // close error in defer not actionable
+
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return fmt.Errorf("open log %s: %w", logPath, err)
 	}
 	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
 
+	markerPath := metaBase + pendingMarkerSuffix
+	retry, err := recoverPendingAppend(f, markerPath, buf)
+	if err != nil {
+		return err
+	}
+	if retry {
+		return nil
+	}
+
 	info, err := f.Stat()
 	if err != nil {
 		return fmt.Errorf("stat log %s: %w", logPath, err)
 	}
-	firstLineEnd := bytes.IndexByte(buf, '\n')
-	firstLine := buf
-	remaining := []byte(nil)
-	if firstLineEnd >= 0 {
-		firstLine = buf[:firstLineEnd]
-		remaining = buf[firstLineEnd+1:]
-	}
+	firstLine, _, _ := bytes.Cut(buf, []byte{'\n'})
 
-	duplicate, err := lastRecordMatches(f, info.Size(), firstLine)
-	if err != nil {
-		return fmt.Errorf("read final log record %s: %w", logPath, err)
-	}
-	if !duplicate {
-		remaining = buf
-	}
+	wasTorn := false
 	if info.Size() > 0 {
 		var tail [1]byte
 		if _, err := f.ReadAt(tail[:], info.Size()-1); err != nil {
 			return fmt.Errorf("read log tail %s: %w", logPath, err)
 		}
-		if tail[0] != '\n' {
-			if _, err := f.Write([]byte{'\n'}); err != nil {
-				return fmt.Errorf("delimit interrupted log record %s: %w", logPath, err)
-			}
+		wasTorn = tail[0] != '\n'
+	}
+
+	// Only a torn tail is eligible for content-based dedup. A newline-
+	// terminated final record was already committed by an unrelated completed
+	// call, so an identical record after it must be preserved. Complete retry
+	// detection is handled above using the marker's exact byte range.
+	duplicate := false
+	if wasTorn {
+		duplicate, err = lastRecordMatches(f, info.Size(), firstLine)
+		if err != nil {
+			return fmt.Errorf("read final log record %s: %w", logPath, err)
+		}
+	}
+	if wasTorn {
+		if _, err := f.Write([]byte{'\n'}); err != nil {
+			return fmt.Errorf("delimit interrupted log record %s: %w", logPath, err)
+		}
+		info, err = f.Stat()
+		if err != nil {
+			return fmt.Errorf("stat delimited log %s: %w", logPath, err)
 		}
 	}
 
-	if len(remaining) == 0 {
-		return nil
+	if !duplicate {
+		marker := pendingAppend{Start: info.Size(), Data: buf}
+		if err := writePendingMarker(markerPath, marker); err != nil {
+			return err
+		}
+		if _, err := f.Write(buf); err != nil {
+			return fmt.Errorf("write to log %s: %w", logPath, err)
+		}
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("sync log %s: %w", logPath, err)
+		}
 	}
-	if _, err := f.Write(remaining); err != nil {
-		return fmt.Errorf("write to log %s: %w", logPath, err)
+
+	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove pending marker %s: %w", markerPath, err)
+	}
+	if err := syncDir(filepath.Dir(markerPath)); err != nil {
+		return fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 	}
 	return nil
+}
+
+// pendingMarkerSuffix names the sidecar file that records the record
+// currently being appended, so a crash between the marker write and log
+// durability can be recognized as a retry on the next call. See
+// AppendRawLines for the reasoning.
+const pendingMarkerSuffix = ".pending"
+
+// appendMetaSubdir holds lock and pending-marker sidecar files for
+// AppendRawLines, kept out of the log's own directory so directory listings
+// of ops files (which may match log names by substring, e.g. a slot suffix)
+// never pick up a sidecar file instead of the log itself.
+const appendMetaSubdir = ".arm-append-meta"
+
+// appendMetaDir returns (creating if needed) the sidecar directory for logPath.
+func appendMetaDir(logPath string) (string, error) {
+	dir := filepath.Join(filepath.Dir(logPath), appendMetaSubdir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create append metadata dir %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+type pendingAppend struct {
+	Start int64  `json:"start"`
+	Data  []byte `json:"data"`
+}
+
+func lockLog(logPath string) (*os.File, error) {
+	lock, err := os.OpenFile(logPath+".lock", os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // internal state path
+	if err != nil {
+		return nil, fmt.Errorf("open log lock %s: %w", logPath, err)
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lock.Close() //nolint:errcheck // cleanup on error path
+		return nil, fmt.Errorf("lock log %s: %w", logPath, err)
+	}
+	return lock, nil
+}
+
+func writePendingMarker(path string, marker pendingAppend) error {
+	data, err := json.Marshal(marker)
+	if err != nil {
+		return fmt.Errorf("marshal pending marker: %w", err)
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-")
+	if err != nil {
+		return fmt.Errorf("write pending marker %s: %w", path, err)
+	}
+	tmpPath := f.Name()
+	defer func() { _ = os.Remove(tmpPath) }() //nolint:errcheck // best-effort cleanup
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close() //nolint:errcheck // cleanup on error path
+		return fmt.Errorf("chmod pending marker %s: %w", path, err)
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close() //nolint:errcheck // cleanup on error path
+		return fmt.Errorf("write pending marker %s: %w", path, err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close() //nolint:errcheck // cleanup on error path
+		return fmt.Errorf("sync pending marker %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close pending marker %s: %w", path, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace pending marker %s: %w", path, err)
+	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("sync pending marker directory %s: %w", path, err)
+	}
+	return nil
+}
+
+func syncDir(path string) error {
+	dir, err := os.Open(path) //nolint:gosec // internal state path
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }() //nolint:errcheck // close error in defer not actionable
+	return dir.Sync()
+}
+
+// recoverPendingAppend completes recovery for the exact append described by a
+// surviving marker. It returns true only when buf is that already-complete
+// append, making a duplicate retry safe to suppress.
+func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, error) {
+	data, err := os.ReadFile(markerPath) //nolint:gosec // internal state path
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read pending marker %s: %w", markerPath, err)
+	}
+	var marker pendingAppend
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return false, fmt.Errorf("decode pending marker %s: %w", markerPath, err)
+	}
+	if marker.Start < 0 || len(marker.Data) == 0 {
+		return false, fmt.Errorf("invalid pending marker %s", markerPath)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false, fmt.Errorf("stat log %s: %w", f.Name(), err)
+	}
+	if marker.Start > info.Size() {
+		return false, fmt.Errorf("pending marker %s starts beyond log end", markerPath)
+	}
+	available := min(int64(len(marker.Data)), info.Size()-marker.Start)
+	if available > 0 {
+		actual := make([]byte, available)
+		if _, err := f.ReadAt(actual, marker.Start); err != nil {
+			return false, fmt.Errorf("read pending log bytes %s: %w", f.Name(), err)
+		}
+		if !bytes.Equal(actual, marker.Data[:available]) {
+			return false, fmt.Errorf("pending marker %s does not match log tail", markerPath)
+		}
+	}
+	complete := available == int64(len(marker.Data))
+	if !complete && available > 0 {
+		if _, err := f.Write([]byte{'\n'}); err != nil {
+			return false, fmt.Errorf("delimit interrupted log record %s: %w", f.Name(), err)
+		}
+	}
+	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
+	}
+	if err := syncDir(filepath.Dir(markerPath)); err != nil {
+		return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
+	}
+	return complete && bytes.Equal(marker.Data, buf), nil
 }
 
 // lastRecordMatches reports whether the final record, whether newline-terminated
@@ -116,10 +297,7 @@ func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {
 
 	tailStart := int64(0)
 	for scanEnd := end; scanEnd > 0; {
-		start := scanEnd - scanChunkSize
-		if start < 0 {
-			start = 0
-		}
+		start := max(scanEnd-scanChunkSize, 0)
 		chunk := make([]byte, scanEnd-start)
 		if _, err := f.ReadAt(chunk, start); err != nil {
 			return false, err
