@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Armature! This document explains 
 
 ## Prerequisites
 
-- Go 1.20 or later
+- Go 1.26 or later (matches go.mod)
 - `make` for build and test commands
 - `golangci-lint` for linting
 - `gremlins` for mutation testing

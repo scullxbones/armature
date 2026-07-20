@@ -10,7 +10,7 @@ body:
 
         Use this form to report friction, usability issues, or unexpected behavior you encounter while using Armature tools and workflows. This mirrors the internal raw-finding format used under `docs/dogfood/findings/raw/`, so external reports feed the same triage pipeline as internal ones.
 
-        See [docs/agents/dogfood-findings.md](../../docs/agents/dogfood-findings.md) for more context on how we use dogfood findings.
+        See [docs/agents/dogfood-findings.md](https://github.com/scullxbones/armature/blob/main/docs/agents/dogfood-findings.md) for more context on how we use dogfood findings.
 
   - type: input
     id: agent

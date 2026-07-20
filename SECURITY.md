@@ -7,13 +7,12 @@ Armature takes security seriously. If you discover a security vulnerability in A
 ### Responsible Disclosure
 
 1. **Do not open a public issue** for security vulnerabilities
-2. **Contact the security team** — Email security@armature.dev with:
+2. **Report via GitHub** — Use [GitHub's private vulnerability reporting](https://github.com/scullxbones/armature/security/advisories/new) (Security tab -> "Report a vulnerability") with:
    - Description of the vulnerability
    - Steps to reproduce (if applicable)
-   - Potential impact
+   - Potential impact — for Armature this includes the harness hook that mediates agent tool calls, since a bypass there affects scope enforcement for every AI contributor
    - Your contact information
-3. **Allow time for response** — We will acknowledge receipt within 48 hours and provide updates as we investigate and develop a fix
-4. **Coordinated disclosure** — We will work with you to determine an appropriate disclosure timeline before publishing any security announcements
+3. **Coordinated disclosure** — We will work with you to determine an appropriate disclosure timeline before publishing any security announcements
 
 ### Security Advisory Process
 
