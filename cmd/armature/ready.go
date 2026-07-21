@@ -80,6 +80,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			}
 
 			entries := ready.ComputeReady(index, issues, workerID, nowEpoch())
+			expiredClaims := ready.ExpiredClaims(issues, time.Now())
 
 			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
@@ -127,6 +128,15 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 						return err
 					}
 				}
+				// Distinct expired-claims section: kept off stdout (which JSON/agent
+				// consumers parse as the ready queue) and printed to stderr, same as
+				// the snapshot warnings above — visible, but not part of the parsed
+				// payload shape.
+				if len(expiredClaims) > 0 {
+					if err := output.RenderExpiredClaims(cmd.ErrOrStderr(), expiredClaims, true); err != nil {
+						return err
+					}
+				}
 			case tui.IsInteractive():
 				m := readytui.New(entries)
 				p := tea.NewProgram(m)
@@ -160,23 +170,17 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				return nil
 			default:
 				if len(entries) == 0 {
-					stale := ready.StaleClaims(issues, time.Now())
-					if len(stale) > 0 {
-						_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "# stale claims (TTL expired):")
-						for _, id := range stale {
-							issue := issues[id]
-							wid := ""
-							if issue != nil {
-								wid = issue.ClaimedBy
-							}
-							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "#   %s (claimed by %s)\n", id, wid)
-						}
-					}
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
-					return nil
+				} else if err := output.RenderReady(cmd.OutOrStdout(), entries, false); err != nil {
+					return err
 				}
-				// Use output.RenderReady for human-readable output
-				return output.RenderReady(cmd.OutOrStdout(), entries, false)
+				// Distinct expired-claims section, always shown (not just when the
+				// ready queue is empty) so expired claims are never silently omitted
+				// nor silently folded into the ready list.
+				if err := output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims, false); err != nil {
+					return err
+				}
+				return nil
 			}
 			return nil
 		},
