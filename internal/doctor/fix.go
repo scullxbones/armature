@@ -62,7 +62,13 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //     indicates the worktree was torn down (or its git metadata corrupted) out from
 //     under an active claim — the same class of failure this fix pass exists to
 //     recover from, independent of whether the TTL has expired yet. This check is
-//     skipped when repoPath is empty or not a git repo.
+//     skipped entirely — for every issue, not just the ones it would otherwise
+//     flag — whenever GitWorktreeBranches cannot positively confirm which
+//     branches have live worktrees (repoPath empty, not a git repo, or any other
+//     git failure). Treating "couldn't determine" the same as "confirmed missing"
+//     would misfire on every currently claimed/in-progress issue in the graph from
+//     a single transient git error — exactly the mass-false-positive risk this
+//     fix pass exists to avoid, not reintroduce.
 //
 // Each action is expressed purely as ops to append; PlanFixes never mutates or
 // removes existing op log lines. Calling PlanFixes again after ApplyFixes has
@@ -98,19 +104,20 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 		fixed[id] = true
 	}
 
-	liveBranches, _ := adapters.GitWorktreeBranches(repoPath) //nolint:errcheck // best-effort; empty map on error just skips this check
-	for id, issue := range allIssues {
-		if issue == nil || fixed[id] {
-			continue
+	if liveBranches, err := adapters.GitWorktreeBranches(repoPath); err == nil {
+		for id, issue := range allIssues {
+			if issue == nil || fixed[id] {
+				continue
+			}
+			if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
+				continue
+			}
+			if liveBranches["task/"+id] {
+				continue
+			}
+			actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
+			fixed[id] = true
 		}
-		if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
-			continue
-		}
-		if liveBranches["task/"+id] {
-			continue
-		}
-		actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
-		fixed[id] = true
 	}
 
 	sort.Slice(actions, func(i, j int) bool { return actions[i].IssueID < actions[j].IssueID })

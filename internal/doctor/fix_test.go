@@ -223,6 +223,35 @@ func TestPlanFixes_LiveWorktreeIsNotFlagged(t *testing.T) {
 	assert.Empty(t, actions, "a claim with a live registered worktree branch must not be flagged")
 }
 
+func TestPlanFixes_GitFailure_SkipsMissingWorktreeCheckEntirely(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+
+	// repoPath points at a directory that is not a git repo at all, so
+	// GitWorktreeBranches returns a non-nil error (liveness cannot be
+	// determined) rather than an empty map. This must not be conflated with
+	// "confirmed no live worktree" for every claimed/in-progress issue — see
+	// PlanFixes' doc comment on the missing-worktree case.
+	notAGitRepo := t.TempDir()
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "active-claim-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Active claim", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "active-claim-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, notAGitRepo)
+	assert.Empty(t, actions, "a git failure while checking worktree liveness must not be treated as 'every claim's worktree is gone'")
+}
+
 // TestDoctorFix_REQ_TOPTIER_S4_T2 is the acceptance-named regression test for
 // TOPTIER-S4-T2: arm doctor --fix must cover expired claims and missing
 // worktrees end to end (create -> claim -> fix -> verify via materialization

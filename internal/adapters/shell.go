@@ -145,13 +145,24 @@ func GitLog(repoPath string, args ...string) (string, error) {
 // worktree registered against repoPath (via `git worktree list --porcelain`).
 // Used to detect claims whose task worktree was torn down (or never existed)
 // out from under an active claim.
+//
+// If repoPath is empty, this is treated as a deliberate "no repo to check"
+// request: it returns an empty set with a nil error. Any other failure (git
+// not found, `-C repoPath` not a git repo, a transient git error) is
+// propagated as a non-nil error — callers MUST NOT treat an error as "no live
+// worktrees exist"; a git failure means liveness could not be determined, and
+// a caller that used that empty map to conclude "no worktree" for every
+// branch would misfire the same way for a transient failure as for a real
+// missing worktree.
 func GitWorktreeBranches(repoPath string) (map[string]bool, error) {
+	if repoPath == "" {
+		return map[string]bool{}, nil
+	}
 	//nolint:gosec // G204: "git" is constant; args are internal
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
 	out, err := cmd.Output()
 	if err != nil {
-		// Not a git repo or worktrees unsupported — return empty set.
-		return map[string]bool{}, nil
+		return nil, fmt.Errorf("git worktree list --porcelain in %s: %w", repoPath, err)
 	}
 	branches := make(map[string]bool)
 	for line := range strings.SplitSeq(string(out), "\n") {
