@@ -213,7 +213,11 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 // claim) — assignment and claim ownership can diverge (e.g. issue assigned
 // to worker-a but claimed by worker-b), and this view is about what's
 // assigned to assignedTo, not who claimed it.
-func filterExpiredClaimsByAssignedWorker(expiredClaims []ready.ExpiredClaimEntry, issues map[string]*materialize.Issue, assignedTo string) []ready.ExpiredClaimEntry {
+func filterExpiredClaimsByAssignedWorker(
+	expiredClaims []ready.ExpiredClaimEntry,
+	issues map[string]*materialize.Issue,
+	assignedTo string,
+) []ready.ExpiredClaimEntry {
 	filtered := expiredClaims[:0]
 	for _, e := range expiredClaims {
 		issue := issues[e.Issue]
