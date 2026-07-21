@@ -374,10 +374,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 	return results, nil
 }
 
-const issuesGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
-# Never commit. See architecture.md §2 (Directory Structure).
-state/
-`
+const issuesGitignore = adapters.OpsGitignore
 
 const postMergeHookTemplate = `#!/bin/sh
 # armature:managed

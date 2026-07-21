@@ -188,6 +188,65 @@ func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
 	assert.Equal(t, "expired-worker", expiredClaims[0]["claimed_by"])
 }
 
+// TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
+// verifies `arm ready --parent X` does not leak an expired claim on an issue
+// outside that parent's subtree. Before the fix, expiredClaims was computed
+// once from all issues and never filtered by --parent (unlike the main ready
+// entries), so a scoped `arm ready` call would surface unrelated expired
+// claims regardless of --parent.
+func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Parent story with a child task-01 is scope; a sibling task outside
+	// that parent must not leak into a --parent-scoped ready call.
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "E7"})
+	require.NoError(t, cmd.Execute())
+
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	cmd2 := newRootCmd()
+	cmd2.SetOut(new(bytes.Buffer))
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Unrelated task", "--type", "task", "--id", "task-outside"})
+	require.NoError(t, cmd2.Execute())
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, "expired-worker.log")
+	staleClaimTime := time.Now().Unix() - 7200 // 2 hours ago, TTL 1 minute — stale
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpClaim, TargetID: "task-outside", Timestamp: staleClaimTime,
+		WorkerID: "expired-worker", Payload: ops.Payload{TTL: 1},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// task-outside is not a descendant of E7: --parent E7 must not surface
+	// its expired claim. RenderExpiredClaims emits nothing at all when there
+	// are no (in-scope) expired claims, so an empty stderr is the expected,
+	// correctly-scoped result.
+	jsonErrOut := readyExpiredClaimsStderr(t, repo, "--parent", "E7")
+	if jsonErrOut != "" {
+		var expiredClaims []map[string]any
+		require.NoError(t, json.Unmarshal([]byte(jsonErrOut), &expiredClaims), "stderr must be a valid JSON array of expired claims")
+		assert.Empty(t, expiredClaims, "expired claim for task-outside must not leak into --parent E7 scoped ready")
+	}
+}
+
+// readyExpiredClaimsStderr runs `arm ready --format json` with the given
+// extra args and returns the stderr JSON payload (the expired-claims channel).
+func readyExpiredClaimsStderr(t *testing.T, repo string, extraArgs ...string) string {
+	t.Helper()
+	args := append([]string{"ready", "--format", "json"}, extraArgs...)
+	_, jsonErrOut, err := runTrlsWithStderr(t, repo, args...)
+	require.NoError(t, err)
+	return jsonErrOut
+}
+
 func TestImportCommand_DryRun_CSV(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

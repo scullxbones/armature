@@ -282,6 +282,45 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX proves that
+// after an AppendLog.Append call (which creates lock/pending-marker sidecars
+// under .arm-append-meta/) followed by CommitWorktreeOp, the ops worktree is
+// not left dirty by those untracked sidecar files. The .armature/.gitignore
+// shipped in this repo must ignore .arm-append-meta/ for this to hold.
+func TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	require.NoError(t, c.CreateOrphanBranch("_armature"))
+	worktreePath := filepath.Join(repo, ".arm")
+	require.NoError(t, c.AddWorktree("_armature", worktreePath))
+
+	opsDir := filepath.Join(worktreePath, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+
+	// Ship the same .gitignore content `arm bootstrap` writes to the ops
+	// worktree root, so this test tracks the real shipped behavior instead of
+	// a hand-maintained on-disk copy (which isn't committed to the repo).
+	gitignoreDst := filepath.Join(worktreePath, ".armature", ".gitignore")
+	require.NoError(t, os.WriteFile(gitignoreDst, []byte(adapters.OpsGitignore), 0644)) //nolint:gosec // test fixture path from t.TempDir()
+
+	logFile := filepath.Join(opsDir, "worker-abc.log")
+	require.NoError(t, adapters.NewAppendLog(logFile).Append([]byte("{\"op\":1}\n")))
+
+	// Sidecar dir must exist as a side effect of AppendLog.Append.
+	_, statErr := os.Stat(filepath.Join(opsDir, ".arm-append-meta"))
+	require.NoError(t, statErr, "expected .arm-append-meta sidecar dir to be created")
+
+	wc := adapters.New(worktreePath)
+	require.NoError(t, wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001"))
+
+	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "status", "--porcelain")
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), ".arm-append-meta", "ops worktree left dirty by append-meta sidecar files: %s", out)
+}
+
 func TestBranchMergedInto_Merged(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

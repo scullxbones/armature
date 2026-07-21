@@ -167,6 +167,19 @@ const pendingMarkerSuffix = ".pending"
 // slot suffix) never pick up a sidecar file instead of the log itself.
 const appendMetaSubdir = ".arm-append-meta"
 
+// OpsGitignore is the canonical .gitignore content `arm bootstrap` writes to
+// the ops worktree root. It is the single source of truth for what must
+// never be committed there — bootstrap.go writes it verbatim, and tests
+// reference it directly instead of depending on an on-disk copy.
+const OpsGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
+# Never commit. See architecture.md §2 (Directory Structure).
+state/
+
+# Lock and pending-marker sidecar files for AppendRawLines. Never commit;
+# these are ephemeral, worker-local coordination files, not ops state.
+**/` + appendMetaSubdir + `/
+`
+
 // appendMetaDir returns (creating if needed) the sidecar directory for logPath.
 func appendMetaDir(logPath string) (string, error) {
 	dir := filepath.Join(filepath.Dir(logPath), appendMetaSubdir)
@@ -273,16 +286,29 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 		}
 	}
 	complete := available == int64(len(marker.Data))
-	// A crash can land with everything durable except the final delimiter
-	// byte. Patching that single byte in and re-checking completeness against
-	// the whole marker buffer (not just the last record) keeps multi-op
-	// AppendOps buffers ("op1\n op2\n") correctly recognized as complete,
-	// which per-record dedup below (wasTorn/lastRecordMatches) cannot do.
-	if !complete && available == int64(len(marker.Data))-1 && marker.Data[len(marker.Data)-1] == '\n' {
-		if _, err := f.Write([]byte{'\n'}); err != nil {
-			return false, fmt.Errorf("delimit interrupted log record %s: %w", f.Name(), err)
+	if !complete {
+		// The marker's own append never finished durably (a torn write left a
+		// partial, invalid JSONL record on disk, or nothing at all). Rather
+		// than guessing at how to complete the original record, discard the
+		// torn bytes entirely by truncating the log back to where this
+		// append started: the log returns to the last known-valid state, and
+		// the caller's buf is appended fresh by the normal path below. Since
+		// the record was discarded rather than completed, this is never a
+		// duplicate retry to suppress — even if buf happens to equal
+		// marker.Data.
+		if err := f.Truncate(marker.Start); err != nil {
+			return false, fmt.Errorf("truncate torn log write %s: %w", f.Name(), err)
 		}
-		complete = true
+		if err := f.Sync(); err != nil {
+			return false, fmt.Errorf("sync truncated log %s: %w", f.Name(), err)
+		}
+		if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
+		}
+		if err := syncDir(filepath.Dir(markerPath)); err != nil {
+			return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
+		}
+		return false, nil
 	}
 	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
@@ -290,7 +316,7 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 	if err := syncDir(filepath.Dir(markerPath)); err != nil {
 		return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 	}
-	return complete && bytes.Equal(marker.Data, buf), nil
+	return bytes.Equal(marker.Data, buf), nil
 }
 
 // lastRecordMatches reports whether the final record, whether newline-terminated

@@ -223,6 +223,55 @@ func TestPlanFixes_LiveWorktreeIsNotFlagged(t *testing.T) {
 	assert.Empty(t, actions, "a claim with a live registered worktree branch must not be flagged")
 }
 
+func TestPlanFixes_LiveFixBranchForBugIsNotFlagged_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	// A bug's worktree branch is derived as fix/<id>, not task/<id>. PlanFixes
+	// must recognize this live fix/ branch instead of hardcoding "task/".
+	repoDir := initGitRepoWithBranch(t, "fix/live-bug-01")
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "live-bug-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Live bug worktree", NodeType: "bug"}},
+		{Type: ops.OpClaim, TargetID: "live-bug-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "a bug claim with a live fix/ worktree branch must not be flagged as missing")
+}
+
+func TestPlanFixes_LiveFeatBranchForFeatureIsNotFlagged_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	// A feature/story's worktree branch is derived as feat/<id>, not task/<id>.
+	repoDir := initGitRepoWithBranch(t, "feat/live-feature-01")
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "live-feature-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Live feature worktree", NodeType: "feature"}},
+		{Type: ops.OpClaim, TargetID: "live-feature-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "a feature claim with a live feat/ worktree branch must not be flagged as missing")
+}
+
 func TestPlanFixes_GitFailure_SkipsMissingWorktreeCheckEntirely(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)

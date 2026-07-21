@@ -112,7 +112,8 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
 				continue
 			}
-			if liveBranches["task/"+id] {
+			branch := materialize.DeriveBranchName(issue.Type, id)
+			if branch == "" || liveBranches[branch] {
 				continue
 			}
 			actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
