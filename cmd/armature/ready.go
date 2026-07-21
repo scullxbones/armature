@@ -84,6 +84,15 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
+			if assignedTo != "" {
+				filtered := expiredClaims[:0]
+				for _, e := range expiredClaims {
+					if e.ClaimedBy == assignedTo {
+						filtered = append(filtered, e)
+					}
+				}
+				expiredClaims = filtered
+			}
 
 			// Apply --parent filter: keep only descendants of the given issue.
 			if filterParent != "" {
@@ -95,6 +104,14 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					}
 				}
 				entries = filtered
+
+				filteredExpired := expiredClaims[:0]
+				for _, e := range expiredClaims {
+					if descendants[e.Issue] {
+						filteredExpired = append(filteredExpired, e)
+					}
+				}
+				expiredClaims = filteredExpired
 			}
 
 			format, _ := cmd.Flags().GetString("format")

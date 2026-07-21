@@ -151,6 +151,50 @@ func TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 	require.Equal(t, buf, contents)
 }
 
+// TestAppendLog_TornWriteWithDifferentRetryTruncatesPartialRecord_REQ_TOPTIER_S4_PRFIX
+// simulates a crash that left a partial (torn) write of one record on disk,
+// followed by a call to append a *different* buffer (not a retry of the
+// original). The torn partial bytes must be discarded (log truncated back to
+// the append's start offset), not papered over with a guessed newline, so the
+// log never contains an invalid/incomplete JSONL record, and the new buffer
+// must be appended correctly afterward.
+func TestAppendLog_TornWriteWithDifferentRetryTruncatesPartialRecord_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	priorLine := []byte(`{"op":"prior"}`)
+	prior := append(append([]byte{}, priorLine...), '\n')
+	require.NoError(t, os.WriteFile(logPath, prior, 0o600))
+
+	// Simulate a crash mid-append: the marker records a full intended record,
+	// but only a partial prefix of it actually made it to disk.
+	intended := []byte(`{"op":"torn-record","field":"value"}` + "\n")
+	partial := intended[:10]
+	require.NoError(t, os.WriteFile(logPath, append(append([]byte{}, prior...), partial...), 0o600))
+
+	metaDir, err := appendMetaDir(logPath)
+	require.NoError(t, err)
+	require.NoError(t, writePendingMarker(filepath.Join(metaDir, filepath.Base(logPath))+pendingMarkerSuffix, pendingAppend{
+		Start: int64(len(prior)), Data: intended,
+	}))
+
+	// The next call is NOT a retry of the interrupted record — it's a
+	// different buffer entirely.
+	newRecord := []byte(`{"op":"new-record"}` + "\n")
+	require.NoError(t, NewAppendLog(logPath).Append(newRecord))
+
+	raw, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+
+	// The torn partial bytes must be gone; the log must contain only the
+	// prior complete record followed by the new record, both valid JSONL.
+	require.Equal(t, string(prior)+string(newRecord), string(raw))
+
+	lines, err := ReadLog(logPath)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{priorLine, []byte(`{"op":"new-record"}`)}, lines)
+}
+
 func TestAppendLog_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

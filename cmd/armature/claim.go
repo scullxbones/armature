@@ -162,20 +162,10 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 // deriveBranchName determines the branch name for a worktree based on issue type.
 // Returns an empty string for types that do not receive a worktree (e.g., epic).
 // claim creates worktrees for task, bug, feature, and story; merged uses this to tear them down.
+// Delegates to materialize.DeriveBranchName, the shared implementation also used
+// by internal/doctor for missing-worktree detection.
 func deriveBranchName(issueType, issueID string) string {
-	switch issueType {
-	case "bug":
-		return "fix/" + issueID
-	case "feature":
-		return "feat/" + issueID
-	case "story":
-		return "feat/" + issueID
-	case "task":
-		return "task/" + issueID
-	default:
-		// epic and unknown types do not have worktrees.
-		return ""
-	}
+	return materialize.DeriveBranchName(issueType, issueID)
 }
 
 // createWorktreeAndBranch creates a new worktree and branches for a task/bug.
