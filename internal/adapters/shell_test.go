@@ -115,6 +115,37 @@ func TestGitLog_InvalidRepo(t *testing.T) {
 	}
 }
 
+func TestParseWorktreePorcelain_ExcludesPrunableWorktreeBranches(t *testing.T) {
+	t.Parallel()
+	out := "worktree /repo\n" +
+		"HEAD abc123\n" +
+		"branch refs/heads/main\n" +
+		"\n" +
+		"worktree /path/to/deleted/worktree\n" +
+		"HEAD def456\n" +
+		"branch refs/heads/task/foo\n" +
+		"prunable gitdir file points to non-existent location\n" +
+		"\n" +
+		"worktree /path/to/live/worktree\n" +
+		"HEAD ghi789\n" +
+		"branch refs/heads/task/bar\n"
+
+	branches := parseWorktreePorcelain(out)
+
+	if !branches["main"] {
+		t.Error("expected main (no prunable line) to be live")
+	}
+	if branches["task/foo"] {
+		t.Error("expected task/foo (prunable worktree) to be excluded")
+	}
+	if !branches["task/bar"] {
+		t.Error("expected task/bar (no prunable line, no trailing blank) to be live")
+	}
+	if len(branches) != 2 {
+		t.Errorf("expected exactly 2 live branches, got %d: %v", len(branches), branches)
+	}
+}
+
 func TestExecuteHook_Allow(t *testing.T) {
 	t.Parallel()
 	cmd := []string{"echo", `{"allowed":true,"message":""}`}
