@@ -16,10 +16,12 @@ import (
 func newDoctorCmd() *cobra.Command {
 	var strict bool
 	var verbose bool
+	var fix bool
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Run repo health checks (D1-D6)",
+		Short: "Run repo health checks (D1-D7); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Fall through to root PersistentPreRunE for normal config loading.
 			// This correctly sets the execution state in the command context.
@@ -72,6 +74,10 @@ func newDoctorCmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			repoPath := appCtx.RepoPath
 
+			if fix {
+				return runDoctorFix(cmd, appCtx, dryRun)
+			}
+
 			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, verbose, time.Now())
 			if err != nil {
 				return err
@@ -115,7 +121,43 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&strict, "strict", false, "promote warnings to errors")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "emit file path and line context for D3 violations; name uncited issue IDs for D6")
+	cmd.Flags().BoolVar(&fix, "fix", false, "reconcile expired claims (claimed->open, in-progress->blocked) by appending ops")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --fix, list planned fixes without writing any ops")
 	return cmd
+}
+
+// runDoctorFix plans and (unless dryRun) applies the deterministic claim-liveness
+// remediations described in docs/design/recovery-state-machine.md.
+func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error {
+	_, allIssues, err := doctor.LoadState(appCtx.IssuesDir, appCtx.StateDir)
+	if err != nil {
+		return err
+	}
+
+	workerID, logPath, err := resolveWorkerAndLog(appCtx)
+	if err != nil {
+		return err
+	}
+
+	actions := doctor.PlanFixes(allIssues, workerID, time.Now())
+
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	if format == "json" {
+		data, _ := json.MarshalIndent(actions, "", "  ") //nolint:errcheck // actions struct contains only serializable values
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	} else {
+		if len(actions) == 0 {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No expired claims to fix.")
+		}
+		for _, a := range actions {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", a.IssueID, a.Reason)
+		}
+	}
+
+	if dryRun || len(actions) == 0 {
+		return nil
+	}
+	return doctor.ApplyFixes(logPath, actions)
 }
 
 func countBySeverity(r doctor.Report, s doctor.Severity) int {

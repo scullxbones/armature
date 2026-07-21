@@ -331,7 +331,7 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ## doctor
 
-Run repository health checks (D1-D6).
+Run repository health checks (D1-D7).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -339,6 +339,20 @@ Run repository health checks (D1-D6).
 **Flags:**
 - `--strict`: Promote warnings to errors.
 - `--verbose`: Show file:line context for D3 violations; name uncited issue IDs for D6.
+- `--fix`: Deterministically reconcile expired claims per the claim-liveness matrix in
+  [docs/design/recovery-state-machine.md](./design/recovery-state-machine.md): a `claimed`
+  issue with an expired TTL is released back to `open`; an `in-progress` issue with an
+  expired TTL is transitioned to `blocked` pending manual investigation (the worker may
+  have left in-flight work). Each fix is appended as new ops — the append-only op log is
+  never rewritten. Re-running `--fix` after applying it is a no-op, since the affected
+  issues are no longer claimed/in-progress with an expired claim.
+- `--dry-run`: With `--fix`, list the planned fixes without writing any ops.
+
+**Examples:**
+```bash
+arm doctor --fix --dry-run   # preview planned reconciliation
+arm doctor --fix             # apply it
+```
 
 **Doctor Checks:**
 See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D6), their triggers, and remediation steps.
