@@ -3405,3 +3405,4 @@
 ["transition","TOPTIER-S4-T1",1784597869,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["claim","TOPTIER-S4-T2",1784597882,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["heartbeat","TOPTIER-S4-T2",1784598825,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
+["transition","TOPTIER-S4-T2",1784598939,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Implemented arm doctor --fix: deterministic reconciliation of stale claims. Released expired claims by appending transition ops to open state. Added PlanFixes() and ApplyFixes() functions with dry-run support. All fixes are idempotent and never mutate history. Tests covering dry-run, fix application, and idempotency all passing. Code builds successfully."}]
