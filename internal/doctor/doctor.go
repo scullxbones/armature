@@ -113,9 +113,10 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	}
 
 	// Extract target IDs from ops for D3 check
+	noteOnlyOrphans := noteOnlyOrphanTargets(allOps)
 	opsTargetIDs := make([]string, 0, len(allOps))
 	for _, op := range allOps {
-		if op.Type != ops.OpSourceFingerprint && op.TargetID != "" {
+		if op.Type != ops.OpSourceFingerprint && op.TargetID != "" && !noteOnlyOrphans[op.TargetID] {
 			opsTargetIDs = append(opsTargetIDs, op.TargetID)
 		}
 	}
@@ -276,6 +277,61 @@ func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []
 	}
 
 	return f
+}
+
+// noteOnlyOrphanTargets returns target IDs whose only references in allOps are
+// note ops that have since been fully deleted via a matching note-delete op
+// (paired by Payload.NoteID). Such targets are stray retracted notes — e.g. a
+// mistyped `arm note list ...` invocation parsed "list" as an issue ID — not
+// genuine orphaned issue references, and must be excluded from the D3 target list.
+func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
+	type noteState struct{ created, deleted bool }
+	notes := make(map[string]map[string]*noteState)
+	otherRefs := make(map[string]bool)
+
+	for _, op := range allOps {
+		if op.TargetID == "" {
+			continue
+		}
+		switch op.Type {
+		case ops.OpNote, ops.OpNoteDelete:
+			if notes[op.TargetID] == nil {
+				notes[op.TargetID] = make(map[string]*noteState)
+			}
+			ns := notes[op.TargetID][op.Payload.NoteID]
+			if ns == nil {
+				ns = &noteState{}
+				notes[op.TargetID][op.Payload.NoteID] = ns
+			}
+			if op.Type == ops.OpNote {
+				ns.created = true
+			} else {
+				ns.deleted = true
+			}
+		case ops.OpSourceFingerprint:
+			// already excluded from D3 entirely
+		default:
+			otherRefs[op.TargetID] = true
+		}
+	}
+
+	result := make(map[string]bool)
+	for targetID, noteMap := range notes {
+		if otherRefs[targetID] {
+			continue
+		}
+		allDeleted := true
+		for _, ns := range noteMap {
+			if !ns.created || !ns.deleted {
+				allDeleted = false
+				break
+			}
+		}
+		if allDeleted {
+			result[targetID] = true
+		}
+	}
+	return result
 }
 
 // checkD3OrphanedOpsFromList checks for orphaned ops given a flat list of target IDs.
