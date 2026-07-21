@@ -1,3 +1,7 @@
 # Materialized state — derived from ops logs, regenerated locally by each worker.
 # Never commit. See architecture.md §2 (Directory Structure).
 state/
+
+# Lock and pending-marker sidecar files for AppendRawLines. Never commit;
+# these are ephemeral, worker-local coordination files, not ops state.
+**/.arm-append-meta/
