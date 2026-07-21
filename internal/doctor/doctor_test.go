@@ -213,6 +213,63 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	assert.Contains(t, d3.Items, "ghost-issue-01")
 }
 
+func TestRun_Integration_D3_SkipsDeletedNoteOnlyIssues(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	// Simulate a stray `arm note list ...` typo: a note was created against a
+	// bogus target ID ("list") and then deleted, with no other op ever
+	// referencing that target. This must not be flagged as an orphaned op.
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	noteOp := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "list",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-01",
+		Payload:   ops.Payload{Msg: "ARCHIMP-S19-T2", NoteID: "note-1"},
+	}
+	deleteOp := ops.Op{
+		Type:      ops.OpNoteDelete,
+		TargetID:  "list",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-01",
+		Payload:   ops.Payload{NoteID: "note-1"},
+	}
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{noteOp, deleteOp}))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	require.NoError(t, err)
+
+	d3 := findCheck(t, report, "D3")
+	assert.Equal(t, doctor.SeverityOK, d3.Severity,
+		"a note that was created and fully deleted against a bogus target should not orphan D3")
+	assert.NotContains(t, d3.Items, "list")
+}
+
+func TestRun_Integration_D3_UndeletedNoteStillOrphans(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	// A note created against a bogus target but never deleted must still
+	// flag as an orphaned op — only fully-deleted note-only targets are skipped.
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	noteOp := ops.Op{
+		Type:      ops.OpNote,
+		TargetID:  "ghost-issue-02",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  "worker-01",
+		Payload:   ops.Payload{Msg: "still here", NoteID: "note-2"},
+	}
+	require.NoError(t, ops.AppendOp(logPath, noteOp))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	require.NoError(t, err)
+
+	d3 := findCheck(t, report, "D3")
+	assert.Equal(t, doctor.SeverityError, d3.Severity)
+	assert.Contains(t, d3.Items, "ghost-issue-02")
+}
+
 func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
