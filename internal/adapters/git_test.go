@@ -303,7 +303,7 @@ func TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX(t *testing.
 	// worktree root, so this test tracks the real shipped behavior instead of
 	// a hand-maintained on-disk copy (which isn't committed to the repo).
 	gitignoreDst := filepath.Join(worktreePath, ".armature", ".gitignore")
-	require.NoError(t, os.WriteFile(gitignoreDst, []byte(adapters.OpsGitignore), 0644)) //nolint:gosec // test fixture path from t.TempDir()
+	require.NoError(t, os.WriteFile(gitignoreDst, []byte(adapters.OpsGitignore), 0644))
 
 	logFile := filepath.Join(opsDir, "worker-abc.log")
 	require.NoError(t, adapters.NewAppendLog(logFile).Append([]byte("{\"op\":1}\n")))
