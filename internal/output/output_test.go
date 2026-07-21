@@ -117,6 +117,41 @@ func TestRenderReady_HumanReadable(t *testing.T) {
 	assert.Contains(t, output, "high")
 }
 
+func TestRenderExpiredClaims_HumanReadable_REQ_TOPTIER_S4_T3(t *testing.T) {
+	t.Parallel()
+	claims := []ready.ExpiredClaimEntry{
+		{Issue: "TASK-01", Title: "Expired Task", Status: "claimed", ClaimedBy: "worker-1"},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, RenderExpiredClaims(&buf, claims, false))
+	out := buf.String()
+	assert.Contains(t, out, "Expired claims")
+	assert.Contains(t, out, "TASK-01")
+	assert.Contains(t, out, "Expired Task")
+	assert.Contains(t, out, "worker-1")
+}
+
+func TestRenderExpiredClaims_HumanReadable_Empty(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	require.NoError(t, RenderExpiredClaims(&buf, nil, false))
+	assert.Empty(t, buf.String(), "nothing to surface when there are no expired claims")
+}
+
+func TestRenderExpiredClaims_JSON(t *testing.T) {
+	t.Parallel()
+	claims := []ready.ExpiredClaimEntry{
+		{Issue: "TASK-01", Title: "Expired Task", Status: "in-progress", ClaimedBy: "worker-1"},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, RenderExpiredClaims(&buf, claims, true))
+	var result []map[string]interface{}
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
+	require.Len(t, result, 1)
+	assert.Equal(t, "TASK-01", result[0]["issue"])
+	assert.Equal(t, "in-progress", result[0]["status"])
+}
+
 func TestRenderReady_JSON(t *testing.T) {
 	t.Parallel()
 	entries := []ready.ReadyEntry{

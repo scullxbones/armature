@@ -155,6 +155,39 @@ func TestReadyCommand_JSONFormat(t *testing.T) {
 	assert.Contains(t, buf.String(), "[")
 }
 
+// TestReadyExpiredClaims_REQ_TOPTIER_S4_T3 verifies `arm ready` surfaces an
+// expired claim distinctly in both text and JSON output, per TOPTIER-S4-T3's
+// acceptance criterion, rather than silently omitting it (ComputeReady only
+// ever returns status=open issues).
+func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Materialize first to establish baseline state before injecting the stale claim op.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, "expired-worker.log")
+	staleClaimTime := time.Now().Unix() - 7200 // 2 hours ago, TTL 1 minute — stale
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: staleClaimTime,
+		WorkerID: "expired-worker", Payload: ops.Payload{TTL: 1},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	jsonOut, jsonErrOut, err := runTrlsWithStderr(t, repo, "ready", "--format", "json")
+	require.NoError(t, err)
+	// stdout ready-queue shape is unchanged: task-01 is claimed, not open, so it
+	// must not appear in the ready array itself.
+	assert.NotContains(t, jsonOut, "task-01", "claimed+expired issue must not appear in the ready queue's own JSON array")
+	var expiredClaims []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(jsonErrOut), &expiredClaims), "stderr must be a valid JSON array of expired claims")
+	require.Len(t, expiredClaims, 1)
+	assert.Equal(t, "task-01", expiredClaims[0]["issue"])
+	assert.Equal(t, "expired-worker", expiredClaims[0]["claimed_by"])
+}
+
 func TestImportCommand_DryRun_CSV(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
