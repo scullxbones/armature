@@ -3,6 +3,7 @@ package ready
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -694,4 +695,74 @@ func TestExplainNotReady_WithInjectedTime_FreshClaimIncluded(t *testing.T) {
 	// Task should NOT be in the explanation map because the claim is still fresh
 	_, ok := result["task-01"]
 	assert.False(t, ok, "fresh claimed task should not appear in ExplainNotReady output")
+}
+
+func TestExpiredClaims_ClaimedPastTTL_Surfaced(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-01": {
+			ID: "task-01", Title: "Expired claimed task", Status: "claimed",
+			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
+		},
+	}
+	entries := ExpiredClaims(issues, time.Unix(61, 0))
+	require.Len(t, entries, 1)
+	assert.Equal(t, "task-01", entries[0].Issue)
+	assert.Equal(t, "worker-a", entries[0].ClaimedBy)
+	assert.Equal(t, "claimed", entries[0].Status)
+}
+
+func TestExpiredClaims_InProgressPastTTL_Surfaced(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-01": {
+			ID: "task-01", Title: "Starved in-progress task", Status: "in-progress",
+			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
+		},
+	}
+	entries := ExpiredClaims(issues, time.Unix(61, 0))
+	require.Len(t, entries, 1)
+	assert.Equal(t, "in-progress", entries[0].Status)
+}
+
+func TestExpiredClaims_ActiveClaim_NotSurfaced(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-01": {
+			ID: "task-01", Status: "claimed", ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 60,
+		},
+	}
+	entries := ExpiredClaims(issues, time.Unix(30, 0))
+	assert.Empty(t, entries, "a claim within its TTL must not be surfaced as expired")
+}
+
+func TestExpiredClaims_OpenIssue_NotSurfaced(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-01": {ID: "task-01", Status: "open"},
+	}
+	entries := ExpiredClaims(issues, time.Unix(1_000_000, 0))
+	assert.Empty(t, entries, "an unclaimed open issue is never an expired claim")
+}
+
+func TestExpiredClaims_DoesNotOverlapReadyQueue(t *testing.T) {
+	t.Parallel()
+	// A claimed+expired task is excluded from the ready queue (ComputeReady only
+	// surfaces status=open), so ExpiredClaims is the sole place it's surfaced —
+	// distinct from, not merged into, the ready queue.
+	index := materialize.Index{
+		"task-01": {Status: "claimed", Type: "task"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-01": {
+			ID: "task-01", Status: "claimed", Type: "task",
+			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
+		},
+	}
+	ready := ComputeReady(index, issues, "", 61)
+	assert.Empty(t, ready, "claimed issues never appear in the ready queue, expired or not")
+
+	expired := ExpiredClaims(issues, time.Unix(61, 0))
+	require.Len(t, expired, 1)
+	assert.Equal(t, "task-01", expired[0].Issue)
 }

@@ -543,6 +543,16 @@ When `--format json` or `--format agent` is used with `--waves`, the output is:
 ```
 Each inner array is a wave of ready issues that can be executed in parallel without scope conflicts.
 
+**Expired claims:** issues in `claimed` or `in-progress` status whose claim TTL has
+lapsed without renewal are never part of the ready queue itself (only `open` issues
+are), so they are surfaced in a distinct expired-claims section instead of being
+silently omitted or silently folded into the ready list:
+- Text output: an "Expired claims (TTL lapsed without renewal):" section is always
+  printed after the ready list (even when the ready list itself is non-empty).
+- `--format json` / `--format agent`: the ready queue's own JSON shape on stdout is
+  unchanged for backward compatibility; expired claims are printed as a separate JSON
+  array to stderr (same channel used for snapshot warnings) when any exist.
+
 ---
 
 ## render-context

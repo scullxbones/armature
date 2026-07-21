@@ -315,6 +315,33 @@ func RenderReadyWaves(w io.Writer, waves [][]ready.ReadyEntry) error {
 	return err
 }
 
+// RenderExpiredClaims renders the distinct expired-claims section for `arm ready`.
+// If asJSON is true, renders a JSON array (even if empty); otherwise renders
+// human-readable text, and is a no-op when claims is empty (nothing to surface).
+func RenderExpiredClaims(w io.Writer, claims []ready.ExpiredClaimEntry, asJSON bool) error {
+	if asJSON {
+		data, err := json.MarshalIndent(claims, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal expired claims JSON: %w", err)
+		}
+		_, err = fmt.Fprintln(w, string(data))
+		return err
+	}
+	if len(claims) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintln(w, "Expired claims (TTL lapsed without renewal):"); err != nil {
+		return err
+	}
+	for _, c := range claims {
+		_, err := fmt.Fprintf(w, "  %s  %s  (%s, claimed by %s)\n", c.Issue, c.Title, c.Status, c.ClaimedBy)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func renderReadyHuman(w io.Writer, entries []ready.ReadyEntry) error {
 	if len(entries) == 0 {
 		_, err := fmt.Fprintln(w, "No tasks ready.")
