@@ -164,14 +164,59 @@ func GitWorktreeBranches(repoPath string) (map[string]bool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list --porcelain in %s: %w", repoPath, err)
 	}
+	return parseWorktreePorcelain(string(out)), nil
+}
+
+// parseWorktreePorcelain parses `git worktree list --porcelain` output into
+// the set of branch names with a live (non-prunable) worktree.
+//
+// Porcelain output is a sequence of blocks separated by blank lines, one per
+// worktree, e.g.:
+//
+//	worktree /path/to/worktree
+//	branch refs/heads/task/foo
+//
+// A worktree whose directory was deleted without `git worktree remove`/
+// `prune` gets an additional `prunable ...` line in its block:
+//
+//	worktree /path/to/deleted/worktree
+//	branch refs/heads/task/foo
+//	prunable gitdir file points to non-existent location
+//
+// Branches belonging to a block containing a `prunable` line are excluded —
+// their worktree is stale and should not be treated as live.
+func parseWorktreePorcelain(out string) map[string]bool {
+	const branchPrefix = "branch refs/heads/"
+	const prunablePrefix = "prunable "
+
 	branches := make(map[string]bool)
-	for line := range strings.SplitSeq(string(out), "\n") {
-		const prefix = "branch refs/heads/"
-		if after, ok := strings.CutPrefix(line, prefix); ok {
-			branches[after] = true
+	var blockBranch string
+	var blockPrunable bool
+
+	flush := func() {
+		if blockBranch != "" && !blockPrunable {
+			branches[blockBranch] = true
+		}
+		blockBranch = ""
+		blockPrunable = false
+	}
+
+	for line := range strings.SplitSeq(out, "\n") {
+		if line == "" {
+			flush()
+			continue
+		}
+		if after, ok := strings.CutPrefix(line, branchPrefix); ok {
+			blockBranch = after
+			continue
+		}
+		if strings.HasPrefix(line, prunablePrefix) {
+			blockPrunable = true
 		}
 	}
-	return branches, nil
+	flush()
+
+	return branches
 }
 
 // ===== Hook Execution (from hooks/runner.go) =====

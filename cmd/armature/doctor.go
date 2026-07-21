@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -157,7 +159,12 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	if dryRun || len(actions) == 0 {
 		return nil
 	}
-	return doctor.ApplyFixes(logPath, actions)
+
+	var gc ops.GitCommitter
+	if appCtx.WorktreePath != "" {
+		gc = adapters.New(appCtx.WorktreePath)
+	}
+	return doctor.ApplyFixes(logPath, appCtx.WorktreePath, actions, gc)
 }
 
 func countBySeverity(r doctor.Report, s doctor.Severity) int {

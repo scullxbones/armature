@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -156,7 +157,7 @@ func TestApplyFixes_IdempotentOnSecondRun(t *testing.T) {
 	require.NoError(t, err)
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
-	require.NoError(t, doctor.ApplyFixes(fixerLogPath, actions))
+	require.NoError(t, doctor.ApplyFixes(fixerLogPath, "", actions, nil))
 
 	// Issue should now be open; doctor should be clean; a second plan should find nothing.
 	index, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
@@ -166,7 +167,7 @@ func TestApplyFixes_IdempotentOnSecondRun(t *testing.T) {
 	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now, "")
 	assert.Empty(t, actions2, "second PlanFixes run must find nothing left to fix")
 
-	require.NoError(t, doctor.ApplyFixes(fixerLogPath, actions2))
+	require.NoError(t, doctor.ApplyFixes(fixerLogPath, "", actions2, nil))
 	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(filepath.Join(issuesDir, "ops"))
 	require.NoError(t, err)
 	assert.Len(t, items, 4, "no-op second ApplyFixes call must not append anything")
@@ -335,7 +336,7 @@ func TestDoctorFix_REQ_TOPTIER_S4_T2(t *testing.T) {
 
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
 	require.Len(t, actions, 2)
-	require.NoError(t, doctor.ApplyFixes(fixerLogPath, actions))
+	require.NoError(t, doctor.ApplyFixes(fixerLogPath, "", actions, nil))
 
 	index, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
@@ -346,12 +347,80 @@ func TestDoctorFix_REQ_TOPTIER_S4_T2(t *testing.T) {
 	assert.Empty(t, doctor.PlanFixes(allIssues2, "fixer-01", now, repoDir))
 }
 
+// TestApplyFixes_CommitsToWorktreeBranch proves that ApplyFixes, given a
+// worktree path and a GitCommitter (the wiring `arm doctor --fix` uses in
+// dual-branch mode), actually commits the appended ops to the worktree's
+// branch — not just writes the local ops log file — the same way
+// appendHighStakesOp commits claim/transition/assign ops.
+func TestApplyFixes_CommitsToWorktreeBranch(t *testing.T) {
+	t.Parallel()
+	repoDir := initGitRepo(t)
+	issuesDir := filepath.Join(repoDir, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "state", "issues"), 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(issuesDir, "config.json"),
+		[]byte(`{"mode":"dual-branch"}`),
+		0644,
+	))
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+
+	now := time.Now()
+	claimedAt := now.Add(-2 * time.Hour).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "commit-test-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Commit test task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "commit-test-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 60}},
+	}))
+
+	fixerLogPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	require.Len(t, actions, 1)
+
+	// Baseline: no uncommitted diff for the fixer log yet (it doesn't exist).
+	beforeLog := currentCommitSubject(t, repoDir)
+
+	gc := adapters.New(repoDir)
+	require.NoError(t, doctor.ApplyFixes(fixerLogPath, repoDir, actions, gc))
+
+	// The fix ops must be committed to the worktree's branch (HEAD advanced,
+	// working tree clean), not merely written to the log file on disk.
+	afterLog := currentCommitSubject(t, repoDir)
+	assert.NotEqual(t, beforeLog, afterLog, "ApplyFixes must create a new commit for the appended ops")
+
+	// The fixer's own ops log file specifically must be committed (not merely
+	// present on disk) — other newly created scaffolding (state/, config.json)
+	// is irrelevant to this assertion.
+	relFixerLog, err := filepath.Rel(repoDir, fixerLogPath)
+	require.NoError(t, err)
+	status := runGitOutput(t, repoDir, "status", "--porcelain", "--", relFixerLog)
+	assert.Empty(t, status, "fixer log must be committed, not left untracked/modified")
+}
+
+func currentCommitSubject(t *testing.T, dir string) string {
+	t.Helper()
+	return runGitOutput(t, dir, "log", "-1", "--format=%H")
+}
+
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return string(out)
+}
+
 func TestApplyFixes_EmptyActionsIsNoOp(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
 
-	require.NoError(t, doctor.ApplyFixes(logPath, nil))
+	require.NoError(t, doctor.ApplyFixes(logPath, "", nil, nil))
 	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(filepath.Join(issuesDir, "ops"))
 	require.NoError(t, err)
 	assert.Empty(t, items)

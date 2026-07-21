@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
@@ -85,13 +86,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
 			if assignedTo != "" {
-				filtered := expiredClaims[:0]
-				for _, e := range expiredClaims {
-					if e.ClaimedBy == assignedTo {
-						filtered = append(filtered, e)
-					}
-				}
-				expiredClaims = filtered
+				expiredClaims = filterExpiredClaimsByAssignedWorker(expiredClaims, issues, assignedTo)
 			}
 
 			// Apply --parent filter: keep only descendants of the given issue.
@@ -209,4 +204,22 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
 	cmd.Flags().BoolVar(&waves, "waves", false, "partition ready entries into scope-disjoint waves (JSON/agent output only)")
 	return cmd
+}
+
+// filterExpiredClaimsByAssignedWorker keeps only the expired-claim entries
+// whose issue is assigned to assignedTo, per the issue's AssignedWorker field
+// (the same field ready.FilterByAssignedTo uses for the main ready list).
+// This is deliberately NOT a filter on ClaimedBy (who currently holds the
+// claim) — assignment and claim ownership can diverge (e.g. issue assigned
+// to worker-a but claimed by worker-b), and this view is about what's
+// assigned to assignedTo, not who claimed it.
+func filterExpiredClaimsByAssignedWorker(expiredClaims []ready.ExpiredClaimEntry, issues map[string]*materialize.Issue, assignedTo string) []ready.ExpiredClaimEntry {
+	filtered := expiredClaims[:0]
+	for _, e := range expiredClaims {
+		issue := issues[e.Issue]
+		if issue != nil && issue.AssignedWorker == assignedTo {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }

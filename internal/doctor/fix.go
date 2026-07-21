@@ -125,17 +125,21 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 	return actions
 }
 
-// ApplyFixes appends the ops for each planned fix to the given ops log, in order.
-// A nil or empty actions slice is a no-op.
-func ApplyFixes(logPath string, actions []FixAction) error {
-	var flat []ops.Op
+// ApplyFixes appends the ops for each planned fix to the given ops log, in
+// order, committing each one to the worktree's branch the same way
+// high-stakes ops (claim, transition, assign) do — via ops.AppendAndCommit —
+// rather than writing to the local ops log file only. Pass worktreePath=""
+// and gc=nil for single-branch mode, where AppendAndCommit skips the commit
+// step. A nil or empty actions slice is a no-op.
+func ApplyFixes(logPath, worktreePath string, actions []FixAction, gc ops.GitCommitter) error {
 	for _, a := range actions {
-		flat = append(flat, a.Ops...)
+		for _, op := range a.Ops {
+			if err := ops.AppendAndCommit(logPath, worktreePath, op, gc); err != nil {
+				return err
+			}
+		}
 	}
-	if len(flat) == 0 {
-		return nil
-	}
-	return ops.AppendOps(logPath, flat)
+	return nil
 }
 
 // claimExpired mirrors the staleness formula used by ready.StaleClaims, for the
