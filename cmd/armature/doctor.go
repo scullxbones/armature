@@ -139,7 +139,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 		return err
 	}
 
-	actions := doctor.PlanFixes(allIssues, workerID, time.Now())
+	actions := doctor.PlanFixes(allIssues, workerID, time.Now(), appCtx.RepoPath)
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" {

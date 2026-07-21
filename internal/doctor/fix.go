@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
@@ -46,36 +47,70 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 	return index, allIssues, nil
 }
 
-// PlanFixes computes the deterministic set of remediation ops for issues whose claim
-// has expired, per the recovery state machine (docs/design/recovery-state-machine.md):
+// PlanFixes computes the deterministic set of remediation ops for issues whose
+// claim or worktree binding is broken, per the recovery state machine
+// (docs/design/recovery-state-machine.md):
 //
 //   - claimed + claim-expired (D2 — Orphaned Claim): the claiming worker went silent
 //     before starting; release the claim by transitioning back to open.
 //   - in-progress + claim-expired (D2 — Orphaned Claim + Starvation): the claiming
 //     worker went silent mid-work; transition to blocked pending manual investigation
 //     rather than silently discarding in-flight work.
+//   - claimed/in-progress + missing worktree: `arm claim --worktree` always creates
+//     the task's worktree as part of a successful claim, so a claimed or in-progress
+//     issue whose `task/<id>` branch has no live worktree registered against repoPath
+//     indicates the worktree was torn down (or its git metadata corrupted) out from
+//     under an active claim — the same class of failure this fix pass exists to
+//     recover from, independent of whether the TTL has expired yet. This check is
+//     skipped when repoPath is empty or not a git repo.
 //
 // Each action is expressed purely as ops to append; PlanFixes never mutates or
 // removes existing op log lines. Calling PlanFixes again after ApplyFixes has
 // appended its output is idempotent: the affected issues are no longer
-// claimed/in-progress with an expired claim, so no further action is planned for
-// them.
-func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now time.Time) []FixAction {
+// claimed/in-progress with a broken claim, so no further action is planned for them.
+//
+// Deliberately out of scope: reopening `done` issues that lack a corroborating git
+// commit ("half-recorded transitions" in the fully general sense). Unlike the cases
+// above, that check has no way to bound itself to a small, currently-active set of
+// issues — it would have to scan every done/merged issue in the whole graph, and a
+// deleted-after-merge task branch is a normal, expected state for old work, not a
+// sign of corruption. Auto-reopening on that signal risks mass false positives
+// across the graph's history. Left as a manual `arm doctor` diagnostic follow-up
+// rather than an automated fix.
+func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now time.Time, repoPath string) []FixAction {
 	nowUnix := now.Unix()
 	var actions []FixAction
+	fixed := make(map[string]bool)
 
 	for _, id := range ready.StaleClaims(allIssues, now) {
 		actions = append(actions, releaseExpiredClaim(id, allIssues[id], workerID, nowUnix))
+		fixed[id] = true
 	}
 
 	for id, issue := range allIssues {
-		if issue == nil || issue.Status != ops.StatusInProgress {
+		if issue == nil || issue.Status != ops.StatusInProgress || fixed[id] {
 			continue
 		}
 		if !claimExpired(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, nowUnix) {
 			continue
 		}
 		actions = append(actions, blockStarvedInProgress(id, issue, workerID, nowUnix))
+		fixed[id] = true
+	}
+
+	liveBranches, _ := adapters.GitWorktreeBranches(repoPath) //nolint:errcheck // best-effort; empty map on error just skips this check
+	for id, issue := range allIssues {
+		if issue == nil || fixed[id] {
+			continue
+		}
+		if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
+			continue
+		}
+		if liveBranches["task/"+id] {
+			continue
+		}
+		actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
+		fixed[id] = true
 	}
 
 	sort.Slice(actions, func(i, j int) bool { return actions[i].IssueID < actions[j].IssueID })
@@ -124,6 +159,34 @@ func releaseExpiredClaim(id string, issue *materialize.Issue, workerID string, n
 				Payload: ops.Payload{
 					Msg:    fmt.Sprintf("doctor --fix: released expired claim (previously claimed by %s)", claimedBy),
 					NoteID: fmt.Sprintf("doctor-fix-%s-%d", id, now),
+				},
+			},
+		},
+	}
+}
+
+func releaseMissingWorktreeClaim(id string, issue *materialize.Issue, workerID string, now int64) FixAction {
+	toStatus := ops.StatusOpen
+	outcome := "Claimed task's worktree/branch no longer exists; releasing claim for re-dispatch."
+	reason := "claimed + missing-worktree: no live task branch worktree found, released for re-dispatch"
+	if issue.Status == ops.StatusInProgress {
+		toStatus = ops.StatusBlocked
+		outcome = "In-progress task's worktree/branch no longer exists; blocked pending investigation (possible in-flight work loss)."
+		reason = "in-progress + missing-worktree: no live task branch worktree found, blocked pending investigation"
+	}
+	return FixAction{
+		IssueID: id,
+		Reason:  reason,
+		Ops: []ops.Op{
+			{
+				Type: ops.OpTransition, TargetID: id, Timestamp: now, WorkerID: workerID,
+				Payload: ops.Payload{To: toStatus, Outcome: outcome},
+			},
+			{
+				Type: ops.OpNote, TargetID: id, Timestamp: now, WorkerID: workerID,
+				Payload: ops.Payload{
+					Msg:    fmt.Sprintf("doctor --fix: no live worktree for task/%s (previously claimed by %s)", id, issue.ClaimedBy),
+					NoteID: fmt.Sprintf("doctor-fix-worktree-%s-%d", id, now),
 				},
 			},
 		},

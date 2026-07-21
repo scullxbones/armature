@@ -141,6 +141,28 @@ func GitLog(repoPath string, args ...string) (string, error) {
 	return string(out), nil
 }
 
+// GitWorktreeBranches returns the set of branch names that currently have a live
+// worktree registered against repoPath (via `git worktree list --porcelain`).
+// Used to detect claims whose task worktree was torn down (or never existed)
+// out from under an active claim.
+func GitWorktreeBranches(repoPath string) (map[string]bool, error) {
+	//nolint:gosec // G204: "git" is constant; args are internal
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		// Not a git repo or worktrees unsupported — return empty set.
+		return map[string]bool{}, nil
+	}
+	branches := make(map[string]bool)
+	for line := range strings.SplitSeq(string(out), "\n") {
+		const prefix = "branch refs/heads/"
+		if after, ok := strings.CutPrefix(line, prefix); ok {
+			branches[after] = true
+		}
+	}
+	return branches, nil
+}
+
 // ===== Hook Execution (from hooks/runner.go) =====
 
 // HookInput is the JSON input passed to a hook script.
