@@ -1,6 +1,9 @@
 package doctor_test
 
 import (
+	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,6 +13,38 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// initGitRepo creates a minimal git repo with one commit and no other branches,
+// for exercising doctor.PlanFixes' missing-worktree detection.
+func initGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-q")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0644))
+	runGit(t, dir, "add", "README.md")
+	runGit(t, dir, "commit", "-q", "-m", "initial commit")
+	return dir
+}
+
+// initGitRepoWithBranch is initGitRepo plus a worktree registered on the given
+// branch name, so callers can assert that a live worktree suppresses a fix.
+func initGitRepoWithBranch(t *testing.T, branch string) string {
+	t.Helper()
+	dir := initGitRepo(t)
+	wtDir := t.TempDir()
+	runGit(t, dir, "worktree", "add", "-b", branch, wtDir)
+	return dir
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+}
 
 func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {
 	t.Parallel()
@@ -29,7 +64,7 @@ func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {
 	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now)
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 	assert.Equal(t, "stale-claim-01", actions[0].IssueID)
 	require.Len(t, actions[0].Ops, 2)
@@ -58,7 +93,7 @@ func TestPlanFixes_BlocksStarvedInProgress(t *testing.T) {
 	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now)
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 	assert.Equal(t, "starved-01", actions[0].IssueID)
 	assert.Equal(t, ops.StatusBlocked, actions[0].Ops[0].Payload.To)
@@ -81,7 +116,7 @@ func TestPlanFixes_DryRunListsWithoutWriting(t *testing.T) {
 
 	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now)
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 
 	// Dry run: do not call ApplyFixes. The ops log must be unchanged.
@@ -92,7 +127,7 @@ func TestPlanFixes_DryRunListsWithoutWriting(t *testing.T) {
 	// Re-planning without applying must yield the identical action set.
 	_, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
-	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now)
+	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now, "")
 	require.Len(t, actions2, 1)
 	assert.Equal(t, actions[0].IssueID, actions2[0].IssueID)
 }
@@ -119,7 +154,7 @@ func TestApplyFixes_IdempotentOnSecondRun(t *testing.T) {
 
 	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now)
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 	require.NoError(t, doctor.ApplyFixes(fixerLogPath, actions))
 
@@ -128,13 +163,109 @@ func TestApplyFixes_IdempotentOnSecondRun(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ops.StatusOpen, index["idempotent-01"].Status)
 
-	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now)
+	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now, "")
 	assert.Empty(t, actions2, "second PlanFixes run must find nothing left to fix")
 
 	require.NoError(t, doctor.ApplyFixes(fixerLogPath, actions2))
 	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(filepath.Join(issuesDir, "ops"))
 	require.NoError(t, err)
 	assert.Len(t, items, 4, "no-op second ApplyFixes call must not append anything")
+}
+
+func TestPlanFixes_ReleasesClaimWithMissingWorktree(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	repoDir := initGitRepo(t)
+
+	// Active (non-expired) claim: TTL not exhausted, but no `task/missing-wt-01`
+	// worktree/branch is registered against repoDir, simulating a worktree torn
+	// down (or its git metadata corrupted) while still actively claimed.
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "missing-wt-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Missing worktree task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "missing-wt-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	require.Len(t, actions, 1)
+	assert.Equal(t, "missing-wt-01", actions[0].IssueID)
+	assert.Equal(t, ops.StatusOpen, actions[0].Ops[0].Payload.To)
+}
+
+func TestPlanFixes_LiveWorktreeIsNotFlagged(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	repoDir := initGitRepoWithBranch(t, "task/live-wt-01")
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "live-wt-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Live worktree task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "live-wt-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "a claim with a live registered worktree branch must not be flagged")
+}
+
+// TestDoctorFix_REQ_TOPTIER_S4_T2 is the acceptance-named regression test for
+// TOPTIER-S4-T2: arm doctor --fix must cover expired claims and missing
+// worktrees end to end (create -> claim -> fix -> verify via materialization
+// replay). Fleet-wide "half-recorded transition" (done-without-commit) recovery
+// is intentionally out of scope for this pass — see the PlanFixes doc comment.
+func TestDoctorFix_REQ_TOPTIER_S4_T2(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	fixerLogPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
+	repoDir := initGitRepo(t)
+
+	now := time.Now()
+	expiredClaimedAt := now.Add(-2 * time.Hour).Unix()
+	missingWTClaimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		// Expired claim case.
+		{Type: ops.OpCreate, TargetID: "req-expired-01", Timestamp: expiredClaimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Expired claim", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "req-expired-01", Timestamp: expiredClaimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 60}},
+		// Missing-worktree case (active TTL, no registered worktree branch).
+		{Type: ops.OpCreate, TargetID: "req-missing-wt-01", Timestamp: missingWTClaimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Missing worktree", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "req-missing-wt-01", Timestamp: missingWTClaimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	require.Len(t, actions, 2)
+	require.NoError(t, doctor.ApplyFixes(fixerLogPath, actions))
+
+	index, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+	assert.Equal(t, ops.StatusOpen, index["req-expired-01"].Status)
+	assert.Equal(t, ops.StatusOpen, index["req-missing-wt-01"].Status)
+
+	// Idempotent: a second plan against the fixed state finds nothing left to do.
+	assert.Empty(t, doctor.PlanFixes(allIssues2, "fixer-01", now, repoDir))
 }
 
 func TestApplyFixes_EmptyActionsIsNoOp(t *testing.T) {
