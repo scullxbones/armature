@@ -234,7 +234,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--dry-run` | sync, dag apply, dag revert, import | bool | Preview without writing ops | **kept-evidence** |
+| `--dry-run` | sync, dag apply, dag revert, import, doctor | bool | Preview without writing ops | **kept-evidence** |
 | `--into` | sync | string | Target branch for merge checks | **kept-evidence** |
 
 ### DAG/Decompose Flags
@@ -287,6 +287,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
 | `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
+| `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |
 | `--parent` | validate | string | Validate only direct children of parent | **kept-evidence** |
