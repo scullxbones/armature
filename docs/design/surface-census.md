@@ -70,11 +70,12 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `claimed_at` | int64 | state.go:41 | claim op | **kept-evidence** | Claim timestamp (epoch ms). Used to calculate staleness. |
 | `claim_ttl` | int | state.go:42 | claim op (TTL in minutes) | **kept-evidence** | Claim time-to-live. Set by --ttl flag (default 60 min). Used by stale review logic. |
 | `last_heartbeat` | int64 | state.go:43 | heartbeat op | **kept-evidence** | Last heartbeat timestamp. Refreshed by heartbeat command to prevent staleness. |
-| `branch` | string | state.go:44 | transition op (branch field) | **kept-evidence** | Feature branch name. Set by transition on completion. Used by merged flow. |
-| `pr` | string | state.go:45 | transition op (pr field), merged op | **kept-evidence** | PR number or URL. Set by transition or merged command. |
-| `assigned_worker` | string | state.go:46 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
-| `preferred_model` | string | state.go:47 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
-| `updated` | int64 | state.go:48 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
+| `last_claiming_worker_activity` | int64 | state.go:51 | claim, heartbeat, transition ops (only when op.WorkerID == ClaimedBy) | **kept-evidence** | Liveness signal scoped to the claiming worker only, unlike `updated` (bumped by every op regardless of author). Used by `doctor --fix`'s `claimExpired` to avoid a third party's unrelated note/link op masking a crashed worker's stale claim. |
+| `branch` | string | state.go:52 | transition op (branch field) | **kept-evidence** | Feature branch name. Set by transition on completion. Used by merged flow. |
+| `pr` | string | state.go:53 | transition op (pr field), merged op | **kept-evidence** | PR number or URL. Set by transition or merged command. |
+| `assigned_worker` | string | state.go:54 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
+| `preferred_model` | string | state.go:55 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
+| `updated` | int64 | state.go:56 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
 
 ## Operation Types (OpTypes)
 
@@ -362,7 +363,7 @@ Enumerated in sources.go flag description:
 - **Issue Types**: 5 (all kept-evidence)
 - **Statuses**: 7 (all kept-evidence)
 - **Confidence States**: 3 (all kept-evidence)
-- **Issue Fields**: 35 (31 kept-evidence, 2 kept-justified, 2 parked)
+- **Issue Fields**: 36 (32 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 19 (all kept-evidence)
 - **CLI Commands**: 47 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)

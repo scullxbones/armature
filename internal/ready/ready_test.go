@@ -712,6 +712,24 @@ func TestExpiredClaims_ClaimedPastTTL_Surfaced(t *testing.T) {
 	assert.Equal(t, "claimed", entries[0].Status)
 }
 
+func TestExpiredClaims_MultipleEntries_SortedByIssueID(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-zebra": {
+			ID: "task-zebra", Status: "claimed",
+			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
+		},
+		"task-alpha": {
+			ID: "task-alpha", Status: "claimed",
+			ClaimedBy: "worker-b", ClaimedAt: 0, ClaimTTL: 1,
+		},
+	}
+	entries := ExpiredClaims(issues, time.Unix(61, 0))
+	require.Len(t, entries, 2)
+	assert.Equal(t, "task-alpha", entries[0].Issue)
+	assert.Equal(t, "task-zebra", entries[1].Issue)
+}
+
 func TestExpiredClaims_InProgressPastTTL_Surfaced(t *testing.T) {
 	t.Parallel()
 	issues := map[string]*materialize.Issue{
