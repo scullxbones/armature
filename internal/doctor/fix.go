@@ -68,7 +68,15 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //     git failure). Treating "couldn't determine" the same as "confirmed missing"
 //     would misfire on every currently claimed/in-progress issue in the graph from
 //     a single transient git error — exactly the mass-false-positive risk this
-//     fix pass exists to avoid, not reintroduce.
+//     fix pass exists to avoid, not reintroduce. This check is further scoped to
+//     claims owned by workerID (the worker running doctor --fix): `git worktree
+//     list` only reports worktrees registered in the local repository doctor is
+//     running against, not worktrees on other machines/clones. In a coordinator
+//     clone, or any clone that has merely pulled another worker's claim ops,
+//     every other worker's claim would look like it has no live worktree here —
+//     only the current worker's own local git state can be trusted to say "the
+//     worktree is really gone" rather than "I just don't have visibility into
+//     another machine's worktree".
 //
 // Each action is expressed purely as ops to append; PlanFixes never mutates or
 // removes existing op log lines. Calling PlanFixes again after ApplyFixes has
@@ -97,7 +105,7 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 		if issue == nil || issue.Status != ops.StatusInProgress || fixed[id] {
 			continue
 		}
-		if !claimExpired(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, nowUnix) {
+		if !claimExpired(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, nowUnix) {
 			continue
 		}
 		actions = append(actions, blockStarvedInProgress(id, issue, workerID, nowUnix))
@@ -110,6 +118,9 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 				continue
 			}
 			if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
+				continue
+			}
+			if issue.ClaimedBy != workerID {
 				continue
 			}
 			branch := materialize.DeriveBranchName(issue.Type, id)
@@ -144,12 +155,28 @@ func ApplyFixes(logPath, worktreePath string, actions []FixAction, gc ops.GitCom
 
 // claimExpired mirrors the staleness formula used by ready.StaleClaims, for the
 // in-progress case that StaleClaims itself does not cover (it only inspects
-// StatusClaimed).
-func claimExpired(claimedAt, lastHeartbeat int64, ttlMinutes int, now int64) bool {
+// StatusClaimed). It additionally folds in `claimingWorkerActivity`
+// (materialize.Issue.LastClaimingWorkerActivity) alongside
+// claimedAt/lastHeartbeat: applyTransition in internal/materialize/engine.go
+// deliberately leaves LastHeartbeat untouched on a claimed->in-progress
+// transition (that field is reserved for explicit heartbeat ops), so without
+// this a claim transitioned to in-progress moments before its TTL window
+// closes would read as claim-expired here even though the transition itself is
+// fresh worker activity.
+//
+// LastClaimingWorkerActivity is bumped only by applyClaim, applyHeartbeat, and
+// applyTransition, and only when the op's WorkerID matches the issue's
+// ClaimedBy — unlike the general-purpose Issue.Updated field (bumped by every
+// op handler regardless of author), this field can't be reset by a third
+// party's note, link, or other unrelated op. See the P1 finding on PR #84: a
+// naive use of Updated here would let ANY worker's activity on the issue mask
+// the claiming worker's actual staleness, causing doctor --fix and `arm ready`
+// to disagree about whether a claim is expired.
+func claimExpired(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
 	if ttlMinutes <= 0 {
 		return false
 	}
-	lastActivity := max(claimedAt, lastHeartbeat)
+	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
 	return now > lastActivity+int64(ttlMinutes)*60
 }
 
