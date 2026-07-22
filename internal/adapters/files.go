@@ -288,19 +288,23 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 	complete := available == int64(len(marker.Data))
 	if !complete {
 		// The marker's own append never finished durably (a torn write left a
-		// partial, invalid JSONL record on disk, or nothing at all). Rather
-		// than guessing at how to complete the original record, discard the
-		// torn bytes entirely by truncating the log back to where this
-		// append started: the log returns to the last known-valid state, and
-		// the caller's buf is appended fresh by the normal path below. Since
-		// the record was discarded rather than completed, this is never a
-		// duplicate retry to suppress — even if buf happens to equal
-		// marker.Data.
-		if err := f.Truncate(marker.Start); err != nil {
-			return false, fmt.Errorf("truncate torn log write %s: %w", f.Name(), err)
-		}
-		if err := f.Sync(); err != nil {
-			return false, fmt.Errorf("sync truncated log %s: %w", f.Name(), err)
+		// partial, invalid JSONL record on disk, or nothing at all). The
+		// prefix already on disk was just verified byte-for-byte against
+		// marker.Data, so the remaining suffix is known exactly — completing
+		// the write requires no guessing (unlike patching in an assumed
+		// delimiter). Finish it from the marker's own recorded bytes so the
+		// originally attempted op is never silently lost, then fall through
+		// to append the caller's buf: usually a distinct record, but if buf
+		// happens to equal marker.Data (an exact retry of the now-completed
+		// write), the equality check below suppresses it as a duplicate.
+		remaining := marker.Data[available:]
+		if len(remaining) > 0 {
+			if _, err := f.Write(remaining); err != nil {
+				return false, fmt.Errorf("complete torn log write %s: %w", f.Name(), err)
+			}
+			if err := f.Sync(); err != nil {
+				return false, fmt.Errorf("sync completed log %s: %w", f.Name(), err)
+			}
 		}
 		if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
 			return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
@@ -308,7 +312,12 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 		if err := syncDir(filepath.Dir(markerPath)); err != nil {
 			return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 		}
-		return false, nil
+		// Now that the marker's own append is durable, buf may turn out to be
+		// an exact retry of it (e.g. only the trailing delimiter was torn) —
+		// in which case it must be suppressed as a duplicate just like the
+		// already-complete case below. Otherwise buf is a distinct record and
+		// must still be appended by the normal path.
+		return bytes.Equal(marker.Data, buf), nil
 	}
 	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)

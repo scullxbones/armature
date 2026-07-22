@@ -8,10 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -160,11 +158,19 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 		return nil
 	}
 
-	var gc ops.GitCommitter
-	if appCtx.WorktreePath != "" {
-		gc = adapters.New(appCtx.WorktreePath)
+	// Append via the same high-stakes path claim/transition/assign use: commit
+	// (dual-branch) and push (best-effort) each op immediately, rather than
+	// doctor.ApplyFixes's commit-only path, which left repairs unpushed until
+	// something else (e.g. `arm push-ops`) happened to run.
+	state := mustState(cmd)
+	for _, a := range actions {
+		for _, op := range a.Ops {
+			if err := appendHighStakesOp(state, logPath, op); err != nil {
+				return err
+			}
+		}
 	}
-	return doctor.ApplyFixes(logPath, appCtx.WorktreePath, actions, gc)
+	return nil
 }
 
 func countBySeverity(r doctor.Report, s doctor.Severity) int {

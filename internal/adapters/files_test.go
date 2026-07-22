@@ -151,14 +151,17 @@ func TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 	require.Equal(t, buf, contents)
 }
 
-// TestAppendLog_TornWriteWithDifferentRetryTruncatesPartialRecord_REQ_TOPTIER_S4_PRFIX
+// TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER_S4_PRFIX
 // simulates a crash that left a partial (torn) write of one record on disk,
 // followed by a call to append a *different* buffer (not a retry of the
-// original). The torn partial bytes must be discarded (log truncated back to
-// the append's start offset), not papered over with a guessed newline, so the
-// log never contains an invalid/incomplete JSONL record, and the new buffer
-// must be appended correctly afterward.
-func TestAppendLog_TornWriteWithDifferentRetryTruncatesPartialRecord_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+// original). The marker's prefix-on-disk was already verified byte-for-byte
+// against marker.Data before this path runs, so the remaining suffix is known
+// exactly — completing the torn record from those recorded bytes requires no
+// guessing, unlike the previously rejected "patch in an assumed delimiter"
+// approach. The originally attempted op must therefore survive (not be
+// discarded), and the new buffer must still be appended afterward as its own
+// record.
+func TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -186,13 +189,18 @@ func TestAppendLog_TornWriteWithDifferentRetryTruncatesPartialRecord_REQ_TOPTIER
 	raw, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 
-	// The torn partial bytes must be gone; the log must contain only the
-	// prior complete record followed by the new record, both valid JSONL.
-	require.Equal(t, string(prior)+string(newRecord), string(raw))
+	// The torn record must be completed from the marker's own bytes (not
+	// discarded), followed by the new record — both valid JSONL, and the
+	// originally attempted op is not lost.
+	require.Equal(t, string(prior)+string(intended)+string(newRecord), string(raw))
 
 	lines, err := ReadLog(logPath)
 	require.NoError(t, err)
-	require.Equal(t, [][]byte{priorLine, []byte(`{"op":"new-record"}`)}, lines)
+	require.Equal(t, [][]byte{
+		priorLine,
+		[]byte(`{"op":"torn-record","field":"value"}`),
+		[]byte(`{"op":"new-record"}`),
+	}, lines)
 }
 
 func TestAppendLog_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
