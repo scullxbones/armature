@@ -100,6 +100,79 @@ func TestPlanFixes_BlocksStarvedInProgress(t *testing.T) {
 	assert.Equal(t, ops.StatusBlocked, actions[0].Ops[0].Payload.To)
 }
 
+// TestPlanFixes_InProgressTransitionCountsAsActivity reproduces the Codex
+// review finding on PR #84 (fix.go:100): materialization leaves LastHeartbeat
+// at the original claim timestamp when applying a claimed->in-progress
+// transition, so a claim transitioned to in-progress moments before the TTL
+// window closes must not be treated as claim-expired just because
+// LastHeartbeat wasn't separately bumped.
+func TestPlanFixes_InProgressTransitionCountsAsActivity(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+
+	now := time.Now()
+	claimedAt := now.Add(-61 * time.Minute).Unix()
+	transitionedAt := now.Add(-2 * time.Minute).Unix() // minute 59 of a 60-minute TTL
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "fresh-transition-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Freshly transitioned task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "fresh-transition-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 60}},
+		{Type: ops.OpTransition, TargetID: "fresh-transition-01", Timestamp: transitionedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{To: ops.StatusInProgress}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	assert.Empty(t, actions, "a claim just transitioned to in-progress must not be treated as claim-expired")
+}
+
+// TestPlanFixes_ThirdPartyNoteDoesNotResetClaimExpiry reproduces the P1 finding
+// from the deep review of PR #84: claimExpired originally folded
+// issue.Updated into its liveness formula, but Updated is bumped by every op
+// handler in internal/materialize/engine.go (applyNote, applyLink, etc.), none
+// of which check op.WorkerID against issue.ClaimedBy. So a coordinator (or any
+// worker other than the claim owner) leaving an unrelated note on the issue
+// shortly before the TTL closes would silently reset the staleness clock as
+// far as doctor --fix is concerned, even though the CLAIMING worker did
+// nothing. A claim must be treated as expired here based only on activity
+// attributable to the claiming worker itself.
+func TestPlanFixes_ThirdPartyNoteDoesNotResetClaimExpiry(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	coordinatorLogPath := filepath.Join(issuesDir, "ops", "coordinator-01.log")
+
+	now := time.Now()
+	claimedAt := now.Add(-61 * time.Minute).Unix() // TTL 60m: already stale as of the claim/transition
+	noteAt := now.Add(-20 * time.Minute).Unix()    // a third party touches Updated recently
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "third-party-note-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Claimed task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "third-party-note-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 60}},
+		{Type: ops.OpTransition, TargetID: "third-party-note-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{To: ops.StatusInProgress}},
+	}))
+	require.NoError(t, ops.AppendOps(coordinatorLogPath, []ops.Op{
+		{Type: ops.OpNote, TargetID: "third-party-note-01", Timestamp: noteAt, WorkerID: "coordinator-01",
+			Payload: ops.Payload{Msg: "checking in, unrelated to worker-01's claim"}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	require.Len(t, actions, 1, "the claim must still be recognized as expired despite the coordinator's unrelated note")
+	assert.Equal(t, "third-party-note-01", actions[0].IssueID)
+	assert.Equal(t, ops.StatusBlocked, actions[0].Ops[0].Payload.To)
+}
+
 func TestPlanFixes_DryRunListsWithoutWriting(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
@@ -177,18 +250,20 @@ func TestPlanFixes_ReleasesClaimWithMissingWorktree(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 	stateDir := filepath.Join(issuesDir, "state")
-	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	logPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
 	repoDir := initGitRepo(t)
 
 	// Active (non-expired) claim: TTL not exhausted, but no `task/missing-wt-01`
 	// worktree/branch is registered against repoDir, simulating a worktree torn
-	// down (or its git metadata corrupted) while still actively claimed.
+	// down (or its git metadata corrupted) while still actively claimed. Claimed
+	// by "fixer-01" (the worker that will run PlanFixes below), since the
+	// missing-worktree remediation is scoped to the current worker's own claims.
 	now := time.Now()
 	claimedAt := now.Add(-1 * time.Minute).Unix()
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
-		{Type: ops.OpCreate, TargetID: "missing-wt-01", Timestamp: claimedAt, WorkerID: "worker-01",
+		{Type: ops.OpCreate, TargetID: "missing-wt-01", Timestamp: claimedAt, WorkerID: "fixer-01",
 			Payload: ops.Payload{Title: "Missing worktree task", NodeType: "task"}},
-		{Type: ops.OpClaim, TargetID: "missing-wt-01", Timestamp: claimedAt, WorkerID: "worker-01",
+		{Type: ops.OpClaim, TargetID: "missing-wt-01", Timestamp: claimedAt, WorkerID: "fixer-01",
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
@@ -302,6 +377,41 @@ func TestPlanFixes_GitFailure_SkipsMissingWorktreeCheckEntirely(t *testing.T) {
 	assert.Empty(t, actions, "a git failure while checking worktree liveness must not be treated as 'every claim's worktree is gone'")
 }
 
+// TestPlanFixes_MissingWorktreeSkipsOtherWorkersClaims reproduces the Codex
+// review finding on PR #84 (fix.go:119): git worktree list only reports
+// worktrees registered in the local repository, so in a coordinator clone (or
+// any clone that has pulled another worker's claim ops) a claim owned by
+// another worker will always look like it has no live worktree locally, even
+// though the claiming worker's own machine has one. The missing-worktree
+// remediation must be scoped to claims owned by the worker running doctor
+// --fix, not any claimed/in-progress issue in the graph.
+func TestPlanFixes_MissingWorktreeSkipsOtherWorkersClaims(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	// repoDir is the *fixer's* local clone: it has no worktree registered for
+	// this branch because the claim belongs to a different worker/machine.
+	repoDir := initGitRepo(t)
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "other-worker-claim-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Other worker's claim", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "other-worker-claim-01", Timestamp: claimedAt, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	// "fixer-01" is running doctor --fix, but the claim is owned by "worker-01" —
+	// a different worker whose worktree simply isn't visible in this local clone.
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "missing-worktree remediation must not touch another worker's claim")
+}
+
 // TestDoctorFix_REQ_TOPTIER_S4_T2 is the acceptance-named regression test for
 // TOPTIER-S4-T2: arm doctor --fix must cover expired claims and missing
 // worktrees end to end (create -> claim -> fix -> verify via materialization
@@ -324,10 +434,17 @@ func TestDoctorFix_REQ_TOPTIER_S4_T2(t *testing.T) {
 			Payload: ops.Payload{Title: "Expired claim", NodeType: "task"}},
 		{Type: ops.OpClaim, TargetID: "req-expired-01", Timestamp: expiredClaimedAt, WorkerID: "worker-01",
 			Payload: ops.Payload{TTL: 60}},
-		// Missing-worktree case (active TTL, no registered worktree branch).
 		{Type: ops.OpCreate, TargetID: "req-missing-wt-01", Timestamp: missingWTClaimedAt, WorkerID: "worker-01",
 			Payload: ops.Payload{Title: "Missing worktree", NodeType: "task"}},
-		{Type: ops.OpClaim, TargetID: "req-missing-wt-01", Timestamp: missingWTClaimedAt, WorkerID: "worker-01",
+	}))
+	// Missing-worktree case (active TTL, no registered worktree branch). Claimed
+	// by "fixer-01" itself, in fixer-01's own log: the missing-worktree
+	// remediation is scoped to claims owned by the worker running doctor --fix
+	// (see PlanFixes doc comment), so this must match the workerID passed to
+	// PlanFixes below, and per the D7 worker-ID-mismatch check the claim op's
+	// WorkerID must match the log file it's appended to.
+	require.NoError(t, ops.AppendOps(fixerLogPath, []ops.Op{
+		{Type: ops.OpClaim, TargetID: "req-missing-wt-01", Timestamp: missingWTClaimedAt, WorkerID: "fixer-01",
 			Payload: ops.Payload{TTL: 240}},
 	}))
 

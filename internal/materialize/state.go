@@ -41,11 +41,19 @@ type Issue struct {
 	ClaimedAt              int64                          `json:"claimed_at,omitempty"`
 	ClaimTTL               int                            `json:"claim_ttl,omitempty"`
 	LastHeartbeat          int64                          `json:"last_heartbeat,omitempty"`
-	Branch                 string                         `json:"branch,omitempty"`
-	PR                     string                         `json:"pr,omitempty"`
-	AssignedWorker         string                         `json:"assigned_worker,omitempty"`
-	PreferredModel         string                         `json:"preferred_model,omitempty"`
-	Updated                int64                          `json:"updated"`
+	// LastClaimingWorkerActivity is bumped only by applyClaim, applyHeartbeat,
+	// and applyTransition, and only when the op's WorkerID matches ClaimedBy.
+	// Unlike Updated (which every op handler bumps, regardless of which worker
+	// authored the op), this field isolates liveness signal attributable to the
+	// worker that actually holds the claim, so a third party's note/link/etc.
+	// on the issue can never be mistaken for the claiming worker still being
+	// alive. See docs/design/recovery-state-machine.md.
+	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
+	Branch                     string `json:"branch,omitempty"`
+	PR                         string `json:"pr,omitempty"`
+	AssignedWorker             string `json:"assigned_worker,omitempty"`
+	PreferredModel             string `json:"preferred_model,omitempty"`
+	Updated                    int64  `json:"updated"`
 }
 
 type Provenance struct {

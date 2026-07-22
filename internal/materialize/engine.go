@@ -127,6 +127,7 @@ func (s *State) applyClaim(op ops.Op) error {
 	issue.ClaimTTL = op.Payload.TTL
 	issue.LastHeartbeat = op.Timestamp
 	issue.Updated = op.Timestamp
+	issue.LastClaimingWorkerActivity = op.Timestamp
 	s.promoteParentToInProgress(issue.Parent)
 	return nil
 }
@@ -138,6 +139,9 @@ func (s *State) applyHeartbeat(op ops.Op) error {
 	}
 	issue.LastHeartbeat = op.Timestamp
 	issue.Updated = op.Timestamp
+	if op.WorkerID == issue.ClaimedBy {
+		issue.LastClaimingWorkerActivity = op.Timestamp
+	}
 	return nil
 }
 
@@ -154,6 +158,9 @@ func (s *State) applyTransition(op ops.Op) error {
 			issue.PriorOutcomes = append(issue.PriorOutcomes, issue.Outcome)
 			issue.Outcome = ""
 		}
+	}
+	if op.WorkerID == issue.ClaimedBy {
+		issue.LastClaimingWorkerActivity = op.Timestamp
 	}
 	issue.Status = newStatus
 	issue.Updated = op.Timestamp
