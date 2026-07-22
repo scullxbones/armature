@@ -60,6 +60,84 @@ func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T
 	assert.Equal(t, int64(200), issue.ClaimedAt)
 }
 
+// TestApplyHeartbeatOp_NonClaimantHeartbeatDoesNotBumpLastHeartbeat verifies
+// that a heartbeat op from a worker who is NOT the current claimant does not
+// extend LastHeartbeat. LastHeartbeat feeds directly into claim.IsClaimStale /
+// doctor's claimExpired staleness formula, so an errant or malicious
+// non-claimant heartbeat must not be able to mask a genuinely stale claim
+// (PR #84 review: "Ignore non-claimant heartbeats for expiry").
+func TestApplyHeartbeatOp_NonClaimantHeartbeatDoesNotBumpLastHeartbeat(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "claimant", Payload: ops.Payload{TTL: 60}}))
+	// A different worker (not the claimant) sends a heartbeat for this issue.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpHeartbeat, TargetID: "task-01", Timestamp: 900,
+		WorkerID: "other-worker"}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, int64(200), issue.LastHeartbeat, "non-claimant heartbeat must not bump LastHeartbeat beyond the claim's own timestamp")
+	assert.Equal(t, int64(200), issue.LastClaimingWorkerActivity,
+		"non-claimant heartbeat must not bump LastClaimingWorkerActivity beyond the claim's own timestamp")
+}
+
+// TestApplyHeartbeatOp_ClaimantHeartbeatBumpsLastHeartbeat is the counterpart:
+// a heartbeat from the actual claimant must still extend LastHeartbeat (and
+// LastClaimingWorkerActivity), preserving existing behavior for the common case.
+func TestApplyHeartbeatOp_ClaimantHeartbeatBumpsLastHeartbeat(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "claimant", Payload: ops.Payload{TTL: 60}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpHeartbeat, TargetID: "task-01", Timestamp: 900,
+		WorkerID: "claimant"}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, int64(900), issue.LastHeartbeat)
+	assert.Equal(t, int64(900), issue.LastClaimingWorkerActivity)
+}
+
+// TestApplyTransitionOp_ClaimantTransitionBumpsLastClaimingWorkerActivity verifies
+// that a transition op authored by the current claimant bumps LastClaimingWorkerActivity,
+// even when the transition is to `open` (which clears ClaimedBy as part of the same
+// op) — the claimant's own release-of-claim is still claimant activity and must be
+// captured before ClaimedBy is zeroed (PR #84 review: "Reuse claimant activity in
+// stale-claim checks").
+func TestApplyTransitionOp_ClaimantTransitionBumpsLastClaimingWorkerActivity(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "claimant", Payload: ops.Payload{TTL: 60}}))
+	// The claimant transitions their own claim back to open.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 900,
+		WorkerID: "claimant", Payload: ops.Payload{To: ops.StatusOpen}}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, int64(900), issue.LastClaimingWorkerActivity,
+		"claimant's own transition (even to open, which clears ClaimedBy) must bump LastClaimingWorkerActivity")
+}
+
+// TestApplyTransitionOp_NonClaimantTransitionDoesNotBumpLastClaimingWorkerActivity
+// verifies that a transition op from a worker who is NOT the current claimant does
+// not extend LastClaimingWorkerActivity, mirroring the heartbeat non-claimant guard.
+func TestApplyTransitionOp_NonClaimantTransitionDoesNotBumpLastClaimingWorkerActivity(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "claimant", Payload: ops.Payload{TTL: 60}}))
+	// A different worker (not the claimant) sends a transition for this issue.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 900,
+		WorkerID: "other-worker", Payload: ops.Payload{To: ops.StatusInProgress}}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, int64(200), issue.LastClaimingWorkerActivity,
+		"non-claimant transition must not bump LastClaimingWorkerActivity")
+}
+
 func TestApplyUnknownOpType_ReturnsError(t *testing.T) {
 	t.Parallel()
 	state := NewState()

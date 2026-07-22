@@ -352,6 +352,7 @@ or updates the armature-issue-id file if the worktree exists.`,
 			priorClaimedAt := issue.ClaimedAt
 			priorLastHeartbeat := issue.LastHeartbeat
 			priorClaimTTL := issue.ClaimTTL
+			priorClaimingWorkerActivity := issue.LastClaimingWorkerActivity
 
 			index := store.Index()
 			// Build a graph from the materialized state for ancestor/descendant checking
@@ -433,7 +434,7 @@ or updates the armature-issue-id file if the worktree exists.`,
 					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
 					rollbackStatus := ops.StatusOpen
 					priorWasActive := priorClaimedBy == workerID &&
-						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimTTL, nowEpoch())
+						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimingWorkerActivity, priorClaimTTL, nowEpoch())
 					if priorWasActive {
 						rollbackStatus = priorStatus
 					}
@@ -460,7 +461,7 @@ or updates the armature-issue-id file if the worktree exists.`,
 					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
 					rollbackStatus := ops.StatusOpen
 					priorWasActive := priorClaimedBy == workerID &&
-						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimTTL, nowEpoch())
+						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimingWorkerActivity, priorClaimTTL, nowEpoch())
 					if priorWasActive {
 						rollbackStatus = priorStatus
 					}

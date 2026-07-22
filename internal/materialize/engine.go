@@ -116,7 +116,7 @@ func (s *State) applyClaim(op ops.Op) error {
 		if ttl <= 0 {
 			ttl = 60
 		}
-		if !claimpkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, ttl, op.Timestamp) {
+		if !claimpkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, ttl, op.Timestamp) {
 			// Keep existing active owner; this claim loses the race.
 			return nil
 		}
@@ -137,9 +137,13 @@ func (s *State) applyHeartbeat(op ops.Op) error {
 	if !ok {
 		return nil
 	}
-	issue.LastHeartbeat = op.Timestamp
 	issue.Updated = op.Timestamp
+	// LastHeartbeat feeds directly into claim.IsClaimStale / doctor's
+	// claimExpired staleness formula, so only the claiming worker's heartbeat
+	// may extend it — a non-claimant's heartbeat must not be able to mask a
+	// genuinely stale claim.
 	if op.WorkerID == issue.ClaimedBy {
+		issue.LastHeartbeat = op.Timestamp
 		issue.LastClaimingWorkerActivity = op.Timestamp
 	}
 	return nil
@@ -151,6 +155,11 @@ func (s *State) applyTransition(op ops.Op) error {
 		return fmt.Errorf("transition: issue %s not found", op.TargetID)
 	}
 	newStatus := op.Payload.To
+	// Capture claimant-ness before any field clearing below: a transition to
+	// `open` zeroes ClaimedBy as part of this same op, but the claimant's own
+	// release of their claim is still claimant activity and must still bump
+	// LastClaimingWorkerActivity.
+	wasClaimant := op.WorkerID == issue.ClaimedBy
 	if newStatus == ops.StatusOpen {
 		issue.ClaimedBy = ""
 		issue.ClaimedAt = 0
@@ -159,7 +168,7 @@ func (s *State) applyTransition(op ops.Op) error {
 			issue.Outcome = ""
 		}
 	}
-	if op.WorkerID == issue.ClaimedBy {
+	if wasClaimant {
 		issue.LastClaimingWorkerActivity = op.Timestamp
 	}
 	issue.Status = newStatus

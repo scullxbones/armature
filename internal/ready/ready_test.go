@@ -7,6 +7,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -219,18 +220,18 @@ func TestReadyTask_NoWorkerID_NoAssignmentOrdering(t *testing.T) {
 func TestIsClaimStale_ExactBoundary_NotStale(t *testing.T) {
 	t.Parallel()
 	// claimedAt=0, ttl=1min, now=60 — exactly at boundary, should NOT be stale
-	assert.False(t, isClaimStale(0, 0, 1, 60), "at exact TTL boundary should not be stale")
+	assert.False(t, isClaimStale(0, 0, 0, 1, 60), "at exact TTL boundary should not be stale")
 }
 
 func TestIsClaimStale_OnePastBoundary_IsStale(t *testing.T) {
 	t.Parallel()
 	// now=61 (1 second past 1-minute TTL)
-	assert.True(t, isClaimStale(0, 0, 1, 61))
+	assert.True(t, isClaimStale(0, 0, 0, 1, 61))
 }
 
 func TestIsClaimStale_ZeroTTL_NeverStale(t *testing.T) {
 	t.Parallel()
-	assert.False(t, isClaimStale(0, 0, 0, 99999))
+	assert.False(t, isClaimStale(0, 0, 0, 0, 99999))
 }
 
 func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
@@ -238,8 +239,56 @@ func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
 	// Claimed at 0, heartbeat at 100, TTL=1min
 	// Without heartbeat: stale at now=61
 	// With heartbeat: not stale until now=160
-	assert.False(t, isClaimStale(0, 100, 1, 130))
-	assert.True(t, isClaimStale(0, 100, 1, 161))
+	assert.False(t, isClaimStale(0, 100, 0, 1, 130))
+	assert.True(t, isClaimStale(0, 100, 0, 1, 161))
+}
+
+// TestIsClaimStale_ClaimingWorkerActivityExtends verifies that ready's
+// isClaimStale folds LastClaimingWorkerActivity into the staleness window the
+// same way internal/claim.IsClaimStale and internal/doctor's claimExpired do,
+// so `arm ready`'s expired-claims computation agrees with `doctor --fix` about
+// whether a claim is expired (PR #84 review: "Count claiming-worker
+// transitions in ready expiry").
+func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
+	t.Parallel()
+	// claimedAt=0, lastHeartbeat=0, claimingWorkerActivity=100, TTL=1min.
+	assert.False(t, isClaimStale(0, 0, 100, 1, 130))
+	assert.True(t, isClaimStale(0, 0, 100, 1, 161))
+}
+
+func TestStaleClaims_ClaimingWorkerActivityPreventsStale(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(200, 0)
+	issues := map[string]*materialize.Issue{
+		"task-a": {
+			ID:                         "task-a",
+			Status:                     ops.StatusClaimed,
+			ClaimedAt:                  0,
+			LastHeartbeat:              0,
+			LastClaimingWorkerActivity: 150,
+			ClaimTTL:                   1,
+		},
+	}
+	// Naively (ignoring LastClaimingWorkerActivity) this would read stale at
+	// now=200 (0+60=60 < 200), but the claimant transitioned at 150
+	// (150+60=210 > 200), so it must not be reported stale.
+	assert.Empty(t, StaleClaims(issues, now))
+}
+
+func TestExpiredClaims_ClaimingWorkerActivityPreventsExpiry(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(200, 0)
+	issues := map[string]*materialize.Issue{
+		"task-a": {
+			ID:                         "task-a",
+			Status:                     ops.StatusInProgress,
+			ClaimedAt:                  0,
+			LastHeartbeat:              0,
+			LastClaimingWorkerActivity: 150,
+			ClaimTTL:                   1,
+		},
+	}
+	assert.Empty(t, ExpiredClaims(issues, now))
 }
 
 func TestReadyTask_DraftConfidence_ExcludedFromReady(t *testing.T) {

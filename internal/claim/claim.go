@@ -38,12 +38,23 @@ func HasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
 	return false
 }
 
-// IsClaimStale checks if a claim has expired based on TTL and heartbeat.
-func IsClaimStale(claimedAt, lastHeartbeat int64, ttlMinutes int, now int64) bool {
+// IsClaimStale checks if a claim has expired based on TTL, heartbeat, and
+// claimant-attributed activity. claimingWorkerActivity should be the claim's
+// LastClaimingWorkerActivity value (materialize.Issue.LastClaimingWorkerActivity)
+// when available, or 0 when the caller has no such value (max() with 0 is a
+// no-op, preserving prior behavior at call sites that can't source it).
+//
+// This mirrors claimExpired in internal/doctor/fix.go: a claim transitioned by
+// its claimant (e.g. claimed->in-progress) moments before the naive TTL window
+// closes bumps LastClaimingWorkerActivity without touching LastHeartbeat, which
+// is reserved for explicit heartbeat ops. Folding claimingWorkerActivity into
+// the staleness calculation prevents that fresh transition from being read as
+// an expired claim.
+func IsClaimStale(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
 	if ttlMinutes <= 0 {
 		return false
 	}
-	lastActivity := max(claimedAt, lastHeartbeat)
+	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
 	ttlSeconds := int64(ttlMinutes) * 60
 	return now > lastActivity+ttlSeconds
 }

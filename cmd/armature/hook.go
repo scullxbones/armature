@@ -100,6 +100,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 	lastHeartbeat := make(map[string]int64)
 	claimTTL := make(map[string]int)
 	transitioned := make(map[string]bool)
+	lastTransitionAt := make(map[string]int64)
 
 	for _, op := range allOps {
 		switch op.Type {
@@ -115,6 +116,14 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 				op.Payload.To == ops.StatusCancelled {
 				transitioned[op.TargetID] = true
 			}
+			// This is a per-worker log: every op here was authored by workerID,
+			// so any transition seen for this issue is by construction claimant
+			// activity — record it even for non-terminal transitions (e.g.
+			// claimed -> in-progress) so it can extend claim liveness like a
+			// heartbeat does.
+			if op.Timestamp > lastTransitionAt[op.TargetID] {
+				lastTransitionAt[op.TargetID] = op.Timestamp
+			}
 		}
 	}
 
@@ -126,7 +135,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		if ttl <= 0 {
 			ttl = defaultTTL
 		}
-		if !claimPkg.IsClaimStale(ca, lastHeartbeat[issueID], ttl, now) {
+		if !claimPkg.IsClaimStale(ca, lastHeartbeat[issueID], lastTransitionAt[issueID], ttl, now) {
 			return issueID
 		}
 	}

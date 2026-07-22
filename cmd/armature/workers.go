@@ -118,12 +118,16 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 	lastHeartbeat := make(map[string]int64)
 	claimTTL := make(map[string]int)
 	transitioned := make(map[string]bool)
+	claimedBy := make(map[string]string)
+	lastClaimingWorkerActivity := make(map[string]int64)
 
 	for _, op := range allOps {
 		switch op.Type {
 		case ops.OpClaim:
 			claimedAt[op.TargetID] = op.Timestamp
 			claimTTL[op.TargetID] = op.Payload.TTL
+			claimedBy[op.TargetID] = op.WorkerID
+			lastClaimingWorkerActivity[op.TargetID] = op.Timestamp
 		case ops.OpHeartbeat:
 			if op.Timestamp > lastHeartbeat[op.TargetID] {
 				lastHeartbeat[op.TargetID] = op.Timestamp
@@ -132,6 +136,12 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 			if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged ||
 				op.Payload.To == ops.StatusCancelled {
 				transitioned[op.TargetID] = true
+			}
+			// Only count a transition as claiming-worker activity when the
+			// transition's author is the current claim owner for this issue —
+			// one worker's transition must not extend another worker's claim.
+			if op.WorkerID == claimedBy[op.TargetID] && op.Timestamp > lastClaimingWorkerActivity[op.TargetID] {
+				lastClaimingWorkerActivity[op.TargetID] = op.Timestamp
 			}
 		}
 	}
@@ -148,7 +158,7 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		if ttl <= 0 {
 			ttl = defaultTTLMinutes
 		}
-		if !claim.IsClaimStale(ca, lastHeartbeat[issueID], ttl, now) {
+		if !claim.IsClaimStale(ca, lastHeartbeat[issueID], lastClaimingWorkerActivity[issueID], ttl, now) {
 			return WorkerStatus{
 				WorkerID:    workerID,
 				Status:      "active",
@@ -195,10 +205,11 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 
 func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 	type issueState struct {
-		claimedAt     int64
-		lastHeartbeat int64
-		ttl           int
-		transitioned  bool
+		claimedAt                  int64
+		lastHeartbeat              int64
+		ttl                        int
+		transitioned               bool
+		lastClaimingWorkerActivity int64
 	}
 	claimsByIssue := make(map[string][]ops.Op)
 	opsByIssue := make(map[string][]ops.Op)
@@ -233,16 +244,17 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 				if ttl <= 0 {
 					ttl = 60
 				}
-				return claim.IsClaimStale(s.claimedAt, s.lastHeartbeat, ttl, now)
+				return claim.IsClaimStale(s.claimedAt, s.lastHeartbeat, s.lastClaimingWorkerActivity, ttl, now)
 			}
 			switch op.Type {
 			case ops.OpClaim:
 				if staleAt(activeWorker, op.Timestamp) {
 					activeWorker = op.WorkerID
 					stateByWorker[op.WorkerID] = &issueState{
-						claimedAt:     op.Timestamp,
-						lastHeartbeat: op.Timestamp,
-						ttl:           op.Payload.TTL,
+						claimedAt:                  op.Timestamp,
+						lastHeartbeat:              op.Timestamp,
+						ttl:                        op.Payload.TTL,
+						lastClaimingWorkerActivity: op.Timestamp,
 					}
 				}
 			case ops.OpHeartbeat:
@@ -250,6 +262,12 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 					s.lastHeartbeat = op.Timestamp
 				}
 			case ops.OpTransition:
+				// stateByWorker is keyed by workerID, so a transition op only ever
+				// touches its own author's state here — by construction this is
+				// claiming-worker activity and cannot extend a different worker's claim.
+				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastClaimingWorkerActivity {
+					s.lastClaimingWorkerActivity = op.Timestamp
+				}
 				if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged || op.Payload.To == ops.StatusCancelled {
 					if s := stateByWorker[op.WorkerID]; s != nil {
 						s.transitioned = true
