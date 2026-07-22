@@ -19,6 +19,10 @@ mutesting-report/
 .worktrees/
 .arm/
 
+# Ops-branch worktree (arm bootstrap binds this to the ops branch; it is not
+# part of the main tree's history)
+.armature/
+
 # IDE / tools
 .vscode/*.code-workspace
 .idea/
