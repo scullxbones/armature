@@ -61,7 +61,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 			continue
 		}
 		if issue != nil && issue.ClaimedBy != "" {
-			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, currentTime) {
+			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, currentTime) {
 				continue
 			}
 		}
@@ -115,7 +115,7 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 		}
 		// Skip issues that are actively claimed (not stale).
 		if issue != nil && issue.ClaimedBy != "" {
-			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, currentTime) {
+			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, currentTime) {
 				continue
 			}
 		}
@@ -178,11 +178,15 @@ func allBlockersMerged(blockers []string, index materialize.Index) bool {
 	return true
 }
 
-func isClaimStale(claimedAt, lastHeartbeat int64, ttlMinutes int, now int64) bool {
+// isClaimStale mirrors claim.IsClaimStale, folding claimingWorkerActivity
+// (materialize.Issue.LastClaimingWorkerActivity) into the staleness window so
+// `arm ready`'s expired-claims computation agrees with doctor --fix about
+// whether a claim is expired.
+func isClaimStale(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
 	if ttlMinutes <= 0 {
 		return false
 	}
-	lastActivity := max(claimedAt, lastHeartbeat)
+	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
 	ttlSeconds := int64(ttlMinutes) * 60
 	return now > lastActivity+ttlSeconds
 }

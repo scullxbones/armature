@@ -20,7 +20,7 @@ func StaleClaims(issues map[string]*materialize.Issue, now time.Time) []string {
 		if issue.Status != ops.StatusClaimed {
 			continue
 		}
-		if isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, nowUnix) {
+		if isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, nowUnix) {
 			stale = append(stale, id)
 		}
 	}
@@ -32,13 +32,14 @@ func StaleClaims(issues map[string]*materialize.Issue, now time.Time) []string {
 // renewal, for distinct surfacing in `arm ready` output (rather than being
 // silently omitted from the ready queue, or silently included in it).
 type ExpiredClaimEntry struct {
-	Issue         string `json:"issue"`
-	Title         string `json:"title"`
-	Status        string `json:"status"`
-	ClaimedBy     string `json:"claimed_by"`
-	ClaimedAt     int64  `json:"claimed_at"`
-	LastHeartbeat int64  `json:"last_heartbeat"`
-	ClaimTTL      int    `json:"claim_ttl"`
+	Issue                      string `json:"issue"`
+	Title                      string `json:"title"`
+	Status                     string `json:"status"`
+	ClaimedBy                  string `json:"claimed_by"`
+	ClaimedAt                  int64  `json:"claimed_at"`
+	LastHeartbeat              int64  `json:"last_heartbeat"`
+	ClaimTTL                   int    `json:"claim_ttl"`
+	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
 }
 
 // ExpiredClaims returns a sorted (by issue ID) list of issues in claimed or
@@ -57,17 +58,18 @@ func ExpiredClaims(issues map[string]*materialize.Issue, now time.Time) []Expire
 		if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
 			continue
 		}
-		if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.ClaimTTL, nowUnix) {
+		if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, nowUnix) {
 			continue
 		}
 		expired = append(expired, ExpiredClaimEntry{
-			Issue:         id,
-			Title:         issue.Title,
-			Status:        issue.Status,
-			ClaimedBy:     issue.ClaimedBy,
-			ClaimedAt:     issue.ClaimedAt,
-			LastHeartbeat: issue.LastHeartbeat,
-			ClaimTTL:      issue.ClaimTTL,
+			Issue:                      id,
+			Title:                      issue.Title,
+			Status:                     issue.Status,
+			ClaimedBy:                  issue.ClaimedBy,
+			ClaimedAt:                  issue.ClaimedAt,
+			LastHeartbeat:              issue.LastHeartbeat,
+			ClaimTTL:                   issue.ClaimTTL,
+			LastClaimingWorkerActivity: issue.LastClaimingWorkerActivity,
 		})
 	}
 	sort.Slice(expired, func(i, j int) bool { return expired[i].Issue < expired[j].Issue })

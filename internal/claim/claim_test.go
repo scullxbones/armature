@@ -35,15 +35,27 @@ func TestResolveClaimRace_LexicographicTiebreaker(t *testing.T) {
 func TestIsClaimStale(t *testing.T) {
 	t.Parallel()
 	// TTL=1 minute = 60 seconds; claimedAt=100, now=161 => stale (100+60=160 < 161)
-	assert.True(t, IsClaimStale(100, 0, 1, 161))
+	assert.True(t, IsClaimStale(100, 0, 0, 1, 161))
 	// now=159 => not stale (100+60=160 > 159)
-	assert.False(t, IsClaimStale(100, 0, 1, 159))
+	assert.False(t, IsClaimStale(100, 0, 0, 1, 159))
 	// heartbeat at 150, now=209 => not stale (150+60=210 > 209)
-	assert.False(t, IsClaimStale(100, 150, 1, 209))
+	assert.False(t, IsClaimStale(100, 150, 0, 1, 209))
 	// heartbeat at 150, now=211 => stale (150+60=210 < 211)
-	assert.True(t, IsClaimStale(100, 150, 1, 211))
+	assert.True(t, IsClaimStale(100, 150, 0, 1, 211))
 	// TTL=0 => never stale
-	assert.False(t, IsClaimStale(100, 0, 0, 9999))
+	assert.False(t, IsClaimStale(100, 0, 0, 0, 9999))
+}
+
+// TestIsClaimStale_ClaimingWorkerActivityExtends verifies that a claimant
+// transition just before naive TTL expiry (bumping LastClaimingWorkerActivity
+// without touching LastHeartbeat) prevents the claim from reading as stale.
+func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
+	t.Parallel()
+	// claimedAt=100, lastHeartbeat=0, claimingWorkerActivity=150, TTL=1min.
+	// now=209 => not stale (150+60=210 > 209), driven solely by claimingWorkerActivity.
+	assert.False(t, IsClaimStale(100, 0, 150, 1, 209))
+	// now=211 => stale (150+60=210 < 211)
+	assert.True(t, IsClaimStale(100, 0, 150, 1, 211))
 }
 
 func TestScopeOverlap(t *testing.T) {
@@ -179,12 +191,12 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 				// TTL=0 is always not-stale; no monotonicity to check.
 				return true
 			}
-			if !IsClaimStale(claimedAt, lastHeartbeat, int(ttlMinutes), now) {
+			if !IsClaimStale(claimedAt, lastHeartbeat, 0, int(ttlMinutes), now) {
 				return true // not stale yet, nothing to verify
 			}
 			// If stale at now, must also be stale at now+delta for any delta >= 0.
 			laterNow := now + 1
-			return IsClaimStale(claimedAt, lastHeartbeat, int(ttlMinutes), laterNow)
+			return IsClaimStale(claimedAt, lastHeartbeat, 0, int(ttlMinutes), laterNow)
 		},
 		gen.Int64Range(0, 10000),
 		gen.Int64Range(0, 10000),
