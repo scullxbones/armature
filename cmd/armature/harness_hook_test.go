@@ -720,6 +720,64 @@ func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.
 	assert.Contains(t, logContent, "cmd/armature/main.go", "the violation entry must name the out-of-scope path")
 }
 
+// TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER_S5_T2
+// verifies that the stale pass-through scope-violation logger normalizes a
+// relative event path against event.Cwd before checking it against the
+// task's declared scope. Without normalization, a relative path like
+// "internal/foo.go" sent with cwd below the worktree root (e.g.
+// "<root>/docs") textually matches an "internal/" scope entry even though
+// the actual absolute write (<root>/docs/internal/foo.go) falls outside
+// that scope — so the violation gap goes unlogged.
+func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER_S5_T2(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/", "--acceptance", `["go test ./... passes"]`)
+	require.NoError(t, err)
+
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	cmd = newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "done", "--force"})
+	require.NoError(t, cmd.Execute())
+
+	t.Setenv("ARMATURE_ISSUE_ID", "")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	// cwd is a subdirectory of the worktree root; the relative edit path
+	// "internal/foo.go" textually matches the "internal/" scope entry, but
+	// the real absolute write (<worktreeDir>/docs/internal/foo.go) is
+	// outside that scope.
+	subCwd := filepath.Join(worktreeDir, "docs")
+	require.NoError(t, os.MkdirAll(filepath.Join(subCwd, "internal"), 0o755))
+
+	var out, errOut bytes.Buffer
+	cmd = newRootCmd()
+	payload := fmt.Sprintf(`{"hook_event_name":"PreToolUse","cwd":%q,"tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/foo.go"}]}}`, subCwd)
+	cmd.SetIn(strings.NewReader(payload))
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"harness-hook", "--repo", worktreeDir})
+
+	err = cmd.Execute()
+	require.NoError(t, err, "stale binding must fail open: exit 0")
+
+	worktreeGitDir, gErr := resolveWorktreeGitDir(worktreeDir)
+	require.NoError(t, gErr)
+	logData, err := os.ReadFile(filepath.Join(worktreeGitDir, "armature-hook.log"))
+	require.NoError(t, err)
+	logContent := string(logData)
+
+	assert.Contains(t, logContent, "pass-through: stale issue binding", "stale binding must log a pass-through entry")
+	assert.Contains(t, logContent, "violation:",
+		"stale binding pass-through with an out-of-scope path (once normalized against cwd) must also log a violation entry")
+	assert.Contains(t, logContent, "docs/internal/foo.go",
+		"the violation entry must name the normalized (cwd-joined) out-of-scope path, not the raw relative path")
+}
+
 // TestResolverErrorFailsOpen_REQ_HOOKBIND_T3 verifies that an error from
 // hook.Evaluate's policy resolution step (e.g. a corrupt materialized issue JSON)
 // fails open: exit 0, loud stderr warning, pass-through logged (finding 3).

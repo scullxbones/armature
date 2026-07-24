@@ -317,6 +317,60 @@ func TestCheckD8ScopeViolations_IgnoresGeneralHygiene_REQ_TOPTIER_S5_T2(t *testi
 	assert.Equal(t, doctor.SeverityOK, finding.Severity)
 }
 
+// TestCheckD8ScopeViolations_DoesNotCrossAttributeBetweenActiveTasks_REQ_TOPTIER_S5_T2
+// verifies that a dirty path legitimately explained by one active task's
+// declared scope is not also reported as a violation of a *different*
+// active task's scope. Without correlating candidate paths to the task they
+// actually belong to, every dirty path in the shared git-status set is
+// checked against every active/recent task's scope glob independently, so a
+// valid TASK-A file that simply falls outside TASK-B's unrelated scope gets
+// misreported as "TASK-B: <path>" even though it's TASK-A's legitimate,
+// in-scope work.
+func TestCheckD8ScopeViolations_DoesNotCrossAttributeBetweenActiveTasks_REQ_TOPTIER_S5_T2(t *testing.T) {
+	t.Parallel()
+	tmpDir := initGitRepo(t)
+
+	scopeADir := filepath.Join(tmpDir, "internal", "a")
+	require.NoError(t, os.MkdirAll(scopeADir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(scopeADir, "foo.go"), []byte("package a"), 0o644))
+
+	scopeBDir := filepath.Join(tmpDir, "internal", "b")
+	require.NoError(t, os.MkdirAll(scopeBDir, 0o755))
+
+	now := time.Now()
+	index := materialize.Index{
+		"TASK-A": {Status: "claimed", Type: "task"},
+		"TASK-B": {Status: "claimed", Type: "task"},
+	}
+	allIssues := map[string]*materialize.Issue{
+		"TASK-A": {
+			ID:        "TASK-A",
+			Status:    "claimed",
+			Type:      "task",
+			Scope:     []string{"internal/a/"},
+			ClaimedAt: now.Unix(),
+			Updated:   now.Unix(),
+		},
+		"TASK-B": {
+			ID:        "TASK-B",
+			Status:    "claimed",
+			Type:      "task",
+			Scope:     []string{"internal/b/"},
+			ClaimedAt: now.Unix(),
+			Updated:   now.Unix(),
+		},
+	}
+
+	// internal/a/foo.go is a legitimate, in-scope dirty file for TASK-A. It
+	// must not be reported as a violation of TASK-B's unrelated scope.
+	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
+	for _, item := range finding.Items {
+		assert.NotEqual(t, "TASK-B: internal/a/foo.go", item, "TASK-A's in-scope file must not be cross-attributed to TASK-B: %v", finding.Items)
+	}
+	assert.Equal(t, doctor.SeverityOK, finding.Severity,
+		"no genuine out-of-scope artifact exists; TASK-A's file is explained by TASK-A's own scope: %v", finding.Items)
+}
+
 // TestCheckD8ScopeViolations_RecentlyCompleted_REQ_TOPTIER_S5_T2 tests D8 with recently-completed tasks
 // still inside the grace period: an out-of-scope untracked artifact must be
 // flagged as an error.

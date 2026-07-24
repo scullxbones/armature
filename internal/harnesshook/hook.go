@@ -11,6 +11,36 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
 
+// AbsolutizePaths resolves each of paths against cwd (or, failing that,
+// root) so scope checks compare like-for-like against a policy's root-based
+// scope entries rather than a raw relative path.
+//
+// When absolutization against cwd fails (cwd empty or itself relative) but a
+// worktree root was supplied, join the relative path against root instead of
+// leaving it as-is. Falling through to the raw relative path would let it
+// match scope entries textually (e.g. a path "internal/x.go" matching scope
+// "internal/" even though, relative to root, the file actually lives
+// elsewhere) — a residual scope-check bypass.
+//
+// If both cwd and root are empty, paths is returned unmodified.
+func AbsolutizePaths(paths []string, cwd, root string) []string {
+	if cwd == "" && root == "" {
+		return paths
+	}
+	absolutized := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if absPath, ok := absolutizeFilePath(path, cwd); ok {
+			absolutized = append(absolutized, absPath)
+		} else if root != "" && !filepath.IsAbs(path) {
+			absolutized = append(absolutized, filepath.Join(root, path))
+		} else {
+			// If absolutization fails, use the original path
+			absolutized = append(absolutized, path)
+		}
+	}
+	return absolutized
+}
+
 // PolicyResolver is the interface for resolving issue policies.
 type PolicyResolver interface {
 	Resolve(taskID string) (harnesspolicy.IssuePolicy, error)
@@ -76,26 +106,7 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 	// This ensures that when cwd=/repo/docs and file_path=internal/x.go, the scope check
 	// evaluates the absolute path /repo/docs/internal/x.go against the root /repo,
 	// not the relative path against the cwd.
-	//
-	// When absolutization against cwd fails (cwd empty or itself relative) but a worktree
-	// root was supplied, join the relative path against Root instead of leaving it as-is.
-	// Falling through to the raw relative path would let it match scope entries textually
-	// (e.g. a path "internal/x.go" matching scope "internal/" even though, relative to
-	// Root, the file actually lives elsewhere) — a residual scope-check bypass.
-	if event.Cwd != "" || input.Root != "" {
-		absolutizedPaths := make([]string, 0, len(event.Paths))
-		for _, path := range event.Paths {
-			if absPath, ok := absolutizeFilePath(path, event.Cwd); ok {
-				absolutizedPaths = append(absolutizedPaths, absPath)
-			} else if input.Root != "" && !filepath.IsAbs(path) {
-				absolutizedPaths = append(absolutizedPaths, filepath.Join(input.Root, path))
-			} else {
-				// If absolutization fails, use the original path
-				absolutizedPaths = append(absolutizedPaths, path)
-			}
-		}
-		event.Paths = absolutizedPaths
-	}
+	event.Paths = AbsolutizePaths(event.Paths, event.Cwd, input.Root)
 
 	// Resolve policy for task using the already-resolved binding (ADR-0007: single resolution)
 	policy, err := h.resolver.Resolve(input.Binding)

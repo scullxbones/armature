@@ -114,8 +114,14 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	} else {
 		scopePolicy = harnesspolicy.NewScopePolicy(policy.Scope)
 	}
+	// Normalize event.Paths against event.Cwd/resolvedBinding.Root before checking
+	// scope: this event was decoded directly (line ~387) and never passed through
+	// harnesshook.Hook.Evaluate's absolutization step, so a relative path with a
+	// cwd below the worktree root would otherwise be checked textually against
+	// the raw scope entries instead of the actual absolute write location.
+	normalizedPaths := harnesshook.AbsolutizePaths(event.Paths, event.Cwd, resolvedBinding.Root)
 	_, _ = harnesshook.LogPassThroughScopeViolation( //nolint:errcheck // logging only, error not actionable
-		logGitDir, scopePolicy, event.Paths, "stale binding")
+		logGitDir, scopePolicy, normalizedPaths, "stale binding")
 }
 
 // isBindingStale checks if the issue binding's status is not claimed or in-progress,

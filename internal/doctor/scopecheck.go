@@ -79,8 +79,15 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 		return f
 	}
 
-	// Collect all violations across all tasks
-	allViolations := make(map[string][]string) // maps task ID to list of violations
+	// Collect all violations across all tasks. A single shared dirty-path set
+	// (from repoPath's git status) is checked against every active/recent
+	// task's scope independently, since there is no per-worktree correlation
+	// between a candidate path and the specific task it belongs to. Without
+	// the cross-task filter below, a path legitimately explained by one
+	// task's scope (in-scope for it) but outside a *different* task's
+	// unrelated scope would be misreported as a violation of that other
+	// task, purely because both tasks happen to be active/recent at once.
+	rawViolations := make(map[string][]string) // maps task ID to list of candidate violations
 	for _, issue := range tasksToCheck {
 		if len(issue.Scope) == 0 {
 			continue
@@ -88,7 +95,38 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 
 		violations := findOutOfScopeArtifacts(repoPath, issue.Scope)
 		if len(violations) > 0 {
-			allViolations[issue.ID] = violations
+			rawViolations[issue.ID] = violations
+		}
+	}
+
+	// A candidate is only a genuine out-of-scope artifact if no other active
+	// or recently-completed task's declared scope explains it; otherwise it's
+	// legitimately in-scope work for that other task, not a violation of the
+	// task it was checked against.
+	explainedBy := make(map[string][]*materialize.Issue) // maps candidate path -> tasks that cover it
+	for _, issue := range tasksToCheck {
+		if len(issue.Scope) == 0 {
+			continue
+		}
+		policy := harnesspolicy.NewScopePolicyWithRoot(issue.Scope, repoPath)
+		for taskID := range rawViolations {
+			for _, path := range rawViolations[taskID] {
+				if result := policy.CheckPaths([]string{path}); result.Allowed {
+					explainedBy[path] = append(explainedBy[path], issue)
+				}
+			}
+		}
+	}
+
+	allViolations := make(map[string][]string) // maps task ID to list of confirmed violations
+	for taskID, violations := range rawViolations {
+		for _, path := range violations {
+			if len(explainedBy[path]) > 0 {
+				// Some other active/recent task's scope covers this path; it's
+				// that task's legitimate work, not a violation of taskID.
+				continue
+			}
+			allViolations[taskID] = append(allViolations[taskID], path)
 		}
 	}
 
