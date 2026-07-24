@@ -1221,7 +1221,7 @@ func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
 // in repo, or an empty slice if the log doesn't exist yet.
 func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
 	t.Helper()
-	logPath := filepath.Join(repo, ".armature", "ops", workerIdentityWithSlot(workerID)+".log")
+	logPath := opsLogPath(filepath.Join(repo, ".armature"), workerIdentityWithSlot(workerID))
 	loggedOps, err := ops.ReadLog(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -1245,7 +1245,7 @@ func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
 // create op to sort before any later op on the same target).
 func backdateAllOps(t *testing.T, repo, workerID string, delta time.Duration) {
 	t.Helper()
-	logPath := filepath.Join(repo, ".armature", "ops", workerIdentityWithSlot(workerID)+".log")
+	logPath := opsLogPath(filepath.Join(repo, ".armature"), workerIdentityWithSlot(workerID))
 	loggedOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
 
