@@ -3501,3 +3501,4 @@
 ["assessment-attested","LNGHZN-S3-T1",1784857621,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"assessment":{"schema_version":1,"bundle_id":"sha256:14e807f2bffafbec4ed8a4907873c3f19dc995561221fb7262e46967e7915a71","contract_fingerprint":"f8abcf2fae1d3980904aaf68232d1d347595a78d0998f8d905f68ca562491968","delivery_fingerprint":"54d709b276b2feddc7750a762e72f5f8e8005f993362b81a7fe4d4a72359a7c5","base_sha":"5569b131e472e6bfd2f96d20c0d51ba19c3815fc","head_sha":"b8f7e0723add5bc80388ca02711734011bce6bce","rating":"yellow","result_fingerprint":"fd66150f31f2305494a618795883286931bd77d247a034815c793d71cf71d8e5","satisfied_count":8,"partially_satisfied_count":0,"not_satisfied_count":0,"indeterminate_count":1}}]
 ["claim","TOPTIER-S5-T1",1784888899,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","TOPTIER-S5-T1",1784888901,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
+["claim","TOPTIER-S5-T1",1784888910,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
