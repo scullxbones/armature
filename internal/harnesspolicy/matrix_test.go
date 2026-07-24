@@ -9,11 +9,19 @@ import (
 
 // TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1 is a comprehensive
 // conformance matrix that verifies every combination of:
-//   - Binding state (bound active, bound inactive, unbound)
 //   - Tool class (Edit, Bash, etc.)
 //   - Path type (in scope, out of scope, outside worktree)
 //
-// The matrix drives policy decisions: allow, block, or pass-through.
+// ScopePolicy itself has no notion of binding state (bound active, bound
+// inactive/stale, unbound) — that's resolved one layer up, in
+// internal/harnesshook (see conformance_test.go's BindingStates subtest for
+// bound active/unbound) and, for the stale ("bound inactive") pass-through
+// case specifically, in cmd/armature/harness_hook_test.go's
+// TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2, which is
+// the layer that actually models claim staleness and drives it through the
+// pass-through decision path.
+//
+// The matrix drives policy decisions: allow or block for a given path set.
 // This is the data-centric test suite for scope policy validation.
 func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()

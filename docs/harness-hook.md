@@ -162,7 +162,7 @@ A wave whose tasks contain `violation:` entries in their logs **must not be inte
 (merged into the main branch) without explicit operator override (`--force`). Violations
 indicate that the harness was unable to enforce scope, raising risk for the story integration.
 
-### Fail-Open Posture
+### Fail-Open Posture (Enforcement)
 
 The hook operates with a fail-open posture:
 - If snapshot loading fails (e.g., state files are corrupted or missing), the event is
@@ -255,7 +255,7 @@ Example repo-level configuration (`.armature/config.json`):
 This ensures that even if a worker pauses tool use at the end of a 5-minute heartbeat
 window, the claim will not expire before the next heartbeat can be emitted.
 
-### Fail-Open Posture
+### Fail-Open Posture (Heartbeats)
 
 Heartbeat emission uses fail-open semantics:
 - If the worker ID cannot be resolved, heartbeat is skipped (not fatal)
@@ -384,7 +384,7 @@ selection bias this capture policy exists to prevent (see "What Gets Captured" a
 Disabling capture is a repo-level Definition-of-Done decision, not something a running
 session should be able to toggle unilaterally.
 
-### Fail-Open Posture
+### Fail-Open Posture (Execution Evidence Capture)
 
 The hook fails open on any capture error:
 - If worktree HEAD cannot be resolved, capture is skipped with stderr warning
@@ -821,7 +821,7 @@ The harness hook enforces task scope and acceptance criteria through a **best-ef
 - **Edit tools:** `Edit`, `Write`, `MultiEdit` (file edits via Claude Code)
 - **Shell tools:** `Bash` (shell commands)
 
-**Scope enforcement:** Lexical path checking against task scope globs; symlink-inside-worktree-pointing-outside is treated as in-scope (fail-open posture, see docs/harness-hook.md#Fail-Open Posture).
+**Scope enforcement:** Lexical path checking against task scope globs; symlink-inside-worktree-pointing-outside is treated as in-scope (fail-open posture, see [Fail-Open Posture (Enforcement)](#fail-open-posture-enforcement)).
 
 **Pass-through conditions:**
 - No issue binding found (session has no `ARMATURE_ISSUE_ID` or worktree binding file)
@@ -870,7 +870,12 @@ The harness hook enforces task scope and acceptance criteria through a **best-ef
 
 **Pass-through entries** (`pass-through:` lines in hook log) are warnings, not enforcement failures. They indicate events that could not be evaluated due to binding resolution or decoding errors and were allowed to proceed. These are fail-open: the hook prefers to let work continue rather than block a worker on transient failures.
 
-**Violation entries** (`violation:` lines in hook log) indicate file writes that should have been subject to scope enforcement but were not — the binding could not be resolved, so no scope check occurred. Violations are surfaced at merge time by the **violation gate** (see docs/harness-hook.md#Violation Gate): `arm merged --issue <task-id>` will fail if violation entries are present unless `--force` is specified.
+**Violation entries** (`violation:` lines in hook log) indicate an enforcement gap and come in two forms:
+
+1. **Unbound file writes.** The binding could not be resolved at all, so no scope check occurred — the write proceeded with no enforcement whatsoever.
+2. **Stale-binding pass-through scope violations.** A binding *was* resolved, but was stale (e.g. the claim expired or the issue moved past claimed/in-progress), so enforcement was skipped (fail-open) — a scope check still ran against the resolved binding's declared scope, found the operation's paths out of scope, and logged a violation entry alongside the `pass-through: stale issue binding` entry (see [Scope Violation Visibility](#scope-violation-visibility) above).
+
+Both forms are surfaced at merge time by the **violation gate** (see [Violation Gate](#violation-gate)): `arm merged --issue <task-id>` will fail if violation entries are present unless `--force` is specified.
 
 A wave whose tasks contain violation entries **must not be integrated** without explicit operator override. Violations raise risk for story integration.
 

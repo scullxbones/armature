@@ -13,6 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// commitAll stages and commits every path currently in dir's worktree. dir
+// must already be a git repo (see initGitRepo in fix_test.go, shared across
+// this package's tests).
+func commitAll(t *testing.T, dir string) {
+	t.Helper()
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-q", "-m", "test commit")
+}
+
 // TestDoctorScopeCheck_REQ_TOPTIER_S5_T2 is the contract-required entry point
 // for the D8 out-of-scope-artifact check. It covers the three cases named in
 // the task contract explicitly:
@@ -25,14 +34,12 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Parallel()
 	t.Run("StrayBinaryOutsideScope", func(t *testing.T) {
 		t.Parallel()
-		tmpDir := t.TempDir()
-		gitDir := filepath.Join(tmpDir, ".git")
-		require.NoError(t, os.MkdirAll(gitDir, 0o755))
+		tmpDir := initGitRepo(t)
 
 		scopeDir := filepath.Join(tmpDir, "internal", "util")
 		require.NoError(t, os.MkdirAll(scopeDir, 0o755))
 
-		// Stray binary artifact left outside the declared scope.
+		// Stray binary artifact left outside the declared scope, untracked.
 		strayBinary := filepath.Join(tmpDir, "stray_binary")
 		require.NoError(t, os.WriteFile(strayBinary, []byte{0x7f, 'E', 'L', 'F'}, 0o755))
 
@@ -85,18 +92,17 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 
 	t.Run("MainWorktreeLeakScopedToTaskDeclaredScope", func(t *testing.T) {
 		t.Parallel()
-		tmpDir := t.TempDir()
-		gitDir := filepath.Join(tmpDir, ".git")
-		require.NoError(t, os.MkdirAll(gitDir, 0o755))
+		tmpDir := initGitRepo(t)
 
 		// The task's declared scope is internal/auth/ only.
 		scopeDir := filepath.Join(tmpDir, "internal", "auth")
 		require.NoError(t, os.MkdirAll(scopeDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(scopeDir, "login.go"), []byte("package auth"), 0o644))
+		commitAll(t, tmpDir)
 
 		// Worktree changes leak into the main worktree at a path outside the
 		// task's declared scope (e.g. a cmd/ file edited from a worktree for
-		// a different task, then left behind in the main worktree).
+		// a different task, then left behind in the main worktree), uncommitted.
 		leakedDir := filepath.Join(tmpDir, "cmd")
 		require.NoError(t, os.MkdirAll(leakedDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(leakedDir, "leaked.go"), []byte("package main"), 0o644))
@@ -132,20 +138,15 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 // TestCheckD8ScopeViolations_NoActiveTasks_REQ_TOPTIER_S5_T2 tests that D8 returns OK when there are no active or recently-completed tasks
 func TestCheckD8ScopeViolations_NoActiveTasks_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
+	tmpDir := initGitRepo(t)
 
 	// No issues in the index
 	index := materialize.Index{}
 	allIssues := map[string]*materialize.Issue{}
 
-	// Create a git repo with some untracked files
-	gitDir := filepath.Join(tmpDir, ".git")
-	err := os.MkdirAll(gitDir, 0o755)
-	require.NoError(t, err)
-
 	// Create an untracked file
 	untracked := filepath.Join(tmpDir, "untracked.txt")
-	err = os.WriteFile(untracked, []byte("content"), 0o644)
+	err := os.WriteFile(untracked, []byte("content"), 0o644)
 	require.NoError(t, err)
 
 	// With no active tasks, D8 should be OK (untracked files are general hygiene, not task-related)
@@ -156,16 +157,11 @@ func TestCheckD8ScopeViolations_NoActiveTasks_REQ_TOPTIER_S5_T2(t *testing.T) {
 // TestCheckD8ScopeViolations_NoOutOfScopeArtifacts_REQ_TOPTIER_S5_T2 tests D8 with a task that has scoped files, but all artifacts are in-scope
 func TestCheckD8ScopeViolations_NoOutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-
-	// Initialize a git repository
-	gitDir := filepath.Join(tmpDir, ".git")
-	err := os.MkdirAll(gitDir, 0o755)
-	require.NoError(t, err)
+	tmpDir := initGitRepo(t)
 
 	// Create scope-aligned directory and file
 	scopeDir := filepath.Join(tmpDir, "internal", "auth")
-	err = os.MkdirAll(scopeDir, 0o755)
+	err := os.MkdirAll(scopeDir, 0o755)
 	require.NoError(t, err)
 
 	inScopeFile := filepath.Join(scopeDir, "login.go")
@@ -195,16 +191,11 @@ func TestCheckD8ScopeViolations_NoOutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testi
 // TestCheckD8ScopeViolations_OutOfScopeArtifacts_REQ_TOPTIER_S5_T2 tests D8 detecting artifacts outside scope
 func TestCheckD8ScopeViolations_OutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-
-	// Initialize a git repository
-	gitDir := filepath.Join(tmpDir, ".git")
-	err := os.MkdirAll(gitDir, 0o755)
-	require.NoError(t, err)
+	tmpDir := initGitRepo(t)
 
 	// Create scope directory
 	scopeDir := filepath.Join(tmpDir, "internal", "auth")
-	err = os.MkdirAll(scopeDir, 0o755)
+	err := os.MkdirAll(scopeDir, 0o755)
 	require.NoError(t, err)
 
 	// Create an in-scope file
@@ -212,7 +203,7 @@ func TestCheckD8ScopeViolations_OutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing
 	err = os.WriteFile(inScopeFile, []byte("package auth"), 0o644)
 	require.NoError(t, err)
 
-	// Create an OUT-OF-SCOPE file
+	// Create an OUT-OF-SCOPE file, left untracked
 	outOfScopeDir := filepath.Join(tmpDir, "cmd")
 	err = os.MkdirAll(outOfScopeDir, 0o755)
 	require.NoError(t, err)
@@ -241,31 +232,66 @@ func TestCheckD8ScopeViolations_OutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing
 	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
 	assert.Equal(t, doctor.SeverityError, finding.Severity)
 	assert.Equal(t, "D8", finding.Check)
-	// The finding should contain items (though it may flag all files since we're not doing git status filtering)
-	// For now, just validate that it detects a problem
-	assert.True(t, len(finding.Items) > 0 || finding.Severity == doctor.SeverityError, "D8 should report violations for out-of-scope files")
+	require.NotEmpty(t, finding.Items)
+	assert.Contains(t, finding.Items, "TASK-001: cmd/main.go")
+}
+
+// TestCheckD8ScopeViolations_CommittedOutOfScopeFile_REQ_TOPTIER_S5_T2 proves
+// the S1 fix: a file that is legitimately committed outside a task's scope
+// glob (e.g. an unrelated package the task never touched) must NOT be
+// flagged, since it is neither untracked nor modified in the worktree. Only
+// stray/untracked/uncommitted escapees should be flagged.
+func TestCheckD8ScopeViolations_CommittedOutOfScopeFile_REQ_TOPTIER_S5_T2(t *testing.T) {
+	t.Parallel()
+	tmpDir := initGitRepo(t)
+
+	// In-scope file.
+	scopeDir := filepath.Join(tmpDir, "internal", "auth")
+	require.NoError(t, os.MkdirAll(scopeDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(scopeDir, "login.go"), []byte("package auth"), 0o644))
+
+	// A committed, out-of-scope code file unrelated to the task's scope.
+	otherDir := filepath.Join(tmpDir, "internal", "billing")
+	require.NoError(t, os.MkdirAll(otherDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(otherDir, "invoice.go"), []byte("package billing"), 0o644))
+
+	commitAll(t, tmpDir)
+
+	now := time.Now()
+	index := materialize.Index{
+		"TASK-001": {Status: "claimed", Type: "task"},
+	}
+	allIssues := map[string]*materialize.Issue{
+		"TASK-001": {
+			ID:        "TASK-001",
+			Status:    "claimed",
+			Type:      "task",
+			Scope:     []string{"internal/auth/"},
+			ClaimedAt: now.Unix(),
+			Updated:   now.Unix(),
+		},
+	}
+
+	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, doctor.SeverityOK, finding.Severity, "committed out-of-scope files must not be flagged: %v", finding.Items)
+	assert.Empty(t, finding.Items)
 }
 
 // TestCheckD8ScopeViolations_IgnoresGeneralHygiene_REQ_TOPTIER_S5_T2 tests that D8 doesn't flag unrelated untracked files
 func TestCheckD8ScopeViolations_IgnoresGeneralHygiene_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-
-	// Initialize a git repository
-	gitDir := filepath.Join(tmpDir, ".git")
-	err := os.MkdirAll(gitDir, 0o755)
-	require.NoError(t, err)
+	tmpDir := initGitRepo(t)
 
 	// Create scope directory and file
 	scopeDir := filepath.Join(tmpDir, "internal", "auth")
-	err = os.MkdirAll(scopeDir, 0o755)
+	err := os.MkdirAll(scopeDir, 0o755)
 	require.NoError(t, err)
 
 	inScopeFile := filepath.Join(scopeDir, "login.go")
 	err = os.WriteFile(inScopeFile, []byte("package auth"), 0o644)
 	require.NoError(t, err)
 
-	// Create a general unrelated file (not correlated with the task's scope)
+	// Create a general unrelated file (not correlated with the task's scope), untracked
 	unrelatedFile := filepath.Join(tmpDir, "README.md")
 	err = os.WriteFile(unrelatedFile, []byte("# Project"), 0o644)
 	require.NoError(t, err)
@@ -292,28 +318,26 @@ func TestCheckD8ScopeViolations_IgnoresGeneralHygiene_REQ_TOPTIER_S5_T2(t *testi
 }
 
 // TestCheckD8ScopeViolations_RecentlyCompleted_REQ_TOPTIER_S5_T2 tests D8 with recently-completed tasks
+// still inside the grace period: an out-of-scope untracked artifact must be
+// flagged as an error.
 func TestCheckD8ScopeViolations_RecentlyCompleted_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-
-	// Initialize a git repository
-	gitDir := filepath.Join(tmpDir, ".git")
-	err := os.MkdirAll(gitDir, 0o755)
-	require.NoError(t, err)
+	tmpDir := initGitRepo(t)
 
 	// Create scope directory
 	scopeDir := filepath.Join(tmpDir, "internal", "util")
-	err = os.MkdirAll(scopeDir, 0o755)
+	err := os.MkdirAll(scopeDir, 0o755)
 	require.NoError(t, err)
 
-	// Create an out-of-scope file
+	// Create an out-of-scope, untracked file
 	outOfScopeFile := filepath.Join(tmpDir, "stray.bin")
 	err = os.WriteFile(outOfScopeFile, []byte("binary"), 0o644)
 	require.NoError(t, err)
 
 	now := time.Now()
 
-	// Create a recently-completed (done) task
+	// Create a recently-completed (done) task, updated 2 minutes ago (within
+	// the 30-minute grace period).
 	index := materialize.Index{
 		"TASK-001": {Status: "done", Type: "task"},
 	}
@@ -323,15 +347,47 @@ func TestCheckD8ScopeViolations_RecentlyCompleted_REQ_TOPTIER_S5_T2(t *testing.T
 			Status:  "done",
 			Type:    "task",
 			Scope:   []string{"internal/util/"},
-			Updated: now.Add(-2 * time.Minute).Unix(), // Updated 2 minutes ago
+			Updated: now.Add(-2 * time.Minute).Unix(),
 		},
 	}
 
-	// D8 should flag the out-of-scope file even though the task is done (within grace period)
 	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	// The check should look at recently-completed tasks (e.g., within 15-30 minutes)
-	// For now, we expect it to flag the issue or be OK depending on the grace period
-	// The test validates that the function exists and returns a Finding
-	assert.NotEmpty(t, finding.Check)
+	assert.Equal(t, doctor.SeverityError, finding.Severity, "in-grace-period out-of-scope artifact should be flagged")
 	assert.Equal(t, "D8", finding.Check)
+	assert.Contains(t, finding.Items, "TASK-001: stray.bin")
+}
+
+// TestCheckD8ScopeViolations_RecentlyCompleted_OutsideGracePeriod_REQ_TOPTIER_S5_T2
+// is the companion case: a done task updated well outside the 30-minute grace
+// window must not be checked at all, so D8 stays OK even with an out-of-scope
+// untracked artifact on disk.
+func TestCheckD8ScopeViolations_RecentlyCompleted_OutsideGracePeriod_REQ_TOPTIER_S5_T2(t *testing.T) {
+	t.Parallel()
+	tmpDir := initGitRepo(t)
+
+	scopeDir := filepath.Join(tmpDir, "internal", "util")
+	err := os.MkdirAll(scopeDir, 0o755)
+	require.NoError(t, err)
+
+	outOfScopeFile := filepath.Join(tmpDir, "stray.bin")
+	err = os.WriteFile(outOfScopeFile, []byte("binary"), 0o644)
+	require.NoError(t, err)
+
+	now := time.Now()
+
+	index := materialize.Index{
+		"TASK-001": {Status: "done", Type: "task"},
+	}
+	allIssues := map[string]*materialize.Issue{
+		"TASK-001": {
+			ID:      "TASK-001",
+			Status:  "done",
+			Type:    "task",
+			Scope:   []string{"internal/util/"},
+			Updated: now.Add(-2 * time.Hour).Unix(), // well outside the 30-minute grace window
+		},
+	}
+
+	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, doctor.SeverityOK, finding.Severity, "out-of-grace-period task should not be checked")
 }

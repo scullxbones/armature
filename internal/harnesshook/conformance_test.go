@@ -50,7 +50,14 @@ func TestHookConformance_REQ_TOPTIER_S5_T1(t *testing.T) {
 }
 
 // TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1 verifies binding resolution
-// across all three binding states: bound active, bound inactive, and unbound.
+// for the two binding states this package's Hook.Evaluate can itself observe:
+// bound active and unbound. The third state, "bound inactive" (a stale
+// claim), is not modeled at this layer at all — staleness is resolved one
+// layer up in cmd/armature (see isBindingStale and
+// logStalePassThroughScopeViolation in cmd/armature/harness_hook.go). That
+// stale-binding pass-through-with-violation path is exercised end-to-end by
+// cmd/armature/harness_hook_test.go's
+// TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2.
 func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {

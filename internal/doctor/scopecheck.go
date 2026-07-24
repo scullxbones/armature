@@ -1,7 +1,9 @@
 package doctor
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -106,68 +108,51 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 	return f
 }
 
-// findOutOfScopeArtifacts scans the repo filesystem and returns paths that are
-// outside the scope, excluding files in non-code directories (like docs, CI config, etc).
+// findOutOfScopeArtifacts identifies untracked or uncommitted-modified paths in
+// repoPath's git worktree that fall outside the given scope globs.
+//
+// It gates candidates on `git status --porcelain`, restricting the check to
+// paths git considers untracked or modified (i.e. stray artifacts and dirty
+// worktree state that escaped scope enforcement at commit time), rather than
+// walking the whole filesystem. Legitimately committed files outside a task's
+// scope glob (e.g. files in an unrelated package) are never flagged, since
+// they are neither untracked nor modified. Root-level config/doc files are
+// additionally exempted via isConfigFile/isNonCodeDir as general hygiene.
+//
+// If repoPath is not a git worktree (or `git status` otherwise fails), no
+// candidates can be safely identified and the function returns nil rather
+// than falling back to a full filesystem walk.
 func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
 	if len(scope) == 0 {
+		return nil
+	}
+
+	candidates := gitDirtyPaths(repoPath)
+	if len(candidates) == 0 {
 		return nil
 	}
 
 	// Create a ScopePolicy to check paths against
 	policy := harnesspolicy.NewScopePolicyWithRoot(scope, repoPath)
 
-	// Collect all files that are outside the scope
 	var outOfScope []string
-	walkErr := filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // Skip on error
-		}
-
-		// Skip git directory
-		if info.IsDir() && info.Name() == ".git" {
-			return filepath.SkipDir
-		}
-
-		// Skip documentation and CI directories
-		if info.IsDir() {
-			dirName := info.Name()
-			if isNonCodeDir(dirName) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Skip directories, only check files
-		if info.IsDir() {
-			return nil
-		}
-
-		// Get relative path from repo root
-		rel, err := filepath.Rel(repoPath, path)
-		if err != nil {
-			return nil
-		}
-
-		// Normalize to forward slashes for scope checking
+	for _, rel := range candidates {
 		rel = filepath.ToSlash(rel)
 
-		// Skip root-level configuration files
-		if !strings.Contains(rel, "/") && isConfigFile(filepath.Base(rel)) {
-			return nil
+		// Skip files in non-code directories (docs, CI config, etc).
+		if isNonCodeDir(topLevelDir(rel)) {
+			continue
 		}
 
-		// Check if this file is within scope
+		// Skip root-level configuration files.
+		if !strings.Contains(rel, "/") && isConfigFile(filepath.Base(rel)) {
+			continue
+		}
+
 		result := policy.CheckPaths([]string{rel})
 		if !result.Allowed && len(result.Violations) > 0 {
-			// File is outside scope; add to violations
 			outOfScope = append(outOfScope, rel)
 		}
-
-		return nil
-	})
-
-	if walkErr != nil {
-		return nil
 	}
 
 	if len(outOfScope) > 0 {
@@ -175,6 +160,46 @@ func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
 	}
 
 	return outOfScope
+}
+
+// topLevelDir returns the first path segment of a forward-slash-normalized
+// relative path, or "" if rel has no directory component.
+func topLevelDir(rel string) string {
+	if idx := strings.Index(rel, "/"); idx >= 0 {
+		return rel[:idx]
+	}
+	return ""
+}
+
+// gitDirtyPaths runs `git status --porcelain` against repoPath and returns the
+// repo-relative paths of untracked or modified (uncommitted) files. Returns
+// nil if repoPath is not a git worktree or the command fails, so callers treat
+// an unresolvable status the same as "no candidates" rather than falling back
+// to flagging every committed file.
+func gitDirtyPaths(repoPath string) []string {
+	// #nosec G204 - repoPath is a caller-supplied trusted repo/worktree path
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain", "--untracked-files=all")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		// Porcelain format: "XY <path>" or "XY <path> -> <newpath>" for renames.
+		entry := line[3:]
+		if idx := strings.Index(entry, " -> "); idx >= 0 {
+			entry = entry[idx+4:]
+		}
+		entry = strings.Trim(entry, "\"")
+		if entry != "" {
+			paths = append(paths, entry)
+		}
+	}
+	return paths
 }
 
 // isNonCodeDir returns true if the directory is known to contain non-code files

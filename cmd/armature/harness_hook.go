@@ -38,11 +38,10 @@ func resolveIssueBinding(gitDir string) string {
 // sanitizeLogField strips newlines and carriage returns from a value before it
 // is interpolated into a single-line log entry, preventing log injection where
 // a crafted tool name or decision message could forge or mask a violation/decision
-// line (finding 8).
+// line (finding 8). Delegates to harnesshook.SanitizeLogField, the single shared
+// implementation also used by internal/harnesshook's pass-through-violation logger.
 func sanitizeLogField(s string) string {
-	s = strings.ReplaceAll(s, "\r", " ")
-	s = strings.ReplaceAll(s, "\n", " ")
-	return s
+	return harnesshook.SanitizeLogField(s)
 }
 
 // appendHookLog appends a single line to <git-dir>/armature-hook.log, prefixed
