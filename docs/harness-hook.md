@@ -185,6 +185,115 @@ detected as an escape. This is consistent with the hook's overall fail-open post
 (ADR-0007): the hook is a best-effort guardrail, not a sandbox, and only the violation
 gate at merge time provides a hard backstop.
 
+## Autonomic Heartbeats
+
+The hook automatically emits rate-limited heartbeats on every `PreToolUse` event (file
+edits, shell commands, etc.) for bound, non-stale claims. This ensures that active work
+updates the claim's activity timestamp without requiring manual heartbeat calls.
+
+### Fixed Debounce Interval
+
+Heartbeats are emitted **at most once every 5 minutes** per worker+issue combination,
+independent of claim TTL. The debounce interval is:
+
+- **Fixed at 5 minutes** (constant `HeartbeatDebounceInterval` in `internal/claim`)
+- **Not configurable** via repo configuration or environment variables
+- **Always on** — operators cannot disable it with a config flag
+
+This fixed interval decouples heartbeat rate from claim TTL, providing predictable
+behavior: a worker can always rely on a heartbeat being emitted within a 5-minute
+window of active tool use.
+
+### Per-Worker+Issue Rate-Limit State
+
+Heartbeat rate-limit state is stored in the **OS temporary directory** as a disposable,
+per-worker+issue cache:
+
+- **Location:** `<os.TempDir()>/armature-heartbeat-<workerID>-<issueID>.json`
+- **Format:** JSON with `last_heartbeat_time_unix` field (Unix timestamp)
+- **Lifecycle:** Ephemeral; automatically cleaned up by OS temp management; not committed to the repository
+
+This design ensures that rate-limit state:
+- Does not accumulate in the worktree or repository
+- Is isolated to the current session (a new session resets the debounce)
+- Cannot cause merge conflicts
+
+### Source Field: Auto vs. Manual
+
+Every heartbeat op carries a `Source` field in its `Payload` to distinguish between
+automatic and manual heartbeats:
+
+- **`"source":"hook"`** (auto): Emitted by the harness hook on every 5th-minute-spaced
+  `PreToolUse` event (tool use within the harness)
+- **`"source":"<omitted>"`** (manual): Emitted by explicit `arm heartbeat ISSUE-ID` commands
+
+This distinction allows operators and reviewers to:
+- See which heartbeats came from active tool use vs. manual intervention
+- Detect long stretches without tool use (gaps between hook-emitted heartbeats)
+- Correlate heartbeat timing with other activity evidence
+
+### Operational Guidance on Claim TTL
+
+Operators should configure `default_ttl` (claim time-to-live, in minutes) to be **at least
+3x the fixed heartbeat debounce interval (~15 minutes minimum)** to provide a safety margin:
+
+- **Too-short TTL** (e.g., `default_ttl: 5`): Claims may expire between heartbeats if tool
+  use pauses for a few minutes, risking claim theft before the next heartbeat window.
+- **Safe TTL** (e.g., `default_ttl: 15` or higher): Provides a 2–3 minute buffer beyond
+  the next heartbeat, tolerating brief pauses in tool use without claim loss.
+
+Example repo-level configuration (`.armature/config.json`):
+
+```json
+{
+  "default_ttl": 15
+}
+```
+
+This ensures that even if a worker pauses tool use at the end of a 5-minute heartbeat
+window, the claim will not expire before the next heartbeat can be emitted.
+
+### Fail-Open Posture
+
+Heartbeat emission uses fail-open semantics:
+- If the worker ID cannot be resolved, heartbeat is skipped (not fatal)
+- If the rate-limit state file cannot be read or written, heartbeat is still emitted and
+  a warning is logged to stderr (rate-limit state loss causes more frequent heartbeats
+  temporarily, not a claim-loss risk)
+- If the heartbeat op cannot be written to the ops log, a warning is logged to stderr
+  and the hook does not block tool execution
+
+This ensures tool execution is never blocked by heartbeat machinery. Heartbeats are
+advisory; enforcement comes from the claim TTL and explicit `arm claim` release.
+
+### When to Use Manual Heartbeats
+
+Workers should call `arm heartbeat ISSUE-ID` manually only during **long stretches of
+non-tool thinking work**, when no tool calls are happening:
+
+- **No manual heartbeat needed:** During active file editing, shell commands, and other
+  tool use (hook handles it automatically)
+- **Manual heartbeat recommended:** When thinking or analyzing for >5 minutes without
+  calling tools (e.g., reviewing code, designing an approach, reading docs). These
+  stretches produce no `PreToolUse` events, so the automatic hook cannot emit a heartbeat.
+
+Example workflow:
+```bash
+# Thinking phase (no tools for 6 minutes)
+# → After ~5 minutes: manually run `arm heartbeat TASK-ID`
+
+# Then tool use resumes
+# → Hook automatically emits heartbeat every 5 minutes during tool use
+
+# Thinking phase again (no tools for 8 minutes)
+# → Manually run `arm heartbeat TASK-ID` again
+```
+
+For workers operating primarily within a harness UI (Claude Code, Codex, Devin), this
+is typically not a concern, since most work involves tool use. The primary case for
+manual heartbeats is standalone workflows where the worker uses Armature from the
+command line with long thinking pauses between commands.
+
 ## Execution Evidence Capture
 
 In addition to scope and acceptance enforcement, harness hooks now record execution
