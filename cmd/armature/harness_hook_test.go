@@ -10,10 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1173,4 +1176,105 @@ func TestHarnessHookNoActivityForPreToolUse_REQ_EXECEV_T1(t *testing.T) {
 	_, err = os.ReadFile(activityLogPath) //nolint:gosec // G703: safe to read test worktree activity log
 	assert.Error(t, err, "activity log should not exist for PreToolUse events")
 	assert.True(t, os.IsNotExist(err), "activity log should not exist (not exist error)")
+}
+
+func TestHeartbeatRateLimitStateRoundTrip(t *testing.T) {
+	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
+	issueID := "task-round-trip"
+	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
+
+	// No state file yet: zero time.
+	assert.True(t, readHeartbeatRateLimitState(workerID, issueID).IsZero())
+
+	now := time.Now().Truncate(time.Second)
+	require.NoError(t, writeHeartbeatRateLimitState(workerID, issueID, now))
+
+	got := readHeartbeatRateLimitState(workerID, issueID)
+	assert.Equal(t, now.Unix(), got.Unix())
+}
+
+func TestHeartbeatRateLimitStateReadMalformedFileReturnsZero(t *testing.T) {
+	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
+	issueID := "task-malformed"
+	stateFile := rateLimitStateFilePath(workerID, issueID)
+	defer os.Remove(stateFile) //nolint:errcheck // best-effort cleanup
+
+	require.NoError(t, os.WriteFile(stateFile, []byte("not json"), 0o600))
+
+	assert.True(t, readHeartbeatRateLimitState(workerID, issueID).IsZero())
+}
+
+func TestTryEmitHeartbeatEmitsOpWithHookSource(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	setupArmatureLayout(t, repo)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	issueID := "task-emit-01"
+	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
+
+	tryEmitHeartbeat(repo, issueID, harnesshook.EventPreToolUse)
+
+	logPath := filepath.Join(repo, ".armature", "issues", "ops", workerIdentityWithSlot(workerID)+".log")
+	loggedOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, loggedOps, 1)
+	assert.Equal(t, ops.OpHeartbeat, loggedOps[0].Type)
+	assert.Equal(t, issueID, loggedOps[0].TargetID)
+	assert.Equal(t, "hook", loggedOps[0].Payload.Source)
+}
+
+func TestTryEmitHeartbeatSkipsWithinDebounceWindow(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	setupArmatureLayout(t, repo)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	issueID := "task-emit-02"
+	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
+
+	// First call emits and records the rate-limit state.
+	tryEmitHeartbeat(repo, issueID, harnesshook.EventPreToolUse)
+
+	logPath := filepath.Join(repo, ".armature", "issues", "ops", workerIdentityWithSlot(workerID)+".log")
+	firstData, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+
+	// Second call immediately after should be debounced: no new op appended.
+	tryEmitHeartbeat(repo, issueID, harnesshook.EventPreToolUse)
+
+	secondData, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(firstData), string(secondData), "debounced call should not append another op")
+}
+
+func TestTryEmitHeartbeatIgnoresNonPreToolUseEvents(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	setupArmatureLayout(t, repo)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	issueID := "task-emit-03"
+	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
+
+	tryEmitHeartbeat(repo, issueID, harnesshook.EventPostToolUse)
+
+	logPath := filepath.Join(repo, ".armature", "issues", "ops", workerIdentityWithSlot(workerID)+".log")
+	_, err = os.ReadFile(logPath)
+	assert.True(t, os.IsNotExist(err), "no heartbeat op should be written for non-PreToolUse events")
+}
+
+func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	armatureDir := filepath.Join(repo, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755))
+	// Deliberately skip setting armature.worker-id so GetWorkerID fails.
+
+	assert.NotPanics(t, func() {
+		tryEmitHeartbeat(repo, "task-emit-04", harnesshook.EventPreToolUse)
+	})
 }
