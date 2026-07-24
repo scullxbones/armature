@@ -211,11 +211,13 @@ per-worker+issue cache:
 
 - **Location:** `<os.TempDir()>/armature-heartbeat-<workerID>-<issueID>.json`
 - **Format:** JSON with `last_heartbeat_time_unix` field (Unix timestamp)
-- **Lifecycle:** Ephemeral; automatically cleaned up by OS temp management; not committed to the repository
+- **Lifecycle:** Not committed to the repository; persists on disk until the OS reclaims
+  `/tmp` (e.g. on reboot). It is not tied to a process or session lifetime — a fresh
+  session started within the debounce window will inherit and respect the prior
+  session's rate-limit timestamp, not reset it.
 
 This design ensures that rate-limit state:
 - Does not accumulate in the worktree or repository
-- Is isolated to the current session (a new session resets the debounce)
 - Cannot cause merge conflicts
 
 ### Source Field: Auto vs. Manual

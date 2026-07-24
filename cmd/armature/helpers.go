@@ -133,8 +133,16 @@ func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
 	ownerID := workerIdentityWithSlot(workerID)
-	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, ownerID)
-	return ownerID, logPath, nil
+	return ownerID, opsLogPath(ctx.IssuesDir, ownerID), nil
+}
+
+// opsLogPath returns the path to ownerID's ops log file under issuesDir. This is
+// the single source of truth for where an owner's ops log lives; every writer
+// and reader of that log (manual commands via resolveWorkerAndLog, the harness
+// hook's heartbeat emission, etc.) must derive the path through here so they
+// can never diverge onto a directory materialize/snapshot doesn't read.
+func opsLogPath(issuesDir, ownerID string) string {
+	return filepath.Join(issuesDir, "ops", ownerID+".log")
 }
 
 func workerIdentityWithSlot(workerID string) string {

@@ -273,7 +273,7 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 	}
 
 	ownerID := workerIdentityWithSlot(workerID)
-	logPath := filepath.Join(issuesDir, "ops", ownerID+".log")
+	logPath := opsLogPath(issuesDir, ownerID)
 
 	var gc ops.GitCommitter
 	if worktreePath != "" {
