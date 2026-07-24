@@ -1204,69 +1204,6 @@ func TestHeartbeatRateLimitStateReadMalformedFileReturnsZero(t *testing.T) {
 	assert.True(t, readHeartbeatRateLimitState(workerID, issueID).IsZero())
 }
 
-func TestTryEmitHeartbeatEmitsOpWithHookSource(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	setupArmatureLayout(t, repo)
-
-	workerID, err := worker.GetWorkerID(repo)
-	require.NoError(t, err)
-	issueID := "task-emit-01"
-	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
-
-	tryEmitHeartbeat(repo, issueID, harnesshook.EventPreToolUse)
-
-	logPath := filepath.Join(repo, ".armature", "issues", "ops", workerIdentityWithSlot(workerID)+".log")
-	loggedOps, err := ops.ReadLog(logPath)
-	require.NoError(t, err)
-	require.Len(t, loggedOps, 1)
-	assert.Equal(t, ops.OpHeartbeat, loggedOps[0].Type)
-	assert.Equal(t, issueID, loggedOps[0].TargetID)
-	assert.Equal(t, "hook", loggedOps[0].Payload.Source)
-}
-
-func TestTryEmitHeartbeatSkipsWithinDebounceWindow(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	setupArmatureLayout(t, repo)
-
-	workerID, err := worker.GetWorkerID(repo)
-	require.NoError(t, err)
-	issueID := "task-emit-02"
-	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
-
-	// First call emits and records the rate-limit state.
-	tryEmitHeartbeat(repo, issueID, harnesshook.EventPreToolUse)
-
-	logPath := filepath.Join(repo, ".armature", "issues", "ops", workerIdentityWithSlot(workerID)+".log")
-	firstData, err := os.ReadFile(logPath)
-	require.NoError(t, err)
-
-	// Second call immediately after should be debounced: no new op appended.
-	tryEmitHeartbeat(repo, issueID, harnesshook.EventPreToolUse)
-
-	secondData, err := os.ReadFile(logPath)
-	require.NoError(t, err)
-	assert.Equal(t, string(firstData), string(secondData), "debounced call should not append another op")
-}
-
-func TestTryEmitHeartbeatIgnoresNonPreToolUseEvents(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	setupArmatureLayout(t, repo)
-
-	workerID, err := worker.GetWorkerID(repo)
-	require.NoError(t, err)
-	issueID := "task-emit-03"
-	defer os.Remove(rateLimitStateFilePath(workerID, issueID)) //nolint:errcheck // best-effort cleanup
-
-	tryEmitHeartbeat(repo, issueID, harnesshook.EventPostToolUse)
-
-	logPath := filepath.Join(repo, ".armature", "issues", "ops", workerIdentityWithSlot(workerID)+".log")
-	_, err = os.ReadFile(logPath)
-	assert.True(t, os.IsNotExist(err), "no heartbeat op should be written for non-PreToolUse events")
-}
-
 func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1274,7 +1211,227 @@ func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755))
 	// Deliberately skip setting armature.worker-id so GetWorkerID fails.
 
+	issuesDir := filepath.Join(repo, ".armature")
 	assert.NotPanics(t, func() {
-		tryEmitHeartbeat(repo, "task-emit-04", harnesshook.EventPreToolUse)
+		tryEmitHeartbeat(repo, issuesDir, "", "task-emit-04", harnesshook.EventPreToolUse)
 	})
+}
+
+// heartbeatOpsForWorker reads the heartbeat ops recorded for workerID's ops log
+// in repo, or an empty slice if the log doesn't exist yet.
+func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
+	t.Helper()
+	logPath := filepath.Join(repo, ".armature", "ops", workerIdentityWithSlot(workerID)+".log")
+	loggedOps, err := ops.ReadLog(logPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		require.NoError(t, err)
+	}
+	var heartbeats []ops.Op
+	for _, op := range loggedOps {
+		if op.Type == ops.OpHeartbeat {
+			heartbeats = append(heartbeats, op)
+		}
+	}
+	return heartbeats
+}
+
+// backdateAllOps rewrites every op in workerID's ops log, shifting each
+// Timestamp back by delta while preserving relative order between ops. Used to
+// simulate a claim aging past its TTL without sleeping in the test or breaking
+// materialize's global timestamp-sort replay ordering (which requires a task's
+// create op to sort before any later op on the same target).
+func backdateAllOps(t *testing.T, repo, workerID string, delta time.Duration) {
+	t.Helper()
+	logPath := filepath.Join(repo, ".armature", "ops", workerIdentityWithSlot(workerID)+".log")
+	loggedOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+
+	require.NoError(t, os.Remove(logPath))
+	for _, op := range loggedOps {
+		op.Timestamp -= int64(delta.Seconds())
+		require.NoError(t, ops.AppendOp(logPath, op))
+	}
+}
+
+// TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1 verifies that the hook emits
+// at most one heartbeat op across two back-to-back PreToolUse events for a
+// bound, non-stale claim (fixed debounce window, not per-call).
+func TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	defer os.Remove(rateLimitStateFilePath(workerID, "task-01")) //nolint:errcheck // best-effort cleanup
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	payload := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`
+
+	for i := 0; i < 2; i++ {
+		hookCmd := newRootCmd()
+		hookCmd.SetIn(strings.NewReader(payload))
+		hookCmd.SetOut(new(bytes.Buffer))
+		hookCmd.SetErr(new(bytes.Buffer))
+		hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+		require.NoError(t, hookCmd.Execute())
+	}
+
+	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
+	require.Len(t, heartbeats, 1, "second call within the debounce window must not emit another heartbeat")
+	assert.Equal(t, "task-01", heartbeats[0].TargetID)
+}
+
+// TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1 verifies that no heartbeat
+// op is emitted when the event resolves to no issue binding at all.
+func TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	// Deliberately do not claim task-01 and do not set ARMATURE_ISSUE_ID, so the
+	// event resolves to no binding.
+	t.Setenv("ARMATURE_ISSUE_ID", "")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	hookCmd := newRootCmd()
+	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}`))
+	hookCmd.SetOut(new(bytes.Buffer))
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+	require.NoError(t, hookCmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	assert.Empty(t, heartbeatOpsForWorker(t, repo, workerID), "unbound event must not emit a heartbeat")
+}
+
+// TestShouldHeartbeatSkipsAlreadyStaleClaim_REQ_LNGHZN_S3_T1 verifies that once a
+// claim's TTL has expired, the hook treats it as stale and does not emit a heartbeat,
+// end to end (claim, backdate it past its TTL, then invoke the hook).
+func TestShouldHeartbeatSkipsAlreadyStaleClaim_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir, "--ttl", "10"})
+	require.NoError(t, cmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	defer os.Remove(rateLimitStateFilePath(workerID, "task-01")) //nolint:errcheck // best-effort cleanup
+
+	// Materialize sorts all ops globally by Timestamp before replay, so backdating
+	// only the claim op would sort it before the task's create op and break
+	// replay ("issue not found"). Instead, shift every existing op's Timestamp
+	// back by an hour, preserving relative order, so the whole history (and thus
+	// ClaimedAt/LastHeartbeat) is old enough to exceed the 10-minute TTL relative
+	// to the real wall-clock time isBindingStale checks against.
+	backdateAllOps(t, repo, workerID, time.Hour)
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	hookCmd := newRootCmd()
+	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
+	hookCmd.SetOut(new(bytes.Buffer))
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+	require.NoError(t, hookCmd.Execute())
+
+	assert.Empty(t, heartbeatOpsForWorker(t, repo, workerID), "stale claim must not emit a heartbeat")
+}
+
+// TestHookHeartbeatSourceIsAutoHook_REQ_LNGHZN_S3_T1 verifies the hook-emitted
+// heartbeat op carries Source="hook", distinguishing it from a manual heartbeat.
+func TestHookHeartbeatSourceIsAutoHook_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	defer os.Remove(rateLimitStateFilePath(workerID, "task-01")) //nolint:errcheck // best-effort cleanup
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	hookCmd := newRootCmd()
+	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
+	hookCmd.SetOut(new(bytes.Buffer))
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+	require.NoError(t, hookCmd.Execute())
+
+	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
+	require.Len(t, heartbeats, 1)
+	assert.Equal(t, "hook", heartbeats[0].Payload.Source)
+}
+
+// TestManualHeartbeatSourceIsManual_REQ_LNGHZN_S3_T1 verifies that a manual
+// `arm heartbeat` call omits the Source field (distinct from hook-emitted
+// heartbeats, which carry Source="hook").
+func TestManualHeartbeatSourceIsManual_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	heartbeatCmd := newRootCmd()
+	heartbeatCmd.SetOut(new(bytes.Buffer))
+	heartbeatCmd.SetArgs([]string{"heartbeat", "--repo", repo, "task-01"})
+	require.NoError(t, heartbeatCmd.Execute())
+
+	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
+	require.Len(t, heartbeats, 1)
+	assert.Empty(t, heartbeats[0].Payload.Source, "manual heartbeat must not carry Source=\"hook\"")
+}
+
+// TestHookHeartbeatFiresOnBlockedToolCall_REQ_LNGHZN_S3_T1 verifies that the
+// heartbeat is emitted even when the tool call itself is ultimately blocked as
+// out-of-scope: the heartbeat runs before the allow/block decision and does not
+// depend on its outcome.
+func TestHookHeartbeatFiresOnBlockedToolCall_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
+	require.NoError(t, err)
+
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	defer os.Remove(rateLimitStateFilePath(workerID, "task-01")) //nolint:errcheck // best-effort cleanup
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	var out bytes.Buffer
+	hookCmd := newRootCmd()
+	// "cmd/armature/main.go" is outside the task's narrowed scope, so this call is blocked.
+	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
+	hookCmd.SetOut(&out)
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+	require.NoError(t, hookCmd.Execute())
+	require.Contains(t, out.String(), `"decision":"block"`, "sanity check: this call must actually be blocked")
+
+	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
+	require.Len(t, heartbeats, 1, "heartbeat must still be emitted even though the tool call was blocked")
+	assert.Equal(t, "hook", heartbeats[0].Payload.Source)
 }

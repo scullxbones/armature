@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
@@ -233,7 +234,13 @@ func rateLimitStateFilePath(workerID, issueID string) string {
 // on every PreToolUse event. Failures are logged as warnings and do not block execution.
 // Returns silently if the event is not a PreToolUse, or if the heartbeat should not
 // be emitted (debounce check). The op is written directly to the ops log file.
-func tryEmitHeartbeat(repoPath, issueID string, eventKind harnesshook.EventKind) {
+//
+// repoPath is used to resolve the worker identity (git config lives at the repo
+// root); issuesDir and worktreePath must come from the resolved config.Context
+// (appCtx.IssuesDir / appCtx.WorktreePath) so the op lands in the same ops
+// directory materialize/snapshot actually read, in both collapsed
+// (worktreePath == "") and dual-branch layouts.
+func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKind harnesshook.EventKind) {
 	// Only emit heartbeats on PreToolUse events
 	if eventKind != harnesshook.EventPreToolUse {
 		return
@@ -265,13 +272,15 @@ func tryEmitHeartbeat(repoPath, issueID string, eventKind harnesshook.EventKind)
 		},
 	}
 
-	// Try to write the op to the ops log
 	ownerID := workerIdentityWithSlot(workerID)
-	// Construct the log path directly using the standard .armature layout
-	issuesDir := filepath.Join(repoPath, ".armature", "issues")
 	logPath := filepath.Join(issuesDir, "ops", ownerID+".log")
 
-	if err := ops.AppendAndCommit(logPath, "", heartbeatOp, nil); err != nil {
+	var gc ops.GitCommitter
+	if worktreePath != "" {
+		gc = adapters.New(worktreePath)
+	}
+
+	if err := ops.AppendAndCommit(logPath, worktreePath, heartbeatOp, gc); err != nil {
 		// Log a warning but don't block
 		fmt.Fprintf(os.Stderr, "warning: failed to emit heartbeat op for %s: %v\n", issueID, err)
 		return
@@ -413,7 +422,7 @@ func newHarnessHookCmd() *cobra.Command {
 
 			// Emit rate-limited heartbeat on PreToolUse events for bound+non-stale claims.
 			// Failures are swallowed and logged as warnings, not blocking execution.
-			tryEmitHeartbeat(appCtx.RepoPath, resolvedBinding.IssueID, event.Kind)
+			tryEmitHeartbeat(appCtx.RepoPath, appCtx.IssuesDir, appCtx.WorktreePath, resolvedBinding.IssueID, event.Kind)
 
 			// Create policy resolver
 			resolver := harnesspolicy.NewIssuePolicyResolver(harnesspolicy.ResolverConfig{
