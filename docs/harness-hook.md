@@ -738,17 +738,56 @@ Example (Codex):
 }
 ```
 
+## Scope Violation Visibility
+
+Out-of-scope operations are logged with a violation marker in `armature-hook.log`, even when the
+hook blocks or passes through the operation. This ensures operators can detect scope escapes and
+review evidence of enforcement gaps.
+
+### Scope Violation Logging
+
+Whenever scope checking detects that paths are outside a task's declared scope, the hook:
+1. Logs a violation entry with the out-of-scope paths (as part of the decision log entry)
+2. Blocks the operation with a clear message
+3. Records the paths for later audit and review
+
+Example violation log entry:
+```
+2026-07-04T12:34:57Z decision: issue_id=TASK-001 resolution_step=file_path event=pre-tool-use tool=Edit decision=block block_reason=path(s) outside task scope: cmd/main.go; allowed scope: internal/auth/
+```
+
+### Post-Task Artifact Check (D8)
+
+The doctor (`arm doctor`) includes a D8 check that flags out-of-scope artifacts discovered
+**after a task is complete**, on disk in the main worktree. This catches stray binaries and
+build artifacts that may have escaped scope enforcement during task execution.
+
+**D8 Scope:**
+- Checks active (claimed/in-progress) tasks and recently-completed (done/merged within 30 minutes) tasks
+- Flags any files on disk that are outside the task's declared scope glob
+- Excludes general main-worktree hygiene (documentation, CI config, build caches)
+
+**Example D8 violation:**
+```
+D8: Out-of-scope artifacts detected for active or recently-completed tasks
+  TASK-001: cmd/main.go
+```
+
+If D8 reports violations, investigate whether the artifacts should have been in-scope
+(task scope too narrow) or are genuine stray files (need cleanup before merge).
+
 ## How Hooks Integrate with Armature Workflow
 
 1. **Coordinator runs `arm ready`** to find unblocked tasks.
 2. **Coordinator runs `arm claim <task-id> --worktree <path>`** to reserve a task and create a git worktree. The task ID is written to `<worktree-git-dir>/armature-issue-id`.
 3. **Coordinator launches harness** from the worktree directory with `ARMATURE_HOOK_PLATFORM` set. `ARMATURE_ISSUE_ID` is optional when a worktree binding file exists.
 4. **Model within harness requests tools** (file edits, shell commands).
-5. **Pre-tool hook fires** → `arm harness-hook` reads task binding from file → checks scope → allow/block returned.
+5. **Pre-tool hook fires** → `arm harness-hook` reads task binding from file → checks scope → allow/block returned. Scope violations are logged.
 6. **Model completes work** and requests harness to stop.
 7. **Stop hook fires** → `arm harness-hook` runs verification → allow/block returned.
 8. **Coordinator runs `arm transition --to done`** to record completion.
-9. **Coordinator runs `arm merged --issue <task-id>`** to tear down the worktree and record the merge. A warning is emitted if the hook log contains pass-through entries.
+9. **Coordinator runs `arm doctor`** to check repository health, including D8 for out-of-scope artifacts in the completed task.
+10. **Coordinator runs `arm merged --issue <task-id>`** to tear down the worktree and record the merge. A warning is emitted if the hook log contains pass-through entries.
 
 ## See Also
 
