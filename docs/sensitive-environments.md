@@ -261,5 +261,6 @@ counts, rating) enters Armature's op log.
 ## See Also
 
 - [ADR-0008: Admit harness-recorded execution evidence into semantic review, upgrade-only](docs/adr/0008-execution-evidence-in-semantic-review.md) — Trust model, mechanics, rejected alternatives
-- [docs/harness-hook.md](docs/harness-hook.md) — Activity capture, kill-switch, teardown ordering
+- [Harness Hook Integration Guide — Threat Model](docs/harness-hook.md#threat-model) — Enforcement model, platform-specific guarantees, pass-through conditions
+- [Harness Hook Integration Guide — Activity Capture](docs/harness-hook.md#execution-evidence-capture) — Activity capture, kill-switch, teardown ordering
 - [Semantic Conformance Review Design](docs/superpowers/specs/2026-06-27-semantic-conformance-review-design.md) — Full review protocol, bundle structure, rating derivation
