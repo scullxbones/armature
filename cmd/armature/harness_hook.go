@@ -14,6 +14,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/ops"
@@ -85,6 +86,37 @@ func logDecision(gitDir string, issueID string, resolutionStep string, eventKind
 // (unbound file write when enforcement was expected).
 func logViolation(gitDir string, reason string) error {
 	return appendHookLog(gitDir, "violation: "+sanitizeLogField(reason))
+}
+
+// logStalePassThroughScopeViolation checks the event's paths against the stale
+// binding's declared scope and, if any are out of scope, logs a violation
+// entry. This covers the pass-through-with-violation case: the hook's
+// enforcement is skipped for a stale claim (fail-open), but the out-of-scope
+// operation still represents an enforcement gap worth recording, per
+// docs/harness-hook.md's "Scope Violation Visibility" contract ("logged...even
+// when the hook blocks or passes through the operation"). Best-effort: any
+// resolution failure is swallowed since enforcement is already skipped here.
+func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding harnesshook.ResolvedBinding, event harnesshook.Event, logGitDir string) {
+	if len(event.Paths) == 0 {
+		return
+	}
+	resolver := harnesspolicy.NewIssuePolicyResolver(harnesspolicy.ResolverConfig{
+		RepoPath:   appCtx.RepoPath,
+		StateDir:   appCtx.StateDir,
+		SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
+	})
+	policy, err := resolver.Resolve(resolvedBinding.IssueID)
+	if err != nil {
+		return
+	}
+	var scopePolicy harnesspolicy.ScopePolicy
+	if resolvedBinding.Root != "" {
+		scopePolicy = harnesspolicy.NewScopePolicyWithRoot(policy.Scope, resolvedBinding.Root)
+	} else {
+		scopePolicy = harnesspolicy.NewScopePolicy(policy.Scope)
+	}
+	_, _ = harnesshook.LogPassThroughScopeViolation( //nolint:errcheck // logging only, error not actionable
+		logGitDir, scopePolicy, event.Paths, "stale binding")
 }
 
 // isBindingStale checks if the issue binding's status is not claimed or in-progress,
@@ -426,8 +458,14 @@ func newHarnessHookCmd() *cobra.Command {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
-			// If binding is stale, pass through
+			// If binding is stale, pass through. Enforcement is skipped for stale
+			// claims, but out-of-scope paths on this event are still an
+			// enforcement gap worth surfacing: check them against the task's
+			// declared scope (if resolvable) and log a violation marker
+			// alongside the pass-through entry so operators can see what
+			// would have been blocked had the claim still been active.
 			if isBindingStale(snap, resolvedBinding.IssueID, time.Now().Unix()) {
+				logStalePassThroughScopeViolation(appCtx, resolvedBinding, event, logGitDir)
 				_ = logPassThrough(logGitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}

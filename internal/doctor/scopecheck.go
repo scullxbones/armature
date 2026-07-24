@@ -20,13 +20,13 @@ import (
 // to a task's scope.
 //
 // Scope:
-// - Only checks against active (claimed/in-progress) or recently-completed (done/merged)
-//   tasks, within a grace period (e.g., 30 minutes after completion).
-// - For each such task, walks the filesystem and identifies paths that would violate
-//   the task's scope globs.
-// - Does NOT check the entire filesystem against all tasks (that would be O(n*m) and
-//   flag unrelated hygiene issues); instead checks only paths that match the task's
-//   scope pattern, looking for both in-scope and out-of-scope variants.
+//   - Only checks against active (claimed/in-progress) or recently-completed (done/merged)
+//     tasks, within a grace period (e.g., 30 minutes after completion).
+//   - For each such task, walks the filesystem and identifies paths that would violate
+//     the task's scope globs.
+//   - Does NOT check the entire filesystem against all tasks (that would be O(n*m) and
+//     flag unrelated hygiene issues); instead checks only paths that match the task's
+//     scope pattern, looking for both in-scope and out-of-scope variants.
 func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*materialize.Issue, repoPath string, now time.Time) Finding {
 	f := Finding{
 		Check:    "D8",
@@ -181,24 +181,24 @@ func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
 // (like documentation, CI configuration, etc) and should be skipped.
 func isNonCodeDir(name string) bool {
 	nonCodeDirs := map[string]bool{
-		"docs":           true,
-		"doc":            true,
-		".github":        true,
-		".gitlab":        true,
-		".gitignore":     true,
-		"node_modules":   true,
-		"venv":           true,
-		".venv":          true,
-		"__pycache__":    true,
-		".pytest_cache":  true,
-		".coverage":      true,
-		"coverage":       true,
-		"vendor":         true,
-		"dist":           true,
-		"build":          true,
-		".build":         true,
-		"target":         true,
-		".gradle":        true,
+		"docs":          true,
+		"doc":           true,
+		".github":       true,
+		".gitlab":       true,
+		".gitignore":    true,
+		"node_modules":  true,
+		"venv":          true,
+		".venv":         true,
+		"__pycache__":   true,
+		".pytest_cache": true,
+		".coverage":     true,
+		"coverage":      true,
+		"vendor":        true,
+		"dist":          true,
+		"build":         true,
+		".build":        true,
+		"target":        true,
+		".gradle":       true,
 	}
 	return nonCodeDirs[name]
 }
@@ -207,33 +207,33 @@ func isNonCodeDir(name string) bool {
 // that should not be checked for scope violations.
 func isConfigFile(name string) bool {
 	configFiles := map[string]bool{
-		"README.md":         true,
-		"README.rst":        true,
-		"README.txt":        true,
-		"LICENSE":           true,
-		"COPYING":           true,
-		".gitignore":        true,
-		".gitattributes":    true,
-		".editorconfig":     true,
-		"Makefile":          true,
-		"Dockerfile":        true,
+		"README.md":          true,
+		"README.rst":         true,
+		"README.txt":         true,
+		"LICENSE":            true,
+		"COPYING":            true,
+		".gitignore":         true,
+		".gitattributes":     true,
+		".editorconfig":      true,
+		"Makefile":           true,
+		"Dockerfile":         true,
 		"docker-compose.yml": true,
-		".travis.yml":       true,
-		".github":           true,
-		"setup.py":          true,
-		"setup.cfg":         true,
-		"pyproject.toml":    true,
-		"package.json":      true,
-		"yarn.lock":         true,
-		"pnpm-lock.yaml":    true,
-		"go.mod":            true,
-		"go.sum":            true,
-		"Cargo.toml":        true,
-		"Cargo.lock":        true,
-		".vscode":           true,
-		".idea":             true,
-		".env":              true,
-		".env.local":        true,
+		".travis.yml":        true,
+		".github":            true,
+		"setup.py":           true,
+		"setup.cfg":          true,
+		"pyproject.toml":     true,
+		"package.json":       true,
+		"yarn.lock":          true,
+		"pnpm-lock.yaml":     true,
+		"go.mod":             true,
+		"go.sum":             true,
+		"Cargo.toml":         true,
+		"Cargo.lock":         true,
+		".vscode":            true,
+		".idea":              true,
+		".env":               true,
+		".env.local":         true,
 	}
 	return configFiles[name]
 }

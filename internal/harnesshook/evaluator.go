@@ -16,7 +16,7 @@ type EvaluatorConfig struct {
 
 // DefaultEvaluator is the standard policy evaluator for harness hook events.
 type DefaultEvaluator struct {
-	cfg                EvaluatorConfig
+	cfg                 EvaluatorConfig
 	lastScopeViolations []string // violations from the most recent PreToolUse evaluation
 }
 

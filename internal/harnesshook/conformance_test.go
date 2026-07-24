@@ -32,6 +32,21 @@ func makeHookPayload(hookEventName string, toolName string, toolInput map[string
 	return data
 }
 
+// TestHookConformance_REQ_TOPTIER_S5_T1 is the canonical single entry point
+// required by the TOPTIER-S5-T1 contract: it exercises the full binding-state x
+// tool-class x path-type matrix by running each of the conformance sub-tests
+// below as a subtest, reusing their table data rather than duplicating it.
+func TestHookConformance_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
+	t.Run("BindingStates", TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1)
+	t.Run("ToolClasses", TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1)
+	t.Run("PathTypes", TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1)
+	t.Run("DogfoodBypassCases", TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1)
+	t.Run("EmptyScope", TestConformanceMatrix_EmptyScope_REQ_TOPTIER_S5_T1)
+	t.Run("AbsolutePaths", TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1)
+	t.Run("NoPathPolicy", TestConformanceMatrix_NoPathPolicy_REQ_TOPTIER_S5_T1)
+}
+
 // TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1 verifies binding resolution
 // across all three binding states: bound active, bound inactive, and unbound.
 func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
