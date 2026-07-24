@@ -751,9 +751,16 @@ Whenever scope checking detects that paths are outside a task's declared scope, 
 2. Blocks the operation with a clear message
 3. Records the paths for later audit and review
 
-Example violation log entry:
+Example violation log entry (blocked operation):
 ```
 2026-07-04T12:34:57Z decision: issue_id=TASK-001 resolution_step=file_path event=pre-tool-use tool=Edit decision=block block_reason=path(s) outside task scope: cmd/main.go; allowed scope: internal/auth/
+```
+
+Even when the hook's ultimate decision is pass-through (e.g. a stale binding), out-of-scope
+paths are still recorded with a `violation:` marker so they are visible at merge time:
+
+```
+2026-07-04T12:34:57Z violation: out-of-scope path(s) on pass-through (stale binding): cmd/main.go
 ```
 
 ### Post-Task Artifact Check (D8)
