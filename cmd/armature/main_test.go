@@ -2230,6 +2230,28 @@ func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 	assert.Equal(t, "/repo/.armature/state/worker-123~lane-a", stateDirFor(ctx, workerID))
 }
 
+func TestWorkerIdentityWithSlot_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Run("valid slot is appended as before", func(t *testing.T) {
+		t.Setenv("ARM_LOG_SLOT", "lane-a_2")
+		assert.Equal(t, "worker-123~lane-a_2", workerIdentityWithSlot("worker-123"))
+	})
+
+	t.Run("slot containing a path separator falls back to unslotted identity", func(t *testing.T) {
+		t.Setenv("ARM_LOG_SLOT", "../../etc")
+		assert.Equal(t, "worker-123", workerIdentityWithSlot("worker-123"))
+	})
+
+	t.Run("slot containing a slash falls back to unslotted identity", func(t *testing.T) {
+		t.Setenv("ARM_LOG_SLOT", "a/b")
+		assert.Equal(t, "worker-123", workerIdentityWithSlot("worker-123"))
+	})
+
+	t.Run("empty slot is unslotted identity", func(t *testing.T) {
+		t.Setenv("ARM_LOG_SLOT", "")
+		assert.Equal(t, "worker-123", workerIdentityWithSlot("worker-123"))
+	})
+}
+
 func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testing.T) {
 	worktreePath := initTempRepo(t)
 	logPath := filepath.Join(worktreePath, ".armature", "ops", "worker.log")

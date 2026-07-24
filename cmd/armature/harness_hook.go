@@ -190,7 +190,9 @@ type heartbeatRateLimitState struct {
 // doesn't exist or cannot be read.
 func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
 	stateFile := rateLimitStateFilePath(workerID, issueID)
-	// #nosec G304 - stateFile is derived from workerID and issueID, controlled by us
+	// #nosec G304 - stateFile is derived from workerID and issueID; any ARM_LOG_SLOT
+	// component is validated against a safe charset by workerIdentityWithSlot, so
+	// this path is controlled by us.
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
 		// File doesn't exist or can't be read; return zero time (no prior heartbeat)
@@ -215,7 +217,9 @@ func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.T
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat state: %w", err)
 	}
-	// #nosec G304 - stateFile is derived from workerID and issueID, controlled by us
+	// #nosec G304 - stateFile is derived from workerID and issueID; any ARM_LOG_SLOT
+	// component is validated against a safe charset by workerIdentityWithSlot, so
+	// this path is controlled by us.
 	if err := os.WriteFile(stateFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write heartbeat state file: %w", err)
 	}
@@ -253,8 +257,17 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		return
 	}
 
+	// ownerID is the slotted identity (a no-op when ARM_LOG_SLOT is unset). It
+	// must be used for the op's WorkerID and the log path: op.WorkerID has
+	// to match whatever ClaimedBy was set to at claim time (always the slotted
+	// identity), or applyHeartbeat's op.WorkerID == issue.ClaimedBy guard silently
+	// discards the heartbeat. It's also used to key rate-limit state so that two
+	// slots for the same base worker debounce independently, matching their
+	// independent ops logs.
+	ownerID := workerIdentityWithSlot(workerID)
+
 	// Read the rate-limit state for this worker+issue
-	lastHeartbeatTime := readHeartbeatRateLimitState(workerID, issueID)
+	lastHeartbeatTime := readHeartbeatRateLimitState(ownerID, issueID)
 
 	// Check if we should emit a heartbeat using the pure decision function
 	if !claimPkg.ShouldHeartbeat(lastHeartbeatTime, time.Now()) {
@@ -266,13 +279,12 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		Type:      ops.OpHeartbeat,
 		TargetID:  issueID,
 		Timestamp: nowEpoch(),
-		WorkerID:  workerID,
+		WorkerID:  ownerID,
 		Payload: ops.Payload{
 			Source: "hook",
 		},
 	}
 
-	ownerID := workerIdentityWithSlot(workerID)
 	logPath := opsLogPath(issuesDir, ownerID)
 
 	var gc ops.GitCommitter
@@ -287,7 +299,7 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 	}
 
 	// Update the rate-limit state file to record this heartbeat
-	if err := writeHeartbeatRateLimitState(workerID, issueID, time.Now()); err != nil {
+	if err := writeHeartbeatRateLimitState(ownerID, issueID, time.Now()); err != nil {
 		// Log a warning but don't block
 		fmt.Fprintf(os.Stderr, "warning: failed to update heartbeat rate-limit state for %s: %v\n", issueID, err)
 		return

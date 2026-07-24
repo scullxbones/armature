@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -145,11 +146,25 @@ func opsLogPath(issuesDir, ownerID string) string {
 	return filepath.Join(issuesDir, "ops", ownerID+".log")
 }
 
+var validSlotPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// workerIdentityWithSlot appends the ARM_LOG_SLOT value (parallel dispatch mode)
+// to workerID to form a slotted identity used in filesystem paths. Since
+// ARM_LOG_SLOT is an environment variable and not fully within our control, it
+// is validated against a safe charset here; an invalid value is treated as if
+// ARM_LOG_SLOT were unset (fail-open, matching this codebase's heartbeat-adjacent
+// pattern of never blocking the harness) rather than propagated into path
+// construction.
 func workerIdentityWithSlot(workerID string) string {
-	if slot := os.Getenv("ARM_LOG_SLOT"); slot != "" {
-		return workerID + "~" + slot
+	slot := os.Getenv("ARM_LOG_SLOT")
+	if slot == "" {
+		return workerID
 	}
-	return workerID
+	if !validSlotPattern.MatchString(slot) {
+		fmt.Fprintf(os.Stderr, "warning: ARM_LOG_SLOT %q contains invalid characters, ignoring\n", slot)
+		return workerID
+	}
+	return workerID + "~" + slot
 }
 
 func baseWorkerIdentity(workerID string) string {

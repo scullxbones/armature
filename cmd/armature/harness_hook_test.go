@@ -1289,6 +1289,57 @@ func TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1(t *testing.T) {
 	assert.Equal(t, "task-01", heartbeats[0].TargetID)
 }
 
+// TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1 verifies that
+// when ARM_LOG_SLOT is set (parallel dispatch mode), the hook-emitted heartbeat
+// op's WorkerID matches the slotted identity recorded as ClaimedBy at claim
+// time, so applyHeartbeat's op.WorkerID == issue.ClaimedBy check actually
+// advances LastHeartbeat instead of silently no-op'ing.
+func TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreeDir := t.TempDir()
+	t.Setenv("ARM_LOG_SLOT", "slot-1")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+	defer os.Remove(rateLimitStateFilePath(workerIdentityWithSlot(workerID), "task-01")) //nolint:errcheck // best-effort cleanup
+
+	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	payload := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`
+
+	hookCmd := newRootCmd()
+	hookCmd.SetIn(strings.NewReader(payload))
+	hookCmd.SetOut(new(bytes.Buffer))
+	hookCmd.SetErr(new(bytes.Buffer))
+	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
+	require.NoError(t, hookCmd.Execute())
+
+	slottedID := workerIdentityWithSlot(workerID)
+	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
+	require.Len(t, heartbeats, 1)
+	assert.Equal(t, slottedID, heartbeats[0].WorkerID,
+		"heartbeat op.WorkerID must match the slotted identity recorded as ClaimedBy, or applyHeartbeat silently ignores it")
+
+	materializeCmd := newRootCmd()
+	materializeCmd.SetOut(new(bytes.Buffer))
+	materializeCmd.SetArgs([]string{"materialize", "--repo", repo})
+	require.NoError(t, materializeCmd.Execute())
+
+	issues, err := materialize.LoadAllIssues(filepath.Join(repo, ".armature", "state", slottedID, "issues"))
+	require.NoError(t, err)
+	issue, ok := issues["task-01"]
+	require.True(t, ok, "task-01 must be materialized")
+
+	assert.Equal(t, slottedID, issue.ClaimedBy, "claim must record the slotted identity")
+	assert.GreaterOrEqual(t, issue.LastHeartbeat, heartbeats[0].Timestamp,
+		"hook-emitted heartbeat from the slotted claimant must advance LastHeartbeat")
+}
+
 // TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1 verifies that no heartbeat
 // op is emitted when the event resolves to no issue binding at all.
 func TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1(t *testing.T) {
