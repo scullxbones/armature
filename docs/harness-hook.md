@@ -789,8 +789,106 @@ If D8 reports violations, investigate whether the artifacts should have been in-
 9. **Coordinator runs `arm doctor`** to check repository health, including D8 for out-of-scope artifacts in the completed task.
 10. **Coordinator runs `arm merged --issue <task-id>`** to tear down the worktree and record the merge. A warning is emitted if the hook log contains pass-through entries.
 
+## Threat Model
+
+This section documents the hook's enforcement guarantees and limitations across platforms.
+
+### Enforcement Model
+
+The harness hook enforces task scope and acceptance criteria through a **best-effort guardrail** model:
+
+- **When hooks are configured and active** in the harness platform, the hook **mechanically blocks** violating tool invocations (scope violations, acceptance failures) by returning a deny decision to the harness.
+- **When hooks are disabled or bypassed**, enforcement is advisory only — the worker can invoke operations that would otherwise be blocked.
+- **The hook is never a sandbox.** The fail-open posture (pass-through on error) and symlink-bypass coverage mean enforcement gaps are possible and are surfaced via violation logging, not by preventing operations.
+- **All enforcement is recorded** to the worktree-local hook log for later audit, visible during merge validation.
+
+### Platform-Specific Guarantees
+
+#### Claude Code: Advisory (Configurable)
+
+**Enforcement:** When hooks are active in `.claude/settings.json`, the hook **mechanically enforces** scope and acceptance checks.
+
+**Limitation:** Enforcement is **advisory** — a worker can disable or modify hooks by editing `.claude/settings.json` or by invoking operations outside the Claude Code tool interface. Armature provides no mechanism to prevent hook modification.
+
+**Tool classes mediated:**
+- **Edit tools:** `Edit`, `Write`, `MultiEdit` (file edits via Claude Code)
+- **Shell tools:** `Bash` (shell commands)
+
+**Scope enforcement:** Lexical path checking against task scope globs; symlink-inside-worktree-pointing-outside is treated as in-scope (fail-open posture, see docs/harness-hook.md#Fail-Open Posture).
+
+**Pass-through conditions:**
+- No issue binding found (session has no `ARMATURE_ISSUE_ID` or worktree binding file)
+- Binding resolution encounters transient errors (file I/O failures, corrupted state)
+- Hook event decoding fails (malformed JSON from harness)
+- Snapshot loading fails (task state unavailable)
+
+**Recorded evidence:**
+- Decision log entries with timestamp, issue ID, resolution step, event kind, tool name, decision (allow/block), and block reason
+- Activity log entries (PostToolUse only) with command, exit code, output hash, truncated output head/tail, worktree HEAD commit
+- Violation entries for unbound file writes detected at merge time
+
+#### Codex: Advisory (Configurable)
+
+**Enforcement:** When hooks are active in `.codex/config.toml`, the hook **mechanically enforces** scope and acceptance checks.
+
+**Limitation:** Enforcement is **advisory** — a worker can disable or modify hooks by editing `.codex/config.toml` or by invoking operations outside the Codex tool interface. Armature provides no mechanism to prevent hook modification.
+
+**Tool classes mediated:**
+- **Edit tools:** `apply_patch`, `Edit`, `Write`
+- **Shell tools:** `shell`, `local_shell`, `Bash`
+
+**Scope enforcement:** Lexical path checking (same as Claude Code).
+
+**Pass-through conditions:** Same as Claude Code.
+
+**Recorded evidence:** Same as Claude Code.
+
+#### Devin: Advisory (Configurable)
+
+**Enforcement:** When hooks are active in `.devin/hooks.json`, the hook **mechanically enforces** scope and acceptance checks.
+
+**Limitation:** Enforcement is **advisory** — a worker can disable or modify hooks by editing `.devin/hooks.json` or by invoking operations outside the Devin tool interface. Armature provides no mechanism to prevent hook modification.
+
+**Tool classes mediated:**
+- **Edit tools:** `edit`
+- **Shell tools:** `exec`
+
+**Scope enforcement:** Lexical path checking (same as Claude Code).
+
+**Pass-through conditions:** Same as Claude Code.
+
+**Recorded evidence:** Same as Claude Code.
+
+### Pass-Through Logging and Violation Detection
+
+**Pass-through entries** (`pass-through:` lines in hook log) are warnings, not enforcement failures. They indicate events that could not be evaluated due to binding resolution or decoding errors and were allowed to proceed. These are fail-open: the hook prefers to let work continue rather than block a worker on transient failures.
+
+**Violation entries** (`violation:` lines in hook log) indicate file writes that should have been subject to scope enforcement but were not — the binding could not be resolved, so no scope check occurred. Violations are surfaced at merge time by the **violation gate** (see docs/harness-hook.md#Violation Gate): `arm merged --issue <task-id>` will fail if violation entries are present unless `--force` is specified.
+
+A wave whose tasks contain violation entries **must not be integrated** without explicit operator override. Violations raise risk for story integration.
+
+### Sensitive Environment Considerations
+
+For sensitive environments (customer infrastructure, air-gapped systems, compliance-critical contexts) containing credentials, tokens, API keys, proprietary data, or PII:
+
+**Execution evidence is recorded by default.** See docs/sensitive-environments.md for:
+- How to disable execution evidence capture (repo-level `git config armature.disable-activity-logging`)
+- Citation boundary (what appears in published reports vs. what operators see)
+- Teardown-after-record ordering constraints
+
+### Summary
+
+| Platform | Enforcement | Mediated Tools (Edit / Shell) | Pass-Through | Violations at Merge |
+|----------|------------|---------------------------|---------------|------------------|
+| Claude Code | Advisory (per hook config) | Edit, Write, MultiEdit / Bash | Logged, warnings only | Block merge unless --force |
+| Codex | Advisory (per hook config) | apply_patch, Edit, Write / shell, local_shell, Bash | Logged, warnings only | Block merge unless --force |
+| Devin | Advisory (per hook config) | edit / exec | Logged, warnings only | Block merge unless --force |
+
+All platforms share the same fail-open posture, pass-through conditions, and violation logging. Differences lie in which tool names and event types each platform's harness natively supports.
+
 ## See Also
 
 - [Commands Reference](commands.md#harness-hook) — `arm harness-hook` command documentation
 - [Configuration Reference](configuration.md#hooks) — Hook configuration in `.armature/config.json`
 - [Harness Hooks Guardrail Refactor Design](docs/superpowers/specs/2026-05-26-harness-hooks-guardrail-refactor-design.md) — Technical design details
+- [Sensitive Environments and Execution Evidence Disclosure](docs/sensitive-environments.md) — Pass-through conditions, capture configuration, teardown ordering
