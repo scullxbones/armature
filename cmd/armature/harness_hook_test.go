@@ -656,6 +656,70 @@ func TestUnboundFileWriteLogsViolation_REQ_HOOKBIND_T3(t *testing.T) {
 	assert.NotContains(t, logContent, "pass-through:", "unbound file write must not log pass-through")
 }
 
+// TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2 drives a
+// genuine "bound inactive" (stale) binding through the harness-hook
+// command's pass-through decision path end-to-end: a task is claimed (so its
+// worktree carries a real armature-issue-id binding file), then transitioned
+// to "done" so isBindingStale reports it stale on the next hook invocation.
+// An out-of-scope edit event is then sent through that stale binding.
+//
+// This is the case the conformance-matrix docstrings claim to cover ("bound
+// inactive") but, before this test, none actually exercised: it asserts both
+// that enforcement passes through (fail-open, exit 0, no block decision) AND
+// that a "violation: ... on pass-through (stale binding)" entry is logged
+// alongside the "pass-through: stale issue binding" entry, per
+// docs/harness-hook.md's Scope Violation Visibility contract.
+func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
+	require.NoError(t, err)
+
+	// Claim the task so its worktree carries a real armature-issue-id binding.
+	worktreeDir := t.TempDir()
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	require.NoError(t, cmd.Execute())
+
+	// Transition the task to "done" so isBindingStale reports the binding as
+	// stale (status is no longer claimed/in-progress) while the worktree's
+	// armature-issue-id file still points at it.
+	cmd = newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "done", "--force"})
+	require.NoError(t, cmd.Execute())
+
+	t.Setenv("ARMATURE_ISSUE_ID", "")
+	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+
+	// Out-of-scope path relative to the task's declared scope (internal/harnesshook/).
+	outOfScopePath := filepath.Join(worktreeDir, "cmd", "armature", "main.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outOfScopePath), 0o755))
+
+	var out, errOut bytes.Buffer
+	cmd = newRootCmd()
+	payload := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":%q}]}}`, outOfScopePath)
+	cmd.SetIn(strings.NewReader(payload))
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"harness-hook", "--repo", worktreeDir})
+
+	err = cmd.Execute()
+	require.NoError(t, err, "stale binding must fail open: exit 0")
+	assert.NotContains(t, out.String(), `"decision":"block"`, "stale binding must pass through, not block")
+
+	worktreeGitDir, gErr := resolveWorktreeGitDir(worktreeDir)
+	require.NoError(t, gErr)
+	logData, err := os.ReadFile(filepath.Join(worktreeGitDir, "armature-hook.log"))
+	require.NoError(t, err)
+	logContent := string(logData)
+
+	assert.Contains(t, logContent, "pass-through: stale issue binding", "stale binding must log a pass-through entry")
+	assert.Contains(t, logContent, "violation:", "stale binding pass-through with an out-of-scope path must also log a violation entry")
+	assert.Contains(t, logContent, "stale binding", "the violation entry must be attributed to the stale binding reason")
+	assert.Contains(t, logContent, "cmd/armature/main.go", "the violation entry must name the out-of-scope path")
+}
+
 // TestResolverErrorFailsOpen_REQ_HOOKBIND_T3 verifies that an error from
 // hook.Evaluate's policy resolution step (e.g. a corrupt materialized issue JSON)
 // fails open: exit 0, loud stderr warning, pass-through logged (finding 3).
