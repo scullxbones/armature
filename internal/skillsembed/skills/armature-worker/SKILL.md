@@ -79,10 +79,12 @@ arm note ISSUE-ID --msg "..."
 arm decision ISSUE-ID --topic X --choice Y --rationale Z
 ```
 
-**Call `arm heartbeat ISSUE-ID` for any work taking more than a few minutes —
-maximum once per minute.** Claims expire after the TTL; without periodic heartbeats
-another worker may steal the claim. Issue heartbeat calls at natural checkpoints
-(e.g. after each test run, after each file written).
+**The harness hook automatically emits rate-limited heartbeats on every tool use
+(PreToolUse events) for bound, non-stale claims** — one heartbeat per 5-minute window.
+You only need to manually call `arm heartbeat ISSUE-ID` during **long stretches of
+non-tool thinking work** (reading docs, analyzing code, etc.) where no tool calls
+happen for more than 5 minutes. Without heartbeats, claims expire after the TTL and
+another worker may steal the claim.
 
 ### 4. Cite Every Issue Touched
 
