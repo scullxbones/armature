@@ -16,6 +16,7 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -177,6 +178,62 @@ func applyRunResult(out io.Writer, result harnesshook.RunResult) error {
 	return nil
 }
 
+// tryEmitHeartbeat attempts to emit a rate-limited heartbeat op for a bound claim
+// on every PreToolUse event. Failures are logged as warnings and do not block execution.
+// Returns silently if the event is not a PreToolUse, or if the heartbeat should not
+// be emitted (debounce check). The op is written directly to the ops log file.
+func tryEmitHeartbeat(repoPath, issueID string, eventKind harnesshook.EventKind) {
+	// Only emit heartbeats on PreToolUse events
+	if eventKind != harnesshook.EventPreToolUse {
+		return
+	}
+
+	// Try to get the worker ID
+	workerID, err := worker.GetWorkerID(repoPath)
+	if err != nil {
+		// Worker not initialized; skip heartbeat emission (fail-open)
+		return
+	}
+
+	// Read the rate-limit state for this worker+issue
+	lastHeartbeatTime := readHeartbeatRateLimitState(workerID, issueID)
+
+	// Check if we should emit a heartbeat using the pure decision function
+	if !claimPkg.ShouldHeartbeat(lastHeartbeatTime, time.Now()) {
+		return
+	}
+
+	// Emit the heartbeat op with Source="hook"
+	heartbeatOp := ops.Op{
+		Type:      ops.OpHeartbeat,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			Source: "hook",
+		},
+	}
+
+	// Try to write the op to the ops log
+	ownerID := workerIdentityWithSlot(workerID)
+	// Construct the log path directly using the standard .armature layout
+	issuesDir := filepath.Join(repoPath, ".armature", "issues")
+	logPath := filepath.Join(issuesDir, "ops", ownerID+".log")
+
+	if err := ops.AppendAndCommit(logPath, "", heartbeatOp, nil); err != nil {
+		// Log a warning but don't block
+		fmt.Fprintf(os.Stderr, "warning: failed to emit heartbeat op for %s: %v\n", issueID, err)
+		return
+	}
+
+	// Update the rate-limit state file to record this heartbeat
+	if err := writeHeartbeatRateLimitState(workerID, issueID, time.Now()); err != nil {
+		// Log a warning but don't block
+		fmt.Fprintf(os.Stderr, "warning: failed to update heartbeat rate-limit state for %s: %v\n", issueID, err)
+		return
+	}
+}
+
 func newHarnessHookCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:           "harness-hook",
@@ -302,6 +359,10 @@ func newHarnessHookCmd() *cobra.Command {
 				_ = logPassThrough(logGitDir, "stale issue binding") //nolint:errcheck // logging only, error not actionable
 				return nil
 			}
+
+			// Emit rate-limited heartbeat on PreToolUse events for bound+non-stale claims.
+			// Failures are swallowed and logged as warnings, not blocking execution.
+			tryEmitHeartbeat(appCtx.RepoPath, resolvedBinding.IssueID, event.Kind)
 
 			// Create policy resolver
 			resolver := harnesspolicy.NewIssuePolicyResolver(harnesspolicy.ResolverConfig{

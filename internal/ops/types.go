@@ -82,6 +82,9 @@ type Payload struct {
 	// claim
 	TTL int `json:"ttl,omitempty"`
 
+	// heartbeat
+	Source string `json:"source,omitempty"`
+
 	// transition
 	To      string `json:"to,omitempty"`
 	Outcome string `json:"outcome,omitempty"`

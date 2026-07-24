@@ -4,9 +4,15 @@ package claim
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/scullxbones/armature/internal/ops"
 )
+
+// HeartbeatDebounceInterval is the fixed debounce interval for rate-limited
+// heartbeat emission from the harness hook. Heartbeats are emitted at most
+// once per interval, independent of claim TTL. Not configurable.
+const HeartbeatDebounceInterval = 5 * time.Minute
 
 // ResolveClaim resolves a claim race: earliest timestamp wins,
 // lexicographic worker ID as tiebreaker.
@@ -57,4 +63,15 @@ func IsClaimStale(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMin
 	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
 	ttlSeconds := int64(ttlMinutes) * 60
 	return now > lastActivity+ttlSeconds
+}
+
+// ShouldHeartbeat checks if a heartbeat should be emitted based on the fixed
+// debounce interval. Returns true if lastHeartbeatTime is zero (no heartbeat yet)
+// or if enough time has passed since the last heartbeat (>= HeartbeatDebounceInterval).
+// The decision logic is pure and takes no I/O.
+func ShouldHeartbeat(lastHeartbeatTime, now time.Time) bool {
+	if lastHeartbeatTime.IsZero() {
+		return true
+	}
+	return now.Sub(lastHeartbeatTime) >= HeartbeatDebounceInterval
 }

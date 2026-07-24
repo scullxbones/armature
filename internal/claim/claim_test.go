@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -253,4 +254,48 @@ func TestHasOverlapDismissalNote_NotFoundDifferentTarget(t *testing.T) {
 	// Looking for note on task-02 about task-01, but we have note on task-01 about task-02
 	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
 	assert.False(t, found)
+}
+
+// TestShouldHeartbeat_NoHeartbeatYet verifies that a heartbeat is emitted when
+// no prior heartbeat exists (lastHeartbeatTime is zero).
+func TestShouldHeartbeat_NoHeartbeatYet_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	assert.True(t, ShouldHeartbeat(time.Time{}, now))
+}
+
+// TestShouldHeartbeat_WithinDebounceWindow verifies that a heartbeat is not
+// emitted when the last heartbeat was within the debounce interval.
+func TestShouldHeartbeat_WithinDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	lastHeartbeat := now.Add(-2 * time.Minute) // 2 minutes ago
+	assert.False(t, ShouldHeartbeat(lastHeartbeat, now))
+}
+
+// TestShouldHeartbeat_ExactlyAtDebounceWindow verifies that a heartbeat is
+// emitted when the elapsed time is exactly equal to the debounce interval.
+func TestShouldHeartbeat_ExactlyAtDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	lastHeartbeat := now.Add(-HeartbeatDebounceInterval)
+	assert.True(t, ShouldHeartbeat(lastHeartbeat, now))
+}
+
+// TestShouldHeartbeat_ExceedsDebounceWindow verifies that a heartbeat is
+// emitted when the elapsed time exceeds the debounce interval.
+func TestShouldHeartbeat_ExceedsDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	lastHeartbeat := now.Add(-6 * time.Minute) // 6 minutes ago
+	assert.True(t, ShouldHeartbeat(lastHeartbeat, now))
+}
+
+// TestShouldHeartbeat_JustBeforeDebounceWindow verifies that a heartbeat is
+// not emitted when the elapsed time is just before the debounce interval.
+func TestShouldHeartbeat_JustBeforeDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	lastHeartbeat := now.Add(-HeartbeatDebounceInterval + 100*time.Millisecond)
+	assert.False(t, ShouldHeartbeat(lastHeartbeat, now))
 }
