@@ -63,6 +63,7 @@ type heartbeatRateLimitState struct {
 // doesn't exist or cannot be read.
 func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
 	stateFile := rateLimitStateFilePath(workerID, issueID)
+	// #nosec G304 - stateFile is derived from workerID and issueID, controlled by us
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
 		// File doesn't exist or can't be read; return zero time (no prior heartbeat)
