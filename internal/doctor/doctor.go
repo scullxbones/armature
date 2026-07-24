@@ -79,6 +79,7 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
+	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
 
 	return Report{Checks: checks}
 }
@@ -138,6 +139,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
 	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
+	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
 
 	return Report{Checks: checks}, nil
 }
