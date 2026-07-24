@@ -16,6 +16,7 @@ import (
 // The matrix drives policy decisions: allow, block, or pass-through.
 // This is the data-centric test suite for scope policy validation.
 func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		scope       []string
@@ -308,6 +309,7 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 // TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1 verifies edge cases
 // for ** (doublestar) glob patterns.
 func TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		scope       []string
@@ -379,6 +381,7 @@ func TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 // TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1 verifies that
 // violation messages are clear and include all necessary information.
 func TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name              string
 		scope             []string
@@ -441,6 +444,7 @@ func TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1(t *testing.T) {
 // TestScopeMatrix_AbsoluteVsRelativePaths_REQ_TOPTIER_S5_T1 verifies that
 // absolute and relative paths are normalized correctly with a provided root.
 func TestScopeMatrix_AbsoluteVsRelativePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	const (
 		repoRoot = "/workspace/armature"
 	)
