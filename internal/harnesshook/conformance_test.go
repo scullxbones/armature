@@ -21,14 +21,16 @@ func (m *mockPolicyResolver) Resolve(taskID string) (harnesspolicy.IssuePolicy, 
 	return m.policy, nil
 }
 
-// makeHookPayload creates a properly formatted hook event payload for testing.
-func makeHookPayload(hookEventName string, toolName string, toolInput map[string]any) []byte {
+// makeHookPayload creates a properly formatted PreToolUse hook event payload for testing.
+func makeHookPayload(t *testing.T, toolName string, toolInput map[string]any) []byte {
+	t.Helper()
 	payload := map[string]any{
-		"hook_event_name": hookEventName,
+		"hook_event_name": "PreToolUse",
 		"tool_name":       toolName,
 		"tool_input":      toolInput,
 	}
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
 	return data
 }
 
@@ -50,6 +52,7 @@ func TestHookConformance_REQ_TOPTIER_S5_T1(t *testing.T) {
 // TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1 verifies binding resolution
 // across all three binding states: bound active, bound inactive, and unbound.
 func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		issueID     string
@@ -122,7 +125,7 @@ func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			hook := NewHook(resolver)
 
-			input := makeHookPayload("PreToolUse", "Edit", map[string]any{
+			input := makeHookPayload(t, "Edit", map[string]any{
 				"file_path": tc.filePath,
 			})
 
@@ -148,6 +151,7 @@ func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
 // TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1 verifies that different tool
 // classes (Edit vs Bash) follow correct binding and evaluation paths.
 func TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		tool        string
@@ -214,7 +218,7 @@ func TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1(t *testing.T) {
 				toolInput["file_path"] = tc.filePath
 			}
 
-			input := makeHookPayload("PreToolUse", tc.tool, toolInput)
+			input := makeHookPayload(t, tc.tool, toolInput)
 
 			result, err := hook.Evaluate(context.Background(), EvaluateInput{
 				Input:    input,
@@ -237,6 +241,7 @@ func TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1(t *testing.T) {
 // TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1 verifies path resolution for
 // in-scope, out-of-scope, and outside-worktree paths.
 func TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		path        string
@@ -292,7 +297,7 @@ func TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			hook := NewHook(resolver)
 
-			input := makeHookPayload("PreToolUse", "Edit", map[string]any{
+			input := makeHookPayload(t, "Edit", map[string]any{
 				"file_path": tc.path,
 			})
 
@@ -320,6 +325,7 @@ func TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1(t *testing.T) {
 // 2. Stray binary left outside declared scope (deny)
 // 3. Worktree changes leaking into the main worktree (deny)
 func TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		path        string
@@ -368,7 +374,7 @@ func TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			hook := NewHook(resolver)
 
-			input := makeHookPayload("PreToolUse", "Edit", map[string]any{
+			input := makeHookPayload(t, "Edit", map[string]any{
 				"file_path": tc.path,
 			})
 
@@ -409,7 +415,7 @@ func TestConformanceMatrix_EmptyScope_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 	hook := NewHook(resolver)
 
-	input := makeHookPayload("PreToolUse", "Edit", map[string]any{
+	input := makeHookPayload(t, "Edit", map[string]any{
 		"file_path": "internal/foo.go",
 	})
 
@@ -444,7 +450,7 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 	// Test with absolute path that should normalize to in-scope
 	absInScopePath := filepath.Join(tmpDir, "internal", "foo.go")
-	input := makeHookPayload("PreToolUse", "Edit", map[string]any{
+	input := makeHookPayload(t, "Edit", map[string]any{
 		"file_path": absInScopePath,
 	})
 
@@ -461,7 +467,7 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 	// Test with absolute path that should be out-of-scope
 	absOutOfScopePath := filepath.Join(tmpDir, "cmd", "main.go")
-	input = makeHookPayload("PreToolUse", "Edit", map[string]any{
+	input = makeHookPayload(t, "Edit", map[string]any{
 		"file_path": absOutOfScopePath,
 	})
 
@@ -494,7 +500,7 @@ func TestConformanceMatrix_NoPathPolicy_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 	hook := NewHook(resolver)
 
-	input := makeHookPayload("PreToolUse", "Bash", map[string]any{
+	input := makeHookPayload(t, "Bash", map[string]any{
 		"command": "echo hello",
 	})
 
