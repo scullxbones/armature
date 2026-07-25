@@ -3517,3 +3517,4 @@
 ["transition","LNGHZN-S4-T1",1785016644,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
 ["claim","LNGHZN-S4-T1",1785016649,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
 ["transition","LNGHZN-S4-T1",1785017461,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["claim","LNGHZN-S4-T2",1785017465,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120}]
