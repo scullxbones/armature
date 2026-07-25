@@ -302,9 +302,11 @@ func runDeliveryGateCheck(appCtx *config.Context, issueID string, scope []string
 }
 
 // candidateBaseRefs are tried in order to find the branch a task diverged
-// from. Local branches are preferred over remote-tracking ones since a
-// worktree created for a task may have no configured remote at all.
-var candidateBaseRefs = []string{"main", "master", "origin/main", "origin/master"}
+// from. Remote-tracking refs are preferred over local branches: a local
+// `main`/`master` in a long-lived coordinator checkout is frequently stale
+// (fast-forwarded only on release), whereas `origin/main` reflects the
+// actual upstream tip workers branched from.
+var candidateBaseRefs = []string{"origin/main", "origin/master", "main", "master"}
 
 // getBaseCommit finds the merge-base between HEAD and the first candidate
 // base ref that resolves in this repo.
@@ -315,7 +317,7 @@ func getBaseCommit(git *adapters.Client) (string, error) {
 			lastErr = err
 			continue
 		}
-		base, err := getMergeBase(git, "HEAD", ref)
+		base, err := git.MergeBase("HEAD", ref)
 		if err != nil {
 			lastErr = err
 			continue
@@ -323,38 +325,4 @@ func getBaseCommit(git *adapters.Client) (string, error) {
 		return base, nil
 	}
 	return "", fmt.Errorf("no candidate base branch (%v) resolves: %w", candidateBaseRefs, lastErr)
-}
-
-// getMergeBase returns the SHA of the merge-base between two revisions.
-// It's a helper to get the base commit for the delivery gate check.
-func getMergeBase(git *adapters.Client, rev1, rev2 string) (string, error) {
-	// First try to resolve both revisions to SHAs to ensure they exist
-	if _, err := git.ResolveRevision(rev1); err != nil {
-		return "", fmt.Errorf("failed to resolve %s: %w", rev1, err)
-	}
-	if _, err := git.ResolveRevision(rev2); err != nil {
-		return "", fmt.Errorf("failed to resolve %s: %w", rev2, err)
-	}
-
-	// Use the DiffNameOnlyRange method which uses three-dot notation (merge-base)
-	// to get the files changed in the merge-base commit. We'll extract the base
-	// by using git merge-base directly with resolved SHAs.
-	// Since we can't call merge-base directly on the Client, we'll use the
-	// rev-list approach: get the log starting from rev1, and stop at rev2's parent
-	allCommits, err := git.LogBranch(rev1, 0)
-	if err != nil {
-		return "", fmt.Errorf("failed to get commit log: %w", err)
-	}
-
-	// Find the first commit that is an ancestor of rev2
-	// This is a simplified approach: iterate through commits from HEAD
-	// and check if they're ancestors of rev2
-	for _, entry := range allCommits {
-		isAncestor, err := git.IsCommitOnBranch(entry.SHA, rev2)
-		if err == nil && isAncestor {
-			return entry.SHA, nil
-		}
-	}
-
-	return "", fmt.Errorf("could not find merge-base between %s and %s", rev1, rev2)
 }

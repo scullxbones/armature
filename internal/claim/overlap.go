@@ -95,7 +95,8 @@ func IsWithinScope(files, scope []string) (bool, string) {
 
 	for _, file := range files {
 		inScope := false
-		for _, glob := range scope {
+		for _, rawGlob := range scope {
+			glob := stripScopeAnnotation(rawGlob)
 			// Try matching the file against this scope glob
 			if matched, _ := filepath.Match(glob, file); matched { //nolint:errcheck // ErrBadPattern unreachable for valid scope paths
 				inScope = true
@@ -116,6 +117,18 @@ func IsWithinScope(files, scope []string) (bool, string) {
 	}
 
 	return true, ""
+}
+
+// stripScopeAnnotation removes a trailing human-readable annotation like
+// " (new)" that workers commonly append to scope entries when declaring a
+// file that doesn't exist yet (e.g. "internal/foo/bar.go (new)"). Scope
+// entries are stored verbatim including this annotation, so any exact-path
+// matcher must strip it before comparing against real file paths.
+func stripScopeAnnotation(glob string) string {
+	if i := strings.LastIndexByte(glob, '('); i > 0 && strings.HasSuffix(glob, ")") {
+		return strings.TrimSpace(glob[:i])
+	}
+	return glob
 }
 
 // globCoversFile checks if a glob pattern covers a file path by examining
