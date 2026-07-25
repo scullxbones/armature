@@ -183,10 +183,15 @@ func (tr *TestRepo) RenderContext(t *testing.T, issueID string) map[string]inter
 func (tr *TestRepo) Transition(t *testing.T, issueID, status, outcome string) {
 	t.Helper()
 
-	tr.runArm(t,
-		"transition", issueID,
-		"--to", status,
-		"--outcome", outcome)
+	args := []string{"transition", issueID, "--to", status, "--outcome", outcome}
+	if status == "done" {
+		// This golden transcript demonstrates the coordinator command sequence
+		// in isolation; it doesn't perform real delivery work in the claimed
+		// worktree, so it can't satisfy the delivery gate's clean-tree/
+		// commit-reference checks.
+		args = append(args, "--skip-delivery-gate")
+	}
+	tr.runArm(t, args...)
 }
 
 // ReviewPrepare prepares a review bundle for an issue.

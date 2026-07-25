@@ -1,3 +1,6 @@
+// Package deliverygate evaluates a worktree against an issue's delivery
+// requirements (clean tree, scope containment, commit reference) without
+// mutating any state.
 package deliverygate
 
 import (
