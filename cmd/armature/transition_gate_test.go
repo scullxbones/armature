@@ -139,6 +139,26 @@ func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestDeliveryGateFailsClosedWhenIssueNotMaterialized_REQ_LNGHZN_S4_T2 verifies
+// that the delivery gate fails closed (refuses the transition, does not skip
+// silently) when the target issue cannot be found in the materialized index —
+// e.g. because no bound context could be resolved for it.
+func TestDeliveryGateFailsClosedWhenIssueNotMaterialized_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// No `create` was run for "ghost-01": the issue has no entry in the
+	// materialized index at all.
+	_, err = runTrls(t, repo, "transition", "--issue", "ghost-01", "--to", "done", "--outcome", "test", "--force")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in materialized index")
+}
+
 // TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2 verifies that
 // transition to done is blocked when a committed change touches a file
 // outside the issue's declared scope.
