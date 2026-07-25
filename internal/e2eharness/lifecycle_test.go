@@ -107,7 +107,7 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	gitRunInDir(t, worktreePath, "add", "task.go")
 	gitRunInDir(t, worktreePath, "commit", "--allow-empty", "-m", "feat: test task work")
 	out, err = h.RunArmIn(worktreePath, "transition", "--repo", worktreePath, "--issue", "TEST-001", "--to", "done",
-		"--force", "--branch", featureBranch, "--outcome", "Implementation complete")
+		"--force", "--skip-delivery-gate", "--branch", featureBranch, "--outcome", "Implementation complete")
 	require.NoError(t, err, "transition to done failed: %s", out)
 	assertMaterializedField(t, h, "status", "done")
 	assertMaterializedField(t, h, "outcome", "Implementation complete")

@@ -686,7 +686,7 @@ func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.
 	// armature-issue-id file still points at it.
 	cmd = newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "done", "--force"})
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "done", "--force"})
 	require.NoError(t, cmd.Execute())
 
 	t.Setenv("ARMATURE_ISSUE_ID", "")
@@ -741,7 +741,7 @@ func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER
 
 	cmd = newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "done", "--force"})
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "done", "--force"})
 	require.NoError(t, cmd.Execute())
 
 	t.Setenv("ARMATURE_ISSUE_ID", "")

@@ -326,7 +326,7 @@ func TestTransitionCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Fixed", "--force"})
+	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Fixed", "--force"})
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -676,7 +676,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--force",
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
 		"--branch", "feature/sync-test", "--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
@@ -725,7 +725,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--force",
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
 		"--branch", "feature/sync-dryrun-test", "--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
@@ -880,7 +880,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--force",
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
 		"--branch", "feature/my-pr", "--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
@@ -1045,7 +1045,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--force", "--outcome", "done")
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1077,7 +1077,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "F-001", "--to", "in-progress")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "F-001", "--to", "done", "--force",
+	_, err = runTrls(t, repo, "transition", "--issue", "F-001", "--to", "done", "--skip-delivery-gate", "--force",
 		"--branch", "feature/e2-test", "--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
@@ -1387,7 +1387,7 @@ func TestReopenCommand(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force", "--outcome", "done")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -2100,7 +2100,7 @@ func TestTransitionCommand_HumanOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force", "--outcome", "completed", "--format", "human", "--force")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed", "--format", "human", "--force")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, `"status"`, "default format should not be JSON")
@@ -2112,7 +2112,7 @@ func TestTransitionCommand_JSONOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force", "--outcome", "completed", "--format", "json", "--force")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed", "--format", "json", "--force")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"status"`)
 	assert.Contains(t, out, "task-01")
@@ -2293,14 +2293,14 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	t.Setenv("ARM_LOG_SLOT", "one")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-a", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--force", "--outcome", "slot one")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "slot one")
 	require.NoError(t, err)
 
 	// Slot "two" transitions task-b to done
 	t.Setenv("ARM_LOG_SLOT", "two")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-b", "--worktree", filepath.Join(t.TempDir(), "claim-worktree-wt"))
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--force", "--outcome", "slot two")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "slot two")
 	require.NoError(t, err)
 
 	// Unset slot so materialize uses the main context
@@ -2670,7 +2670,7 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 
 	// Write an op via a slotted log (transition done)
 	t.Setenv("ARM_LOG_SLOT", "w")
-	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--force", "--outcome", "via slot")
+	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
 	t.Setenv("ARM_LOG_SLOT", "")
 
@@ -3033,7 +3033,7 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", defaultBranch)
 
 	// Try to transition to done without --force; should fail
-	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "test")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "test")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot transition to done")
 }
@@ -3063,7 +3063,7 @@ func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", defaultBranch)
 
 	// Transition with --force should succeed
-	_, err = runTrls(t, repo, "transition", "--issue", "task-01b", "--to", "done", "--outcome", "test", "--force")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01b", "--to", "done", "--skip-delivery-gate", "--outcome", "test", "--force")
 	assert.NoError(t, err)
 }
 
@@ -3089,7 +3089,7 @@ func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/task-01c")
 
 	// Transition to done on feature branch should succeed
-	_, err = runTrls(t, repo, "transition", "--issue", "task-01c", "--to", "done", "--force", "--outcome", "test")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01c", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "test")
 	assert.NoError(t, err)
 }
 
@@ -3122,7 +3122,7 @@ func SKIP_TestTransitionToDone_ParentStoryWarning(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/story-01")
 
 	// Transition task-02 to done
-	_, err = runTrls(t, repo, "transition", "--issue", "task-02", "--to", "done", "--force", "--outcome", "completed")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-02", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed")
 	require.NoError(t, err)
 
 	// Materialize to reflect task-02's transition
@@ -3130,7 +3130,7 @@ func SKIP_TestTransitionToDone_ParentStoryWarning(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition task-03 to done; should emit warning about story still being in-progress
-	_, errOut, err := runTrlsWithStderr(t, repo, "transition", "--issue", "task-03", "--to", "done", "--force", "--outcome", "completed")
+	_, errOut, err := runTrlsWithStderr(t, repo, "transition", "--issue", "task-03", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed")
 	assert.NoError(t, err)
 
 	// Check stderr for warning
@@ -3171,7 +3171,7 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
-	root.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-04", "--to", "done", "--outcome", "completed"})
+	root.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-04", "--to", "done", "--skip-delivery-gate", "--outcome", "completed"})
 	err = root.Execute()
 	assert.NoError(t, err)
 
@@ -3371,7 +3371,7 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition to done and extract just the status field
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force", "--outcome", "completed", "--field", "status")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed", "--field", "status")
 	require.NoError(t, err)
 
 	// Output should be just "done" (the status value), nothing else
@@ -3474,7 +3474,7 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/uncited-test")
 
 	// Transition to done without --force and without any citation — should warn but exit 0
-	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-01", "--to", "done", "--outcome", "done")
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-01", "--to", "done", "--skip-delivery-gate", "--outcome", "done")
 	require.NoError(t, err, "transition should succeed (exit 0) even for uncited issue")
 	assert.Contains(t, stderr, "WARNING", "should print WARNING on stderr for uncited issue")
 	assert.Contains(t, stderr, "source citation", "warning should mention source citation")
@@ -3501,7 +3501,7 @@ func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/uncited-force-test")
 
 	// Transition with --force should suppress the uncited warning
-	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-force-01", "--to", "done", "--force", "--outcome", "done")
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-force-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "done")
 	require.NoError(t, err)
 	assert.NotContains(t, stderr, "WARNING", "no WARNING should appear when --force is used")
 	assert.NotContains(t, stderr, "source citation", "no citation warning when --force is used")
@@ -3531,7 +3531,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/cited-test")
 
 	// Transition to done — cited issue should produce no warning
-	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "cited-01", "--to", "done", "--outcome", "done")
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "cited-01", "--to", "done", "--skip-delivery-gate", "--outcome", "done")
 	require.NoError(t, err)
 	assert.NotContains(t, stderr, "WARNING", "no WARNING should appear for a cited issue")
 	assert.NotContains(t, stderr, "source citation", "no citation warning for a cited issue")
