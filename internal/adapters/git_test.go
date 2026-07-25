@@ -759,6 +759,75 @@ func TestDiffFrom(t *testing.T) {
 	assert.Contains(t, diff, "original")
 }
 
+func TestMergeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("base\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "base commit")
+	shaOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	gitRun("checkout", "-b", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("feature\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "feature commit")
+
+	got, err := c.MergeBase("feature", "master")
+	if err != nil {
+		// Default branch name may be "main" in some git configs.
+		got, err = c.MergeBase("feature", "main")
+	}
+	require.NoError(t, err)
+	assert.Equal(t, baseSHA, got)
+}
+
+func TestMergeBase_InvalidRevision_REQ_LNGHZN_S4_T2(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	_, err := c.MergeBase("does-not-exist", "HEAD")
+	assert.Error(t, err)
+}
+
+func TestLogRange_ExcludesBaseAndEarlier_REQ_LNGHZN_S4_T2(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("v0\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "base commit")
+	shaOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("v1\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "commit after base")
+
+	entries, err := c.LogRange(baseSHA, "HEAD")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "commit after base", entries[0].Subject)
+}
+
 func TestDiffFrom_InvalidSHA(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

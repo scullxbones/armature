@@ -154,6 +154,33 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2 verifies
+// that a conventional-commit reference committed BEFORE baseCommit does not
+// satisfy the check — only commits strictly after base count.
+func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("v0"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	// A matching reference lands BEFORE the base commit — e.g. an older,
+	// already-merged commit for the same issue ID.
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): earlier work")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	require.NoError(t, os.WriteFile(file, []byte("v1"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "no reference in this one")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "a match before base must not satisfy the check")
+	assert.NotEmpty(t, result.Remediation)
+}
+
 // TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1 verifies that the
 // DeliveryGate function returns correct combined results for all three checks.
 func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {

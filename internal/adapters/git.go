@@ -87,6 +87,16 @@ func (c *Client) IsCommitOnBranch(sha, branch string) (bool, error) {
 	return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, branch, err)
 }
 
+// MergeBase returns the SHA of the merge-base between two revisions.
+func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
+	cmd := c.cmd("merge-base", rev1, rev2)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find merge-base of %s and %s: %w", rev1, rev2, err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 // IsWorkingTreeDirty checks if the working tree has uncommitted changes to tracked files.
 // Returns true if there are modified tracked files or staged changes, false if clean.
 // Untracked files are ignored (only tracked file changes count as "dirty").
@@ -453,6 +463,18 @@ type LogEntry struct {
 	Date    string
 }
 
+// LogRange returns log entries reachable from head but not from base
+// (`git log base..head`), most recent first.
+func (c *Client) LogRange(base, head string) ([]LogEntry, error) {
+	format := "%H%x00%s%x00%ae%x00%ai"
+	cmd := c.cmd("log", base+".."+head, "--format="+format, "--")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log %s..%s: %w", base, head, err)
+	}
+	return parseLogOutput(out), nil
+}
+
 // ListFilesAtCommit returns the list of file paths tracked at the given commit SHA.
 func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
 	cmd := c.cmd("ls-tree", "-r", "--name-only", sha)
@@ -499,9 +521,14 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git log %s: %w", branch, err)
 	}
+	return parseLogOutput(out), nil
+}
+
+// parseLogOutput parses NUL-delimited `git log --format=%H%x00%s%x00%ae%x00%ai` output.
+func parseLogOutput(out []byte) []LogEntry {
 	raw := strings.TrimSpace(string(out))
 	if raw == "" {
-		return []LogEntry{}, nil
+		return []LogEntry{}
 	}
 	lines := strings.Split(raw, "\n")
 	entries := make([]LogEntry, 0, len(lines))
@@ -517,7 +544,7 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 			Date:    parts[3],
 		})
 	}
-	return entries, nil
+	return entries
 }
 
 // HeadSHA returns the full SHA of the current HEAD commit.

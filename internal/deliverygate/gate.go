@@ -58,9 +58,10 @@ func CleanTreeCheck(worktreePath string) CheckResult {
 	// arm's own materialized state under .armature/ is expected to be
 	// gitignored in any repo using armature; treat it as noise here rather
 	// than depending on every caller's .gitignore being correctly set up.
+	const armatureStateDir = ".armature/"
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Path == ".armature/" || strings.HasPrefix(entry.Path, ".armature/") {
+		if strings.HasPrefix(entry.Path, armatureStateDir) {
 			continue
 		}
 		paths = append(paths, entry.Path)
@@ -118,8 +119,8 @@ func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
 	git := adapters.New(worktreePath)
 
-	// Get all commits from base to HEAD
-	entries, err := git.LogBranch("HEAD", 0)
+	// Get only commits strictly after baseCommit (exclusive) up to HEAD.
+	entries, err := git.LogRange(baseCommit, "HEAD")
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
@@ -131,18 +132,10 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// Matches: type(ISSUE-ID): or type(ISSUE-ID)!:
 	pattern := regexp.MustCompile(`^[a-z]+\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
 
-	// Check if we have at least one commit from baseCommit onwards
-	// that matches the conventional-commit pattern
 	foundMatchingCommit := false
 	for _, entry := range entries {
-		// Entry.Subject is the first line of the commit message
 		if pattern.MatchString(entry.Subject) {
 			foundMatchingCommit = true
-			break
-		}
-
-		// Stop when we reach the base commit (don't check commits before it)
-		if entry.SHA == baseCommit {
 			break
 		}
 	}

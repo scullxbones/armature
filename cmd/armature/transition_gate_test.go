@@ -5,33 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// TestTransitionCommandHasSkipFlag_REQ_LNGHZN_S4_T2 verifies that the
-// transition command exposes the --skip-delivery-gate flag.
-func TestTransitionCommandHasSkipFlag_REQ_LNGHZN_S4_T2(t *testing.T) {
-	cmd := newTransitionCmd()
-
-	flag := cmd.Flags().Lookup("skip-delivery-gate")
-	if flag == nil {
-		t.Fatal("--skip-delivery-gate flag not found on transition command")
-	}
-	if flag.Value.Type() != "bool" {
-		t.Errorf("--skip-delivery-gate flag has wrong type: %s, expected bool", flag.Value.Type())
-	}
-}
-
-// TestPayloadStructHasSkipField_REQ_LNGHZN_S4_T2 verifies that ops.Payload
-// carries the SkippedDeliveryGate field used for the audit trail.
-func TestPayloadStructHasSkipField_REQ_LNGHZN_S4_T2(t *testing.T) {
-	payload := ops.Payload{SkippedDeliveryGate: true}
-	if !payload.SkippedDeliveryGate {
-		t.Error("SkippedDeliveryGate field not working as expected")
-	}
-}
 
 // TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2 verifies that transition
 // to done is blocked when the worktree has uncommitted changes.

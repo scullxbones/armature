@@ -234,3 +234,18 @@ func TestIsWithinScope_CaseSensitivity_REQ_LNGHZN_S4_T1(t *testing.T) {
 	isIn, _ := IsWithinScope([]string{"internal/Claim/overlap.go"}, []string{"internal/claim/**"})
 	assert.False(t, isIn, "case mismatch should not match on Unix")
 }
+
+// TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2 verifies that a
+// scope entry carrying the " (new)" annotation workers commonly append when
+// declaring a file that doesn't exist yet (e.g. "internal/foo/bar.go (new)")
+// still matches the real file path once it's created.
+func TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2(t *testing.T) {
+	t.Parallel()
+
+	isIn, outOfScope := IsWithinScope(
+		[]string{"internal/deliverygate/gate.go", "internal/deliverygate/gate_test.go"},
+		[]string{"internal/deliverygate/gate.go (new)", "internal/deliverygate/gate_test.go (new)"},
+	)
+	assert.True(t, isIn, "file should match its scope entry once the (new) annotation is stripped")
+	assert.Empty(t, outOfScope)
+}
