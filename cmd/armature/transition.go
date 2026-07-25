@@ -84,13 +84,6 @@ This enforces branch + PR discipline.`,
 				}
 			}
 
-			// Run delivery gate check when transitioning to done (unless --skip-delivery-gate)
-			if to == "done" && !skipDeliveryGate {
-				if err := runDeliveryGateCheck(cmd, appCtx, issueID); err != nil {
-					return err
-				}
-			}
-
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
@@ -111,6 +104,16 @@ This enforces branch + PR discipline.`,
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status
 				currentEntry = &entry
+			}
+
+			// Run delivery gate check when transitioning to done (unless --skip-delivery-gate)
+			if to == "done" && !skipDeliveryGate {
+				if currentEntry == nil {
+					return fmt.Errorf("issue %s not found in materialized index (required for delivery gate check). Use --skip-delivery-gate to bypass", issueID)
+				}
+				if err := runDeliveryGateCheck(appCtx, issueID, currentEntry.Scope); err != nil {
+					return err
+				}
 			}
 
 			hookInput := adapters.HookInput{
@@ -255,33 +258,23 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
 // It fails closed: if the worktree cannot be determined or the gate checks fail,
 // it returns an error with per-check remediations.
-func runDeliveryGateCheck(cmd *cobra.Command, appCtx *config.Context, issueID string) error {
-	// Read the issue to get its scope
-	store := newSnapshotStore(appCtx)
-	issue, err := store.ReadIssue(issueID)
-	if err != nil {
-		return fmt.Errorf("failed to read issue for delivery gate check: %w", err)
-	}
-	if issue == nil {
-		return fmt.Errorf("issue %s not found (required for delivery gate check)", issueID)
-	}
-
+func runDeliveryGateCheck(appCtx *config.Context, issueID string, scope []string) error {
 	// Get the repo path (worktree path)
 	worktreePath := appCtx.RepoPath
 	if worktreePath == "" {
 		return fmt.Errorf("no repo path available: cannot run delivery gate check. Use --skip-delivery-gate to bypass")
 	}
 
-	// Get the base commit: use merge-base with origin/main
+	// Get the base commit: use merge-base against whichever default branch exists.
 	git := adapters.New(worktreePath)
-	baseCommit, err := getMergeBase(git, "HEAD", "origin/main")
+	baseCommit, err := getBaseCommit(git)
 	if err != nil {
-		// If merge-base fails (e.g., origin/main doesn't exist), fail closed
+		// If no candidate base branch resolves, fail closed
 		return fmt.Errorf("failed to determine base commit for delivery gate check: %w. Use --skip-delivery-gate to bypass", err)
 	}
 
 	// Run the delivery gate check
-	result := deliverygate.DeliveryGate(worktreePath, issueID, baseCommit, issue.Scope)
+	result := deliverygate.DeliveryGate(worktreePath, issueID, baseCommit, scope)
 
 	// Collect failed checks with their remediations
 	failedChecks := []string{}
@@ -302,22 +295,44 @@ func runDeliveryGateCheck(cmd *cobra.Command, appCtx *config.Context, issueID st
 			errMsg += fmt.Sprintf("  %d. %s\n", i+1, check)
 		}
 		errMsg += "\nUse --skip-delivery-gate to override (audit trail will record the override)"
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	return nil
+}
+
+// candidateBaseRefs are tried in order to find the branch a task diverged
+// from. Local branches are preferred over remote-tracking ones since a
+// worktree created for a task may have no configured remote at all.
+var candidateBaseRefs = []string{"main", "master", "origin/main", "origin/master"}
+
+// getBaseCommit finds the merge-base between HEAD and the first candidate
+// base ref that resolves in this repo.
+func getBaseCommit(git *adapters.Client) (string, error) {
+	var lastErr error
+	for _, ref := range candidateBaseRefs {
+		if _, err := git.ResolveRevision(ref); err != nil {
+			lastErr = err
+			continue
+		}
+		base, err := getMergeBase(git, "HEAD", ref)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return base, nil
+	}
+	return "", fmt.Errorf("no candidate base branch (%v) resolves: %w", candidateBaseRefs, lastErr)
 }
 
 // getMergeBase returns the SHA of the merge-base between two revisions.
 // It's a helper to get the base commit for the delivery gate check.
 func getMergeBase(git *adapters.Client, rev1, rev2 string) (string, error) {
 	// First try to resolve both revisions to SHAs to ensure they exist
-	sha1, err := git.ResolveRevision(rev1)
-	if err != nil {
+	if _, err := git.ResolveRevision(rev1); err != nil {
 		return "", fmt.Errorf("failed to resolve %s: %w", rev1, err)
 	}
-	sha2, err := git.ResolveRevision(rev2)
-	if err != nil {
+	if _, err := git.ResolveRevision(rev2); err != nil {
 		return "", fmt.Errorf("failed to resolve %s: %w", rev2, err)
 	}
 
