@@ -33,9 +33,9 @@ func TestPayloadStructHasSkipField_REQ_LNGHZN_S4_T2(t *testing.T) {
 	}
 }
 
-// TestDeliveryGateBlocksUncleanTree_REQ_LNGHZN_S4_T2 verifies that transition
+// TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2 verifies that transition
 // to done is blocked when the worktree has uncommitted changes.
-func TestDeliveryGateBlocksUncleanTree_REQ_LNGHZN_S4_T2(t *testing.T) {
+func TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -90,10 +90,10 @@ func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T)
 	assert.Contains(t, err.Error(), "delivery gate")
 }
 
-// TestSkipDeliveryGateFlag_REQ_LNGHZN_S4_T2 verifies that --skip-delivery-gate
+// TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2 verifies that --skip-delivery-gate
 // allows transition to done even when gate checks would otherwise fail, and
 // records the override in the transition op's payload.
-func TestSkipDeliveryGateFlag_REQ_LNGHZN_S4_T2(t *testing.T) {
+func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -139,11 +139,11 @@ func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestDeliveryGateFailsClosedWhenIssueNotMaterialized_REQ_LNGHZN_S4_T2 verifies
+// TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2 verifies
 // that the delivery gate fails closed (refuses the transition, does not skip
 // silently) when the target issue cannot be found in the materialized index —
 // e.g. because no bound context could be resolved for it.
-func TestDeliveryGateFailsClosedWhenIssueNotMaterialized_REQ_LNGHZN_S4_T2(t *testing.T) {
+func TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
