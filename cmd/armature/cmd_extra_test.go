@@ -1114,7 +1114,7 @@ func TestListCmd_StatusFilter(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done", "--outcome", "completed", "--force")
+	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "completed", "--force")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1571,7 +1571,7 @@ func TestListTerminal(t *testing.T) {
 	// Transition task-done to done; on a repo with git history this becomes merged.
 	_, err = runTrls(t, repo, "claim", "task-done", "--worktree", filepath.Join(t.TempDir(), "claim-task-done-wt"))
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "task-done", "--to", "done", "--outcome", "completed", "--force")
+	_, err = runTrls(t, repo, "transition", "task-done", "--to", "done", "--skip-delivery-gate", "--outcome", "completed", "--force")
 	require.NoError(t, err)
 
 	// --terminal must include cancelled and done/merged issues.
@@ -1806,7 +1806,7 @@ func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--force")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 }

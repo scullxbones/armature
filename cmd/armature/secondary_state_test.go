@@ -36,7 +36,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	require.Contains(t, out, "Test Issue")
 
 	// merged (requires done status first)
-	_, err = runTrls(t, repo, "transition", "--issue", "TASK-1", "--to", "done", "--force")
+	_, err = runTrls(t, repo, "transition", "--issue", "TASK-1", "--to", "done", "--force", "--skip-delivery-gate")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)

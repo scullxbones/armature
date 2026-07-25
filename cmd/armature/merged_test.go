@@ -27,7 +27,7 @@ func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition task-01 to done.
-	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force")
 	require.NoError(t, err)
 
 	// Materialize again to update index.json (done→merged in single-branch mode).
@@ -69,7 +69,7 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -112,7 +112,7 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 	// Transition bug to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "bug-01", "--to", "done", "--outcome", "Fixed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "bug-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Fixed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -147,7 +147,7 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 	// Transition story to done before calling merged
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Delivered", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json and issues/story-01.json exist before calling merged.
@@ -189,7 +189,7 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 	// Transition story to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--outcome", "Delivered", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Delivered", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -233,7 +233,7 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 	// Transition feature to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--outcome", "Shipped", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Shipped", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -266,7 +266,7 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 	// Transition feature to done before calling merged
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--outcome", "Shipped", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Shipped", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json and issues/feature-01.json exist before calling merged.
@@ -310,7 +310,7 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -350,7 +350,7 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -386,7 +386,7 @@ func TestMergedHandlesMissingWorktree(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition.
@@ -436,7 +436,7 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition.
@@ -532,7 +532,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 
 		transitionCmd := newRootCmd()
 		transitionCmd.SetOut(new(bytes.Buffer))
-		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 		require.NoError(t, transitionCmd.Execute())
 
 		// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -577,7 +577,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 
 		transitionCmd := newRootCmd()
 		transitionCmd.SetOut(new(bytes.Buffer))
-		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+		transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 		require.NoError(t, transitionCmd.Execute())
 
 		// Materialize so index.json reflects status=done (dual-branch: done is NOT auto-advanced to merged).
@@ -658,7 +658,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	// Transition to done (stays as done in dual-branch mode, not auto-advanced to merged)
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize to finalize the transition
@@ -735,7 +735,7 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json and issues/task-01.json exist before calling merged.
@@ -792,7 +792,7 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -861,7 +861,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	_, err = runTrls(t, repo, "materialize")
@@ -922,7 +922,7 @@ func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -979,7 +979,7 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -1031,7 +1031,7 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	// Transition task to done
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	// Materialize so index.json reflects the done→merged transition before calling merged.
@@ -1094,7 +1094,7 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 	// Transition to done and materialize, then verify the merged gate fires.
 	transitionCmd := newRootCmd()
 	transitionCmd.SetOut(new(bytes.Buffer))
-	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force"})
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--outcome", "Completed", "--force", "--skip-delivery-gate"})
 	require.NoError(t, transitionCmd.Execute())
 
 	_, err = runTrls(t, repo, "materialize")
