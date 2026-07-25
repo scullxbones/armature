@@ -86,11 +86,11 @@ type Payload struct {
 	Source string `json:"source,omitempty"`
 
 	// transition
-	To      string `json:"to,omitempty"`
-	Outcome string `json:"outcome,omitempty"`
-	Branch  string `json:"branch,omitempty"`
-	PR                    string `json:"pr,omitempty"`
-	SkippedDeliveryGate   bool   `json:"skipped_delivery_gate,omitempty"`
+	To                  string `json:"to,omitempty"`
+	Outcome             string `json:"outcome,omitempty"`
+	Branch              string `json:"branch,omitempty"`
+	PR                  string `json:"pr,omitempty"`
+	SkippedDeliveryGate bool   `json:"skipped_delivery_gate,omitempty"`
 
 	// note
 	Msg    string `json:"msg,omitempty"`

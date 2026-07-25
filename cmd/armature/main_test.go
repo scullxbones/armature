@@ -2100,7 +2100,8 @@ func TestTransitionCommand_HumanOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed", "--format", "human", "--force")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
+		"--force", "--outcome", "completed", "--format", "human")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, `"status"`, "default format should not be JSON")
@@ -2112,7 +2113,8 @@ func TestTransitionCommand_JSONOutput(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed", "--format", "json", "--force")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
+		"--force", "--outcome", "completed", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"status"`)
 	assert.Contains(t, out, "task-01")
@@ -3371,7 +3373,8 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition to done and extract just the status field
-	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "completed", "--field", "status")
+	out, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
+		"--force", "--outcome", "completed", "--field", "status")
 	require.NoError(t, err)
 
 	// Output should be just "done" (the status value), nothing else
@@ -3501,7 +3504,8 @@ func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/uncited-force-test")
 
 	// Transition with --force should suppress the uncited warning
-	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-force-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "done")
+	_, stderr, err := runTrlsWithStderr(t, repo, "transition", "--issue", "uncited-force-01", "--to", "done",
+		"--skip-delivery-gate", "--force", "--outcome", "done")
 	require.NoError(t, err)
 	assert.NotContains(t, stderr, "WARNING", "no WARNING should appear when --force is used")
 	assert.NotContains(t, stderr, "source citation", "no citation warning when --force is used")

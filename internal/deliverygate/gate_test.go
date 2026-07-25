@@ -1,6 +1,7 @@
 package deliverygate
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -196,7 +197,7 @@ func initGitRepo(t *testing.T, dir string) {
 
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
 		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com")
 	output, err := cmd.CombinedOutput()
@@ -205,7 +206,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 
 func getHeadSHA(t *testing.T, dir string) string {
 	t.Helper()
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	require.NoError(t, err, "git rev-parse HEAD failed")
 	return string(output[:len(output)-1]) // trim newline

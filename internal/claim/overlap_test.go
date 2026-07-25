@@ -161,11 +161,11 @@ func TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		files     []string
-		scope     []string
-		wantIsIn  bool
-		wantFile  string // first file that's out of scope (empty if all in)
+		name     string
+		files    []string
+		scope    []string
+		wantIsIn bool
+		wantFile string // first file that's out of scope (empty if all in)
 	}{
 		{
 			name:     "all files in single glob pattern",
