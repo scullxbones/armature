@@ -7,6 +7,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -15,7 +16,7 @@ import (
 
 func newTransitionCmd() *cobra.Command {
 	var issueID, to, outcome, branch, pr, fieldFlag string
-	var force bool
+	var force, skipDeliveryGate bool
 
 	cmd := &cobra.Command{
 		Use:   "transition [issue-id]",
@@ -82,6 +83,14 @@ This enforces branch + PR discipline.`,
 						issueID, issueID, issueID)
 				}
 			}
+
+			// Run delivery gate check when transitioning to done (unless --skip-delivery-gate)
+			if to == "done" && !skipDeliveryGate {
+				if err := runDeliveryGateCheck(cmd, appCtx, issueID); err != nil {
+					return err
+				}
+			}
+
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
@@ -117,7 +126,13 @@ This enforces branch + PR discipline.`,
 			op := ops.Op{
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID,
-				Payload:  ops.Payload{To: to, Outcome: outcome, Branch: branch, PR: pr},
+				Payload: ops.Payload{
+					To:                  to,
+					Outcome:             outcome,
+					Branch:              branch,
+					PR:                  pr,
+					SkippedDeliveryGate: skipDeliveryGate,
+				},
 			}
 			if err := appendHighStakesOp(state, logPath, op); err != nil {
 				return err
@@ -165,6 +180,7 @@ This enforces branch + PR discipline.`,
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number")
 	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status)")
 	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
+	cmd.Flags().BoolVar(&skipDeliveryGate, "skip-delivery-gate", false, "skip delivery gate check when transitioning to done")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
 }
@@ -234,4 +250,96 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 	}
 
 	return nil
+}
+
+// runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
+// It fails closed: if the worktree cannot be determined or the gate checks fail,
+// it returns an error with per-check remediations.
+func runDeliveryGateCheck(cmd *cobra.Command, appCtx *config.Context, issueID string) error {
+	// Read the issue to get its scope
+	store := newSnapshotStore(appCtx)
+	issue, err := store.ReadIssue(issueID)
+	if err != nil {
+		return fmt.Errorf("failed to read issue for delivery gate check: %w", err)
+	}
+	if issue == nil {
+		return fmt.Errorf("issue %s not found (required for delivery gate check)", issueID)
+	}
+
+	// Get the repo path (worktree path)
+	worktreePath := appCtx.RepoPath
+	if worktreePath == "" {
+		return fmt.Errorf("no repo path available: cannot run delivery gate check. Use --skip-delivery-gate to bypass")
+	}
+
+	// Get the base commit: use merge-base with origin/main
+	git := adapters.New(worktreePath)
+	baseCommit, err := getMergeBase(git, "HEAD", "origin/main")
+	if err != nil {
+		// If merge-base fails (e.g., origin/main doesn't exist), fail closed
+		return fmt.Errorf("failed to determine base commit for delivery gate check: %w. Use --skip-delivery-gate to bypass", err)
+	}
+
+	// Run the delivery gate check
+	result := deliverygate.DeliveryGate(worktreePath, issueID, baseCommit, issue.Scope)
+
+	// Collect failed checks with their remediations
+	failedChecks := []string{}
+	if !result.CleanTree.Pass {
+		failedChecks = append(failedChecks, "CleanTree: "+result.CleanTree.Remediation)
+	}
+	if !result.ScopeContainment.Pass {
+		failedChecks = append(failedChecks, "ScopeContainment: "+result.ScopeContainment.Remediation)
+	}
+	if !result.CommitReference.Pass {
+		failedChecks = append(failedChecks, "CommitReference: "+result.CommitReference.Remediation)
+	}
+
+	// If any check failed, return an error
+	if len(failedChecks) > 0 {
+		errMsg := "delivery gate check failed:\n"
+		for i, check := range failedChecks {
+			errMsg += fmt.Sprintf("  %d. %s\n", i+1, check)
+		}
+		errMsg += "\nUse --skip-delivery-gate to override (audit trail will record the override)"
+		return fmt.Errorf(errMsg)
+	}
+
+	return nil
+}
+
+// getMergeBase returns the SHA of the merge-base between two revisions.
+// It's a helper to get the base commit for the delivery gate check.
+func getMergeBase(git *adapters.Client, rev1, rev2 string) (string, error) {
+	// First try to resolve both revisions to SHAs to ensure they exist
+	sha1, err := git.ResolveRevision(rev1)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve %s: %w", rev1, err)
+	}
+	sha2, err := git.ResolveRevision(rev2)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve %s: %w", rev2, err)
+	}
+
+	// Use the DiffNameOnlyRange method which uses three-dot notation (merge-base)
+	// to get the files changed in the merge-base commit. We'll extract the base
+	// by using git merge-base directly with resolved SHAs.
+	// Since we can't call merge-base directly on the Client, we'll use the
+	// rev-list approach: get the log starting from rev1, and stop at rev2's parent
+	allCommits, err := git.LogBranch(rev1, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to get commit log: %w", err)
+	}
+
+	// Find the first commit that is an ancestor of rev2
+	// This is a simplified approach: iterate through commits from HEAD
+	// and check if they're ancestors of rev2
+	for _, entry := range allCommits {
+		isAncestor, err := git.IsCommitOnBranch(entry.SHA, rev2)
+		if err == nil && isAncestor {
+			return entry.SHA, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find merge-base between %s and %s", rev1, rev2)
 }
