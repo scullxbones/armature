@@ -52,12 +52,19 @@ func CleanTreeCheck(worktreePath string) CheckResult {
 		}
 	}
 
-	// If there are any dirty entries, the tree is not clean
-	if len(entries) > 0 {
-		paths := make([]string, 0, len(entries))
-		for _, entry := range entries {
-			paths = append(paths, entry.Path)
+	// arm's own materialized state under .armature/ is expected to be
+	// gitignored in any repo using armature; treat it as noise here rather
+	// than depending on every caller's .gitignore being correctly set up.
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Path == ".armature/" || strings.HasPrefix(entry.Path, ".armature/") {
+			continue
 		}
+		paths = append(paths, entry.Path)
+	}
+
+	// If there are any dirty entries, the tree is not clean
+	if len(paths) > 0 {
 		return CheckResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
