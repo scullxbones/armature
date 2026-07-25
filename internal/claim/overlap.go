@@ -83,3 +83,53 @@ func extractDir(pattern string) string {
 func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
+
+// IsWithinScope checks if all files in the provided list are within the
+// declared scope globs. It returns (true, "") if all files are in scope,
+// or (false, "filename") if a file is outside scope.
+// An empty files list is considered within any scope.
+func IsWithinScope(files, scope []string) (bool, string) {
+	if len(files) == 0 {
+		return true, ""
+	}
+
+	for _, file := range files {
+		inScope := false
+		for _, glob := range scope {
+			// Try matching the file against this scope glob
+			if matched, _ := filepath.Match(glob, file); matched { //nolint:errcheck // ErrBadPattern unreachable for valid scope paths
+				inScope = true
+				break
+			}
+
+			// Also check if the glob matches the file's directory structure
+			// This handles cases like "internal/claim/**" matching "internal/claim/sub/file.go"
+			if globCoversFile(glob, file) {
+				inScope = true
+				break
+			}
+		}
+
+		if !inScope {
+			return false, file
+		}
+	}
+
+	return true, ""
+}
+
+// globCoversFile checks if a glob pattern covers a file path by examining
+// directory hierarchy. This handles patterns like "dir/**" that should match
+// files in subdirectories.
+func globCoversFile(glob, file string) bool {
+	// If the glob contains /**, it's a directory pattern that covers all subdirectories
+	if !strings.Contains(glob, "/**") {
+		return false
+	}
+
+	// Extract the directory part (before /**)
+	dirPart := strings.TrimSuffix(glob, "/**")
+
+	// Check if the file is in this directory or a subdirectory
+	return file == dirPart || strings.HasPrefix(file, dirPart+"/")
+}

@@ -154,3 +154,83 @@ func TestGlobOverlaps_ParityWithValidatePackage_PR79(t *testing.T) {
 		})
 	}
 }
+
+// TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1 verifies that IsWithinScope
+// correctly identifies files that are within the declared scope globs.
+func TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		files     []string
+		scope     []string
+		wantIsIn  bool
+		wantFile  string // first file that's out of scope (empty if all in)
+	}{
+		{
+			name:     "all files in single glob pattern",
+			files:    []string{"internal/claim/overlap.go", "internal/claim/overlap_test.go"},
+			scope:    []string{"internal/claim/**"},
+			wantIsIn: true,
+		},
+		{
+			name:     "all files in multiple glob patterns",
+			files:    []string{"internal/claim/overlap.go", "cmd/armature/main.go"},
+			scope:    []string{"internal/claim/**", "cmd/armature/**"},
+			wantIsIn: true,
+		},
+		{
+			name:     "single file in single exact pattern",
+			files:    []string{"internal/claim/overlap.go"},
+			scope:    []string{"internal/claim/overlap.go"},
+			wantIsIn: true,
+		},
+		{
+			name:     "file outside scope",
+			files:    []string{"internal/validate/validate.go"},
+			scope:    []string{"internal/claim/**"},
+			wantIsIn: false,
+			wantFile: "internal/validate/validate.go",
+		},
+		{
+			name:     "mixed files with one outside scope",
+			files:    []string{"internal/claim/overlap.go", "internal/validate/validate.go"},
+			scope:    []string{"internal/claim/**"},
+			wantIsIn: false,
+			wantFile: "internal/validate/validate.go",
+		},
+		{
+			name:     "empty files list within any scope",
+			files:    []string{},
+			scope:    []string{"internal/claim/**"},
+			wantIsIn: true,
+		},
+		{
+			name:     "directory glob patterns",
+			files:    []string{"internal/claim/a.go", "internal/claim/sub/b.go"},
+			scope:    []string{"internal/claim/**"},
+			wantIsIn: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			isIn, outFile := IsWithinScope(tt.files, tt.scope)
+			assert.Equal(t, tt.wantIsIn, isIn, "IsWithinScope(%v, %v) isIn", tt.files, tt.scope)
+			if !tt.wantIsIn && tt.wantFile != "" {
+				assert.Equal(t, tt.wantFile, outFile, "IsWithinScope(%v, %v) out of scope file", tt.files, tt.scope)
+			}
+		})
+	}
+}
+
+// TestIsWithinScope_CaseSensitivity_REQ_LNGHZN_S4_T1 verifies that IsWithinScope
+// respects case-sensitive matching (like glob.Match on Unix).
+func TestIsWithinScope_CaseSensitivity_REQ_LNGHZN_S4_T1(t *testing.T) {
+	t.Parallel()
+
+	// Case-sensitive matching: "internal/Claim" should not match "internal/claim/**"
+	isIn, _ := IsWithinScope([]string{"internal/Claim/overlap.go"}, []string{"internal/claim/**"})
+	assert.False(t, isIn, "case mismatch should not match on Unix")
+}
