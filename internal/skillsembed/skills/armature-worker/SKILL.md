@@ -141,6 +141,35 @@ unmarshal that documented string format.
 See `examples/json-roundtrip-test.go` in this skill directory for a worked example to adapt
 to your specific types and fields.
 
+### 5c. The Delivery Gate
+
+When you transition to `done`, Armature runs a **delivery gate** — a set of three checks that verify your work meets minimal quality and scope standards before marking the task complete.
+
+**The Three Checks:**
+
+1. **Clean Tree:** `git status --porcelain` must be empty. All work must be staged and committed; the worktree must be clean. (`.armature/` state is automatically excluded from this check — it is not considered outstanding work.)
+2. **Scope Containment:** The diff between your base commit (resolved via `git merge-base` against `main`, `master`, `origin/main`, or `origin/master`, whichever exists locally) and `HEAD` must be a subset of the issue's declared scope (verified via `internal/claim.IsWithinScope`). This prevents scope creep: you cannot deliver changes outside the issue's boundaries.
+3. **Commit Reference:** At least one commit since the base commit must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. This ensures your work is traceable and tied to the issue ID.
+
+**On Failure:**
+
+If any check fails, the transition is refused. The error message lists each failed check with a remediation step:
+
+- **Clean Tree failure:** Commit or discard outstanding changes.
+- **Scope Containment failure:** Narrow the diff to the declared scope or broaden the scope if the changes are justified.
+- **Commit Reference failure:** Add at least one properly-formatted commit (e.g., `feat(LNGHZN-S4-T3): document delivery gate`).
+
+**Skipping the Gate:**
+
+The `--skip-delivery-gate` flag bypasses all three checks. Use this **only when the gate assumption does not hold** — for example, in a docs-only or demo-transcript task where you are not doing real delivery work, or when an external constraint makes gate compliance impossible.
+
+```bash
+arm transition LNGHZN-S4-T3 --to done --skip-delivery-gate \
+  --outcome "Skipped gate: demo-transcript task does not execute real delivery"
+```
+
+When you skip the gate, the override is recorded in the transition op's `Payload.SkippedDeliveryGate` field as an audit trail. **However, prefer fixing the underlying issue over reaching for the override** — if you have uncommitted changes, commit them; if scope has drifted, narrow it; if commits are missing conventional-format messages, add them.
+
 ### 6. Complete and Commit
 
 ```
