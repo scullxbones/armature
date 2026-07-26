@@ -70,7 +70,7 @@ if [ "$cmd" = "commit" ] && [ "$target" = "$repo" ]; then
 fi
 exec "$real_git" "$@"
 `
-	require.NoError(t, os.WriteFile(wrapperPath, []byte(fmt.Sprintf(script, realGit, repo)), 0o755))
+	require.NoError(t, os.WriteFile(wrapperPath, fmt.Appendf(nil, script, realGit, repo), 0o755))
 	return wrapperDir
 }
 
@@ -877,6 +877,80 @@ func TestDiffNameOnly_InvalidSHA(t *testing.T) {
 
 	_, err := c.DiffNameOnly("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 	assert.Error(t, err)
+}
+
+func TestDiffNameStatus_DetectsRenameWithBothPaths(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	content := strings.Repeat("line of content\n", 20)
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "outside"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "outside", "a.go"), []byte(content), 0644))
+	gitRun("add", "outside/a.go")
+	gitRun("commit", "-m", "add outside file")
+
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "inside"), 0755))
+	gitRun("mv", "outside/a.go", "inside/a.go")
+	gitRun("commit", "-m", "rename outside to inside")
+
+	entries, err := c.DiffNameStatus(baseSHA)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.True(t, strings.HasPrefix(entries[0].Status, "R"), "expected rename status, got %q", entries[0].Status)
+	assert.Equal(t, "outside/a.go", entries[0].OldPath)
+	assert.Equal(t, "inside/a.go", entries[0].Path)
+}
+
+func TestDiffNameStatus_NonRenameChangesHaveNoOldPath(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("a\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "beta.txt"), []byte("b\n"), 0644))
+	gitRun("add", "alpha.txt", "beta.txt")
+	gitRun("commit", "-m", "add files")
+
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("changed\n"), 0644))
+	gitRun("add", "alpha.txt")
+	gitRun("rm", "beta.txt")
+	gitRun("commit", "-m", "modify alpha, delete beta")
+
+	entries, err := c.DiffNameStatus(baseSHA)
+	require.NoError(t, err)
+	byPath := map[string]adapters.DiffStatusEntry{}
+	for _, e := range entries {
+		byPath[e.Path] = e
+	}
+	require.Contains(t, byPath, "alpha.txt")
+	require.Contains(t, byPath, "beta.txt")
+	assert.Empty(t, byPath["alpha.txt"].OldPath)
+	assert.Empty(t, byPath["beta.txt"].OldPath)
+	assert.Equal(t, "M", byPath["alpha.txt"].Status)
+	assert.Equal(t, "D", byPath["beta.txt"].Status)
 }
 
 func TestResetHard(t *testing.T) {

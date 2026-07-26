@@ -435,6 +435,44 @@ func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testin
 	assert.NoError(t, err)
 }
 
+// TestDeliveryGateBlocksWrongBranchCheckout_PR88 verifies that the delivery
+// gate fails closed when the claimed worktree's HEAD is on some branch other
+// than the expected task/<issueID> branch. The armature-issue-id marker file
+// checked by verifyIssueWorktreeBinding persists in .git regardless of which
+// branch is checked out, so a worker could check out an unrelated scratch
+// branch after claiming, commit clean, correctly-scoped, correctly-referenced
+// changes there, and (absent this check) pass the gate even though the actual
+// task branch the coordinator integrates never received the commit.
+func TestDeliveryGateBlocksWrongBranchCheckout_PR88(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-11", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-11-wt")
+	_, err = runTrls(t, repo, "claim", "gate-11", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Check out an unrelated scratch branch in the worktree, then commit
+	// clean, in-scope, correctly-referenced changes there instead of on
+	// task/gate-11.
+	run(t, wt, "git", "checkout", "-b", "scratch-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, wt, "git", "add", "foo.go")
+	run(t, wt, "git", "commit", "-m", "feat(gate-11): add foo")
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-11", "--to", "done", "--outcome", "test", "--force")
+	assert.Error(t, err, "transition must fail when HEAD is not on the expected task branch")
+	assert.Contains(t, err.Error(), "scratch-branch")
+	assert.Contains(t, err.Error(), "task/gate-11")
+	assert.Contains(t, err.Error(), "--skip-delivery-gate")
+}
+
 // TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2 verifies that
 // the delivery gate check evaluates the worktree state produced AFTER
 // pre-transition hooks run, not the state before them. A configured

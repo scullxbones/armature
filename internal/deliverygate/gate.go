@@ -88,13 +88,26 @@ func CleanTreeCheck(worktreePath string) CheckResult {
 func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
-	// Get the list of files changed since base commit
-	files, err := git.DiffNameOnly(baseCommit)
+	// Get the list of file changes since base commit, with rename detection
+	// enabled so both the source and destination paths of any rename are
+	// checked against scope. `git diff --name-only` alone would report only
+	// the destination path of a rename, masking an out-of-scope original
+	// location (e.g. a rename that moves a file from outside scope into
+	// scope, silently deleting the out-of-scope original).
+	entries, err := git.DiffNameStatus(baseCommit)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to get diff: %v", err),
 		}
+	}
+
+	files := make([]string, 0, len(entries)*2)
+	for _, entry := range entries {
+		if entry.OldPath != "" {
+			files = append(files, entry.OldPath)
+		}
+		files = append(files, entry.Path)
 	}
 
 	// Use IsWithinScope to check if all files are within scope

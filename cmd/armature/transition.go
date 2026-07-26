@@ -154,7 +154,7 @@ This enforces branch + PR discipline.`,
 					if gateRepoPath == "" {
 						gateRepoPath = "."
 					}
-					if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Scope); err != nil {
+					if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Type, currentEntry.Scope); err != nil {
 						return err
 					}
 				}
@@ -292,7 +292,7 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
 // It fails closed: if the worktree cannot be determined or the gate checks fail,
 // it returns an error with per-check remediations.
-func runDeliveryGateCheck(worktreePath string, issueID string, scope []string) error {
+func runDeliveryGateCheck(worktreePath string, issueID string, issueType string, scope []string) error {
 	if worktreePath == "" {
 		return fmt.Errorf("no repo path available: cannot run delivery gate check. Use --skip-delivery-gate to bypass")
 	}
@@ -306,6 +306,18 @@ func runDeliveryGateCheck(worktreePath string, issueID string, scope []string) e
 	// binding doesn't match and when no binding marker exists at all —
 	// never silently allow an unbound path through.
 	if err := verifyIssueWorktreeBinding(worktreePath, issueID); err != nil {
+		return err
+	}
+
+	// Verify the worktree's actual current branch (HEAD) is the expected
+	// task branch for this issue, not merely that the armature-issue-id
+	// marker file matches. The marker file persists in .git across a `git
+	// checkout` of an unrelated scratch branch, so without this check a
+	// worker could claim, then check out some other branch, commit clean
+	// correctly-scoped changes there, and pass the gate even though the
+	// actual task/<issueID> branch the coordinator will integrate never
+	// received the commit.
+	if err := verifyIssueBranchBinding(worktreePath, issueID, issueType); err != nil {
 		return err
 	}
 
@@ -385,6 +397,37 @@ func verifyIssueWorktreeBinding(worktreePath, issueID string) error {
 		return fmt.Errorf("%s is bound to issue %s, not %s: refusing to run delivery gate check\n"+
 			"against the wrong worktree. Use --skip-delivery-gate to bypass",
 			worktreePath, binding, issueID)
+	}
+	return nil
+}
+
+// verifyIssueBranchBinding fails closed unless worktreePath's current git
+// branch (HEAD) is the expected task branch for issueID, derived the same
+// way claim.go's createWorktreeAndBranch does (see deriveBranchName). The
+// armature-issue-id marker file checked by verifyIssueWorktreeBinding only
+// proves the worktree was once claimed for this issue — it does not prove
+// HEAD is still on the branch the coordinator will actually integrate. A
+// worker could check out an unrelated scratch branch after claiming and
+// still pass that check, silently stranding otherwise-valid commits off the
+// task branch. issueType empty or unmapped (deriveBranchName returns "")
+// skips this check, matching the caller's existing task/bug/feature gating.
+func verifyIssueBranchBinding(worktreePath, issueID, issueType string) error {
+	expectedBranch := deriveBranchName(issueType, issueID)
+	if expectedBranch == "" {
+		return nil
+	}
+
+	git := adapters.New(worktreePath)
+	currentBranch, err := git.CurrentBranch()
+	if err != nil {
+		return fmt.Errorf("determine current branch for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
+	}
+	if currentBranch != expectedBranch {
+		return fmt.Errorf(
+			"%s is on branch %q but the delivery gate expects %q for issue %s:\n"+
+				"the coordinator integrates %[3]s, so commits on any other branch will not be picked up.\n"+
+				"Check out %[3]s or use --skip-delivery-gate to override",
+			worktreePath, currentBranch, expectedBranch, issueID)
 	}
 	return nil
 }

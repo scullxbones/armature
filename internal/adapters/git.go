@@ -607,6 +607,53 @@ func (c *Client) DiffNameOnly(baseSHA string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
+// DiffStatusEntry represents one line of `git diff --name-status` output.
+// Status is the raw git status code (e.g. "A", "M", "D", or "R100" for a
+// rename with a 100% similarity score). For renames, OldPath is the source
+// path and Path is the destination path; for all other statuses OldPath is
+// empty.
+type DiffStatusEntry struct {
+	Status  string
+	Path    string
+	OldPath string
+}
+
+// DiffNameStatus returns the list of file changes between the given base
+// commit and HEAD, with rename detection enabled (-M) so that renamed files
+// report BOTH their source and destination paths. This is important for scope
+// checks: `git diff --name-only` collapses a rename to only its destination
+// path, which can hide that the file's original location was out of scope.
+func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
+	cmd := c.cmd("diff", "--name-status", "-M", baseSHA, "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --name-status -M %s HEAD: %w", baseSHA, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []DiffStatusEntry{}, nil
+	}
+	lines := strings.Split(raw, "\n")
+	entries := make([]DiffStatusEntry, 0, len(lines))
+	for _, line := range lines {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 2 {
+			continue
+		}
+		status := fields[0]
+		if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
+			// Rename/copy lines: <status>\t<old path>\t<new path>
+			if len(fields) < 3 {
+				continue
+			}
+			entries = append(entries, DiffStatusEntry{Status: status, OldPath: fields[1], Path: fields[2]})
+			continue
+		}
+		entries = append(entries, DiffStatusEntry{Status: status, Path: fields[1]})
+	}
+	return entries, nil
+}
+
 // ResetHard resets the working tree and index to the given ref (e.g. a SHA or
 // branch name).
 func (c *Client) ResetHard(ref string) error {
