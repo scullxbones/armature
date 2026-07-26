@@ -2,6 +2,7 @@ package claim
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -36,21 +37,15 @@ func ScopesOverlapEx(scopeA, scopeB []string, graph HierarchyGraph, issueA, issu
 	}
 
 	// Check if issueA is an ancestor of issueB (issueB is a descendant of issueA)
-	descendants := graph.Descendants(issueA)
-	for _, desc := range descendants {
-		if desc == issueB {
-			// issueA is ancestor of issueB — exclude from overlap detection
-			return false
-		}
+	if slices.Contains(graph.Descendants(issueA), issueB) {
+		// issueA is ancestor of issueB — exclude from overlap detection
+		return false
 	}
 
 	// Check if issueB is an ancestor of issueA (issueA is a descendant of issueB)
-	descendants = graph.Descendants(issueB)
-	for _, desc := range descendants {
-		if desc == issueA {
-			// issueB is ancestor of issueA — exclude from overlap detection
-			return false
-		}
+	if slices.Contains(graph.Descendants(issueB), issueA) {
+		// issueB is ancestor of issueA — exclude from overlap detection
+		return false
 	}
 
 	// Neither is an ancestor of the other — check scope overlap normally
@@ -125,7 +120,7 @@ func IsWithinScope(files, scope []string) (bool, string) {
 // entries are stored verbatim including this annotation, so any exact-path
 // matcher must strip it before comparing against real file paths.
 func stripScopeAnnotation(glob string) string {
-	if i := strings.LastIndexByte(glob, '('); i > 0 && strings.HasSuffix(glob, ")") {
+	if i := strings.LastIndex(glob, " ("); i >= 0 && strings.HasSuffix(glob, ")") {
 		return strings.TrimSpace(glob[:i])
 	}
 	return glob
@@ -140,19 +135,60 @@ func stripScopeAnnotation(glob string) string {
 func globCoversFile(glob, file string) bool {
 	// A trailing-slash directory scope (e.g. "internal/") covers everything
 	// under that directory, at any depth.
-	if strings.HasSuffix(glob, "/") {
-		dirPart := strings.TrimSuffix(glob, "/")
+	if dirPart, ok := strings.CutSuffix(glob, "/"); ok {
 		return file == dirPart || strings.HasPrefix(file, dirPart+"/")
 	}
 
-	// If the glob contains /**, it's a directory pattern that covers all subdirectories
-	if !strings.Contains(glob, "/**") {
-		return false
+	// A "**" segment anywhere in the pattern (not just as a trailing "/**"
+	// suffix) matches zero or more path segments, per standard doublestar
+	// semantics. This handles both a trailing "dir/**" (matching everything
+	// under dir) and a mid-pattern "**" like "internal/**/api.go" (matching
+	// internal/api.go, internal/foo/api.go, internal/foo/bar/api.go, etc.) —
+	// consistent with internal/harnesspolicy/scope.go's doublestarMatch.
+	if strings.Contains(glob, "**") {
+		return doublestarMatch(glob, file)
 	}
 
-	// Extract the directory part (before /**)
-	dirPart := strings.TrimSuffix(glob, "/**")
+	return false
+}
 
-	// Check if the file is in this directory or a subdirectory
-	return file == dirPart || strings.HasPrefix(file, dirPart+"/")
+// doublestarMatch reports whether file matches a glob pattern containing
+// "**" segments, matching path-segment-by-segment so that "**" spans zero or
+// more path segments (unlike filepath.Match, which treats "**" as a literal
+// "*" within a single segment and so cannot match across a "/"). Ported from
+// internal/harnesspolicy/scope.go's doublestarMatch/matchSegments: the two
+// packages must not import each other (harnesspolicy sits below claim in the
+// dependency graph), so the segment-aware matching logic is duplicated here
+// rather than shared via an import.
+func doublestarMatch(glob, file string) bool {
+	return matchGlobSegments(strings.Split(glob, "/"), strings.Split(file, "/"))
+}
+
+// matchGlobSegments matches glob path segments against file path segments,
+// expanding a "**" segment to zero or more path segments via backtracking,
+// and matching all other segments with filepath.Match.
+func matchGlobSegments(pattern, segments []string) bool {
+	for len(pattern) > 0 {
+		if pattern[0] == "**" {
+			if len(pattern) == 1 {
+				return true
+			}
+			for i := 0; i <= len(segments); i++ {
+				if matchGlobSegments(pattern[1:], segments[i:]) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(segments) == 0 {
+			return false
+		}
+		matched, err := filepath.Match(pattern[0], segments[0])
+		if err != nil || !matched {
+			return false
+		}
+		pattern = pattern[1:]
+		segments = segments[1:]
+	}
+	return len(segments) == 0
 }

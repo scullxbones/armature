@@ -130,20 +130,33 @@ This enforces branch + PR discipline.`,
 				if currentEntry == nil {
 					return fmt.Errorf("issue %s not found in materialized index (required for delivery gate check). Use --skip-delivery-gate to bypass", issueID)
 				}
-				// Use the literal --repo flag value (the worker's actual
-				// worktree), not appCtx.RepoPath: config resolution collapses
-				// a linked worktree's path to the *main* repo root (see
-				// resolveParentRepoFromWorktree in internal/config/context.go)
-				// so it can locate the shared armature.ops-worktree-path
-				// config — but the delivery gate must run git
-				// status/diff/log against the worker's own worktree, where
-				// the actual dirty files, scoped diff, and commits live.
-				gateRepoPath, _ := cmd.Flags().GetString("repo")
-				if gateRepoPath == "" {
-					gateRepoPath = "."
-				}
-				if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Scope); err != nil {
-					return err
+				// The delivery gate validates a claimed issue's own worktree
+				// binding, scope, and commits, so it applies to every issue
+				// kind that claim actually binds to a worker's own worktree —
+				// task, bug, and feature (see internal/materialize/branch.go's
+				// worktree-branch mapping and cmd/armature/claim.go's
+				// createWorktreeAndBranch). Stories and epics are transitioned
+				// to done from a manually created/checked-out branch outside
+				// the claimed-worktree workflow — stories by the coordinator
+				// after the story-level auditor gate, epics never claimed at
+				// all — so the gate must not run for them at all (not even
+				// require --skip-delivery-gate).
+				if currentEntry.Type == "task" || currentEntry.Type == "bug" || currentEntry.Type == "feature" {
+					// Use the literal --repo flag value (the worker's actual
+					// worktree), not appCtx.RepoPath: config resolution collapses
+					// a linked worktree's path to the *main* repo root (see
+					// resolveParentRepoFromWorktree in internal/config/context.go)
+					// so it can locate the shared armature.ops-worktree-path
+					// config -- but the delivery gate must run git
+					// status/diff/log against the worker's own worktree, where
+					// the actual dirty files, scoped diff, and commits live.
+					gateRepoPath, _ := cmd.Flags().GetString("repo")
+					if gateRepoPath == "" {
+						gateRepoPath = "."
+					}
+					if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Scope); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -335,12 +348,13 @@ func runDeliveryGateCheck(worktreePath string, issueID string, scope []string) e
 
 	// If any check failed, return an error
 	if len(failedChecks) > 0 {
-		errMsg := "delivery gate check failed:\n"
+		var sb strings.Builder
+		sb.WriteString("delivery gate check failed:\n")
 		for i, check := range failedChecks {
-			errMsg += fmt.Sprintf("  %d. %s\n", i+1, check)
+			fmt.Fprintf(&sb, "  %d. %s\n", i+1, check)
 		}
-		errMsg += "\nUse --skip-delivery-gate to override (audit trail will record the override)"
-		return fmt.Errorf("%s", errMsg)
+		sb.WriteString("\nUse --skip-delivery-gate to override (audit trail will record the override)")
+		return fmt.Errorf("%s", sb.String())
 	}
 
 	return nil
