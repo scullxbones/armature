@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/scullxbones/armature/internal/config"
 )
 
 // TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2 verifies that transition
@@ -259,4 +262,53 @@ func TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1(t *testing
 
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-07", "--to", "done", "--outcome", "test", "--force")
 	assert.NoError(t, err, "sibling commit pulled in by rebase onto updated parent tip must not be misattributed as in-scope diff")
+}
+
+// TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2 verifies that
+// the delivery gate check evaluates the worktree state produced AFTER
+// pre-transition hooks run, not the state before them. A configured
+// pre-transition hook here dirties a tracked file in the worktree as a side
+// effect (simulating a formatter or code generator); if the gate ran before
+// hooks (the previous ordering), the clean-tree check would have already
+// passed and this dirty file would slip through undetected. With the gate
+// running after hooks, the transition must fail.
+func TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-08", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-08-wt")
+	_, err = runTrls(t, repo, "claim", "gate-08", "--worktree", wt)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, wt, "git", "add", "foo.go")
+	run(t, wt, "git", "commit", "-m", "feat(gate-08): add foo")
+
+	// Configure a pre-transition hook that dirties the tracked file in the
+	// worktree as a side effect, then reports success. This is written to the
+	// shared .armature/config.json in the main repo (linked worktrees share
+	// this config), so it's picked up when the transition command runs from wt.
+	fooPath := filepath.Join(wt, "foo.go")
+	cfg := config.DefaultConfig("go")
+	cfg.Hooks = []config.HookConfig{
+		{
+			Name: "dirtying-hook",
+			Command: []string{"sh", "-c", fmt.Sprintf(
+				"echo '// dirtied by hook' >> %q && echo '{\"allowed\":true}'",
+				fooPath,
+			)},
+		},
+	}
+	require.NoError(t, config.WriteConfig(filepath.Join(repo, ".armature", "config.json"), cfg))
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-08", "--to", "done", "--outcome", "test", "--force")
+	assert.Error(t, err, "gate must catch the dirty tree left behind by the pre-transition hook")
+	assert.Contains(t, err.Error(), "delivery gate")
 }
