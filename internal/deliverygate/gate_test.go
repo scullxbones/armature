@@ -154,6 +154,34 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1 verifies that
+// a commit type outside the repo's documented convention (feat, fix, refactor,
+// test, docs, style, polish — see docs/conventions.md) does not satisfy the
+// check, even though it matches "some lowercase word" followed by (ISSUE-ID):.
+func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	// Create a base commit
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Add a commit using a bogus, non-conventional type.
+	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "oops(TEST-123): bypass convention")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "commit with disallowed type should fail")
+	assert.NotEmpty(t, result.Remediation)
+}
+
 // TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2 verifies
 // that a conventional-commit reference committed BEFORE baseCommit does not
 // satisfy the check — only commits strictly after base count.

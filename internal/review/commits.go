@@ -28,10 +28,12 @@ func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapt
 	}
 
 	// Filter commits by the conventional-commit pattern
-	// Pattern: ^[a-z]+\(ISSUE-ID\):
-	// This matches any lowercase type (feat, fix, refactor, etc.) followed by
-	// the issue ID in parentheses and a colon.
-	pattern := regexp.MustCompile(`^[a-z]+\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
+	// Pattern: ^(feat|fix|refactor|test|docs|style|polish)\(ISSUE-ID\)!?:
+	// Restricted to the commit types enumerated by docs/conventions.md — an
+	// unrestricted ^[a-z]+ would also match a bogus type like
+	// "oops(ISSUE-ID): ..." (same overly-permissive bug fixed in
+	// internal/deliverygate/gate.go's CommitReferenceCheck).
+	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
 
 	// Initialize as an empty (non-nil) slice so the no-match case marshals to
 	// JSON "[]" rather than "null" for agent consumers.

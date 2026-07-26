@@ -53,7 +53,7 @@ merge: <ISSUE-ID> <description>
 The scope (the `<ISSUE-ID>` in parentheses) is mandatory for all commits except merge commits, which use the alternate format above. The description should be concise and in imperative mood (use "add" not "adds", "fix" not "fixed").
 
 **Per-task commits:**
-Each task must be completed with a single focused commit. Do not leave partial work uncommitted. Immediately after `arm transition ISSUE-ID --to done`, stage the scoped files and commit with the format above.
+Each task must be completed with a single focused commit. Do not leave partial work uncommitted. Stage the scoped files and commit with the format above *before* running `arm transition ISSUE-ID --to done` — the delivery gate's Clean Tree and Commit Reference checks require a clean worktree and an existing conventional commit at transition time, not the other way around.
 
 ## Branch Naming
 
