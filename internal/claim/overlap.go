@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/scopematch"
 )
 
 // HierarchyGraph defines the minimal interface needed for ancestor/descendant checking.
@@ -88,25 +90,13 @@ func IsWithinScope(files, scope []string) (bool, string) {
 		return true, ""
 	}
 
+	strippedScope := make([]string, len(scope))
+	for i, rawGlob := range scope {
+		strippedScope[i] = stripScopeAnnotation(rawGlob)
+	}
+
 	for _, file := range files {
-		inScope := false
-		for _, rawGlob := range scope {
-			glob := stripScopeAnnotation(rawGlob)
-			// Try matching the file against this scope glob
-			if matched, _ := filepath.Match(glob, file); matched { //nolint:errcheck // ErrBadPattern unreachable for valid scope paths
-				inScope = true
-				break
-			}
-
-			// Also check if the glob matches the file's directory structure
-			// This handles cases like "internal/claim/**" matching "internal/claim/sub/file.go"
-			if globCoversFile(glob, file) {
-				inScope = true
-				break
-			}
-		}
-
-		if !inScope {
+		if !scopematch.Allows(strippedScope, file) {
 			return false, file
 		}
 	}
@@ -124,80 +114,4 @@ func stripScopeAnnotation(glob string) string {
 		return strings.TrimSpace(glob[:i])
 	}
 	return glob
-}
-
-// globCoversFile checks if a glob pattern covers a file path by examining
-// directory hierarchy. This handles patterns like "dir/**" that should match
-// files in subdirectories, and a trailing-slash directory scope like "dir/"
-// (no "/**" suffix), which by convention also means "recursively, everything
-// under dir/" — consistent with internal/harnesspolicy/scope.go's cleanScope,
-// which treats any scope entry ending in "/" as a recursive directory scope.
-func globCoversFile(glob, file string) bool {
-	// The canonical repository-root scope "." means "everything in the repo
-	// is in scope" (see internal/harnesspolicy/scope.go's allows, which
-	// special-cases scope == "." the same way). filepath.Match(".", file)
-	// would fail to match any non-"." path, so this must be handled before
-	// falling through to pattern matching.
-	if glob == "." {
-		return true
-	}
-
-	// A trailing-slash directory scope (e.g. "internal/") covers everything
-	// under that directory, at any depth.
-	if dirPart, ok := strings.CutSuffix(glob, "/"); ok {
-		return file == dirPart || strings.HasPrefix(file, dirPart+"/")
-	}
-
-	// A "**" segment anywhere in the pattern (not just as a trailing "/**"
-	// suffix) matches zero or more path segments, per standard doublestar
-	// semantics. This handles both a trailing "dir/**" (matching everything
-	// under dir) and a mid-pattern "**" like "internal/**/api.go" (matching
-	// internal/api.go, internal/foo/api.go, internal/foo/bar/api.go, etc.) —
-	// consistent with internal/harnesspolicy/scope.go's doublestarMatch.
-	if strings.Contains(glob, "**") {
-		return doublestarMatch(glob, file)
-	}
-
-	return false
-}
-
-// doublestarMatch reports whether file matches a glob pattern containing
-// "**" segments, matching path-segment-by-segment so that "**" spans zero or
-// more path segments (unlike filepath.Match, which treats "**" as a literal
-// "*" within a single segment and so cannot match across a "/"). Ported from
-// internal/harnesspolicy/scope.go's doublestarMatch/matchSegments: the two
-// packages must not import each other (harnesspolicy sits below claim in the
-// dependency graph), so the segment-aware matching logic is duplicated here
-// rather than shared via an import.
-func doublestarMatch(glob, file string) bool {
-	return matchGlobSegments(strings.Split(glob, "/"), strings.Split(file, "/"))
-}
-
-// matchGlobSegments matches glob path segments against file path segments,
-// expanding a "**" segment to zero or more path segments via backtracking,
-// and matching all other segments with filepath.Match.
-func matchGlobSegments(pattern, segments []string) bool {
-	for len(pattern) > 0 {
-		if pattern[0] == "**" {
-			if len(pattern) == 1 {
-				return true
-			}
-			for i := 0; i <= len(segments); i++ {
-				if matchGlobSegments(pattern[1:], segments[i:]) {
-					return true
-				}
-			}
-			return false
-		}
-		if len(segments) == 0 {
-			return false
-		}
-		matched, err := filepath.Match(pattern[0], segments[0])
-		if err != nil || !matched {
-			return false
-		}
-		pattern = pattern[1:]
-		segments = segments[1:]
-	}
-	return len(segments) == 0
 }

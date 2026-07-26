@@ -119,14 +119,14 @@ func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestGateSkippedForNonTaskIssueKindOnDone_PR88 verifies that the delivery
+// TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery
 // gate — which validates a claimed task's own worktree binding, scope, and
 // commits — is not invoked at all for non-task issue kinds (e.g. "story")
 // transitioning to done. Stories are transitioned to done from a manually
 // created feat/STORY-ID branch per the coordinator workflow and are never
 // claimed or worktree-bound, so the gate must not apply to them — not even
 // require --skip-delivery-gate.
-func TestGateSkippedForNonTaskIssueKindOnDone_PR88(t *testing.T) {
+func TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -149,12 +149,12 @@ func TestGateSkippedForNonTaskIssueKindOnDone_PR88(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestGateAppliesToBugIssueKindOnDone_PR88 verifies that the delivery gate
+// TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery gate
 // applies to issue kind "bug" the same way it applies to "task": bugs get a
 // worktree+branch created on claim (see internal/materialize/branch.go's
 // "bug" case) and are expected to go through the same scoped/committed
 // worker workflow, so the gate must not be silently skipped for them.
-func TestGateAppliesToBugIssueKindOnDone_PR88(t *testing.T) {
+func TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -177,13 +177,13 @@ func TestGateAppliesToBugIssueKindOnDone_PR88(t *testing.T) {
 	assert.Contains(t, err.Error(), "delivery gate")
 }
 
-// TestGateAppliesToFeatureIssueKindOnDone_PR88 verifies that the delivery
+// TestGateAppliesToFeatureIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery
 // gate applies to issue kind "feature" the same way it applies to "task":
 // features get a worktree+branch created on claim (see
 // internal/materialize/branch.go's "feature" case) and are expected to go
 // through the same scoped/committed worker workflow, so the gate must not be
 // silently skipped for them.
-func TestGateAppliesToFeatureIssueKindOnDone_PR88(t *testing.T) {
+func TestGateAppliesToFeatureIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -435,7 +435,7 @@ func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testin
 	assert.NoError(t, err)
 }
 
-// TestDeliveryGateBlocksWrongBranchCheckout_PR88 verifies that the delivery
+// TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2 verifies that the delivery
 // gate fails closed when the claimed worktree's HEAD is on some branch other
 // than the expected task/<issueID> branch. The armature-issue-id marker file
 // checked by verifyIssueWorktreeBinding persists in .git regardless of which
@@ -443,7 +443,7 @@ func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testin
 // branch after claiming, commit clean, correctly-scoped, correctly-referenced
 // changes there, and (absent this check) pass the gate even though the actual
 // task branch the coordinator integrates never received the commit.
-func TestDeliveryGateBlocksWrongBranchCheckout_PR88(t *testing.T) {
+func TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

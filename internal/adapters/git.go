@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -95,6 +96,22 @@ func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
 		return "", fmt.Errorf("failed to find merge-base of %s and %s: %w", rev1, rev2, err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// RevListCount returns the number of commits reachable from `to` but not
+// from `from` (i.e. `git rev-list --count from..to`). Used to prove
+// non-divergence: a count of 0 means `to` has not moved past `from`.
+func (c *Client) RevListCount(from, to string) (int, error) {
+	cmd := c.cmd("rev-list", "--count", from+".."+to)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("failed to count commits %s..%s: %w", from, to, err)
+	}
+	count, convErr := strconv.Atoi(strings.TrimSpace(string(output)))
+	if convErr != nil {
+		return 0, fmt.Errorf("failed to parse rev-list count output %q: %w", output, convErr)
+	}
+	return count, nil
 }
 
 // IsWorkingTreeDirty checks if the working tree has uncommitted changes to tracked files.

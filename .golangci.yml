@@ -78,6 +78,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/scopematch"
         # traceability uses adapters as its I/O port; all other internal imports are forbidden
         traceability-boundary:
           list-mode: strict
