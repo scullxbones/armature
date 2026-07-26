@@ -109,7 +109,22 @@ This enforces branch + PR discipline.`,
 				currentEntry = &entry
 			}
 
-			// Run delivery gate check when transitioning to done (unless --skip-delivery-gate)
+			hookInput := adapters.HookInput{
+				IssueID:    issueID,
+				FromStatus: currentStatus,
+				ToStatus:   to,
+				WorkerID:   workerID,
+			}
+			if err := hooks.RunPreTransition(&cfg, hookInput); err != nil {
+				return err
+			}
+
+			// Run delivery gate check when transitioning to done (unless
+			// --skip-delivery-gate). This runs AFTER pre-transition hooks so it
+			// validates the actual final state of the worktree: a hook (formatter,
+			// code generator, test run) can modify files or leave artifacts, and
+			// the gate must catch a resulting dirty tree or out-of-scope file
+			// rather than checking a state that hooks are about to change.
 			if to == "done" && !skipDeliveryGate {
 				if currentEntry == nil {
 					return fmt.Errorf("issue %s not found in materialized index (required for delivery gate check). Use --skip-delivery-gate to bypass", issueID)
@@ -129,16 +144,6 @@ This enforces branch + PR discipline.`,
 				if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Scope); err != nil {
 					return err
 				}
-			}
-
-			hookInput := adapters.HookInput{
-				IssueID:    issueID,
-				FromStatus: currentStatus,
-				ToStatus:   to,
-				WorkerID:   workerID,
-			}
-			if err := hooks.RunPreTransition(&cfg, hookInput); err != nil {
-				return err
 			}
 
 			op := ops.Op{
