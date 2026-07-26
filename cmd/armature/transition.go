@@ -363,10 +363,14 @@ func verifyIssueWorktreeBinding(worktreePath, issueID string) error {
 		return fmt.Errorf("read issue binding for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
 	}
 	if binding == "" {
-		return fmt.Errorf("%s is not bound to any issue (no armature-issue-id marker found): cannot verify this is the claimed worktree for %s. Use --skip-delivery-gate to bypass", worktreePath, issueID)
+		return fmt.Errorf("%s is not bound to any issue (no armature-issue-id marker found):\n"+
+			"cannot verify this is the claimed worktree for %s. Use --skip-delivery-gate to bypass",
+			worktreePath, issueID)
 	}
 	if binding != issueID {
-		return fmt.Errorf("%s is bound to issue %s, not %s: refusing to run delivery gate check against the wrong worktree. Use --skip-delivery-gate to bypass", worktreePath, binding, issueID)
+		return fmt.Errorf("%s is bound to issue %s, not %s: refusing to run delivery gate check\n"+
+			"against the wrong worktree. Use --skip-delivery-gate to bypass",
+			worktreePath, binding, issueID)
 	}
 	return nil
 }
@@ -420,7 +424,8 @@ func dynamicBaseCommit(git *adapters.Client) (string, error) {
 	// recordedBaseCommit / getBaseCommit instead of silently producing a
 	// wrong (empty) range.
 	if parentBranch == "HEAD" {
-		return "", fmt.Errorf("recorded parent branch for %s is the literal value \"HEAD\" (stale pre-fix record): treating as no usable parent branch", currentBranch)
+		return "", fmt.Errorf("recorded parent branch for %s is the literal value \"HEAD\"\n"+
+			"(stale pre-fix record): treating as no usable parent branch", currentBranch)
 	}
 	if _, err := git.ResolveRevision(parentBranch); err != nil {
 		return "", fmt.Errorf("recorded parent branch %s does not resolve: %w", parentBranch, err)
