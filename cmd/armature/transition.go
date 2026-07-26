@@ -373,6 +373,17 @@ func dynamicBaseCommit(git *adapters.Client) (string, error) {
 	if err != nil || parentBranch == "" {
 		return "", fmt.Errorf("no recorded parent branch for %s: %w", currentBranch, err)
 	}
+	// A persisted literal "HEAD" is a stale record from before the
+	// detached-HEAD guard existed in claim.go (see writeParentBranchConfigIfAbsent):
+	// resolving the ref "HEAD" here would just mean the task branch's own tip,
+	// collapsing the merge-base to the task's HEAD and making every commit
+	// range for CommitReferenceCheck empty. Treat it the same as an
+	// absent/empty value so old bad records self-heal by falling back to
+	// recordedBaseCommit / getBaseCommit instead of silently producing a
+	// wrong (empty) range.
+	if parentBranch == "HEAD" {
+		return "", fmt.Errorf("recorded parent branch for %s is the literal value \"HEAD\" (stale pre-fix record): treating as no usable parent branch", currentBranch)
+	}
 	if _, err := git.ResolveRevision(parentBranch); err != nil {
 		return "", fmt.Errorf("recorded parent branch %s does not resolve: %w", parentBranch, err)
 	}
