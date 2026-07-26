@@ -249,3 +249,33 @@ func TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.True(t, isIn, "file should match its scope entry once the (new) annotation is stripped")
 	assert.Empty(t, outOfScope)
 }
+
+// TestIsWithinScope_TrailingSlashDirectoryScope_REQ_LNGHZN_S4 verifies that a
+// scope entry ending in "/" (no "/**" suffix), such as "internal/", is
+// treated as a recursive directory scope covering every file underneath it
+// at any depth — consistent with internal/harnesspolicy/scope.go's
+// cleanScope semantics for the same trailing-slash convention.
+func TestIsWithinScope_TrailingSlashDirectoryScope_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	isIn, outOfScope := IsWithinScope(
+		[]string{"internal/foo.go"},
+		[]string{"internal/"},
+	)
+	assert.True(t, isIn, "file directly under a trailing-slash directory scope should be in scope")
+	assert.Empty(t, outOfScope)
+}
+
+// TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZN_S4
+// verifies that a trailing-slash directory scope like "internal/" does not
+// overly broaden matching to sibling directories outside its prefix.
+func TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	isIn, outOfScope := IsWithinScope(
+		[]string{"other/foo.go"},
+		[]string{"internal/"},
+	)
+	assert.False(t, isIn, "file outside the trailing-slash directory scope should not be in scope")
+	assert.Equal(t, "other/foo.go", outOfScope)
+}

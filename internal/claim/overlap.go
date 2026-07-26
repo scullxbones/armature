@@ -133,8 +133,18 @@ func stripScopeAnnotation(glob string) string {
 
 // globCoversFile checks if a glob pattern covers a file path by examining
 // directory hierarchy. This handles patterns like "dir/**" that should match
-// files in subdirectories.
+// files in subdirectories, and a trailing-slash directory scope like "dir/"
+// (no "/**" suffix), which by convention also means "recursively, everything
+// under dir/" — consistent with internal/harnesspolicy/scope.go's cleanScope,
+// which treats any scope entry ending in "/" as a recursive directory scope.
 func globCoversFile(glob, file string) bool {
+	// A trailing-slash directory scope (e.g. "internal/") covers everything
+	// under that directory, at any depth.
+	if strings.HasSuffix(glob, "/") {
+		dirPart := strings.TrimSuffix(glob, "/")
+		return file == dirPart || strings.HasPrefix(file, dirPart+"/")
+	}
+
 	// If the glob contains /**, it's a directory pattern that covers all subdirectories
 	if !strings.Contains(glob, "/**") {
 		return false
