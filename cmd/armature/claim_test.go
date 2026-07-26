@@ -90,6 +90,139 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 	assert.Error(t, err, "no parent branch config should be recorded when the coordinator was in detached HEAD, got: %q", out)
 }
 
+// TestClaimExistingWorktreePersistsBranchPointMetadata_PR88 verifies that the
+// existing-worktree claim path persists the base-commit file using the
+// worktree's OWN honest HEAD (correct: at registration time the worktree has
+// not yet diverged, so its tip IS the true fork point). It deliberately does
+// NOT persist parent-branch config on this path: unlike the new-worktree path
+// (createWorktreeAndBranch), there is no reliable signal for the true parent
+// BRANCH NAME here — gitClient.CurrentBranch() rooted at the worktree would
+// only return the worktree's own branch name (self-referential), and
+// ctx.RepoPath's CurrentBranch() reflects the coordinator's own checkout,
+// which may be on a wholly unrelated branch by claim time. Recording either
+// would be confidently WRONG (not merely missing), which is worse: the
+// delivery gate would merge-base against a bogus parent and silently
+// misattribute commits. Falling back to getBaseCommit's honest default-branch
+// merge-base (no persisted parent-branch config) is the safer choice.
+func TestClaimExistingWorktreePersistsBranchPointMetadata_PR88(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Simulate a story branch already containing sibling-task commits, as the
+	// coordinator workflow would set up.
+	run(t, repo, "git", "checkout", "-b", "story-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
+	run(t, repo, "git", "add", "sibling.go")
+	run(t, repo, "git", "commit", "-m", "feat(sibling-task): unrelated sibling work")
+
+	headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	// Manually create the worktree on the expected task branch BEFORE
+	// claiming, so `arm claim` below takes the existing-worktree path rather
+	// than createWorktreeAndBranch.
+	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	run(t, repo, "git", "branch", "task/task-01", "story-branch")
+	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, cmd.Execute())
+
+	// Parent-branch config must NOT be recorded on this path: there is no
+	// reliable signal for the true parent branch name from the worktree
+	// alone, so persisting one (self-referential or coordinator-unrelated)
+	// would be confidently wrong. Absence lets the gate fall back to an
+	// honest default-branch merge-base instead.
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", "branch.task/task-01.armature-parent")
+	getCmd.Dir = repo
+	_, err := getCmd.Output()
+	assert.Error(t, err, "parent branch config should NOT be recorded for the existing-worktree claim path")
+
+	// Base-commit file should be recorded in the worktree's actual git dir.
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	require.NoError(t, err, "base commit file should be recorded for the existing-worktree claim path")
+	assert.Equal(t, headSHA, strings.TrimSpace(string(baseCommitData)))
+}
+
+// TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_PR88
+// verifies the P1 fix: the existing-worktree claim path must not read
+// HEAD/CurrentBranch from ctx.RepoPath (the coordinator's own checkout) to
+// derive the persisted parent-branch metadata, because the coordinator repo
+// can be checked out on a branch with no relationship to the pre-existing
+// worktree's actual branch or fork point. Before the fix, this test's
+// worktree (on task/task-01, forked from story-branch) would have its
+// metadata contaminated with the coordinator's unrelated "main" checkout:
+// parentBranch="main" and headSHA=main's HEAD, both wrong. After the fix,
+// persisted metadata must reflect the worktree's own true branch/HEAD (or
+// not be written at all), never the unrelated coordinator branch/commit.
+func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_PR88(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+
+	// Simulate a story branch already containing sibling-task commits.
+	run(t, repo, "git", "checkout", "-b", "story-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
+	run(t, repo, "git", "add", "sibling.go")
+	run(t, repo, "git", "commit", "-m", "feat(sibling-task): unrelated sibling work")
+
+	storyHeadSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	// Manually create the worktree on the expected task branch BEFORE
+	// claiming, so `arm claim` below takes the existing-worktree path.
+	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	run(t, repo, "git", "branch", "task/task-01", "story-branch")
+	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
+
+	// Now move the COORDINATOR repo (ctx.RepoPath) to an unrelated branch with
+	// an unrelated HEAD, simulating the coordinator having moved on to other
+	// work by the time claim registers this pre-existing worktree.
+	run(t, repo, "git", "checkout", defaultBranch)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "unrelated.go"), []byte("package unrelated\n"), 0o644))
+	run(t, repo, "git", "add", "unrelated.go")
+	run(t, repo, "git", "commit", "-m", "chore: unrelated coordinator-side work")
+	mainHeadSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	require.NotEqual(t, storyHeadSHA, mainHeadSHA)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, cmd.Execute())
+
+	// If parent-branch config was written, it must NOT be the coordinator's
+	// unrelated "main" branch.
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", "branch.task/task-01.armature-parent")
+	getCmd.Dir = repo
+	out, err := getCmd.Output()
+	if err == nil {
+		assert.NotEqual(t, defaultBranch, strings.TrimSpace(string(out)),
+			"parent branch config must not be contaminated with the coordinator's unrelated checkout")
+	}
+
+	// If a base-commit file was written, it must NOT be the coordinator's
+	// unrelated HEAD SHA.
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	if err == nil {
+		assert.NotEqual(t, mainHeadSHA, strings.TrimSpace(string(baseCommitData)),
+			"base commit file must not be contaminated with the coordinator's unrelated HEAD")
+	}
+}
+
 // TestClaimWithoutWorktreeFlag verifies that claim fails when --worktree is omitted.
 func TestClaimWithoutWorktreeFlag(t *testing.T) {
 	repo := setupRepoWithTask(t)
