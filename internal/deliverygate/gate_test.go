@@ -99,6 +99,69 @@ func TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.Contains(t, result.Remediation, "cmd/main.go")
 }
 
+// TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4 verifies
+// that a rename whose original path was outside the declared scope fails
+// scope containment, even though the destination path is in scope. Plain
+// `git diff --name-only` collapses a rename to only its destination path,
+// which would otherwise mask an out-of-scope deletion via rename.
+func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	outsideFile := filepath.Join(tmpDir, "outside", "a.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outsideFile), 0755))
+	// Content needs enough bulk for git's rename heuristic to recognize the
+	// move rather than reporting a plain delete+add.
+	content := ""
+	for range 20 {
+		content += "line of content\n"
+	}
+	require.NoError(t, os.WriteFile(outsideFile, []byte(content), 0644))
+	runGit(t, tmpDir, "add", "outside/a.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	insideFile := filepath.Join(tmpDir, "inside", "a.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(insideFile), 0755))
+	runGit(t, tmpDir, "mv", "outside/a.go", "inside/a.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST): rename outside to inside")
+
+	result := ScopeContainmentCheck(tmpDir, baseCommit, []string{"inside/**"})
+	assert.False(t, result.Pass, "rename from out-of-scope path should fail scope containment")
+	assert.Contains(t, result.Remediation, "outside/a.go")
+}
+
+// TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4 verifies that
+// a rename whose source and destination are both within scope passes.
+func TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	oldFile := filepath.Join(tmpDir, "pkg", "old.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(oldFile), 0755))
+	content := ""
+	for range 20 {
+		content += "line of content\n"
+	}
+	require.NoError(t, os.WriteFile(oldFile, []byte(content), 0644))
+	runGit(t, tmpDir, "add", "pkg/old.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "mv", "pkg/old.go", "pkg/new.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST): rename within scope")
+
+	result := ScopeContainmentCheck(tmpDir, baseCommit, []string{"pkg/**"})
+	assert.True(t, result.Pass, "rename fully within scope should pass")
+	assert.Empty(t, result.Remediation)
+}
+
 // TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1 verifies that
 // the commit reference check passes when at least one commit has the proper
 // conventional-commit format with the issue ID in the scope.
