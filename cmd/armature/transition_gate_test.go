@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 )
 
@@ -262,6 +263,45 @@ func TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1(t *testing
 
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-07", "--to", "done", "--outcome", "test", "--force")
 	assert.NoError(t, err, "sibling commit pulled in by rebase onto updated parent tip must not be misattributed as in-scope diff")
+}
+
+// TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_T2
+// verifies that a stale parent-branch git config record from before the
+// detached-HEAD guard existed (a literal "HEAD" value) is treated as no
+// usable parent branch at gate-check time, rather than being resolved as the
+// task branch's own tip (which would collapse the merge-base and make the
+// commit-reference range empty). The gate must fall back to the existing
+// getBaseCommit chain (merge-base against a default/candidate branch) and
+// still pass.
+func TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	run(t, repo, "git", "branch", "-m", "main")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-09", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-09-wt")
+	_, err = runTrls(t, repo, "claim", "gate-09", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Simulate a pre-fix claim record: force the persisted parent-branch
+	// config value for this task branch to the literal string "HEAD", as
+	// would have been written before commit 978405cc's idempotency guard
+	// existed.
+	git := adapters.New(repo)
+	require.NoError(t, git.SetGitConfig(parentBranchConfigKey("gate-09"), "HEAD"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, wt, "git", "add", "foo.go")
+	run(t, wt, "git", "commit", "-m", "feat(gate-09): add foo")
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-09", "--to", "done", "--outcome", "test", "--force")
+	assert.NoError(t, err, "stale literal-HEAD parent-branch config must self-heal via fallback, not collapse the merge-base range")
 }
 
 // TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2 verifies that
