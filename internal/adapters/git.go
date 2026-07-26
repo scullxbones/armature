@@ -796,6 +796,25 @@ func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	return c.IsCommitOnBranch(sha, target)
 }
 
+// CommitChangedFiles returns the file paths touched by a single commit,
+// diffed against its first parent (`git diff-tree --no-commit-id --name-only
+// -r <sha>`). Returns an empty (non-nil) slice for a no-op/empty commit (e.g.
+// one created with `git commit --allow-empty`), which callers use to
+// distinguish a commit with real content from one that only satisfies a
+// message-shape check.
+func (c *Client) CommitChangedFiles(sha string) ([]string, error) {
+	cmd := c.cmd("diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff-tree --no-commit-id --name-only -r %s: %w", sha, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []string{}, nil
+	}
+	return strings.Split(raw, "\n"), nil
+}
+
 // ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.
 func (c *Client) ResolveRevision(rev string) (string, error) {
 	cmd := c.cmd("rev-parse", "--verify", rev)

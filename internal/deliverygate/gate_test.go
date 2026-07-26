@@ -272,6 +272,62 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_RejectsEmptyCommit_PR88 verifies the P3 fix: a
+// commit that matches the conventional-commit format but has no actual diff
+// (e.g. `git commit --allow-empty -m "fix(ISSUE-ID): busywork"`) must not
+// satisfy the check. Before the fix, CommitReferenceCheck only inspected
+// commit subject lines, so an empty commit with the right message shape would
+// wrongly pass the gate with no real content delivered.
+func TestCommitReferenceCheck_RejectsEmptyCommit_PR88(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// A conventional-commit-shaped but content-free commit.
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "fix(TEST-123): busywork")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "an empty commit must not satisfy the commit reference check")
+	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_PR88 verifies
+// that the empty-commit tightening doesn't reject an issue whose FIRST
+// matching commit happens to be empty but a LATER matching commit has real
+// content — the check should keep looking rather than stop at the first
+// subject-line match.
+func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_PR88(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "fix(TEST-123): busywork")
+
+	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): real fix")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "a later real-content matching commit should still pass")
+	assert.Empty(t, result.Remediation)
+}
+
 // TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1 verifies that the
 // DeliveryGate function returns correct combined results for all three checks.
 func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {

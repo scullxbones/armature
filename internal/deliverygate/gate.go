@@ -149,19 +149,29 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// bogus type like "oops(ISSUE-ID): ..." from satisfying this check.
 	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
 
+	// A commit whose subject matches the conventional-commit format but has no
+	// actual diff (e.g. an empty commit created with `git commit
+	// --allow-empty -m "fix(ISSUE-ID): busywork"`) delivers no real content
+	// and must not satisfy this check on its own. Keep scanning past it in
+	// case a later matching commit does have real content.
 	foundMatchingCommit := false
 	for _, entry := range entries {
-		if pattern.MatchString(entry.Subject) {
-			foundMatchingCommit = true
-			break
+		if !pattern.MatchString(entry.Subject) {
+			continue
 		}
+		files, err := git.CommitChangedFiles(entry.SHA)
+		if err != nil || len(files) == 0 {
+			continue
+		}
+		foundMatchingCommit = true
+		break
 	}
 
 	if !foundMatchingCommit {
 		return CheckResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
-				"No commits found matching conventional-commit format %s(<ISSUE-ID>): ... since %s",
+				"No commits with non-trivial content found matching conventional-commit format %s(<ISSUE-ID>): ... since %s",
 				"[type]", baseCommit,
 			),
 		}

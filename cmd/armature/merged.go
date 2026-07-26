@@ -121,8 +121,19 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 		return hasPassThrough, nil
 	}
 
-	// Remove the worktree.
+	// Clear persisted branch-point metadata (parent-branch config, base-commit
+	// file) BEFORE removing the worktree: resolveWorktreeGitDir needs the
+	// worktree to still exist to locate its git directory. Without this, a
+	// stale value would survive branch deletion/recreation and the
+	// "if absent" guards in writeParentBranchConfigIfAbsent/
+	// writeBaseCommitFileIfAbsent would never overwrite it with the fresh,
+	// correct parent for a branch name later reused with a genuinely
+	// different parent. Best-effort: never blocks the merged-confirmation flow.
+	branchName := deriveBranchName(issue.Type, issue.ID)
 	gitClient := adapters.New(repoPath)
+	clearBranchPointMetadata(gitClient, worktreePath, branchName)
+
+	// Remove the worktree.
 	if err := gitClient.RemoveWorktree(worktreePath); err != nil {
 		return hasPassThrough, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
