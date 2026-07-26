@@ -295,6 +295,18 @@ func TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZ
 	assert.Equal(t, "other/foo.go", outOfScope)
 }
 
+// TestIsWithinScope_RepoRootScopeMatchesAnyFile_PR88 verifies that the
+// canonical repository-root scope "." matches any file path, consistent
+// with internal/harnesspolicy/scope.go's ScopePolicy.allows, which
+// special-cases scope == "." to mean "everything in the repo is in scope".
+func TestIsWithinScope_RepoRootScopeMatchesAnyFile_PR88(t *testing.T) {
+	t.Parallel()
+
+	isIn, outOfScope := IsWithinScope([]string{"cmd/main.go"}, []string{"."})
+	assert.True(t, isIn, `scope "." should cover any file path in the repo`)
+	assert.Empty(t, outOfScope)
+}
+
 // TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_PR88 verifies that a
 // "**" segment appearing in the middle of a scope glob (not just as a
 // trailing "/**" suffix) matches zero or more path segments, per standard

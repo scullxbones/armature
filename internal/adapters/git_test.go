@@ -1633,3 +1633,33 @@ func TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths(t *testing.T) {
 	}, entries,
 		"DirtyEntries must report the modified tracked file and the untracked file with correct classification")
 }
+
+// TestDirtyEntriesReportsOldPathForRename verifies that a staged rename
+// reports both its destination (Path) and source (OldPath) path, so callers
+// can detect a rename that crosses a boundary (e.g. into a state directory)
+// even though `git status --porcelain` collapses the rename to one line.
+func TestDirtyEntriesReportsOldPathForRename(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	origFile := filepath.Join(repo, "original.txt")
+	require.NoError(t, os.WriteFile(origFile, []byte("content"), 0o600))
+	gitRun("add", "original.txt")
+	gitRun("commit", "-m", "add original file")
+
+	gitRun("mv", "original.txt", "renamed.txt")
+
+	entries, err := c.DirtyEntries()
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "renamed.txt", entries[0].Path)
+	assert.Equal(t, "original.txt", entries[0].OldPath)
+}

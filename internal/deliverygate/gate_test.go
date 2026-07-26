@@ -40,6 +40,30 @@ func TestCleanTreeCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation, "dirty tree should have remediation message")
 }
 
+// TestCleanTreeCheck_RenameFromOutsideToArmatureDir_PR88 verifies that a
+// staged rename moving a tracked file from outside .armature/ into
+// .armature/ is NOT filtered out by the .armature/ noise exclusion: the
+// source path being outside .armature/ means a real tracked file was
+// effectively deleted, so the tree must be reported as dirty.
+func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_PR88(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	outsideFile := filepath.Join(tmpDir, "outside.go")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("package main"), 0644))
+	runGit(t, tmpDir, "add", "outside.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".armature"), 0755))
+	runGit(t, tmpDir, "mv", "outside.go", ".armature/outside.go")
+
+	result := CleanTreeCheck(tmpDir)
+	assert.False(t, result.Pass, "rename from outside .armature/ into .armature/ must not be filtered out")
+	assert.Contains(t, result.Remediation, "outside.go")
+}
+
 // TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1 verifies that
 // the scope containment check passes when all changed files are within scope.
 func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T) {
@@ -326,6 +350,87 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_PR88(t *testin
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a later real-content matching commit should still pass")
 	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_RejectsSelfCancellingRevert_PR88 verifies that a
+// matching conventional commit whose change is fully reverted by a later
+// commit in the range does not satisfy the check. Before the fix,
+// CommitReferenceCheck only checked that the matching commit itself had
+// nonempty CommitChangedFiles, without confirming the change survived into
+// the net base-to-HEAD diff, so a matching commit immediately followed by a
+// revert would wrongly pass despite zero net delivery.
+func TestCommitReferenceCheck_RejectsSelfCancellingRevert_PR88(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Commit A: matching format, changes a real file.
+	require.NoError(t, os.WriteFile(file, []byte("changed content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): make a change")
+
+	// Commit B: reverts A's change back to the base content, so the net
+	// base-to-HEAD diff is empty.
+	require.NoError(t, os.WriteFile(file, []byte("base content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "revert the change")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "a matching commit whose change is fully reverted must not satisfy the check")
+	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_RejectsPaddedSelfCancellingRevert verifies that a
+// matching conventional commit whose change is fully reverted cannot be
+// smuggled past the check by padding the range with a later, unrelated,
+// trivial in-scope commit. Before this fix, CommitReferenceCheck only
+// confirmed that the net base-to-HEAD diff was nonempty for ANY reason,
+// without checking that the net diff overlaps with the files the matching
+// commit itself touched — so an unrelated filler commit could keep the net
+// diff nonempty even though the matching commit's own substance was fully
+// reverted.
+func TestCommitReferenceCheck_RejectsPaddedSelfCancellingRevert(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	widget := filepath.Join(tmpDir, "widget.txt")
+	other := filepath.Join(tmpDir, "other.txt")
+	require.NoError(t, os.WriteFile(widget, []byte("base widget"), 0644))
+	require.NoError(t, os.WriteFile(other, []byte("base other"), 0644))
+	runGit(t, tmpDir, "add", "widget.txt", "other.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// C1: matching format, changes widget.txt.
+	require.NoError(t, os.WriteFile(widget, []byte("changed widget"), 0644))
+	runGit(t, tmpDir, "add", "widget.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement widget")
+
+	// C2: reverts C1's change back to base content.
+	require.NoError(t, os.WriteFile(widget, []byte("base widget"), 0644))
+	runGit(t, tmpDir, "add", "widget.txt")
+	runGit(t, tmpDir, "commit", "-m", "revert the widget change")
+
+	// C3: unrelated trivial edit to another in-scope file, keeping the net
+	// diff nonempty despite C1's substance being fully reverted.
+	require.NoError(t, os.WriteFile(other, []byte("base other\n// trivial comment"), 0644))
+	runGit(t, tmpDir, "add", "other.txt")
+	runGit(t, tmpDir, "commit", "-m", "add trivial comment")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "a matching commit whose change is reverted must not be satisfied by an unrelated padding commit")
+	assert.NotEmpty(t, result.Remediation)
 }
 
 // TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1 verifies that the

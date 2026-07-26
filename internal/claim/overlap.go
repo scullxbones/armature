@@ -133,6 +133,15 @@ func stripScopeAnnotation(glob string) string {
 // under dir/" — consistent with internal/harnesspolicy/scope.go's cleanScope,
 // which treats any scope entry ending in "/" as a recursive directory scope.
 func globCoversFile(glob, file string) bool {
+	// The canonical repository-root scope "." means "everything in the repo
+	// is in scope" (see internal/harnesspolicy/scope.go's allows, which
+	// special-cases scope == "." the same way). filepath.Match(".", file)
+	// would fail to match any non-"." path, so this must be handled before
+	// falling through to pattern matching.
+	if glob == "." {
+		return true
+	}
+
 	// A trailing-slash directory scope (e.g. "internal/") covers everything
 	// under that directory, at any depth.
 	if dirPart, ok := strings.CutSuffix(glob, "/"); ok {
