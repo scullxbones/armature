@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -57,6 +59,35 @@ func setupRepoWithParentAndTask(t *testing.T) string {
 	require.NoError(t, cmd3.Execute())
 
 	return repo
+}
+
+// TestClaimDetachedHEADDoesNotPersistAsParentBranch verifies that claiming a
+// task while the coordinator repo is in a detached-HEAD state does not
+// persist the literal string "HEAD" as the task branch's recorded parent
+// branch. gitClient.CurrentBranch() (git rev-parse --abbrev-ref HEAD)
+// returns "HEAD" itself in that state, and persisting it would later make
+// the delivery gate resolve "HEAD" in the task worktree — the task's own
+// current commit — collapsing the merge-base to the task's HEAD and
+// emptying the commit range for CommitReferenceCheck, rejecting every
+// otherwise-valid commit. No parent branch config should be written.
+func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// Detach HEAD in the coordinator repo before claiming.
+	headSHA := runGitOutput(t, repo, "rev-parse", "HEAD")
+	run(t, repo, "git", "checkout", "--detach", strings.TrimSpace(headSHA))
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, cmd.Execute())
+
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", "branch.task/task-01.armature-parent")
+	getCmd.Dir = repo
+	out, err := getCmd.CombinedOutput()
+	assert.Error(t, err, "no parent branch config should be recorded when the coordinator was in detached HEAD, got: %q", out)
 }
 
 // TestClaimWithoutWorktreeFlag verifies that claim fails when --worktree is omitted.

@@ -212,7 +212,16 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// removed, in which case gitClient.CurrentBranch() here would return
 	// whatever the coordinator happens to be on *now* — not the original
 	// parent — so an existing record must never be overwritten.
-	if parentErr == nil && parentBranch != "" {
+	// "HEAD" is the literal string CurrentBranch() returns when the
+	// coordinator repo is in a detached-HEAD state (git rev-parse
+	// --abbrev-ref HEAD prints "HEAD" itself, not a branch name). Persisting
+	// that as the parent branch would later make the delivery gate resolve
+	// the ref "HEAD" in the task worktree — the task's own current commit —
+	// collapsing the merge-base to the task's HEAD and making every commit
+	// range for CommitReferenceCheck empty. Treat it as no usable parent
+	// branch so nothing is persisted, falling back to the existing
+	// no-parent-branch-config behavior.
+	if parentErr == nil && parentBranch != "" && parentBranch != "HEAD" {
 		if err := writeParentBranchConfigIfAbsent(gitClient, branchName, parentBranch); err != nil {
 			return fmt.Errorf("write parent branch config: %w", err)
 		}
