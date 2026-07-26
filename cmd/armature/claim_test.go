@@ -90,21 +90,22 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 	assert.Error(t, err, "no parent branch config should be recorded when the coordinator was in detached HEAD, got: %q", out)
 }
 
-// TestClaimExistingWorktreePersistsBranchPointMetadata_PR88 verifies that the
-// existing-worktree claim path persists the base-commit file using the
-// worktree's OWN honest HEAD (correct: at registration time the worktree has
-// not yet diverged, so its tip IS the true fork point). It deliberately does
-// NOT persist parent-branch config on this path: unlike the new-worktree path
-// (createWorktreeAndBranch), there is no reliable signal for the true parent
-// BRANCH NAME here — gitClient.CurrentBranch() rooted at the worktree would
-// only return the worktree's own branch name (self-referential), and
-// ctx.RepoPath's CurrentBranch() reflects the coordinator's own checkout,
-// which may be on a wholly unrelated branch by claim time. Recording either
-// would be confidently WRONG (not merely missing), which is worse: the
-// delivery gate would merge-base against a bogus parent and silently
-// misattribute commits. Falling back to getBaseCommit's honest default-branch
-// merge-base (no persisted parent-branch config) is the safer choice.
-func TestClaimExistingWorktreePersistsBranchPointMetadata_PR88(t *testing.T) {
+// TestClaimExistingWorktreeDoesNotFabricateBaseCommitWhenDiverged_REQ_LNGHZN_S4
+// verifies the LNGHZN-S4 P1 fix: the existing-worktree claim path must NOT
+// assume the worktree's current HEAD is the true fork point just because
+// it's an existing-worktree registration. That assumption ("at registration
+// time the worktree has not yet diverged, so its tip IS the true fork
+// point") is false whenever the worktree was cut from a branch that already
+// contains sibling-task commits (as here: task/task-01 is branched from
+// story-branch, which already has a sibling commit on top of main) — HEAD
+// has, in fact, diverged from the resolvable candidate base (main) by one
+// commit. Persisting HEAD as the base-commit in that case would fabricate an
+// unproven value and silently corrupt later scope checks. The fix requires
+// proving non-divergence (rev-list --count <candidate-base>..HEAD == 0)
+// before writing; here that count is 1, so neither the base-commit file nor
+// parent-branch config should be written, leaving getBaseCommit/
+// dynamicBaseCommit in transition.go to fall back honestly.
+func TestClaimExistingWorktreeDoesNotFabricateBaseCommitWhenDiverged_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
 	// Simulate a story branch already containing sibling-task commits, as the
@@ -113,8 +114,6 @@ func TestClaimExistingWorktreePersistsBranchPointMetadata_PR88(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
 	run(t, repo, "git", "add", "sibling.go")
 	run(t, repo, "git", "commit", "-m", "feat(sibling-task): unrelated sibling work")
-
-	headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
 	// Manually create the worktree on the expected task branch BEFORE
 	// claiming, so `arm claim` below takes the existing-worktree path rather
@@ -139,7 +138,46 @@ func TestClaimExistingWorktreePersistsBranchPointMetadata_PR88(t *testing.T) {
 	_, err := getCmd.Output()
 	assert.Error(t, err, "parent branch config should NOT be recorded for the existing-worktree claim path")
 
-	// Base-commit file should be recorded in the worktree's actual git dir.
+	// Base-commit file must NOT be recorded either: the worktree's HEAD has
+	// diverged from main by the sibling commit, so it is not a proven fork
+	// point and persisting it would fabricate an unproven base-commit.
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	_, err = os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	assert.Error(t, err, "base commit file should NOT be recorded when the worktree has already diverged from the candidate base")
+}
+
+// TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4 verifies
+// the complementary case: when the existing worktree genuinely has NOT
+// diverged from the resolvable candidate base branch (its HEAD equals the
+// candidate base), the existing-worktree claim path still persists the
+// base-commit file using the worktree's own honest HEAD, exactly as before
+// the P1 fix. This is the case the original assumption was actually correct
+// for.
+func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	// Manually create the worktree on the expected task branch directly from
+	// main's current tip (no divergence) BEFORE claiming, so `arm claim`
+	// below takes the existing-worktree path rather than
+	// createWorktreeAndBranch.
+	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	run(t, repo, "git", "branch", "task/task-01")
+	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, cmd.Execute())
+
 	gitPath := filepath.Join(worktreePath, ".git")
 	gitFileContent, err := os.ReadFile(gitPath)
 	require.NoError(t, err)
@@ -148,11 +186,11 @@ func TestClaimExistingWorktreePersistsBranchPointMetadata_PR88(t *testing.T) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
 	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
-	require.NoError(t, err, "base commit file should be recorded for the existing-worktree claim path")
+	require.NoError(t, err, "base commit file should be recorded when the worktree has not diverged from the candidate base")
 	assert.Equal(t, headSHA, strings.TrimSpace(string(baseCommitData)))
 }
 
-// TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_PR88
+// TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_REQ_LNGHZN_S4
 // verifies the P1 fix: the existing-worktree claim path must not read
 // HEAD/CurrentBranch from ctx.RepoPath (the coordinator's own checkout) to
 // derive the persisted parent-branch metadata, because the coordinator repo
@@ -163,7 +201,7 @@ func TestClaimExistingWorktreePersistsBranchPointMetadata_PR88(t *testing.T) {
 // parentBranch="main" and headSHA=main's HEAD, both wrong. After the fix,
 // persisted metadata must reflect the worktree's own true branch/HEAD (or
 // not be written at all), never the unrelated coordinator branch/commit.
-func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_PR88(t *testing.T) {
+func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
 

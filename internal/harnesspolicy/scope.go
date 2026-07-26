@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/scopematch"
 )
 
 type ScopePolicy struct {
@@ -89,71 +91,7 @@ func (r ScopeCheckResult) Message() string {
 }
 
 func (p ScopePolicy) allows(path string) bool {
-	for _, rawScope := range p.scope {
-		scope, isDir := cleanScope(rawScope)
-		if scope == "." {
-			return true
-		}
-		if path == scope {
-			return true
-		}
-		if isDir && strings.HasPrefix(path, scope+"/") {
-			return true
-		}
-		if strings.Contains(scope, "**") {
-			if doublestarMatch(scope, path) {
-				return true
-			}
-			continue
-		}
-		if strings.ContainsAny(scope, "*?[") {
-			matched, err := filepath.Match(scope, path)
-			if err == nil && matched {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// doublestarMatch reports whether path matches a scope glob pattern containing
-// "**" segments, matching path-segment-by-segment (unlike a plain prefix cut,
-// which ignores everything after the "**" and so both over-allows, e.g.
-// "**/*.go" allowing non-Go files, and under-allows nothing after a suffix,
-// e.g. "internal/**/api.go" matching "internal/foo/bar.go"). "**" spans zero
-// or more path segments, per the conventional doublestar glob semantics.
-func doublestarMatch(pattern, path string) bool {
-	return matchSegments(strings.Split(pattern, "/"), strings.Split(path, "/"))
-}
-
-// matchSegments matches pattern segments against path segments, expanding a
-// "**" segment to zero or more path segments via backtracking, and matching
-// all other segments with filepath.Match (which itself supports single-segment
-// glob syntax like "*", "?", "[...]").
-func matchSegments(pattern, segments []string) bool {
-	for len(pattern) > 0 {
-		if pattern[0] == "**" {
-			if len(pattern) == 1 {
-				return true
-			}
-			for i := 0; i <= len(segments); i++ {
-				if matchSegments(pattern[1:], segments[i:]) {
-					return true
-				}
-			}
-			return false
-		}
-		if len(segments) == 0 {
-			return false
-		}
-		matched, err := filepath.Match(pattern[0], segments[0])
-		if err != nil || !matched {
-			return false
-		}
-		pattern = pattern[1:]
-		segments = segments[1:]
-	}
-	return len(segments) == 0
+	return scopematch.Allows(p.scope, path)
 }
 
 func (p ScopePolicy) cleanPath(path string) string {
@@ -173,16 +111,6 @@ func violationsForPaths(paths []string) []ScopeViolation {
 	return violations
 }
 
-func cleanScope(raw string) (string, bool) {
-	return cleanRepoPath(raw), strings.HasSuffix(filepath.ToSlash(raw), "/")
-}
-
 func cleanRepoPath(path string) string {
-	slashed := filepath.ToSlash(path)
-	trimmed := strings.TrimPrefix(slashed, "./")
-	cleaned := filepath.ToSlash(filepath.Clean(trimmed))
-	if cleaned == "." {
-		return "."
-	}
-	return strings.TrimPrefix(cleaned, "/")
+	return scopematch.CleanRepoPath(path)
 }

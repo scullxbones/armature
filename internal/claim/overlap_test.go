@@ -250,11 +250,11 @@ func TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.Empty(t, outOfScope)
 }
 
-// TestIsWithinScope_PreservesFilenameWithLiteralParens_PR88 verifies that a
+// TestIsWithinScope_PreservesFilenameWithLiteralParens_REQ_LNGHZN_S4_T1 verifies that a
 // scope entry ending in a literal parenthesized filename (no preceding space,
 // so it's not the " (new)" annotation marker) is not mistaken for an
 // annotation and mis-truncated.
-func TestIsWithinScope_PreservesFilenameWithLiteralParens_PR88(t *testing.T) {
+func TestIsWithinScope_PreservesFilenameWithLiteralParens_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	isIn, outOfScope := IsWithinScope(
@@ -295,11 +295,11 @@ func TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZ
 	assert.Equal(t, "other/foo.go", outOfScope)
 }
 
-// TestIsWithinScope_RepoRootScopeMatchesAnyFile_PR88 verifies that the
+// TestIsWithinScope_RepoRootScopeMatchesAnyFile_REQ_LNGHZN_S4_T1 verifies that the
 // canonical repository-root scope "." matches any file path, consistent
 // with internal/harnesspolicy/scope.go's ScopePolicy.allows, which
 // special-cases scope == "." to mean "everything in the repo is in scope".
-func TestIsWithinScope_RepoRootScopeMatchesAnyFile_PR88(t *testing.T) {
+func TestIsWithinScope_RepoRootScopeMatchesAnyFile_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	isIn, outOfScope := IsWithinScope([]string{"cmd/main.go"}, []string{"."})
@@ -307,14 +307,14 @@ func TestIsWithinScope_RepoRootScopeMatchesAnyFile_PR88(t *testing.T) {
 	assert.Empty(t, outOfScope)
 }
 
-// TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_PR88 verifies that a
+// TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_REQ_LNGHZN_S4_T1 verifies that a
 // "**" segment appearing in the middle of a scope glob (not just as a
 // trailing "/**" suffix) matches zero or more path segments, per standard
 // doublestar semantics. E.g. "internal/**/api.go" should match both
 // "internal/foo/api.go" (one intervening segment) and
 // "internal/foo/bar/api.go" (two intervening segments), and must not match
 // unrelated files in the same directories.
-func TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_PR88(t *testing.T) {
+func TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	scope := []string{"internal/**/api.go"}

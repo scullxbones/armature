@@ -40,12 +40,12 @@ func TestCleanTreeCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation, "dirty tree should have remediation message")
 }
 
-// TestCleanTreeCheck_RenameFromOutsideToArmatureDir_PR88 verifies that a
+// TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1 verifies that a
 // staged rename moving a tracked file from outside .armature/ into
 // .armature/ is NOT filtered out by the .armature/ noise exclusion: the
 // source path being outside .armature/ means a real tracked file was
 // effectively deleted, so the tree must be reported as dirty.
-func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_PR88(t *testing.T) {
+func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -214,6 +214,32 @@ func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testin
 	assert.Empty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription verifies that
+// a commit subject matching "fix(ISSUE-ID):" with no description after the
+// colon does not satisfy the check: the regex must require a non-empty
+// description, not just the type/issue-ID/colon prefix.
+func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123):")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "bare subject with no description should fail")
+	assert.NotEmpty(t, result.Remediation)
+}
+
 // TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1 verifies that
 // the commit reference check fails when no commits match the conventional format.
 func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
@@ -296,13 +322,13 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsEmptyCommit_PR88 verifies the P3 fix: a
+// TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1 verifies the P3 fix: a
 // commit that matches the conventional-commit format but has no actual diff
 // (e.g. `git commit --allow-empty -m "fix(ISSUE-ID): busywork"`) must not
 // satisfy the check. Before the fix, CommitReferenceCheck only inspected
 // commit subject lines, so an empty commit with the right message shape would
 // wrongly pass the gate with no real content delivered.
-func TestCommitReferenceCheck_RejectsEmptyCommit_PR88(t *testing.T) {
+func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -323,12 +349,12 @@ func TestCommitReferenceCheck_RejectsEmptyCommit_PR88(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_PR88 verifies
+// TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_T1 verifies
 // that the empty-commit tightening doesn't reject an issue whose FIRST
 // matching commit happens to be empty but a LATER matching commit has real
 // content — the check should keep looking rather than stop at the first
 // subject-line match.
-func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_PR88(t *testing.T) {
+func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -352,14 +378,14 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_PR88(t *testin
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsSelfCancellingRevert_PR88 verifies that a
+// TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1 verifies that a
 // matching conventional commit whose change is fully reverted by a later
 // commit in the range does not satisfy the check. Before the fix,
 // CommitReferenceCheck only checked that the matching commit itself had
 // nonempty CommitChangedFiles, without confirming the change survived into
 // the net base-to-HEAD diff, so a matching commit immediately followed by a
 // revert would wrongly pass despite zero net delivery.
-func TestCommitReferenceCheck_RejectsSelfCancellingRevert_PR88(t *testing.T) {
+func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()

@@ -1135,7 +1135,7 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 	assert.DirExists(t, worktreePath)
 }
 
-// TestMergedClearsStaleParentBranchMetadata_PR88 verifies the P2 fix: `arm
+// TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4 verifies the P2 fix: `arm
 // merged` must clear the persisted branch.<name>.armature-parent git-config
 // key (and base-commit file) when it removes a task's worktree. Without this,
 // if the branch is later deleted and the same branch name is reused for a
@@ -1143,7 +1143,7 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 // guard sees the stale leftover value and never records the fresh, correct
 // parent — silently corrupting the delivery gate's merge-base computation
 // for whatever unrelated branch reuses that name.
-func TestMergedClearsStaleParentBranchMetadata_PR88(t *testing.T) {
+func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 

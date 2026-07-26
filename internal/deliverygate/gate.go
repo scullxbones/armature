@@ -149,12 +149,16 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		}
 	}
 
-	// Build regex pattern: ^(feat|fix|refactor|test|docs|style|polish)\(ISSUE-ID\)!?:
-	// Matches: type(ISSUE-ID): or type(ISSUE-ID)!: where type is one of the
-	// commit types enumerated by docs/conventions.md. Restricting the type
-	// alternation (rather than accepting any lowercase word) prevents a
-	// bogus type like "oops(ISSUE-ID): ..." from satisfying this check.
-	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
+	// Build regex pattern: ^(feat|fix|refactor|test|docs|style|polish)\(ISSUE-ID\)!?:[ \t]+\S
+	// Matches: type(ISSUE-ID): <description> or type(ISSUE-ID)!: <description>
+	// where type is one of the commit types enumerated by
+	// docs/conventions.md. Restricting the type alternation (rather than
+	// accepting any lowercase word) prevents a bogus type like
+	// "oops(ISSUE-ID): ..." from satisfying this check. Requiring whitespace
+	// followed by a non-whitespace character after the colon prevents a
+	// bare "fix(ISSUE-ID):" with no actual description from satisfying this
+	// check.
+	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`)
 
 	// A commit whose subject matches the conventional-commit format but has no
 	// actual diff (e.g. an empty commit created with `git commit

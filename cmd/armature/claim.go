@@ -636,10 +636,7 @@ or updates the armature-issue-id file if the worktree exists.`,
 				// unrelated branch by the time it registers a pre-existing
 				// worktree, and reading HEAD there would record a
 				// confidently WRONG base-commit (not merely a missing one) —
-				// silently corrupting scope checks later. The worktree's own
-				// current HEAD, by contrast, is legitimately correct here:
-				// at registration time the worktree has not yet diverged, so
-				// its tip IS the true fork point.
+				// silently corrupting scope checks later.
 				//
 				// The parent BRANCH NAME cannot be derived this way, though:
 				// gitClient.CurrentBranch() rooted at the worktree returns
@@ -649,16 +646,47 @@ or updates the armature-issue-id file if the worktree exists.`,
 				// worktree alone. So on this path we deliberately do NOT
 				// persist parent-branch config; the delivery gate falls back
 				// to getBaseCommit's honest default-branch merge-base instead
-				// of a confidently wrong recorded parent, while the
-				// base-commit file (still derived correctly, see above) is
-				// persisted as usual.
+				// of a confidently wrong recorded parent.
 				worktreeGitClient := adapters.New(worktreePath)
 				headSHA, headErr := worktreeGitClient.ResolveRevision("HEAD")
-				//nolint:errcheck // best-effort metadata persistence; see comment above
-				_ = persistBranchPointMetadata(
-					worktreeGitClient, worktreePath, expectedBranch,
-					headSHA, headErr, "", fmt.Errorf("parent branch not derivable from existing-worktree claim path"),
-				)
+
+				// The worktree's current HEAD is only a legitimate base-commit
+				// candidate if the worktree has NOT yet diverged from a
+				// resolvable candidate base branch (origin/main, main, etc.):
+				// "at registration time the worktree has not yet diverged, so
+				// its tip IS the true fork point" is only true for a genuinely
+				// fresh worktree. It is FALSE for an idempotent re-claim of a
+				// worktree that already contains task commits (or one that
+				// lost its metadata file), where HEAD has moved past the true
+				// fork point — persisting it there would fabricate an
+				// unproven base-commit and silently corrupt later scope
+				// checks. So: only persist if a candidate base resolves AND
+				// rev-list --count <candidate>..HEAD is 0, proving no
+				// divergence. If that can't be proven, leave the metadata
+				// file absent so the existing fallback (getBaseCommit /
+				// dynamicBaseCommit in transition.go) takes over honestly
+				// instead of being short-circuited by a fabricated value.
+				provenNonDivergent := false
+				if headErr == nil {
+					for _, ref := range candidateBaseRefs {
+						if _, resolveErr := worktreeGitClient.ResolveRevision(ref); resolveErr != nil {
+							continue
+						}
+						count, countErr := worktreeGitClient.RevListCount(ref, "HEAD")
+						if countErr != nil {
+							continue
+						}
+						provenNonDivergent = count == 0
+						break
+					}
+				}
+				if provenNonDivergent {
+					//nolint:errcheck // best-effort metadata persistence; see comment above
+					_ = persistBranchPointMetadata(
+						worktreeGitClient, worktreePath, expectedBranch,
+						headSHA, headErr, "", fmt.Errorf("parent branch not derivable from existing-worktree claim path"),
+					)
+				}
 			}
 
 			// Auto-advance any open ancestor story/epic to in-progress.
