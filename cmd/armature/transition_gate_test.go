@@ -304,6 +304,50 @@ func TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_
 	assert.NoError(t, err, "stale literal-HEAD parent-branch config must self-heal via fallback, not collapse the merge-base range")
 }
 
+// TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2 verifies
+// that transitioning issue X to done with --repo pointed at a directory that
+// is NOT the worktree bound to issue X fails closed with a clear error,
+// rather than running the delivery gate against the wrong directory (which
+// could pass even if the actual claimed worktree for X is dirty or
+// out-of-scope).
+func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-10a", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-10b", "--title", "Gate task", "--type", "task", "--scope", "bar.go")
+	require.NoError(t, err)
+
+	wtA := filepath.Join(t.TempDir(), "gate-10a-wt")
+	_, err = runTrls(t, repo, "claim", "gate-10a", "--worktree", wtA)
+	require.NoError(t, err)
+
+	wtB := filepath.Join(t.TempDir(), "gate-10b-wt")
+	_, err = runTrls(t, repo, "claim", "gate-10b", "--worktree", wtB)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wtA, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, wtA, "git", "add", "foo.go")
+	run(t, wtA, "git", "commit", "-m", "feat(gate-10a): add foo")
+
+	// Attempt to transition gate-10a to done, but point --repo at wtB (bound
+	// to a different issue) instead of wtA. runTrls injects "--repo" using
+	// its repo argument, so pass wtB there rather than as an extra flag.
+	_, err = runTrls(t, wtB, "transition", "--issue", "gate-10a", "--to", "done", "--outcome", "test", "--force")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "gate-10b")
+
+	// Regression: transitioning with --repo correctly pointed at the bound
+	// worktree still passes.
+	_, err = runTrls(t, wtA, "transition", "--issue", "gate-10a", "--to", "done", "--outcome", "test", "--force")
+	assert.NoError(t, err)
+}
+
 // TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2 verifies that
 // the delivery gate check evaluates the worktree state produced AFTER
 // pre-transition hooks run, not the state before them. A configured

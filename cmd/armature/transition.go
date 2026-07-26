@@ -11,6 +11,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -283,6 +284,18 @@ func runDeliveryGateCheck(worktreePath string, issueID string, scope []string) e
 		return fmt.Errorf("no repo path available: cannot run delivery gate check. Use --skip-delivery-gate to bypass")
 	}
 
+	// Verify that worktreePath (the --repo flag value, or "." if unset) is
+	// actually the worktree bound to issueID before checking it: without
+	// this, a caller could point --repo at some other clean checkout while
+	// the real claimed worktree for issueID is dirty or out-of-scope, and
+	// the gate would pass by checking the wrong directory. Fail closed (like
+	// the "not found in materialized index" check above) both when the
+	// binding doesn't match and when no binding marker exists at all —
+	// never silently allow an unbound path through.
+	if err := verifyIssueWorktreeBinding(worktreePath, issueID); err != nil {
+		return err
+	}
+
 	// Get the base commit. Prefer dynamically recomputing merge-base against
 	// the recorded parent branch (git config, shared across worktrees — see
 	// parentBranchConfigKey): this self-corrects both if the worktree was
@@ -330,6 +343,31 @@ func runDeliveryGateCheck(worktreePath string, issueID string, scope []string) e
 		return fmt.Errorf("%s", errMsg)
 	}
 
+	return nil
+}
+
+// verifyIssueWorktreeBinding fails closed unless worktreePath is the actual
+// worktree bound to issueID (the issue-ID marker file written by
+// updateIssueIDFile at claim time — see harnesshook.ReadIssueBindingFileErr).
+// This prevents `arm transition --to done --repo <some-other-checkout>` from
+// running the delivery gate against a directory that isn't the claimed
+// worktree for issueID, which would let a dirty or out-of-scope claimed
+// worktree pass because the wrong directory was checked instead.
+func verifyIssueWorktreeBinding(worktreePath, issueID string) error {
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return fmt.Errorf("resolve git dir for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
+	}
+	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+	if err != nil {
+		return fmt.Errorf("read issue binding for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
+	}
+	if binding == "" {
+		return fmt.Errorf("%s is not bound to any issue (no armature-issue-id marker found): cannot verify this is the claimed worktree for %s. Use --skip-delivery-gate to bypass", worktreePath, issueID)
+	}
+	if binding != issueID {
+		return fmt.Errorf("%s is bound to issue %s, not %s: refusing to run delivery gate check against the wrong worktree. Use --skip-delivery-gate to bypass", worktreePath, binding, issueID)
+	}
 	return nil
 }
 
