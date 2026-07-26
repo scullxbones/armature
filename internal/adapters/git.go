@@ -129,9 +129,12 @@ func (c *Client) IsWorkingTreeDirty() (bool, error) {
 
 // DirtyEntry is a single parsed line of `git status --porcelain` output: the
 // repo-relative path and whether it is untracked (status code "??") as
-// opposed to a tracked file with staged or unstaged changes.
+// opposed to a tracked file with staged or unstaged changes. For a staged
+// rename, OldPath holds the source path (Path is always the destination);
+// OldPath is empty for all other statuses.
 type DirtyEntry struct {
 	Path      string
+	OldPath   string
 	Untracked bool
 }
 
@@ -143,7 +146,10 @@ type DirtyEntry struct {
 // scaffolding while still refusing on tracked changes is exactly
 // IsWorkingTreeDirty's existing contract; this exposes the same information
 // per-path instead of collapsing it to a single bool. Renamed paths report
-// the destination path. Returns an empty (nil) slice for a clean working tree.
+// the destination path in Path and the source path in OldPath, so a caller
+// checking a rename against a boundary (e.g. a scope or state directory)
+// can inspect both sides rather than only seeing the destination. Returns an
+// empty (nil) slice for a clean working tree.
 func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
 	cmd := c.cmd("status", "--porcelain")
 	out, err := cmd.Output()
@@ -161,12 +167,17 @@ func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
 		if line == "" || len(line) < 4 {
 			continue
 		}
-		// Porcelain v1 format: "XY PATH" or "XY ORIG_PATH -> PATH" for renames.
-		path := line[3:]
-		if idx := strings.Index(path, " -> "); idx >= 0 {
-			path = path[idx+len(" -> "):]
+		// Porcelain v1 format: "XY PATH" or "XY ORIG_PATH -> PATH" for renames
+		// (rename status "R" appears at either index 0 or 1 depending on
+		// whether the rename is staged, unstaged, or both).
+		rest := line[3:]
+		path := rest
+		oldPath := ""
+		if idx := strings.Index(rest, " -> "); idx >= 0 {
+			oldPath = rest[:idx]
+			path = rest[idx+len(" -> "):]
 		}
-		entries = append(entries, DirtyEntry{Path: path, Untracked: strings.HasPrefix(line, "??")})
+		entries = append(entries, DirtyEntry{Path: path, OldPath: oldPath, Untracked: strings.HasPrefix(line, "??")})
 	}
 	return entries, nil
 }

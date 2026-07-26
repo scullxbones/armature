@@ -58,10 +58,17 @@ func CleanTreeCheck(worktreePath string) CheckResult {
 	// arm's own materialized state under .armature/ is expected to be
 	// gitignored in any repo using armature; treat it as noise here rather
 	// than depending on every caller's .gitignore being correctly set up.
+	// A rename's OldPath must also be under .armature/ before the entry is
+	// ignored: DirtyEntries only reports OldPath for renames (empty
+	// otherwise), so a rename from a tracked file outside .armature/ into
+	// .armature/ (e.g. `git mv outside.go .armature/outside.go`) would
+	// otherwise be discarded here by checking Path alone, even though it
+	// effectively deletes a tracked non-armature-state file.
 	const armatureStateDir = ".armature/"
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Path, armatureStateDir) {
+		if strings.HasPrefix(entry.Path, armatureStateDir) &&
+			(entry.OldPath == "" || strings.HasPrefix(entry.OldPath, armatureStateDir)) {
 			continue
 		}
 		paths = append(paths, entry.Path)
@@ -154,6 +161,34 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// --allow-empty -m "fix(ISSUE-ID): busywork"`) delivers no real content
 	// and must not satisfy this check on its own. Keep scanning past it in
 	// case a later matching commit does have real content.
+	// A matching commit having non-empty CommitChangedFiles is not enough on
+	// its own: a later commit in the range (e.g. a revert) can cancel out
+	// exactly the change the matching commit made, leaving nothing actually
+	// delivered even though the matching commit "touched files" at the time
+	// it was made. It is also not enough to require that the net base-to-HEAD
+	// diff is merely nonempty for any reason: a fully-reverted matching commit
+	// can be padded with one unrelated trivial in-scope commit, making the net
+	// diff nonempty while the matching commit's own substance survives
+	// nowhere in it. Require instead that the net diff contains at least one
+	// path that the matching commit itself touched, so a padded self-
+	// cancelling revert can't slip a zero-net-change delivery past this check.
+	netDiff, err := git.DiffNameStatus(baseCommit)
+	if err != nil {
+		return CheckResult{
+			Pass:        false,
+			Remediation: fmt.Sprintf("Failed to get diff: %v", err),
+		}
+	}
+	netDiffFiles := make(map[string]bool, len(netDiff)*2)
+	for _, e := range netDiff {
+		if e.Path != "" {
+			netDiffFiles[e.Path] = true
+		}
+		if e.OldPath != "" {
+			netDiffFiles[e.OldPath] = true
+		}
+	}
+
 	foundMatchingCommit := false
 	for _, entry := range entries {
 		if !pattern.MatchString(entry.Subject) {
@@ -161,6 +196,16 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		}
 		files, err := git.CommitChangedFiles(entry.SHA)
 		if err != nil || len(files) == 0 {
+			continue
+		}
+		overlaps := false
+		for _, f := range files {
+			if netDiffFiles[f] {
+				overlaps = true
+				break
+			}
+		}
+		if !overlaps {
 			continue
 		}
 		foundMatchingCommit = true
@@ -171,7 +216,7 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		return CheckResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
-				"No commits with non-trivial content found matching conventional-commit format %s(<ISSUE-ID>): ... since %s",
+				"No commits with non-trivial, undone content found matching conventional-commit format %s(<ISSUE-ID>): ... since %s",
 				"[type]", baseCommit,
 			),
 		}
