@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1130,4 +1133,57 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 
 	// Worktree preserved as evidence.
 	assert.DirExists(t, worktreePath)
+}
+
+// TestMergedClearsStaleParentBranchMetadata_PR88 verifies the P2 fix: `arm
+// merged` must clear the persisted branch.<name>.armature-parent git-config
+// key (and base-commit file) when it removes a task's worktree. Without this,
+// if the branch is later deleted and the same branch name is reused for a
+// genuinely different parent, writeParentBranchConfigIfAbsent's "if absent"
+// guard sees the stale leftover value and never records the fresh, correct
+// parent — silently corrupting the delivery gate's merge-base computation
+// for whatever unrelated branch reuses that name.
+func TestMergedClearsStaleParentBranchMetadata_PR88(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+
+	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, claimCmd.Execute())
+
+	// Sanity check: claiming from the default branch should have recorded it
+	// as the parent-branch config for task/task-01.
+	out := runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent")
+	require.Equal(t, defaultBranch, strings.TrimSpace(out))
+
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
+		"--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// The stale parent-branch config must be cleared after merged.
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", "branch.task/task-01.armature-parent")
+	getCmd.Dir = repo
+	_, getErr := getCmd.Output()
+	assert.Error(t, getErr, "parent-branch config should be unset after arm merged")
+
+	// A fresh write for the same branch name (simulating branch deletion and
+	// reuse with a genuinely different parent) must now succeed, proving the
+	// idempotency guard isn't blocked by a stale leftover value.
+	gitClient := adapters.New(repo)
+	require.NoError(t, writeParentBranchConfigIfAbsent(gitClient, "task/task-01", "other-parent-branch"))
+	out2 := runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent")
+	assert.Equal(t, "other-parent-branch", strings.TrimSpace(out2))
 }
