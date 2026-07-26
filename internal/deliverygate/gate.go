@@ -115,7 +115,8 @@ func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 // CommitReferenceCheck verifies that at least one commit since baseCommit
 // matches the conventional-commit format with the issue ID in the scope.
 // Format: <type>(<ISSUE-ID>): ... or <type>(<ISSUE-ID>)!: ...
-// where type is lowercase alphabetic (feat, fix, refactor, test, docs, etc).
+// where type is one of feat, fix, refactor, test, docs, style, polish
+// (see docs/conventions.md).
 func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
 	git := adapters.New(worktreePath)
 
@@ -128,9 +129,12 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		}
 	}
 
-	// Build regex pattern: ^[a-z]+\(ISSUE-ID\)!?:
-	// Matches: type(ISSUE-ID): or type(ISSUE-ID)!:
-	pattern := regexp.MustCompile(`^[a-z]+\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
+	// Build regex pattern: ^(feat|fix|refactor|test|docs|style|polish)\(ISSUE-ID\)!?:
+	// Matches: type(ISSUE-ID): or type(ISSUE-ID)!: where type is one of the
+	// commit types enumerated by docs/conventions.md. Restricting the type
+	// alternation (rather than accepting any lowercase word) prevents a
+	// bogus type like "oops(ISSUE-ID): ..." from satisfying this check.
+	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
 
 	foundMatchingCommit := false
 	for _, entry := range entries {

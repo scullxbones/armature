@@ -117,8 +117,8 @@ go run ./cmd/armature --help   # confirms the binary at least compiles
 **Completion order (never deviate):**
 1. Run `go build ./...` — fix any compile errors.
 2. Run `make check` — fix any lint/test/coverage failures.
-3. `arm transition ISSUE-ID --to done --outcome "..."` — only after both pass.
-4. Immediately stage scoped files and commit — do not leave the transition uncommitted before moving to step 6.
+3. Stage scoped files and commit with a conventional commit message (`<type>(ISSUE-ID): ...`) — the delivery gate's Clean Tree and Commit Reference checks require this to already be done before you transition.
+4. `arm transition ISSUE-ID --to done --outcome "..."` — only after the build, checks, and commit above are complete.
 
 ### 5b. Cross-Layer JSON Fixture Testing (when applicable)
 
@@ -143,7 +143,7 @@ to your specific types and fields.
 
 ### 5c. The Delivery Gate
 
-When you transition to `done`, Armature runs a **delivery gate** — a set of three checks that verify your work meets minimal quality and scope standards before marking the task complete.
+Before you transition to `done`, stage and commit your work (conventional commit format, see the Completion order above) — the gate expects a clean tree and an existing commit, not the other way around. When you transition to `done`, Armature runs a **delivery gate** — a set of three checks that verify your work meets minimal quality and scope standards before marking the task complete.
 
 **The Three Checks:**
 
@@ -173,9 +173,9 @@ When you skip the gate, the override is recorded in the transition op's `Payload
 ### 6. Complete and Commit
 
 ```
-arm transition ISSUE-ID --to done --outcome "what was accomplished"
 git add <each file from the task scope>
 git commit -m "feat(ISSUE-ID): brief description of what was implemented"
+arm transition ISSUE-ID --to done --outcome "what was accomplished"
 ```
 
 Stage files **explicitly by name or path** — taken directly from the task's `scope` field.

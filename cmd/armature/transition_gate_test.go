@@ -162,3 +162,101 @@ func TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "delivery gate")
 }
+
+// TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1 verifies that
+// if a task's worktree is removed (e.g. by `arm merged`'s RemoveWorktree)
+// while the branch itself still exists, and the task is later re-claimed
+// (recreating the worktree at a new path), the delivery gate still scopes
+// against the branch's true original divergence point rather than whatever
+// happens to be checked out in the main repo at re-claim time. The parent
+// branch is recorded as git config on claim (shared across worktrees), so it
+// survives worktree removal even though the per-worktree base-commit file
+// does not.
+func TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Simulate a story branch the coordinator has checked out, standing in
+	// for a real story branch (no need to materialize an actual story issue
+	// for this test — claim.go only cares about the git branch name).
+	run(t, repo, "git", "checkout", "-b", "story-branch")
+
+	_, err = runTrls(t, repo, "create", "--id", "gate-06", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt1 := filepath.Join(t.TempDir(), "gate-06-wt1")
+	_, err = runTrls(t, repo, "claim", "gate-06", "--worktree", wt1)
+	require.NoError(t, err)
+
+	// Remove the worktree directly (as RemoveWorktree in merged.go would),
+	// leaving the task branch intact.
+	run(t, repo, "git", "worktree", "remove", wt1, "--force")
+
+	// After removal, the story branch (still checked out in the main repo)
+	// gains a new commit unrelated to the task — simulating a sibling task
+	// completing after gate-06 was originally claimed.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
+	run(t, repo, "git", "add", "sibling.go")
+	run(t, repo, "git", "commit", "-m", "feat(gate-sibling): unrelated sibling work")
+
+	// Re-claim gate-06 at a new worktree path: the branch already exists, so
+	// this exercises the worktree-recreation path.
+	wt2 := filepath.Join(t.TempDir(), "gate-06-wt2")
+	_, err = runTrls(t, repo, "claim", "gate-06", "--worktree", wt2)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt2, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, wt2, "git", "add", "foo.go")
+	run(t, wt2, "git", "commit", "-m", "feat(gate-06): add foo")
+
+	// The sibling commit landed on story-branch strictly after gate-06
+	// diverged from it, so it must not be attributed to gate-06's diff.
+	_, err = runTrls(t, wt2, "transition", "--issue", "gate-06", "--to", "done", "--outcome", "test", "--force")
+	assert.NoError(t, err, "sibling commit added after worktree removal must not be misattributed as in-scope diff")
+}
+
+// TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1 verifies
+// that if a task branch is rebased onto an updated parent-branch tip
+// (picking up new sibling commits along the way), the delivery gate
+// recomputes the branch-point dynamically via merge-base rather than trusting
+// a base commit SHA recorded once at claim time — a stale recorded SHA would
+// misattribute the rebased-in sibling commits as in-scope diff.
+func TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "checkout", "-b", "story-branch")
+
+	_, err = runTrls(t, repo, "create", "--id", "gate-07", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-07-wt")
+	_, err = runTrls(t, repo, "claim", "gate-07", "--worktree", wt)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, wt, "git", "add", "foo.go")
+	run(t, wt, "git", "commit", "-m", "feat(gate-07): add foo")
+
+	// A sibling commit lands on story-branch after gate-07 branched off.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
+	run(t, repo, "git", "add", "sibling.go")
+	run(t, repo, "git", "commit", "-m", "feat(gate-sibling): unrelated sibling work")
+
+	// Rebase the task branch onto the updated story-branch tip, pulling the
+	// sibling commit into the task branch's own ancestry.
+	run(t, wt, "git", "rebase", "story-branch")
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-07", "--to", "done", "--outcome", "test", "--force")
+	assert.NoError(t, err, "sibling commit pulled in by rebase onto updated parent tip must not be misattributed as in-scope diff")
+}

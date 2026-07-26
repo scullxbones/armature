@@ -88,8 +88,13 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "HEAD")
 	require.NoError(t, err, "ReviewCommits should succeed")
 
-	// Verify all expected commits are found
-	assert.Equal(t, 7, len(commits), "should find exactly 7 commits for TOPTIER-S1-T3")
+	// Verify all expected commits are found. chore is intentionally excluded:
+	// it is not one of the commit types docs/conventions.md documents (feat,
+	// fix, refactor, test, docs, style, polish), so ReviewCommits' pattern is
+	// restricted to that allow-list — the same fix applied to
+	// internal/deliverygate/gate.go's CommitReferenceCheck, which previously
+	// used an unrestricted ^[a-z]+ that would also match a bogus type.
+	assert.Equal(t, 6, len(commits), "should find exactly 6 commits for TOPTIER-S1-T3")
 
 	// Extract subjects for verification
 	subjects := make(map[string]bool)
@@ -103,7 +108,7 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	assert.True(t, subjects["refactor(TOPTIER-S1-T3): refactor module"], "refactor commit should be found")
 	assert.True(t, subjects["test(TOPTIER-S1-T3): add tests"], "test commit should be found")
 	assert.True(t, subjects["docs(TOPTIER-S1-T3): update documentation"], "docs commit should be found")
-	assert.True(t, subjects["chore(TOPTIER-S1-T3): update dependencies"], "chore commit should be found")
+	assert.False(t, subjects["chore(TOPTIER-S1-T3): update dependencies"], "chore is not a valid conventions.md type and should not be found")
 	assert.True(t, subjects["feat(TOPTIER-S1-T3)!: breaking change"], "breaking-change (feat(ID)!:) commit should be found")
 
 	// Verify that commits for other issues are not included
@@ -137,6 +142,35 @@ func TestReviewCommits_RejectsOptionLikeBranch(t *testing.T) {
 	_, err := ReviewCommits(git, "TOPTIER-S1-T3", "--all")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid branch")
+}
+
+// TestReviewCommits_RejectsDisallowedType verifies that a commit type outside
+// the repo's documented convention (feat, fix, refactor, test, docs, style,
+// polish — see docs/conventions.md) is not matched, even though it matches
+// "some lowercase word" followed by (ISSUE-ID):. Same bug class as the
+// overly-permissive ^[a-z]+ pattern fixed in
+// internal/deliverygate/gate.go's CommitReferenceCheck.
+func TestReviewCommits_RejectsDisallowedType(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	repo := tmpDir
+
+	run(t, repo, "git", "init")
+	run(t, repo, "git", "config", "maintenance.auto", "false")
+	run(t, repo, "git", "config", "gc.auto", "0")
+	run(t, repo, "git", "config", "user.email", "test@example.com")
+	run(t, repo, "git", "config", "user.name", "Test User")
+	run(t, repo, "git", "config", "commit.gpgsign", "false")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "initial commit")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "oops.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "oops.go")
+	run(t, repo, "git", "commit", "-m", "oops(TOPTIER-S1-T3): bypass convention")
+
+	git := adapters.New(repo)
+	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(commits), "commit with disallowed type should not be matched")
 }
 
 // TestReviewCommits_PartialMatchIgnored verifies that ReviewCommits only matches

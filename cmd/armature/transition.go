@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
@@ -111,7 +114,19 @@ This enforces branch + PR discipline.`,
 				if currentEntry == nil {
 					return fmt.Errorf("issue %s not found in materialized index (required for delivery gate check). Use --skip-delivery-gate to bypass", issueID)
 				}
-				if err := runDeliveryGateCheck(appCtx, issueID, currentEntry.Scope); err != nil {
+				// Use the literal --repo flag value (the worker's actual
+				// worktree), not appCtx.RepoPath: config resolution collapses
+				// a linked worktree's path to the *main* repo root (see
+				// resolveParentRepoFromWorktree in internal/config/context.go)
+				// so it can locate the shared armature.ops-worktree-path
+				// config — but the delivery gate must run git
+				// status/diff/log against the worker's own worktree, where
+				// the actual dirty files, scoped diff, and commits live.
+				gateRepoPath, _ := cmd.Flags().GetString("repo")
+				if gateRepoPath == "" {
+					gateRepoPath = "."
+				}
+				if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Scope); err != nil {
 					return err
 				}
 			}
@@ -258,19 +273,31 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
 // It fails closed: if the worktree cannot be determined or the gate checks fail,
 // it returns an error with per-check remediations.
-func runDeliveryGateCheck(appCtx *config.Context, issueID string, scope []string) error {
-	// Get the repo path (worktree path)
-	worktreePath := appCtx.RepoPath
+func runDeliveryGateCheck(worktreePath string, issueID string, scope []string) error {
 	if worktreePath == "" {
 		return fmt.Errorf("no repo path available: cannot run delivery gate check. Use --skip-delivery-gate to bypass")
 	}
 
-	// Get the base commit: use merge-base against whichever default branch exists.
+	// Get the base commit. Prefer dynamically recomputing merge-base against
+	// the recorded parent branch (git config, shared across worktrees — see
+	// parentBranchConfigKey): this self-corrects both if the worktree was
+	// removed and recreated (config survives that; a per-worktree file would
+	// not) and if the task branch was later rebased onto an updated parent
+	// tip (merge-base recomputed fresh each time, so it never goes stale).
+	// Fall back to the SHA recorded once at claim time (worktrees claimed
+	// before the parent-branch config was introduced), then to merge-base
+	// against a default branch.
 	git := adapters.New(worktreePath)
-	baseCommit, err := getBaseCommit(git)
+	baseCommit, err := dynamicBaseCommit(git)
 	if err != nil {
-		// If no candidate base branch resolves, fail closed
-		return fmt.Errorf("failed to determine base commit for delivery gate check: %w. Use --skip-delivery-gate to bypass", err)
+		baseCommit, err = recordedBaseCommit(worktreePath)
+		if err != nil {
+			baseCommit, err = getBaseCommit(git)
+			if err != nil {
+				// If no candidate base branch resolves, fail closed
+				return fmt.Errorf("failed to determine base commit for delivery gate check: %w. Use --skip-delivery-gate to bypass", err)
+			}
+		}
 	}
 
 	// Run the delivery gate check
@@ -299,6 +326,56 @@ func runDeliveryGateCheck(appCtx *config.Context, issueID string, scope []string
 	}
 
 	return nil
+}
+
+// recordedBaseCommit reads the branch-point SHA persisted at claim time
+// (see writeBaseCommitFileIfAbsent in claim.go) from the worktree's actual
+// git directory. Returns an error if the worktree wasn't claimed after this
+// mechanism was introduced, so callers can fall back to getBaseCommit.
+func recordedBaseCommit(worktreePath string) (string, error) {
+	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve worktree git dir: %w", err)
+	}
+	data, err := os.ReadFile(filepath.Join(actualGitDir, baseCommitFileName)) //nolint:gosec // G304: derived from a trusted git directory
+	if err != nil {
+		return "", err
+	}
+	sha := strings.TrimSpace(string(data))
+	if sha == "" {
+		return "", fmt.Errorf("base commit file is empty")
+	}
+	return sha, nil
+}
+
+// dynamicBaseCommit recomputes the task branch's divergence point on demand
+// by merge-basing the current branch against its recorded parent branch
+// (see parentBranchConfigKey / writeParentBranchConfigIfAbsent in claim.go).
+// Unlike a SHA recorded once at claim time, this is recomputed fresh on
+// every gate check, so it stays correct even if the task branch was rebased
+// onto an updated parent tip after claim — a stale recorded SHA would
+// otherwise misattribute new sibling commits pulled in by the rebase as
+// in-scope diff, reintroducing the sibling-attribution bug this mechanism
+// exists to prevent. Returns an error if the current branch can't be
+// determined, no parent is recorded (worktrees claimed before this existed),
+// or the parent ref no longer resolves.
+func dynamicBaseCommit(git *adapters.Client) (string, error) {
+	currentBranch, err := git.CurrentBranch()
+	if err != nil || currentBranch == "" {
+		return "", fmt.Errorf("determine current branch: %w", err)
+	}
+	parentBranch, err := git.ReadGitConfig(parentBranchConfigKey(currentBranch))
+	if err != nil || parentBranch == "" {
+		return "", fmt.Errorf("no recorded parent branch for %s: %w", currentBranch, err)
+	}
+	if _, err := git.ResolveRevision(parentBranch); err != nil {
+		return "", fmt.Errorf("recorded parent branch %s does not resolve: %w", parentBranch, err)
+	}
+	base, err := git.MergeBase(currentBranch, parentBranch)
+	if err != nil {
+		return "", fmt.Errorf("merge-base %s %s: %w", currentBranch, parentBranch, err)
+	}
+	return base, nil
 }
 
 // candidateBaseRefs are tried in order to find the branch a task diverged

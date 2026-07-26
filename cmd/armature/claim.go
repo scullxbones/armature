@@ -184,10 +184,38 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// Create git client for main repo
 	gitClient := adapters.New(repoPath)
 
+	// Resolve HEAD before branching: this is the actual point the task branch
+	// diverges from the coordinator's checkout, which may already be a story
+	// branch containing completed sibling-task commits (not necessarily main).
+	// Persisted below so the delivery gate can scope-check against the real
+	// branch-point instead of guessing via merge-base against a default branch.
+	headSHA, headErr := gitClient.ResolveRevision("HEAD")
+
+	// Capture the name of the branch this task branch is being cut from
+	// (the coordinator's current checkout — often a story branch). This is
+	// persisted as git config on the *main repo* (shared across all linked
+	// worktrees, not per-worktree), so it survives worktree removal/recreation
+	// (e.g. via `arm merged`'s RemoveWorktree) and lets the delivery gate
+	// recompute the branch-point dynamically via merge-base at check time —
+	// which also self-corrects if the task branch is later rebased onto an
+	// updated parent tip, instead of trusting a SHA recorded once at claim time.
+	parentBranch, parentErr := gitClient.CurrentBranch()
+
 	// Create a branch from HEAD for this task/bug (idempotent: no-op if already exists)
 	// The branch inherits all commits and files from HEAD, unlike an orphan branch.
 	if err := gitClient.CreateBranchFrom(branchName, "HEAD"); err != nil {
 		return fmt.Errorf("create branch: %w", err)
+	}
+
+	// Persist the parent branch name, but only if not already recorded: claim
+	// is idempotent and may re-run after the worktree (but not the branch) was
+	// removed, in which case gitClient.CurrentBranch() here would return
+	// whatever the coordinator happens to be on *now* — not the original
+	// parent — so an existing record must never be overwritten.
+	if parentErr == nil && parentBranch != "" {
+		if err := writeParentBranchConfigIfAbsent(gitClient, branchName, parentBranch); err != nil {
+			return fmt.Errorf("write parent branch config: %w", err)
+		}
 	}
 
 	// Add worktree pointing to the branch
@@ -200,6 +228,71 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 		return fmt.Errorf("write issue ID file: %w", err)
 	}
 
+	// Persist the branch-point SHA if it was already claimed (idempotent claim
+	// re-runs against an existing branch skip this: HEAD may have moved since
+	// the branch was first created, and re-persisting would overwrite the true
+	// original branch-point with a later, incorrect value).
+	if headErr == nil {
+		if err := writeBaseCommitFileIfAbsent(worktreePath, headSHA); err != nil {
+			return fmt.Errorf("write base commit file: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// baseCommitFileName is the name of the file (written into a worktree's
+// actual git directory, alongside armature-issue-id) that records the SHA
+// the task branch diverged from at claim time. The delivery gate reads this
+// to scope-check against the real branch-point rather than merge-basing
+// against a default branch, which is wrong whenever the task branch was cut
+// from a story branch containing completed sibling-task commits.
+const baseCommitFileName = "armature-base-commit"
+
+// parentBranchConfigKey returns the git config key used to durably record,
+// on the shared (main-repo) git config, the branch a task branch was cut
+// from. Recorded as git config rather than a per-worktree file: git config
+// --local written from a linked worktree lands in the main repo's shared
+// .git/config (armature does not enable the worktreeConfig extension), so
+// the record survives `arm merged` removing the worktree, and stays
+// addressable by branch name if the worktree is later recreated.
+func parentBranchConfigKey(branchName string) string {
+	return "branch." + branchName + ".armature-parent"
+}
+
+// writeParentBranchConfigIfAbsent records parentBranch as the branch
+// branchName diverged from, but only if no such record exists yet — the
+// same idempotency guard as writeBaseCommitFileIfAbsent, and for the same
+// reason: an existing record reflects the true original parent and must
+// never be overwritten by a later, possibly different, "current branch".
+func writeParentBranchConfigIfAbsent(gitClient *adapters.Client, branchName, parentBranch string) error {
+	key := parentBranchConfigKey(branchName)
+	if existing, err := gitClient.ReadGitConfig(key); err == nil && existing != "" {
+		return nil
+	}
+	return gitClient.SetGitConfig(key, parentBranch)
+}
+
+// writeBaseCommitFileIfAbsent records headSHA as the task branch's
+// branch-point, but only if no such record exists yet. Claim is idempotent
+// and may be re-run against an already-created branch; without the
+// absence-check, a later HEAD would silently overwrite the true origin
+// branch-point.
+func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
+	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return fmt.Errorf("resolve worktree git dir: %w", err)
+	}
+
+	baseCommitFile := filepath.Join(actualGitDir, baseCommitFileName)
+	if _, err := os.Stat(baseCommitFile); err == nil {
+		// Already recorded from the original claim; leave it alone.
+		return nil
+	}
+
+	if err := os.WriteFile(baseCommitFile, []byte(headSHA), 0o600); err != nil {
+		return fmt.Errorf("write base commit file: %w", err)
+	}
 	return nil
 }
 
