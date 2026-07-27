@@ -13,42 +13,19 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
 // resolveWorktreeGitDir resolves the actual git directory for a worktree path.
-// In a git worktree, the .git entry is a file (not a directory) containing
-// "gitdir: <path>" pointing to the real git dir (e.g., <parent>/.git/worktrees/<name>).
-// This function reads that file and returns the resolved absolute path.
-// It is used by both claim and harness-hook so that both read from the same location.
+// It is used by both claim and harness-hook so that both read from the same
+// location. Delegates to internal/deliverygate.ResolveWorktreeGitDir, the
+// single source of truth also used by the delivery gate's read-side
+// base-commit resolution.
 func resolveWorktreeGitDir(worktreePath string) (string, error) {
-	gitPath := filepath.Join(worktreePath, ".git")
-	// If .git is a directory (main worktree), return it directly.
-	info, err := os.Stat(gitPath)
-	if err != nil {
-		return "", fmt.Errorf("stat .git: %w", err)
-	}
-	if info.IsDir() {
-		return gitPath, nil
-	}
-
-	// .git is a file — read "gitdir: <path>" from it.
-	//nolint:gosec // git paths are internal, not user-provided
-	gitFileContent, err := os.ReadFile(gitPath)
-	if err != nil {
-		return "", fmt.Errorf("read .git file: %w", err)
-	}
-	gitDirLine := strings.TrimSpace(string(gitFileContent))
-	if !strings.HasPrefix(gitDirLine, "gitdir: ") {
-		return "", fmt.Errorf("unexpected .git file format: %s", gitDirLine)
-	}
-	actualGitDir := strings.TrimPrefix(gitDirLine, "gitdir: ")
-	if !filepath.IsAbs(actualGitDir) {
-		actualGitDir = filepath.Join(worktreePath, actualGitDir)
-	}
-	return actualGitDir, nil
+	return deliverygate.ResolveWorktreeGitDir(worktreePath)
 }
 
 // worktreePathExists checks if a worktree exists at the given path.
@@ -272,10 +249,12 @@ func persistBranchPointMetadata(
 // baseCommitFileName is the name of the file (written into a worktree's
 // actual git directory, alongside armature-issue-id) that records the SHA
 // the task branch diverged from at claim time. The delivery gate reads this
-// to scope-check against the real branch-point rather than merge-basing
-// against a default branch, which is wrong whenever the task branch was cut
-// from a story branch containing completed sibling-task commits.
-const baseCommitFileName = "armature-base-commit"
+// (see internal/deliverygate.RecordedBaseCommit) to scope-check against the
+// real branch-point rather than merge-basing against a default branch, which
+// is wrong whenever the task branch was cut from a story branch containing
+// completed sibling-task commits. Aliased to the deliverygate constant so
+// the write side (here) and read side (deliverygate) can never drift apart.
+const baseCommitFileName = deliverygate.BaseCommitFileName
 
 // parentBranchConfigKey returns the git config key used to durably record,
 // on the shared (main-repo) git config, the branch a task branch was cut
@@ -283,9 +262,11 @@ const baseCommitFileName = "armature-base-commit"
 // --local written from a linked worktree lands in the main repo's shared
 // .git/config (armature does not enable the worktreeConfig extension), so
 // the record survives `arm merged` removing the worktree, and stays
-// addressable by branch name if the worktree is later recreated.
+// addressable by branch name if the worktree is later recreated. Delegates
+// to internal/deliverygate.ParentBranchConfigKey, the same key the delivery
+// gate's read side (DynamicBaseCommit) resolves.
 func parentBranchConfigKey(branchName string) string {
-	return "branch." + branchName + ".armature-parent"
+	return deliverygate.ParentBranchConfigKey(branchName)
 }
 
 // writeParentBranchConfigIfAbsent records parentBranch as the branch
