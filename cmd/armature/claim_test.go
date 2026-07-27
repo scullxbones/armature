@@ -261,6 +261,81 @@ func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_R
 	}
 }
 
+// TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction verifies
+// that both claim entry paths that can persist branch-point metadata -- the
+// fresh-worktree path (createWorktreeAndBranch) and the existing-worktree
+// path (which also covers a stale-claim takeover of an already-existing
+// worktree, since that path branches solely on "does a worktree already
+// exist at this path", not on who owned the prior claim) -- write the
+// base-commit file in the exact same shape: same filename
+// (armature-base-commit) in the worktree's actual git directory, containing
+// exactly the resolved HEAD SHA with no extra formatting. Both paths route
+// through the single persistBranchPointMetadata function (see
+// createWorktreeAndBranch's call at the end of this file and the
+// existing-worktree branch in newClaimCmd), so this test exists to catch a
+// regression where one path's write logic drifts from the other's (e.g. a
+// change to one call site's serialization without updating the other) --
+// the kind of scattered-duplication bug the LNGHZN-S4 review repeatedly
+// flagged.
+func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.T) {
+	readBaseCommitFile := func(t *testing.T, worktreePath string) string {
+		t.Helper()
+		gitPath := filepath.Join(worktreePath, ".git")
+		gitFileContent, err := os.ReadFile(gitPath)
+		require.NoError(t, err)
+		actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+		if !filepath.IsAbs(actualGitDir) {
+			actualGitDir = filepath.Join(worktreePath, actualGitDir)
+		}
+		data, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+		require.NoError(t, err, "base-commit file should be recorded")
+		return string(data)
+	}
+
+	t.Run("fresh worktree path", func(t *testing.T) {
+		repo := setupRepoWithParentAndTask(t)
+		headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+		worktreePath := filepath.Join(t.TempDir(), "fresh-worktree")
+
+		buf := new(bytes.Buffer)
+		cmd := newRootCmd()
+		cmd.SetOut(buf)
+		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		require.NoError(t, cmd.Execute())
+
+		content := readBaseCommitFile(t, worktreePath)
+		assert.Equal(t, headSHA, strings.TrimSpace(content),
+			"fresh-worktree path must persist HEAD as the base-commit with no extra formatting")
+		assert.NotContains(t, content, "\n", "base-commit file must contain the raw SHA with no trailing newline or extra data")
+	})
+
+	t.Run("existing worktree path (also covers stale-claim takeover)", func(t *testing.T) {
+		repo := setupRepoWithParentAndTask(t)
+		headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+		// Pre-create the worktree at the expected branch/HEAD so `arm claim`
+		// takes the existing-worktree path instead of createWorktreeAndBranch.
+		// This is the same code path a stale-claim takeover of a pre-existing
+		// worktree exercises: the branch taken depends only on whether a
+		// worktree already exists at the target path, not on who previously
+		// owned the claim.
+		worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+		run(t, repo, "git", "branch", "task/task-01")
+		run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
+
+		buf := new(bytes.Buffer)
+		cmd := newRootCmd()
+		cmd.SetOut(buf)
+		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		require.NoError(t, cmd.Execute())
+
+		content := readBaseCommitFile(t, worktreePath)
+		assert.Equal(t, headSHA, strings.TrimSpace(content),
+			"existing-worktree path must persist HEAD as the base-commit in the same shape as the fresh-worktree path")
+		assert.NotContains(t, content, "\n", "base-commit file must contain the raw SHA with no trailing newline or extra data")
+	})
+}
+
 // TestClaimWithoutWorktreeFlag verifies that claim fails when --worktree is omitted.
 func TestClaimWithoutWorktreeFlag(t *testing.T) {
 	repo := setupRepoWithTask(t)

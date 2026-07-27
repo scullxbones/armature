@@ -459,6 +459,99 @@ func TestCommitReferenceCheck_RejectsPaddedSelfCancellingRevert(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_RejectsSameFileContentRevert verifies that a
+// matching conventional commit whose added content is fully undone cannot be
+// smuggled past the check merely because the SAME file it touched still
+// shows up in the net base..HEAD diff (due to an unrelated trivial edit to
+// that same file). Before this fix, CommitReferenceCheck only checked that
+// the matching commit's touched FILENAMES overlapped with the net diff's
+// changed filenames -- not that any of the matching commit's actual added
+// content survives in the net diff. A later commit can revert the matching
+// commit's real change and pad the same file with an unrelated trivial edit,
+// keeping the filename in the net diff while none of the delivered content
+// survives.
+func TestCommitReferenceCheck_RejectsSameFileContentRevert(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	widget := filepath.Join(tmpDir, "widget.txt")
+	require.NoError(t, os.WriteFile(widget, []byte("base widget\n"), 0644))
+	runGit(t, tmpDir, "add", "widget.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// C1: matching format, adds real delivered content to widget.txt.
+	require.NoError(t, os.WriteFile(widget, []byte("base widget\nDELIVERED FEATURE\n"), 0644))
+	runGit(t, tmpDir, "add", "widget.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement widget")
+
+	// C2: removes C1's delivered line and adds an unrelated trivial line to
+	// the SAME file, so widget.txt still appears in the net base..HEAD diff
+	// even though none of C1's actual content survives.
+	require.NoError(t, os.WriteFile(widget, []byte("base widget\ntrailing padding\n"), 0644))
+	runGit(t, tmpDir, "add", "widget.txt")
+	runGit(t, tmpDir, "commit", "-m", "swap in padding")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass,
+		"a matching commit whose delivered content is undone must not pass merely because its filename still appears in the net diff")
+	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_RejectsShortCoincidentalLineMatch_REQ_LNGHZN_S4 verifies
+// that a matching commit whose real (long, distinctive) added content is fully
+// reverted cannot be smuggled past the survival check merely because a SHORT,
+// common line it also happened to add (e.g. a lone "}") coincidentally
+// reappears as an added line elsewhere in the net diff for the same file, for
+// entirely unrelated reasons. Before this fix, the survival check treated ANY
+// single non-blank added-line match — however short and generic — as proof of
+// survival, so two coincidentally identical short lines in unrelated commits
+// could produce a false "survives" even though the matching commit's actual
+// distinctive content was completely undone.
+func TestCommitReferenceCheck_RejectsShortCoincidentalLineMatch_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	widget := filepath.Join(tmpDir, "widget.go")
+	require.NoError(t, os.WriteFile(widget, []byte("package widget\n"), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// C1: matching format, adds a distinctive delivered line plus a short,
+	// generic closing-brace line.
+	require.NoError(t, os.WriteFile(widget, []byte(
+		"package widget\n\nfunc New() {\n\tdoDistinctiveDeliveredWork()\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement widget")
+
+	// C2: fully reverts C1's change back to base content.
+	require.NoError(t, os.WriteFile(widget, []byte("package widget\n"), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "revert the widget change")
+
+	// C3: an unrelated later change to the SAME file that happens to add a
+	// short, common line ("}") for reasons that have nothing to do with C1's
+	// reverted content.
+	require.NoError(t, os.WriteFile(widget, []byte(
+		"package widget\n\nfunc Unrelated() {\n\tdoOtherThing()\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "add unrelated function")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass,
+		"a coincidental short-line match (e.g. a lone \"}\") must not count as survival of the matching commit's reverted content")
+	assert.NotEmpty(t, result.Remediation)
+}
+
 // TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1 verifies that the
 // DeliveryGate function returns correct combined results for all three checks.
 func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {

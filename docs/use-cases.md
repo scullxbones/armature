@@ -357,7 +357,13 @@ The working tree must be clean: `git status --porcelain` must be empty. All work
 
 **2. Scope Containment**
 
-The diff between your base commit and `HEAD` must be a subset of the issue's declared scope. The base commit is resolved via `git merge-base` against whichever of `main`, `master`, `origin/main`, or `origin/master` exists locally. Scope validation uses the internal `claim.IsWithinScope` check.
+The diff between your base commit and `HEAD` must be a subset of the issue's declared scope. The base commit is resolved with a three-tier fallback, most-precise first:
+
+1. **Dynamic parent-branch merge-base** — recomputed fresh on every gate check as `git merge-base` between the task branch and the parent branch it was cut from (recorded as git config at claim time). This is the branch the coordinator's checkout was actually on when the task branch was created — often a story branch containing completed sibling-task commits, not `main`. Recomputing on demand (rather than trusting a value cached once) means it self-corrects if the task branch is later rebased onto an updated parent tip.
+2. **Claim-time recorded SHA** — if no parent-branch record exists (e.g. a worktree claimed before this mechanism existed), fall back to the branch-point SHA persisted once at claim time.
+3. **Default-branch merge-base** — if neither of the above is available, fall back to `git merge-base` against whichever of `origin/main`, `origin/master`, `main`, or `master` resolves first.
+
+If none of the three tiers can determine a base commit, the transition fails closed (use `--skip-delivery-gate` to override). Scope validation uses the internal `claim.IsWithinScope` check.
 
 This prevents scope creep: you cannot deliver changes that fall outside the issue's boundaries.
 
