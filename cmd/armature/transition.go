@@ -3,15 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
-	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -305,7 +302,7 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	// the "not found in materialized index" check above) both when the
 	// binding doesn't match and when no binding marker exists at all —
 	// never silently allow an unbound path through.
-	if err := verifyIssueWorktreeBinding(worktreePath, issueID); err != nil {
+	if err := deliverygate.VerifyIssueWorktreeBinding(worktreePath, issueID); err != nil {
 		return err
 	}
 
@@ -317,7 +314,7 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	// correctly-scoped changes there, and pass the gate even though the
 	// actual task/<issueID> branch the coordinator will integrate never
 	// received the commit.
-	if err := verifyIssueBranchBinding(worktreePath, issueID, issueType); err != nil {
+	if err := deliverygate.VerifyIssueBranchBinding(worktreePath, issueID, issueType); err != nil {
 		return err
 	}
 
@@ -331,16 +328,10 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	// before the parent-branch config was introduced), then to merge-base
 	// against a default branch.
 	git := adapters.New(worktreePath)
-	baseCommit, err := dynamicBaseCommit(git)
+	baseCommit, err := deliverygate.ResolveBaseCommit(worktreePath, git)
 	if err != nil {
-		baseCommit, err = recordedBaseCommit(worktreePath)
-		if err != nil {
-			baseCommit, err = getBaseCommit(git)
-			if err != nil {
-				// If no candidate base branch resolves, fail closed
-				return fmt.Errorf("failed to determine base commit for delivery gate check: %w. Use --skip-delivery-gate to bypass", err)
-			}
-		}
+		// If no candidate base branch resolves, fail closed
+		return fmt.Errorf("%w. Use --skip-delivery-gate to bypass", err)
 	}
 
 	// Run the delivery gate check
@@ -372,150 +363,14 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	return nil
 }
 
-// verifyIssueWorktreeBinding fails closed unless worktreePath is the actual
-// worktree bound to issueID (the issue-ID marker file written by
-// updateIssueIDFile at claim time — see harnesshook.ReadIssueBindingFileErr).
-// This prevents `arm transition --to done --repo <some-other-checkout>` from
-// running the delivery gate against a directory that isn't the claimed
-// worktree for issueID, which would let a dirty or out-of-scope claimed
-// worktree pass because the wrong directory was checked instead.
-func verifyIssueWorktreeBinding(worktreePath, issueID string) error {
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
-	if err != nil {
-		return fmt.Errorf("resolve git dir for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
-	}
-	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
-	if err != nil {
-		return fmt.Errorf("read issue binding for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
-	}
-	if binding == "" {
-		return fmt.Errorf("%s is not bound to any issue (no armature-issue-id marker found):\n"+
-			"cannot verify this is the claimed worktree for %s. Use --skip-delivery-gate to bypass",
-			worktreePath, issueID)
-	}
-	if binding != issueID {
-		return fmt.Errorf("%s is bound to issue %s, not %s: refusing to run delivery gate check\n"+
-			"against the wrong worktree. Use --skip-delivery-gate to bypass",
-			worktreePath, binding, issueID)
-	}
-	return nil
-}
-
-// verifyIssueBranchBinding fails closed unless worktreePath's current git
-// branch (HEAD) is the expected task branch for issueID, derived the same
-// way claim.go's createWorktreeAndBranch does (see deriveBranchName). The
-// armature-issue-id marker file checked by verifyIssueWorktreeBinding only
-// proves the worktree was once claimed for this issue — it does not prove
-// HEAD is still on the branch the coordinator will actually integrate. A
-// worker could check out an unrelated scratch branch after claiming and
-// still pass that check, silently stranding otherwise-valid commits off the
-// task branch. issueType empty or unmapped (deriveBranchName returns "")
-// skips this check, matching the caller's existing task/bug/feature gating.
-func verifyIssueBranchBinding(worktreePath, issueID, issueType string) error {
-	expectedBranch := deriveBranchName(issueType, issueID)
-	if expectedBranch == "" {
-		return nil
-	}
-
-	git := adapters.New(worktreePath)
-	currentBranch, err := git.CurrentBranch()
-	if err != nil {
-		return fmt.Errorf("determine current branch for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
-	}
-	if currentBranch != expectedBranch {
-		return fmt.Errorf(
-			"%s is on branch %q but the delivery gate expects %q for issue %s:\n"+
-				"the coordinator integrates %[3]s, so commits on any other branch will not be picked up.\n"+
-				"Check out %[3]s or use --skip-delivery-gate to override",
-			worktreePath, currentBranch, expectedBranch, issueID)
-	}
-	return nil
-}
-
-// recordedBaseCommit reads the branch-point SHA persisted at claim time
-// (see writeBaseCommitFileIfAbsent in claim.go) from the worktree's actual
-// git directory. Returns an error if the worktree wasn't claimed after this
-// mechanism was introduced, so callers can fall back to getBaseCommit.
-func recordedBaseCommit(worktreePath string) (string, error) {
-	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
-	if err != nil {
-		return "", fmt.Errorf("resolve worktree git dir: %w", err)
-	}
-	data, err := os.ReadFile(filepath.Join(actualGitDir, baseCommitFileName)) //nolint:gosec // G304: derived from a trusted git directory
-	if err != nil {
-		return "", err
-	}
-	sha := strings.TrimSpace(string(data))
-	if sha == "" {
-		return "", fmt.Errorf("base commit file is empty")
-	}
-	return sha, nil
-}
-
-// dynamicBaseCommit recomputes the task branch's divergence point on demand
-// by merge-basing the current branch against its recorded parent branch
-// (see parentBranchConfigKey / writeParentBranchConfigIfAbsent in claim.go).
-// Unlike a SHA recorded once at claim time, this is recomputed fresh on
-// every gate check, so it stays correct even if the task branch was rebased
-// onto an updated parent tip after claim — a stale recorded SHA would
-// otherwise misattribute new sibling commits pulled in by the rebase as
-// in-scope diff, reintroducing the sibling-attribution bug this mechanism
-// exists to prevent. Returns an error if the current branch can't be
-// determined, no parent is recorded (worktrees claimed before this existed),
-// or the parent ref no longer resolves.
-func dynamicBaseCommit(git *adapters.Client) (string, error) {
-	currentBranch, err := git.CurrentBranch()
-	if err != nil || currentBranch == "" {
-		return "", fmt.Errorf("determine current branch: %w", err)
-	}
-	parentBranch, err := git.ReadGitConfig(parentBranchConfigKey(currentBranch))
-	if err != nil || parentBranch == "" {
-		return "", fmt.Errorf("no recorded parent branch for %s: %w", currentBranch, err)
-	}
-	// A persisted literal "HEAD" is a stale record from before the
-	// detached-HEAD guard existed in claim.go (see writeParentBranchConfigIfAbsent):
-	// resolving the ref "HEAD" here would just mean the task branch's own tip,
-	// collapsing the merge-base to the task's HEAD and making every commit
-	// range for CommitReferenceCheck empty. Treat it the same as an
-	// absent/empty value so old bad records self-heal by falling back to
-	// recordedBaseCommit / getBaseCommit instead of silently producing a
-	// wrong (empty) range.
-	if parentBranch == "HEAD" {
-		return "", fmt.Errorf("recorded parent branch for %s is the literal value \"HEAD\"\n"+
-			"(stale pre-fix record): treating as no usable parent branch", currentBranch)
-	}
-	if _, err := git.ResolveRevision(parentBranch); err != nil {
-		return "", fmt.Errorf("recorded parent branch %s does not resolve: %w", parentBranch, err)
-	}
-	base, err := git.MergeBase(currentBranch, parentBranch)
-	if err != nil {
-		return "", fmt.Errorf("merge-base %s %s: %w", currentBranch, parentBranch, err)
-	}
-	return base, nil
-}
-
-// candidateBaseRefs are tried in order to find the branch a task diverged
-// from. Remote-tracking refs are preferred over local branches: a local
-// `main`/`master` in a long-lived coordinator checkout is frequently stale
-// (fast-forwarded only on release), whereas `origin/main` reflects the
-// actual upstream tip workers branched from.
-var candidateBaseRefs = []string{"origin/main", "origin/master", "main", "master"}
-
-// getBaseCommit finds the merge-base between HEAD and the first candidate
-// base ref that resolves in this repo.
-func getBaseCommit(git *adapters.Client) (string, error) {
-	var lastErr error
-	for _, ref := range candidateBaseRefs {
-		if _, err := git.ResolveRevision(ref); err != nil {
-			lastErr = err
-			continue
-		}
-		base, err := git.MergeBase("HEAD", ref)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		return base, nil
-	}
-	return "", fmt.Errorf("no candidate base branch (%v) resolves: %w", candidateBaseRefs, lastErr)
-}
+// verifyIssueWorktreeBinding, verifyIssueBranchBinding, recordedBaseCommit,
+// dynamicBaseCommit, candidateBaseRefs, and getBaseCommit have moved to
+// internal/deliverygate (basecommit.go) as VerifyIssueWorktreeBinding,
+// VerifyIssueBranchBinding, RecordedBaseCommit, DynamicBaseCommit,
+// CandidateBaseRefs, and GetBaseCommit, so this read-side base-commit
+// resolution logic is independently unit-testable via package import
+// instead of living unexported in this cmd/armature (main package) file.
+// candidateBaseRefs is kept here as a thin alias because claim.go's
+// existing-worktree claim path also consults it when proving a worktree
+// hasn't diverged before persisting branch-point metadata.
+var candidateBaseRefs = deliverygate.CandidateBaseRefs
