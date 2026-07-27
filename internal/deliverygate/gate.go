@@ -132,6 +132,49 @@ func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 	return CheckResult{Pass: true, Remediation: ""}
 }
 
+// addedLinesByFile parses a unified diff (as produced by `git diff` or
+// `git show`) and returns, per file (using the "b/" post-image path), the
+// set of non-blank content lines that were added (a line beginning with "+"
+// in a hunk, excluding the "+++" file-header line). Blank added lines are
+// excluded because they are too common to reliably indicate that specific
+// delivered content survived. This is used to check whether a commit's own
+// added content is still present in a later diff, rather than merely
+// checking that a filename appears in both diffs.
+func addedLinesByFile(diff string) map[string]map[string]bool {
+	result := make(map[string]map[string]bool)
+	currentFile := ""
+	for _, line := range strings.Split(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "+++ "):
+			path := strings.TrimPrefix(line, "+++ ")
+			path = strings.TrimPrefix(path, "b/")
+			if path == "/dev/null" {
+				currentFile = ""
+				continue
+			}
+			currentFile = path
+		case strings.HasPrefix(line, "+") && currentFile != "":
+			content := strings.TrimSpace(strings.TrimPrefix(line, "+"))
+			if content == "" {
+				continue
+			}
+			if result[currentFile] == nil {
+				result[currentFile] = make(map[string]bool)
+			}
+			result[currentFile][content] = true
+		}
+	}
+	return result
+}
+
+// survivalMinLineLength is the minimum trimmed length (in characters) an
+// added line must have to count as proof that a matching commit's content
+// survives in the net base..HEAD diff. Short lines like "}", "return nil",
+// or a common import are common enough that two unrelated commits touching
+// the same file can coincidentally add an identical short line, which would
+// otherwise let a fully-reverted matching commit falsely appear to survive.
+const survivalMinLineLength = 15
+
 // CommitReferenceCheck verifies that at least one commit since baseCommit
 // matches the conventional-commit format with the issue ID in the scope.
 // Format: <type>(<ISSUE-ID>): ... or <type>(<ISSUE-ID>)!: ...
@@ -170,28 +213,23 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// exactly the change the matching commit made, leaving nothing actually
 	// delivered even though the matching commit "touched files" at the time
 	// it was made. It is also not enough to require that the net base-to-HEAD
-	// diff is merely nonempty for any reason: a fully-reverted matching commit
-	// can be padded with one unrelated trivial in-scope commit, making the net
-	// diff nonempty while the matching commit's own substance survives
-	// nowhere in it. Require instead that the net diff contains at least one
-	// path that the matching commit itself touched, so a padded self-
-	// cancelling revert can't slip a zero-net-change delivery past this check.
-	netDiff, err := git.DiffNameStatus(baseCommit)
+	// diff is merely nonempty for any reason, or that the matching commit's
+	// touched FILENAMES merely appear in the net diff's changed filenames: a
+	// fully-reverted matching commit can be padded with an unrelated trivial
+	// edit to the very same file, keeping that filename in the net diff while
+	// none of the matching commit's own added content survives anywhere in
+	// it. Require instead that at least one line the matching commit itself
+	// added is still present as an added line in the net base..HEAD diff for
+	// that same file, so neither a filename-only match nor a same-file
+	// unrelated edit can smuggle a self-cancelling revert past this check.
+	netDiff, err := git.DiffFrom(baseCommit)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to get diff: %v", err),
 		}
 	}
-	netDiffFiles := make(map[string]bool, len(netDiff)*2)
-	for _, e := range netDiff {
-		if e.Path != "" {
-			netDiffFiles[e.Path] = true
-		}
-		if e.OldPath != "" {
-			netDiffFiles[e.OldPath] = true
-		}
-	}
+	netAddedByFile := addedLinesByFile(netDiff)
 
 	foundMatchingCommit := false
 	for _, entry := range entries {
@@ -202,14 +240,44 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		if err != nil || len(files) == 0 {
 			continue
 		}
-		overlaps := false
+		commitDiff, err := git.CommitDiff(entry.SHA)
+		if err != nil {
+			continue
+		}
+		commitAddedByFile := addedLinesByFile(commitDiff)
+
+		survives := false
 		for _, f := range files {
-			if netDiffFiles[f] {
-				overlaps = true
+			netLines := netAddedByFile[f]
+			if len(netLines) == 0 {
+				continue
+			}
+			// Only apply the short-line floor when the commit added more
+			// than one line to this file: if a short line is the ENTIRE
+			// content the commit added, there is nothing longer to prefer
+			// and rejecting it would falsely reject a legitimately tiny real
+			// change. But when several lines were added, a short one among
+			// them (a lone "}", "return nil", a common import) is far more
+			// likely to coincidentally collide with an unrelated commit
+			// touching the same file than to genuinely prove this commit's
+			// content survives — without this floor, such a coincidence
+			// could make a fully-reverted matching commit's change look like
+			// it survived.
+			requireLongLine := len(commitAddedByFile[f]) > 1
+			for line := range commitAddedByFile[f] {
+				if requireLongLine && len(line) < survivalMinLineLength {
+					continue
+				}
+				if netLines[line] {
+					survives = true
+					break
+				}
+			}
+			if survives {
 				break
 			}
 		}
-		if !overlaps {
+		if !survives {
 			continue
 		}
 		foundMatchingCommit = true

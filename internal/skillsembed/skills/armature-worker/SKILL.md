@@ -263,7 +263,7 @@ Examples:
 | Using `git commit -am` | `-a` only stages tracked files — new files and directories are silently skipped; always use explicit `git add <scope files>` |
 | Including `.armature/` in `git add` | Stages stale data; ops are already on `_armature` branch — omit `.armature/` from code commits |
 | Leave issues uncited | Run `arm sources link` or `arm sources accept-citation --ci` before returning |
-| Repeating `transition` then `commit` manually | Use a bundled command: `arm transition ID ... && git add . .armature/ && git commit -m ...` |
+| Running `transition` before committing | The delivery gate requires a clean tree and an existing commit *before* you transition — stage scoped files and commit first, then run `arm transition ID --to done ...` (see Section 5c) |
 | Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |
 | Scope overlap WARNING on `arm validate` | Add `arm link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
 | MISSING entries in `arm sources verify` | Run `arm sources sync` to fetch and fingerprint; re-run `arm sources verify` until all show OK |

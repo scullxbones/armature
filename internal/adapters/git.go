@@ -843,6 +843,21 @@ func (c *Client) CommitChangedFiles(sha string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
+// CommitDiff returns the unified diff patch introduced by a single commit
+// relative to its first parent (`git show --format= <sha>`), i.e. the
+// content the commit itself added or removed, independent of what any later
+// commit does. Used to check whether a commit's own delivered content
+// survives in a later net diff, rather than merely checking that the
+// filenames it touched still appear in that net diff.
+func (c *Client) CommitDiff(sha string) (string, error) {
+	cmd := c.cmd("show", "--format=", sha)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git show --format= %s: %w", sha, err)
+	}
+	return string(out), nil
+}
+
 // ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.
 func (c *Client) ResolveRevision(rev string) (string, error) {
 	cmd := c.cmd("rev-parse", "--verify", rev)
