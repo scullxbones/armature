@@ -9,6 +9,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -130,40 +131,56 @@ This enforces branch + PR discipline.`,
 				// The delivery gate validates a claimed issue's own worktree
 				// binding, scope, and commits, so it applies to every issue
 				// kind that claim actually binds to a worker's own worktree —
-				// task, bug, and feature (see internal/materialize/branch.go's
-				// worktree-branch mapping and cmd/armature/claim.go's
-				// createWorktreeAndBranch). Stories and epics are transitioned
-				// to done from a manually created/checked-out branch outside
-				// the claimed-worktree workflow — stories by the coordinator
-				// after the story-level auditor gate, epics never claimed at
-				// all — so the gate must not run for them at all (not even
-				// require --skip-delivery-gate).
-				if currentEntry.Type == "task" || currentEntry.Type == "bug" || currentEntry.Type == "feature" {
-					// Use the literal --repo flag value (the worker's actual
-					// worktree), not appCtx.RepoPath: config resolution collapses
-					// a linked worktree's path to the *main* repo root (see
-					// resolveParentRepoFromWorktree in internal/config/context.go)
-					// so it can locate the shared armature.ops-worktree-path
-					// config -- but the delivery gate must run git
-					// status/diff/log against the worker's own worktree, where
-					// the actual dirty files, scoped diff, and commits live.
-					gateRepoPath, _ := cmd.Flags().GetString("repo")
-					if gateRepoPath == "" {
-						gateRepoPath = "."
-					}
-					// Resolve to the worktree's top level before gating:
-					// ResolveWorktreeGitDir (used by VerifyIssueWorktreeBinding
-					// and friends) stats "<gateRepoPath>/.git" with no walk-up,
-					// so the default "." fails with "stat .git" when arm
-					// transition is invoked from a subdirectory of the worktree
-					// rather than its root. git itself resolves this via
-					// rev-parse --show-toplevel; if that fails (e.g. not
-					// actually inside a git worktree), fall back to the
-					// original value so the existing checks fail closed with
-					// their normal error instead of a confusing new one here.
-					if resolved, resolveErr := deliverygate.ResolveWorktreeRoot(gateRepoPath); resolveErr == nil {
-						gateRepoPath = resolved
-					}
+				// task, bug, feature, and (when actually claimed) story (see
+				// internal/materialize/branch.go's worktree-branch mapping and
+				// cmd/armature/claim.go's createWorktreeAndBranch, which all
+				// four issue kinds go through). Epics never receive a worktree
+				// at all (DeriveBranchName returns "" for them) and are
+				// transitioned to done from a manually created/checked-out
+				// branch outside the claimed-worktree workflow, so the gate
+				// must not run for them (not even require
+				// --skip-delivery-gate). Stories are dual-mode: claim.go also
+				// supports claiming a story directly into its own worktree,
+				// but the coordinator additionally transitions *unclaimed*
+				// stories to done after the story-level auditor gate, from
+				// its own checkout with no worktree binding at all — that
+				// path must stay exempt too. Resolve the gate path first so
+				// a cheap worktree-binding probe can tell an unclaimed story
+				// apart from a claimed one before deciding whether to run
+				// the full gate.
+				//
+				// Use the literal --repo flag value (the worker's actual
+				// worktree), not appCtx.RepoPath: config resolution collapses
+				// a linked worktree's path to the *main* repo root (see
+				// resolveParentRepoFromWorktree in internal/config/context.go)
+				// so it can locate the shared armature.ops-worktree-path
+				// config -- but the delivery gate must run git
+				// status/diff/log against the worker's own worktree, where
+				// the actual dirty files, scoped diff, and commits live.
+				gateRepoPath, _ := cmd.Flags().GetString("repo")
+				if gateRepoPath == "" {
+					gateRepoPath = "."
+				}
+				// Resolve to the worktree's top level before gating:
+				// ResolveWorktreeGitDir (used by VerifyIssueWorktreeBinding
+				// and friends) stats "<gateRepoPath>/.git" with no walk-up,
+				// so the default "." fails with "stat .git" when arm
+				// transition is invoked from a subdirectory of the worktree
+				// rather than its root. git itself resolves this via
+				// rev-parse --show-toplevel; if that fails (e.g. not
+				// actually inside a git worktree), fall back to the
+				// original value so the existing checks fail closed with
+				// their normal error instead of a confusing new one here.
+				if resolved, resolveErr := deliverygate.ResolveWorktreeRoot(gateRepoPath); resolveErr == nil {
+					gateRepoPath = resolved
+				}
+
+				runGate := currentEntry.Type == "task" || currentEntry.Type == "bug" || currentEntry.Type == "feature"
+				if currentEntry.Type == "story" && isClaimedWorktreeForIssue(gateRepoPath, issueID) {
+					runGate = true
+				}
+
+				if runGate {
 					if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Type, currentEntry.Scope); err != nil {
 						return err
 					}
@@ -297,6 +314,27 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 	}
 
 	return nil
+}
+
+// isClaimedWorktreeForIssue reports whether worktreePath is a worktree
+// actually claimed for issueID (the armature-issue-id marker file written by
+// claim at claim time — same mechanism deliverygate.VerifyIssueWorktreeBinding
+// enforces once the gate is known to apply). Used only to decide whether a
+// story transition should be gated at all: an unclaimed coordinator-level
+// story transition (no marker, or a marker for a different issue) must stay
+// exempt, so any resolution failure or non-matching binding here is treated
+// as "not claimed" rather than an error — the caller falls back to skipping
+// the gate exactly as it always has for stories.
+func isClaimedWorktreeForIssue(worktreePath, issueID string) bool {
+	gitDir, err := deliverygate.ResolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return false
+	}
+	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+	if err != nil || binding == "" {
+		return false
+	}
+	return binding == issueID
 }
 
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.

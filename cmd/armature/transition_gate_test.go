@@ -149,6 +149,39 @@ func TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2 verifies that
+// the delivery gate is NOT blanket-skipped for issue kind "story": claim.go
+// supports claiming a story directly (deriving a feat/<ID> branch and
+// creating/binding a linked worktree for it, same as task/bug/feature), so a
+// story that went through that claimed-worktree workflow must be gated the
+// same way before being marked done. Only the *unclaimed* coordinator-level
+// story transition (see TestGateSkippedForNonTaskIssueKindOnDone above) is
+// exempt.
+func TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-01", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-01-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-01", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Dirty the tree without committing: the clean-tree check should block,
+	// proving the gate actually ran against this claimed story worktree
+	// instead of being skipped outright because the issue kind is "story".
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-story-01", "--to", "done", "--outcome", "test", "--force")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "delivery gate")
+}
+
 // TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery gate
 // applies to issue kind "bug" the same way it applies to "task": bugs get a
 // worktree+branch created on claim (see internal/materialize/branch.go's
