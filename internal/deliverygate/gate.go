@@ -143,7 +143,7 @@ func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 func addedLinesByFile(diff string) map[string]map[string]bool {
 	result := make(map[string]map[string]bool)
 	currentFile := ""
-	for _, line := range strings.Split(diff, "\n") {
+	for line := range strings.SplitSeq(diff, "\n") {
 		switch {
 		case strings.HasPrefix(line, "+++ "):
 			path := strings.TrimPrefix(line, "+++ ")
@@ -167,6 +167,56 @@ func addedLinesByFile(diff string) map[string]map[string]bool {
 	return result
 }
 
+// removedLinesByFile parses a unified diff (as produced by `git diff` or
+// `git show`) and returns, per file (using the "b/" post-image path, same
+// file-identity convention as addedLinesByFile so lookups by the paths
+// returned from CommitChangedFiles line up for both maps, including
+// renames), the set of non-blank content lines that were removed (a line
+// beginning with "-" in a hunk, excluding the "---" file-header line).
+// Mirrors addedLinesByFile for the pre-image side: a deletion-only commit
+// removes content without adding any, so addedLinesByFile alone can never
+// provide survival evidence for it. removedLinesByFile lets the survival
+// check instead confirm that the matching commit's removed content is
+// genuinely absent from the current HEAD version of the file.
+func removedLinesByFile(diff string) map[string]map[string]bool {
+	result := make(map[string]map[string]bool)
+	currentFile := ""
+	for line := range strings.SplitSeq(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "--- "):
+			// Set from the pre-image path first; a deleted file's "+++ "
+			// line is "+++ /dev/null" (no real post-image path), so this is
+			// the only header line that names a deleted file. A normal
+			// (non-delete) hunk immediately overwrites currentFile via its
+			// "+++ " line below, keeping the "b/" path as the identity used
+			// everywhere else.
+			path := strings.TrimPrefix(line, "--- ")
+			path = strings.TrimPrefix(path, "a/")
+			if path == "/dev/null" {
+				currentFile = ""
+				continue
+			}
+			currentFile = path
+		case strings.HasPrefix(line, "+++ "):
+			path := strings.TrimPrefix(line, "+++ ")
+			path = strings.TrimPrefix(path, "b/")
+			if path != "/dev/null" {
+				currentFile = path
+			}
+		case strings.HasPrefix(line, "-") && currentFile != "":
+			content := strings.TrimSpace(strings.TrimPrefix(line, "-"))
+			if content == "" {
+				continue
+			}
+			if result[currentFile] == nil {
+				result[currentFile] = make(map[string]bool)
+			}
+			result[currentFile][content] = true
+		}
+	}
+	return result
+}
+
 // survivalMinLineLength is the minimum trimmed length (in characters) an
 // added line must have to count as proof that a matching commit's content
 // survives in the net base..HEAD diff. Short lines like "}", "return nil",
@@ -174,6 +224,64 @@ func addedLinesByFile(diff string) map[string]map[string]bool {
 // the same file can coincidentally add an identical short line, which would
 // otherwise let a fully-reverted matching commit falsely appear to survive.
 const survivalMinLineLength = 15
+
+// addedContentSurvives reports whether at least one line the matching commit
+// added to a file is still present as an added line in the net base..HEAD
+// diff for that same file, applying the short-line coincidence floor
+// described on survivalMinLineLength.
+func addedContentSurvives(commitLines, netLines map[string]bool) bool {
+	if len(netLines) == 0 {
+		return false
+	}
+	// Only apply the short-line floor when the commit added more than one
+	// line to this file: if a short line is the ENTIRE content the commit
+	// added, there is nothing longer to prefer and rejecting it would
+	// falsely reject a legitimately tiny real change. But when several
+	// lines were added, a short one among them (a lone "}", "return nil", a
+	// common import) is far more likely to coincidentally collide with an
+	// unrelated commit touching the same file than to genuinely prove this
+	// commit's content survives — without this floor, such a coincidence
+	// could make a fully-reverted matching commit's change look like it
+	// survived.
+	requireLongLine := len(commitLines) > 1
+	for line := range commitLines {
+		if requireLongLine && len(line) < survivalMinLineLength {
+			continue
+		}
+		if netLines[line] {
+			return true
+		}
+	}
+	return false
+}
+
+// deletionSurvives reports whether a deletion-only change the matching
+// commit made to file f (removedLines, its removed content) persists at
+// HEAD: true if none of removedLines are present in f's current HEAD
+// content (including if f no longer exists at HEAD at all), false if a
+// later commit re-added the removed content, undoing the deletion.
+func deletionSurvives(git *adapters.Client, f string, removedLines map[string]bool) bool {
+	content, err := git.ShowFileAtCommit("HEAD", f)
+	if err != nil {
+		// File does not exist at HEAD (or is otherwise unreadable): the
+		// removed content cannot be present, so the deletion survives.
+		return true
+	}
+	currentLines := make(map[string]bool)
+	for line := range strings.SplitSeq(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		currentLines[trimmed] = true
+	}
+	for line := range removedLines {
+		if currentLines[line] {
+			return false
+		}
+	}
+	return true
+}
 
 // CommitReferenceCheck verifies that at least one commit since baseCommit
 // matches the conventional-commit format with the issue ID in the scope.
@@ -245,35 +353,31 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 			continue
 		}
 		commitAddedByFile := addedLinesByFile(commitDiff)
+		commitRemovedByFile := removedLinesByFile(commitDiff)
 
 		survives := false
 		for _, f := range files {
-			netLines := netAddedByFile[f]
-			if len(netLines) == 0 {
-				continue
+			// Check added-content survival and removal survival
+			// independently (OR semantics): a file where the matching
+			// commit both added and removed lines (e.g. a refactor) must
+			// still be checked for deletion survival even when its added
+			// content was later edited away, since either kind of
+			// evidence alone is sufficient to prove the commit's change
+			// survives.
+			if len(commitAddedByFile[f]) > 0 && addedContentSurvives(commitAddedByFile[f], netAddedByFile[f]) {
+				survives = true
+				break
 			}
-			// Only apply the short-line floor when the commit added more
-			// than one line to this file: if a short line is the ENTIRE
-			// content the commit added, there is nothing longer to prefer
-			// and rejecting it would falsely reject a legitimately tiny real
-			// change. But when several lines were added, a short one among
-			// them (a lone "}", "return nil", a common import) is far more
-			// likely to coincidentally collide with an unrelated commit
-			// touching the same file than to genuinely prove this commit's
-			// content survives — without this floor, such a coincidence
-			// could make a fully-reverted matching commit's change look like
-			// it survived.
-			requireLongLine := len(commitAddedByFile[f]) > 1
-			for line := range commitAddedByFile[f] {
-				if requireLongLine && len(line) < survivalMinLineLength {
-					continue
-				}
-				if netLines[line] {
-					survives = true
-					break
-				}
-			}
-			if survives {
+			// addedLinesByFile can never provide survival evidence for a
+			// pure removal, since there is no added line to look for.
+			// Instead confirm the removed content is genuinely still
+			// absent from the current HEAD version of f: if it survives
+			// (the file no longer exists, or exists without any of the
+			// removed lines), the deletion persisted; if a later commit
+			// re-added the removed content, the deletion was undone and
+			// must not count as delivered.
+			if removedLines := commitRemovedByFile[f]; len(removedLines) > 0 && deletionSurvives(git, f, removedLines) {
+				survives = true
 				break
 			}
 		}

@@ -552,6 +552,280 @@ func TestCommitReferenceCheck_RejectsShortCoincidentalLineMatch_REQ_LNGHZN_S4(t 
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4 verifies
+// that a matching conventional commit whose only change is removing lines
+// (no lines added) is treated as delivered when that deletion is never
+// undone. Before this fix, the survival check was based entirely on
+// addedLinesByFile, which a pure deletion never populates, so a legitimate
+// deletion-only delivery was wrongly rejected as "not surviving".
+func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit removes the distinctive line and adds nothing.
+	require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale line")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "a deletion-only commit whose deletion is never undone must satisfy the check")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4
+// verifies that a matching deletion-only commit does NOT satisfy the check
+// when a later commit re-adds the removed content, undoing the deletion.
+func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit removes the distinctive line and adds nothing.
+	require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale line")
+
+	// Later commit re-adds the removed content, undoing the deletion.
+	require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "restore the line")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "a deletion-only commit whose deletion is later undone must not satisfy the check")
+	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4 is a table-driven
+// suite enumerating the survival semantics of CommitReferenceCheck's
+// CommitReferenceCheck ("does the matching commit's own content survive to
+// HEAD") logic. These semantics have been redefined multiple times across
+// review rounds (filename-overlap-only -> same-file added-line-multiset
+// intersection -> deletion handling), each round's fix closing only the
+// specific counterexample found at the time. This suite exists to pin down
+// all of them together so a future change can't silently regress one case
+// while fixing another.
+func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		expectedPass bool
+		setup        func(t *testing.T, dir string) (baseCommit string)
+	}{
+		{
+			name:         "added-only content still present at HEAD survives",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("base content\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				require.NoError(t, os.WriteFile(file, []byte("base content\nDISTINCTIVE ADDED DELIVERY LINE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "feat(TEST-123): add content")
+				return base
+			},
+		},
+		{
+			name:         "added-only content later fully reverted does not survive",
+			expectedPass: false,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("base content\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				require.NoError(t, os.WriteFile(file, []byte("base content\nDISTINCTIVE ADDED DELIVERY LINE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "feat(TEST-123): add content")
+
+				require.NoError(t, os.WriteFile(file, []byte("base content\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "revert the addition")
+				return base
+			},
+		},
+		{
+			name:         "deletion-only commit whose deletion persists survives",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "fix(TEST-123): remove stale line")
+				return base
+			},
+		},
+		{
+			name:         "deletion-only commit whose deletion is later reverted does not survive",
+			expectedPass: false,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "fix(TEST-123): remove stale line")
+
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "restore the line")
+				return base
+			},
+		},
+		{
+			name:         "modify (remove+add on same lines) whose net change persists survives",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("original distinctive line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				require.NoError(t, os.WriteFile(file, []byte("replacement distinctive delivered line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "fix(TEST-123): replace line")
+				return base
+			},
+		},
+		{
+			name:         "modify later fully reverted back to pre-commit content does not survive",
+			expectedPass: false,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("original distinctive line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				require.NoError(t, os.WriteFile(file, []byte("replacement distinctive delivered line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "fix(TEST-123): replace line")
+
+				require.NoError(t, os.WriteFile(file, []byte("original distinctive line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "revert the replacement")
+				return base
+			},
+		},
+		{
+			name:         "rename with content change whose content persists at new path survives",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				oldFile := filepath.Join(dir, "oldname.txt")
+				newFile := filepath.Join(dir, "newname.txt")
+				content := "line one\nline two\nline three\nline four\n"
+				require.NoError(t, os.WriteFile(oldFile, []byte(content), 0644))
+				runGit(t, dir, "add", "oldname.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				runGit(t, dir, "mv", "oldname.txt", "newname.txt")
+				require.NoError(t, os.WriteFile(newFile, []byte(content+"DISTINCTIVE RENAMED DELIVERY LINE\n"), 0644))
+				runGit(t, dir, "add", "-A")
+				runGit(t, dir, "commit", "-m", "feat(TEST-123): rename with content change")
+				return base
+			},
+		},
+		{
+			name:         "mixed add+delete in same file whose added content is edited away but original deletion still holds survives",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				// Matching commit both removes the stale line and adds new
+				// content to the same file (a refactor-shaped change).
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\nADDED REPLACEMENT DELIVERY LINE HERE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "fix(TEST-123): replace stale line")
+
+				// Later commit edits away the added content (so
+				// addedContentSurvives will return false for this file),
+				// but does not restore the originally deleted line — the
+				// matching commit's deletion still holds at HEAD.
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\nSOME OTHER UNRELATED LINE ENTIRELY\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "edit away the added line")
+				return base
+			},
+		},
+		{
+			name:         "empty/no-op commit does not satisfy the check (existing gate.go behavior)",
+			expectedPass: false,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte("content\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				runGit(t, dir, "commit", "--allow-empty", "-m", "fix(TEST-123): busywork")
+				return base
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tmpDir := t.TempDir()
+			initGitRepo(t, tmpDir)
+			baseCommit := tc.setup(t, tmpDir)
+
+			result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+			assert.Equal(t, tc.expectedPass, result.Pass, "case %q", tc.name)
+			if tc.expectedPass {
+				assert.Empty(t, result.Remediation)
+			} else {
+				assert.NotEmpty(t, result.Remediation)
+			}
+		})
+	}
+}
+
 // TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1 verifies that the
 // DeliveryGate function returns correct combined results for all three checks.
 func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
