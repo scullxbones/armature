@@ -26,6 +26,13 @@ const BaseCommitFileName = "armature-base-commit"
 // .git/config (armature does not enable the worktreeConfig extension), so
 // the record survives `arm merged` removing the worktree, and stays
 // addressable by branch name if the worktree is later recreated.
+//
+// Known limitation: the key is derived solely from the branch name, with no
+// staleness check beyond the literal-"HEAD" guard in DynamicBaseCommit. If a
+// branch name is recycled for a new, unrelated task after the old task
+// merged and its marker was never cleaned up, DynamicBaseCommit would
+// merge-base against the stale recorded parent. Branch-name recycling
+// immediately after merge is out of scope for this fix.
 func ParentBranchConfigKey(branchName string) string {
 	return "branch." + branchName + ".armature-parent"
 }
@@ -69,6 +76,26 @@ func ResolveWorktreeGitDir(worktreePath string) (string, error) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
 	return actualGitDir, nil
+}
+
+// ResolveWorktreeRoot resolves path to the top-level directory of the git
+// worktree that contains it, walking up through parent directories the way
+// git itself does (via `git rev-parse --show-toplevel`). ResolveWorktreeGitDir
+// (and the checks built on it, e.g. VerifyIssueWorktreeBinding) stat
+// `<path>/.git` directly with no walk-up, so passing a subdirectory of a
+// worktree fails with "stat .git: no such file or directory" even though the
+// path IS inside a valid worktree. Callers that may receive a subdirectory
+// (e.g. the default "." when a command is run from anywhere inside a
+// worktree) should resolve through this first. If path is not inside a git
+// working tree at all, both the resolution here and the direct stat down-
+// stream fail the same way, so returning the original path on error is safe:
+// it never widens what would otherwise pass.
+func ResolveWorktreeRoot(path string) (string, error) {
+	toplevel, err := adapters.New(path).Toplevel()
+	if err != nil {
+		return path, fmt.Errorf("resolve worktree top level for %s: %w", path, err)
+	}
+	return toplevel, nil
 }
 
 // VerifyIssueWorktreeBinding fails closed unless worktreePath is the actual

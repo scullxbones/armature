@@ -54,6 +54,21 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	return cmd
 }
 
+// Toplevel returns the top-level working directory of the git repository (or
+// worktree) containing the client's repoPath, via `git rev-parse
+// --show-toplevel`. Unlike a manual .git-file stat, this resolves correctly
+// even when repoPath is a subdirectory of the worktree: git itself walks up
+// parent directories to find the enclosing repository, so this works from
+// any nesting depth.
+func (c *Client) Toplevel() (string, error) {
+	cmd := c.cmd("rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve worktree top level: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 // CurrentBranch returns the current git branch name.
 func (c *Client) CurrentBranch() (string, error) {
 	cmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")
@@ -652,32 +667,41 @@ type DiffStatusEntry struct {
 // checks: `git diff --name-only` collapses a rename to only its destination
 // path, which can hide that the file's original location was out of scope.
 func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
-	cmd := c.cmd("diff", "--name-status", "-M", baseSHA, "HEAD")
+	// -z switches git to NUL-delimited, unquoted output: without it, git
+	// quotes and octal-escapes any path containing non-ASCII or special
+	// characters (e.g. "caf\303\251.go" instead of the literal "café.go"),
+	// which breaks scope-containment comparisons against the literal path.
+	// Mirrors DiffNameOnlyRange, which already handles this correctly.
+	cmd := c.cmd("diff", "--name-status", "-M", "-z", baseSHA, "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git diff --name-status -M %s HEAD: %w", baseSHA, err)
 	}
-	raw := strings.TrimSpace(string(out))
+	// With -z, git emits a flat sequence of NUL-terminated fields (no
+	// per-line \t separator): status, path, status, path, ... or for a
+	// rename/copy: status, oldpath, newpath, status, path, ...
+	raw := strings.TrimRight(string(out), "\x00")
 	if raw == "" {
 		return []DiffStatusEntry{}, nil
 	}
-	lines := strings.Split(raw, "\n")
-	entries := make([]DiffStatusEntry, 0, len(lines))
-	for _, line := range lines {
-		fields := strings.Split(line, "\t")
-		if len(fields) < 2 {
-			continue
-		}
-		status := fields[0]
+	fields := strings.Split(raw, "\x00")
+	entries := make([]DiffStatusEntry, 0, len(fields))
+	for i := 0; i < len(fields); {
+		status := fields[i]
+		i++
 		if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
-			// Rename/copy lines: <status>\t<old path>\t<new path>
-			if len(fields) < 3 {
-				continue
+			if i+1 >= len(fields) {
+				break
 			}
-			entries = append(entries, DiffStatusEntry{Status: status, OldPath: fields[1], Path: fields[2]})
+			entries = append(entries, DiffStatusEntry{Status: status, OldPath: fields[i], Path: fields[i+1]})
+			i += 2
 			continue
 		}
-		entries = append(entries, DiffStatusEntry{Status: status, Path: fields[1]})
+		if i >= len(fields) {
+			break
+		}
+		entries = append(entries, DiffStatusEntry{Status: status, Path: fields[i]})
+		i++
 	}
 	return entries, nil
 }
@@ -826,15 +850,22 @@ func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 
 // CommitChangedFiles returns the file paths touched by a single commit,
 // diffed against its first parent (`git diff-tree --no-commit-id --name-only
-// -r <sha>`). Returns an empty (non-nil) slice for a no-op/empty commit (e.g.
-// one created with `git commit --allow-empty`), which callers use to
-// distinguish a commit with real content from one that only satisfies a
-// message-shape check.
+// -M -r <sha>`). Rename detection (-M) is enabled for consistency with
+// DiffNameStatus: without it, a pure rename is reported as a delete of the
+// old path plus an add of the new path instead of a single renamed entry.
+// With --name-only specifically (unlike --name-status), git does not emit a
+// separate old-path line or similarity-score prefix for a detected rename —
+// it simply reports the new (post-image) path alone, so no output-parsing
+// change is needed here to accommodate -M; verified against actual git
+// behavior, not assumed. Returns an empty (non-nil) slice for a no-op/empty
+// commit (e.g. one created with `git commit --allow-empty`), which callers
+// use to distinguish a commit with real content from one that only satisfies
+// a message-shape check.
 func (c *Client) CommitChangedFiles(sha string) ([]string, error) {
-	cmd := c.cmd("diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+	cmd := c.cmd("diff-tree", "--no-commit-id", "--name-only", "-M", "-r", sha)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git diff-tree --no-commit-id --name-only -r %s: %w", sha, err)
+		return nil, fmt.Errorf("git diff-tree --no-commit-id --name-only -M -r %s: %w", sha, err)
 	}
 	raw := strings.TrimSpace(string(out))
 	if raw == "" {
@@ -856,6 +887,28 @@ func (c *Client) CommitDiff(sha string) (string, error) {
 		return "", fmt.Errorf("git show --format= %s: %w", sha, err)
 	}
 	return string(out), nil
+}
+
+// PatchID computes git's own patch identifier for a unified diff (as
+// produced by `git diff`/`git show`), via `git patch-id --stable`: a
+// content-based hash of the diff's changed lines that ignores line numbers
+// and diff/hunk-header noise, git's own tool for deciding whether two diffs
+// represent the same underlying change. Returns "" for an empty/no-op diff.
+func (c *Client) PatchID(diff string) (string, error) {
+	if strings.TrimSpace(diff) == "" {
+		return "", nil
+	}
+	cmd := c.cmd("patch-id", "--stable")
+	cmd.Stdin = strings.NewReader(diff)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git patch-id: %w", err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return "", nil
+	}
+	return fields[0], nil
 }
 
 // ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.

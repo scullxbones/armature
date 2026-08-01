@@ -631,43 +631,46 @@ or updates the armature-issue-id file if the worktree exists.`,
 				worktreeGitClient := adapters.New(worktreePath)
 				headSHA, headErr := worktreeGitClient.ResolveRevision("HEAD")
 
-				// The worktree's current HEAD is only a legitimate base-commit
-				// candidate if the worktree has NOT yet diverged from a
-				// resolvable candidate base branch (origin/main, main, etc.):
-				// "at registration time the worktree has not yet diverged, so
-				// its tip IS the true fork point" is only true for a genuinely
-				// fresh worktree. It is FALSE for an idempotent re-claim of a
-				// worktree that already contains task commits (or one that
-				// lost its metadata file), where HEAD has moved past the true
-				// fork point — persisting it there would fabricate an
-				// unproven base-commit and silently corrupt later scope
-				// checks. So: only persist if a candidate base resolves AND
-				// rev-list --count <candidate>..HEAD is 0, proving no
-				// divergence. If that can't be proven, leave the metadata
-				// file absent so the existing fallback (getBaseCommit /
-				// dynamicBaseCommit in transition.go) takes over honestly
-				// instead of being short-circuited by a fabricated value.
-				provenNonDivergent := false
+				// Persisting the worktree's raw current HEAD as the
+				// base-commit is only correct for a genuinely fresh worktree
+				// ("at registration time the worktree has not yet diverged,
+				// so its tip IS the true fork point"). That assumption is
+				// FALSE whenever this worktree was cut from a branch that
+				// already contains sibling-task commits (e.g. a story
+				// branch) — HEAD there already includes those sibling
+				// commits, and naively persisting it would misattribute them
+				// to this task's diff and wrongly block a valid `done`
+				// transition. Rather than skip persistence entirely whenever
+				// HEAD has diverged (the prior, overly conservative
+				// behavior), compute the ACTUAL fork point — the merge-base
+				// of HEAD against the first resolvable candidate base ref
+				// (origin/main, main, etc.; see candidateBaseRefs) — and
+				// persist that unconditionally. This reuses the same
+				// git-config/marker-file mechanism the fresh-worktree path
+				// uses (persistBranchPointMetadata), just with a computed
+				// fork point instead of a trusted-fresh HEAD, so sibling
+				// commits already on the parent branch at registration time
+				// are correctly excluded from this task's scope regardless
+				// of whether HEAD has diverged from a candidate base.
+				baseSHA := headSHA
 				if headErr == nil {
 					for _, ref := range candidateBaseRefs {
 						if _, resolveErr := worktreeGitClient.ResolveRevision(ref); resolveErr != nil {
 							continue
 						}
-						count, countErr := worktreeGitClient.RevListCount(ref, "HEAD")
-						if countErr != nil {
+						mergeBase, mbErr := worktreeGitClient.MergeBase("HEAD", ref)
+						if mbErr != nil {
 							continue
 						}
-						provenNonDivergent = count == 0
+						baseSHA = mergeBase
 						break
 					}
 				}
-				if provenNonDivergent {
-					//nolint:errcheck // best-effort metadata persistence; see comment above
-					_ = persistBranchPointMetadata(
-						worktreeGitClient, worktreePath, expectedBranch,
-						headSHA, headErr, "", fmt.Errorf("parent branch not derivable from existing-worktree claim path"),
-					)
-				}
+				//nolint:errcheck // best-effort metadata persistence; see comment above
+				_ = persistBranchPointMetadata(
+					worktreeGitClient, worktreePath, expectedBranch,
+					baseSHA, headErr, "", fmt.Errorf("parent branch not derivable from existing-worktree claim path"),
+				)
 			}
 
 			// Auto-advance any open ancestor story/epic to in-progress.

@@ -473,6 +473,41 @@ func TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.Contains(t, err.Error(), "--skip-delivery-gate")
 }
 
+// TestTransitionDoneFromWorktreeSubdirectory_REQ_LNGHZN_S4 verifies that
+// `arm transition --to done` (with no --repo flag, so gateRepoPath defaults
+// to ".") succeeds when run from a subdirectory of the claimed worktree, not
+// only from the worktree's top level. Before the fix, gateRepoPath was
+// passed unresolved into VerifyIssueWorktreeBinding -> ResolveWorktreeGitDir,
+// which stats "<gateRepoPath>/.git" with no walk-up, so running from a
+// subdirectory failed with "stat .git: no such file or directory" even
+// though the subdirectory genuinely is inside the bound worktree.
+func TestTransitionDoneFromWorktreeSubdirectory_REQ_LNGHZN_S4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-12", "--title", "Gate task", "--type", "task", "--scope", "sub/foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-12-wt")
+	_, err = runTrls(t, repo, "claim", "gate-12", "--worktree", wt)
+	require.NoError(t, err)
+
+	subdir := filepath.Join(wt, "sub")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subdir, "foo.go"), []byte("package sub\n"), 0o644))
+	run(t, wt, "git", "add", "sub/foo.go")
+	run(t, wt, "git", "commit", "-m", "feat(gate-12): add sub/foo")
+
+	// Run transition with cwd inside the subdirectory of the worktree, and no
+	// --repo flag, so gateRepoPath defaults to "." relative to that cwd.
+	_, err = runTrls(t, subdir, "transition", "--issue", "gate-12", "--to", "done", "--outcome", "test", "--force")
+	assert.NoError(t, err, "transition to done must succeed when run from a subdirectory of the bound worktree")
+}
+
 // TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2 verifies that
 // the delivery gate check evaluates the worktree state produced AFTER
 // pre-transition hooks run, not the state before them. A configured

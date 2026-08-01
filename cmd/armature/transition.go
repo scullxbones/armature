@@ -151,6 +151,19 @@ This enforces branch + PR discipline.`,
 					if gateRepoPath == "" {
 						gateRepoPath = "."
 					}
+					// Resolve to the worktree's top level before gating:
+					// ResolveWorktreeGitDir (used by VerifyIssueWorktreeBinding
+					// and friends) stats "<gateRepoPath>/.git" with no walk-up,
+					// so the default "." fails with "stat .git" when arm
+					// transition is invoked from a subdirectory of the worktree
+					// rather than its root. git itself resolves this via
+					// rev-parse --show-toplevel; if that fails (e.g. not
+					// actually inside a git worktree), fall back to the
+					// original value so the existing checks fail closed with
+					// their normal error instead of a confusing new one here.
+					if resolved, resolveErr := deliverygate.ResolveWorktreeRoot(gateRepoPath); resolveErr == nil {
+						gateRepoPath = resolved
+					}
 					if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Type, currentEntry.Scope); err != nil {
 						return err
 					}
