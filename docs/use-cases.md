@@ -365,6 +365,8 @@ The diff between your base commit and `HEAD` must be a subset of the issue's dec
 
 If none of the three tiers can determine a base commit, the transition fails closed (use `--skip-delivery-gate` to override). Scope validation uses the internal `claim.IsWithinScope` check.
 
+**Known limitation — worktrees claimed from a pre-existing checkout:** tier 1 (dynamic parent-branch merge-base) requires the parent branch name to have been recorded as git config at claim time. When a task/bug/feature worktree is registered by claiming an *already-existing* worktree/branch (rather than one `arm claim` creates fresh — see `createWorktreeAndBranch` vs. the existing-worktree path in `cmd/armature/claim.go`), there is no reliable way to derive the true parent branch name from the worktree alone, so that config is deliberately never written. This is intentional and covered by tests, not an oversight — but it means such worktrees permanently fall back to tier 2 or tier 3 and can never self-correct via tier 1's automatic rebase recomputation. If the story branch the task worktree was cut from is later rebased onto an updated parent tip, the recorded/fallback base commit can go stale and produce a spurious scope-containment or clean-tree gate failure. *Remedy:* re-run the affected worktree's claim (if safe) to allow a fresh base-commit computation, or use `--skip-delivery-gate` with an audited override.
+
 This prevents scope creep: you cannot deliver changes that fall outside the issue's boundaries.
 
 *Remedy:* Either narrow the diff to fit the declared scope (revert out-of-scope changes), or broaden the scope in the original issue if the additional changes are justified.
