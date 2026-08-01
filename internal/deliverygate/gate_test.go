@@ -380,11 +380,9 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_
 
 // TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1 verifies that a
 // matching conventional commit whose change is fully reverted by a later
-// commit in the range does not satisfy the check. Before the fix,
-// CommitReferenceCheck only checked that the matching commit itself had
-// nonempty CommitChangedFiles, without confirming the change survived into
-// the net base-to-HEAD diff, so a matching commit immediately followed by a
-// revert would wrongly pass despite zero net delivery.
+// commit in the range, with nothing else delivered, does not satisfy the
+// check: the net base..HEAD diff is empty, so there is no evidence anything
+// was actually delivered.
 func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -414,16 +412,19 @@ func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *te
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsPaddedSelfCancellingRevert verifies that a
-// matching conventional commit whose change is fully reverted cannot be
-// smuggled past the check by padding the range with a later, unrelated,
-// trivial in-scope commit. Before this fix, CommitReferenceCheck only
-// confirmed that the net base-to-HEAD diff was nonempty for ANY reason,
-// without checking that the net diff overlaps with the files the matching
-// commit itself touched — so an unrelated filler commit could keep the net
-// diff nonempty even though the matching commit's own substance was fully
-// reverted.
-func TestCommitReferenceCheck_RejectsPaddedSelfCancellingRevert(t *testing.T) {
+// TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4 documents
+// an intentional design trade-off: a matching conventional commit whose own
+// change is fully reverted, but the range also contains an unrelated later
+// commit that delivers something else, now PASSES. The new two-part check
+// (conventional-commit reference exists AND net base..HEAD diff is
+// non-empty) deliberately does not attribute the surviving net diff back to
+// the specific matching commit — that per-commit content-survival
+// reconstruction is what caused repeated edge-case bugs (deletions, binary
+// files, renames, mixed add/delete, merges) across prior implementations.
+// The abuse case this check exists to prevent (a `type(ID): busywork`
+// commit reverted with NOTHING else delivered) is still caught, because in
+// that case the net diff is empty.
+func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -448,165 +449,15 @@ func TestCommitReferenceCheck_RejectsPaddedSelfCancellingRevert(t *testing.T) {
 	runGit(t, tmpDir, "add", "widget.txt")
 	runGit(t, tmpDir, "commit", "-m", "revert the widget change")
 
-	// C3: unrelated trivial edit to another in-scope file, keeping the net
-	// diff nonempty despite C1's substance being fully reverted.
+	// C3: an unrelated edit to another in-scope file — net delivery from
+	// somewhere in the range, even though C1's own substance was reverted.
 	require.NoError(t, os.WriteFile(other, []byte("base other\n// trivial comment"), 0644))
 	runGit(t, tmpDir, "add", "other.txt")
 	runGit(t, tmpDir, "commit", "-m", "add trivial comment")
 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass, "a matching commit whose change is reverted must not be satisfied by an unrelated padding commit")
-	assert.NotEmpty(t, result.Remediation)
-}
-
-// TestCommitReferenceCheck_RejectsSameFileContentRevert verifies that a
-// matching conventional commit whose added content is fully undone cannot be
-// smuggled past the check merely because the SAME file it touched still
-// shows up in the net base..HEAD diff (due to an unrelated trivial edit to
-// that same file). Before this fix, CommitReferenceCheck only checked that
-// the matching commit's touched FILENAMES overlapped with the net diff's
-// changed filenames -- not that any of the matching commit's actual added
-// content survives in the net diff. A later commit can revert the matching
-// commit's real change and pad the same file with an unrelated trivial edit,
-// keeping the filename in the net diff while none of the delivered content
-// survives.
-func TestCommitReferenceCheck_RejectsSameFileContentRevert(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
-
-	widget := filepath.Join(tmpDir, "widget.txt")
-	require.NoError(t, os.WriteFile(widget, []byte("base widget\n"), 0644))
-	runGit(t, tmpDir, "add", "widget.txt")
-	runGit(t, tmpDir, "commit", "-m", "base")
-
-	baseCommit := getHeadSHA(t, tmpDir)
-
-	// C1: matching format, adds real delivered content to widget.txt.
-	require.NoError(t, os.WriteFile(widget, []byte("base widget\nDELIVERED FEATURE\n"), 0644))
-	runGit(t, tmpDir, "add", "widget.txt")
-	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement widget")
-
-	// C2: removes C1's delivered line and adds an unrelated trivial line to
-	// the SAME file, so widget.txt still appears in the net base..HEAD diff
-	// even though none of C1's actual content survives.
-	require.NoError(t, os.WriteFile(widget, []byte("base widget\ntrailing padding\n"), 0644))
-	runGit(t, tmpDir, "add", "widget.txt")
-	runGit(t, tmpDir, "commit", "-m", "swap in padding")
-
-	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass,
-		"a matching commit whose delivered content is undone must not pass merely because its filename still appears in the net diff")
-	assert.NotEmpty(t, result.Remediation)
-}
-
-// TestCommitReferenceCheck_RejectsShortCoincidentalLineMatch_REQ_LNGHZN_S4 verifies
-// that a matching commit whose real (long, distinctive) added content is fully
-// reverted cannot be smuggled past the survival check merely because a SHORT,
-// common line it also happened to add (e.g. a lone "}") coincidentally
-// reappears as an added line elsewhere in the net diff for the same file, for
-// entirely unrelated reasons. Before this fix, the survival check treated ANY
-// single non-blank added-line match — however short and generic — as proof of
-// survival, so two coincidentally identical short lines in unrelated commits
-// could produce a false "survives" even though the matching commit's actual
-// distinctive content was completely undone.
-func TestCommitReferenceCheck_RejectsShortCoincidentalLineMatch_REQ_LNGHZN_S4(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
-
-	widget := filepath.Join(tmpDir, "widget.go")
-	require.NoError(t, os.WriteFile(widget, []byte("package widget\n"), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "base")
-
-	baseCommit := getHeadSHA(t, tmpDir)
-
-	// C1: matching format, adds a distinctive delivered line plus a short,
-	// generic closing-brace line.
-	require.NoError(t, os.WriteFile(widget, []byte(
-		"package widget\n\nfunc New() {\n\tdoDistinctiveDeliveredWork()\n}\n",
-	), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement widget")
-
-	// C2: fully reverts C1's change back to base content.
-	require.NoError(t, os.WriteFile(widget, []byte("package widget\n"), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "revert the widget change")
-
-	// C3: an unrelated later change to the SAME file that happens to add a
-	// short, common line ("}") for reasons that have nothing to do with C1's
-	// reverted content.
-	require.NoError(t, os.WriteFile(widget, []byte(
-		"package widget\n\nfunc Unrelated() {\n\tdoOtherThing()\n}\n",
-	), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "add unrelated function")
-
-	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass,
-		"a coincidental short-line match (e.g. a lone \"}\") must not count as survival of the matching commit's reverted content")
-	assert.NotEmpty(t, result.Remediation)
-}
-
-// TestCommitReferenceCheck_RejectsShortLineCoincidenceWhenAllContentIsShort_REQ_LNGHZN_S4
-// verifies the specific gap the prior survivalMinLineLength/requireLongLine
-// heuristic left open: when the matching commit's ENTIRE added content is
-// short lines (nothing at or above the old 15-char floor), the old code fell
-// back to unrestricted short-line matching, so a coincidentally-identical
-// short line added by a later, unrelated commit to the same file could
-// falsely make a fully-reverted matching commit appear to survive. The
-// hunk-based patch-id replacement must attribute survival correctly even
-// when the matching commit has no long line to prefer, because it compares
-// whole hunks (with context), not bare content lines.
-func TestCommitReferenceCheck_RejectsShortLineCoincidenceWhenAllContentIsShort_REQ_LNGHZN_S4(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
-
-	widget := filepath.Join(tmpDir, "widget.go")
-	require.NoError(t, os.WriteFile(widget, []byte(
-		"package widget\n\nfunc A() {\n}\n\nfunc Z() {\n}\n",
-	), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "base")
-
-	baseCommit := getHeadSHA(t, tmpDir)
-
-	// C1: matching format, adds a short, generic line ("}") inside func A,
-	// with no line anywhere near the old 15-char "long line" floor.
-	require.NoError(t, os.WriteFile(widget, []byte(
-		"package widget\n\nfunc A() {\n\tx := 1\n\t_ = x\n}\n\nfunc Z() {\n}\n",
-	), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): tweak A")
-
-	// C2: fully reverts C1's change back to base content.
-	require.NoError(t, os.WriteFile(widget, []byte(
-		"package widget\n\nfunc A() {\n}\n\nfunc Z() {\n}\n",
-	), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "revert the A tweak")
-
-	// C3: an unrelated later change to func Z, adding the SAME short,
-	// coincidental content ("x := 1" / "_ = x") for entirely unrelated
-	// reasons, at a different position in the same file (different
-	// surrounding hunk context).
-	require.NoError(t, os.WriteFile(widget, []byte(
-		"package widget\n\nfunc A() {\n}\n\nfunc Z() {\n\tx := 1\n\t_ = x\n}\n",
-	), 0644))
-	runGit(t, tmpDir, "add", "widget.go")
-	runGit(t, tmpDir, "commit", "-m", "add unrelated tweak to Z")
-
-	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass,
-		"a fully-reverted commit with only short content must not be attributed "+
-			"survival via an unrelated commit's coincidentally-identical short lines elsewhere in the file")
-	assert.NotEmpty(t, result.Remediation)
+	assert.True(t, result.Pass, "a matching commit reference plus a non-empty net diff from elsewhere in the range satisfies the check")
+	assert.Empty(t, result.Remediation)
 }
 
 // TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4 verifies
@@ -669,19 +520,14 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_CosmeticReformattingByLaterCommitDoesNotSurvive_REQ_LNGHZN_S4
-// documents an intentional behavior change from the prior patch-id-based
-// implementation: survival is now determined by exact blob-OID comparison
-// (see commitChangeSurvives), not whitespace-normalized hunk comparison, so
-// a later commit that changes only a delivered line's literal bytes (e.g. a
-// gofmt-style indentation rewrap) changes the blob OID at that path and is
-// therefore no longer recognized as "the same content surviving". Trading
-// away this cosmetic-reformatting tolerance is deliberate: reintroducing a
-// text-normalization layer on top of blob-OID comparison would reintroduce
-// the same class of diff-text-parsing bugs (non-ASCII path decoding,
-// content-preserving renames with no textual hunk) that motivated moving to
-// blob-OID comparison in the first place.
-func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitDoesNotSurvive_REQ_LNGHZN_S4(t *testing.T) {
+// TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_REQ_LNGHZN_S4
+// verifies that a later commit which only cosmetically reformats a
+// previously delivered line (e.g. a gofmt-style indentation rewrap) does not
+// break the check: the net base..HEAD diff is still non-empty relative to
+// base, and a matching conventional-commit reference exists somewhere in the
+// range, so the two-part check passes without needing to attribute the
+// reformatted content back to the original matching commit specifically.
+func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -712,9 +558,9 @@ func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitDoesNotSurvive_RE
 	runGit(t, tmpDir, "commit", "-m", "gofmt cleanup")
 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass,
-		"exact blob-OID comparison intentionally no longer tolerates cosmetic reformatting of delivered content")
-	assert.NotEmpty(t, result.Remediation)
+	assert.True(t, result.Pass,
+		"a matching commit reference plus a non-empty net diff satisfies the check even after a cosmetic reformat")
+	assert.Empty(t, result.Remediation)
 }
 
 // TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4 verifies
@@ -783,14 +629,19 @@ func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *t
 }
 
 // TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4 is a table-driven
-// suite enumerating the survival semantics of CommitReferenceCheck's
-// CommitReferenceCheck ("does the matching commit's own content survive to
-// HEAD") logic. These semantics have been redefined multiple times across
-// review rounds (filename-overlap-only -> same-file added-line-multiset
-// intersection -> deletion handling), each round's fix closing only the
-// specific counterexample found at the time. This suite exists to pin down
-// all of them together so a future change can't silently regress one case
-// while fixing another.
+// suite enumerating outcomes of CommitReferenceCheck's two-part design
+// (conventional-commit reference exists AND the net base..HEAD diff is
+// non-empty) across add/delete/modify/rename shapes, with and without a
+// later commit undoing the change. Earlier designs tried to prove the
+// matching commit's OWN content specifically survives to HEAD and were
+// redefined multiple times across review rounds (filename-overlap-only ->
+// same-file added-line-multiset intersection -> blob-OID comparison), each
+// round's fix closing one counterexample while reopening another for a
+// different diff shape (deletions, binary files, renames, merges). The
+// two-part check sidesteps that entirely: it doesn't attribute the diff to
+// any specific commit, only requires that a matching reference exists AND
+// something was net-delivered. This suite pins down that every case below
+// still lands on the intuitively-correct verdict under the simpler design.
 func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1110,19 +961,16 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_CopySourcePathLaterDeletedDoesNotFalselySurvive_REQ_LNGHZN_S4
-// is a regression test for a review finding: parseNameStatusZ maps both
-// renames ("R...") and copies ("C...") to {OldPath, Path} identically, but a
-// copy's OldPath (the source) is untouched by the commit — its content never
-// went anywhere. An earlier version of commitChangeSurvives unconditionally
-// treated OldPath as "removed content" for both cases, so when the matching
-// commit is a copy-with-edits (dest differs from source) and an *unrelated*
-// later commit deletes the copy's untouched source path, the check would
-// wrongly report the matching commit's contribution as "surviving" purely
-// because the source path no longer exists — even when the matching commit's
-// own destination-path content was itself further overwritten and no longer
-// present anywhere at HEAD.
-func TestCommitReferenceCheck_CopySourcePathLaterDeletedDoesNotFalselySurvive_REQ_LNGHZN_S4(t *testing.T) {
+// TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4
+// exercises a copy-with-edits followed by unrelated further edits and an
+// unrelated deletion of the copy's source path. Under the two-part check,
+// this passes: a matching conventional-commit reference exists, and the net
+// base..HEAD diff is non-empty (dest.txt's final content differs from base,
+// and source.txt was removed). The check does not attempt to prove that the
+// matching commit's OWN destination-path content specifically survived —
+// that per-commit attribution is exactly the class of logic (with its own
+// copy-vs-rename OldPath edge cases) this design intentionally avoids.
+func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -1156,20 +1004,20 @@ func TestCommitReferenceCheck_CopySourcePathLaterDeletedDoesNotFalselySurvive_RE
 	runGit(t, tmpDir, "commit", "-m", "unrelated: remove source file")
 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass,
-		"an unrelated deletion of a copy's untouched source path must not count as the matching commit's own content surviving")
+	assert.True(t, result.Pass,
+		"a matching commit reference plus a non-empty net diff satisfies the check regardless of copy/rename source-path bookkeeping")
+	assert.Empty(t, result.Remediation)
 }
 
 // TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4
-// is a regression test for a review finding: `git diff-tree` (no -m/-c/--cc)
-// suppresses its output entirely for a non-trivial merge commit. LogRange
-// (which feeds CommitReferenceCheck's commit scan) uses plain `base..head`
-// log semantics, which is NOT first-parent-only, so a merge commit can
-// appear in the scanned range. If that merge commit's subject happens to
-// match `fix(ISSUE-ID): ...` and CommitDiffTreeStatus returns zero entries
-// for it (because diff-tree suppressed the diff), commitChangeSurvives would
-// wrongly report it as not surviving even though it legitimately delivers
-// real content relative to its first parent.
+// verifies a merge commit whose subject matches the conventional-commit
+// format still satisfies the check when it legitimately merges in real
+// content. LogRange (which feeds the commit-subject scan) uses plain
+// `base..head` log semantics, which is NOT first-parent-only, so a merge
+// commit can appear in the scanned range; under the two-part design this is
+// unproblematic regardless of the merge commit's own diff-tree output, since
+// the second half of the check reads the net base..HEAD diff directly
+// rather than any specific commit's per-commit diff.
 func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1199,15 +1047,15 @@ func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_BinaryFileDoesNotFalselySurviveViaLineHeuristic_REQ_LNGHZN_S4
-// is a regression test for a review finding: when the exact blob-OID
-// comparison doesn't confirm survival, commitChangeSurvives falls through to
-// removedLinesBetweenBlobs, which splits raw blob bytes on '\n' — meaningless
-// for binary content, and prone to reporting spurious "removed lines" that
-// happen not to reappear at HEAD, producing a false-positive survival
-// verdict for a binary file whose actual current content differs entirely
-// from what the matching commit produced.
-func TestCommitReferenceCheck_BinaryFileDoesNotFalselySurviveViaLineHeuristic_REQ_LNGHZN_S4(t *testing.T) {
+// TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4
+// exercises a binary file modified by the matching commit and then further
+// modified by an unrelated later commit. Under the two-part check this
+// passes: a matching conventional-commit reference exists, and the net
+// base..HEAD diff is non-empty (the binary asset's final content differs
+// from base). No per-file-shape content-survival heuristic (which for prior
+// implementations meant splitting binary blob bytes on '\n' — meaningless
+// for binary content) is needed to reach that verdict.
+func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -1225,15 +1073,49 @@ func TestCommitReferenceCheck_BinaryFileDoesNotFalselySurviveViaLineHeuristic_RE
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): update binary asset")
 
 	// Unrelated later commit replaces the binary asset with entirely
-	// different content, so the matching commit's own post-image blob no
-	// longer matches HEAD.
+	// different content.
 	require.NoError(t, os.WriteFile(binFile, []byte("\x00CCCC_FINAL_LINE\ntrailing\n"), 0644))
 	runGit(t, tmpDir, "add", "asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: replace binary asset")
 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.False(t, result.Pass,
-		"a binary file's line-split byte sequences coincidentally not reappearing at HEAD must not count as surviving content")
+	assert.True(t, result.Pass,
+		"a matching commit reference plus a non-empty net diff satisfies the check for binary content too")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4 is a
+// regression test for review comment 3695646511 (gate.go, prior blob-OID
+// implementation): a matching commit that deletes a binary file was NOT
+// recognized as delivering content, because the deletion-survival fallback
+// (removedLinesBetweenBlobs) refused to compute "removed lines" for a binary
+// pre-image, and a deletion's Status ("D...") skips the exact blob-OID
+// comparison entirely — so a binary-file deletion had NO surviving-evidence
+// path at all and always caused the gate to reject a legitimate,
+// never-undone deletion. The two-part check has no such gap: the binary
+// file's absence from the tree is just another entry in the base..HEAD diff,
+// so no per-file-shape (text vs. binary) special-casing is needed.
+func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	binFile := filepath.Join(tmpDir, "stale-asset.bin")
+	require.NoError(t, os.WriteFile(binFile, []byte("\x00STALE_BINARY_CONTENT\n"), 0644))
+	runGit(t, tmpDir, "add", "stale-asset.bin")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit deletes the binary file outright, and the deletion is
+	// never reverted.
+	runGit(t, tmpDir, "rm", "stale-asset.bin")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale binary asset")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass,
+		"a matching commit that deletes a binary file, with the deletion never undone, must satisfy the check")
+	assert.Empty(t, result.Remediation)
 }
 
 // Helper functions
