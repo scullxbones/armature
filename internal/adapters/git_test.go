@@ -953,6 +953,76 @@ func TestDiffNameStatus_NonRenameChangesHaveNoOldPath(t *testing.T) {
 	assert.Equal(t, "D", byPath["beta.txt"].Status)
 }
 
+// TestCommitChangedFiles_DetectsRenameAsSinglePath verifies that a pure
+// rename commit is reported by CommitChangedFiles as its single (new) path,
+// consistent with DiffNameStatus's rename detection (-M), rather than as a
+// delete-of-old-path plus add-of-new-path pair. Before this fix,
+// CommitChangedFiles ran `git diff-tree` without -M, so a pure rename showed
+// up as two unrelated paths instead of one, inconsistent with DiffNameStatus.
+func TestCommitChangedFiles_DetectsRenameAsSinglePath(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	content := strings.Repeat("line of content\n", 20)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.txt"), []byte(content), 0644))
+	gitRun("add", "a.txt")
+	gitRun("commit", "-m", "add a.txt")
+
+	gitRun("mv", "a.txt", "b.txt")
+	gitRun("commit", "-m", "rename a.txt to b.txt")
+
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(shaOut))
+
+	files, err := c.CommitChangedFiles(sha)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.txt"}, files, "pure rename should report only the new path, not a delete+add pair")
+}
+
+// TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4 verifies that
+// DiffNameStatus reports the literal path for a filename containing
+// non-ASCII characters, rather than git's default octal-escaped quoted form
+// (e.g. "caf\303\251.go"). Without -z, `git diff --name-status` quotes such
+// paths, which breaks downstream scope-containment comparisons (e.g.
+// claim.IsWithinScope) against the literal path recorded in the issue's
+// declared scope.
+func TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	nonASCIIPath := "café.go"
+	require.NoError(t, os.WriteFile(filepath.Join(repo, nonASCIIPath), []byte("package main\n"), 0644))
+	gitRun("add", nonASCIIPath)
+	gitRun("commit", "-m", "add non-ascii file")
+
+	entries, err := c.DiffNameStatus(baseSHA)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, nonASCIIPath, entries[0].Path, "path must be the literal non-ASCII name, not git's octal-escaped quoted form")
+	assert.Equal(t, "A", entries[0].Status)
+}
+
 func TestResetHard(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

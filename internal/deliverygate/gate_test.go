@@ -552,6 +552,63 @@ func TestCommitReferenceCheck_RejectsShortCoincidentalLineMatch_REQ_LNGHZN_S4(t 
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_RejectsShortLineCoincidenceWhenAllContentIsShort_REQ_LNGHZN_S4
+// verifies the specific gap the prior survivalMinLineLength/requireLongLine
+// heuristic left open: when the matching commit's ENTIRE added content is
+// short lines (nothing at or above the old 15-char floor), the old code fell
+// back to unrestricted short-line matching, so a coincidentally-identical
+// short line added by a later, unrelated commit to the same file could
+// falsely make a fully-reverted matching commit appear to survive. The
+// hunk-based patch-id replacement must attribute survival correctly even
+// when the matching commit has no long line to prefer, because it compares
+// whole hunks (with context), not bare content lines.
+func TestCommitReferenceCheck_RejectsShortLineCoincidenceWhenAllContentIsShort_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	widget := filepath.Join(tmpDir, "widget.go")
+	require.NoError(t, os.WriteFile(widget, []byte(
+		"package widget\n\nfunc A() {\n}\n\nfunc Z() {\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// C1: matching format, adds a short, generic line ("}") inside func A,
+	// with no line anywhere near the old 15-char "long line" floor.
+	require.NoError(t, os.WriteFile(widget, []byte(
+		"package widget\n\nfunc A() {\n\tx := 1\n\t_ = x\n}\n\nfunc Z() {\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): tweak A")
+
+	// C2: fully reverts C1's change back to base content.
+	require.NoError(t, os.WriteFile(widget, []byte(
+		"package widget\n\nfunc A() {\n}\n\nfunc Z() {\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "revert the A tweak")
+
+	// C3: an unrelated later change to func Z, adding the SAME short,
+	// coincidental content ("x := 1" / "_ = x") for entirely unrelated
+	// reasons, at a different position in the same file (different
+	// surrounding hunk context).
+	require.NoError(t, os.WriteFile(widget, []byte(
+		"package widget\n\nfunc A() {\n}\n\nfunc Z() {\n\tx := 1\n\t_ = x\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "widget.go")
+	runGit(t, tmpDir, "commit", "-m", "add unrelated tweak to Z")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass,
+		"a fully-reverted commit with only short content must not be attributed "+
+			"survival via an unrelated commit's coincidentally-identical short lines elsewhere in the file")
+	assert.NotEmpty(t, result.Remediation)
+}
+
 // TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4 verifies
 // that a matching conventional commit whose only change is removing lines
 // (no lines added) is treated as delivered when that deletion is never
@@ -610,6 +667,50 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a deletion-only commit whose deletion is later undone must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_SurvivesCosmeticReformattingByLaterCommit_REQ_LNGHZN_S4
+// verifies that a matching commit's delivered content still counts as
+// surviving when a later commit only cosmetically reformats it (e.g. a
+// gofmt-style rewrap that changes internal whitespace but not the actual
+// tokens). Before this fix, the survival check did exact string matching on
+// trimmed lines, so a reformatted surviving line would fail to match the
+// matching commit's original line text and be wrongly rejected as "not
+// surviving" -- a fail-closed false rejection of a legitimate delivery.
+func TestCommitReferenceCheck_SurvivesCosmeticReformattingByLaterCommit_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.go")
+	require.NoError(t, os.WriteFile(file, []byte("package p\n"), 0644))
+	runGit(t, tmpDir, "add", "file.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit adds a distinctive delivered line, indented with
+	// spaces.
+	require.NoError(t, os.WriteFile(file, []byte(
+		"package p\n\nfunc New() {\n    return doDistinctiveDeliveredWork()\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "file.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement New")
+
+	// Later commit only cosmetically reformats the delivered line's
+	// indentation (spaces -> tab, gofmt-style), without changing its actual
+	// tokens/content or the file's line structure.
+	require.NoError(t, os.WriteFile(file, []byte(
+		"package p\n\nfunc New() {\n\treturn doDistinctiveDeliveredWork()\n}\n",
+	), 0644))
+	runGit(t, tmpDir, "add", "file.go")
+	runGit(t, tmpDir, "commit", "-m", "gofmt cleanup")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass,
+		"a matching commit's delivered content must still count as surviving when only cosmetically reformatted by a later commit")
+	assert.Empty(t, result.Remediation)
 }
 
 // TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4 is a table-driven
@@ -791,6 +892,64 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 			},
 		},
 		{
+			// Regression for PR #88 review finding: a commit whose every
+			// added line is shorter than survivalMinLineLength (15 chars)
+			// used to blanket-skip ALL of its lines whenever it added more
+			// than one, leaving no evidence to check and permanently
+			// rejecting a commit that legitimately delivers only short
+			// lines.
+			name:         "commit whose every added line is short still finds survival evidence",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.go")
+				require.NoError(t, os.WriteFile(file, []byte("package p\n"), 0644))
+				runGit(t, dir, "add", "file.go")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				// Both added lines are short (< 15 chars).
+				require.NoError(t, os.WriteFile(file, []byte("package p\nvar X = 1\n"), 0644))
+				runGit(t, dir, "add", "file.go")
+				runGit(t, dir, "commit", "-m", "feat(TEST-123): add short var")
+				return base
+			},
+		},
+		{
+			// Regression for PR #88 review finding: deletionSurvives used to
+			// require ALL removed lines to remain absent from HEAD, so a
+			// commit that removed several lines but had just one of them
+			// coincidentally restored elsewhere (e.g. re-added by an
+			// unrelated later commit for an unrelated reason) was rejected
+			// wholesale, even though most of its removed content is
+			// genuinely gone and the deletion substantively still holds.
+			name:         "deletion with multiple removed lines survives if at least one remains absent",
+			expectedPass: true,
+			setup: func(t *testing.T, dir string) string {
+				t.Helper()
+				file := filepath.Join(dir, "file.txt")
+				require.NoError(t, os.WriteFile(file, []byte(
+					"keep this line\nDELETE THIS FIRST DISTINCTIVE LINE\nDELETE THIS SECOND DISTINCTIVE LINE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "base")
+				base := getHeadSHA(t, dir)
+
+				// Matching commit removes both distinctive lines and adds nothing.
+				require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "fix(TEST-123): remove stale lines")
+
+				// A later, unrelated commit coincidentally reintroduces only
+				// ONE of the two removed lines (e.g. an unrelated doc note
+				// with the same text), not both.
+				require.NoError(t, os.WriteFile(file, []byte(
+					"keep this line\nDELETE THIS FIRST DISTINCTIVE LINE\n"), 0644))
+				runGit(t, dir, "add", "file.txt")
+				runGit(t, dir, "commit", "-m", "unrelated: coincidental reintroduction of one line")
+				return base
+			},
+		},
+		{
 			name:         "empty/no-op commit does not satisfy the check (existing gate.go behavior)",
 			expectedPass: false,
 			setup: func(t *testing.T, dir string) string {
@@ -854,6 +1013,79 @@ func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.True(t, gate.CleanTree.Pass, "tree is clean after commit")
 	assert.True(t, gate.ScopeContainment.Pass, "all files within scope")
 	assert.True(t, gate.CommitReference.Pass, "commit has proper format")
+}
+
+// TestFileHunks_CapturesContentLinesWithinHunk verifies that fileHunks
+// includes every line of a hunk (context, added, and removed), not just its
+// "@@" header, so hunk-level patch-id comparison actually reflects the
+// hunk's real content.
+func TestFileHunks_CapturesContentLinesWithinHunk(t *testing.T) {
+	t.Parallel()
+
+	diff := "diff --git a/file.txt b/file.txt\n" +
+		"--- a/file.txt\n" +
+		"+++ b/file.txt\n" +
+		"@@ -1,2 +1,3 @@\n" +
+		" context line\n" +
+		"-removed line\n" +
+		"+added line one\n" +
+		"+added line two\n"
+
+	hunks := fileHunks(diff)
+	require.Contains(t, hunks, "file.txt")
+	require.Len(t, hunks["file.txt"], 1)
+	hunk := hunks["file.txt"][0]
+	assert.Contains(t, hunk, "context line")
+	assert.Contains(t, hunk, "removed line")
+	assert.Contains(t, hunk, "added line one")
+	assert.Contains(t, hunk, "added line two")
+}
+
+// TestRemovedLinesByFile_WholeFileDeletionAttributesToOldPath verifies that
+// for a commit that deletes an entire file (post-image "+++ /dev/null"),
+// removedLinesByFile attributes the removed content to the file's old (only)
+// path, rather than discarding it because the post-image path doesn't exist.
+func TestRemovedLinesByFile_WholeFileDeletionAttributesToOldPath(t *testing.T) {
+	t.Parallel()
+
+	diff := "diff --git a/gone.txt b/gone.txt\n" +
+		"deleted file mode 100644\n" +
+		"--- a/gone.txt\n" +
+		"+++ /dev/null\n" +
+		"@@ -1,2 +0,0 @@\n" +
+		"-first removed line\n" +
+		"-second removed line\n"
+
+	removed := removedLinesByFile(diff)
+	require.Contains(t, removed, "gone.txt")
+	assert.True(t, removed["gone.txt"]["first removed line"])
+	assert.True(t, removed["gone.txt"]["second removed line"])
+}
+
+// TestCommitReferenceCheck_WholeFileDeletionSurvives verifies end to end that
+// a matching commit which deletes an entire file (rather than removing some
+// lines from a surviving file) is correctly recognized as delivering
+// non-trivial, undone content when the deletion is never reverted.
+func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "gone.txt")
+	require.NoError(t, os.WriteFile(file, []byte("first removed line\nsecond removed line\n"), 0644))
+	runGit(t, tmpDir, "add", "gone.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit deletes the entire file.
+	runGit(t, tmpDir, "rm", "gone.txt")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale file")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "a whole-file deletion whose deletion is never undone must satisfy the check")
+	assert.Empty(t, result.Remediation)
 }
 
 // Helper functions

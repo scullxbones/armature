@@ -90,8 +90,8 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 	assert.Error(t, err, "no parent branch config should be recorded when the coordinator was in detached HEAD, got: %q", out)
 }
 
-// TestClaimExistingWorktreeDoesNotFabricateBaseCommitWhenDiverged_REQ_LNGHZN_S4
-// verifies the LNGHZN-S4 P1 fix: the existing-worktree claim path must NOT
+// TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S4
+// verifies the LNGHZN-S4 fix: the existing-worktree claim path must NOT
 // assume the worktree's current HEAD is the true fork point just because
 // it's an existing-worktree registration. That assumption ("at registration
 // time the worktree has not yet diverged, so its tip IS the true fork
@@ -99,14 +99,15 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 // contains sibling-task commits (as here: task/task-01 is branched from
 // story-branch, which already has a sibling commit on top of main) — HEAD
 // has, in fact, diverged from the resolvable candidate base (main) by one
-// commit. Persisting HEAD as the base-commit in that case would fabricate an
-// unproven value and silently corrupt later scope checks. The fix requires
-// proving non-divergence (rev-list --count <candidate-base>..HEAD == 0)
-// before writing; here that count is 1, so neither the base-commit file nor
-// parent-branch config should be written, leaving getBaseCommit/
-// dynamicBaseCommit in transition.go to fall back honestly.
-func TestClaimExistingWorktreeDoesNotFabricateBaseCommitWhenDiverged_REQ_LNGHZN_S4(t *testing.T) {
+// commit. Rather than skip persistence entirely in this case (the prior,
+// overly conservative behavior, which left the gate to fall back to a
+// default-branch merge-base and could still misattribute sibling commits),
+// the fix computes the ACTUAL fork point — merge-base(HEAD, main) — and
+// persists THAT unconditionally, correctly excluding the sibling commit.
+func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
+
+	mainTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
 	// Simulate a story branch already containing sibling-task commits, as the
 	// coordinator workflow would set up.
@@ -138,9 +139,9 @@ func TestClaimExistingWorktreeDoesNotFabricateBaseCommitWhenDiverged_REQ_LNGHZN_
 	_, err := getCmd.Output()
 	assert.Error(t, err, "parent branch config should NOT be recorded for the existing-worktree claim path")
 
-	// Base-commit file must NOT be recorded either: the worktree's HEAD has
-	// diverged from main by the sibling commit, so it is not a proven fork
-	// point and persisting it would fabricate an unproven base-commit.
+	// The base-commit file MUST be recorded, and must contain the computed
+	// fork point (merge-base against main), NOT the worktree's raw diverged
+	// HEAD (which would include the sibling commit).
 	gitPath := filepath.Join(worktreePath, ".git")
 	gitFileContent, err := os.ReadFile(gitPath)
 	require.NoError(t, err)
@@ -148,8 +149,10 @@ func TestClaimExistingWorktreeDoesNotFabricateBaseCommitWhenDiverged_REQ_LNGHZN_
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	_, err = os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
-	assert.Error(t, err, "base commit file should NOT be recorded when the worktree has already diverged from the candidate base")
+	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	require.NoError(t, err, "base commit file should be recorded with the computed fork point even when HEAD has diverged")
+	assert.Equal(t, mainTipSHA, strings.TrimSpace(string(baseCommitData)),
+		"persisted base-commit must be the merge-base fork point (main tip), excluding the sibling commit")
 }
 
 // TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4 verifies
