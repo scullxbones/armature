@@ -669,15 +669,19 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_SurvivesCosmeticReformattingByLaterCommit_REQ_LNGHZN_S4
-// verifies that a matching commit's delivered content still counts as
-// surviving when a later commit only cosmetically reformats it (e.g. a
-// gofmt-style rewrap that changes internal whitespace but not the actual
-// tokens). Before this fix, the survival check did exact string matching on
-// trimmed lines, so a reformatted surviving line would fail to match the
-// matching commit's original line text and be wrongly rejected as "not
-// surviving" -- a fail-closed false rejection of a legitimate delivery.
-func TestCommitReferenceCheck_SurvivesCosmeticReformattingByLaterCommit_REQ_LNGHZN_S4(t *testing.T) {
+// TestCommitReferenceCheck_CosmeticReformattingByLaterCommitDoesNotSurvive_REQ_LNGHZN_S4
+// documents an intentional behavior change from the prior patch-id-based
+// implementation: survival is now determined by exact blob-OID comparison
+// (see commitChangeSurvives), not whitespace-normalized hunk comparison, so
+// a later commit that changes only a delivered line's literal bytes (e.g. a
+// gofmt-style indentation rewrap) changes the blob OID at that path and is
+// therefore no longer recognized as "the same content surviving". Trading
+// away this cosmetic-reformatting tolerance is deliberate: reintroducing a
+// text-normalization layer on top of blob-OID comparison would reintroduce
+// the same class of diff-text-parsing bugs (non-ASCII path decoding,
+// content-preserving renames with no textual hunk) that motivated moving to
+// blob-OID comparison in the first place.
+func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitDoesNotSurvive_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -708,8 +712,73 @@ func TestCommitReferenceCheck_SurvivesCosmeticReformattingByLaterCommit_REQ_LNGH
 	runGit(t, tmpDir, "commit", "-m", "gofmt cleanup")
 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.True(t, result.Pass,
-		"a matching commit's delivered content must still count as surviving when only cosmetically reformatted by a later commit")
+	assert.False(t, result.Pass,
+		"exact blob-OID comparison intentionally no longer tolerates cosmetic reformatting of delivered content")
+	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4 verifies
+// the fix for a review finding against the prior diff-text-based survival
+// check: a matching commit that adds content to a file with a non-ASCII
+// name (which git quotes and octal-escapes in default diff/log text output,
+// e.g. "caf\303\251.go" for "café.go") must still be recognized as
+// surviving. Blob-OID comparison sidesteps this entirely: paths come from
+// CommitDiffTreeStatus's -z (NUL-delimited, unquoted) output and are passed
+// as literal arguments to git plumbing, with no diff-header text to decode.
+func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base content\n"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	nonASCIIFile := filepath.Join(tmpDir, "café.go")
+	require.NoError(t, os.WriteFile(nonASCIIFile, []byte("package main\n\nfunc café() {}\n"), 0644))
+	runGit(t, tmpDir, "add", "café.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): add café helper")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "a matching commit adding a non-ASCII-named file must be recognized as surviving")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4
+// verifies the fix for a review finding against the prior diff-text-based
+// survival check: a matching commit that is a pure (100%-similarity) rename
+// with no textual hunk (git represents it as a rename with zero added/
+// removed lines) must still be recognized as delivering a real change.
+// Blob-OID comparison handles this automatically: the commit's post-image
+// blob OID at the destination path is unchanged from the pre-rename blob,
+// so comparing it against HEAD's blob OID at the destination path correctly
+// recognizes the rename as surviving with no hunk-parsing involved.
+func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	oldFile := filepath.Join(tmpDir, "oldname.txt")
+	content := ""
+	for range 20 {
+		content += "line of content\n"
+	}
+	require.NoError(t, os.WriteFile(oldFile, []byte(content), 0644))
+	runGit(t, tmpDir, "add", "oldname.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "mv", "oldname.txt", "newname.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): rename to newname")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "a content-preserving (pure) rename must be recognized as a surviving delivered change")
 	assert.Empty(t, result.Remediation)
 }
 
@@ -1015,53 +1084,6 @@ func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.True(t, gate.CommitReference.Pass, "commit has proper format")
 }
 
-// TestFileHunks_CapturesContentLinesWithinHunk verifies that fileHunks
-// includes every line of a hunk (context, added, and removed), not just its
-// "@@" header, so hunk-level patch-id comparison actually reflects the
-// hunk's real content.
-func TestFileHunks_CapturesContentLinesWithinHunk(t *testing.T) {
-	t.Parallel()
-
-	diff := "diff --git a/file.txt b/file.txt\n" +
-		"--- a/file.txt\n" +
-		"+++ b/file.txt\n" +
-		"@@ -1,2 +1,3 @@\n" +
-		" context line\n" +
-		"-removed line\n" +
-		"+added line one\n" +
-		"+added line two\n"
-
-	hunks := fileHunks(diff)
-	require.Contains(t, hunks, "file.txt")
-	require.Len(t, hunks["file.txt"], 1)
-	hunk := hunks["file.txt"][0]
-	assert.Contains(t, hunk, "context line")
-	assert.Contains(t, hunk, "removed line")
-	assert.Contains(t, hunk, "added line one")
-	assert.Contains(t, hunk, "added line two")
-}
-
-// TestRemovedLinesByFile_WholeFileDeletionAttributesToOldPath verifies that
-// for a commit that deletes an entire file (post-image "+++ /dev/null"),
-// removedLinesByFile attributes the removed content to the file's old (only)
-// path, rather than discarding it because the post-image path doesn't exist.
-func TestRemovedLinesByFile_WholeFileDeletionAttributesToOldPath(t *testing.T) {
-	t.Parallel()
-
-	diff := "diff --git a/gone.txt b/gone.txt\n" +
-		"deleted file mode 100644\n" +
-		"--- a/gone.txt\n" +
-		"+++ /dev/null\n" +
-		"@@ -1,2 +0,0 @@\n" +
-		"-first removed line\n" +
-		"-second removed line\n"
-
-	removed := removedLinesByFile(diff)
-	require.Contains(t, removed, "gone.txt")
-	assert.True(t, removed["gone.txt"]["first removed line"])
-	assert.True(t, removed["gone.txt"]["second removed line"])
-}
-
 // TestCommitReferenceCheck_WholeFileDeletionSurvives verifies end to end that
 // a matching commit which deletes an entire file (rather than removing some
 // lines from a surviving file) is correctly recognized as delivering
@@ -1086,6 +1108,132 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a whole-file deletion whose deletion is never undone must satisfy the check")
 	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_CopySourcePathLaterDeletedDoesNotFalselySurvive_REQ_LNGHZN_S4
+// is a regression test for a review finding: parseNameStatusZ maps both
+// renames ("R...") and copies ("C...") to {OldPath, Path} identically, but a
+// copy's OldPath (the source) is untouched by the commit — its content never
+// went anywhere. An earlier version of commitChangeSurvives unconditionally
+// treated OldPath as "removed content" for both cases, so when the matching
+// commit is a copy-with-edits (dest differs from source) and an *unrelated*
+// later commit deletes the copy's untouched source path, the check would
+// wrongly report the matching commit's contribution as "surviving" purely
+// because the source path no longer exists — even when the matching commit's
+// own destination-path content was itself further overwritten and no longer
+// present anywhere at HEAD.
+func TestCommitReferenceCheck_CopySourcePathLaterDeletedDoesNotFalselySurvive_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	sourcePath := filepath.Join(tmpDir, "source.txt")
+	require.NoError(t, os.WriteFile(sourcePath, []byte(
+		"line one\nDISTINCTIVE LINE TO BE EDITED AWAY\nline three\n"), 0644))
+	runGit(t, tmpDir, "add", "source.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit copies source.txt to dest.txt, with edits (so git
+	// reports it as a copy "C..." with OldPath=source.txt, Path=dest.txt,
+	// rather than a 100%-similarity copy).
+	destPath := filepath.Join(tmpDir, "dest.txt")
+	require.NoError(t, os.WriteFile(destPath, []byte(
+		"line one\nline two replaced\nline three\n"), 0644))
+	runGit(t, tmpDir, "add", "-A")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): copy and adapt")
+
+	// Unrelated later commit overwrites dest.txt entirely, so the matching
+	// commit's own post-image blob at dest.txt no longer matches HEAD (the
+	// exact blob-OID check must fail, forcing the fallback path).
+	require.NoError(t, os.WriteFile(destPath, []byte("totally different content now\n"), 0644))
+	runGit(t, tmpDir, "add", "dest.txt")
+	runGit(t, tmpDir, "commit", "-m", "unrelated: further edit dest")
+
+	// Unrelated later commit deletes the copy's untouched source path.
+	runGit(t, tmpDir, "rm", "source.txt")
+	runGit(t, tmpDir, "commit", "-m", "unrelated: remove source file")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass,
+		"an unrelated deletion of a copy's untouched source path must not count as the matching commit's own content surviving")
+}
+
+// TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4
+// is a regression test for a review finding: `git diff-tree` (no -m/-c/--cc)
+// suppresses its output entirely for a non-trivial merge commit. LogRange
+// (which feeds CommitReferenceCheck's commit scan) uses plain `base..head`
+// log semantics, which is NOT first-parent-only, so a merge commit can
+// appear in the scanned range. If that merge commit's subject happens to
+// match `fix(ISSUE-ID): ...` and CommitDiffTreeStatus returns zero entries
+// for it (because diff-tree suppressed the diff), commitChangeSurvives would
+// wrongly report it as not surviving even though it legitimately delivers
+// real content relative to its first parent.
+func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	baseFile := filepath.Join(tmpDir, "base.txt")
+	require.NoError(t, os.WriteFile(baseFile, []byte("base content\n"), 0644))
+	runGit(t, tmpDir, "add", "base.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "feature-branch")
+	featureFile := filepath.Join(tmpDir, "feature.txt")
+	require.NoError(t, os.WriteFile(featureFile, []byte("DISTINCTIVE FEATURE CONTENT\n"), 0644))
+	runGit(t, tmpDir, "add", "feature.txt")
+	runGit(t, tmpDir, "commit", "-m", "add feature file")
+
+	// Back to the branch containing baseCommit, then merge with a commit
+	// subject matching the conventional-commit format.
+	runGit(t, tmpDir, "checkout", "-")
+	runGit(t, tmpDir, "merge", "--no-ff", "-m", "fix(TEST-123): merge feature", "feature-branch")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass,
+		"a merge commit whose subject matches and whose first-parent diff carries real content must be recognized as delivering")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_BinaryFileDoesNotFalselySurviveViaLineHeuristic_REQ_LNGHZN_S4
+// is a regression test for a review finding: when the exact blob-OID
+// comparison doesn't confirm survival, commitChangeSurvives falls through to
+// removedLinesBetweenBlobs, which splits raw blob bytes on '\n' — meaningless
+// for binary content, and prone to reporting spurious "removed lines" that
+// happen not to reappear at HEAD, producing a false-positive survival
+// verdict for a binary file whose actual current content differs entirely
+// from what the matching commit produced.
+func TestCommitReferenceCheck_BinaryFileDoesNotFalselySurviveViaLineHeuristic_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	binFile := filepath.Join(tmpDir, "asset.bin")
+	require.NoError(t, os.WriteFile(binFile, []byte("\x00AAAA_UNIQUE_LINE_ONE\ntrailing\n"), 0644))
+	runGit(t, tmpDir, "add", "asset.bin")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Matching commit modifies the binary asset.
+	require.NoError(t, os.WriteFile(binFile, []byte("\x00BBBB_DIFFERENT_LINE\ntrailing\n"), 0644))
+	runGit(t, tmpDir, "add", "asset.bin")
+	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): update binary asset")
+
+	// Unrelated later commit replaces the binary asset with entirely
+	// different content, so the matching commit's own post-image blob no
+	// longer matches HEAD.
+	require.NoError(t, os.WriteFile(binFile, []byte("\x00CCCC_FINAL_LINE\ntrailing\n"), 0644))
+	runGit(t, tmpDir, "add", "asset.bin")
+	runGit(t, tmpDir, "commit", "-m", "unrelated: replace binary asset")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass,
+		"a binary file's line-split byte sequences coincidentally not reappearing at HEAD must not count as surviving content")
 }
 
 // Helper functions

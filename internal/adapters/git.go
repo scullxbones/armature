@@ -677,12 +677,63 @@ func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git diff --name-status -M %s HEAD: %w", baseSHA, err)
 	}
-	// With -z, git emits a flat sequence of NUL-terminated fields (no
-	// per-line \t separator): status, path, status, path, ... or for a
-	// rename/copy: status, oldpath, newpath, status, path, ...
+	return parseNameStatusZ(out), nil
+}
+
+// CommitDiffTreeStatus returns the per-path status (added/modified/deleted/
+// renamed/copied) that a single commit sha introduced relative to its first
+// parent (`git diff-tree --no-commit-id --name-status -M -C -z -r <sha^1>
+// <sha>`), with rename/copy detection enabled so a content-preserving rename
+// reports
+// both its source and destination paths rather than collapsing to a
+// delete+add. Like DiffNameStatus, -z is used so non-ASCII/special-character
+// paths are returned unquoted and unescaped rather than requiring the caller
+// to decode git's quoted diff-header path format.
+//
+// A bare "diff-tree ... <sha>" (no explicit parent) suppresses output
+// entirely for any non-trivial merge commit unless -m/-c/--cc is given.
+// CommitReferenceCheck's commit scan (LogRange) uses plain `base..head` log
+// semantics, which is NOT first-parent-only, so a merge commit can appear in
+// the scanned range and, without one of those flags, would silently look
+// like it touched nothing (zero entries), making commitChangeSurvives report
+// false with no explanation. Passing -m expands a merge into one diff per
+// parent concatenated together, which would corrupt parseNameStatusZ's
+// single-diff field parsing; instead this diffs explicitly against the
+// commit's first parent (sha^1 sha), which works uniformly for both merge
+// and non-merge commits and always yields exactly one diff. This treats a
+// merge the same way `git log --first-parent` / a linear history would,
+// matching this project's conventions (docs/conventions.md documents
+// `merge: <ISSUE-ID> ...` as the distinct commit-message shape produced when
+// the Coordinator integrates worker branches — merges are an expected,
+// normal part of a story branch's history, just not expected to carry a
+// `fix(ID):`-shaped subject themselves).
+//
+// A root commit (no parent) has no `sha^1` to diff against; that case falls
+// back to the original single-rev form, where diff-tree compares against the
+// empty tree.
+func (c *Client) CommitDiffTreeStatus(sha string) ([]DiffStatusEntry, error) {
+	args := []string{"diff-tree", "--no-commit-id", "--name-status", "-M", "-C", "-z", "-r"}
+	if _, err := c.cmd("rev-parse", "--verify", "--quiet", sha+"^1").Output(); err == nil {
+		args = append(args, sha+"^1", sha)
+	} else {
+		args = append(args, sha)
+	}
+	cmd := c.cmd(args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff-tree --no-commit-id --name-status -M -C -z -r %s: %w", sha, err)
+	}
+	return parseNameStatusZ(out), nil
+}
+
+// parseNameStatusZ parses the NUL-delimited output shared by `git diff
+// --name-status -z` and `git diff-tree --name-status -z`: a flat sequence of
+// NUL-terminated fields (no per-line \t separator): status, path, status,
+// path, ... or for a rename/copy: status, oldpath, newpath, status, path, ...
+func parseNameStatusZ(out []byte) []DiffStatusEntry {
 	raw := strings.TrimRight(string(out), "\x00")
 	if raw == "" {
-		return []DiffStatusEntry{}, nil
+		return []DiffStatusEntry{}
 	}
 	fields := strings.Split(raw, "\x00")
 	entries := make([]DiffStatusEntry, 0, len(fields))
@@ -703,7 +754,33 @@ func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
 		entries = append(entries, DiffStatusEntry{Status: status, Path: fields[i]})
 		i++
 	}
-	return entries, nil
+	return entries
+}
+
+// BlobOIDAtRev resolves the git blob object ID for path as it exists at rev,
+// using `git ls-tree` rather than `git rev-parse rev:path` so a missing path
+// is reported via an empty ("", false) result instead of a non-zero exit
+// code from git. path is passed as a literal argument rather than parsed
+// from git's own (potentially quoted/octal-escaped) diff-header text, so
+// non-ASCII or special-character filenames need no header-decoding to
+// resolve correctly. Returns ("", false, nil) if path does not exist at rev
+// (e.g. it was deleted, or added only after rev).
+func (c *Client) BlobOIDAtRev(rev, path string) (string, bool, error) {
+	cmd := c.cmd("ls-tree", rev, "--", path)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false, fmt.Errorf("git ls-tree %s -- %s: %w", rev, path, err)
+	}
+	line := strings.TrimRight(string(out), "\n")
+	if line == "" {
+		return "", false, nil
+	}
+	metaPart, _, hasTab := strings.Cut(line, "\t")
+	meta := strings.Fields(metaPart)
+	if !hasTab || len(meta) < 3 {
+		return "", false, fmt.Errorf("unexpected git ls-tree output for %s at %s: %q", path, rev, line)
+	}
+	return meta[2], true, nil
 }
 
 // ResetHard resets the working tree and index to the given ref (e.g. a SHA or

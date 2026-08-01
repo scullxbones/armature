@@ -246,16 +246,30 @@ func GetBaseCommit(git *adapters.Client) (string, error) {
 // time (RecordedBaseCommit), then merge-base against a default branch
 // candidate (GetBaseCommit). Each tier is tried in turn; the first one that
 // succeeds wins. Returns an error only if all three tiers fail.
+//
+// Every tier's error is accumulated into lastErr (not just the last tier's,
+// as an earlier version of this function did) so a debugging session sees
+// why each tier in turn was rejected, rather than only the final tier's
+// error with the first two silently discarded.
 func ResolveBaseCommit(worktreePath string, git *adapters.Client) (string, error) {
-	if baseCommit, err := DynamicBaseCommit(git); err == nil {
+	var lastErr error
+
+	baseCommit, err := DynamicBaseCommit(git)
+	if err == nil {
 		return baseCommit, nil
 	}
-	if baseCommit, err := RecordedBaseCommit(worktreePath); err == nil {
+	lastErr = err
+
+	baseCommit, err = RecordedBaseCommit(worktreePath)
+	if err == nil {
 		return baseCommit, nil
 	}
-	baseCommit, err := GetBaseCommit(git)
+	lastErr = fmt.Errorf("%w; recorded base commit also failed: %w", lastErr, err)
+
+	baseCommit, err = GetBaseCommit(git)
 	if err != nil {
-		return "", fmt.Errorf("failed to determine base commit for delivery gate check: %w", err)
+		lastErr = fmt.Errorf("%w; default base branch lookup also failed: %w", lastErr, err)
+		return "", fmt.Errorf("failed to determine base commit for delivery gate check: %w", lastErr)
 	}
 	return baseCommit, nil
 }
