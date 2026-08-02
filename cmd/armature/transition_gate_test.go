@@ -182,6 +182,45 @@ func TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2(t *testing.T) 
 	assert.Contains(t, err.Error(), "delivery gate")
 }
 
+// TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
+// verifies that the delivery gate cannot be silently bypassed by running
+// `arm transition` from a checkout other than the one a story was actually
+// claimed into. Before the fix, isClaimedWorktreeForIssue only inspected the
+// invoking checkout's own armature-issue-id marker; invoking from the main
+// coordinator repo (never claimed, no marker) made the story-type gate
+// probe return false and skip the gate entirely -- with
+// SkippedDeliveryGate: false recorded, leaving no audit trail that anything
+// was bypassed. See
+// docs/dogfood/findings/raw/2026-08-02T1600Z-claude-workflow-story-gate-bypass-via-wrong-checkout.md.
+func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-02", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-02-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-02", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Dirty the claimed worktree without committing: the clean-tree check
+	// would block if the gate actually ran.
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	// Invoke the transition from the MAIN repo checkout, not the worktree the
+	// story was claimed into. Before the fix, this made
+	// isClaimedWorktreeForIssue read the main repo's own (absent) marker,
+	// return false, and skip the gate -- letting the dirty claimed worktree
+	// pass "done" undetected.
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-02", "--to", "done", "--outcome", "test", "--force")
+	assert.Error(t, err, "transitioning a claimed story to done from a different checkout must still run the delivery gate")
+	assert.Contains(t, err.Error(), "delivery gate")
+}
+
 // TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery gate
 // applies to issue kind "bug" the same way it applies to "task": bugs get a
 // worktree+branch created on claim (see internal/materialize/branch.go's
