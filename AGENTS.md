@@ -2,7 +2,7 @@
 
 Armature is a git-native work orchestration system: state is append-only ops materialized into task state under `.armature/`, with no external DB or server.
 
-Go project. Build with `make`, not raw `go build`.
+Go project. Build with `make`, not raw `go build`. Writing python tools is a last resort. Instead use standard tools like LSP, Read, Edit, Write, Grep, Glob before Bash. When using bash use `jq` for JSON, and `rg` instead of grep.
 
 ## Constitution
 
