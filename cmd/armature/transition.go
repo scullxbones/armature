@@ -176,8 +176,23 @@ This enforces branch + PR discipline.`,
 				}
 
 				runGate := currentEntry.Type == "task" || currentEntry.Type == "bug" || currentEntry.Type == "feature"
-				if currentEntry.Type == "story" && isClaimedWorktreeForIssue(gateRepoPath, issueID) {
-					runGate = true
+				if currentEntry.Type == "story" {
+					if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
+						runGate = true
+					} else if claimedPath, ok := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID); ok {
+						// The invoking checkout's own marker didn't match
+						// (isClaimedWorktreeForIssue above), but a
+						// repo-global scan found a *different* worktree
+						// actually claimed for this story issue (see
+						// docs/dogfood/findings/raw/2026-08-02T1600Z-
+						// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
+						// Fail closed: run the gate against that claimed
+						// worktree, not the invoking checkout, so a dirty
+						// or out-of-scope claimed worktree can't slip a
+						// "done" through by transitioning from elsewhere.
+						runGate = true
+						gateRepoPath = claimedPath
+					}
 				}
 
 				if runGate {
@@ -335,6 +350,48 @@ func isClaimedWorktreeForIssue(worktreePath, issueID string) bool {
 		return false
 	}
 	return binding == issueID
+}
+
+// resolveClaimedStoryWorktree finds a worktree actually claimed for a story
+// issue, regardless of which checkout `arm transition` is invoked from. It
+// derives repo-global state via `git worktree list --porcelain` (run against
+// repoPath, which enumerates every worktree linked to the repository no
+// matter which one the command happens to run in — see
+// findWorktreePathByBranch/GitWorktreeBranches, the same mechanism `arm
+// merged` already uses) and cross-checks the candidate worktree's own
+// armature-issue-id marker file, rather than trusting only the invoking
+// checkout's marker as isClaimedWorktreeForIssue does. This closes the gap
+// described in
+// docs/dogfood/findings/raw/2026-08-02T1600Z-claude-workflow-story-gate-bypass-via-wrong-checkout.md:
+// a story claimed into worktree A must still gate a `--to done` transition
+// invoked from an unrelated checkout B.
+//
+// Returns ("", false) when no branch, no worktree, or no matching binding is
+// found. Callers must treat that as "no evidence found here", not
+// affirmative proof the story is unclaimed — this is combined with
+// isClaimedWorktreeForIssue's own check of the invoking checkout, and any
+// resolution error here intentionally falls through to that same "not
+// claimed by this signal" result rather than erroring the transition, since
+// an unclaimed coordinator-level story transition must remain a valid,
+// ungated path.
+func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool) {
+	branchName := deriveBranchName("story", issueID)
+	if branchName == "" {
+		return "", false
+	}
+	worktreePath := findWorktreePathByBranch(repoPath, branchName)
+	if worktreePath == "" {
+		return "", false
+	}
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return "", false
+	}
+	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+	if err != nil || binding != issueID {
+		return "", false
+	}
+	return worktreePath, true
 }
 
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
