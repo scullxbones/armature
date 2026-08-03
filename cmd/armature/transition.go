@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -184,42 +185,48 @@ This enforces branch + PR discipline.`,
 
 				runGate := currentEntry.Type == "task" || currentEntry.Type == "bug" || currentEntry.Type == "feature"
 				if currentEntry.Type == "story" {
-					if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
-						runGate = true
-					} else {
-						claimedPath, found, resolveErr := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID)
-						if resolveErr != nil {
-							// Fail closed: we couldn't reliably determine
-							// whether some other worktree is claimed for this
-							// story (git worktree list failed, or a marker
-							// file existed but couldn't be read for a reason
-							// other than "missing"). Refuse the transition
-							// rather than silently treating it as unclaimed —
-							// see finding 2 in the Opus review of commit
-							// 1ac1b2e5.
-							return fmt.Errorf("could not determine claimed worktree for story %s: %w. Use --skip-delivery-gate to bypass", issueID, resolveErr)
-						}
-						if found {
-							// The invoking checkout's own marker didn't match
-							// (isClaimedWorktreeForIssue above), but a
-							// repo-global scan found a *different* worktree
-							// actually claimed for this story issue (see
-							// docs/dogfood/findings/raw/2026-08-02T1600Z-
-							// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
-							// Fail closed: run the gate against that claimed
-							// worktree, not the invoking checkout, so a dirty
-							// or out-of-scope claimed worktree can't slip a
-							// "done" through by transitioning from elsewhere.
+					storyClaimed, err := isStoryClaimedInCurrentOps(appCtx.IssuesDir, issueID)
+					if err != nil {
+						return fmt.Errorf("determine current claim for story %s: %w. Use --skip-delivery-gate to bypass", issueID, err)
+					}
+					if storyClaimed {
+						if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
 							runGate = true
-							gateRepoPath = claimedPath
-						} else if currentEntry.Assignee != "" {
-							// No live marker is discoverable, but materialized state
-							// still records a claimant. That means this story entered
-							// the claimed-worktree workflow and its worktree was likely
-							// removed or pruned manually. Do not confuse that state with
-							// an unclaimed coordinator-level story: the delivery gate
-							// cannot validate a missing bound worktree, so fail closed.
-							return fmt.Errorf("claimed story %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass", issueID)
+						} else {
+							claimedPath, found, resolveErr := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID)
+							if resolveErr != nil {
+								// Fail closed: we couldn't reliably determine
+								// whether some other worktree is claimed for this
+								// story (git worktree list failed, or a marker
+								// file existed but couldn't be read for a reason
+								// other than "missing"). Refuse the transition
+								// rather than silently treating it as unclaimed —
+								// see finding 2 in the Opus review of commit
+								// 1ac1b2e5.
+								return fmt.Errorf("could not determine claimed worktree for story %s: %w. Use --skip-delivery-gate to bypass", issueID, resolveErr)
+							}
+							if found {
+								// The invoking checkout's own marker didn't match
+								// (isClaimedWorktreeForIssue above), but a
+								// repo-global scan found a *different* worktree
+								// actually claimed for this story issue (see
+								// docs/dogfood/findings/raw/2026-08-02T1600Z-
+								// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
+								// Fail closed: run the gate against that claimed
+								// worktree, not the invoking checkout, so a dirty
+								// or out-of-scope claimed worktree can't slip a
+								// "done" through by transitioning from elsewhere.
+								runGate = true
+								gateRepoPath = claimedPath
+							} else {
+								// No live marker is discoverable, but the authoritative ops
+								// still record a claimant. That means this story entered
+								// the claimed-worktree workflow and its worktree was likely
+								// removed or pruned manually. Do not confuse that state with
+								// an unclaimed coordinator-level story: the delivery gate
+								// cannot validate a missing bound worktree, so fail closed.
+								return fmt.Errorf("claimed story %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass", issueID)
+							}
 						}
 					}
 				}
@@ -291,6 +298,26 @@ This enforces branch + PR discipline.`,
 	cmd.Flags().BoolVar(&skipDeliveryGate, "skip-delivery-gate", false, "skip delivery gate check when transitioning to done")
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
+}
+
+// isStoryClaimedInCurrentOps reads the append-only source of truth without
+// updating derived state. Transition's delivery decision must not rely on a
+// stale snapshot: unassign and transition --to open append release ops but do
+// not synchronously materialize them.
+func isStoryClaimedInCurrentOps(issuesDir, issueID string) (bool, error) {
+	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+	if err != nil {
+		return false, fmt.Errorf("read ops: %w", err)
+	}
+	state, _, err := materialize.Run("", allOps, nil, materialize.Options{WriteStateFiles: false})
+	if err != nil {
+		return false, fmt.Errorf("replay ops: %w", err)
+	}
+	issue, ok := state.Issues[issueID]
+	if !ok {
+		return false, fmt.Errorf("story not found in current ops")
+	}
+	return issue.ClaimedBy != "", nil
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.

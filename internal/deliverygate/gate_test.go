@@ -64,6 +64,31 @@ func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1(t *testi
 	assert.Contains(t, result.Remediation, "outside.go")
 }
 
+// TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LNGHZN_S4_T1
+// verifies that ignored generated artifacts still make a delivery tree dirty,
+// while Armature's derived coordination state remains safe local noise.
+func TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LNGHZN_S4_T1(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("bin/\ncoverage.out\n.armature/\n"), 0o644))
+	runGit(t, tmpDir, "add", ".gitignore")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "bin", "arm"), []byte("binary"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "coverage.out"), []byte("coverage"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".armature", "state"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".armature", "state", "index.json"), []byte("{}"), 0o644))
+
+	result := CleanTreeCheck(tmpDir)
+	assert.False(t, result.Pass, "ignored build artifacts must fail the clean-tree gate")
+	assert.Contains(t, result.Remediation, "bin/")
+	assert.Contains(t, result.Remediation, "coverage.out")
+	assert.NotContains(t, result.Remediation, ".armature/")
+}
+
 // TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1 verifies that
 // the scope containment check passes when all changed files are within scope.
 func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T) {
