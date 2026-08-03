@@ -11,6 +11,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2 verifies that transition
@@ -72,7 +73,7 @@ func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T)
 
 // TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2 verifies that --skip-delivery-gate
 // allows transition to done even when gate checks would otherwise fail, and
-// records the override in the transition op's payload.
+// records the override in the transition op's payload alongside its outcome.
 func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -93,7 +94,44 @@ func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	run(t, wt, "git", "commit", "-m", "no conventional reference here")
 
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-03", "--to", "done", "--outcome", "test", "--skip-delivery-gate", "--force")
-	assert.NoError(t, err)
+	require.NoError(t, err)
+
+	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
+	require.NoError(t, err)
+	for _, op := range allOps {
+		if op.Type == ops.OpTransition && op.TargetID == "gate-03" {
+			assert.Equal(t, "done", op.Payload.To)
+			assert.Equal(t, "test", op.Payload.Outcome)
+			assert.True(t, op.Payload.SkippedDeliveryGate)
+			return
+		}
+	}
+	t.Fatal("expected a transition op with the recorded delivery-gate override")
+}
+
+// TestTransitionRejectsGateOverrideOutsideDone_REQ_LNGHZN_S4_T2 verifies that
+// the delivery-gate override is only valid for a transition to done and does
+// not append a misleading audit field to transitions where no gate exists.
+func TestTransitionRejectsGateOverrideOutsideDone_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-override-01", "--title", "Gate task", "--type", "task")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-override-01", "--to", "blocked", "--skip-delivery-gate")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only valid with --to done")
+
+	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
+	require.NoError(t, err)
+	for _, op := range allOps {
+		assert.False(t, op.Type == ops.OpTransition && op.TargetID == "gate-override-01", "invalid override must not append a transition op")
+	}
 }
 
 // TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2 verifies that the
@@ -267,6 +305,38 @@ func TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2(t *tes
 	// still proof the gate ran against the claimed worktree instead of being
 	// silently skipped.
 	assert.Contains(t, err.Error(), "gate-story-03")
+	assert.Contains(t, err.Error(), "--skip-delivery-gate")
+}
+
+// TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2
+// verifies that a story which remains claimed after its claimed
+// worktree was manually removed cannot silently transition to done. An
+// unclaimed coordinator-level story is still exempt, but a recorded claimant
+// proves this story previously entered the claimed-worktree workflow and must
+// require an explicit delivery-gate override when that worktree is gone.
+func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-04", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-04-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-04", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Simulate manual removal and pruning after claim. This removes the only
+	// marker file, while materialized state still records the story as claimed.
+	run(t, repo, "git", "worktree", "remove", wt, "--force")
+	run(t, repo, "git", "worktree", "prune")
+
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-04", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err, "a materially assigned story with no discoverable claimed worktree must fail closed")
+	assert.Contains(t, err.Error(), "claimed worktree")
 	assert.Contains(t, err.Error(), "--skip-delivery-gate")
 }
 

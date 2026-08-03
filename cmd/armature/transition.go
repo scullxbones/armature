@@ -60,6 +60,9 @@ This enforces branch + PR discipline.`,
 				sort.Strings(valid)
 				return fmt.Errorf("invalid status %q: valid values are %v", to, valid)
 			}
+			if skipDeliveryGate && to != "done" {
+				return fmt.Errorf("--skip-delivery-gate is only valid with --to done")
+			}
 
 			state := mustState(cmd)
 			appCtx := state.ctx
@@ -209,6 +212,14 @@ This enforces branch + PR discipline.`,
 							// "done" through by transitioning from elsewhere.
 							runGate = true
 							gateRepoPath = claimedPath
+						} else if currentEntry.Assignee != "" {
+							// No live marker is discoverable, but materialized state
+							// still records a claimant. That means this story entered
+							// the claimed-worktree workflow and its worktree was likely
+							// removed or pruned manually. Do not confuse that state with
+							// an unclaimed coordinator-level story: the delivery gate
+							// cannot validate a missing bound worktree, so fail closed.
+							return fmt.Errorf("claimed story %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass", issueID)
 						}
 					}
 				}
