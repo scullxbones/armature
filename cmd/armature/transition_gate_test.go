@@ -375,12 +375,18 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 	assert.Contains(t, err.Error(), "Working tree is not clean", "must fail specifically on the clean-tree check this test dirtied, not some unrelated error")
 }
 
-// TestTransitionDoneReleasedStoryIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2
-// verifies that releasing a claimed story makes its old worktree binding
-// irrelevant to the coordinator-level completion flow. The marker remains in
-// the released worktree so it can be reused safely, but it must not cause the
-// delivery gate to validate abandoned work from a claim that no longer exists.
-func TestTransitionDoneReleasedStoryIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2(t *testing.T) {
+// TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2
+// reproduces the self-unassign delivery-gate bypass: `arm unassign` is
+// self-service with no permission check and clears ClaimedBy via a
+// transition->open op, but it does not touch the worktree's
+// armature-issue-id marker or its working tree contents. A worker could
+// previously claim a story into a worktree, make dirty/out-of-scope/
+// uncommitted changes, self-unassign, and then `transition --to done
+// --force` — since the gate was keyed solely on ClaimedBy != "", it never
+// ran against the still-bound, still-dirty worktree. The gate must now run
+// against any worktree whose marker still names this issue, regardless of
+// materialized claim state.
+func TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -397,19 +403,20 @@ func TestTransitionDoneReleasedStoryIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2
 	_, err = runTrls(t, repo, "unassign", "--issue", "gate-story-released-01")
 	require.NoError(t, err)
 
-	// The released worktree is no longer part of delivery, even if it remains
-	// dirty and retains its marker for future reuse.
+	// The released worktree still carries its armature-issue-id marker (kept
+	// so it can be reused safely) and is now dirtied — exactly the exploit
+	// scenario: claim, dirty, self-unassign, done --force.
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
 
 	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-released-01", "--to", "done", "--outcome", "test", "--force")
-	require.NoError(t, err)
+	require.Error(t, err, "self-unassigning must not exempt a still-bound, dirty worktree from the delivery gate")
+	assert.Contains(t, err.Error(), "delivery gate")
 }
 
-// TestTransitionDoneStoryReopenedWithoutMaterializeIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2
-// verifies that an immediate release through transition --to open is just as
-// authoritative as unassign: a stale snapshot must not resurrect the old
-// claim and cause an abandoned, dirty worktree to be gated.
-func TestTransitionDoneStoryReopenedWithoutMaterializeIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2(t *testing.T) {
+// TestTransitionDoneReopenedThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2
+// verifies the same bypass is closed when the story is released via
+// `transition --to open` rather than `unassign`.
+func TestTransitionDoneReopenedThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -429,6 +436,38 @@ func TestTransitionDoneStoryReopenedWithoutMaterializeIgnoresStaleWorktreeBindin
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
 
 	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-reopened-01", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err, "transition --to open must not exempt a still-bound, dirty worktree from the delivery gate")
+	assert.Contains(t, err.Error(), "delivery gate")
+}
+
+// TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGHZN_S4_T2
+// verifies the legitimate case the gate must still allow: a story is
+// claimed, its worktree is later fully removed and pruned (no lingering
+// marker anywhere), and it is released. Since no worktree anywhere still
+// carries this issue's marker, the coordinator-level completion flow stays
+// exempt, distinct from the self-unassign exploit above where the marker
+// and dirty contents linger.
+func TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-released-02", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-released-02-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-released-02", "--worktree", wt)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "unassign", "--issue", "gate-story-released-02")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "worktree", "remove", wt, "--force")
+	run(t, repo, "git", "worktree", "prune")
+
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-released-02", "--to", "done", "--outcome", "test", "--force")
 	require.NoError(t, err)
 }
 
@@ -615,6 +654,45 @@ func TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-05", "--to", "done", "--outcome", "test", "--force")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "delivery gate")
+}
+
+// TestRunDeliveryGateCheck_AllThreeChecksFailSimultaneously verifies that
+// when a worktree fails all three delivery-gate checks at once — dirty
+// tree, an out-of-scope committed change, and no commit referencing the
+// issue in the conventional format — the aggregated error surfaces all
+// three remediations, not just the first one encountered.
+func TestRunDeliveryGateCheck_AllThreeChecksFailSimultaneously(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-all-three", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-all-three-wt")
+	_, err = runTrls(t, repo, "claim", "gate-all-three", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Commit a file outside declared scope ("bar.go" is not in scope
+	// "foo.go") with a message that does not reference the issue in the
+	// conventional commit format — this alone fails both ScopeContainment
+	// and CommitReference.
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "bar.go"), []byte("package bar\n"), 0o644))
+	run(t, wt, "git", "add", "bar.go")
+	run(t, wt, "git", "commit", "-m", "misc change with no issue reference")
+
+	// Leave an untracked, uncommitted file so the working tree is also
+	// dirty — this fails CleanTree.
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "baz.txt"), []byte("scratch\n"), 0o644))
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-all-three", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CleanTree:")
+	assert.Contains(t, err.Error(), "ScopeContainment:")
+	assert.Contains(t, err.Error(), "CommitReference:")
 }
 
 // TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1 verifies that

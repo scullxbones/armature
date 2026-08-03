@@ -320,6 +320,33 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4 verifies
+// that the documented merge-commit format ("merge: <ISSUE-ID> <description>",
+// per docs/conventions.md) satisfies the commit-reference check even though
+// it doesn't follow the type(ISSUE-ID): description shape used by other
+// commit types.
+func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "merge: TEST-123 integrate feature work")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "documented merge: ID description format should be accepted")
+	assert.Empty(t, result.Remediation)
+}
+
 // TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2 verifies
 // that a conventional-commit reference committed BEFORE baseCommit does not
 // satisfy the check — only commits strictly after base count.

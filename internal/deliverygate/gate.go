@@ -176,16 +176,23 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		}
 	}
 
-	// Build regex pattern: ^(feat|fix|refactor|test|docs|style|polish)\(ISSUE-ID\)!?:[ \t]+\S
-	// Matches: type(ISSUE-ID): <description> or type(ISSUE-ID)!: <description>
+	// Build regex pattern matching either:
+	//   type(ISSUE-ID): <description>  or  type(ISSUE-ID)!: <description>
+	//   merge: ISSUE-ID <description>
 	// where type is one of the commit types enumerated by
 	// docs/conventions.md. Restricting the type alternation (rather than
 	// accepting any lowercase word) prevents a bogus type like
 	// "oops(ISSUE-ID): ..." from satisfying this check. Requiring whitespace
-	// followed by a non-whitespace character after the colon prevents a
-	// bare "fix(ISSUE-ID):" with no actual description from satisfying this
-	// check.
-	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`)
+	// followed by a non-whitespace character after the colon (or after the
+	// issue ID, for the merge form) prevents a bare "fix(ISSUE-ID):" or
+	// "merge: ISSUE-ID" with no actual description from satisfying this
+	// check. The merge form uses a distinct shape (no parens around the
+	// issue ID) per the documented "merge: <ISSUE-ID> <description>" special
+	// case for merge commits.
+	pattern := regexp.MustCompile(
+		`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S` +
+			`|^merge:[ \t]+` + regexp.QuoteMeta(issueID) + `[ \t]+\S`,
+	)
 
 	foundMatchingCommit := false
 	for _, entry := range entries {

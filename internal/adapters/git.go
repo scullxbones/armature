@@ -697,41 +697,6 @@ func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
 // to decode git's quoted diff-header path format.
 //
 // A bare "diff-tree ... <sha>" (no explicit parent) suppresses output
-// entirely for any non-trivial merge commit unless -m/-c/--cc is given.
-// CommitReferenceCheck's commit scan (LogRange) uses plain `base..head` log
-// semantics, which is NOT first-parent-only, so a merge commit can appear in
-// the scanned range and, without one of those flags, would silently look
-// like it touched nothing (zero entries), making commitChangeSurvives report
-// false with no explanation. Passing -m expands a merge into one diff per
-// parent concatenated together, which would corrupt parseNameStatusZ's
-// single-diff field parsing; instead this diffs explicitly against the
-// commit's first parent (sha^1 sha), which works uniformly for both merge
-// and non-merge commits and always yields exactly one diff. This treats a
-// merge the same way `git log --first-parent` / a linear history would,
-// matching this project's conventions (docs/conventions.md documents
-// `merge: <ISSUE-ID> ...` as the distinct commit-message shape produced when
-// the Coordinator integrates worker branches — merges are an expected,
-// normal part of a story branch's history, just not expected to carry a
-// `fix(ID):`-shaped subject themselves).
-//
-// A root commit (no parent) has no `sha^1` to diff against; that case falls
-// back to the original single-rev form, where diff-tree compares against the
-// empty tree.
-func (c *Client) CommitDiffTreeStatus(sha string) ([]DiffStatusEntry, error) {
-	args := []string{"diff-tree", "--no-commit-id", "--name-status", "-M", "-C", "-z", "-r"}
-	if _, err := c.cmd("rev-parse", "--verify", "--quiet", sha+"^1").Output(); err == nil {
-		args = append(args, sha+"^1", sha)
-	} else {
-		args = append(args, sha)
-	}
-	cmd := c.cmd(args...)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git diff-tree --no-commit-id --name-status -M -C -z -r %s: %w", sha, err)
-	}
-	return parseNameStatusZ(out), nil
-}
-
 // parseNameStatusZ parses the NUL-delimited output shared by `git diff
 // --name-status -z` and `git diff-tree --name-status -z`: a flat sequence of
 // NUL-terminated fields (no per-line \t separator): status, path, status,
@@ -761,32 +726,6 @@ func parseNameStatusZ(out []byte) []DiffStatusEntry {
 		i++
 	}
 	return entries
-}
-
-// BlobOIDAtRev resolves the git blob object ID for path as it exists at rev,
-// using `git ls-tree` rather than `git rev-parse rev:path` so a missing path
-// is reported via an empty ("", false) result instead of a non-zero exit
-// code from git. path is passed as a literal argument rather than parsed
-// from git's own (potentially quoted/octal-escaped) diff-header text, so
-// non-ASCII or special-character filenames need no header-decoding to
-// resolve correctly. Returns ("", false, nil) if path does not exist at rev
-// (e.g. it was deleted, or added only after rev).
-func (c *Client) BlobOIDAtRev(rev, path string) (string, bool, error) {
-	cmd := c.cmd("ls-tree", rev, "--", path)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", false, fmt.Errorf("git ls-tree %s -- %s: %w", rev, path, err)
-	}
-	line := strings.TrimRight(string(out), "\n")
-	if line == "" {
-		return "", false, nil
-	}
-	metaPart, _, hasTab := strings.Cut(line, "\t")
-	meta := strings.Fields(metaPart)
-	if !hasTab || len(meta) < 3 {
-		return "", false, fmt.Errorf("unexpected git ls-tree output for %s at %s: %q", path, rev, line)
-	}
-	return meta[2], true, nil
 }
 
 // ResetHard resets the working tree and index to the given ref (e.g. a SHA or
@@ -955,43 +894,6 @@ func (c *Client) CommitChangedFiles(sha string) ([]string, error) {
 		return []string{}, nil
 	}
 	return strings.Split(raw, "\n"), nil
-}
-
-// CommitDiff returns the unified diff patch introduced by a single commit
-// relative to its first parent (`git show --format= <sha>`), i.e. the
-// content the commit itself added or removed, independent of what any later
-// commit does. Used to check whether a commit's own delivered content
-// survives in a later net diff, rather than merely checking that the
-// filenames it touched still appear in that net diff.
-func (c *Client) CommitDiff(sha string) (string, error) {
-	cmd := c.cmd("show", "--format=", sha)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git show --format= %s: %w", sha, err)
-	}
-	return string(out), nil
-}
-
-// PatchID computes git's own patch identifier for a unified diff (as
-// produced by `git diff`/`git show`), via `git patch-id --stable`: a
-// content-based hash of the diff's changed lines that ignores line numbers
-// and diff/hunk-header noise, git's own tool for deciding whether two diffs
-// represent the same underlying change. Returns "" for an empty/no-op diff.
-func (c *Client) PatchID(diff string) (string, error) {
-	if strings.TrimSpace(diff) == "" {
-		return "", nil
-	}
-	cmd := c.cmd("patch-id", "--stable")
-	cmd.Stdin = strings.NewReader(diff)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git patch-id: %w", err)
-	}
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return "", nil
-	}
-	return fields[0], nil
 }
 
 // ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.
