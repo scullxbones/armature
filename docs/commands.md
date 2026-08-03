@@ -812,7 +812,7 @@ Transition an issue to a new status.
 - `--outcome string`: Outcome description.
 - `--pr string`: PR number.
 - `--to string`: Target status.
-- `--skip-delivery-gate`: Skip the delivery gate check when transitioning to `done`. The override is recorded in the transition op's `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) field as an audit trail. See [Delivery Gate](use-cases.md#the-delivery-gate).
+- `--skip-delivery-gate`: Skip the delivery gate check only when transitioning to `done`; it is rejected for other states. The transition op records `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) as the audit flag. Supply `--outcome` with the reason for the override. See [Delivery Gate](use-cases.md#the-delivery-gate).
 
 **Example:**
 ```bash

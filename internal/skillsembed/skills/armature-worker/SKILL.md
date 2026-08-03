@@ -143,12 +143,12 @@ to your specific types and fields.
 
 ### 5c. The Delivery Gate
 
-Before you transition to `done`, stage and commit your work (conventional commit format, see the Completion order above) — the gate expects a clean tree and an existing commit, not the other way around. When you transition to `done`, Armature runs a **delivery gate** — a set of three checks that verify your work meets minimal quality and scope standards before marking the task complete.
+Before you transition to `done`, stage and commit your work (conventional commit format, see the Completion order above) — the gate expects a clean tree and an existing commit, not the other way around. When a claimed task, bug, feature, or story transitions to `done`, Armature runs a **delivery gate** against its bound worktree. An epic and an unclaimed coordinator-level story have no bound worktree and are exempt; a story with a recorded claimant but no discoverable claimed worktree fails closed.
 
 **The Three Checks:**
 
 1. **Clean Tree:** `git status --porcelain` must be empty. All work must be staged and committed; the worktree must be clean. (`.armature/` state is automatically excluded from this check — it is not considered outstanding work.)
-2. **Scope Containment:** The diff between your base commit (resolved via `git merge-base` against `main`, `master`, `origin/main`, or `origin/master`, whichever exists locally) and `HEAD` must be a subset of the issue's declared scope (verified via `internal/claim.IsWithinScope`). This prevents scope creep: you cannot deliver changes outside the issue's boundaries.
+2. **Scope Containment:** The diff between `HEAD` and a base commit must be a subset of the issue's declared scope (verified via `internal/claim.IsWithinScope`). The base is selected in order: a fresh `git merge-base` against the recorded parent branch, the claim-time recorded SHA, then a merge-base against the first available `origin/main`, `origin/master`, `main`, or `master`. This prevents scope creep: you cannot deliver changes outside the issue's boundaries.
 3. **Commit Reference:** At least one commit since the base commit must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. This ensures your work is traceable and tied to the issue ID.
 
 **On Failure:**
@@ -161,14 +161,14 @@ If any check fails, the transition is refused. The error message lists each fail
 
 **Skipping the Gate:**
 
-The `--skip-delivery-gate` flag bypasses all three checks. Use this **only when the gate assumption does not hold** — for example, in a docs-only or demo-transcript task where you are not doing real delivery work, or when an external constraint makes gate compliance impossible.
+The `--skip-delivery-gate` flag bypasses all three checks only with `--to done`; other target states reject it. Use this **only when the gate assumption does not hold** — for example, in a docs-only or demo-transcript task where you are not doing real delivery work, or when an external constraint makes gate compliance impossible.
 
 ```bash
 arm transition LNGHZN-S4-T3 --to done --skip-delivery-gate \
   --outcome "Skipped gate: demo-transcript task does not execute real delivery"
 ```
 
-When you skip the gate, the override is recorded in the transition op's `Payload.SkippedDeliveryGate` field as an audit trail. **However, prefer fixing the underlying issue over reaching for the override** — if you have uncommitted changes, commit them; if scope has drifted, narrow it; if commits are missing conventional-format messages, add them.
+When you skip the gate, the transition op records `Payload.SkippedDeliveryGate` as an audit flag and its `outcome` records your supplied reason. **However, prefer fixing the underlying issue over reaching for the override** — if you have uncommitted changes, commit them; if scope has drifted, narrow it; if commits are missing conventional-format messages, add them.
 
 ### 6. Complete and Commit
 
