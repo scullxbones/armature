@@ -190,45 +190,63 @@ This enforces branch + PR discipline.`,
 				// worktree into a delivery-gate exemption.
 				runGate := gateIssue.ClaimedBy != "" || gateIssue.Type == "task" || gateIssue.Type == "bug" || gateIssue.Type == "feature"
 				if gateIssue.Type == "story" {
-					if gateIssue.ClaimedBy != "" {
-						if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
-							runGate = true
-						} else {
-							claimedPath, found, resolveErr := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID)
-							if resolveErr != nil {
-								// Fail closed: we couldn't reliably determine
-								// whether some other worktree is claimed for this
-								// story (git worktree list failed, or a marker
-								// file existed but couldn't be read for a reason
-								// other than "missing"). Refuse the transition
-								// rather than silently treating it as unclaimed —
-								// see finding 2 in the Opus review of commit
-								// 1ac1b2e5.
-								return fmt.Errorf("could not determine claimed worktree for story %s: %w. Use --skip-delivery-gate to bypass", issueID, resolveErr)
-							}
-							if found {
-								// The invoking checkout's own marker didn't match
-								// (isClaimedWorktreeForIssue above), but a
-								// repo-global scan found a *different* worktree
-								// actually claimed for this story issue (see
-								// docs/dogfood/findings/raw/2026-08-02T1600Z-
-								// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
-								// Fail closed: run the gate against that claimed
-								// worktree, not the invoking checkout, so a dirty
-								// or out-of-scope claimed worktree can't slip a
-								// "done" through by transitioning from elsewhere.
-								runGate = true
-								gateRepoPath = claimedPath
-							} else {
-								// No live marker is discoverable, but the authoritative ops
-								// still record a claimant. That means this story entered
-								// the claimed-worktree workflow and its worktree was likely
-								// removed or pruned manually. Do not confuse that state with
-								// an unclaimed coordinator-level story: the delivery gate
-								// cannot validate a missing bound worktree, so fail closed.
-								return fmt.Errorf("claimed story %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass", issueID)
-							}
+					// Scan for a lingering claimed-worktree marker unconditionally,
+					// not only when gateIssue.ClaimedBy != "". `arm unassign` is
+					// self-service with no permission check and clears ClaimedBy
+					// via a transition->open op, but it does not touch the
+					// worktree's armature-issue-id marker or its working tree
+					// contents. Gating solely on ClaimedBy let a worker claim a
+					// story, make dirty/out-of-scope/uncommitted changes,
+					// self-unassign, and then `transition --to done --force` from
+					// that same (or any) checkout with the gate never running
+					// against the still-bound, still-dirty worktree. The marker
+					// is the authoritative signal that a worktree is still bound
+					// to this issue's delivery, regardless of what the
+					// materialized claim state says.
+					if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
+						runGate = true
+					} else {
+						claimedPath, found, resolveErr := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID)
+						if resolveErr != nil {
+							// Fail closed: we couldn't reliably determine
+							// whether some other worktree is claimed for this
+							// story (git worktree list failed, or a marker
+							// file existed but couldn't be read for a reason
+							// other than "missing"). Refuse the transition
+							// rather than silently treating it as unclaimed —
+							// see finding 2 in the Opus review of commit
+							// 1ac1b2e5.
+							return fmt.Errorf("could not determine claimed worktree for story %s: %w. Use --skip-delivery-gate to bypass", issueID, resolveErr)
 						}
+						if found {
+							// The invoking checkout's own marker didn't match
+							// (isClaimedWorktreeForIssue above), but a
+							// repo-global scan found a *different* worktree
+							// actually bound to this story issue (see
+							// docs/dogfood/findings/raw/2026-08-02T1600Z-
+							// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
+							// Fail closed: run the gate against that bound
+							// worktree, not the invoking checkout, so a dirty
+							// or out-of-scope worktree can't slip a "done"
+							// through by transitioning from elsewhere, or by
+							// self-unassigning first.
+							runGate = true
+							gateRepoPath = claimedPath
+						} else if gateIssue.ClaimedBy != "" {
+							// No live marker is discoverable, but the authoritative ops
+							// still record a claimant. That means this story entered
+							// the claimed-worktree workflow and its worktree was likely
+							// removed or pruned manually. Do not confuse that state with
+							// an unclaimed coordinator-level story: the delivery gate
+							// cannot validate a missing bound worktree, so fail closed.
+							return fmt.Errorf("claimed story %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass", issueID)
+						}
+						// Else: the story is not currently claimed AND no
+						// worktree anywhere still carries its marker. This is
+						// a legitimate unclaimed coordinator-level story (never
+						// entered the bound-worktree workflow, or its bound
+						// worktree was fully removed/pruned after release) —
+						// stay exempt.
 					}
 				}
 
