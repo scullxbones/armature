@@ -133,8 +133,9 @@ This enforces branch + PR discipline.`,
 			// the gate must catch a resulting dirty tree or out-of-scope file
 			// rather than checking a state that hooks are about to change.
 			if to == "done" && !skipDeliveryGate {
-				if currentEntry == nil {
-					return fmt.Errorf("issue %s not found in materialized index (required for delivery gate check). Use --skip-delivery-gate to bypass", issueID)
+				gateIssue, err := currentIssueFromOps(appCtx.IssuesDir, issueID)
+				if err != nil {
+					return fmt.Errorf("determine current issue state for delivery gate %s: %w. Use --skip-delivery-gate to bypass", issueID, err)
 				}
 				// The delivery gate validates a claimed issue's own worktree
 				// binding, scope, and commits, so it applies to every issue
@@ -183,13 +184,13 @@ This enforces branch + PR discipline.`,
 					gateRepoPath = resolved
 				}
 
-				runGate := currentEntry.Type == "task" || currentEntry.Type == "bug" || currentEntry.Type == "feature"
-				if currentEntry.Type == "story" {
-					storyClaimed, err := isStoryClaimedInCurrentOps(appCtx.IssuesDir, issueID)
-					if err != nil {
-						return fmt.Errorf("determine current claim for story %s: %w. Use --skip-delivery-gate to bypass", issueID, err)
-					}
-					if storyClaimed {
+				// A claim is authoritative evidence that this issue entered the
+				// bound-worktree workflow. An amend can change its type without
+				// clearing that claim, so type alone must never turn a live bound
+				// worktree into a delivery-gate exemption.
+				runGate := gateIssue.ClaimedBy != "" || gateIssue.Type == "task" || gateIssue.Type == "bug" || gateIssue.Type == "feature"
+				if gateIssue.Type == "story" {
+					if gateIssue.ClaimedBy != "" {
 						if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
 							runGate = true
 						} else {
@@ -232,7 +233,7 @@ This enforces branch + PR discipline.`,
 				}
 
 				if runGate {
-					if err := runDeliveryGateCheck(gateRepoPath, issueID, currentEntry.Type, currentEntry.Scope); err != nil {
+					if err := runDeliveryGateCheck(gateRepoPath, issueID, gateIssue.Type, gateIssue.Scope); err != nil {
 						return err
 					}
 				}
@@ -300,24 +301,24 @@ This enforces branch + PR discipline.`,
 	return cmd
 }
 
-// isStoryClaimedInCurrentOps reads the append-only source of truth without
-// updating derived state. Transition's delivery decision must not rely on a
-// stale snapshot: unassign and transition --to open append release ops but do
-// not synchronously materialize them.
-func isStoryClaimedInCurrentOps(issuesDir, issueID string) (bool, error) {
+// currentIssueFromOps reads the append-only source of truth without updating
+// derived state. Delivery-gate decisions must not rely on a stale snapshot:
+// amend, unassign, and transition --to open append authoritative state changes
+// but do not synchronously materialize them.
+func currentIssueFromOps(issuesDir, issueID string) (*materialize.Issue, error) {
 	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 	if err != nil {
-		return false, fmt.Errorf("read ops: %w", err)
+		return nil, fmt.Errorf("read ops: %w", err)
 	}
 	state, _, err := materialize.Run("", allOps, nil, materialize.Options{WriteStateFiles: false})
 	if err != nil {
-		return false, fmt.Errorf("replay ops: %w", err)
+		return nil, fmt.Errorf("replay ops: %w", err)
 	}
 	issue, ok := state.Issues[issueID]
 	if !ok {
-		return false, fmt.Errorf("story not found in current ops")
+		return nil, fmt.Errorf("issue not found in current ops")
 	}
-	return issue.ClaimedBy != "", nil
+	return issue, nil
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
@@ -504,8 +505,7 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	// actually the worktree bound to issueID before checking it: without
 	// this, a caller could point --repo at some other clean checkout while
 	// the real claimed worktree for issueID is dirty or out-of-scope, and
-	// the gate would pass by checking the wrong directory. Fail closed (like
-	// the "not found in materialized index" check above) both when the
+	// the gate would pass by checking the wrong directory. Fail closed both when the
 	// binding doesn't match and when no binding marker exists at all —
 	// never silently allow an unbound path through.
 	if err := deliverygate.VerifyIssueWorktreeBinding(worktreePath, issueID); err != nil {

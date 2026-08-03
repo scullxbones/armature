@@ -157,6 +157,73 @@ func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestTransitionDoneReplaysAmendedScopeBeforeGating_REQ_LNGHZN_S4_T2 verifies
+// that an amend op immediately narrows the delivery scope, even before a
+// separate materialize run updates the derived index. The append-only ops log
+// is authoritative, so an out-of-scope delivery must be rejected rather than
+// slipping through on the snapshot's former, broader scope.
+func TestTransitionDoneReplaysAmendedScopeBeforeGating_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-scope-01", "--title", "Gate task", "--type", "task",
+		"--scope", "foo.go", "--scope", "bar.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-scope-01-wt")
+	_, err = runTrls(t, repo, "claim", "gate-scope-01", "--worktree", wt)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "bar.go"), []byte("package bar\n"), 0o644))
+	run(t, wt, "git", "add", "foo.go", "bar.go")
+	run(t, wt, "git", "commit", "-m", "feat(gate-scope-01): add delivery files")
+
+	// amend is low-stakes and deliberately does not materialize synchronously;
+	// this leaves the on-disk index at its former [foo.go, bar.go] scope.
+	_, err = runTrls(t, repo, "amend", "gate-scope-01", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-scope-01", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err, "the amended scope must reject the committed bar.go without requiring materialization")
+	assert.Contains(t, err.Error(), "bar.go")
+}
+
+// TestTransitionDoneClaimedIssueAmendedToEpicStillRunsGate_REQ_LNGHZN_S4_T2
+// verifies that a type amendment cannot turn a claimed, worktree-bound issue
+// into a delivery-gate exemption. The amend retains the active claim, so a
+// dirty bound worktree must still be rejected even though epics are normally
+// completed outside the claimed-worktree workflow.
+func TestTransitionDoneClaimedIssueAmendedToEpicStillRunsGate_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-amended-epic-01", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-amended-epic-01-wt")
+	_, err = runTrls(t, repo, "claim", "gate-amended-epic-01", "--worktree", wt)
+	require.NoError(t, err)
+
+	// amend is low-stakes and does not materialize synchronously. Its replayed
+	// type is now epic, but its active claim and bound worktree remain live.
+	_, err = runTrls(t, repo, "amend", "gate-amended-epic-01", "--type", "epic")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-amended-epic-01", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err, "a claimed issue remains bound after its type changes and must be delivery-gated")
+	assert.Contains(t, err.Error(), "delivery gate")
+}
+
 // TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery
 // gate — which validates a claimed task's own worktree binding, scope, and
 // commits — is not invoked at all for non-task issue kinds (e.g. "story")
@@ -184,6 +251,55 @@ func TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	// feature branch, as the coordinator workflow does.
 	run(t, repo, "git", "checkout", "-b", "feat/story-01")
 	_, err = runTrls(t, repo, "transition", "--issue", "story-01", "--to", "done", "--outcome", "test")
+	assert.NoError(t, err)
+}
+
+// TestTransitionDoneUnmaterializedStoryReplaysAuthoritativeOps_REQ_LNGHZN_S4_T2
+// verifies that an unclaimed story created since the last materialization can
+// complete through its coordinator-level flow. The derived index is empty,
+// but the append-only create op is authoritative and confirms that the issue
+// exists and is exempt from the claimed-worktree delivery gate.
+func TestTransitionDoneUnmaterializedStoryReplaysAuthoritativeOps_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-unmaterialized-story-01", "--title", "Gate story", "--type", "story")
+	require.NoError(t, err)
+
+	// Do not materialize: the index has no entry for this story. A coordinator
+	// completes unclaimed stories from its own feature branch.
+	run(t, repo, "git", "checkout", "-b", "feat/gate-unmaterialized-story-01")
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-unmaterialized-story-01", "--to", "done", "--outcome", "test")
+	require.NoError(t, err)
+
+	issue, err := currentIssueFromOps(getTestContext(t, repo).IssuesDir, "gate-unmaterialized-story-01")
+	require.NoError(t, err)
+	assert.Equal(t, "done", issue.Status)
+}
+
+// TestGateSkippedForUnclaimedEpicOnDone_REQ_LNGHZN_S4_T2 verifies that a
+// normal, unclaimed epic remains exempt from the claimed-worktree delivery
+// gate. Only a live claimant turns an otherwise exempt issue type into a
+// fail-closed gate path.
+func TestGateSkippedForUnclaimedEpicOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-epic-01", "--title", "Gate epic", "--type", "epic")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "checkout", "-b", "feat/gate-epic-01")
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-epic-01", "--to", "done", "--outcome", "test")
 	assert.NoError(t, err)
 }
 
@@ -456,8 +572,8 @@ func TestGateAppliesToFeatureIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 
 // TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2 verifies
 // that the delivery gate fails closed (refuses the transition, does not skip
-// silently) when the target issue cannot be found in the materialized index —
-// e.g. because no bound context could be resolved for it.
+// silently) when the target issue does not exist in the authoritative ops
+// stream — e.g. because no bound context could be resolved for it.
 func TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -467,11 +583,10 @@ func TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// No `create` was run for "ghost-01": the issue has no entry in the
-	// materialized index at all.
+	// No `create` was run for "ghost-01": the issue has no authoritative op.
 	_, err = runTrls(t, repo, "transition", "--issue", "ghost-01", "--to", "done", "--outcome", "test", "--force")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in materialized index")
+	assert.Contains(t, err.Error(), "issue not found in current ops")
 }
 
 // TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2 verifies that
