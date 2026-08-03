@@ -217,8 +217,57 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 	// return false, and skip the gate -- letting the dirty claimed worktree
 	// pass "done" undetected.
 	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-02", "--to", "done", "--outcome", "test", "--force")
-	assert.Error(t, err, "transitioning a claimed story to done from a different checkout must still run the delivery gate")
-	assert.Contains(t, err.Error(), "delivery gate")
+	require.Error(t, err, "transitioning a claimed story to done from a different checkout must still run the delivery gate")
+	assert.Contains(t, err.Error(), "Working tree is not clean", "must fail specifically on the clean-tree check this test dirtied, not some unrelated error")
+}
+
+// TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2
+// verifies that the delivery gate cannot be bypassed by leaving the claimed
+// story worktree in a detached HEAD (or checked out to some other branch)
+// before transitioning from a different checkout. Before this fix,
+// resolveClaimedStoryWorktree located the claimed worktree by first finding
+// whichever worktree had refs/heads/feat/<id> checked out
+// (deriveBranchName + findWorktreePathByBranch) and only then checked its
+// marker file -- so a claimed worktree that wasn't currently on its story
+// branch (detached HEAD mid-rebase/mid-bisect, or checked out to a scratch
+// branch) was invisible to the scan and the gate silently skipped, exactly
+// as in the original bug. See
+// docs/dogfood/findings/raw/2026-08-02T1600Z-claude-workflow-story-gate-bypass-via-wrong-checkout.md.
+func TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-03", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-03-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-03", "--worktree", wt)
+	require.NoError(t, err)
+
+	// Dirty the claimed worktree without committing: the clean-tree check
+	// would block if the gate actually ran.
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	// Leave the claimed worktree in a detached HEAD, as if mid-rebase or
+	// mid-bisect: no worktree now has refs/heads/feat/gate-story-03 checked
+	// out, so a branch-first scan finds nothing even though the worktree's
+	// own armature-issue-id marker still names gate-story-03.
+	run(t, wt, "git", "checkout", "--detach")
+
+	// Invoke the transition from the MAIN repo checkout, not the (now
+	// detached) worktree the story was claimed into.
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-03", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err, "transitioning a claimed story to done must still run the delivery gate even when the claimed worktree is in a detached HEAD")
+	// The branch-binding check runs before the clean-tree check (see
+	// runDeliveryGateCheck), so a detached HEAD trips that check first --
+	// still proof the gate ran against the claimed worktree instead of being
+	// silently skipped.
+	assert.Contains(t, err.Error(), "gate-story-03")
+	assert.Contains(t, err.Error(), "--skip-delivery-gate")
 }
 
 // TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery gate
