@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -179,19 +183,33 @@ This enforces branch + PR discipline.`,
 				if currentEntry.Type == "story" {
 					if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
 						runGate = true
-					} else if claimedPath, ok := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID); ok {
-						// The invoking checkout's own marker didn't match
-						// (isClaimedWorktreeForIssue above), but a
-						// repo-global scan found a *different* worktree
-						// actually claimed for this story issue (see
-						// docs/dogfood/findings/raw/2026-08-02T1600Z-
-						// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
-						// Fail closed: run the gate against that claimed
-						// worktree, not the invoking checkout, so a dirty
-						// or out-of-scope claimed worktree can't slip a
-						// "done" through by transitioning from elsewhere.
-						runGate = true
-						gateRepoPath = claimedPath
+					} else {
+						claimedPath, found, resolveErr := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID)
+						if resolveErr != nil {
+							// Fail closed: we couldn't reliably determine
+							// whether some other worktree is claimed for this
+							// story (git worktree list failed, or a marker
+							// file existed but couldn't be read for a reason
+							// other than "missing"). Refuse the transition
+							// rather than silently treating it as unclaimed —
+							// see finding 2 in the Opus review of commit
+							// 1ac1b2e5.
+							return fmt.Errorf("could not determine claimed worktree for story %s: %w. Use --skip-delivery-gate to bypass", issueID, resolveErr)
+						}
+						if found {
+							// The invoking checkout's own marker didn't match
+							// (isClaimedWorktreeForIssue above), but a
+							// repo-global scan found a *different* worktree
+							// actually claimed for this story issue (see
+							// docs/dogfood/findings/raw/2026-08-02T1600Z-
+							// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
+							// Fail closed: run the gate against that claimed
+							// worktree, not the invoking checkout, so a dirty
+							// or out-of-scope claimed worktree can't slip a
+							// "done" through by transitioning from elsewhere.
+							runGate = true
+							gateRepoPath = claimedPath
+						}
 					}
 				}
 
@@ -353,45 +371,87 @@ func isClaimedWorktreeForIssue(worktreePath, issueID string) bool {
 }
 
 // resolveClaimedStoryWorktree finds a worktree actually claimed for a story
-// issue, regardless of which checkout `arm transition` is invoked from. It
-// derives repo-global state via `git worktree list --porcelain` (run against
-// repoPath, which enumerates every worktree linked to the repository no
-// matter which one the command happens to run in — see
-// findWorktreePathByBranch/GitWorktreeBranches, the same mechanism `arm
-// merged` already uses) and cross-checks the candidate worktree's own
-// armature-issue-id marker file, rather than trusting only the invoking
-// checkout's marker as isClaimedWorktreeForIssue does. This closes the gap
-// described in
-// docs/dogfood/findings/raw/2026-08-02T1600Z-claude-workflow-story-gate-bypass-via-wrong-checkout.md:
-// a story claimed into worktree A must still gate a `--to done` transition
-// invoked from an unrelated checkout B.
+// issue, regardless of which checkout `arm transition` is invoked from and
+// regardless of what branch that worktree currently has checked out. It
+// enumerates EVERY worktree linked to the repository via `git worktree list
+// --porcelain` (listAllWorktreePaths) and checks each one's own
+// armature-issue-id marker file directly, rather than first narrowing to
+// "whichever worktree currently has refs/heads/feat/<id> checked out" the
+// way findWorktreePathByBranch does. Branch-name lookup is not enough: a
+// claimed worktree left in a detached HEAD (mid-rebase, mid-bisect) or
+// checked out to an unrelated scratch branch has no worktree whose HEAD
+// matches the story branch, so a branch-first scan would miss it entirely
+// and the gate would silently skip — exactly the gap described in
+// docs/dogfood/findings/raw/2026-08-02T1600Z-claude-workflow-story-gate-bypass-via-wrong-checkout.md
+// and confirmed still exploitable against the branch-first version of this
+// function by a follow-up review of commit 1ac1b2e5. Only the marker file,
+// never the checked-out branch, decides whether a worktree is "claimed for
+// issueID" here.
 //
-// Returns ("", false) when no branch, no worktree, or no matching binding is
-// found. Callers must treat that as "no evidence found here", not
-// affirmative proof the story is unclaimed — this is combined with
-// isClaimedWorktreeForIssue's own check of the invoking checkout, and any
-// resolution error here intentionally falls through to that same "not
-// claimed by this signal" result rather than erroring the transition, since
-// an unclaimed coordinator-level story transition must remain a valid,
-// ungated path.
-func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool) {
-	branchName := deriveBranchName("story", issueID)
-	if branchName == "" {
-		return "", false
-	}
-	worktreePath := findWorktreePathByBranch(repoPath, branchName)
-	if worktreePath == "" {
-		return "", false
-	}
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+// Returns ("", false, nil) when no worktree's marker matches issueID —
+// callers combine this with isClaimedWorktreeForIssue's own check of the
+// invoking checkout, and both together are the only avenue for treating the
+// story as unclaimed (a legitimate, ungated coordinator-level transition).
+// Returns a non-nil error when the scan itself could not be trusted: `git
+// worktree list` failing to execute, a worktree's git dir failing to resolve
+// for a reason other than the worktree directory simply not existing
+// (stale/prunable entries are skipped, not treated as errors), or a marker
+// file existing but failing to read for a reason other than "missing" (e.g.
+// permission denied, corrupt file) — see harnesshook.ReadIssueBindingFileErr,
+// which already distinguishes "missing" (legitimately unclaimed) from "read
+// failed" (must not be silently treated as unclaimed) for exactly this
+// reason. Callers MUST fail the transition closed on a non-nil error rather
+// than falling through to "not claimed", per the armature constitution's I5
+// (deterministic gates decide, never silently skip).
+func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool, error) {
+	paths, err := listAllWorktreePaths(repoPath)
 	if err != nil {
-		return "", false
+		return "", false, fmt.Errorf("list worktrees: %w", err)
 	}
-	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
-	if err != nil || binding != issueID {
-		return "", false
+	for _, worktreePath := range paths {
+		gitDir, err := resolveWorktreeGitDir(worktreePath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// Worktree directory no longer exists (stale/prunable
+				// `git worktree list` entry) — nothing to check here.
+				continue
+			}
+			return "", false, fmt.Errorf("resolve git dir for worktree %s: %w", worktreePath, err)
+		}
+		binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+		if err != nil {
+			// A marker file existed but couldn't be read for a reason other
+			// than "missing" — fail closed rather than silently skipping
+			// this worktree as if it were unclaimed.
+			return "", false, fmt.Errorf("read issue binding for worktree %s: %w", worktreePath, err)
+		}
+		if binding == issueID {
+			return worktreePath, true, nil
+		}
 	}
-	return worktreePath, true
+	return "", false, nil
+}
+
+// listAllWorktreePaths returns the path of every worktree git knows about for
+// the repository at repoPath (main worktree included), regardless of what
+// branch each one currently has checked out. Used by
+// resolveClaimedStoryWorktree, which must find a claimed worktree by its own
+// armature-issue-id marker independent of branch state.
+func listAllWorktreePaths(repoPath string) ([]string, error) {
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
+	}
+
+	var paths []string
+	for _, line := range strings.Split(string(output), "\n") {
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			paths = append(paths, rest)
+		}
+	}
+	return paths, nil
 }
 
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
