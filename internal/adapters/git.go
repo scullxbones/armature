@@ -168,6 +168,7 @@ type DirtyEntry struct {
 	Path      string
 	OldPath   string
 	Untracked bool
+	Ignored   bool
 }
 
 // DirtyEntries returns every working-tree change, tracked or untracked
@@ -183,7 +184,7 @@ type DirtyEntry struct {
 // can inspect both sides rather than only seeing the destination. Returns an
 // empty (nil) slice for a clean working tree.
 func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
-	cmd := c.cmd("status", "--porcelain")
+	cmd := c.cmd("status", "--porcelain", "--ignored")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
@@ -209,7 +210,12 @@ func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
 			oldPath = rest[:idx]
 			path = rest[idx+len(" -> "):]
 		}
-		entries = append(entries, DirtyEntry{Path: path, OldPath: oldPath, Untracked: strings.HasPrefix(line, "??")})
+		entries = append(entries, DirtyEntry{
+			Path:      path,
+			OldPath:   oldPath,
+			Untracked: strings.HasPrefix(line, "??"),
+			Ignored:   strings.HasPrefix(line, "!!"),
+		})
 	}
 	return entries, nil
 }

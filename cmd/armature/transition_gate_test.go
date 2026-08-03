@@ -259,6 +259,63 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 	assert.Contains(t, err.Error(), "Working tree is not clean", "must fail specifically on the clean-tree check this test dirtied, not some unrelated error")
 }
 
+// TestTransitionDoneReleasedStoryIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2
+// verifies that releasing a claimed story makes its old worktree binding
+// irrelevant to the coordinator-level completion flow. The marker remains in
+// the released worktree so it can be reused safely, but it must not cause the
+// delivery gate to validate abandoned work from a claim that no longer exists.
+func TestTransitionDoneReleasedStoryIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-released-01", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-released-01-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-released-01", "--worktree", wt)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "unassign", "--issue", "gate-story-released-01")
+	require.NoError(t, err)
+
+	// The released worktree is no longer part of delivery, even if it remains
+	// dirty and retains its marker for future reuse.
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-released-01", "--to", "done", "--outcome", "test", "--force")
+	require.NoError(t, err)
+}
+
+// TestTransitionDoneStoryReopenedWithoutMaterializeIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2
+// verifies that an immediate release through transition --to open is just as
+// authoritative as unassign: a stale snapshot must not resurrect the old
+// claim and cause an abandoned, dirty worktree to be gated.
+func TestTransitionDoneStoryReopenedWithoutMaterializeIgnoresStaleWorktreeBinding_REQ_LNGHZN_S4_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-story-reopened-01", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-story-reopened-01-wt")
+	_, err = runTrls(t, repo, "claim", "gate-story-reopened-01", "--worktree", wt)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-reopened-01", "--to", "open", "--force")
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-reopened-01", "--to", "done", "--outcome", "test", "--force")
+	require.NoError(t, err)
+}
+
 // TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2
 // verifies that the delivery gate cannot be bypassed by leaving the claimed
 // story worktree in a detached HEAD (or checked out to some other branch)
