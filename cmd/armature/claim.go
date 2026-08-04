@@ -243,6 +243,17 @@ func persistBranchPointMetadata(
 		}
 	}
 
+	// Persist the branch the issue was actually claimed under, immutably, so
+	// the delivery gate can later verify branch binding against what was
+	// claimed rather than re-deriving it from the CURRENT (possibly
+	// since-amended) issue type. branchName is already the branch derived
+	// from the issue's type at claim time (DeriveBranchName), so it's the
+	// correct value to record here for both the fresh-worktree and
+	// existing-worktree claim paths.
+	if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
+		return fmt.Errorf("write claimed branch file: %w", err)
+	}
+
 	return nil
 }
 
@@ -305,6 +316,45 @@ func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
 	return nil
 }
 
+// claimedBranchFileName is the name of the file (written into a worktree's
+// actual git directory, alongside armature-base-commit) that records the
+// branch name the issue was claimed under. Aliased to the deliverygate
+// constant so the write side (here) and read side (deliverygate) can never
+// drift apart, matching the baseCommitFileName pattern above.
+const claimedBranchFileName = deliverygate.ClaimedBranchFileName
+
+// writeClaimedBranchFileIfAbsent records branchName as the branch the issue
+// was claimed under, but only if no such record exists yet (the same
+// idempotency guard as writeBaseCommitFileIfAbsent, and for the same reason:
+// an existing record reflects the true original claim and must never be
+// overwritten by a later, possibly different, value). Skips writing entirely
+// when branchName is "" — a legitimately branchless issue type (e.g. epic,
+// story before it gets a worktree) has nothing to record, and writing an
+// empty marker would be indistinguishable from "not yet recorded" on the
+// read side, defeating the pre-migration fallback in
+// deliverygate.RecordedClaimedBranch.
+func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
+	if branchName == "" {
+		return nil
+	}
+
+	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return fmt.Errorf("resolve worktree git dir: %w", err)
+	}
+
+	claimedBranchFile := filepath.Join(actualGitDir, claimedBranchFileName)
+	if _, err := os.Stat(claimedBranchFile); err == nil {
+		// Already recorded from the original claim; leave it alone.
+		return nil
+	}
+
+	if err := os.WriteFile(claimedBranchFile, []byte(branchName), 0o600); err != nil {
+		return fmt.Errorf("write claimed branch file: %w", err)
+	}
+	return nil
+}
+
 // clearBranchPointMetadata unsets the persisted parent-branch git config and
 // removes the base-commit file for branchName/worktreePath. Called from `arm
 // merged` alongside RemoveWorktree so that if the branch is later deleted and
@@ -319,7 +369,8 @@ func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
 func clearBranchPointMetadata(gitClient *adapters.Client, worktreePath, branchName string) {
 	_ = gitClient.UnsetGitConfig(parentBranchConfigKey(branchName)) //nolint:errcheck // best-effort cleanup
 	if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
-		_ = os.Remove(filepath.Join(actualGitDir, baseCommitFileName)) //nolint:errcheck // best-effort cleanup
+		_ = os.Remove(filepath.Join(actualGitDir, baseCommitFileName))    //nolint:errcheck // best-effort cleanup
+		_ = os.Remove(filepath.Join(actualGitDir, claimedBranchFileName)) //nolint:errcheck // best-effort cleanup
 	}
 }
 

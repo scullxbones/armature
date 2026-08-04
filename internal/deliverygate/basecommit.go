@@ -19,6 +19,16 @@ import (
 // from a story branch containing completed sibling-task commits.
 const BaseCommitFileName = "armature-base-commit"
 
+// ClaimedBranchFileName is the name of the file (written into a worktree's
+// actual git directory, alongside armature-issue-id and armature-base-commit)
+// that records the branch name the issue was actually claimed under — derived
+// from materialize.DeriveBranchName against the issue's TYPE AT CLAIM TIME.
+// The delivery gate's VerifyIssueBranchBinding reads this (via
+// RecordedClaimedBranch) and prefers it over re-deriving the expected branch
+// from the CURRENT issue type, which may have been amended after claim (e.g.
+// task -> epic) to route around the branch-binding check.
+const ClaimedBranchFileName = "armature-claimed-branch"
+
 // ParentBranchConfigKey returns the git config key used to durably record,
 // on the shared (main-repo) git config, the branch a task branch was cut
 // from. Recorded as git config rather than a per-worktree file: git config
@@ -138,9 +148,25 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 // task branch. issueType empty or unmapped (DeriveBranchName returns "")
 // skips this check, matching the caller's existing task/bug/feature gating.
 func VerifyIssueBranchBinding(worktreePath, issueID, issueType string) error {
-	expectedBranch := materialize.DeriveBranchName(issueType, issueID)
-	if expectedBranch == "" {
-		return nil
+	// Prefer the branch recorded immutably at claim time over re-deriving it
+	// from the CURRENT issue type: the issue's type can be amended after
+	// claim (e.g. task -> epic, which has no branch mapping), and re-deriving
+	// from that amended type would make this check silently no-op, letting
+	// commits on an arbitrary scratch branch through. If a claimed-branch
+	// record exists, it wins even when DeriveBranchName(current type) would
+	// return "" — that mismatch is exactly the bypass this guards against, so
+	// it fails closed rather than skipping.
+	expectedBranch, recorded, err := RecordedClaimedBranch(worktreePath)
+	if err != nil {
+		return fmt.Errorf("read recorded claimed branch for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
+	}
+	if !recorded {
+		// No claimed-branch record (pre-migration worktree, claimed before this
+		// record existed): fall back to re-deriving from the current issue type.
+		expectedBranch = materialize.DeriveBranchName(issueType, issueID)
+		if expectedBranch == "" {
+			return nil
+		}
 	}
 
 	git := adapters.New(worktreePath)
@@ -177,6 +203,35 @@ func RecordedBaseCommit(worktreePath string) (string, error) {
 		return "", fmt.Errorf("base commit file is empty")
 	}
 	return sha, nil
+}
+
+// RecordedClaimedBranch reads the branch name persisted at claim time (see
+// writeClaimedBranchFileIfAbsent in cmd/armature/claim.go) from the
+// worktree's actual git directory. Returns (_, false, nil) — not an error —
+// when the marker file simply doesn't exist, since that's the expected state
+// for worktrees claimed before this mechanism was introduced (or for
+// branchless types like epic/story, for which the marker is never written);
+// callers should fall back to re-deriving the expected branch in that case.
+// Any other read error (e.g. permission denied, or an unresolvable worktree
+// git dir) is returned as an error so it isn't silently treated the same as
+// "not recorded".
+func RecordedClaimedBranch(worktreePath string) (string, bool, error) {
+	actualGitDir, err := ResolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return "", false, fmt.Errorf("resolve worktree git dir: %w", err)
+	}
+	data, err := os.ReadFile(filepath.Join(actualGitDir, ClaimedBranchFileName)) //nolint:gosec // G304: derived from a trusted git directory
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	branch := strings.TrimSpace(string(data))
+	if branch == "" {
+		return "", false, fmt.Errorf("claimed branch file is empty")
+	}
+	return branch, true, nil
 }
 
 // DynamicBaseCommit recomputes the task branch's divergence point on demand
