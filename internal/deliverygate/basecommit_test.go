@@ -97,6 +97,39 @@ func TestRecordedBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	assert.Equal(t, sha, got)
 }
 
+// TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_REQ_LNGHZN_S4
+// verifies the fix for the open PR review comment on basecommit.go:143: if
+// a task is claimed (recording armature-claimed-branch), then its type is
+// amended to an unmapped type (e.g. epic) WITHOUT releasing the claim, and a
+// clean in-scope commit lands on a scratch branch that was never
+// task/<ID>, VerifyIssueBranchBinding must fail closed — not silently skip
+// verification because DeriveBranchName(current type) now returns "".
+func TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
+
+	// Simulate claim time: record the branch the issue was actually claimed
+	// under (task/issue-1), as writeClaimedBranchFileIfAbsent would.
+	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, ClaimedBranchFileName), []byte("task/issue-1"), 0o600))
+
+	// Check out a scratch branch that was never the claimed task branch.
+	runGit(t, tmpDir, "checkout", "-b", "scratch")
+
+	// The issue's type is amended to "epic" (unmapped) without releasing the
+	// claim. DeriveBranchName("epic", ...) returns "", but that must NOT
+	// cause verification to be skipped now that a claimed-branch record
+	// exists.
+	err = VerifyIssueBranchBinding(tmpDir, "issue-1", "epic")
+	assert.Error(t, err, "must fail closed: recorded claimed branch task/issue-1 does not match current branch scratch")
+	assert.Contains(t, err.Error(), "task/issue-1")
+	assert.Contains(t, err.Error(), "scratch")
+}
+
 // TestRecordedClaimedBranch_REQ_LNGHZN_S4 verifies the claim-time recorded
 // claimed-branch marker is read back correctly, and that a missing file (or
 // a not-found-worktree) surfaces "not found" so callers can fall back to
