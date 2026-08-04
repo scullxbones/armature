@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -182,6 +184,66 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 	require.NoError(t, err, "base commit file should be recorded with the computed fork point even when HEAD has diverged")
 	assert.Equal(t, mainTipSHA, strings.TrimSpace(string(baseCommitData)),
 		"persisted base-commit must be the merge-base fork point (main tip), excluding the sibling commit")
+}
+
+// TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4
+// documents a known, accepted limitation surfaced by a holistic branch
+// review: because the existing-worktree claim path deliberately does not
+// persist a parent-branch git config (see the comment above the
+// persistBranchPointMetadata call in claim.go's existing-worktree branch —
+// there is no reliable signal for the true parent branch name from the
+// worktree alone), deliverygate.ResolveBaseCommit's tier-1
+// DynamicBaseCommit (self-correcting on rebase) can never succeed for a
+// worktree claimed this way. It permanently falls back to tier-2
+// RecordedBaseCommit, the static SHA computed once at claim time — so if the
+// task branch is later rebased onto an updated parent tip, the delivery
+// gate keeps scope-checking against the pre-rebase fork point instead of the
+// new one. This is intentional (documented in claim.go), not a regression;
+// this test exists so the gap stays pinned rather than silently drifting.
+func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	mainTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	run(t, repo, "git", "checkout", "-b", "story-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
+	run(t, repo, "git", "add", "sibling.go")
+	run(t, repo, "git", "commit", "-m", "feat(sibling-task): unrelated sibling work")
+
+	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	run(t, repo, "git", "branch", "task/task-01", "story-branch")
+	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, cmd.Execute())
+
+	// At claim time, the computed fork point equals mainTipSHA (see the
+	// sibling test above). Now advance main and rebase the task branch onto
+	// the new tip, simulating the coordinator updating main after claim.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "newmain.go"), []byte("package newmain\n"), 0o644))
+	run(t, repo, "git", "checkout", "main")
+	run(t, repo, "git", "add", "newmain.go")
+	run(t, repo, "git", "commit", "-m", "feat(other): advance main after claim")
+	newMainTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	require.NotEqual(t, mainTipSHA, newMainTipSHA)
+
+	run(t, worktreePath, "git", "rebase", "main")
+
+	worktreeGit := adapters.New(worktreePath)
+	resolved, err := deliverygate.ResolveBaseCommit(worktreePath, worktreeGit)
+	require.NoError(t, err)
+
+	// Known gap: resolved is the STALE pre-rebase fork point, not the new
+	// main tip a fresh claim would compute. If this ever starts asserting
+	// newMainTipSHA instead, the gap has been closed and this test (and its
+	// doc comment) should be updated/removed accordingly.
+	assert.Equal(t, mainTipSHA, resolved,
+		"documents known gap: existing-worktree claim path's recorded base commit does not self-correct on rebase")
+	assert.NotEqual(t, newMainTipSHA, resolved,
+		"if this fails, the DynamicBaseCommit self-correcting tier has started working for this path — update this test")
 }
 
 // TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4 verifies
