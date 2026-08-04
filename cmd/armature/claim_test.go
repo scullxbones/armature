@@ -203,7 +203,8 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
-	mainTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+	defaultTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
 	run(t, repo, "git", "checkout", "-b", "story-branch")
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
@@ -220,29 +221,29 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
 	require.NoError(t, cmd.Execute())
 
-	// At claim time, the computed fork point equals mainTipSHA (see the
-	// sibling test above). Now advance main and rebase the task branch onto
-	// the new tip, simulating the coordinator updating main after claim.
+	// At claim time, the computed fork point equals defaultTipSHA (see the
+	// sibling test above). Now advance the default branch and rebase the task
+	// branch onto the new tip, simulating the coordinator updating it after claim.
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "newmain.go"), []byte("package newmain\n"), 0o644))
-	run(t, repo, "git", "checkout", "main")
+	run(t, repo, "git", "checkout", defaultBranch)
 	run(t, repo, "git", "add", "newmain.go")
 	run(t, repo, "git", "commit", "-m", "feat(other): advance main after claim")
-	newMainTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
-	require.NotEqual(t, mainTipSHA, newMainTipSHA)
+	newDefaultTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	require.NotEqual(t, defaultTipSHA, newDefaultTipSHA)
 
-	run(t, worktreePath, "git", "rebase", "main")
+	run(t, worktreePath, "git", "rebase", defaultBranch)
 
 	worktreeGit := adapters.New(worktreePath)
 	resolved, err := deliverygate.ResolveBaseCommit(worktreePath, worktreeGit)
 	require.NoError(t, err)
 
 	// Known gap: resolved is the STALE pre-rebase fork point, not the new
-	// main tip a fresh claim would compute. If this ever starts asserting
-	// newMainTipSHA instead, the gap has been closed and this test (and its
+	// default-branch tip a fresh claim would compute. If this ever starts asserting
+	// newDefaultTipSHA instead, the gap has been closed and this test (and its
 	// doc comment) should be updated/removed accordingly.
-	assert.Equal(t, mainTipSHA, resolved,
+	assert.Equal(t, defaultTipSHA, resolved,
 		"documents known gap: existing-worktree claim path's recorded base commit does not self-correct on rebase")
-	assert.NotEqual(t, newMainTipSHA, resolved,
+	assert.NotEqual(t, newDefaultTipSHA, resolved,
 		"if this fails, the DynamicBaseCommit self-correcting tier has started working for this path — update this test")
 }
 
