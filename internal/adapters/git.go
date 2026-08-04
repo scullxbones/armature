@@ -510,12 +510,25 @@ type LogEntry struct {
 	Subject string
 	Author  string
 	Date    string
+	// Parents holds the SHAs of this commit's parent commits, from git log's
+	// %P. Empty for the repository's root commit, one entry for an ordinary
+	// commit, two or more for a genuine merge commit.
+	Parents []string
+}
+
+// ParentCount returns the number of parent commits this entry has. A
+// genuine merge commit has 2 or more; an ordinary commit has exactly 1; a
+// root commit has 0. Used to distinguish a real merge commit from an
+// ordinary commit whose subject merely happens to look like one (e.g. a
+// hand-written "merge: ID description" subject on a single-parent commit).
+func (e LogEntry) ParentCount() int {
+	return len(e.Parents)
 }
 
 // LogRange returns log entries reachable from head but not from base
 // (`git log base..head`), most recent first.
 func (c *Client) LogRange(base, head string) ([]LogEntry, error) {
-	format := "%H%x00%s%x00%ae%x00%ai"
+	format := "%H%x00%s%x00%ae%x00%ai%x00%P"
 	cmd := c.cmd("log", base+".."+head, "--format="+format, "--")
 	out, err := cmd.Output()
 	if err != nil {
@@ -554,7 +567,7 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	if strings.HasPrefix(branch, "-") {
 		return nil, fmt.Errorf("invalid branch %q", branch)
 	}
-	format := "%H%x00%s%x00%ae%x00%ai"
+	format := "%H%x00%s%x00%ae%x00%ai%x00%P"
 	args := []string{"log", branch, "--format=" + format}
 	if n > 0 {
 		args = append(args, fmt.Sprintf("-n%d", n))
@@ -573,7 +586,9 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	return parseLogOutput(out), nil
 }
 
-// parseLogOutput parses NUL-delimited `git log --format=%H%x00%s%x00%ae%x00%ai` output.
+// parseLogOutput parses NUL-delimited
+// `git log --format=%H%x00%s%x00%ae%x00%ai%x00%P` output. The trailing %P
+// field is space-separated parent SHAs and may be empty (root commit).
 func parseLogOutput(out []byte) []LogEntry {
 	raw := strings.TrimSpace(string(out))
 	if raw == "" {
@@ -583,14 +598,19 @@ func parseLogOutput(out []byte) []LogEntry {
 	entries := make([]LogEntry, 0, len(lines))
 	for _, line := range lines {
 		parts := strings.Split(line, "\x00")
-		if len(parts) != 4 {
+		if len(parts) != 5 {
 			continue
+		}
+		var parents []string
+		if parts[4] != "" {
+			parents = strings.Fields(parts[4])
 		}
 		entries = append(entries, LogEntry{
 			SHA:     parts[0],
 			Subject: parts[1],
 			Author:  parts[2],
 			Date:    parts[3],
+			Parents: parents,
 		})
 	}
 	return entries

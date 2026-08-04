@@ -322,10 +322,48 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 
 // TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4 verifies
 // that the documented merge-commit format ("merge: <ISSUE-ID> <description>",
-// per docs/conventions.md) satisfies the commit-reference check even though
-// it doesn't follow the type(ISSUE-ID): description shape used by other
-// commit types.
+// per docs/conventions.md) satisfies the commit-reference check when it is
+// the subject of a GENUINE merge commit (2+ parents) — the shape the
+// documented format is meant for.
 func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	// Build a genuine two-parent merge commit whose subject is the
+	// documented merge form.
+	runGit(t, tmpDir, "checkout", "-b", "feature-branch")
+	featureFile := filepath.Join(tmpDir, "feature.txt")
+	require.NoError(t, os.WriteFile(featureFile, []byte("feature content"), 0644))
+	runGit(t, tmpDir, "add", "feature.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): feature work")
+
+	runGit(t, tmpDir, "checkout", "-b", "integration-branch", baseCommit)
+	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "unrelated integration commit")
+	runGit(t, tmpDir, "merge", "--no-ff", "feature-branch", "-m", "merge: TEST-123 integrate feature work")
+
+	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "documented merge: ID description format should be accepted on a genuine merge commit")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4
+// fixes the open PR review comment on gate.go:194: the merge: ID description
+// subject form must only be accepted on a genuine merge commit (2+
+// parents). An ordinary single-parent commit whose author merely wrote a
+// subject that LOOKS like the merge form must not satisfy the check via
+// regex alone.
+func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -343,8 +381,8 @@ func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.
 	runGit(t, tmpDir, "commit", "-m", "merge: TEST-123 integrate feature work")
 
 	result := CommitReferenceCheck(tmpDir, baseCommit, "TEST-123")
-	assert.True(t, result.Pass, "documented merge: ID description format should be accepted")
-	assert.Empty(t, result.Remediation)
+	assert.False(t, result.Pass, "merge: ID subject on a single-parent (non-merge) commit must be rejected")
+	assert.NotEmpty(t, result.Remediation)
 }
 
 // TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2 verifies

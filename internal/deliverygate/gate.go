@@ -189,14 +189,24 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// check. The merge form uses a distinct shape (no parens around the
 	// issue ID) per the documented "merge: <ISSUE-ID> <description>" special
 	// case for merge commits.
-	pattern := regexp.MustCompile(
-		`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S` +
-			`|^merge:[ \t]+` + regexp.QuoteMeta(issueID) + `[ \t]+\S`,
+	typedPattern := regexp.MustCompile(
+		`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
 	)
+	mergePattern := regexp.MustCompile(`^merge:[ \t]+` + regexp.QuoteMeta(issueID) + `[ \t]+\S`)
 
 	foundMatchingCommit := false
 	for _, entry := range entries {
-		if pattern.MatchString(entry.Subject) {
+		if typedPattern.MatchString(entry.Subject) {
+			foundMatchingCommit = true
+			break
+		}
+		// The merge: ID description subject form is only a valid reference
+		// on a GENUINE merge commit (2+ parents). Regex alone can't tell a
+		// real merge commit from an ordinary single-parent commit whose
+		// author merely wrote a subject that looks like the merge form —
+		// accepting it there would let a fabricated "merge:" subject satisfy
+		// the gate without ever actually merging anything.
+		if entry.ParentCount() >= 2 && mergePattern.MatchString(entry.Subject) {
 			foundMatchingCommit = true
 			break
 		}
