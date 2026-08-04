@@ -2,19 +2,28 @@ package review
 
 import (
 	"fmt"
-	"regexp"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/commitref"
 )
 
 // ReviewCommits discovers and returns all delivery commits for an issue
 // across all conventional-commit type prefixes (feat, fix, refactor, test,
-// docs, chore, etc.).
+// docs, chore, etc.), plus the documented merge-commit reference form.
 //
-// Commits are matched by their message prefix: `TYPE(ISSUE-ID):` where TYPE
-// is any lowercase alphabetic string (e.g., feat, fix, refactor, test, docs, chore).
-// This replaces the coordinator skill's feat-only grep pseudocode which silently
-// dropped other commit types.
+// Commits are matched by either:
+//   - the typed prefix `TYPE(ISSUE-ID):` (or `TYPE(ISSUE-ID)!:`), where TYPE
+//     is restricted to the commit types enumerated by docs/conventions.md, or
+//   - the merge form `merge: ISSUE-ID description` (see docs/conventions.md),
+//     so an issue delivered solely via a merge commit is still discoverable
+//     here — the delivery gate's CommitReferenceCheck already accepts this
+//     form (internal/deliverygate/gate.go).
+//
+// Both patterns are built by internal/commitref (TypedCommitPattern /
+// MergeCommitPattern), the same shared source the delivery gate itself uses,
+// so this discovery check and the gate's pass/fail check can't
+// independently drift apart on which types/forms they recognize — the exact
+// bug class that left the merge form unrecognized here.
 func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapters.LogEntry, error) {
 	if branch == "" {
 		branch = "HEAD"
@@ -27,13 +36,8 @@ func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapt
 		return nil, fmt.Errorf("failed to list commits: %w", err)
 	}
 
-	// Filter commits by the conventional-commit pattern
-	// Pattern: ^(feat|fix|refactor|test|docs|style|polish)\(ISSUE-ID\)!?:
-	// Restricted to the commit types enumerated by docs/conventions.md — an
-	// unrestricted ^[a-z]+ would also match a bogus type like
-	// "oops(ISSUE-ID): ..." (same overly-permissive bug fixed in
-	// internal/deliverygate/gate.go's CommitReferenceCheck).
-	pattern := regexp.MustCompile(`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:`)
+	typedPattern := commitref.TypedCommitPattern(issueID)
+	mergePattern := commitref.MergeCommitPattern(issueID)
 
 	// Initialize as an empty (non-nil) slice so the no-match case marshals to
 	// JSON "[]" rather than "null" for agent consumers.
@@ -41,7 +45,7 @@ func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapt
 	for _, entry := range entries {
 		// LogBranch's format string produces a single-line subject, so no
 		// further newline-splitting is needed here.
-		if pattern.MatchString(entry.Subject) {
+		if typedPattern.MatchString(entry.Subject) || mergePattern.MatchString(entry.Subject) {
 			results = append(results, entry)
 		}
 	}
