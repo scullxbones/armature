@@ -36,16 +36,20 @@ func ReviewCommits(git *adapters.Client, issueID string, branch string) ([]adapt
 		return nil, fmt.Errorf("failed to list commits: %w", err)
 	}
 
-	typedPattern := commitref.TypedCommitPattern(issueID)
-	mergePattern := commitref.MergeCommitPattern(issueID)
-
 	// Initialize as an empty (non-nil) slice so the no-match case marshals to
 	// JSON "[]" rather than "null" for agent consumers.
 	results := []adapters.LogEntry{}
 	for _, entry := range entries {
 		// LogBranch's format string produces a single-line subject, so no
 		// further newline-splitting is needed here.
-		if typedPattern.MatchString(entry.Subject) || mergePattern.MatchString(entry.Subject) {
+		//
+		// commitref.IsValidReference is the single shared decision point for
+		// "does this commit satisfy issueID" (typed form, or merge form on a
+		// genuine 2+-parent commit), shared with
+		// internal/deliverygate.CommitReferenceCheck so this discovery check
+		// and the gate's pass/fail check can't independently drift apart —
+		// see its doc comment for the bug class this structurally prevents.
+		if commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
 			results = append(results, entry)
 		}
 	}

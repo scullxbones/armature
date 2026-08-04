@@ -278,6 +278,42 @@ func TestReviewCommits_IncludesMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
 	assert.True(t, found, "merge: ID description commit should be included")
 }
 
+// TestReviewCommits_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4 mirrors
+// internal/deliverygate/gate_test.go's
+// TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4:
+// the merge: ID description subject form must only be recognized on a
+// genuine merge commit (2+ parents). A holistic branch review found that the
+// multi-parent guard added to CommitReferenceCheck was never wired into
+// ReviewCommits, so an ordinary single-parent commit whose author merely
+// wrote a subject that looks like the merge form was still discoverable
+// here — exactly the bug class the guard was supposed to eliminate
+// everywhere.
+func TestReviewCommits_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	repo := tmpDir
+
+	run(t, repo, "git", "init")
+	run(t, repo, "git", "config", "maintenance.auto", "false")
+	run(t, repo, "git", "config", "gc.auto", "0")
+	run(t, repo, "git", "config", "user.email", "test@example.com")
+	run(t, repo, "git", "config", "user.name", "Test User")
+	run(t, repo, "git", "config", "commit.gpgsign", "false")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "initial commit")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content"), 0o644))
+	run(t, repo, "git", "add", "file.txt")
+	run(t, repo, "git", "commit", "-m", "merge: TOPTIER-S1-T3 integrate feature work")
+
+	git := adapters.New(repo)
+	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "HEAD")
+	require.NoError(t, err)
+	for _, c := range commits {
+		assert.NotEqual(t, "merge: TOPTIER-S1-T3 integrate feature work", c.Subject,
+			"merge: ID subject on a single-parent (non-merge) commit must not be discoverable")
+	}
+}
+
 // Helper function to run git commands
 //
 //nolint:unparam // name is "git" in all current callers but helper is intentionally general
