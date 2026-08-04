@@ -97,6 +97,34 @@ func TestRecordedBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	assert.Equal(t, sha, got)
 }
 
+// TestRecordedClaimedBranch_REQ_LNGHZN_S4 verifies the claim-time recorded
+// claimed-branch marker is read back correctly, and that a missing file (or
+// a not-found-worktree) surfaces "not found" so callers can fall back to
+// re-deriving the expected branch from the current issue type.
+func TestRecordedClaimedBranch_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
+
+	// Absent: not found, no error.
+	branch, found, err := RecordedClaimedBranch(tmpDir)
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Empty(t, branch)
+
+	// Present: returns the recorded branch name.
+	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, ClaimedBranchFileName), []byte("task/issue-1\n"), 0o600))
+
+	branch, found, err = RecordedClaimedBranch(tmpDir)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "task/issue-1", branch)
+}
+
 // TestDynamicBaseCommit_REQ_LNGHZN_S4_T3 verifies the dynamic merge-base
 // recomputation against a recorded parent-branch git config, including the
 // stale-"HEAD"-literal self-healing guard.

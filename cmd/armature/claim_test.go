@@ -90,6 +90,35 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 	assert.Error(t, err, "no parent branch config should be recorded when the coordinator was in detached HEAD, got: %q", out)
 }
 
+// TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4 verifies the
+// root-cause structural fix: at claim time, the branch name the issue was
+// actually claimed under (derived from the issue TYPE at claim time) is
+// recorded immutably into the worktree's git directory, so later delivery-
+// gate checks can verify against what was actually claimed rather than
+// re-deriving branch expectations from the CURRENT (possibly since-amended)
+// issue type.
+func TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	require.NoError(t, cmd.Execute())
+
+	gitPath := filepath.Join(worktreePath, ".git")
+	gitFileContent, err := os.ReadFile(gitPath)
+	require.NoError(t, err)
+	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
+	if !filepath.IsAbs(actualGitDir) {
+		actualGitDir = filepath.Join(worktreePath, actualGitDir)
+	}
+	claimedBranchData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-claimed-branch")) //nolint:gosec // test path is internal
+	require.NoError(t, err, "claimed-branch marker file should be recorded at claim time")
+	assert.Equal(t, "task/task-01", strings.TrimSpace(string(claimedBranchData)))
+}
+
 // TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S4
 // verifies the LNGHZN-S4 fix: the existing-worktree claim path must NOT
 // assume the worktree's current HEAD is the true fork point just because
