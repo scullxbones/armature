@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -230,6 +231,53 @@ func TestReviewCommits_MultilineMessage(t *testing.T) {
 	assert.Contains(t, commits[0].Subject, "feat(TOPTIER-S1-T3): add feature")
 }
 
+// TestReviewCommits_IncludesMergeCommitFormat_REQ_LNGHZN_S4 fixes the open
+// PR review comment on commits.go:36: ReviewCommits' pattern only matched
+// the typed `type(ID): ...` form and silently excluded the documented
+// `merge: ID description` form that the delivery gate's CommitReferenceCheck
+// already accepts (see docs/conventions.md). An issue delivered solely via a
+// merge commit must still show up in `arm review commits <ID>` discovery.
+func TestReviewCommits_IncludesMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	repo := tmpDir
+
+	run(t, repo, "git", "init")
+	run(t, repo, "git", "config", "maintenance.auto", "false")
+	run(t, repo, "git", "config", "gc.auto", "0")
+	run(t, repo, "git", "config", "user.email", "test@example.com")
+	run(t, repo, "git", "config", "user.name", "Test User")
+	run(t, repo, "git", "config", "commit.gpgsign", "false")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "initial commit")
+
+	initialBranchOut := runOutput(t, repo, "git", "rev-parse", "--abbrev-ref", "HEAD")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "feature.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "feature.go")
+	run(t, repo, "git", "commit", "-m", "some feature work")
+	run(t, repo, "git", "checkout", "-b", "feature-branch")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "more feature work")
+
+	run(t, repo, "git", "checkout", "-b", "integration-branch", initialBranchOut)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "other.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "other.go")
+	run(t, repo, "git", "commit", "-m", "unrelated integration commit")
+	run(t, repo, "git", "merge", "--no-ff", "feature-branch", "-m", "merge: TOPTIER-S1-T3 integrate feature branch")
+
+	git := adapters.New(repo)
+	commits, err := ReviewCommits(git, "TOPTIER-S1-T3", "integration-branch")
+	require.NoError(t, err)
+	require.NotEmpty(t, commits, "issue delivered via a merge commit should be discoverable")
+
+	found := false
+	for _, c := range commits {
+		if c.Subject == "merge: TOPTIER-S1-T3 integrate feature branch" {
+			found = true
+		}
+	}
+	assert.True(t, found, "merge: ID description commit should be included")
+}
+
 // Helper function to run git commands
 //
 //nolint:unparam // name is "git" in all current callers but helper is intentionally general
@@ -240,4 +288,15 @@ func run(t *testing.T, dir string, name string, args ...string) {
 	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v failed: %s", name, args, out)
+}
+
+// runOutput runs a git command and returns its trimmed stdout.
+func runOutput(t *testing.T, dir string, name string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+	out, err := cmd.Output()
+	require.NoError(t, err, "command %s %v failed", name, args)
+	return strings.TrimSpace(string(out))
 }

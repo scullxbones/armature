@@ -5,11 +5,11 @@ package deliverygate
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/commitref"
 )
 
 // CheckResult represents the outcome of a single gate check.
@@ -189,10 +189,8 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// check. The merge form uses a distinct shape (no parens around the
 	// issue ID) per the documented "merge: <ISSUE-ID> <description>" special
 	// case for merge commits.
-	typedPattern := regexp.MustCompile(
-		`^(feat|fix|refactor|test|docs|style|polish)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
-	)
-	mergePattern := regexp.MustCompile(`^merge:[ \t]+` + regexp.QuoteMeta(issueID) + `[ \t]+\S`)
+	typedPattern := commitref.TypedCommitPattern(issueID)
+	mergePattern := commitref.MergeCommitPattern(issueID)
 
 	foundMatchingCommit := false
 	for _, entry := range entries {
