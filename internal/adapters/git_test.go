@@ -828,6 +828,61 @@ func TestLogRange_ExcludesBaseAndEarlier_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.Equal(t, "commit after base", entries[0].Subject)
 }
 
+// TestLogRange_ReportsParentCount_REQ_LNGHZN_S4 verifies LogEntry exposes
+// the number of parent commits (from git log's %P), so callers can
+// distinguish an ordinary single-parent commit from a genuine merge commit
+// without a second git invocation.
+func TestLogRange_ReportsParentCount_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("v0\n"), 0644))
+	gitRun("add", "file.txt")
+	gitRun("commit", "-m", "base commit")
+	shaOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	baseSHA := strings.TrimSpace(string(shaOut))
+
+	// A branch with a single-parent commit.
+	gitRun("checkout", "-b", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("f\n"), 0644))
+	gitRun("add", "feature.txt")
+	gitRun("commit", "-m", "single parent commit")
+
+	// Merge feature back into a second branch off base to create a genuine
+	// two-parent merge commit.
+	gitRun("checkout", "-b", "other", baseSHA)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "other.txt"), []byte("o\n"), 0644))
+	gitRun("add", "other.txt")
+	gitRun("commit", "-m", "other branch commit")
+	gitRun("merge", "--no-ff", "feature", "-m", "merge: LNGHZN-S4 merge feature into other")
+
+	entries, err := c.LogRange(baseSHA, "HEAD")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(entries), 3)
+
+	var mergeEntry, singleEntry *adapters.LogEntry
+	for i := range entries {
+		switch entries[i].Subject {
+		case "merge: LNGHZN-S4 merge feature into other":
+			mergeEntry = &entries[i]
+		case "single parent commit":
+			singleEntry = &entries[i]
+		}
+	}
+	require.NotNil(t, mergeEntry, "merge commit entry not found")
+	require.NotNil(t, singleEntry, "single-parent commit entry not found")
+	assert.GreaterOrEqual(t, mergeEntry.ParentCount(), 2, "merge commit should report 2+ parents")
+	assert.Equal(t, 1, singleEntry.ParentCount(), "ordinary commit should report exactly 1 parent")
+}
+
 func TestDiffFrom_InvalidSHA(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
