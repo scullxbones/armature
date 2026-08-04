@@ -176,35 +176,18 @@ func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 		}
 	}
 
-	// Build regex pattern matching either:
-	//   type(ISSUE-ID): <description>  or  type(ISSUE-ID)!: <description>
-	//   merge: ISSUE-ID <description>
-	// where type is one of the commit types enumerated by
-	// docs/conventions.md. Restricting the type alternation (rather than
-	// accepting any lowercase word) prevents a bogus type like
-	// "oops(ISSUE-ID): ..." from satisfying this check. Requiring whitespace
-	// followed by a non-whitespace character after the colon (or after the
-	// issue ID, for the merge form) prevents a bare "fix(ISSUE-ID):" or
-	// "merge: ISSUE-ID" with no actual description from satisfying this
-	// check. The merge form uses a distinct shape (no parens around the
-	// issue ID) per the documented "merge: <ISSUE-ID> <description>" special
-	// case for merge commits.
-	typedPattern := commitref.TypedCommitPattern(issueID)
-	mergePattern := commitref.MergeCommitPattern(issueID)
-
+	// A matching commit is either the typed form
+	// (type(ISSUE-ID): <description>, type restricted to the set
+	// docs/conventions.md documents) or the merge form
+	// (merge: ISSUE-ID <description>) on a genuine merge commit — see
+	// commitref.IsValidReference's doc comment for the full rationale.
 	foundMatchingCommit := false
 	for _, entry := range entries {
-		if typedPattern.MatchString(entry.Subject) {
-			foundMatchingCommit = true
-			break
-		}
-		// The merge: ID description subject form is only a valid reference
-		// on a GENUINE merge commit (2+ parents). Regex alone can't tell a
-		// real merge commit from an ordinary single-parent commit whose
-		// author merely wrote a subject that looks like the merge form —
-		// accepting it there would let a fabricated "merge:" subject satisfy
-		// the gate without ever actually merging anything.
-		if entry.ParentCount() >= 2 && mergePattern.MatchString(entry.Subject) {
+		// commitref.IsValidReference is the single shared decision point for
+		// "does this commit satisfy issueID" (typed form, or merge form on a
+		// genuine 2+-parent commit) — see its doc comment for why this must
+		// not be reimplemented independently here.
+		if commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
 			foundMatchingCommit = true
 			break
 		}
