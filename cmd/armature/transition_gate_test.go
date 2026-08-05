@@ -552,6 +552,48 @@ func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t
 	assert.Contains(t, err.Error(), "--skip-delivery-gate")
 }
 
+// TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_REQ_LNGHZN_S4
+// reproduces the open review-thread bug: a task is claimed (creating a
+// worktree+marker), self-unassigned (clearing ClaimedBy), then amended to an
+// unmapped type (epic) — WITHOUT the worktree marker ever being removed.
+// Before the fix, the gate's default trigger was keyed off
+// `ClaimedBy != "" || Type in {task,bug,feature}`: after unassign clears
+// ClaimedBy and the amend retypes away from task/bug/feature, BOTH halves of
+// that predicate go false, and the (task-only) story-specific worktree scan
+// never runs for a non-story type, so the gate was skipped outright even
+// though the worktree's own armature-issue-id marker still names this issue
+// and the tree is dirty. deliverygateRequired must catch this by looking for
+// a live binding first, independent of Type/ClaimedBy.
+func TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_REQ_LNGHZN_S4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-unassign-retype-01", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "gate-unassign-retype-01-wt")
+	_, err = runTrls(t, repo, "claim", "gate-unassign-retype-01", "--worktree", wt)
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "unassign", "--issue", "gate-unassign-retype-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "gate-unassign-retype-01", "--type", "epic")
+	require.NoError(t, err)
+
+	// The lingering worktree still carries its armature-issue-id marker and
+	// is now dirtied — the gate must still catch this instead of treating
+	// the unassigned, retyped-to-epic issue as exempt.
+	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "gate-unassign-retype-01", "--to", "done", "--outcome", "test", "--force")
+	require.Error(t, err, "unassign+retype-to-epic must not exempt a still-bound, dirty worktree from the delivery gate")
+	assert.Contains(t, err.Error(), "delivery gate")
+}
+
 // TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2 verifies that the delivery gate
 // applies to issue kind "bug" the same way it applies to "task": bugs get a
 // worktree+branch created on claim (see internal/materialize/branch.go's
