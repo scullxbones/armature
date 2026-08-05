@@ -184,74 +184,14 @@ This enforces branch + PR discipline.`,
 					gateRepoPath = resolved
 				}
 
-				// A claim is authoritative evidence that this issue entered the
-				// bound-worktree workflow. An amend can change its type without
-				// clearing that claim, so type alone must never turn a live bound
-				// worktree into a delivery-gate exemption.
-				runGate := gateIssue.ClaimedBy != "" || gateIssue.Type == "task" || gateIssue.Type == "bug" || gateIssue.Type == "feature"
-				if gateIssue.Type == "story" {
-					// Scan for a lingering claimed-worktree marker unconditionally,
-					// not only when gateIssue.ClaimedBy != "". `arm unassign` is
-					// self-service with no permission check and clears ClaimedBy
-					// via a transition->open op, but it does not touch the
-					// worktree's armature-issue-id marker or its working tree
-					// contents. Gating solely on ClaimedBy let a worker claim a
-					// story, make dirty/out-of-scope/uncommitted changes,
-					// self-unassign, and then `transition --to done --force` from
-					// that same (or any) checkout with the gate never running
-					// against the still-bound, still-dirty worktree. The marker
-					// is the authoritative signal that a worktree is still bound
-					// to this issue's delivery, regardless of what the
-					// materialized claim state says.
-					if isClaimedWorktreeForIssue(gateRepoPath, issueID) {
-						runGate = true
-					} else {
-						claimedPath, found, resolveErr := resolveClaimedStoryWorktree(appCtx.RepoPath, issueID)
-						if resolveErr != nil {
-							// Fail closed: we couldn't reliably determine
-							// whether some other worktree is claimed for this
-							// story (git worktree list failed, or a marker
-							// file existed but couldn't be read for a reason
-							// other than "missing"). Refuse the transition
-							// rather than silently treating it as unclaimed —
-							// see finding 2 in the Opus review of commit
-							// 1ac1b2e5.
-							return fmt.Errorf("could not determine claimed worktree for story %s: %w. Use --skip-delivery-gate to bypass", issueID, resolveErr)
-						}
-						if found {
-							// The invoking checkout's own marker didn't match
-							// (isClaimedWorktreeForIssue above), but a
-							// repo-global scan found a *different* worktree
-							// actually bound to this story issue (see
-							// docs/dogfood/findings/raw/2026-08-02T1600Z-
-							// claude-workflow-story-gate-bypass-via-wrong-checkout.md).
-							// Fail closed: run the gate against that bound
-							// worktree, not the invoking checkout, so a dirty
-							// or out-of-scope worktree can't slip a "done"
-							// through by transitioning from elsewhere, or by
-							// self-unassigning first.
-							runGate = true
-							gateRepoPath = claimedPath
-						} else if gateIssue.ClaimedBy != "" {
-							// No live marker is discoverable, but the authoritative ops
-							// still record a claimant. That means this story entered
-							// the claimed-worktree workflow and its worktree was likely
-							// removed or pruned manually. Do not confuse that state with
-							// an unclaimed coordinator-level story: the delivery gate
-							// cannot validate a missing bound worktree, so fail closed.
-							return fmt.Errorf("claimed story %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass", issueID)
-						}
-						// Else: the story is not currently claimed AND no
-						// worktree anywhere still carries its marker. This is
-						// a legitimate unclaimed coordinator-level story (never
-						// entered the bound-worktree workflow, or its bound
-						// worktree was fully removed/pruned after release) —
-						// stay exempt.
-					}
+				runGate, resolvedGateRepoPath, gateErr := deliverygateRequired(appCtx.RepoPath, gateRepoPath, issueID, gateIssue)
+				if gateErr != nil {
+					return gateErr
 				}
+				gateRepoPath = resolvedGateRepoPath
 
 				if runGate {
-					if err := runDeliveryGateCheck(gateRepoPath, issueID, gateIssue.Type, gateIssue.Scope); err != nil {
+					if err := runDeliveryGateCheck(gateRepoPath, issueID, gateIssue.Type, gateIssue.ClaimedBy, gateIssue.Scope); err != nil {
 						return err
 					}
 				}
@@ -406,25 +346,145 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 	return nil
 }
 
-// isClaimedWorktreeForIssue reports whether worktreePath is a worktree
-// actually claimed for issueID (the armature-issue-id marker file written by
-// claim at claim time — same mechanism deliverygate.VerifyIssueWorktreeBinding
-// enforces once the gate is known to apply). Used only to decide whether a
-// story transition should be gated at all: an unclaimed coordinator-level
-// story transition (no marker, or a marker for a different issue) must stay
-// exempt, so any resolution failure or non-matching binding here is treated
-// as "not claimed" rather than an error — the caller falls back to skipping
-// the gate exactly as it always has for stories.
-func isClaimedWorktreeForIssue(worktreePath, issueID string) bool {
+// deliverygateRequired decides whether `arm transition --to done` must run
+// the delivery gate for issueID, and which worktree it should run against.
+// It applies ONE rule, regardless of the issue's type or claim state: the
+// gate is required whenever a live claimed-worktree binding is discoverable
+// for issueID — i.e. some worktree (the invoking checkout, or any other
+// worktree linked to the repo) carries an armature-issue-id marker recorded
+// for issueID at claim time. gateIssue.Type and gateIssue.ClaimedBy are used
+// ONLY to decide where to look for that binding, and whether its absence is
+// itself an error — NEVER to skip enforcing a binding once one is found. A
+// worktree marker on disk outlives both an amend that changes Type and an
+// `arm unassign` that clears ClaimedBy, so neither of those mutable fields
+// may be used to wave off a binding the marker proves is still live.
+//
+// This replaces a prior multi-branch decision tree (default-by-Type,
+// story-specific worktree scan, ClaimedBy fallback) assembled incrementally
+// across ~7 PR review rounds, each patching one gap the tree's branching
+// opened. The tree's central flaw: it consulted current Type/ClaimedBy
+// first and only fell back to checking for a live binding in the story
+// case, so an issue retyped to an unmapped type after claim (e.g. task ->
+// epic, done via unassign+retype) could skip the gate entirely even though
+// its worktree marker, and possibly uncommitted or out-of-scope changes,
+// were still live. Consolidating to "look for a binding first, let Type
+// only decide where to look and whether not finding one is an error" closes
+// that gap for every issue kind at once, without relaxing any individual
+// check: every fail-closed error path below has a direct predecessor in the
+// tree it replaces.
+//
+// Returns (runGate, gateRepoPath, error). gateRepoPath is the worktree the
+// gate should actually run against: normally invokingRepoPath, but a
+// repo-wide scan may find the live binding on a different worktree when the
+// invoking checkout's own marker doesn't match (or is entirely missing) —
+// see resolveClaimedStoryWorktree's doc comment. A non-nil error means the
+// transition must be refused outright (fail closed), not treated as "gate
+// not required".
+func deliverygateRequired(repoRoot, invokingRepoPath, issueID string, gateIssue *materialize.Issue) (bool, string, error) {
+	// Deliberately no epic-Type short-circuit here, even though epics
+	// normally never receive a worktree (materialize.DeriveBranchName
+	// returns "" for them, and `arm claim` refuses --worktree for a type
+	// with no branch mapping — see claim.go). A worktree CAN still end up
+	// bound to an issue that is epic RIGHT NOW: it was claimed as
+	// task/bug/feature (creating the worktree+marker), then amended to epic
+	// after the fact, possibly with the claim itself also released via
+	// unassign. Skipping the lookup for Type == "epic" would resurrect
+	// exactly the bypass this function exists to close — see
+	// TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree.
+	// A genuinely-never-claimed epic still ends up exempt below, once the
+	// scan finds no binding and the "not found" fail-closed check (which
+	// never fires for Type == "epic") lets it through.
+
+	// Inspect the invoking checkout's own marker first. Three outcomes:
+	//   - bound to issueID: the cheap common case (most transitions run from
+	//     the worker's own claimed worktree) — gate right here.
+	//   - bound to a DIFFERENT issue: this is an explicit misdirection (e.g.
+	//     --repo pointed at the wrong worktree) and must fail closed against
+	//     THIS checkout specifically, not be silently redirected to whatever
+	//     worktree issueID actually lives in — see
+	//     TestTransitionDoneRepoNotBoundToIssueFailsClosed. Route it into the
+	//     gate anyway so runDeliveryGateCheck's own VerifyIssueWorktreeBinding
+	//     produces that precise "bound to X, not Y" error.
+	//   - unbound (no marker at all) or unresolvable: fall through to the
+	//     repo-wide scan below, which is the only way to find a story (or any
+	//     type) claimed into a worktree other than the one transition was
+	//     invoked from.
+	invokingBinding, bindingErr := worktreeIssueBinding(invokingRepoPath)
+	if bindingErr == nil {
+		if invokingBinding == issueID {
+			return true, invokingRepoPath, nil
+		}
+		if invokingBinding != "" {
+			return true, invokingRepoPath, nil
+		}
+	}
+
+	// No (matching) binding in the invoking checkout: scan every worktree
+	// linked to the repo for one whose own marker is bound to issueID,
+	// regardless of what branch it currently has checked out (see
+	// resolveClaimedStoryWorktree's doc comment — a claimed worktree can be
+	// left in detached HEAD or on a scratch branch and still be the live
+	// binding; branch-name lookup alone would miss it). A scan failure (git
+	// worktree list failing, or a marker existing but unreadable for a reason
+	// other than "missing") must fail the transition closed, never be
+	// silently treated as "no binding found" — see armature constitution I5
+	// (deterministic gates decide).
+	claimedPath, found, err := resolveClaimedStoryWorktree(repoRoot, issueID)
+	if err != nil {
+		return false, invokingRepoPath, fmt.Errorf("could not determine claimed worktree for %s: %w. Use --skip-delivery-gate to bypass", issueID, err)
+	}
+	if found {
+		return true, claimedPath, nil
+	}
+
+	// No live worktree binding is discoverable anywhere. Type/ClaimedBy now
+	// decide only whether that absence is itself an error:
+	//
+	//   - task/bug/feature always go through the claimed-worktree workflow
+	//     (see internal/materialize/branch.go), so a missing binding for one
+	//     of these types is never a legitimate "nothing to check" — it means
+	//     the worktree was removed/pruned, or the issue was never claimed at
+	//     all, either of which the gate cannot validate. Fail closed exactly
+	//     as it always has (previously via runDeliveryGateCheck's own
+	//     VerifyIssueWorktreeBinding failing on the missing marker; now
+	//     surfaced here with the same effect).
+	//   - Any other still-claimed issue (story claimed directly into its own
+	//     worktree, or any type amended away from task/bug/feature after
+	//     claim) that has no discoverable binding likely had its worktree
+	//     removed or pruned manually. Do not confuse that with a
+	//     legitimately unclaimed issue: fail closed.
+	if gateIssue.ClaimedBy != "" || gateIssue.Type == "task" || gateIssue.Type == "bug" || gateIssue.Type == "feature" {
+		return false, invokingRepoPath, fmt.Errorf(
+			"claimed issue %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass",
+			issueID)
+	}
+
+	// Never claimed (or claim fully released) and no worktree anywhere
+	// carries its marker: this issue never entered, or has fully exited, the
+	// bound-worktree workflow (e.g. an unclaimed coordinator-level story).
+	// Stay exempt.
+	return false, invokingRepoPath, nil
+}
+
+// worktreeIssueBinding reads the armature-issue-id marker file that claim
+// writes into worktreePath's actual git directory at claim time (the same
+// mechanism deliverygate.VerifyIssueWorktreeBinding enforces once the gate
+// is known to apply). Returns ("", nil) when there is no marker (worktree
+// never claimed, or not a worktree at all — mirrors
+// harnesshook.ReadIssueBindingFileErr's own "missing" semantics), the bound
+// issue ID when a marker exists, or a non-nil error only when resolution or
+// the read itself failed for a reason other than "missing" (e.g. permission
+// denied). deliverygateRequired uses the three-way result to distinguish "is
+// this worktree bound to the issue I'm gating for", "is it bound to some
+// OTHER issue" (an explicit misdirection that must fail closed against this
+// checkout, not be silently redirected elsewhere), and "unbound" (fall
+// through to a repo-wide scan for the live binding).
+func worktreeIssueBinding(worktreePath string) (string, error) {
 	gitDir, err := deliverygate.ResolveWorktreeGitDir(worktreePath)
 	if err != nil {
-		return false
+		return "", err
 	}
-	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
-	if err != nil || binding == "" {
-		return false
-	}
-	return binding == issueID
+	return harnesshook.ReadIssueBindingFileErr(gitDir)
 }
 
 // resolveClaimedStoryWorktree finds a worktree actually claimed for a story
@@ -446,7 +506,7 @@ func isClaimedWorktreeForIssue(worktreePath, issueID string) bool {
 // issueID" here.
 //
 // Returns ("", false, nil) when no worktree's marker matches issueID —
-// callers combine this with isClaimedWorktreeForIssue's own check of the
+// callers combine this with worktreeIssueBinding's own check of the
 // invoking checkout, and both together are the only avenue for treating the
 // story as unclaimed (a legitimate, ungated coordinator-level transition).
 // Returns a non-nil error when the scan itself could not be trusted: `git
@@ -514,7 +574,7 @@ func listAllWorktreePaths(repoPath string) ([]string, error) {
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.
 // It fails closed: if the worktree cannot be determined or the gate checks fail,
 // it returns an error with per-check remediations.
-func runDeliveryGateCheck(worktreePath string, issueID string, issueType string, scope []string) error {
+func runDeliveryGateCheck(worktreePath string, issueID string, issueType string, claimedBy string, scope []string) error {
 	if worktreePath == "" {
 		return fmt.Errorf("no repo path available: cannot run delivery gate check. Use --skip-delivery-gate to bypass")
 	}
@@ -538,21 +598,20 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	// correctly-scoped changes there, and pass the gate even though the
 	// actual task/<issueID> branch the coordinator will integrate never
 	// received the commit.
-	if err := deliverygate.VerifyIssueBranchBinding(worktreePath, issueID, issueType); err != nil {
+	if err := deliverygate.VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy); err != nil {
 		return err
 	}
 
-	// Get the base commit. Prefer dynamically recomputing merge-base against
-	// the recorded parent branch (git config, shared across worktrees — see
-	// parentBranchConfigKey): this self-corrects both if the worktree was
-	// removed and recreated (config survives that; a per-worktree file would
-	// not) and if the task branch was later rebased onto an updated parent
-	// tip (merge-base recomputed fresh each time, so it never goes stale).
-	// Fall back to the SHA recorded once at claim time (worktrees claimed
-	// before the parent-branch config was introduced), then to merge-base
-	// against a default branch.
+	// Get the base commit to scope-check against. Gating trusts ONLY the SHA
+	// recorded once at claim time (deliverygate.GatedBaseCommit) — unlike
+	// ResolveBaseCommit's three-tier fallback (used by non-gating callers),
+	// this deliberately does NOT fall back to a dynamically recomputed or
+	// default-branch-guessed base commit: either guess can silently stand in
+	// for a claim record that is stale or was never made, letting the gate
+	// pass against data nobody actually recorded for this claim. See
+	// GatedBaseCommit's doc comment for the full rationale.
 	git := adapters.New(worktreePath)
-	baseCommit, err := deliverygate.ResolveBaseCommit(worktreePath, git)
+	baseCommit, err := deliverygate.GatedBaseCommit(worktreePath, issueID, git)
 	if err != nil {
 		// If no candidate base branch resolves, fail closed
 		return fmt.Errorf("%w. Use --skip-delivery-gate to bypass", err)
