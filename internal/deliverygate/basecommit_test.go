@@ -58,18 +58,49 @@ func TestVerifyIssueBranchBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 	initGitRepo(t, tmpDir)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
-	// issueType with no branch mapping skips the check entirely.
-	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic"))
+	// issueType with no branch mapping and not currently claimed skips the
+	// check entirely.
+	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", ""))
 
 	// On an unrelated branch: fail closed.
 	runGit(t, tmpDir, "checkout", "-b", "scratch")
-	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "task")
+	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "task", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "scratch")
 
 	// On the expected task branch: pass.
 	runGit(t, tmpDir, "checkout", "-b", "task/issue-1")
-	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "task"))
+	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "task", ""))
+}
+
+// TestVerifyIssueBranchBinding_FailsClosedWhenClaimedAndNoRecordOrMapping_REQ_LNGHZN_S4
+// verifies the fix for the second (previously silent-pass) half of the
+// no-record fallback: a pre-migration worktree (claimed before the
+// armature-claimed-branch marker mechanism existed) for an issue that is
+// STILL claimed, whose current type has no branch mapping (e.g. amended
+// task -> epic without releasing the claim), must fail closed rather than
+// return nil. Absence of a record for a claimed issue is never evidence
+// there is nothing to check.
+func TestVerifyIssueBranchBinding_FailsClosedWhenClaimedAndNoRecordOrMapping_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
+
+	// No armature-claimed-branch marker recorded at all (pre-migration
+	// worktree), and the current type ("epic") has no branch mapping.
+	// Previously this returned nil unconditionally; now it must fail closed
+	// because the issue is still claimed.
+	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "issue-1")
+	assert.Contains(t, err.Error(), "worker-a")
+
+	// Same setup, but NOT claimed (claimedBy == ""): this is the legitimate
+	// case (e.g. a genuinely branchless epic that was never claimed into the
+	// worktree workflow) and must still pass.
+	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", ""))
 }
 
 // TestRecordedBaseCommit_REQ_LNGHZN_S4_T3 verifies the claim-time recorded
@@ -124,7 +155,7 @@ func TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_R
 	// claim. DeriveBranchName("epic", ...) returns "", but that must NOT
 	// cause verification to be skipped now that a claimed-branch record
 	// exists.
-	err = VerifyIssueBranchBinding(tmpDir, "issue-1", "epic")
+	err = VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a")
 	assert.Error(t, err, "must fail closed: recorded claimed branch task/issue-1 does not match current branch scratch")
 	assert.Contains(t, err.Error(), "task/issue-1")
 	assert.Contains(t, err.Error(), "scratch")
@@ -188,6 +219,50 @@ func TestDynamicBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	// Valid parent-branch record: resolves to the merge-base.
 	require.NoError(t, git.SetGitConfig(ParentBranchConfigKey("task/issue-1"), "main-parent"))
 	got, err := DynamicBaseCommit(git)
+	require.NoError(t, err)
+	assert.Equal(t, baseSHA, got)
+}
+
+// TestGatedBaseCommit_REQ_LNGHZN_S4 verifies GatedBaseCommit trusts claim-time
+// recorded facts (the dynamically-recomputed parent-branch merge-base, or the
+// SHA recorded once at claim time) but fails closed — rather than falling
+// through to GetBaseCommit's default-branch guess — when NEITHER recorded
+// fact is available, even though that guess would happily resolve in this
+// repo shape.
+func TestGatedBaseCommit_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
+	baseSHA := getHeadSHA(t, tmpDir)
+	runGit(t, tmpDir, "checkout", "-b", "task/issue-1")
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "task work")
+
+	git := adapters.New(tmpDir)
+
+	// Neither a parent-branch config (dynamic tier) nor a recorded
+	// base-commit file exists yet: GatedBaseCommit must fail closed, even
+	// though GetBaseCommit's default-branch guess would resolve via "main"
+	// in this same repo shape.
+	_, err := GatedBaseCommit(tmpDir, "issue-1", git)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "issue-1")
+
+	// Sanity check: GetBaseCommit DOES succeed in this same repo shape,
+	// proving GatedBaseCommit is deliberately more conservative, not that
+	// both merely fail for an unrelated reason.
+	guessed, guessErr := GetBaseCommit(git)
+	require.NoError(t, guessErr)
+	assert.Equal(t, baseSHA, guessed)
+
+	// Once the recorded SHA file exists, GatedBaseCommit returns it (tier:
+	// RecordedBaseCommit, since no parent-branch config is set).
+	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, BaseCommitFileName), []byte(baseSHA), 0o600))
+
+	got, err := GatedBaseCommit(tmpDir, "issue-1", git)
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, got)
 }

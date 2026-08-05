@@ -146,8 +146,15 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 // worker could check out an unrelated scratch branch after claiming and
 // still pass that check, silently stranding otherwise-valid commits off the
 // task branch. issueType empty or unmapped (DeriveBranchName returns "")
-// skips this check, matching the caller's existing task/bug/feature gating.
-func VerifyIssueBranchBinding(worktreePath, issueID, issueType string) error {
+// skips this check, matching the caller's existing task/bug/feature gating —
+// UNLESS claimedBy is non-empty, in which case skipping is never safe (see
+// below).
+//
+// claimedBy is the issue's CURRENT ClaimedBy (materialize.Issue.ClaimedBy),
+// passed separately from issueType because both can be amended
+// independently after claim. It is used only for the no-record fallback
+// path below.
+func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string) error {
 	// Prefer the branch recorded immutably at claim time over re-deriving it
 	// from the CURRENT issue type: the issue's type can be amended after
 	// claim (e.g. task -> epic, which has no branch mapping), and re-deriving
@@ -165,6 +172,21 @@ func VerifyIssueBranchBinding(worktreePath, issueID, issueType string) error {
 		// record existed): fall back to re-deriving from the current issue type.
 		expectedBranch = materialize.DeriveBranchName(issueType, issueID)
 		if expectedBranch == "" {
+			if claimedBy != "" {
+				// A pre-migration worktree (no armature-claimed-branch marker)
+				// for an issue that is STILL claimed must never be read as
+				// "nothing to check" just because the current type has no
+				// branch mapping — the issue may have been retyped (e.g.
+				// task -> epic) after claim specifically to route around this
+				// check while the claim, and whatever worktree/branch it's
+				// bound to, is still live. Absence of a record is not
+				// evidence of absence of a binding to verify: fail closed.
+				return fmt.Errorf(
+					"issue %s is claimed by %s but has no recorded claimed-branch marker and its "+
+						"current type %q has no branch mapping: cannot verify branch binding for a "+
+						"claimed issue. Re-claim to record the marker, or use --skip-delivery-gate to bypass",
+					issueID, claimedBy, issueType)
+			}
 			return nil
 		}
 	}
@@ -295,17 +317,50 @@ func GetBaseCommit(git *adapters.Client) (string, error) {
 	return "", fmt.Errorf("no candidate base branch (%v) resolves: %w", CandidateBaseRefs, lastErr)
 }
 
-// ResolveBaseCommit runs the three-tier base-commit fallback chain used by
-// the delivery gate: dynamically recomputed merge-base against the recorded
-// parent branch (DynamicBaseCommit), then the SHA recorded once at claim
-// time (RecordedBaseCommit), then merge-base against a default branch
-// candidate (GetBaseCommit). Each tier is tried in turn; the first one that
-// succeeds wins. Returns an error only if all three tiers fail.
+// GatedBaseCommit returns the base commit the delivery gate must scope-check
+// against, trusting ONLY facts actually recorded at claim time: the
+// dynamically-recomputed merge-base against the recorded parent branch
+// (DynamicBaseCommit — the parent branch NAME is the recorded fact,
+// git-config, written once at claim; recomputing the merge-base against it
+// fresh on every check is what lets a rebased task branch or a
+// removed-and-recreated worktree keep resolving correctly, see
+// TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1 and
+// TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1), then the
+// SHA recorded once at claim time (RecordedBaseCommit) if no parent-branch
+// record exists (worktrees claimed before that config was introduced).
 //
-// Every tier's error is accumulated into lastErr (not just the last tier's,
-// as an earlier version of this function did) so a debugging session sees
-// why each tier in turn was rejected, rather than only the final tier's
-// error with the first two silently discarded.
+// Deliberately does NOT fall through to GetBaseCommit: that tier has no
+// recorded claim-time fact behind it at all — it merge-bases against
+// whatever candidate default branch (origin/main, etc.) happens to resolve
+// RIGHT NOW, so letting it stand in for gating purposes would let the gate
+// pass against data nobody actually recorded for this claim, using the
+// repository's current shape as if it were the claim's actual base. If
+// neither a parent-branch config nor a recorded base-commit file exists for
+// worktreePath (e.g. it was claimed before either mechanism existed), that
+// must fail the gate closed rather than falling through to that guess.
+func GatedBaseCommit(worktreePath, issueID string, git *adapters.Client) (string, error) {
+	baseCommit, err := DynamicBaseCommit(git)
+	if err == nil {
+		return baseCommit, nil
+	}
+	dynamicErr := err
+
+	baseCommit, err = RecordedBaseCommit(worktreePath)
+	if err == nil {
+		return baseCommit, nil
+	}
+
+	return "", fmt.Errorf(
+		"no recorded base commit for claimed issue %s (dynamic parent-branch merge-base failed: %v; recorded base-commit file also failed: %w)\n"+
+			"this worktree predates delivery-gate claim recording: re-claim it, or use --skip-delivery-gate to bypass",
+		issueID, dynamicErr, err)
+}
+
+// ResolveBaseCommit runs the three-tier base-commit fallback chain for
+// NON-GATING callers that want the best available guess at a task branch's
+// divergence point (e.g. informational/reporting use). Gating (arm
+// transition --to done) must use GatedBaseCommit instead — see its doc
+// comment for why the fallback tiers here are unsafe as a gating input.
 func ResolveBaseCommit(worktreePath string, git *adapters.Client) (string, error) {
 	var lastErr error
 
