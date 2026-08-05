@@ -351,7 +351,7 @@ When a worker transitions a claimed task, bug, feature, or story to `done`, Arma
 
 **1. Clean Tree**
 
-The working tree must be clean: `git status --porcelain` must be empty. All work must be staged and committed; there can be no outstanding changes. Note: `.armature/` state (Armature's internal coordination data) is automatically excluded from this check and does not count as outstanding work.
+The working tree must be clean: the gate runs `git status --porcelain --ignored` and requires empty output. All work must be staged and committed; there can be no outstanding changes. Because `--ignored` is included, gitignored build artifacts (e.g. `bin/arm`, `coverage.out`) count as dirty too and must be removed or cleaned before transitioning to `done` -- a plain `git status --porcelain` (without `--ignored`) showing clean is not sufficient. Note: `.armature/` state (Armature's internal coordination data) is exempted from this check and does not count as outstanding work.
 
 *Remedy:* Stage any uncommitted changes (`git add <files>`) and commit them with a conventional-commit message.
 

@@ -43,6 +43,7 @@ func TestScopeMatchers_ClaimAndHarnesspolicyAgree_REQ_LNGHZN_S4(t *testing.T) {
 		{"single-star glob within a dir", []string{"internal/claim/*.go"}, "internal/claim/overlap.go", true},
 		{"single-star glob does not cross dir boundary", []string{"internal/claim/*.go"}, "internal/claim/sub/overlap.go", false},
 		{"case-sensitive mismatch", []string{"internal/claim/**"}, "internal/Claim/overlap.go", false},
+		{"(new) annotation stripped before matching", []string{"internal/foo.go (new)"}, "internal/foo.go", true},
 	}
 
 	for _, tc := range cases {

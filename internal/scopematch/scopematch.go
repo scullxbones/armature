@@ -59,9 +59,27 @@ func Allows(scope []string, path string) bool {
 // CleanScope normalizes a raw scope entry and reports whether it denotes a
 // directory scope (i.e. had a trailing slash before normalization), which
 // covers everything at or under that directory regardless of whether the
-// entry also contains "**".
+// entry also contains "**". Before normalization, a trailing human-readable
+// annotation like " (new)" is stripped -- workers commonly append this to a
+// scope entry when declaring a file that doesn't exist yet (e.g.
+// "internal/foo/bar.go (new)"), and scope entries are stored verbatim
+// including the annotation, so any exact-path matcher must strip it before
+// comparing against real file paths.
 func CleanScope(raw string) (string, bool) {
-	return CleanRepoPath(raw), strings.HasSuffix(filepath.ToSlash(raw), "/")
+	stripped := stripAnnotation(raw)
+	return CleanRepoPath(stripped), strings.HasSuffix(filepath.ToSlash(stripped), "/")
+}
+
+// stripAnnotation removes a trailing " (...)" annotation from a scope entry,
+// e.g. "internal/foo.go (new)" becomes "internal/foo.go". A parenthesized
+// suffix is only treated as an annotation when preceded by a space, so a
+// literal filename containing parens (e.g. "internal/foo/bar(baz).go") is
+// left untouched.
+func stripAnnotation(glob string) string {
+	if i := strings.LastIndex(glob, " ("); i >= 0 && strings.HasSuffix(glob, ")") {
+		return strings.TrimSpace(glob[:i])
+	}
+	return glob
 }
 
 // CleanRepoPath normalizes a path for scope comparison: converts to forward

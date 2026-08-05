@@ -90,28 +90,11 @@ func IsWithinScope(files, scope []string) (bool, string) {
 		return true, ""
 	}
 
-	strippedScope := make([]string, len(scope))
-	for i, rawGlob := range scope {
-		strippedScope[i] = stripScopeAnnotation(rawGlob)
-	}
-
 	for _, file := range files {
-		if !scopematch.Allows(strippedScope, file) {
+		if !scopematch.Allows(scope, file) {
 			return false, file
 		}
 	}
 
 	return true, ""
-}
-
-// stripScopeAnnotation removes a trailing human-readable annotation like
-// " (new)" that workers commonly append to scope entries when declaring a
-// file that doesn't exist yet (e.g. "internal/foo/bar.go (new)"). Scope
-// entries are stored verbatim including this annotation, so any exact-path
-// matcher must strip it before comparing against real file paths.
-func stripScopeAnnotation(glob string) string {
-	if i := strings.LastIndex(glob, " ("); i >= 0 && strings.HasSuffix(glob, ")") {
-		return strings.TrimSpace(glob[:i])
-	}
-	return glob
 }
