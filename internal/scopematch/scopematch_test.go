@@ -91,6 +91,32 @@ func TestCleanRepoPath(t *testing.T) {
 	}
 }
 
+func TestAllows_StripsNewFileAnnotation(t *testing.T) {
+	t.Parallel()
+	if !Allows([]string{"internal/foo.go (new)"}, "internal/foo.go") {
+		t.Fatal("expected '(new)' annotation on scope entry to be stripped before matching")
+	}
+}
+
+func TestCleanScope_StripsNewFileAnnotation(t *testing.T) {
+	t.Parallel()
+	cleaned, isDir := CleanScope("internal/foo.go (new)")
+	if isDir {
+		t.Fatal("expected annotated non-directory scope entry to not be a directory scope")
+	}
+	if cleaned != "internal/foo.go" {
+		t.Fatalf("expected cleaned scope 'internal/foo.go', got %q", cleaned)
+	}
+}
+
+func TestCleanScope_PreservesFilenameWithLiteralParens(t *testing.T) {
+	t.Parallel()
+	cleaned, _ := CleanScope("internal/foo/bar(baz).go")
+	if cleaned != "internal/foo/bar(baz).go" {
+		t.Fatalf("expected literal parens in filename to be preserved, got %q", cleaned)
+	}
+}
+
 func TestCleanScope_DetectsTrailingSlash(t *testing.T) {
 	t.Parallel()
 	cleaned, isDir := CleanScope("internal/")
