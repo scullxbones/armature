@@ -3620,3 +3620,4 @@
 ["claim","LNGHZN-S5-T4",1786142267,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
 ["heartbeat","LNGHZN-S5-T4",1786142378,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
 ["heartbeat","LNGHZN-S5-T4",1786143308,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
+["amend","LNGHZN-S5-T4",1786144665,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/claim.go","cmd/armature/claim_test.go","cmd/armature/cmd_extra_test.go","cmd/armature/main_test.go","cmd/armature/merged_test.go","cmd/armature/transition_gate_test.go","cmd/armature/harness_hook_test.go","cmd/armature/hook_test.go","cmd/armature/review_test.go"]}]
