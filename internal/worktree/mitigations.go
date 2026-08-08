@@ -1,4 +1,3 @@
-// Package worktree provides managed worktree reconciliation and lifecycle.
 package worktree
 
 import (
@@ -8,143 +7,105 @@ import (
 	"strings"
 )
 
-// ProjectType represents the type of project detected in a repository.
-type ProjectType string
-
-const (
-	ProjectTypeGo      ProjectType = "go"
-	ProjectTypeUnknown ProjectType = "unknown"
-)
-
-// Mitigation represents a specific worktree mitigation to apply.
-type Mitigation string
-
-const (
-	MitigationGoWorkIsolation Mitigation = "go-work-isolation"
-)
-
-// DetectProjectType detects the project type based on files present in the repo root.
-// Returns ProjectTypeGo if either go.mod or go.work is present, ProjectTypeUnknown otherwise.
-// This is a pure function that does not shell out.
-func DetectProjectType(repoRoot string) ProjectType {
-	// Check for go.mod
-	goModPath := filepath.Join(repoRoot, "go.mod")
-	if _, err := os.Stat(goModPath); err == nil {
-		return ProjectTypeGo
+// NormalizePath resolves symlinks in path for reliable comparison, falling back
+// to an absolute path when the path cannot be resolved (e.g. it does not exist
+// yet). Both sides of any worktree-path comparison must go through this so a
+// symlinked repo root (common on macOS, where /tmp -> /private/tmp) does not
+// make an identical worktree look like two different paths.
+func NormalizePath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
 	}
-
-	// Check for go.work
-	goWorkPath := filepath.Join(repoRoot, "go.work")
-	if _, err := os.Stat(goWorkPath); err == nil {
-		return ProjectTypeGo
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
 	}
-
-	return ProjectTypeUnknown
+	return path
 }
 
-// GetMitigationsForProjectType returns the list of mitigations applicable to a project type.
-// For Go projects, returns MitigationGoWorkIsolation to isolate the worktree's Go workspace
-// from the main tree's workspace, preventing gopls from getting confused about module boundaries.
-// For unknown project types, returns an empty list.
-func GetMitigationsForProjectType(projType ProjectType) []Mitigation {
-	switch projType {
-	case ProjectTypeGo:
-		return []Mitigation{MitigationGoWorkIsolation}
-	default:
-		return []Mitigation{}
-	}
-}
-
-// ApplyMitigations applies all applicable mitigations for the detected project type.
-// For Go projects, it creates a go.work file in the worktree to isolate it from the main
-// tree's workspace. This prevents gopls in the IDE from treating the worktree as part of
-// a larger workspace and getting confused about module boundaries.
-// The mitigation is idempotent: if a go.work already exists in the worktree, it is
-// preserved and not overwritten.
+// ApplyMitigations applies best-effort project-isolation for a newly provisioned
+// worktree. Its sole job is to keep the MAIN tree's tooling from walking the
+// worktree: if the main tree uses a go.work file, the worktree is removed from
+// its `use` directives so the main tree's gopls does not treat the worktree as
+// part of the same workspace.
+//
+// If the main tree has no go.work (the common case — this repo has none), it is
+// a no-op: the worktree is already isolated because .worktrees/ is gitignored.
+// It NEVER creates a go.work file, in the worktree or anywhere else — a bare
+// go.work with no `use` would break `go build ./...` inside the worktree.
 func ApplyMitigations(repoRoot, worktreeRoot string) error {
-	// Detect the project type
-	projType := DetectProjectType(repoRoot)
-
-	// Get applicable mitigations
-	mitigations := GetMitigationsForProjectType(projType)
-
-	// Apply each mitigation
-	for _, mitigation := range mitigations {
-		if mitigation == MitigationGoWorkIsolation {
-			if err := applyGoWorkIsolation(repoRoot, worktreeRoot); err != nil {
-				return fmt.Errorf("apply go-work-isolation: %w", err)
-			}
+	goWorkPath := filepath.Join(repoRoot, "go.work")
+	info, err := os.Stat(goWorkPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no main-tree go.work: worktree is already isolated
 		}
+		return fmt.Errorf("stat main go.work: %w", err)
 	}
 
-	return nil
-}
-
-// applyGoWorkIsolation ensures the worktree has a go.work file that isolates it
-// from the main tree's workspace. Creates a minimal go.work in the worktree if it
-// doesn't already exist, preserving any existing go.work (idempotent).
-func applyGoWorkIsolation(repoRoot, worktreeRoot string) error {
-	// Ensure the worktree directory exists
-	// #nosec G301 - this is an internal worktree directory, not user-controlled
-	if err := os.MkdirAll(worktreeRoot, 0o700); err != nil {
-		return fmt.Errorf("create worktree directory: %w", err)
+	// #nosec G304 - repoRoot is internal, not user-controlled
+	content, err := os.ReadFile(goWorkPath)
+	if err != nil {
+		return fmt.Errorf("read main go.work: %w", err)
 	}
 
-	worktreeGoWork := filepath.Join(worktreeRoot, "go.work")
-
-	// Check if go.work already exists in the worktree
-	if _, err := os.Stat(worktreeGoWork); err == nil {
-		// go.work already exists, preserve it (idempotent)
+	newContent, changed := removeWorktreeFromGoWork(string(content), repoRoot, worktreeRoot)
+	if !changed {
 		return nil
 	}
 
-	// Determine the Go version to use in the go.work file
-	// Read it from the repo root's go.mod or go.work if available
-	goVersion := determineGoVersion(repoRoot)
-
-	// Create a minimal go.work file in the worktree
-	// This declares the worktree as a standalone workspace, independent of the main tree
-	goWorkContent := fmt.Sprintf("go %s\n", goVersion)
-
-	// #nosec G306 - this is an internal worktree file, not user-controlled
-	if err := os.WriteFile(worktreeGoWork, []byte(goWorkContent), 0o600); err != nil {
-		return fmt.Errorf("write go.work: %w", err)
+	if err := os.WriteFile(goWorkPath, []byte(newContent), info.Mode().Perm()); err != nil {
+		return fmt.Errorf("rewrite main go.work: %w", err)
 	}
-
 	return nil
 }
 
-// determineGoVersion extracts the Go version from the repo root's go.mod or go.work.
-// Returns a sensible default if neither file is found or the version cannot be determined.
-func determineGoVersion(repoRoot string) string {
-	for _, name := range []string{"go.mod", "go.work"} {
-		// #nosec G304 - repoRoot is internal, paths are not user-controlled
-		content, err := os.ReadFile(filepath.Join(repoRoot, name))
-		if err != nil {
-			continue
-		}
-		if version := parseGoVersion(string(content)); version != "" {
-			return version
+// removeWorktreeFromGoWork returns go.work content with any `use` directive that
+// resolves to worktreeRoot removed. It handles both the block form
+// (use (\n\t./path\n)) and the single-line form (use ./path). The second return
+// value reports whether anything was removed.
+func removeWorktreeFromGoWork(content, repoRoot, worktreeRoot string) (string, bool) {
+	target := NormalizePath(worktreeRoot)
+	changed := false
+	inBlock := false
+	var out []string
+
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case !inBlock && strings.HasPrefix(trimmed, "use ("):
+			inBlock = true
+			out = append(out, line)
+		case inBlock && trimmed == ")":
+			inBlock = false
+			out = append(out, line)
+		case inBlock:
+			if useDirectiveMatches(trimmed, repoRoot, target) {
+				changed = true
+				continue
+			}
+			out = append(out, line)
+		case strings.HasPrefix(trimmed, "use "):
+			if useDirectiveMatches(strings.TrimSpace(strings.TrimPrefix(trimmed, "use")), repoRoot, target) {
+				changed = true
+				continue
+			}
+			out = append(out, line)
+		default:
+			out = append(out, line)
 		}
 	}
-	// Default to a conservative version
-	return "1.20"
+
+	return strings.Join(out, "\n"), changed
 }
 
-// parseGoVersion extracts the version from the first "go <version>" directive in
-// go.mod/go.work content, stripping any trailing line comment. Returns "" if absent.
-func parseGoVersion(content string) string {
-	for _, line := range strings.Split(content, "\n") {
-		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "go ")
-		if !ok {
-			continue
-		}
-		if i := strings.Index(rest, "//"); i >= 0 {
-			rest = rest[:i]
-		}
-		if version := strings.TrimSpace(rest); version != "" {
-			return version
-		}
+// useDirectiveMatches reports whether a `use` path (relative to repoRoot or
+// absolute) resolves to the target worktree path.
+func useDirectiveMatches(p, repoRoot, target string) bool {
+	if p == "" {
+		return false
 	}
-	return ""
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(repoRoot, p)
+	}
+	return NormalizePath(p) == target
 }

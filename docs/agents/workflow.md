@@ -30,8 +30,11 @@ arm claim --issue TASK-ID --worktree
 - Worktree is created at `.worktrees/<issue-id>` (relative to repo root)
 - Issue branch is checked out inside the worktree
 - Worktree path is recorded in the claim ops (recoverable if task is re-claimed)
-- **Project-type mitigations are automatically applied:**
-  - For Go projects (detected via `go.mod` or `go.work`), a `go.work` file is created in the worktree to isolate it from the main tree's workspace, preventing gopls from getting confused about module boundaries
+- **Best-effort isolation mitigation is automatically applied:**
+  - If the **main tree** uses a `go.work` file, the newly provisioned worktree is removed from its `use` directives so the main tree's gopls does not walk the worktree and get confused about module boundaries.
+  - If the main tree has no `go.work` (the common case — this repo has none), this is a no-op: the worktree is already isolated because `.worktrees/` is gitignored.
+  - The mitigation **never creates a `go.work`** — not in the worktree and not in the main tree. A bare `go.work` with no `use` directive would break `go build ./...` inside the worktree.
+  - It is best-effort and non-fatal: a failure only degrades IDE ergonomics and never fails the claim.
 
 ### Inspection & Reconciliation
 
