@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -11,9 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testNow is a fixed reference clock for reconcile tests. Cases that don't set a
+// ClaimTTL are never stale (IsClaimStale returns false for ttl<=0), so this value
+// only matters for the staleness-specific tests below, which set it explicitly.
+var testNow = time.Unix(1_000_000, 0)
+
 func TestReconcile_EmptyInputs(t *testing.T) {
 	t.Parallel()
-	result := Reconcile([]Meta{}, map[string]*materialize.Issue{})
+	result := Reconcile([]Meta{}, map[string]*materialize.Issue{}, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Empty(t, result.Orphans)
@@ -36,7 +42,7 @@ func TestReconcile_BoundWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.BoundWorktrees, 1)
 	assert.Contains(t, result.BoundWorktrees, "task-01")
@@ -59,7 +65,7 @@ func TestReconcile_Orphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Len(t, result.Orphans, 1)
@@ -80,7 +86,7 @@ func TestReconcile_Ghost_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Empty(t, result.Orphans)
@@ -103,7 +109,7 @@ func TestReconcile_GCRemovalMerged_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.GCRemovalSet, 1)
 	assert.Contains(t, result.GCRemovalSet, "task-04")
@@ -125,7 +131,7 @@ func TestReconcile_GCRemovalCancelled_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.GCRemovalSet, 1)
 	assert.Contains(t, result.GCRemovalSet, "task-05")
@@ -147,7 +153,7 @@ func TestReconcile_NoGCRemovalDone_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.GCRemovalSet)
 	assert.Len(t, result.BoundWorktrees, 1)
@@ -188,7 +194,7 @@ func TestReconcile_MixedScenario_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.BoundWorktrees, 1)
 	assert.Contains(t, result.BoundWorktrees, "task-01")
@@ -210,7 +216,7 @@ func TestReconcile_WorktreeWithoutIssue_REQ_LNGHZN_S5_T2(t *testing.T) {
 	}
 	issues := map[string]*materialize.Issue{}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Empty(t, result.Orphans)
@@ -230,7 +236,7 @@ func TestReconcile_MergedWithoutWorktree_NotGhostNotRemoval_REQ_LNGHZN_S5_T2(t *
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.Ghosts)
 	assert.Empty(t, result.GCRemovalSet)
@@ -251,7 +257,7 @@ func TestReconcile_NonLiveClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2(t *test
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.Ghosts)
 }
@@ -271,7 +277,7 @@ func TestReconcile_SortedOutput_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-c": {ID: "task-c", Status: ops.StatusInProgress, ClaimedBy: "w", WorktreePath: "/repo/.worktrees/task-c"},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"task-a", "task-b", "task-c"}, result.BoundWorktrees)
 }
@@ -294,7 +300,7 @@ func TestReconcile_SymlinkNormalization_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-09": {ID: "task-09", Status: ops.StatusInProgress, ClaimedBy: "w", WorktreePath: symWorktree},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"task-09"}, result.BoundWorktrees)
 	assert.Empty(t, result.Ghosts)
@@ -317,7 +323,7 @@ func TestReconcile_UnclaimedWorktreeIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Len(t, result.Orphans, 1)
@@ -338,7 +344,7 @@ func TestWorktreeListFlagsOrphans_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-10": {ID: "task-10", Status: ops.StatusInProgress, ClaimedBy: "", WorktreePath: "/repo/.worktrees/task-10"},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Contains(t, result.BoundWorktrees, "task-09")
 	assert.Contains(t, result.Orphans, "task-10")
@@ -362,7 +368,7 @@ func TestReconcile_RemoteClaimNotGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, localRoot)
+	result := Reconcile(worktrees, issues, testNow, localRoot)
 
 	assert.Empty(t, result.Ghosts, "a remote clone's live claim must not be a local ghost")
 }
@@ -383,9 +389,92 @@ func TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, localRoot)
+	result := Reconcile(worktrees, issues, testNow, localRoot)
 
 	assert.Equal(t, []string{"task-local"}, result.Ghosts)
+}
+
+// TestReconcile_TerminalForeignPathLocalWorktree_IsGCRemoval_REQ_LNGHZN_S5_T2
+// (thread 2) covers a merged issue whose git-replicated WorktreePath names a
+// FOREIGN clone, while a real worktree for it exists on THIS clone's branch.
+// Classification must key on the local worktree (via its path) and land the
+// issue in GCRemovalSet — not Orphans — so gc, which removes by branch in this
+// clone, agrees with selection. Pre-fix, the foreign path failed to match and
+// the local worktree fell through to Orphans.
+func TestReconcile_TerminalForeignPathLocalWorktree_IsGCRemoval_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []Meta{
+		{Path: "/local/clone/.worktrees/task-foreign", Branch: "task/task-foreign"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-foreign": {
+			ID:     "task-foreign",
+			Status: ops.StatusMerged,
+			// Recorded path points at a DIFFERENT clone (git-replicated absolute path).
+			WorktreePath: "/other/clone/.worktrees/task-foreign",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, testNow)
+
+	assert.Contains(t, result.GCRemovalSet, "task-foreign",
+		"a terminal issue with a local worktree must be gc-ready regardless of the foreign recorded path")
+	assert.NotContains(t, result.Orphans, "task-foreign",
+		"a terminal local worktree must not be misclassified as an orphan")
+}
+
+// TestReconcile_StaleClaimIsOrphanNotBound_REQ_LNGHZN_S5_T2 (thread 4) covers a
+// claimed issue whose claim is past its TTL: it holds ClaimedBy but is no longer
+// live, so its worktree is an Orphan, not Bound. Pre-fix, any non-empty ClaimedBy
+// was treated as healthy with no TTL check.
+func TestReconcile_StaleClaimIsOrphanNotBound_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []Meta{
+		{Path: "/repo/.worktrees/task-stale", Branch: "task/task-stale"},
+	}
+	// Claimed at t=100 with a 1-minute TTL; now is well past 100+60=160.
+	now := time.Unix(100_000, 0)
+	issues := map[string]*materialize.Issue{
+		"task-stale": {
+			ID:           "task-stale",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-1",
+			ClaimedAt:    100,
+			ClaimTTL:     1,
+			WorktreePath: "/repo/.worktrees/task-stale",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, now)
+
+	assert.Contains(t, result.Orphans, "task-stale", "a claim past its TTL is an orphan")
+	assert.NotContains(t, result.BoundWorktrees, "task-stale", "a stale claim must not be bound")
+}
+
+// TestReconcile_FreshClaimStillBound_REQ_LNGHZN_S5_T2 is the companion to the
+// stale case: a claim within its TTL stays Bound.
+func TestReconcile_FreshClaimStillBound_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []Meta{
+		{Path: "/repo/.worktrees/task-fresh", Branch: "task/task-fresh"},
+	}
+	// Claimed at t=100 with a 60-minute TTL; now is well within 100+3600.
+	now := time.Unix(200, 0)
+	issues := map[string]*materialize.Issue{
+		"task-fresh": {
+			ID:           "task-fresh",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-1",
+			ClaimedAt:    100,
+			ClaimTTL:     60,
+			WorktreePath: "/repo/.worktrees/task-fresh",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, now)
+
+	assert.Contains(t, result.BoundWorktrees, "task-fresh")
+	assert.NotContains(t, result.Orphans, "task-fresh")
 }
 
 // TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2 is the contract-named acceptance test:
@@ -399,7 +488,7 @@ func TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-11": {ID: "task-11", Status: ops.StatusMerged, ClaimedBy: "worker-1", WorktreePath: "/repo/.worktrees/task-11"},
 	}
 
-	result := Reconcile(worktrees, issues)
+	result := Reconcile(worktrees, issues, testNow)
 
 	assert.Contains(t, result.GCRemovalSet, "task-11")
 	assert.NotContains(t, result.BoundWorktrees, "task-11")
