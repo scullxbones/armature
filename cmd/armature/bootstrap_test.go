@@ -1909,6 +1909,11 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	firstCount := strings.Count(excludeContent, ".armature/")
 	assert.Equal(t, 1, firstCount, "should have exactly one .armature/ entry")
 
+	// .worktrees/ (where `arm claim` provisions linked worktrees) must also be
+	// excluded so `git add .` never stages them as gitlinks (finding #4).
+	assert.Contains(t, excludeContent, ".worktrees/", ".git/info/exclude should contain .worktrees/")
+	assert.Equal(t, 1, strings.Count(excludeContent, ".worktrees/"), "should have exactly one .worktrees/ entry")
+
 	// Run bootstrap again: the collapsed layout is already the steady state,
 	// so this must be a true idempotent no-op.
 	cmd2 := newRootCmd()
@@ -1920,6 +1925,7 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	require.NoError(t, readErr2)
 	excludeContent2 := string(content2)
 	assert.Equal(t, 1, strings.Count(excludeContent2, ".armature/"), "should still have exactly one .armature/ entry after second run (idempotent)")
+	assert.Equal(t, 1, strings.Count(excludeContent2, ".worktrees/"), "should still have exactly one .worktrees/ entry after second run (idempotent)")
 }
 
 // TestCopyRecursiveDoesNotOverwriteExistingFiles_P2 verifies that copyRecursive does not overwrite

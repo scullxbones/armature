@@ -89,6 +89,31 @@ func TestApplyTransition_NoWorktreePathPreservesExisting_REQ_LNGHZN_S5_T1(t *tes
 		"a normal transition must not clear the existing WorktreePath")
 }
 
+// TestApplyTransition_ClearWorktreePathRestoresEmpty_REQ_LNGHZN_S5_T1 verifies
+// that a transition op carrying ClearWorktreePath restores the issue's
+// WorktreePath to empty. This is the claim-rollback case where the pre-claim
+// path was empty (a first claim with no pre-existing worktree): an empty
+// Payload.WorktreePath alone is indistinguishable from "no change", so without
+// the explicit clear-signal the rollback would silently leave the issue pointing
+// at the just-removed canonical path.
+func TestApplyTransition_ClearWorktreePathRestoresEmpty_REQ_LNGHZN_S5_T1(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	// Claim overwrites the (empty) WorktreePath with the canonical path.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, WorktreePath: "/repo/.worktrees/task-01"}}))
+	require.Equal(t, "/repo/.worktrees/task-01", state.Issues["task-01"].WorktreePath)
+
+	// Rollback restores the pre-claim path, which was empty: ClearWorktreePath
+	// must win over the (absent) WorktreePath and zero the field.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusInProgress, ClearWorktreePath: true}}))
+	assert.Equal(t, "", state.Issues["task-01"].WorktreePath,
+		"ClearWorktreePath must restore the WorktreePath to empty")
+}
+
 func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T) {
 	t.Parallel()
 	state := NewState()

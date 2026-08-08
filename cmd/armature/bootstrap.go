@@ -1389,6 +1389,13 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 	}
 
+	// Exclude the managed worktree directory (.worktrees/) from git regardless of
+	// layout. `arm claim` provisions linked worktrees at .worktrees/<issue-id>
+	// inside the repo; without this, a broad `git add .` stages them as gitlinks.
+	if err := updateGitExclude(repoPath, ".worktrees/", ""); err != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .worktrees/ from git tracking: %v\n", err)
+	}
+
 	// Set git config keys for current layout
 	// Note: armature.mode is intentionally not written here; nothing reads it anymore
 	// (dual-branch is the only mode for now; collapsed is T3+), so it would be dead legacy-compat state.

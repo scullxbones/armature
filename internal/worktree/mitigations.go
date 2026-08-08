@@ -22,6 +22,37 @@ func NormalizePath(path string) string {
 	return path
 }
 
+// NormalizePathAllowingMissing normalizes a path that may not exist on disk yet
+// (e.g. a ghost worktree whose directory was removed), keeping the result
+// symmetric with NormalizePath'd, EvalSymlinks-resolved managed roots. It resolves
+// the nearest existing ancestor via EvalSymlinks and re-joins the missing tail, so
+// a path reached through a symlinked repo root still shares its resolved prefix
+// with the managed root. Plain NormalizePath cannot do this for a missing leaf:
+// EvalSymlinks fails and the filepath.Abs fallback leaves the path symlinky,
+// defeating a HasPrefix scope test against a resolved root.
+func NormalizePathAllowingMissing(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	missing := ""
+	cur := abs
+	for {
+		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
+			if missing == "" {
+				return resolved
+			}
+			return filepath.Join(resolved, missing)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return abs // reached the filesystem root without resolving anything
+		}
+		missing = filepath.Join(filepath.Base(cur), missing)
+		cur = parent
+	}
+}
+
 // ApplyMitigations applies best-effort project-isolation for a newly provisioned
 // worktree. Its sole job is to keep the MAIN tree's tooling from walking the
 // worktree: if the main tree uses a go.work file, the worktree is removed from
