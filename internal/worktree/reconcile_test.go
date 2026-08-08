@@ -609,3 +609,48 @@ func TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.NotContains(t, result.BoundWorktrees, "task-11")
 	assert.NotContains(t, result.Orphans, "task-11")
 }
+
+func TestReconcile_GCSelectsRecordedPathAmongDuplicateMarkers_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	legacyPath := "/tmp/legacy-task-12"
+	canonicalPath := "/repo/.worktrees/task-12"
+	result := Reconcile([]Meta{
+		{Path: legacyPath, IssueID: "task-12"},
+		{Path: canonicalPath, IssueID: "task-12"},
+	}, map[string]*materialize.Issue{
+		"task-12": {ID: "task-12", Status: ops.StatusMerged, WorktreePath: canonicalPath},
+	}, testNow)
+
+	assert.Equal(t, []string{"task-12"}, result.GCRemovalSet)
+	require.Len(t, result.GCRemovals, 1)
+	assert.Equal(t, canonicalPath, result.GCRemovals[0].Path,
+		"GC must carry the exact recorded canonical path instead of looking up the first marker")
+}
+
+func TestReconcile_GCAmbiguousDuplicateMarkersRemovesNothing_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	result := Reconcile([]Meta{
+		{Path: "/repo/.worktrees/task-13-a", IssueID: "task-13"},
+		{Path: "/repo/.worktrees/task-13-b", IssueID: "task-13"},
+	}, map[string]*materialize.Issue{
+		"task-13": {ID: "task-13", Status: ops.StatusCancelled, WorktreePath: "/other/clone/task-13"},
+	}, testNow)
+
+	assert.Empty(t, result.GCRemovalSet)
+	assert.Empty(t, result.GCRemovals)
+	assert.Equal(t, []string{"task-13"}, result.GCAmbiguous)
+}
+
+func TestReconcile_WrongPathMarkerStillLeavesRecordedPathGhost_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	recordedPath := "/repo/.worktrees/task-14"
+	wrongPath := "/repo/.worktrees/legacy-task-14"
+	result := Reconcile([]Meta{{Path: wrongPath, IssueID: "task-14"}}, map[string]*materialize.Issue{
+		"task-14": {ID: "task-14", Status: ops.StatusInProgress, ClaimedBy: "worker-1", WorktreePath: recordedPath},
+	}, testNow)
+
+	assert.Equal(t, []string{"task-14"}, result.Orphans,
+		"a marker at the wrong path is not the live recorded worktree")
+	assert.Equal(t, []string{"task-14"}, result.Ghosts,
+		"a wrong-path marker must not hide the missing recorded path")
+}

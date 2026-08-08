@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -100,33 +101,120 @@ func removeWorktreeFromGoWork(content, repoRoot, worktreeRoot string) (string, b
 	inBlock := false
 	var out []string
 
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case !inBlock && strings.HasPrefix(trimmed, "use ("):
+	for _, rawLine := range strings.SplitAfter(content, "\n") {
+		line := strings.TrimSuffix(rawLine, "\n")
+		line = strings.TrimSuffix(line, "\r")
+		code := strings.TrimSpace(stripGoWorkComment(line))
+		if !inBlock && isUseBlockStart(code) {
 			inBlock = true
-			out = append(out, line)
-		case inBlock && trimmed == ")":
-			inBlock = false
-			out = append(out, line)
-		case inBlock:
-			if useDirectiveMatches(trimmed, repoRoot, target) {
-				changed = true
-				continue
-			}
-			out = append(out, line)
-		case strings.HasPrefix(trimmed, "use "):
-			if useDirectiveMatches(strings.TrimSpace(strings.TrimPrefix(trimmed, "use")), repoRoot, target) {
-				changed = true
-				continue
-			}
-			out = append(out, line)
-		default:
-			out = append(out, line)
+			out = append(out, rawLine)
+			continue
 		}
+		if inBlock && code == ")" {
+			inBlock = false
+			out = append(out, rawLine)
+			continue
+		}
+		if path, ok := parseGoWorkUsePath(code, inBlock); ok && useDirectiveMatches(path, repoRoot, target) {
+			changed = true
+			continue
+		}
+		out = append(out, rawLine)
 	}
 
-	return strings.Join(out, "\n"), changed
+	return strings.Join(out, ""), changed
+}
+
+func stripGoWorkComment(line string) string {
+	var quote byte
+	escaped := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' && quote == '"' {
+				escaped = true
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '"' || c == '`' {
+			quote = c
+			continue
+		}
+		if c == '/' && i+1 < len(line) && line[i+1] == '/' {
+			return line[:i]
+		}
+	}
+	return line
+}
+
+func isUseBlockStart(code string) bool {
+	return strings.HasPrefix(code, "use") && strings.TrimSpace(code[len("use"):]) == "("
+}
+
+func parseGoWorkUsePath(code string, inBlock bool) (string, bool) {
+	if code == "" || code == ")" {
+		return "", false
+	}
+	if !inBlock {
+		if !strings.HasPrefix(code, "use") {
+			return "", false
+		}
+		if len(code) > len("use") && code[len("use")] != ' ' && code[len("use")] != '\t' {
+			return "", false
+		}
+		code = strings.TrimSpace(code[len("use"):])
+		if code == "" || strings.HasPrefix(code, "(") {
+			return "", false
+		}
+	}
+	path, _, ok := parseGoWorkToken(code)
+	return path, ok
+}
+
+func parseGoWorkToken(code string) (string, string, bool) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", "", false
+	}
+	if code[0] == '"' || code[0] == '`' {
+		quote := code[0]
+		escaped := false
+		for i := 1; i < len(code); i++ {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if quote == '"' && code[i] == '\\' {
+				escaped = true
+				continue
+			}
+			if code[i] == quote {
+				raw := code[:i+1]
+				value, err := strconv.Unquote(raw)
+				if err != nil {
+					return "", "", false
+				}
+				return value, code[i+1:], true
+			}
+		}
+		return "", "", false
+	}
+	end := len(code)
+	for i, r := range code {
+		if r == ' ' || r == '\t' {
+			end = i
+			break
+		}
+	}
+	return code[:end], code[end:], true
 }
 
 // useDirectiveMatches reports whether a `use` path (relative to repoRoot or

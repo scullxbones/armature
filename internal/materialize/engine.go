@@ -190,6 +190,13 @@ func (s *State) applyTransition(op ops.Op) error {
 	case op.Payload.WorktreePath != "":
 		issue.WorktreePath = op.Payload.WorktreePath
 	}
+	if op.Payload.RestoreClaim {
+		issue.ClaimedBy = op.Payload.RestoreClaimedBy
+		issue.ClaimedAt = op.Payload.RestoreClaimedAt
+		issue.ClaimTTL = op.Payload.RestoreClaimTTL
+		issue.LastHeartbeat = op.Payload.RestoreLastHeartbeat
+		issue.LastClaimingWorkerActivity = op.Payload.RestoreLastClaimingWorkerActivity
+	}
 	if op.Payload.Outcome != "" {
 		issue.Outcome = op.Payload.Outcome
 	}

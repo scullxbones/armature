@@ -77,6 +77,27 @@ func TestApplyMitigations_GoWorkWithoutWorktree_Unchanged_REQ_LNGHZN_S5_T3(t *te
 	assert.Equal(t, goWork, string(content))
 }
 
+func TestApplyMitigations_ParsesQuotedPathsAndTrailingComments_REQ_LNGHZN_S5_T3(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	worktreeRoot := filepath.Join(repoRoot, ".worktrees", "task with space")
+	content := "go 1.26\n\nuse (\n\t\"./.worktrees/task with space\" // managed\n\t./other // unrelated\n)\nuse \"./.worktrees/task with space\" // duplicate\n"
+	newContent, changed := removeWorktreeFromGoWork(content, repoRoot, worktreeRoot)
+	assert.True(t, changed)
+	assert.NotContains(t, newContent, "task with space")
+	assert.Contains(t, newContent, "./other // unrelated")
+}
+
+func TestApplyMitigations_PreservesCRLFWhenRemovingQuotedPath_REQ_LNGHZN_S5_T3(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	worktreeRoot := filepath.Join(repoRoot, ".worktrees", "task-crlf")
+	content := "go 1.26\r\n\r\nuse (\r\n\t\"./.worktrees/task-crlf\" // managed\r\n\t./other\r\n)\r\n"
+	newContent, changed := removeWorktreeFromGoWork(content, repoRoot, worktreeRoot)
+	assert.True(t, changed)
+	assert.Equal(t, "go 1.26\r\n\r\nuse (\r\n\t./other\r\n)\r\n", newContent)
+}
+
 // TestNormalizePath_NonexistentFallsBackToAbs_REQ_LNGHZN_S5_T3 verifies that a
 // non-existent path still normalizes to an absolute path rather than failing.
 func TestNormalizePath_NonexistentFallsBackToAbs_REQ_LNGHZN_S5_T3(t *testing.T) {

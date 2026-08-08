@@ -120,24 +120,12 @@ func TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4(t *testing.T) {
 	assert.Equal(t, "task/task-01", strings.TrimSpace(string(claimedBranchData)))
 }
 
-// TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S4
-// verifies the LNGHZN-S4 fix: the existing-worktree claim path must NOT
-// assume the worktree's current HEAD is the true fork point just because
-// it's an existing-worktree registration. That assumption ("at registration
-// time the worktree has not yet diverged, so its tip IS the true fork
-// point") is false whenever the worktree was cut from a branch that already
-// contains sibling-task commits (as here: task/task-01 is branched from
-// story-branch, which already has a sibling commit on top of main) — HEAD
-// has, in fact, diverged from the resolvable candidate base (main) by one
-// commit. Rather than skip persistence entirely in this case (the prior,
-// overly conservative behavior, which left the gate to fall back to a
-// default-branch merge-base and could still misattribute sibling commits),
-// the fix computes the ACTUAL fork point — merge-base(HEAD, main) — and
-// persists THAT unconditionally, correctly excluding the sibling commit.
+// TestClaimExistingWorktreeDoesNotInventForkPointWhenDiverged_REQ_LNGHZN_S5
+// verifies that registering a pre-existing worktree does not turn a current
+// default-branch merge-base into trusted claim provenance. The delivery gate
+// must remain fail-closed until the original claim's metadata is available.
 func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
-
-	mainTipSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
 	// Simulate a story branch already containing sibling-task commits, as the
 	// coordinator workflow would set up.
@@ -169,9 +157,8 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 	_, err := getCmd.Output()
 	assert.Error(t, err, "parent branch config should NOT be recorded for the existing-worktree claim path")
 
-	// The base-commit file MUST be recorded, and must contain the computed
-	// fork point (merge-base against main), NOT the worktree's raw diverged
-	// HEAD (which would include the sibling commit).
+	// No provenance may be synthesized from the default branch. The gate must
+	// explicitly reject this legacy/pre-existing worktree instead.
 	gitPath := filepath.Join(worktreePath, ".git")
 	gitFileContent, err := os.ReadFile(gitPath)
 	require.NoError(t, err)
@@ -179,10 +166,11 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
-	require.NoError(t, err, "base commit file should be recorded with the computed fork point even when HEAD has diverged")
-	assert.Equal(t, mainTipSHA, strings.TrimSpace(string(baseCommitData)),
-		"persisted base-commit must be the merge-base fork point (main tip), excluding the sibling commit")
+	_, err = os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	assert.Error(t, err, "existing worktree must not receive a guessed base commit")
+	_, err = deliverygate.GatedBaseCommit(worktreePath, "task-01", adapters.New(worktreePath))
+	assert.Error(t, err, "delivery gate must fail closed when legacy provenance is missing")
+	assert.Contains(t, err.Error(), "no recorded base commit")
 }
 
 // TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4
@@ -232,18 +220,11 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 
 	run(t, worktreePath, "git", "rebase", defaultBranch)
 
-	worktreeGit := adapters.New(worktreePath)
-	resolved, err := deliverygate.ResolveBaseCommit(worktreePath, worktreeGit)
-	require.NoError(t, err)
-
-	// Known gap: resolved is the STALE pre-rebase fork point, not the new
-	// default-branch tip a fresh claim would compute. If this ever starts asserting
-	// newDefaultTipSHA instead, the gap has been closed and this test (and its
-	// doc comment) should be updated/removed accordingly.
-	assert.Equal(t, defaultTipSHA, resolved,
-		"documents known gap: existing-worktree claim path's recorded base commit does not self-correct on rebase")
-	assert.NotEqual(t, newDefaultTipSHA, resolved,
-		"if this fails, the DynamicBaseCommit self-correcting tier has started working for this path — update this test")
+	_, err := deliverygate.GatedBaseCommit(worktreePath, "task-01", adapters.New(worktreePath))
+	assert.Error(t, err, "pre-existing worktree provenance must fail closed after rebase")
+	assert.Contains(t, err.Error(), "no recorded base commit")
+	_ = defaultTipSHA
+	_ = newDefaultTipSHA
 }
 
 // TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4 verifies
@@ -255,8 +236,6 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 // for.
 func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
-
-	headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
 	// Manually create the worktree on the expected task branch directly from
 	// main's current tip (no divergence) BEFORE claiming, so `arm claim`
@@ -272,16 +251,9 @@ func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t 
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
-	gitPath := filepath.Join(worktreePath, ".git")
-	gitFileContent, err := os.ReadFile(gitPath)
-	require.NoError(t, err)
-	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
-	if !filepath.IsAbs(actualGitDir) {
-		actualGitDir = filepath.Join(worktreePath, actualGitDir)
-	}
-	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
-	require.NoError(t, err, "base commit file should be recorded when the worktree has not diverged from the candidate base")
-	assert.Equal(t, headSHA, strings.TrimSpace(string(baseCommitData)))
+	_, err := deliverygate.GatedBaseCommit(worktreePath, "task-01", adapters.New(worktreePath))
+	assert.Error(t, err, "a pre-existing worktree must not receive a guessed base commit")
+	assert.Contains(t, err.Error(), "no recorded base commit")
 }
 
 // TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_REQ_LNGHZN_S4
@@ -403,9 +375,8 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 		assert.NotContains(t, content, "\n", "base-commit file must contain the raw SHA with no trailing newline or extra data")
 	})
 
-	t.Run("existing worktree path (also covers stale-claim takeover)", func(t *testing.T) {
+	t.Run("existing worktree path preserves missing provenance", func(t *testing.T) {
 		repo := setupRepoWithParentAndTask(t)
-		headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
 		// Pre-create the worktree at the expected branch/HEAD so `arm claim`
 		// takes the existing-worktree path instead of createWorktreeAndBranch.
@@ -423,10 +394,8 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, cmd.Execute())
 
-		content := readBaseCommitFile(t, worktreePath)
-		assert.Equal(t, headSHA, strings.TrimSpace(content),
-			"existing-worktree path must persist HEAD as the base-commit in the same shape as the fresh-worktree path")
-		assert.NotContains(t, content, "\n", "base-commit file must contain the raw SHA with no trailing newline or extra data")
+		_, err := deliverygate.GatedBaseCommit(worktreePath, "task-01", adapters.New(worktreePath))
+		assert.Error(t, err, "existing-worktree path must not synthesize branch-point metadata")
 	})
 }
 
@@ -745,6 +714,8 @@ func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
 	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+	baseSHA := strings.TrimSpace(runGitOutput(t, legacyPath, "rev-parse", "HEAD"))
+	require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, baseSHA), "adoption requires original claim provenance")
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
 	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
@@ -753,6 +724,63 @@ func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *
 	assert.DirExists(t, canonicalPath)
 	assert.NoDirExists(t, legacyPath)
 	assert.Equal(t, "task/task-01", strings.TrimSpace(runOutput(t, canonicalPath, "branch", "--show-current")))
+}
+
+func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+	parentTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	run(t, repo, "git", "checkout", "-b", "story-branch")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "sibling.go"), []byte("package sibling\n"), 0o644))
+	run(t, repo, "git", "add", "sibling.go")
+	run(t, repo, "git", "commit", "-m", "feat(sibling): add adopted branch work")
+
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	run(t, repo, "git", "branch", "task/task-01", "story-branch")
+	run(t, repo, "git", "worktree", "add", legacyPath, "task/task-01")
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+	require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, parentTip), "seed trusted branch-point metadata before adoption")
+
+	// Move the coordinator to an unrelated tip before adoption. Adoption must
+	// derive its branch point from the adopted worktree, not this checkout.
+	run(t, repo, "git", "checkout", parentBranch)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "coordinator.go"), []byte("package coordinator\n"), 0o644))
+	run(t, repo, "git", "add", "coordinator.go")
+	run(t, repo, "git", "commit", "-m", "chore: advance coordinator")
+	coordinatorTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	require.NotEqual(t, parentTip, coordinatorTip)
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	require.NoError(t, err)
+
+	gitPath, err := resolveWorktreeGitDir(canonicalPath)
+	require.NoError(t, err)
+	baseData, err := os.ReadFile(filepath.Join(gitPath, baseCommitFileName))
+	require.NoError(t, err, "adopted worktree must record a branch point")
+	assert.Equal(t, parentTip, strings.TrimSpace(string(baseData)),
+		"adopted worktree base must come from the adopted branch, not coordinator HEAD")
+	assert.NotEqual(t, coordinatorTip, strings.TrimSpace(string(baseData)))
+
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", parentBranchConfigKey("task/task-01"))
+	getCmd.Dir = repo
+	_, err = getCmd.Output()
+	assert.Error(t, err, "adoption must not invent a parent branch from the coordinator checkout")
+}
+
+func TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no recorded branch-point provenance")
+	assert.DirExists(t, legacyPath, "failed adoption must restore the original worktree")
+	assert.NoDirExists(t, canonicalPath)
 }
 
 // TestClaimDoesNotCreateWorktreeWhenOverlapFails verifies that when claim fails due to
@@ -1078,6 +1106,7 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
 	require.NoError(t, err)
 	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed after first claim")
+	before := issue
 
 	// Now break the worktree's .git file by replacing it with a pointer to a non-existent directory.
 	// This will cause updateIssueIDFile to fail on the re-claim attempt.
@@ -1100,6 +1129,12 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 		"task should remain claimed after failed worktree retry (not be released to open)")
 	assert.NotEqual(t, ops.StatusOpen, issueAfter.Status,
 		"task must NOT transition to open on worktree retry failure when it was already claimed")
+	assert.Equal(t, before.ClaimedBy, issueAfter.ClaimedBy)
+	assert.Equal(t, before.ClaimedAt, issueAfter.ClaimedAt)
+	assert.Equal(t, before.ClaimTTL, issueAfter.ClaimTTL)
+	assert.Equal(t, before.LastHeartbeat, issueAfter.LastHeartbeat)
+	assert.Equal(t, before.LastClaimingWorkerActivity, issueAfter.LastClaimingWorkerActivity)
+	assert.Equal(t, before.WorktreePath, issueAfter.WorktreePath)
 }
 
 // TestClaimRollsBackStaleTakeoverToOpen verifies the P2 bug fix:

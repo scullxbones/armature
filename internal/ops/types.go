@@ -82,6 +82,17 @@ type Payload struct {
 	// claim
 	TTL          int    `json:"ttl,omitempty"`
 	WorktreePath string `json:"worktree_path,omitempty"`
+	// RestoreClaim marks a transition as an explicit compensating claim
+	// snapshot. It is used by a failed claim retry to restore every lease field
+	// captured before the retry appended its claim op. A marker is required so
+	// zero values are still meaningful and ordinary transitions remain
+	// backward-compatible.
+	RestoreClaim                      bool   `json:"restore_claim,omitempty"`
+	RestoreClaimedBy                  string `json:"restore_claimed_by,omitempty"`
+	RestoreClaimedAt                  int64  `json:"restore_claimed_at,omitempty"`
+	RestoreClaimTTL                   int    `json:"restore_claim_ttl,omitempty"`
+	RestoreLastHeartbeat              int64  `json:"restore_last_heartbeat,omitempty"`
+	RestoreLastClaimingWorkerActivity int64  `json:"restore_last_claiming_worker_activity,omitempty"`
 	// ClearWorktreePath is an explicit clear-signal for a transition op (used by
 	// claim rollback): when true, applyTransition sets the issue's WorktreePath
 	// back to empty. This distinguishes "restore to empty" from "no change" —

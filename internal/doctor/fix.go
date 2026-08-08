@@ -56,27 +56,27 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //   - in-progress + claim-expired (D2 — Orphaned Claim + Starvation): the claiming
 //     worker went silent mid-work; transition to blocked pending manual investigation
 //     rather than silently discarding in-flight work.
-//   - claimed/in-progress + missing worktree: `arm claim --worktree` always creates
-//     the task's canonical worktree as part of a successful claim (at
-//     `.worktrees/<issue-id>`), so a claimed or in-progress issue whose canonical
-//     path has no live marker-bound worktree registered against repoPath indicates
-//     the worktree was torn down (or its git
-//     metadata corrupted) out from under an active claim — the same class of failure
-//     this fix pass exists to recover from, independent of whether the TTL has
-//     expired yet. This check is skipped entirely — for every issue, not just the
-//     ones it would otherwise flag — whenever the marker-aware inventory cannot
-//     positively confirm which worktrees are live (repoPath empty, not a git repo,
-//     or any other git failure). Treating "couldn't determine" the same as "confirmed
-//     missing" would misfire on every currently claimed/in-progress issue in the
-//     graph from a single transient git error — exactly the mass-false-positive risk
-//     this fix pass exists to avoid, not reintroduce. This check is further scoped to
-//     claims owned by workerID (the worker running doctor --fix): `git worktree list`
-//     only reports worktrees registered in the local repository doctor is running
-//     against, not worktrees on other machines/clones. In a coordinator clone, or any
-//     clone that has merely pulled another worker's claim ops, every other worker's
-//     claim would look like it has no live worktree here — only the current worker's
-//     own local git state can be trusted to say "the worktree is really gone" rather
-//     than "I just don't have visibility into another machine's worktree".
+//   - claimed/in-progress + missing worktree: `arm claim --worktree` records the
+//     task's worktree path (the canonical `.worktrees/<issue-id>` path for new
+//     claims), so a claimed or in-progress issue whose recorded path has no live
+//     marker-bound worktree registered against repoPath indicates the worktree was
+//     torn down (or its git metadata corrupted) out from under an active claim —
+//     the same class of failure this fix pass exists to recover from, independent
+//     of whether the TTL has expired yet. This check is skipped entirely — for
+//     every issue, not just the ones it would otherwise flag — whenever the
+//     marker-aware inventory cannot positively confirm which worktrees are live
+//     (repoPath empty, not a git repo, or any other git failure). Treating
+//     "couldn't determine" the same as "confirmed missing" would misfire on every
+//     currently claimed/in-progress issue in the graph from a single transient git
+//     error — exactly the mass-false-positive risk this fix pass exists to avoid,
+//     not reintroduce. This check is further scoped to claims owned by workerID
+//     (the worker running doctor --fix): `git worktree list` only reports worktrees
+//     registered in the local repository doctor is running against, not worktrees
+//     on other machines/clones. In a coordinator clone, or any clone that has
+//     merely pulled another worker's claim ops, every other worker's claim would
+//     look like it has no live worktree here — only the current worker's own local
+//     git state can be trusted to say "the worktree is really gone" rather than
+//     "I just don't have visibility into another machine's worktree".
 //
 // Each action is expressed purely as ops to append; PlanFixes never mutates or
 // removes existing op log lines. Calling PlanFixes again after ApplyFixes has
@@ -113,9 +113,14 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 	}
 
 	if repoPath != "" {
-		inventory, err := worktree.ListManaged(repoPath)
+		// List the complete local inventory here rather than only the canonical
+		// .worktrees root. Claims made before managed auto-provisioning can carry
+		// an explicit legacy WorktreePath outside that root; if that path is still
+		// marker-bound and registered in this clone, it is live and must not be
+		// repaired as a missing worktree.
+		inventory, err := worktree.List(repoPath)
 		if err != nil {
-			// A failed inventory cannot prove a missing canonical worktree.
+			// A failed inventory cannot prove a missing recorded worktree.
 			return actions
 		}
 		for id, issue := range allIssues {
@@ -128,10 +133,19 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			if issue.ClaimedBy != workerID {
 				continue
 			}
-			canonicalPath := worktree.NormalizePath(worktree.CanonicalPath(repoPath, id))
+			canonicalPath := worktree.NormalizePathAllowingMissing(worktree.CanonicalPath(repoPath, id))
 			found := false
 			for _, item := range inventory {
-				if item.IssueID == id && worktree.NormalizePath(item.Path) == canonicalPath {
+				expectedPath := canonicalPath
+				if issue.WorktreePath != "" {
+					expectedPath = worktree.NormalizePathAllowingMissing(issue.WorktreePath)
+				} else if !worktree.IsUnderRoot(item.Path, worktree.CanonicalRoot(repoPath)) {
+					// Without a recorded path, the managed lifecycle contract
+					// only promises the canonical location. Legacy arbitrary
+					// worktrees are not enough evidence to suppress remediation.
+					continue
+				}
+				if item.IssueID == id && worktree.NormalizePathAllowingMissing(item.Path) == expectedPath {
 					found = true
 					break
 				}

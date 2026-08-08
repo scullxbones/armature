@@ -132,16 +132,10 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 // skipped as a no-op (worktreeSkipped). A returned error is a genuine removal
 // failure and is orthogonal to the outcome (outcome is worktreeSkipped on error).
 func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, errWriter io.Writer) (worktreeRemoveOutcome, error) {
-	worktreePath, gitDir, binding, ok := resolveIssueWorktree(repoPath, issue)
+	worktreePath, _, binding, ok := resolveIssueWorktree(repoPath, issue)
 	if !ok {
 		// No branch for this type, worktree missing, or git dir unresolvable; nothing to remove.
 		return worktreeSkipped, nil
-	}
-
-	// Check for pass-through entries before doing anything else, so the warning
-	// is emitted regardless of whether the worktree gets removed.
-	if readHookLogForPassThroughs(gitDir) {
-		_, _ = fmt.Fprintf(errWriter, "Warning: %s has pass-through entries in armature-hook.log\n", issue.ID)
 	}
 
 	// Verify binding before removal: if the armature-issue-id file is missing or
@@ -153,6 +147,52 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 			worktreePath, branchName, issue.ID, binding)
 		return worktreeSkipped, nil
 	}
+	return removeWorktreeAtPathTracked(repoPath, issue, worktreePath, errWriter)
+}
+
+// removeWorktreeAtPathTracked removes exactly selectedPath after refreshing the
+// inventory and revalidating its marker binding. GC passes the path selected by
+// reconciliation; it must not call FindByIssue again because a legacy and a
+// canonical worktree can share one marker identity.
+func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selectedPath string, errWriter io.Writer) (worktreeRemoveOutcome, error) {
+	items, err := worktree.List(repoPath)
+	if err != nil {
+		return worktreeSkipped, fmt.Errorf("revalidate worktree inventory: %w", err)
+	}
+	var selected worktree.Meta
+	found := false
+	for _, item := range items {
+		if worktree.NormalizePath(item.Path) == worktree.NormalizePath(selectedPath) {
+			selected = item
+			found = true
+			break
+		}
+	}
+	if !found {
+		return worktreeSkipped, nil
+	}
+	if selected.IssueID != issue.ID {
+		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is now bound to %s, not %s; skipping removal\n",
+			selected.Path, selected.IssueID, issue.ID)
+		return worktreeSkipped, nil
+	}
+
+	gitDir, err := resolveWorktreeGitDir(selected.Path)
+	if err != nil {
+		return worktreeSkipped, fmt.Errorf("resolve selected worktree %s: %w", selected.Path, err)
+	}
+	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+	if err != nil {
+		return worktreeSkipped, fmt.Errorf("revalidate issue binding for %s: %w", selected.Path, err)
+	}
+	if binding != issue.ID {
+		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is bound to %s, not %s; skipping removal\n",
+			selected.Path, binding, issue.ID)
+		return worktreeSkipped, nil
+	}
+	if readHookLogForPassThroughs(gitDir) {
+		_, _ = fmt.Fprintf(errWriter, "Warning: %s has pass-through entries in armature-hook.log\n", issue.ID)
+	}
 
 	// Clear persisted branch-point metadata (parent-branch config, base-commit
 	// file) BEFORE removing the worktree: resolveWorktreeGitDir needs the
@@ -162,12 +202,15 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 	// writeBaseCommitFileIfAbsent would never overwrite it with the fresh,
 	// correct parent for a branch name later reused with a genuinely
 	// different parent. Best-effort: never blocks the merged-confirmation flow.
-	branchName := deriveBranchName(issue.Type, issue.ID)
+	branchName := strings.TrimPrefix(selected.Branch, "refs/heads/")
+	if branchName == "" || branchName == "detached" {
+		branchName = deriveBranchName(issue.Type, issue.ID)
+	}
 	gitClient := adapters.New(repoPath)
-	clearBranchPointMetadata(gitClient, worktreePath, branchName)
+	clearBranchPointMetadata(gitClient, selected.Path, branchName)
 
 	// Remove the worktree.
-	if err := gitClient.RemoveWorktree(worktreePath); err != nil {
+	if err := gitClient.RemoveWorktree(selected.Path); err != nil {
 		return worktreeSkipped, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
 
