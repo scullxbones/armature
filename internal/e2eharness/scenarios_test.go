@@ -35,7 +35,7 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 		go func(i int, worker string) {
 			defer wg.Done()
 			raceResults[i].out, raceResults[i].err = h.RunArmIn(worker,
-				"claim", "--repo", worker, "--issue", "RACE-001", "--worktree", filepath.Join(h.TempDir, "race-worktree-"+string(rune('a'+i))))
+				"claim", "--repo", worker, "--issue", "RACE-001", "--worktree")
 		}(i, worker)
 	}
 	wg.Wait()
@@ -73,7 +73,7 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	require.NoError(t, err, "second race recovery show failed: %s", out)
 	assert.Equal(t, authoritativeOwner, strings.TrimSpace(out), "independent replays must retain one authoritative winner")
 
-	out, err = h.RunArmIn(workerB, "claim", "--repo", workerB, "--issue", "STALE-001", "--worktree", filepath.Join(h.TempDir, "stale-worktree-b"))
+	out, err = h.RunArmIn(workerB, "claim", "--repo", workerB, "--issue", "STALE-001", "--worktree")
 	require.NoError(t, err, "reclaim after TTL expiry failed: %s", out)
 	assert.Contains(t, out, "STALE-001")
 }
@@ -90,8 +90,7 @@ func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	require.NoError(t, err, "initial coordinator worker-init failed: %s", out)
 
 	// The first coordinator gets only the first work item out before it crashes.
-	firstWorktree := filepath.Join(h.TempDir, "wave-one-worktree")
-	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "WAVE-001", "--worktree", firstWorktree)
+	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "WAVE-001", "--worktree")
 	require.NoError(t, err, "initial wave dispatch failed: %s", out)
 	assertScenarioStatus(t, h, h.WorkDir, "WAVE-001", "claimed")
 	assertScenarioStatus(t, h, h.WorkDir, "WAVE-002", "open")
@@ -107,8 +106,7 @@ func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	assertScenarioStatus(t, h, recoveryDir, "WAVE-001", "claimed")
 	assertScenarioStatus(t, h, recoveryDir, "WAVE-002", "open")
 
-	secondWorktree := filepath.Join(h.TempDir, "wave-two-worktree")
-	out, err = h.RunArmIn(recoveryDir, "claim", "--repo", recoveryDir, "--issue", "WAVE-002", "--worktree", secondWorktree)
+	out, err = h.RunArmIn(recoveryDir, "claim", "--repo", recoveryDir, "--issue", "WAVE-002", "--worktree")
 	require.NoError(t, err, "recovered coordinator must dispatch remaining wave item: %s", out)
 	assertScenarioStatus(t, h, recoveryDir, "WAVE-002", "claimed")
 	assertScenarioStatus(t, h, recoveryDir, "WAVE-001", "claimed")

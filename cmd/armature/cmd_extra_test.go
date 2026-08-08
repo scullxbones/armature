@@ -577,7 +577,7 @@ func TestListCmd_Group_WithStatusFilter(t *testing.T) {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02", "--worktree", filepath.Join(t.TempDir(), "claim-task-02-wt")})
+	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02", "--worktree"})
 	require.NoError(t, cmd2.Execute())
 
 	out, err := runTrls(t, repo, "--format", "human", "list", "--group", "--status", "open")
@@ -1112,7 +1112,7 @@ func TestListCmd_StatusFilter(t *testing.T) {
 	// Transition task-01 to done so we have two distinct statuses
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "completed", "--force")
 	require.NoError(t, err)
@@ -1563,13 +1563,13 @@ func TestListTerminal(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition task-cancel to cancelled.
-	_, err = runTrls(t, repo, "claim", "task-cancel", "--worktree", filepath.Join(t.TempDir(), "claim-task-cancel-wt"))
+	_, err = runTrls(t, repo, "claim", "task-cancel", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-cancel", "--to", "cancelled", "--outcome", "not needed", "--force")
 	require.NoError(t, err)
 
 	// Transition task-done to done; on a repo with git history this becomes merged.
-	_, err = runTrls(t, repo, "claim", "task-done", "--worktree", filepath.Join(t.TempDir(), "claim-task-done-wt"))
+	_, err = runTrls(t, repo, "claim", "task-done", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-done", "--to", "done", "--skip-delivery-gate", "--outcome", "completed", "--force")
 	require.NoError(t, err)
@@ -1603,7 +1603,7 @@ func TestReadyExplain(t *testing.T) {
 	_, err = runTrls(t, repo, "link", "--source", "task-blocked", "--dep", "task-blocker")
 	require.NoError(t, err)
 	// Claim task-blocker so it is in-progress (not merged) — task-blocked remains not ready.
-	_, err = runTrls(t, repo, "claim", "task-blocker", "--worktree", filepath.Join(t.TempDir(), "claim-task-blocker-wt"))
+	_, err = runTrls(t, repo, "claim", "task-blocker", "--worktree")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "ready", "--explain")
@@ -1755,7 +1755,7 @@ func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task, then cancel it so an OpTransition with StatusCancelled is recorded.
-	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "wt-01"))
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled")
 	require.NoError(t, err)
@@ -1777,7 +1777,7 @@ func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
 	)
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "claim", "task-02",
-		"--worktree", filepath.Join(t.TempDir(), "wt-task-02"),
+		"--worktree",
 	)
 	require.NoError(t, err)
 
@@ -1802,7 +1802,7 @@ func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
 
 	// Claim task-01 (child of story-01) then transition it to done.
 	_, err = runTrls(t, repo, "claim", "task-01",
-		"--worktree", filepath.Join(t.TempDir(), "wt-task-01"),
+		"--worktree",
 	)
 	require.NoError(t, err)
 
