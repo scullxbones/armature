@@ -1,4 +1,4 @@
-# ADR 0004: Managed Worktree Auto-Provisioning with Boolean Flag
+# ADR 0013: Managed Worktree Auto-Provisioning with Boolean Flag
 
 ## Status
 

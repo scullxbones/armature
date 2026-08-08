@@ -17,6 +17,7 @@ import (
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // resolveWorktreeGitDir resolves the actual git directory for a worktree path.
@@ -185,6 +186,43 @@ func checkoutBranchInWorktree(worktreePath, branchName string) error {
 	return nil
 }
 
+// priorClaimState captures the issue's claim-related fields as they were before
+// this claim's op was appended, so a failed post-claim worktree setup step can
+// decide whether to keep the prior status or release the claim.
+type priorClaimState struct {
+	status                 string
+	claimedBy              string
+	claimedAt              int64
+	lastHeartbeat          int64
+	claimTTL               int
+	claimingWorkerActivity int64
+}
+
+// rollbackClaim releases (or restores) the claim after a post-claim worktree
+// setup step fails, then returns the error to surface. A same-worker ACTIVE
+// claim keeps its prior status; a stale same-worker claim or a different-worker
+// takeover is released to open. opLabel names the failed step in the returned
+// error. Shared by the create-worktree and update-issue-ID failure paths.
+func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel string, cause error, prior priorClaimState) error {
+	rollbackStatus := ops.StatusOpen
+	priorWasActive := prior.claimedBy == workerID &&
+		!claimPkg.IsClaimStale(prior.claimedAt, prior.lastHeartbeat, prior.claimingWorkerActivity, prior.claimTTL, nowEpoch())
+	if priorWasActive {
+		rollbackStatus = prior.status
+	}
+	rollbackOp := ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{To: rollbackStatus},
+	}
+	if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
+		return fmt.Errorf("%s: %w; also failed to push claim release: %v (manual cleanup may be needed)", opLabel, cause, rbErr)
+	}
+	return fmt.Errorf("%s: %w (claim released; retry arm claim)", opLabel, cause)
+}
+
 // createWorktreeAndBranch creates a new worktree and branches for a task/bug.
 // It uses a git client to create a worktree at the given path with a derived branch name.
 // If the branch is already checked out in another worktree or if worktree creation fails,
@@ -236,6 +274,15 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// trips git's "branch already checked out" guard.
 	if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
 		return fmt.Errorf("checkout branch in worktree: %w", err)
+	}
+
+	// Best-effort project-isolation mitigation: if the MAIN tree uses a go.work
+	// file, drop this worktree from its `use` directives so the main tree's
+	// gopls does not walk the worktree. A no-op when there is no main-tree
+	// go.work (the common case). Non-fatal: a failure only degrades IDE
+	// ergonomics, so it must never fail the claim.
+	if err := worktree.ApplyMitigations(repoPath, worktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: apply worktree mitigations: %v\n", err)
 	}
 
 	// Create the issue ID file in the worktree's .git directory
@@ -567,12 +614,14 @@ armature-issue-id file if the worktree already exists.`,
 			// - Same-worker active claim (priorClaimedBy == workerID && !stale): keep prior status
 			// - Stale same-worker claim (priorClaimedBy == workerID && stale): rollback to StatusOpen
 			// - Different-worker takeover (priorClaimedBy != workerID): rollback to StatusOpen
-			priorStatus := issue.Status
-			priorClaimedBy := issue.ClaimedBy
-			priorClaimedAt := issue.ClaimedAt
-			priorLastHeartbeat := issue.LastHeartbeat
-			priorClaimTTL := issue.ClaimTTL
-			priorClaimingWorkerActivity := issue.LastClaimingWorkerActivity
+			prior := priorClaimState{
+				status:                 issue.Status,
+				claimedBy:              issue.ClaimedBy,
+				claimedAt:              issue.ClaimedAt,
+				lastHeartbeat:          issue.LastHeartbeat,
+				claimTTL:               issue.ClaimTTL,
+				claimingWorkerActivity: issue.LastClaimingWorkerActivity,
+			}
 
 			index := store.Index()
 			// Build a graph from the materialized state for ancestor/descendant checking
@@ -647,55 +696,13 @@ armature-issue-id file if the worktree already exists.`,
 			// validations pass and this worker has won the claim race.
 			if !worktreeExists {
 				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, *issue); err != nil {
-					// Worktree creation failed after winning the claim race.
-					// Determine rollback status based on whether this is a same-worker active claim or stale/takeover:
-					// - Same-worker ACTIVE claim (priorClaimedBy == workerID && !stale): restore priorStatus (keep the claim)
-					// - Same-worker STALE claim (priorClaimedBy == workerID && stale): rollback to StatusOpen (release)
-					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
-					rollbackStatus := ops.StatusOpen
-					priorWasActive := priorClaimedBy == workerID &&
-						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimingWorkerActivity, priorClaimTTL, nowEpoch())
-					if priorWasActive {
-						rollbackStatus = priorStatus
-					}
-					rollbackOp := ops.Op{
-						Type:      ops.OpTransition,
-						TargetID:  issueID,
-						Timestamp: nowEpoch(),
-						WorkerID:  workerID,
-						Payload:   ops.Payload{To: rollbackStatus},
-					}
-					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
-						return fmt.Errorf("create worktree: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
-					}
-					return fmt.Errorf("create worktree: %w (claim released; retry arm claim)", err)
+					return rollbackClaim(cmd, logPath, issueID, workerID, "create worktree", err, prior)
 				}
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-					// Task ID update failed after winning the claim race.
-					// Determine rollback status based on whether this is a same-worker active claim or stale/takeover:
-					// - Same-worker ACTIVE claim (priorClaimedBy == workerID && !stale): restore priorStatus (keep the claim)
-					// - Same-worker STALE claim (priorClaimedBy == workerID && stale): rollback to StatusOpen (release)
-					// - Different-worker takeover (priorClaimedBy != workerID or empty): rollback to StatusOpen (release)
-					rollbackStatus := ops.StatusOpen
-					priorWasActive := priorClaimedBy == workerID &&
-						!claimPkg.IsClaimStale(priorClaimedAt, priorLastHeartbeat, priorClaimingWorkerActivity, priorClaimTTL, nowEpoch())
-					if priorWasActive {
-						rollbackStatus = priorStatus
-					}
-					rollbackOp := ops.Op{
-						Type:      ops.OpTransition,
-						TargetID:  issueID,
-						Timestamp: nowEpoch(),
-						WorkerID:  workerID,
-						Payload:   ops.Payload{To: rollbackStatus},
-					}
-					if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
-						return fmt.Errorf("update task ID file: %w; also failed to push claim release: %v (manual cleanup may be needed)", err, rbErr)
-					}
-					return fmt.Errorf("update task ID file: %w (claim released; retry arm claim)", err)
+					return rollbackClaim(cmd, logPath, issueID, workerID, "update task ID file", err, prior)
 				}
 
 				// Also persist branch-point metadata (parent branch config,

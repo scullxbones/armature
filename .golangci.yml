@@ -138,6 +138,17 @@ linters:
             - "github.com/scullxbones/armature/internal/ready"
             - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/validate"
+        # worktree reconciles managed worktrees against materialized issue state;
+        # materialize (for Issue) and ops (for status constants) are its complete sub-domain
+        worktree-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/worktree/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
     errcheck:
       check-type-assertions: true
       check-blank: true
