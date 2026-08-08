@@ -174,6 +174,14 @@ func (s *State) applyTransition(op ops.Op) error {
 	}
 	issue.Status = newStatus
 	issue.Updated = op.Timestamp
+	// A transition op may carry a WorktreePath ONLY when it is a claim rollback
+	// restoring the path that was overwritten by the (now-failed) claim attempt.
+	// Normal transitions never set Payload.WorktreePath, so this never clobbers a
+	// live path; restoring it keeps an active same-worker retry's claim pointing
+	// at its real (possibly legacy) worktree instead of a just-removed canonical one.
+	if op.Payload.WorktreePath != "" {
+		issue.WorktreePath = op.Payload.WorktreePath
+	}
 	if op.Payload.Outcome != "" {
 		issue.Outcome = op.Payload.Outcome
 	}

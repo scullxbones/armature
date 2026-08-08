@@ -45,6 +45,50 @@ func TestApplyClaimOp(t *testing.T) {
 	assert.Equal(t, int64(200), issue.ClaimedAt)
 }
 
+// TestApplyTransition_RestoresWorktreePathFromPayload_REQ_LNGHZN_S5_T1 verifies
+// that a transition op carrying a WorktreePath restores it onto the issue. This
+// is the mechanism a claim rollback relies on to put back the pre-claim (legacy)
+// worktree path after the canonical path's provisioning failed. Pre-fix,
+// applyTransition ignored Payload.WorktreePath entirely, so a rollback could not
+// restore it and the active claim was left pointing at the just-removed canonical
+// path.
+func TestApplyTransition_RestoresWorktreePathFromPayload_REQ_LNGHZN_S5_T1(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	// Claim overwrites WorktreePath with the canonical path.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, WorktreePath: "/repo/.worktrees/task-01"}}))
+	require.Equal(t, "/repo/.worktrees/task-01", state.Issues["task-01"].WorktreePath)
+
+	// Rollback transition restores the prior (legacy) worktree path while keeping
+	// the same worker's active claim.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusInProgress, WorktreePath: "/legacy/path/task-01"}}))
+	assert.Equal(t, "/legacy/path/task-01", state.Issues["task-01"].WorktreePath,
+		"a transition carrying a WorktreePath must restore it")
+	assert.Equal(t, "w1", state.Issues["task-01"].ClaimedBy, "the claim must remain with the same worker")
+}
+
+// TestApplyTransition_NoWorktreePathPreservesExisting_REQ_LNGHZN_S5_T1 verifies
+// that a normal transition (no WorktreePath in payload) leaves the issue's
+// existing WorktreePath untouched, so the restore mechanism never clobbers a
+// live path during ordinary status changes.
+func TestApplyTransition_NoWorktreePathPreservesExisting_REQ_LNGHZN_S5_T1(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, WorktreePath: "/repo/.worktrees/task-01"}}))
+
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusDone}}))
+	assert.Equal(t, "/repo/.worktrees/task-01", state.Issues["task-01"].WorktreePath,
+		"a normal transition must not clear the existing WorktreePath")
+}
+
 func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T) {
 	t.Parallel()
 	state := NewState()
