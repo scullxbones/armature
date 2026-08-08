@@ -80,7 +80,8 @@ type Payload struct {
 	EstComplexity     string          `json:"estimated_complexity,omitempty"`
 
 	// claim
-	TTL int `json:"ttl,omitempty"`
+	TTL          int    `json:"ttl,omitempty"`
+	WorktreePath string `json:"worktree_path,omitempty"`
 
 	// heartbeat
 	Source string `json:"source,omitempty"`

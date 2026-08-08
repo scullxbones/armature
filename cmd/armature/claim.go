@@ -610,7 +610,7 @@ armature-issue-id file if the worktree already exists.`,
 
 			op := ops.Op{
 				Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(),
-				WorkerID: workerID, Payload: ops.Payload{TTL: ttl},
+				WorkerID: workerID, Payload: ops.Payload{TTL: ttl, WorktreePath: worktreePath},
 			}
 			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				return err

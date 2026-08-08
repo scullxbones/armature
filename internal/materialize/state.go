@@ -49,6 +49,7 @@ type Issue struct {
 	// on the issue can never be mistaken for the claiming worker still being
 	// alive. See docs/design/recovery-state-machine.md.
 	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
+	WorktreePath               string `json:"worktree_path,omitempty"`
 	Branch                     string `json:"branch,omitempty"`
 	PR                         string `json:"pr,omitempty"`
 	AssignedWorker             string `json:"assigned_worker,omitempty"`
