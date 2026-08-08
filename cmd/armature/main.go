@@ -263,6 +263,10 @@ func newRootCmd() *cobra.Command {
 	reviewCmd.GroupID = "admin"
 	root.AddCommand(reviewCmd)
 
+	worktreeCmd := newWorktreeCmd()
+	worktreeCmd.GroupID = "admin"
+	root.AddCommand(worktreeCmd)
+
 	return root
 }
 
