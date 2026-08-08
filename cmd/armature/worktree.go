@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
@@ -283,24 +284,54 @@ func readManagedWorktrees(repoPath string) ([]worktree.Meta, error) {
 			currentBranch = rest
 			// Once we have both path and branch, check if this is a managed worktree
 			if isManaged(repoPath, currentPath) {
+				issueID, err := readWorktreeIssueBinding(currentPath)
+				if err != nil {
+					return nil, fmt.Errorf("read worktree binding for %s: %w", currentPath, err)
+				}
 				worktrees = append(worktrees, worktree.Meta{
-					Path:   currentPath,
-					Branch: currentBranch,
+					Path:    currentPath,
+					Branch:  currentBranch,
+					IssueID: issueID,
 				})
 			}
 		} else if rest, ok := strings.CutPrefix(line, "detached"); ok {
 			// Detached worktrees under .worktrees/ are also managed
 			_ = rest
 			if isManaged(repoPath, currentPath) {
+				issueID, err := readWorktreeIssueBinding(currentPath)
+				if err != nil {
+					return nil, fmt.Errorf("read worktree binding for %s: %w", currentPath, err)
+				}
 				worktrees = append(worktrees, worktree.Meta{
-					Path:   currentPath,
-					Branch: "detached",
+					Path:    currentPath,
+					Branch:  "detached",
+					IssueID: issueID,
 				})
 			}
 		}
 	}
 
 	return worktrees, nil
+}
+
+// readWorktreeIssueBinding reads the authoritative armature-issue-id binding for
+// the worktree at worktreePath, so reconciliation keys worktree→issue identity on
+// the marker the claim wrote (and the removal layer verifies) rather than on the
+// path basename — which truncates slash-bearing issue IDs — or the git-replicated
+// absolute Issue.WorktreePath, which is meaningless outside the claiming clone.
+// A resolve failure or a missing marker yields "" (Reconcile falls back to the
+// path basename), but a marker that EXISTS and cannot be read (e.g. permission
+// denied) is surfaced as an error via ReadIssueBindingFileErr, matching the
+// fail-closed style of readManagedWorktrees. Swallowing that error would truncate
+// a slash-bearing ID to its basename, landing the worktree in Unrecognized while
+// its live claim lands in Ghosts — the same double-report checkExistingWorktreeBinding
+// avoids by using the ...Err variant.
+func readWorktreeIssueBinding(worktreePath string) (string, error) {
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	if err != nil {
+		return "", nil // can't resolve git dir; fall back to basename
+	}
+	return harnesshook.ReadIssueBindingFileErr(gitDir)
 }
 
 // isManaged reports whether path is a managed worktree: it must live directly

@@ -15,6 +15,15 @@ import (
 type Meta struct {
 	Path   string
 	Branch string
+	// IssueID is the authoritative worktree→issue binding, read from the
+	// worktree's own armature-issue-id marker file (the same binding the
+	// removal layer verifies via harnesshook.ReadIssueBindingFileErr). When
+	// set, it — not the path basename — determines the worktree's issue
+	// identity during reconciliation, so a slash-bearing issue ID (or any ID
+	// that does not round-trip through filepath.Base) is classified correctly.
+	// An empty IssueID falls back to the path basename, preserving behavior for
+	// callers/tests that do not populate the binding.
+	IssueID string
 }
 
 // ReconcileResult holds the classification of all worktrees and detected anomalies.
@@ -75,8 +84,15 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	accountedFor := make(map[string]bool)
 
 	// First pass: drive classification from THIS clone's on-disk worktrees.
+	// Identity comes from the authoritative armature-issue-id binding (wt.IssueID)
+	// the caller reads off each worktree; only when that is absent do we fall back
+	// to the path basename (legacy callers/tests). The basename is a weak signal —
+	// it truncates slash-bearing IDs — so the binding is preferred whenever present.
 	for _, wt := range worktrees {
-		issueID := extractIssueIDFromWorktreePath(wt.Path)
+		issueID := wt.IssueID
+		if issueID == "" {
+			issueID = extractIssueIDFromWorktreePath(wt.Path)
+		}
 		issue := issues[issueID]
 		if issueID == "" || issue == nil {
 			result.Unrecognized = append(result.Unrecognized, wt.Path)
@@ -105,8 +121,14 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 		if accountedFor[issue.ID] {
 			continue
 		}
-		normPath := NormalizePath(issue.WorktreePath)
+		// The worktree is missing on disk (that's the ghost condition), so the
+		// recorded path's leaf cannot be symlink-resolved directly. Resolve its
+		// existing parent instead so the managed-root prefix test stays symmetric
+		// with the EvalSymlinks-resolved roots even when the repo root is reached
+		// through a symlink (WSL /mnt/c, macOS /tmp→/private/tmp, symlinked $HOME).
+		normPath := NormalizePathAllowingMissing(issue.WorktreePath)
 		if !isTerminalStatus(issue.Status) && issue.ClaimedBy != "" &&
+			!issue.ClaimStale(now.Unix()) &&
 			isUnderManagedRoot(normPath, managedRoots) {
 			result.Ghosts = append(result.Ghosts, issue.ID)
 		}

@@ -220,7 +220,17 @@ func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel strin
 		// Restore the pre-claim worktree path: the claim op overwrote it with the
 		// canonical path, but provisioning that path failed, so the still-active
 		// claim must point back at the worktree it had before (e.g. a legacy path).
-		payload.WorktreePath = prior.worktreePath
+		// This branch is reached only when the prior claim was active (priorWasActive),
+		// so it is never a first claim. When the prior path was empty — a same-worker
+		// active retry over a legacy worktree that had no recorded path — an empty
+		// Payload.WorktreePath would be dropped by applyTransition as "no change",
+		// leaving the issue pointing at the just-removed canonical path; the explicit
+		// ClearWorktreePath signal restores it to empty instead.
+		if prior.worktreePath != "" {
+			payload.WorktreePath = prior.worktreePath
+		} else {
+			payload.ClearWorktreePath = true
+		}
 	}
 	rollbackOp := ops.Op{
 		Type:      ops.OpTransition,

@@ -373,6 +373,47 @@ func TestReconcile_RemoteClaimNotGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 	assert.Empty(t, result.Ghosts, "a remote clone's live claim must not be a local ghost")
 }
 
+// TestReconcile_SymlinkedRootLocalGhost_REQ_LNGHZN_S5_T3 pins the symlink-
+// asymmetric ghost-scoping fix: a genuine LOCAL ghost whose recorded path is
+// reached through a symlinked repo root must still be detected. The recorded
+// WorktreePath is stored symlink-unresolved (filepath.Abs) and its leaf worktree
+// is missing on disk, so a naive EvalSymlinks fails and leaves the path symlinky,
+// while the managed root (its parent .worktrees/ exists) resolves to the real
+// path — defeating the HasPrefix scope test and silently dropping the ghost.
+// Unlike the fake-absolute-path ghost tests, this exercises a REAL symlink so the
+// fix is genuinely pinned rather than tautological.
+func TestReconcile_SymlinkedRootLocalGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
+	t.Parallel()
+	realRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, ".worktrees"), 0o755))
+
+	linkRoot := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(realRoot, linkRoot))
+
+	// Managed root computed from the symlinked path, exactly as production does:
+	// its existing .worktrees/ dir resolves through EvalSymlinks to the real path.
+	managedRoot := NormalizePath(filepath.Join(linkRoot, ".worktrees")) + string(os.PathSeparator)
+
+	// Recorded path goes through the symlink; the leaf worktree is missing on disk
+	// (the ghost condition), so the full path cannot be symlink-resolved directly.
+	recorded := filepath.Join(linkRoot, ".worktrees", "task-sym")
+
+	worktrees := []Meta{}
+	issues := map[string]*materialize.Issue{
+		"task-sym": {
+			ID:           "task-sym",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-1",
+			WorktreePath: recorded,
+		},
+	}
+
+	result := Reconcile(worktrees, issues, testNow, managedRoot)
+
+	assert.Equal(t, []string{"task-sym"}, result.Ghosts,
+		"a genuine local ghost reached through a symlinked repo root must not be dropped")
+}
+
 // TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3 verifies that a live claim
 // owned by THIS clone (recorded path under the local managed root) whose worktree
 // is missing on disk is still classified as a ghost even with scoping enabled.
@@ -475,6 +516,62 @@ func TestReconcile_FreshClaimStillBound_REQ_LNGHZN_S5_T2(t *testing.T) {
 
 	assert.Contains(t, result.BoundWorktrees, "task-fresh")
 	assert.NotContains(t, result.Orphans, "task-fresh")
+}
+
+// TestReconcile_BindingKeysIdentityOverBasename_REQ_LNGHZN_S5_T2 verifies that a
+// worktree's authoritative armature-issue-id binding (Meta.IssueID) — not the path
+// basename — drives classification. The issue ID contains a slash, so the path
+// basename would truncate it to the last segment and fail to match any issue,
+// misreporting the worktree as Unrecognized. Keying on the binding classifies it
+// correctly as bound.
+func TestReconcile_BindingKeysIdentityOverBasename_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []Meta{
+		// git flattens slash IDs into a single directory, so the on-disk basename
+		// ("T2") differs from the real issue ID ("LNGHZN-S5/T2").
+		{Path: "/repo/.worktrees/T2", Branch: "task/LNGHZN-S5/T2", IssueID: "LNGHZN-S5/T2"},
+	}
+	issues := map[string]*materialize.Issue{
+		"LNGHZN-S5/T2": {
+			ID:           "LNGHZN-S5/T2",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-1",
+			WorktreePath: "/repo/.worktrees/T2",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, testNow)
+
+	assert.Equal(t, []string{"LNGHZN-S5/T2"}, result.BoundWorktrees,
+		"the armature-issue-id binding must key identity, not the truncated basename")
+	assert.Empty(t, result.Unrecognized,
+		"a bound worktree must not be misreported as unrecognized due to a truncated basename")
+}
+
+// TestReconcile_StaleClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2 verifies that
+// an issue whose claim is past its TTL and whose worktree is missing on disk is NOT
+// a ghost: a ghost is a LIVE claim that lost its worktree, and a stale claim is no
+// longer live. Pre-fix the ghost pass omitted the staleness check (finding #2).
+func TestReconcile_StaleClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	localRoot := "/local/clone/.worktrees/"
+	worktrees := []Meta{} // missing on disk
+	// Claimed at t=100 with a 1-minute TTL; now is well past 100+60.
+	now := time.Unix(100_000, 0)
+	issues := map[string]*materialize.Issue{
+		"task-stale": {
+			ID:           "task-stale",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-1",
+			ClaimedAt:    100,
+			ClaimTTL:     1,
+			WorktreePath: "/local/clone/.worktrees/task-stale",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, now, localRoot)
+
+	assert.Empty(t, result.Ghosts, "a stale (no-longer-live) claim with a missing worktree is not a ghost")
 }
 
 // TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2 is the contract-named acceptance test:

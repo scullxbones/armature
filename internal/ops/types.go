@@ -82,6 +82,13 @@ type Payload struct {
 	// claim
 	TTL          int    `json:"ttl,omitempty"`
 	WorktreePath string `json:"worktree_path,omitempty"`
+	// ClearWorktreePath is an explicit clear-signal for a transition op (used by
+	// claim rollback): when true, applyTransition sets the issue's WorktreePath
+	// back to empty. This distinguishes "restore to empty" from "no change" —
+	// an empty WorktreePath string alone means "no change" because it is
+	// indistinguishable from an absent field in the op log. Append-only,
+	// backward compatible: absent in every legacy op, decoding to false.
+	ClearWorktreePath bool `json:"clear_worktree_path,omitempty"`
 
 	// heartbeat
 	Source string `json:"source,omitempty"`

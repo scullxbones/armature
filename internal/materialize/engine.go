@@ -179,7 +179,15 @@ func (s *State) applyTransition(op ops.Op) error {
 	// Normal transitions never set Payload.WorktreePath, so this never clobbers a
 	// live path; restoring it keeps an active same-worker retry's claim pointing
 	// at its real (possibly legacy) worktree instead of a just-removed canonical one.
-	if op.Payload.WorktreePath != "" {
+	//
+	// ClearWorktreePath is the explicit clear-signal a rollback uses when the
+	// path to restore is empty: an empty Payload.WorktreePath is indistinguishable
+	// from "no change" (an omitted field), so a rollback that must put back an
+	// EMPTY pre-claim path sets ClearWorktreePath instead, and it takes precedence.
+	switch {
+	case op.Payload.ClearWorktreePath:
+		issue.WorktreePath = ""
+	case op.Payload.WorktreePath != "":
 		issue.WorktreePath = op.Payload.WorktreePath
 	}
 	if op.Payload.Outcome != "" {
