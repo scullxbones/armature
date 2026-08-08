@@ -155,12 +155,12 @@ func (tr *TestRepo) Ready(t *testing.T) []interface{} {
 func (tr *TestRepo) Claim(t *testing.T, issueID string, ttlMinutes int) string {
 	t.Helper()
 
-	worktreePath := filepath.Join(tr.path, "worktrees", issueID)
+	worktreePath := filepath.Join(tr.path, ".worktrees", issueID)
 
 	tr.runArm(t,
 		"claim", issueID,
 		"--ttl", fmt.Sprintf("%d", ttlMinutes),
-		"--worktree", worktreePath)
+		"--worktree")
 
 	return worktreePath
 }

@@ -1164,10 +1164,10 @@ func TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1(t
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Resolve the worktree's actual (private) git dir.
@@ -1227,10 +1227,10 @@ func TestReviewPrepareCommand_MismatchedBinding_NoActivityLog_REQ_EXECEV_F1(t *t
 	require.NoError(t, err)
 
 	// Create a worktree bound to task-02
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-02")
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-02", "--worktree", worktreeDir})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-02", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Resolve the worktree's actual git dir.
@@ -1290,13 +1290,13 @@ func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
 	// Claim without --worktree flag semantics that write the binding file; instead we
 	// simulate an env-only-bound session by claiming into worktreeDir and then removing
 	// the armature-issue-id file, leaving only the env var as the binding source.
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	gitFile := filepath.Join(worktreeDir, ".git")

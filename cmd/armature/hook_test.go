@@ -59,7 +59,7 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Claim the task first
-	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -98,7 +98,7 @@ func TestHookRunPrepareCommitMsg_WithActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Claim the task
-	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 
 	// Write a commit message file
@@ -120,7 +120,7 @@ func TestHookRunPrepareCommitMsg_MissingFile(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Claim the task
-	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-01-wt"))
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "hook", "run", "prepare-commit-msg", "/nonexistent/COMMIT_EDITMSG")
@@ -153,7 +153,7 @@ func TestHookPostCommit_InitialCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim it.
-	_, err = runTrls(t, repo, "claim", "task-scope-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-scope-01-wt"))
+	_, err = runTrls(t, repo, "claim", "task-scope-01", "--worktree")
 	require.NoError(t, err)
 
 	// Now run post-commit on the very first real commit (HEAD~1 absent for the init commit).
@@ -176,7 +176,7 @@ func TestHookPostCommit_ScopeRename(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "rename src/old.go -> src/new.go")
 
 	// Claim the task so there's an active claim and a log path.
-	_, err := runTrls(t, repo, "claim", "task-rename-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-rename-01-wt"))
+	_, err := runTrls(t, repo, "claim", "task-rename-01", "--worktree")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -199,7 +199,7 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "delete src/gone.go")
 
 	// Claim the task so there's an active claim and a log path.
-	_, err := runTrls(t, repo, "claim", "task-delete-01", "--worktree", filepath.Join(t.TempDir(), "claim-task-delete-01-wt"))
+	_, err := runTrls(t, repo, "claim", "task-delete-01", "--worktree")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -340,7 +340,7 @@ func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
 
 	// Claim the task so there's an active claim and a log path for scope-rename ops.
-	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree", filepath.Join(t.TempDir(), "claim-checkpoint-wt"))
+	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree")
 	require.NoError(t, err)
 
 	// Add the scoped file, commit it, then rename it and commit again so that

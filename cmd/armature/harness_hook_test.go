@@ -52,10 +52,9 @@ func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task so it has claimed/in-progress status
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -83,10 +82,9 @@ func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task so it has claimed/in-progress status
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -112,10 +110,9 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task so it has claimed/in-progress status
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -264,10 +261,9 @@ func TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding(t *tes
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -511,10 +507,10 @@ func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task to write armature-issue-id into the worktree git dir.
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify armature-issue-id was written.
@@ -560,10 +556,10 @@ func TestDecisionLoggedToResolvedWorktree_REQ_HOOKBIND_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task in a separate worktree directory
-	claimedWorktreeDir := t.TempDir()
+	claimedWorktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", claimedWorktreeDir})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = claimCmd.Execute()
 	require.NoError(t, err)
 
@@ -675,10 +671,10 @@ func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.
 	require.NoError(t, err)
 
 	// Claim the task so its worktree carries a real armature-issue-id binding.
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	// Transition the task to "done" so isBindingStale reports the binding as
@@ -733,10 +729,10 @@ func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	cmd = newRootCmd()
@@ -786,10 +782,9 @@ func TestResolverErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -879,10 +874,9 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task so binding is valid
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -939,10 +933,10 @@ func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.
 	require.NoError(t, err)
 
 	// Claim the task so it has claimed/in-progress status
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -1005,10 +999,10 @@ func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testin
 			_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 			require.NoError(t, err)
 
-			worktreeDir := t.TempDir()
+			worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 			cmd := newRootCmd()
 			cmd.SetOut(new(bytes.Buffer))
-			cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+			cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 			err = cmd.Execute()
 			require.NoError(t, err)
 
@@ -1052,10 +1046,10 @@ func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) 
 	require.NoError(t, err)
 
 	// Claim the task
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -1108,10 +1102,10 @@ func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T
 	require.NoError(t, err)
 
 	// Claim the task
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -1163,10 +1157,10 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -1215,10 +1209,10 @@ func TestHarnessHookNoActivityForNonBashTools_REQ_EXECEV_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -1262,10 +1256,10 @@ func TestHarnessHookNoActivityForPreToolUse_REQ_EXECEV_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	// Claim the task
-	worktreeDir := t.TempDir()
+	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
@@ -1383,10 +1377,9 @@ func backdateAllOps(t *testing.T, repo, workerID string, delta time.Duration) {
 // bound, non-stale claim (fixed debounce window, not per-call).
 func TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -1418,12 +1411,11 @@ func TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1(t *testing.T) {
 // advances LastHeartbeat instead of silently no-op'ing.
 func TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreeDir := t.TempDir()
 	t.Setenv("ARM_LOG_SLOT", "slot-1")
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -1488,10 +1480,9 @@ func TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1(t *testing.T) {
 // end to end (claim, backdate it past its TTL, then invoke the hook).
 func TestShouldHeartbeatSkipsAlreadyStaleClaim_REQ_LNGHZN_S3_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir, "--ttl", "10"})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", "--ttl", "10"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -1523,10 +1514,9 @@ func TestShouldHeartbeatSkipsAlreadyStaleClaim_REQ_LNGHZN_S3_T1(t *testing.T) {
 // heartbeat op carries Source="hook", distinguishing it from a manual heartbeat.
 func TestHookHeartbeatSourceIsAutoHook_REQ_LNGHZN_S3_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -1553,10 +1543,9 @@ func TestHookHeartbeatSourceIsAutoHook_REQ_LNGHZN_S3_T1(t *testing.T) {
 // heartbeats, which carry Source="hook").
 func TestManualHeartbeatSourceIsManual_REQ_LNGHZN_S3_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -1581,10 +1570,9 @@ func TestHookHeartbeatFiresOnBlockedToolCall_REQ_LNGHZN_S3_T1(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	worktreeDir := t.TempDir()
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", worktreeDir})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)

@@ -27,8 +27,8 @@ func TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-01", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-01")
+	_, err = runTrls(t, repo, "claim", "gate-01", "--worktree")
 	require.NoError(t, err)
 
 	// Commit a scoped file with a conventional-commit reference so only the
@@ -58,8 +58,8 @@ func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T)
 	_, err = runTrls(t, repo, "create", "--id", "gate-02", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-02-wt")
-	_, err = runTrls(t, repo, "claim", "gate-02", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-02")
+	_, err = runTrls(t, repo, "claim", "gate-02", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
@@ -85,8 +85,8 @@ func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-03", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-03-wt")
-	_, err = runTrls(t, repo, "claim", "gate-03", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-03")
+	_, err = runTrls(t, repo, "claim", "gate-03", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
@@ -147,8 +147,8 @@ func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-04", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-04-wt")
-	_, err = runTrls(t, repo, "claim", "gate-04", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-04")
+	_, err = runTrls(t, repo, "claim", "gate-04", "--worktree")
 	require.NoError(t, err)
 
 	// No commits, no scoped changes at all: gate checks would fail if run,
@@ -174,8 +174,8 @@ func TestTransitionDoneReplaysAmendedScopeBeforeGating_REQ_LNGHZN_S4_T2(t *testi
 		"--scope", "foo.go", "--scope", "bar.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-scope-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-scope-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-scope-01")
+	_, err = runTrls(t, repo, "claim", "gate-scope-01", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
@@ -209,8 +209,8 @@ func TestTransitionDoneClaimedIssueAmendedToEpicStillRunsGate_REQ_LNGHZN_S4_T2(t
 	_, err = runTrls(t, repo, "create", "--id", "gate-amended-epic-01", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-amended-epic-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-amended-epic-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-amended-epic-01")
+	_, err = runTrls(t, repo, "claim", "gate-amended-epic-01", "--worktree")
 	require.NoError(t, err)
 
 	// amend is low-stakes and does not materialize synchronously. Its replayed
@@ -322,8 +322,8 @@ func TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2(t *testing.T) 
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-01", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-01")
+	_, err = runTrls(t, repo, "claim", "gate-story-01", "--worktree")
 	require.NoError(t, err)
 
 	// Dirty the tree without committing: the clean-tree check should block,
@@ -357,8 +357,8 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-02", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-02-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-02", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-02")
+	_, err = runTrls(t, repo, "claim", "gate-story-02", "--worktree")
 	require.NoError(t, err)
 
 	// Dirty the claimed worktree without committing: the clean-tree check
@@ -397,8 +397,8 @@ func TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZ
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-released-01", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-released-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-released-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-released-01")
+	_, err = runTrls(t, repo, "claim", "gate-story-released-01", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "unassign", "--issue", "gate-story-released-01")
 	require.NoError(t, err)
@@ -427,8 +427,8 @@ func TestTransitionDoneReopenedThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-reopened-01", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-reopened-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-reopened-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-reopened-01")
+	_, err = runTrls(t, repo, "claim", "gate-story-reopened-01", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-reopened-01", "--to", "open", "--force")
 	require.NoError(t, err)
@@ -458,8 +458,8 @@ func TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGH
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-released-02", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-released-02-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-released-02", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-released-02")
+	_, err = runTrls(t, repo, "claim", "gate-story-released-02", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "unassign", "--issue", "gate-story-released-02")
 	require.NoError(t, err)
@@ -494,8 +494,8 @@ func TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2(t *tes
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-03", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-03-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-03", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-03")
+	_, err = runTrls(t, repo, "claim", "gate-story-03", "--worktree")
 	require.NoError(t, err)
 
 	// Dirty the claimed worktree without committing: the clean-tree check
@@ -537,8 +537,8 @@ func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t
 	_, err = runTrls(t, repo, "create", "--id", "gate-story-04", "--title", "Gate story", "--type", "story", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-story-04-wt")
-	_, err = runTrls(t, repo, "claim", "gate-story-04", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-story-04")
+	_, err = runTrls(t, repo, "claim", "gate-story-04", "--worktree")
 	require.NoError(t, err)
 
 	// Simulate manual removal and pruning after claim. This removes the only
@@ -575,8 +575,8 @@ func TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_RE
 	_, err = runTrls(t, repo, "create", "--id", "gate-unassign-retype-01", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-unassign-retype-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-unassign-retype-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-unassign-retype-01")
+	_, err = runTrls(t, repo, "claim", "gate-unassign-retype-01", "--worktree")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "unassign", "--issue", "gate-unassign-retype-01")
@@ -610,8 +610,8 @@ func TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-bug-01", "--title", "Gate bug", "--type", "bug", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-bug-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-bug-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-bug-01")
+	_, err = runTrls(t, repo, "claim", "gate-bug-01", "--worktree")
 	require.NoError(t, err)
 
 	// Dirty the tree without committing: the clean-tree check should block.
@@ -639,8 +639,8 @@ func TestGateAppliesToFeatureIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-feat-01", "--title", "Gate feature", "--type", "feature", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-feat-01-wt")
-	_, err = runTrls(t, repo, "claim", "gate-feat-01", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-feat-01")
+	_, err = runTrls(t, repo, "claim", "gate-feat-01", "--worktree")
 	require.NoError(t, err)
 
 	// Dirty the tree without committing: the clean-tree check should block.
@@ -684,8 +684,8 @@ func TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-05", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-05-wt")
-	_, err = runTrls(t, repo, "claim", "gate-05", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-05")
+	_, err = runTrls(t, repo, "claim", "gate-05", "--worktree")
 	require.NoError(t, err)
 
 	// Commit a file outside declared scope ("bar.go" is not in scope "foo.go").
@@ -714,8 +714,8 @@ func TestRunDeliveryGateCheck_AllThreeChecksFailSimultaneously(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-all-three", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-all-three-wt")
-	_, err = runTrls(t, repo, "claim", "gate-all-three", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-all-three")
+	_, err = runTrls(t, repo, "claim", "gate-all-three", "--worktree")
 	require.NoError(t, err)
 
 	// Commit a file outside declared scope ("bar.go" is not in scope
@@ -763,8 +763,8 @@ func TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-06", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt1 := filepath.Join(t.TempDir(), "gate-06-wt1")
-	_, err = runTrls(t, repo, "claim", "gate-06", "--worktree", wt1)
+	wt1 := filepath.Join(repo, ".worktrees", "gate-06")
+	_, err = runTrls(t, repo, "claim", "gate-06", "--worktree")
 	require.NoError(t, err)
 
 	// Remove the worktree directly (as RemoveWorktree in merged.go would),
@@ -780,8 +780,8 @@ func TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1(t *testing.T) {
 
 	// Re-claim gate-06 at a new worktree path: the branch already exists, so
 	// this exercises the worktree-recreation path.
-	wt2 := filepath.Join(t.TempDir(), "gate-06-wt2")
-	_, err = runTrls(t, repo, "claim", "gate-06", "--worktree", wt2)
+	wt2 := filepath.Join(repo, ".worktrees", "gate-06")
+	_, err = runTrls(t, repo, "claim", "gate-06", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt2, "foo.go"), []byte("package foo\n"), 0o644))
@@ -814,8 +814,8 @@ func TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1(t *testing
 	_, err = runTrls(t, repo, "create", "--id", "gate-07", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-07-wt")
-	_, err = runTrls(t, repo, "claim", "gate-07", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-07")
+	_, err = runTrls(t, repo, "claim", "gate-07", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
@@ -855,8 +855,8 @@ func TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_
 	_, err = runTrls(t, repo, "create", "--id", "gate-09", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-09-wt")
-	_, err = runTrls(t, repo, "claim", "gate-09", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-09")
+	_, err = runTrls(t, repo, "claim", "gate-09", "--worktree")
 	require.NoError(t, err)
 
 	// Simulate a pre-fix claim record: force the persisted parent-branch
@@ -893,12 +893,12 @@ func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testin
 	_, err = runTrls(t, repo, "create", "--id", "gate-10b", "--title", "Gate task", "--type", "task", "--scope", "bar.go")
 	require.NoError(t, err)
 
-	wtA := filepath.Join(t.TempDir(), "gate-10a-wt")
-	_, err = runTrls(t, repo, "claim", "gate-10a", "--worktree", wtA)
+	wtA := filepath.Join(repo, ".worktrees", "gate-10a")
+	_, err = runTrls(t, repo, "claim", "gate-10a", "--worktree")
 	require.NoError(t, err)
 
-	wtB := filepath.Join(t.TempDir(), "gate-10b-wt")
-	_, err = runTrls(t, repo, "claim", "gate-10b", "--worktree", wtB)
+	wtB := filepath.Join(repo, ".worktrees", "gate-10b")
+	_, err = runTrls(t, repo, "claim", "gate-10b", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wtA, "foo.go"), []byte("package foo\n"), 0o644))
@@ -937,8 +937,8 @@ func TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-11", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-11-wt")
-	_, err = runTrls(t, repo, "claim", "gate-11", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-11")
+	_, err = runTrls(t, repo, "claim", "gate-11", "--worktree")
 	require.NoError(t, err)
 
 	// Check out an unrelated scratch branch in the worktree, then commit
@@ -975,8 +975,8 @@ func TestTransitionDoneFromWorktreeSubdirectory_REQ_LNGHZN_S4(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--id", "gate-12", "--title", "Gate task", "--type", "task", "--scope", "sub/foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-12-wt")
-	_, err = runTrls(t, repo, "claim", "gate-12", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-12")
+	_, err = runTrls(t, repo, "claim", "gate-12", "--worktree")
 	require.NoError(t, err)
 
 	subdir := filepath.Join(wt, "sub")
@@ -1010,8 +1010,8 @@ func TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2(t *testing.T) 
 	_, err = runTrls(t, repo, "create", "--id", "gate-08", "--title", "Gate task", "--type", "task", "--scope", "foo.go")
 	require.NoError(t, err)
 
-	wt := filepath.Join(t.TempDir(), "gate-08-wt")
-	_, err = runTrls(t, repo, "claim", "gate-08", "--worktree", wt)
+	wt := filepath.Join(repo, ".worktrees", "gate-08")
+	_, err = runTrls(t, repo, "claim", "gate-08", "--worktree")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
