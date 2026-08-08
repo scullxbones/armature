@@ -92,22 +92,43 @@ func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) bool {
 	return readHookLogForViolations(gitDir)
 }
 
+// worktreeRemoveOutcome distinguishes an actual worktree removal from a
+// no-op skip, so callers that report removals (e.g. `arm worktree gc`) do not
+// count skipped/not-found worktrees as removed.
+type worktreeRemoveOutcome int
+
+const (
+	// worktreeSkipped means nothing was removed: the worktree was not found by
+	// branch (missing, or detached so its ref doesn't match refs/heads/<name>),
+	// or the clone-local armature-issue-id binding did not match the issue.
+	worktreeSkipped worktreeRemoveOutcome = iota
+	// worktreeRemoved means the worktree was located, binding-verified, and removed.
+	worktreeRemoved
+)
+
 // removeWorktreeForIssue removes the git worktree for a given issue if it exists.
 // If the worktree is found, it checks the hook log before removing it; if pass-through
 // entries are present, a warning is emitted to errWriter. If the worktree is already
 // gone (e.g., manually removed), no warning is emitted even if pass-throughs occurred.
-// Returns true if a pass-through warning was found and emitted.
-func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter io.Writer) (bool, error) {
+func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter io.Writer) error {
+	_, err := removeWorktreeForIssueTracked(repoPath, issue, errWriter)
+	return err
+}
+
+// removeWorktreeForIssueTracked is removeWorktreeForIssue but additionally
+// reports whether a worktree was actually removed (worktreeRemoved) versus
+// skipped as a no-op (worktreeSkipped). A returned error is a genuine removal
+// failure and is orthogonal to the outcome (outcome is worktreeSkipped on error).
+func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, errWriter io.Writer) (worktreeRemoveOutcome, error) {
 	worktreePath, gitDir, binding, ok := resolveIssueWorktree(repoPath, issue)
 	if !ok {
 		// No branch for this type, worktree missing, or git dir unresolvable; nothing to remove.
-		return false, nil
+		return worktreeSkipped, nil
 	}
 
 	// Check for pass-through entries before doing anything else, so the warning
 	// is emitted regardless of whether the worktree gets removed.
-	hasPassThrough := readHookLogForPassThroughs(gitDir)
-	if hasPassThrough {
+	if readHookLogForPassThroughs(gitDir) {
 		_, _ = fmt.Fprintf(errWriter, "Warning: %s has pass-through entries in armature-hook.log\n", issue.ID)
 	}
 
@@ -118,7 +139,7 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 		branchName := deriveBranchName(issue.Type, issue.ID)
 		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is on branch %s but not bound to %s (binding=%q); skipping removal\n",
 			worktreePath, branchName, issue.ID, binding)
-		return hasPassThrough, nil
+		return worktreeSkipped, nil
 	}
 
 	// Clear persisted branch-point metadata (parent-branch config, base-commit
@@ -135,10 +156,10 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 
 	// Remove the worktree.
 	if err := gitClient.RemoveWorktree(worktreePath); err != nil {
-		return hasPassThrough, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
+		return worktreeSkipped, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
 
-	return hasPassThrough, nil
+	return worktreeRemoved, nil
 }
 
 // findWorktreePathByBranch finds the worktree path for a given branch name by parsing git worktree list.
@@ -245,7 +266,7 @@ func newMergedCmd() *cobra.Command {
 
 			// Remove worktree if this is a task, bug, feature, or story type.
 			// This happens AFTER the op is recorded, so on failure the worktree is preserved.
-			if _, err := removeWorktreeForIssue(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
+			if err := removeWorktreeForIssue(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
 
