@@ -63,13 +63,14 @@ If none of these steps yields a binding, the write is marked as unbound (see Vio
 
 ### Why Worktree Dispatch is Mandatory
 
-Worktree dispatch (passing `--worktree <path>` to `arm claim`) is **required** for worker
+Worktree dispatch (passing `--worktree` to `arm claim`) is **required** for worker
 dispatch. The binding-resolution invariant depends on it: without a bound worktree, steps 1–2
 have nothing to resolve against, and the hook cannot distinguish between intended pass-throughs
-and enforcement gaps. Workers claim with `arm claim TASK-ID --worktree <path>` (creating an
-isolated git worktree on a task-specific branch). The task ID is written to the worktree's
-git-dir `armature-issue-id` file. When the worker's hook fires, step 1 resolves the binding
-from the file path being edited, confirming that each agent operates under its claimed issue.
+and enforcement gaps. Workers claim with `arm claim TASK-ID --worktree` (creating an
+isolated git worktree at `.worktrees/<issue-id>` on a task-specific branch). The task ID is
+written to the worktree's git-dir `armature-issue-id` file. When the worker's hook fires,
+step 1 resolves the binding from the file path being edited, confirming that each agent
+operates under its claimed issue.
 
 ### Binding File Locations
 

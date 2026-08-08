@@ -100,12 +100,12 @@ Claim a ready task and associate it with a git worktree.
 - `--force`: Override scope overlap warning and proceed with claim.
 - `--issue string`: Issue ID to claim.
 - `--ttl int`: Claim TTL in minutes (default 60).
-- `--worktree string`: Path to task worktree (required). Creates a new git worktree and a derived branch (`task/<id>`, `fix/<id>`, or `feat/<id>`) if the path does not exist.
+- `--worktree`: Enable worktree auto-provisioning (required). Auto-provisions a git worktree at `.worktrees/<issue-id>` and creates a derived branch (`task/<id>`, `fix/<id>`, or `feat/<id>`).
 
 **Example:**
 ```bash
-arm claim TASK-001 --worktree ./task-001-work
-arm claim TASK-001 --ttl 120 --worktree ./task-001-work
+arm claim TASK-001 --worktree
+arm claim TASK-001 --ttl 120 --worktree
 ```
 
 ---
