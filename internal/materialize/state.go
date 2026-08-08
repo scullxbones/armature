@@ -6,8 +6,19 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/review"
 )
+
+// ClaimStale reports whether this issue's claim has expired as of now (Unix
+// seconds), delegating to the shared claim.IsClaimStale expiry formula so every
+// caller — worktree reconciliation, doctor, claim races — agrees on staleness
+// from a single source of truth. Exposed here (rather than importing claim
+// directly from packages like internal/worktree, whose depguard boundary forbids
+// it) because materialize already owns the claim sub-domain.
+func (i *Issue) ClaimStale(now int64) bool {
+	return claimpkg.IsClaimStale(i.ClaimedAt, i.LastHeartbeat, i.LastClaimingWorkerActivity, i.ClaimTTL, now)
+}
 
 // Issue represents the full materialized state of a single work item.
 type Issue struct {

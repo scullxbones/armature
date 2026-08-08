@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -18,41 +19,49 @@ type Meta struct {
 
 // ReconcileResult holds the classification of all worktrees and detected anomalies.
 type ReconcileResult struct {
-	// BoundWorktrees: worktrees with live claims (issue has ClaimedBy and WorktreePath matches)
+	// BoundWorktrees: local worktrees whose issue holds a live, non-stale claim
 	BoundWorktrees []string
-	// Orphans: worktrees on disk with no live claim that map to a known issue
+	// Orphans: local worktrees whose issue has no live claim (unclaimed or stale)
 	Orphans []string
 	// Ghosts: issues holding a LIVE claim whose recorded WorktreePath is missing on disk
 	Ghosts []string
-	// GCRemovalSet: issues in merged/cancelled status with an existing worktree
+	// GCRemovalSet: issues in merged/cancelled status with a local worktree on disk
 	GCRemovalSet []string
 	// Unrecognized: worktree paths on disk that map to no known issue (reported by PATH)
 	Unrecognized []string
 }
 
 // Reconcile classifies managed worktrees against the set of issues and their claim state.
-// A BOUND worktree is associated with an issue that references it (via WorktreePath), holds a live
-// claim (issue.ClaimedBy is set), and the worktree exists on disk.
-// An ORPHAN is a worktree on disk with no live claim whose derived issue ID is a known issue.
-// A GHOST is an issue holding a live claim (ClaimedBy set, non-terminal) whose recorded
-// worktree_path doesn't exist on disk. A gc'd/merged worktree that is simply gone is the
-// EXPECTED end state, not a ghost, so terminal-status issues are excluded.
-// GCRemovalSet contains issues in merged/cancelled with an existing worktree.
-// UNRECOGNIZED holds worktree paths that map to no known issue.
-// All path comparisons normalize both sides through NormalizePath so a symlinked repo
-// root does not make an identical worktree look like two different paths.
+//
+// Classification is driven from THIS clone's on-disk worktrees (the []Meta), not
+// from the git-replicated absolute issue.WorktreePath: the removal layer
+// (removeWorktreeForIssueTracked) locates a worktree by branch in THIS clone, so
+// selection must key on the same clone-local signal to agree with it. Each local
+// worktree's issue is derived from its path (the base name is the issue ID), then
+// classified by the issue's status AND claim staleness:
+//   - terminal issue (merged/cancelled) -> GCRemovalSet (a clone-local terminal
+//     worktree is gc-ready even when the recorded WorktreePath points at a foreign
+//     or reused clone)
+//   - live, non-stale claim (ClaimedBy set, TTL not expired) -> BoundWorktrees
+//   - anything else (unclaimed, or a claim past its TTL) -> Orphans
+//   - a worktree mapping to no known issue -> Unrecognized (by PATH)
+//
+// A GHOST is an issue holding a live claim (ClaimedBy set, non-terminal) whose
+// recorded worktree_path has no matching local worktree. A gc'd/merged worktree
+// that is simply gone is the EXPECTED end state, so terminal-status issues are
+// excluded. Staleness reuses claim.IsClaimStale against now so a claim past its
+// TTL is treated as no-longer-live.
 //
 // managedRoots optionally scopes ghost detection to worktrees this clone owns.
 // A live claim's recorded WorktreePath is an absolute path captured in the
 // claiming clone and git-replicated to every clone; a claim owned by a remote
-// clone can never match this clone's local `git worktree list`, so treating it
-// as a ghost here would be a false positive. When one or more managedRoots are
-// supplied (normalized, trailing-separator prefixes of this clone's managed
-// worktree directory), a missing worktree is only classified as a ghost when
-// its recorded path falls under one of them (i.e. it is locally owned). When no
-// managedRoots are supplied, ghost scoping is disabled and all live claims are
-// eligible — preserving the original behavior for callers/tests that don't scope.
-func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, managedRoots ...string) ReconcileResult {
+// clone can never match this clone's local worktrees, so treating it as a ghost
+// here would be a false positive. When one or more managedRoots are supplied
+// (normalized, trailing-separator prefixes of this clone's managed worktree
+// directory), a missing worktree is only a ghost when its recorded path falls
+// under one of them. When none are supplied, ghost scoping is disabled and all
+// live claims are eligible — preserving behavior for callers/tests that don't scope.
+func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.Time, managedRoots ...string) ReconcileResult {
 	result := ReconcileResult{
 		BoundWorktrees: []string{},
 		Orphans:        []string{},
@@ -61,53 +70,45 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, managedRo
 		Unrecognized:   []string{},
 	}
 
-	worktreesByPath := make(map[string]bool)
+	// accountedFor tracks issues that have a local worktree, so the ghost pass
+	// (which looks for live claims with NO local worktree) can skip them.
+	accountedFor := make(map[string]bool)
+
+	// First pass: drive classification from THIS clone's on-disk worktrees.
 	for _, wt := range worktrees {
-		worktreesByPath[NormalizePath(wt.Path)] = true
+		issueID := extractIssueIDFromWorktreePath(wt.Path)
+		issue := issues[issueID]
+		if issueID == "" || issue == nil {
+			result.Unrecognized = append(result.Unrecognized, wt.Path)
+			continue
+		}
+		accountedFor[issueID] = true
+
+		switch {
+		case isTerminalStatus(issue.Status):
+			result.GCRemovalSet = append(result.GCRemovalSet, issueID)
+		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
+			result.BoundWorktrees = append(result.BoundWorktrees, issueID)
+		default:
+			// Unclaimed, or a claim past its TTL: worktree with no live claim.
+			result.Orphans = append(result.Orphans, issueID)
+		}
 	}
 
-	worktreeClaimed := make(map[string]bool)
-
-	// First pass: classify each issue that records a worktree path.
+	// Second pass: issues holding a live claim whose worktree is missing on disk
+	// are ghosts. A terminal issue whose worktree is gone is the expected end
+	// state, not an anomaly, so terminal issues are excluded.
 	for _, issue := range issues {
 		if issue == nil || issue.WorktreePath == "" {
 			continue
 		}
-
+		if accountedFor[issue.ID] {
+			continue
+		}
 		normPath := NormalizePath(issue.WorktreePath)
-		isTerminal := isTerminalStatus(issue.Status)
-
-		if worktreesByPath[normPath] {
-			switch {
-			case isTerminal:
-				result.GCRemovalSet = append(result.GCRemovalSet, issue.ID)
-			case issue.ClaimedBy != "":
-				result.BoundWorktrees = append(result.BoundWorktrees, issue.ID)
-			default:
-				result.Orphans = append(result.Orphans, issue.ID)
-			}
-			worktreeClaimed[normPath] = true
-			continue
-		}
-
-		// Recorded path is missing on disk. A ghost is only a LIVE claim whose
-		// worktree vanished; a terminal (merged/cancelled) issue whose worktree
-		// is gone is the expected end state, not an anomaly.
-		if !isTerminal && issue.ClaimedBy != "" && isUnderManagedRoot(normPath, managedRoots) {
+		if !isTerminalStatus(issue.Status) && issue.ClaimedBy != "" &&
+			isUnderManagedRoot(normPath, managedRoots) {
 			result.Ghosts = append(result.Ghosts, issue.ID)
-		}
-	}
-
-	// Second pass: worktrees on disk not tied to any issue's recorded path.
-	for _, wt := range worktrees {
-		if worktreeClaimed[NormalizePath(wt.Path)] {
-			continue
-		}
-		issueID := extractIssueIDFromWorktreePath(wt.Path)
-		if issueID != "" && issues[issueID] != nil {
-			result.Orphans = append(result.Orphans, issueID)
-		} else {
-			result.Unrecognized = append(result.Unrecognized, wt.Path)
 		}
 	}
 
