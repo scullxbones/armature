@@ -15,6 +15,62 @@ arm ready → arm claim → arm render-context → (launch worker outside Armatu
 - Materialized state is derived from ops, not source of truth.
 - `done` = worker-complete; `merged` = confirmed on main branch.
 
+## Managed Worktree Lifecycle
+
+Armature automatically manages worktrees tied to tasks, bugs, features, and stories. Worktrees are created, reconciled, and cleaned up as part of the normal workflow:
+
+### Provisioning (at claim)
+
+When you claim a task with the `--worktree` flag, Armature auto-provisions a worktree:
+
+```bash
+arm claim --issue TASK-ID --worktree
+```
+
+- Worktree is created at `.worktrees/<issue-id>` (relative to repo root)
+- Issue branch is checked out inside the worktree
+- Worktree path is recorded in the claim ops (recoverable if task is re-claimed)
+- **Project-type mitigations are automatically applied:**
+  - For Go projects (detected via `go.mod` or `go.work`), a `go.work` file is created in the worktree to isolate it from the main tree's workspace, preventing gopls from getting confused about module boundaries
+
+### Inspection & Reconciliation
+
+Use `arm worktree list` to inspect all worktrees and their claim status:
+
+```bash
+arm worktree list
+```
+
+This classifies worktrees into categories:
+- **Bound:** Worktree exists and has an active claim (the normal state)
+- **Orphan:** Worktree exists on disk but no active claim holds it (needs reclamation or cleanup)
+- **Ghost:** Issue has a recorded worktree_path but the worktree doesn't exist on disk
+- **GC Removal Set:** Merged/cancelled issues with an existing worktree (ready for cleanup)
+
+### Reclamation & Garbage Collection
+
+Unclaimed (orphan) worktrees can be reclaimed or cleaned up:
+
+```bash
+arm worktree gc
+```
+
+This removes worktrees for issues in merged or cancelled status. Orphaned worktrees (with no active claim) can be re-bound by re-claiming the task:
+
+```bash
+arm claim --issue TASK-ID --worktree
+```
+
+### Teardown (at merged)
+
+When a task is confirmed merged on main, its worktree is automatically cleaned up:
+
+```bash
+arm merged --issue TASK-ID
+```
+
+This removes the linked worktree and frees its resources. The `.worktrees/` directory remains gitignored, so worktree contents are never committed.
+
 ## Before closing out work
 
 ```bash
