@@ -73,10 +73,10 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `last_claiming_worker_activity` | int64 | state.go:51 | claim, heartbeat, transition ops (only when op.WorkerID == ClaimedBy) | **kept-evidence** | Liveness signal scoped to the claiming worker only, unlike `updated` (bumped by every op regardless of author). Used by `doctor --fix`'s `claimExpired` to avoid a third party's unrelated note/link op masking a crashed worker's stale claim. |
 | `worktree_path` | string | state.go:52 | claim op (auto-provisioned worktree path) | **kept-evidence** | Absolute path of the worktree provisioned by `arm claim --worktree`. Set by claim command; lets recovery tooling locate the worktree deterministically. Legacy claim ops without the field replay cleanly (omitempty). |
 | `branch` | string | state.go:53 | transition op (branch field) | **kept-evidence** | Feature branch name. Set by transition on completion. Used by merged flow. |
-| `pr` | string | state.go:53 | transition op (pr field), merged op | **kept-evidence** | PR number or URL. Set by transition or merged command. |
-| `assigned_worker` | string | state.go:54 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
-| `preferred_model` | string | state.go:55 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
-| `updated` | int64 | state.go:56 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
+| `pr` | string | state.go:54 | transition op (pr field), merged op | **kept-evidence** | PR number or URL. Set by transition or merged command. |
+| `assigned_worker` | string | state.go:55 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
+| `preferred_model` | string | state.go:56 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
+| `updated` | int64 | state.go:57 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
 
 ## Operation Types (OpTypes)
 
@@ -171,9 +171,9 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
 | `scope-delete` | main.go:243, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
 | `doctor` | main.go:247, doctor.go | Diagnose DAG health | **kept-evidence** | Validator. Checks for broken refs, cycles, orphans. |
-| `worktree` | main.go, worktree.go | Manage managed worktrees | **kept-evidence** | Container for worktree reconciliation subcommands. |
-| `worktree list` | worktree.go | List managed worktrees with bound issue and claim status | **kept-evidence** | Subcommand of `worktree`. Flags orphans (worktree, no live claim) and ghosts (claim recording a missing worktree). |
-| `worktree gc` | worktree.go | Remove worktrees for merged/cancelled issues | **kept-evidence** | Subcommand of `worktree`. Supports --dry-run to preview removals. Only mutates state by removing worktrees. |
+| `worktree` | main.go:266, worktree.go | Manage managed worktrees | **kept-evidence** | Container for worktree reconciliation subcommands. |
+| `worktree list` | main.go:266, worktree.go | List managed worktrees with bound issue and claim status | **kept-evidence** | Subcommand of `worktree`. Flags orphans (worktree, no live claim) and ghosts (claim recording a missing worktree). |
+| `worktree gc` | main.go:266, worktree.go | Remove worktrees for merged/cancelled issues | **kept-evidence** | Subcommand of `worktree`. Supports --dry-run to preview removals. Only mutates state by removing worktrees. |
 | `completion` | main.go:251, cmd_completion.go | Bash/zsh completion | **kept-evidence** | Shell integration. Cobra-generated. |
 | `hook` | main.go:255, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |

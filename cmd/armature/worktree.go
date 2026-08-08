@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -49,10 +50,11 @@ func newWorktreeListCmd() *cobra.Command {
 
 			if format == "json" || format == "agent" {
 				jsonResult := map[string]interface{}{
-					"bound":    result.BoundWorktrees,
-					"orphans":  result.Orphans,
-					"ghosts":   result.Ghosts,
-					"gc_ready": result.GCRemovalSet,
+					"bound":        result.BoundWorktrees,
+					"orphans":      result.Orphans,
+					"ghosts":       result.Ghosts,
+					"gc_ready":     result.GCRemovalSet,
+					"unrecognized": result.Unrecognized,
 				}
 				data, _ := json.MarshalIndent(jsonResult, "", "  ") //nolint:errcheck
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
@@ -192,16 +194,16 @@ func newWorktreeGCCmd() *cobra.Command {
 
 // readManagedWorktrees reads all managed worktrees from git worktree list --porcelain.
 // Filters to only worktrees under .worktrees/ directory.
-func readManagedWorktrees(repoPath string) []worktree.WorktreeMeta {
+func readManagedWorktrees(repoPath string) []worktree.Meta {
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		// No worktrees or git command failed; return empty list
-		return []worktree.WorktreeMeta{}
+		return []worktree.Meta{}
 	}
 
-	var worktrees []worktree.WorktreeMeta
+	var worktrees []worktree.Meta
 	lines := strings.Split(string(output), "\n")
 
 	var currentPath string
@@ -217,8 +219,8 @@ func readManagedWorktrees(repoPath string) []worktree.WorktreeMeta {
 		} else if rest, ok := strings.CutPrefix(line, "branch "); ok {
 			currentBranch = rest
 			// Once we have both path and branch, check if this is a managed worktree
-			if isManaged(currentPath) {
-				worktrees = append(worktrees, worktree.WorktreeMeta{
+			if isManaged(repoPath, currentPath) {
+				worktrees = append(worktrees, worktree.Meta{
 					Path:   currentPath,
 					Branch: currentBranch,
 				})
@@ -226,8 +228,8 @@ func readManagedWorktrees(repoPath string) []worktree.WorktreeMeta {
 		} else if rest, ok := strings.CutPrefix(line, "detached"); ok {
 			// Detached worktrees under .worktrees/ are also managed
 			_ = rest
-			if isManaged(currentPath) {
-				worktrees = append(worktrees, worktree.WorktreeMeta{
+			if isManaged(repoPath, currentPath) {
+				worktrees = append(worktrees, worktree.Meta{
 					Path:   currentPath,
 					Branch: "detached",
 				})
@@ -238,7 +240,12 @@ func readManagedWorktrees(repoPath string) []worktree.WorktreeMeta {
 	return worktrees
 }
 
-// isManaged checks if a worktree path is under .worktrees/ (a managed worktree).
-func isManaged(path string) bool {
-	return strings.Contains(path, ".worktrees") || strings.Contains(filepath.Base(filepath.Dir(path)), ".worktrees")
+// isManaged reports whether path is a managed worktree: it must live directly
+// under this repo's <repoPath>/.worktrees/ directory. A substring test on
+// ".worktrees" would misclassify unrelated paths (e.g. a sibling repo that
+// merely contains the string) as managed, making them gc-removal candidates.
+// Both sides are symlink-normalized so a symlinked repo root still matches.
+func isManaged(repoPath, path string) bool {
+	managedRoot := worktree.NormalizePath(filepath.Join(repoPath, ".worktrees")) + string(os.PathSeparator)
+	return strings.HasPrefix(worktree.NormalizePath(path), managedRoot)
 }
