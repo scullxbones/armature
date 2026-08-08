@@ -328,6 +328,64 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 	})
 }
 
+// TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5 verifies that the boolean
+// --worktree flag auto-provisions a worktree at the canonical .worktrees/<issue-id>
+// location (per ADR 0004).
+func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	repo := NewTestRepo(t)
+	storyID := repo.CreateStory(t, "Worktree Auto-Provisioning Test Story")
+	taskID := repo.CreateTask(t, storyID, "Test auto-provisioning", []string{"test.go"})
+
+	// Claim with boolean --worktree flag
+	worktreePath := repo.Claim(t, taskID, 120)
+
+	// Verify worktree is created at canonical .worktrees/<issue-id> location
+	expectedPath := filepath.Join(repo.Path(), ".worktrees", taskID)
+	if worktreePath != expectedPath {
+		t.Fatalf("worktree path mismatch: expected %s, got %s", expectedPath, worktreePath)
+	}
+
+	// Verify the directory exists
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("worktree not created at expected location: %v", err)
+	}
+
+	// Verify .git file exists (worktrees use a file pointer to the real git dir)
+	gitFile := filepath.Join(worktreePath, ".git")
+	if _, err := os.Stat(gitFile); err != nil {
+		t.Fatalf("worktree .git file not found: %v", err)
+	}
+
+	// Read the .git file to get the real git directory
+	gitContent, err := os.ReadFile(gitFile)
+	if err != nil {
+		t.Fatalf("failed to read .git file: %v", err)
+	}
+
+	// Parse gitdir path from .git file content
+	// Format: "gitdir: /path/to/.git/worktrees/name"
+	gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
+	issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
+
+	// Verify the task ID binding file exists
+	// #nosec G703 -- path derived from worktree .git file created by the test
+	content, err := os.ReadFile(issueIDFile)
+	if err != nil {
+		t.Fatalf("failed to read armature-issue-id: %v", err)
+	}
+
+	if string(content) != taskID {
+		t.Fatalf("armature-issue-id mismatch: expected %s, got %s", taskID, string(content))
+	}
+
+	t.Logf("Successfully verified worktree auto-provisioned at canonical location .worktrees/%s with valid binding", taskID)
+}
+
 // TestCoordinatorWavePlanningReference_REQ_TOPTIER_S1_T2 verifies that the
 // coordinator's wave-planning instructions use the machine-readable command
 // and the same issue field emitted by arm ready --waves.

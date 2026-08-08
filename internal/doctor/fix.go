@@ -57,26 +57,25 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //     worker went silent mid-work; transition to blocked pending manual investigation
 //     rather than silently discarding in-flight work.
 //   - claimed/in-progress + missing worktree: `arm claim --worktree` always creates
-//     the task's worktree as part of a successful claim, so a claimed or in-progress
-//     issue whose `task/<id>` branch has no live worktree registered against repoPath
-//     indicates the worktree was torn down (or its git metadata corrupted) out from
-//     under an active claim — the same class of failure this fix pass exists to
-//     recover from, independent of whether the TTL has expired yet. This check is
-//     skipped entirely — for every issue, not just the ones it would otherwise
-//     flag — whenever GitWorktreeBranches cannot positively confirm which
-//     branches have live worktrees (repoPath empty, not a git repo, or any other
-//     git failure). Treating "couldn't determine" the same as "confirmed missing"
-//     would misfire on every currently claimed/in-progress issue in the graph from
-//     a single transient git error — exactly the mass-false-positive risk this
-//     fix pass exists to avoid, not reintroduce. This check is further scoped to
-//     claims owned by workerID (the worker running doctor --fix): `git worktree
-//     list` only reports worktrees registered in the local repository doctor is
-//     running against, not worktrees on other machines/clones. In a coordinator
-//     clone, or any clone that has merely pulled another worker's claim ops,
-//     every other worker's claim would look like it has no live worktree here —
-//     only the current worker's own local git state can be trusted to say "the
-//     worktree is really gone" rather than "I just don't have visibility into
-//     another machine's worktree".
+//     the task's worktree as part of a successful claim (at `.worktrees/<issue-id>`),
+//     so a claimed or in-progress issue whose `task/<id>` branch has no live worktree
+//     registered against repoPath indicates the worktree was torn down (or its git
+//     metadata corrupted) out from under an active claim — the same class of failure
+//     this fix pass exists to recover from, independent of whether the TTL has
+//     expired yet. This check is skipped entirely — for every issue, not just the
+//     ones it would otherwise flag — whenever GitWorktreeBranches cannot positively
+//     confirm which branches have live worktrees (repoPath empty, not a git repo, or
+//     any other git failure). Treating "couldn't determine" the same as "confirmed
+//     missing" would misfire on every currently claimed/in-progress issue in the
+//     graph from a single transient git error — exactly the mass-false-positive risk
+//     this fix pass exists to avoid, not reintroduce. This check is further scoped to
+//     claims owned by workerID (the worker running doctor --fix): `git worktree list`
+//     only reports worktrees registered in the local repository doctor is running
+//     against, not worktrees on other machines/clones. In a coordinator clone, or any
+//     clone that has merely pulled another worker's claim ops, every other worker's
+//     claim would look like it has no live worktree here — only the current worker's
+//     own local git state can be trusted to say "the worktree is really gone" rather
+//     than "I just don't have visibility into another machine's worktree".
 //
 // Each action is expressed purely as ops to append; PlanFixes never mutates or
 // removes existing op log lines. Calling PlanFixes again after ApplyFixes has

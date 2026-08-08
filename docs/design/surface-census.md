@@ -216,7 +216,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
-| `--worktree` | claim | string | Path to task worktree (required) | **kept-evidence** |
+| `--worktree` | claim | bool | Enable worktree auto-provisioning at .worktrees/<issue-id> (required) | **kept-evidence** |
 | `--force` | claim, merged, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
