@@ -196,6 +196,12 @@ type priorClaimState struct {
 	lastHeartbeat          int64
 	claimTTL               int
 	claimingWorkerActivity int64
+	// worktreePath is the issue's WorktreePath BEFORE this claim's op overwrote
+	// it with the canonical .worktrees/<issue-id> path. On a same-worker active
+	// retry over a legacy differently-pathed worktree, a provisioning failure
+	// must restore this so the still-active claim doesn't point at a path that
+	// was just removed, orphaning the legacy worktree.
+	worktreePath string
 }
 
 // rollbackClaim releases (or restores) the claim after a post-claim worktree
@@ -207,15 +213,21 @@ func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel strin
 	rollbackStatus := ops.StatusOpen
 	priorWasActive := prior.claimedBy == workerID &&
 		!claimPkg.IsClaimStale(prior.claimedAt, prior.lastHeartbeat, prior.claimingWorkerActivity, prior.claimTTL, nowEpoch())
+	payload := ops.Payload{To: rollbackStatus}
 	if priorWasActive {
 		rollbackStatus = prior.status
+		payload.To = rollbackStatus
+		// Restore the pre-claim worktree path: the claim op overwrote it with the
+		// canonical path, but provisioning that path failed, so the still-active
+		// claim must point back at the worktree it had before (e.g. a legacy path).
+		payload.WorktreePath = prior.worktreePath
 	}
 	rollbackOp := ops.Op{
 		Type:      ops.OpTransition,
 		TargetID:  issueID,
 		Timestamp: nowEpoch(),
 		WorkerID:  workerID,
-		Payload:   ops.Payload{To: rollbackStatus},
+		Payload:   payload,
 	}
 	if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
 		return fmt.Errorf("%s: %w; also failed to push claim release: %v (manual cleanup may be needed)", opLabel, cause, rbErr)
@@ -636,6 +648,7 @@ armature-issue-id file if the worktree already exists.`,
 				lastHeartbeat:          issue.LastHeartbeat,
 				claimTTL:               issue.ClaimTTL,
 				claimingWorkerActivity: issue.LastClaimingWorkerActivity,
+				worktreePath:           issue.WorktreePath,
 			}
 
 			index := store.Index()
