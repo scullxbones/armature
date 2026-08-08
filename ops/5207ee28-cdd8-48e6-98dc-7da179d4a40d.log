@@ -3630,3 +3630,4 @@
 ["note","LNGHZN-S5-T4",1786191702,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Review yellow: acceptance[1] race test (TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace) passes and asserts the detached-add-then-checkout path, but does not discriminate the fix from the old order — the genuinely-failing 'branch checked out in another live worktree' case fails under BOTH orders (confirmed empirically by implementer + reviewer). Follow-up: revisit whether the DoD's stated race is reproducible in a discriminating test, or narrow the DoD's race claim. Non-blocking; shipped behavior is correct.","note_id":"note-1786191702240619399"}]
 ["transition","LNGHZN-S5-T4",1786191854,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["claim","LNGHZN-S5-T1",1786192382,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
+["claim","LNGHZN-S5-T5",1786192386,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240}]
