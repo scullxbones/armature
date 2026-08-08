@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -34,8 +35,14 @@ func newWorktreeListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 
-			// Read all managed worktrees from git worktree list
-			worktrees := readManagedWorktrees(ctx.RepoPath)
+			// Read all managed worktrees from git worktree list. Propagate a git
+			// failure instead of proceeding on an empty inventory: an empty list
+			// from a transient git error would mislabel every live claim a ghost
+			// and make gc silently remove nothing.
+			worktrees, err := readManagedWorktrees(ctx.RepoPath)
+			if err != nil {
+				return fmt.Errorf("read managed worktrees: %w", err)
+			}
 
 			// Load current-truth issues via the snapshot store, exactly as
 			// `arm list` does: it materializes from the op log against the
@@ -51,7 +58,7 @@ func newWorktreeListCmd() *cobra.Command {
 			// Reconcile, scoping ghost detection to worktrees this clone owns so a
 			// live claim held by a remote clone (whose absolute WorktreePath can
 			// never match this clone's git worktree list) is not a false ghost.
-			result := worktree.Reconcile(worktrees, issues, managedWorktreeRoot(ctx.RepoPath))
+			result := worktree.Reconcile(worktrees, issues, time.Now(), managedWorktreeRoot(ctx.RepoPath))
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -125,8 +132,12 @@ func newWorktreeGCCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 
-			// Read all managed worktrees
-			worktrees := readManagedWorktrees(ctx.RepoPath)
+			// Read all managed worktrees; abort on a git failure rather than
+			// proceeding on an empty inventory (see list command).
+			worktrees, err := readManagedWorktrees(ctx.RepoPath)
+			if err != nil {
+				return fmt.Errorf("read managed worktrees: %w", err)
+			}
 
 			// Load current-truth issues via the snapshot store (see list command).
 			issues, err := loadIssuesForReconcile(ctx)
@@ -136,7 +147,7 @@ func newWorktreeGCCmd() *cobra.Command {
 
 			// Reconcile to find what should be removed, scoping ghost detection to
 			// worktrees this clone owns (see list command for rationale).
-			result := worktree.Reconcile(worktrees, issues, managedWorktreeRoot(ctx.RepoPath))
+			result := worktree.Reconcile(worktrees, issues, time.Now(), managedWorktreeRoot(ctx.RepoPath))
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -243,14 +254,16 @@ func newWorktreeGCCmd() *cobra.Command {
 }
 
 // readManagedWorktrees reads all managed worktrees from git worktree list --porcelain.
-// Filters to only worktrees under .worktrees/ directory.
-func readManagedWorktrees(repoPath string) []worktree.Meta {
+// Filters to only worktrees under .worktrees/ directory. A git failure is returned
+// as an error (not swallowed into an empty list): callers must fail closed, since an
+// empty inventory from a transient failure would mislabel live claims as ghosts and
+// make gc a silent no-op.
+func readManagedWorktrees(repoPath string) ([]worktree.Meta, error) {
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
-		// No worktrees or git command failed; return empty list
-		return []worktree.Meta{}
+		return nil, fmt.Errorf("git worktree list: %w", err)
 	}
 
 	var worktrees []worktree.Meta
@@ -287,7 +300,7 @@ func readManagedWorktrees(repoPath string) []worktree.Meta {
 		}
 	}
 
-	return worktrees
+	return worktrees, nil
 }
 
 // isManaged reports whether path is a managed worktree: it must live directly

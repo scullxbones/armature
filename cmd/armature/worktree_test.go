@@ -177,6 +177,22 @@ func TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, out, "task-gc")
 }
 
+// TestReadManagedWorktrees_GitFailureIsError_REQ_LNGHZN_S5_T2 verifies that a
+// `git worktree list` failure is surfaced as a non-nil error rather than
+// swallowed into an empty inventory. An empty list from a transient git failure
+// would mislabel every live claim as a ghost and make gc a silent no-op, so the
+// commands must fail closed instead.
+func TestReadManagedWorktrees_GitFailureIsError_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	// A plain temp dir is not a git repository, so `git -C <dir> worktree list`
+	// exits non-zero.
+	nonRepo := t.TempDir()
+
+	worktrees, err := readManagedWorktrees(nonRepo)
+	require.Error(t, err, "a git worktree list failure must return an error, not empty success")
+	assert.Nil(t, worktrees, "no inventory should be returned on git failure")
+}
+
 // TestIsManaged_PrefixMatch_REQ_LNGHZN_S5_T2 verifies isManaged uses a
 // path-prefix test rooted at <repo>/.worktrees/, not a naive substring match.
 func TestIsManaged_PrefixMatch_REQ_LNGHZN_S5_T2(t *testing.T) {
