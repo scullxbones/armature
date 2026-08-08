@@ -344,6 +344,50 @@ func TestWorktreeListFlagsOrphans_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, result.Orphans, "task-10")
 }
 
+// TestReconcile_RemoteClaimNotGhost_REQ_LNGHZN_S5_T3 verifies that a live claim
+// owned by a REMOTE clone (its recorded WorktreePath is under a different clone's
+// absolute .worktrees root, and so never appears in this clone's git worktree
+// list) is NOT classified as a ghost when ghost detection is scoped to this
+// clone's managed root.
+func TestReconcile_RemoteClaimNotGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
+	t.Parallel()
+	localRoot := "/local/clone/.worktrees/"
+	worktrees := []Meta{} // nothing on disk locally
+	issues := map[string]*materialize.Issue{
+		"task-remote": {
+			ID:           "task-remote",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-remote",
+			WorktreePath: "/other/clone/.worktrees/task-remote",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, localRoot)
+
+	assert.Empty(t, result.Ghosts, "a remote clone's live claim must not be a local ghost")
+}
+
+// TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3 verifies that a live claim
+// owned by THIS clone (recorded path under the local managed root) whose worktree
+// is missing on disk is still classified as a ghost even with scoping enabled.
+func TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
+	t.Parallel()
+	localRoot := "/local/clone/.worktrees/"
+	worktrees := []Meta{} // missing on disk
+	issues := map[string]*materialize.Issue{
+		"task-local": {
+			ID:           "task-local",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-local",
+			WorktreePath: "/local/clone/.worktrees/task-local",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, localRoot)
+
+	assert.Equal(t, []string{"task-local"}, result.Ghosts)
+}
+
 // TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2 is the contract-named acceptance test:
 // gc's removal set must contain issues in merged status with an existing worktree.
 func TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2(t *testing.T) {

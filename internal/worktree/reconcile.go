@@ -4,6 +4,7 @@ package worktree
 import (
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -40,7 +41,18 @@ type ReconcileResult struct {
 // UNRECOGNIZED holds worktree paths that map to no known issue.
 // All path comparisons normalize both sides through NormalizePath so a symlinked repo
 // root does not make an identical worktree look like two different paths.
-func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue) ReconcileResult {
+//
+// managedRoots optionally scopes ghost detection to worktrees this clone owns.
+// A live claim's recorded WorktreePath is an absolute path captured in the
+// claiming clone and git-replicated to every clone; a claim owned by a remote
+// clone can never match this clone's local `git worktree list`, so treating it
+// as a ghost here would be a false positive. When one or more managedRoots are
+// supplied (normalized, trailing-separator prefixes of this clone's managed
+// worktree directory), a missing worktree is only classified as a ghost when
+// its recorded path falls under one of them (i.e. it is locally owned). When no
+// managedRoots are supplied, ghost scoping is disabled and all live claims are
+// eligible — preserving the original behavior for callers/tests that don't scope.
+func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, managedRoots ...string) ReconcileResult {
 	result := ReconcileResult{
 		BoundWorktrees: []string{},
 		Orphans:        []string{},
@@ -81,7 +93,7 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue) Reconcile
 		// Recorded path is missing on disk. A ghost is only a LIVE claim whose
 		// worktree vanished; a terminal (merged/cancelled) issue whose worktree
 		// is gone is the expected end state, not an anomaly.
-		if !isTerminal && issue.ClaimedBy != "" {
+		if !isTerminal && issue.ClaimedBy != "" && isUnderManagedRoot(normPath, managedRoots) {
 			result.Ghosts = append(result.Ghosts, issue.ID)
 		}
 	}
@@ -107,6 +119,22 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue) Reconcile
 	sort.Strings(result.Unrecognized)
 
 	return result
+}
+
+// isUnderManagedRoot reports whether normPath falls under one of the supplied
+// managed roots. With no roots supplied, scoping is disabled and it returns true
+// (legacy behavior). Roots are expected to be NormalizePath'd, trailing-separator
+// prefixes; normPath is expected to already be normalized by the caller.
+func isUnderManagedRoot(normPath string, managedRoots []string) bool {
+	if len(managedRoots) == 0 {
+		return true
+	}
+	for _, root := range managedRoots {
+		if root != "" && strings.HasPrefix(normPath, root) {
+			return true
+		}
+	}
+	return false
 }
 
 // isTerminalStatus returns true if the issue status is one where worktrees should be removed.

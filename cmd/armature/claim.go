@@ -269,11 +269,23 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 		return fmt.Errorf("add worktree: %w", err)
 	}
 
+	// From here on the worktree exists on disk but is not yet fully provisioned
+	// (unbound and/or detached). Any subsequent failure must remove it before
+	// returning: a leftover unbound+detached worktree at .worktrees/<issue-id>
+	// blocks a later re-claim (the path already exists but isn't bound to the
+	// issue). Cleanup is best-effort and logged if it itself fails.
+	cleanupPartialWorktree := func(cause error, label string) error {
+		if rmErr := gitClient.RemoveWorktree(worktreePath); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to clean up partial worktree at %s: %v\n", worktreePath, rmErr)
+		}
+		return fmt.Errorf("%s: %w", label, cause)
+	}
+
 	// Create-or-checkout the issue branch inside the worktree. Because the
 	// worktree is detached, no other worktree holds the branch, so this never
 	// trips git's "branch already checked out" guard.
 	if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
-		return fmt.Errorf("checkout branch in worktree: %w", err)
+		return cleanupPartialWorktree(err, "checkout branch in worktree")
 	}
 
 	// Best-effort project-isolation mitigation: if the MAIN tree uses a go.work
@@ -287,10 +299,13 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 
 	// Create the issue ID file in the worktree's .git directory
 	if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-		return fmt.Errorf("write issue ID file: %w", err)
+		return cleanupPartialWorktree(err, "write issue ID file")
 	}
 
-	return persistBranchPointMetadata(gitClient, worktreePath, branchName, headSHA, headErr, parentBranch, parentErr)
+	if err := persistBranchPointMetadata(gitClient, worktreePath, branchName, headSHA, headErr, parentBranch, parentErr); err != nil {
+		return cleanupPartialWorktree(err, "persist branch-point metadata")
+	}
+	return nil
 }
 
 // persistBranchPointMetadata records the branch-point metadata (parent branch
