@@ -1,11 +1,12 @@
 package harnesshook
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // DecodedEventInfo carries the minimal information extracted from a decoded
@@ -83,25 +84,7 @@ func ReadIssueBindingFile(gitDir string) string {
 // fail closed on such errors (rather than silently treating the worktree as
 // unbound) should use this variant.
 func ReadIssueBindingFileErr(gitDir string) (string, error) {
-	issueIDPath := filepath.Join(gitDir, "armature-issue-id")
-	data, err := os.ReadFile(issueIDPath) //nolint:gosec // G304: derived from a trusted git directory
-	if err == nil {
-		return strings.TrimSpace(string(data)), nil
-	}
-	if !os.IsNotExist(err) {
-		return "", fmt.Errorf("read %s: %w", issueIDPath, err)
-	}
-
-	taskIDPath := filepath.Join(gitDir, "armature-task-id")
-	data, err = os.ReadFile(taskIDPath) //nolint:gosec // G304: derived from a trusted git directory
-	if err == nil {
-		return strings.TrimSpace(string(data)), nil
-	}
-	if !os.IsNotExist(err) {
-		return "", fmt.Errorf("read %s: %w", taskIDPath, err)
-	}
-
-	return "", nil
+	return worktree.ReadBinding(gitDir)
 }
 
 // ResolveBindingFromDir walks up the directory tree starting from dir to find

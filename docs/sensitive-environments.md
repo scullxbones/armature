@@ -162,7 +162,7 @@ git config --local --unset armature.disable-activity-logging
 
 ```bash
 git config --local armature.disable-activity-logging true
-arm claim TASK-001 --worktree ./worktree
+arm claim TASK-001 --worktree
 # then launch harness from the worktree
 ```
 

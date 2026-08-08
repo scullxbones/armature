@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +16,7 @@ import (
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -555,18 +554,13 @@ func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool, error)
 // resolveClaimedStoryWorktree, which must find a claimed worktree by its own
 // armature-issue-id marker independent of branch state.
 func listAllWorktreePaths(repoPath string) ([]string, error) {
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	items, err := worktree.List(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
+		return nil, err
 	}
-
-	var paths []string
-	for _, line := range strings.Split(string(output), "\n") {
-		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
-			paths = append(paths, rest)
-		}
+	paths := make([]string, 0, len(items))
+	for _, item := range items {
+		paths = append(paths, item.Path)
 	}
 	return paths, nil
 }

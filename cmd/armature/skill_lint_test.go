@@ -72,7 +72,7 @@ Run the following commands:
 
 ` + "```bash" + `
 arm worker-init --check || arm worker-init
-arm claim TASK-01 --worktree /tmp/wt
+arm claim TASK-01 --worktree
 arm note TASK-01 --msg "Testing"
 arm transition TASK-01 --to done --outcome "Complete"
 arm doctor
@@ -180,11 +180,26 @@ More info.
 	// Optional flags in square brackets are Cobra synopsis notation, not
 	// copyable shell syntax. Lint must reject them before they ship in an
 	// executable example.
+	t.Run("ObsoleteValueTakingWorktreeFails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 --worktree /tmp/wt\n```\n"), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		output := new(bytes.Buffer)
+		cmd.Stderr = output
+		err := cmd.Run()
+		require.Error(t, err)
+		require.Contains(t, output.String(), "obsolete value-taking --worktree")
+	})
+
 	t.Run("BracketedOptionalFlagSyntaxFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		skillMD := "```bash\narm claim --issue TASK-01 --worktree /tmp/wt [--ttl 120]\n```\n"
+		skillMD := "```bash\narm claim --issue TASK-01 --worktree [--ttl 120]\n```\n"
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
@@ -208,7 +223,7 @@ More info.
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 \\\n  --worktree /tmp/wt\n```\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("```bash\narm claim TASK-01 \\\n  --worktree\n```\n"), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -225,7 +240,7 @@ More info.
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		skillMD := "```bash\narm claim TASK-01 --worktree /tmp/wt \\\n  --not-a-real-flag\n```\n"
+		skillMD := "```bash\narm claim TASK-01 --worktree \\\n  --not-a-real-flag\n```\n"
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
@@ -481,7 +496,7 @@ assert any("arm review commits" in c for c in commands), commands
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		skillMD := "```bash\narm claim TASK-01 --worktree /tmp/wt --ttl[=60]\n```\n"
+		skillMD := "```bash\narm claim TASK-01 --worktree --ttl[=60]\n```\n"
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
@@ -502,7 +517,7 @@ assert any("arm review commits" in c for c in commands), commands
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
-		skillMD := "1. Claim the task:\n   ```bash\n   arm claim TASK-01 --worktree /tmp/wt\n   ```\n"
+		skillMD := "1. Claim the task:\n   ```bash\n   arm claim TASK-01 --worktree\n   ```\n"
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
 		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled

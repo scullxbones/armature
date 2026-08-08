@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +46,51 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v: %s", args, out)
+}
+
+func worktreeGitDir(t *testing.T, worktreePath string) string {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--git-dir")
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	gitDir := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(worktreePath, gitDir)
+	}
+	return gitDir
+}
+
+func addCanonicalMarkerWorktree(t *testing.T, repoDir, issueID string) string {
+	t.Helper()
+	worktreePath := filepath.Join(repoDir, ".worktrees", issueID)
+	require.NoError(t, os.MkdirAll(filepath.Dir(worktreePath), 0755))
+	runGit(t, repoDir, "worktree", "add", "-b", "task/"+issueID, worktreePath)
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeGitDir(t, worktreePath), "armature-issue-id"), []byte(issueID+"\n"), 0644))
+	return worktreePath
+}
+
+func TestPlanFixes_UsesCanonicalMarkerInventory_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
+	repoDir := initGitRepo(t)
+	worktreePath := addCanonicalMarkerWorktree(t, repoDir, "canonical-01")
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "canonical-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{Title: "Canonical worktree task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "canonical-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{TTL: 240, WorktreePath: worktreePath}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "a canonical marker-bound worktree must satisfy doctor --fix")
 }
 
 func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {

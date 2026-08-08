@@ -9,6 +9,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // BaseCommitFileName is the name of the file (written into a worktree's
@@ -61,31 +62,7 @@ var CandidateBaseRefs = []string{"origin/main", "origin/master", "main", "master
 // Shared by claim, harness-hook, and the delivery gate so all read from the
 // same location.
 func ResolveWorktreeGitDir(worktreePath string) (string, error) {
-	gitPath := filepath.Join(worktreePath, ".git")
-	// If .git is a directory (main worktree), return it directly.
-	info, err := os.Stat(gitPath)
-	if err != nil {
-		return "", fmt.Errorf("stat .git: %w", err)
-	}
-	if info.IsDir() {
-		return gitPath, nil
-	}
-
-	// .git is a file — read "gitdir: <path>" from it.
-	//nolint:gosec // git paths are internal, not user-provided
-	gitFileContent, err := os.ReadFile(gitPath)
-	if err != nil {
-		return "", fmt.Errorf("read .git file: %w", err)
-	}
-	gitDirLine := strings.TrimSpace(string(gitFileContent))
-	if !strings.HasPrefix(gitDirLine, "gitdir: ") {
-		return "", fmt.Errorf("unexpected .git file format: %s", gitDirLine)
-	}
-	actualGitDir := strings.TrimPrefix(gitDirLine, "gitdir: ")
-	if !filepath.IsAbs(actualGitDir) {
-		actualGitDir = filepath.Join(worktreePath, actualGitDir)
-	}
-	return actualGitDir, nil
+	return worktree.ResolveGitDir(worktreePath)
 }
 
 // ResolveWorktreeRoot resolves path to the top-level directory of the git

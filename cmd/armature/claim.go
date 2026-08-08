@@ -42,49 +42,20 @@ func worktreePathExists(path string) (bool, error) {
 	return false, err // other error
 }
 
-// isWorktreeOf checks if a worktree at worktreePath is registered to the git repository at repoPath.
-// It runs `git -C repoPath worktree list --porcelain` and checks if worktreePath appears in the list.
-// This prevents claiming a worktree that belongs to a different git repository.
+// isWorktreeOf checks if a worktree at worktreePath is registered to the git
+// repository at repoPath. It uses the shared marker-aware inventory so claim's
+// foreign-repository guard cannot drift from list, GC, merged, or Doctor.
 func isWorktreeOf(repoPath, worktreePath string) bool {
-	// Use EvalSymlinks to resolve symlinks for accurate path comparison.
-	// git worktree list --porcelain emits resolved paths, so we must match them.
-	absWorktreePath, err := filepath.EvalSymlinks(worktreePath)
-	if err != nil {
-		// Fall back to Abs if EvalSymlinks fails (path may not exist yet).
-		absWorktreePath, err = filepath.Abs(worktreePath)
-		if err != nil {
-			return false
-		}
-	}
-
-	// Get the worktree registered to this repo by parsing `git worktree list --porcelain`
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	worktrees, err := worktree.List(repoPath)
 	if err != nil {
 		return false
 	}
-
-	// Parse porcelain format: each worktree entry starts with "worktree <path>"
-	for line := range strings.SplitSeq(string(output), "\n") {
-		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
-			registeredPath := strings.TrimSpace(rest)
-			// Use EvalSymlinks to resolve symlinks for accurate path comparison.
-			// git worktree list --porcelain emits resolved paths, so we must match them.
-			absRegisteredPath, err := filepath.EvalSymlinks(registeredPath)
-			if err != nil {
-				// Fall back to Abs if EvalSymlinks fails (path may not exist yet).
-				absRegisteredPath, err = filepath.Abs(registeredPath)
-				if err != nil {
-					continue
-				}
-			}
-			if absRegisteredPath == absWorktreePath {
-				return true
-			}
+	target := worktree.NormalizePath(worktreePath)
+	for _, item := range worktrees {
+		if worktree.NormalizePath(item.Path) == target {
+			return true
 		}
 	}
-
 	return false
 }
 
@@ -144,6 +115,23 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 // by internal/doctor for missing-worktree detection.
 func deriveBranchName(issueType, issueID string) string {
 	return materialize.DeriveBranchName(issueType, issueID)
+}
+
+// canonicalWorktreePath validates the issue ID before it is used in any
+// filesystem or git operation. Slash-bearing IDs are supported, but absolute
+// IDs and traversal outside the repository's canonical .worktrees root are
+// rejected before the claim op is appended.
+func canonicalWorktreePath(repoPath, issueID string) (string, error) {
+	if issueID == "" || filepath.IsAbs(issueID) {
+		return "", fmt.Errorf("invalid issue ID %q for canonical worktree path", issueID)
+	}
+	root := worktree.CanonicalRoot(repoPath)
+	path := worktree.CanonicalPath(repoPath, issueID)
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("issue ID %q escapes canonical worktree root %s", issueID, root)
+	}
+	return path, nil
 }
 
 // addWorktreeDetached provisions a linked worktree at worktreePath checked out
@@ -217,20 +205,17 @@ func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel strin
 	if priorWasActive {
 		rollbackStatus = prior.status
 		payload.To = rollbackStatus
-		// Restore the pre-claim worktree path: the claim op overwrote it with the
-		// canonical path, but provisioning that path failed, so the still-active
-		// claim must point back at the worktree it had before (e.g. a legacy path).
-		// This branch is reached only when the prior claim was active (priorWasActive),
-		// so it is never a first claim. When the prior path was empty — a same-worker
-		// active retry over a legacy worktree that had no recorded path — an empty
-		// Payload.WorktreePath would be dropped by applyTransition as "no change",
-		// leaving the issue pointing at the just-removed canonical path; the explicit
-		// ClearWorktreePath signal restores it to empty instead.
-		if prior.worktreePath != "" {
-			payload.WorktreePath = prior.worktreePath
-		} else {
-			payload.ClearWorktreePath = true
-		}
+	}
+	// Always restore the pre-claim path, regardless of whether the failed claim
+	// was a first claim, stale takeover, or active retry. The claim op is
+	// append-only and materializes its canonical path before provisioning; if
+	// provisioning fails that path may have been removed, so retaining it would
+	// leave state pointing at a nonexistent worktree. An explicit clear signal
+	// preserves an empty legacy path instead of being mistaken for "no change".
+	if prior.worktreePath != "" {
+		payload.WorktreePath = prior.worktreePath
+	} else {
+		payload.ClearWorktreePath = true
 	}
 	rollbackOp := ops.Op{
 		Type:      ops.OpTransition,
@@ -287,8 +272,44 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	if headErr == nil && headSHA != "" {
 		detachRef = headSHA
 	}
-	if err := addWorktreeDetached(repoPath, worktreePath, detachRef); err != nil {
-		return fmt.Errorf("add worktree: %w", err)
+	adopted := false
+	adoptedFrom := ""
+	// Deliberate checked-out-branch policy: if the issue already owns a
+	// correctly bound worktree elsewhere, adopt it by moving the registered
+	// worktree to the canonical path. This preserves its branch and uncommitted
+	// files and avoids Git's branch-already-checked-out guard. An unbound or
+	// differently-bound worktree is never adopted; the detached-first path will
+	// fail closed and clean up its temporary registration instead.
+	inventory, inventoryErr := worktree.List(repoPath)
+	if inventoryErr != nil {
+		return fmt.Errorf("inspect existing worktrees: %w", inventoryErr)
+	}
+	for _, item := range inventory {
+		if worktree.NormalizePath(item.Path) == worktree.NormalizePath(worktreePath) || item.Branch != "refs/heads/"+branchName {
+			continue
+		}
+		if item.IssueID != issueID {
+			return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
+		}
+		if _, statErr := os.Stat(worktreePath); statErr == nil {
+			break
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("check canonical worktree path: %w", statErr)
+		}
+		if err := os.MkdirAll(filepath.Dir(worktreePath), 0o750); err != nil {
+			return fmt.Errorf("create canonical worktree root: %w", err)
+		}
+		if err := gitClient.MoveWorktree(item.Path, worktreePath); err != nil {
+			return fmt.Errorf("adopt bound worktree: %w", err)
+		}
+		adopted = true
+		adoptedFrom = item.Path
+		break
+	}
+	if !adopted {
+		if err := addWorktreeDetached(repoPath, worktreePath, detachRef); err != nil {
+			return fmt.Errorf("add worktree: %w", err)
+		}
 	}
 
 	// From here on the worktree exists on disk but is not yet fully provisioned
@@ -297,7 +318,11 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// blocks a later re-claim (the path already exists but isn't bound to the
 	// issue). Cleanup is best-effort and logged if it itself fails.
 	cleanupPartialWorktree := func(cause error, label string) error {
-		if rmErr := gitClient.RemoveWorktree(worktreePath); rmErr != nil {
+		if adoptedFrom != "" {
+			if moveErr := gitClient.MoveWorktree(worktreePath, adoptedFrom); moveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to restore adopted worktree at %s: %v\n", adoptedFrom, moveErr)
+			}
+		} else if rmErr := gitClient.RemoveWorktree(worktreePath); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to clean up partial worktree at %s: %v\n", worktreePath, rmErr)
 		}
 		return fmt.Errorf("%s: %w", label, cause)
@@ -306,8 +331,10 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// Create-or-checkout the issue branch inside the worktree. Because the
 	// worktree is detached, no other worktree holds the branch, so this never
 	// trips git's "branch already checked out" guard.
-	if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
-		return cleanupPartialWorktree(err, "checkout branch in worktree")
+	if !adopted {
+		if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
+			return cleanupPartialWorktree(err, "checkout branch in worktree")
+		}
 	}
 
 	// Best-effort project-isolation mitigation: if the MAIN tree uses a go.work
@@ -557,6 +584,7 @@ armature-issue-id file if the worktree already exists.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
+			var err error
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -567,19 +595,13 @@ armature-issue-id file if the worktree already exists.`,
 				return fmt.Errorf("--worktree is required")
 			}
 
-			// The worktree is always provisioned at the hardcoded default root
-			// .worktrees/<issue-id> relative to the repo root, so every worker
-			// dispatch gets an isolated, predictable worktree location.
-			worktreePath = filepath.Join(ctx.RepoPath, ".worktrees", issueID)
-
-			// Normalize worktreePath to an absolute path to ensure all subsequent
-			// operations (worktreePathExists, updateIssueIDFile, etc.) resolve paths
-			// relative to the worktree location, not the current working directory.
-			absWorktreePath, err := filepath.Abs(worktreePath)
+			// Validate and resolve the canonical path before any claim append or
+			// filesystem/git mutation. This permits slash-bearing IDs but rejects
+			// absolute and traversal IDs that would escape .worktrees.
+			worktreePath, err = canonicalWorktreePath(ctx.RepoPath, issueID)
 			if err != nil {
-				return fmt.Errorf("resolve worktree path: %w", err)
+				return err
 			}
-			worktreePath = absWorktreePath
 
 			issuesDir := ctx.IssuesDir
 

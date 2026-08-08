@@ -142,6 +142,64 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the worktree directory from disk")
 }
 
+// TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2 verifies
+// that a worktree directory removed outside git is not treated as a live bound
+// worktree while git still reports its stale registration as prunable.
+func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-prunable", "--title", "Prunable", "--type", "task", "--scope", "prunable.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-prunable", "--worktree")
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(repo, ".worktrees", "task-prunable")
+	require.NoError(t, os.RemoveAll(worktreePath))
+
+	res := listJSON(t, repo)
+	assert.Contains(t, res["ghosts"], "task-prunable", "a prunable registration must not count as a live worktree")
+	assert.NotContains(t, res["bound"], "task-prunable")
+}
+
+// TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2 verifies gc
+// removes a terminal managed worktree even after its branch is detached.
+func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-detached-gc", "--title", "Detached GC", "--type", "task", "--scope", "detached.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-detached-gc", "--worktree")
+	require.NoError(t, err)
+
+	worktreePath := filepath.Join(repo, ".worktrees", "task-detached-gc")
+	run(t, worktreePath, "git", "checkout", "--detach", "HEAD")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-detached-gc", "--to", "merged", "--force")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.NoError(t, err)
+
+	var res struct {
+		Removed []string `json:"removed"`
+		Skipped []string `json:"skipped"`
+		Failed  []string `json:"failed"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &res))
+	assert.Contains(t, res.Removed, "task-detached-gc", "detached terminal worktree must be removed")
+	assert.NotContains(t, res.Skipped, "task-detached-gc")
+	assert.Empty(t, res.Failed)
+	_, statErr := os.Stat(worktreePath)
+	assert.True(t, os.IsNotExist(statErr), "gc must remove the detached worktree directory")
+}
+
 // TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2 verifies --dry-run reports the
 // merged worktree as a removal candidate but leaves it on disk.
 func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {

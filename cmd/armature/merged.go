@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -51,23 +50,36 @@ func readHookLogForViolations(gitDir string) bool {
 }
 
 // resolveIssueWorktree locates the worktree for an issue's branch and resolves its
-// git dir and binding. Returns ok=false when the issue type has no branch, the
-// worktree doesn't exist, or its git dir can't be resolved. binding is the content
-// of armature-issue-id ("" when absent). Shared by the merged violation gate and
-// worktree removal (finding 7).
+// git dir and binding. Returns ok=false when no matching worktree exists or its
+// git dir can't be resolved. binding is the content of armature-issue-id ("" when
+// absent). Shared by the merged violation gate and worktree removal (finding 7).
 func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePath, gitDir, binding string, ok bool) {
-	// Only types that claim creates worktrees for have a derivable branch name.
-	branchName := deriveBranchName(issue.Type, issue.ID)
-	if branchName == "" {
+	worktrees, err := worktree.List(repoPath)
+	if err != nil {
 		return "", "", "", false
 	}
-
-	worktreePath = findWorktreePathByBranch(repoPath, branchName)
+	// Marker identity is authoritative. This also handles a detached worktree
+	// and prevents an unrelated worktree holding the expected branch from being
+	// selected ahead of the actually bound worktree.
+	if item, found := worktree.FindByIssue(worktrees, issue.ID); found {
+		worktreePath = item.Path
+	} else if branchName := deriveBranchName(issue.Type, issue.ID); branchName != "" {
+		// Legacy fallback: an unbound worktree on the expected branch may still
+		// be torn down by merged, but a worktree bound to another issue is never
+		// eligible merely because its branch happens to match.
+		wantRef := "refs/heads/" + branchName
+		for _, item := range worktrees {
+			if item.IssueID == "" && item.Branch == wantRef {
+				worktreePath = item.Path
+				break
+			}
+		}
+	}
 	if worktreePath == "" {
 		return "", "", "", false
 	}
 
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err = resolveWorktreeGitDir(worktreePath)
 	if err != nil {
 		return "", "", "", false
 	}
@@ -99,8 +111,8 @@ type worktreeRemoveOutcome int
 
 const (
 	// worktreeSkipped means nothing was removed: the worktree was not found by
-	// branch (missing, or detached so its ref doesn't match refs/heads/<name>),
-	// or the clone-local armature-issue-id binding did not match the issue.
+	// branch or binding, or the clone-local armature-issue-id binding did not match
+	// the issue.
 	worktreeSkipped worktreeRemoveOutcome = iota
 	// worktreeRemoved means the worktree was located, binding-verified, and removed.
 	worktreeRemoved
@@ -162,35 +174,20 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 	return worktreeRemoved, nil
 }
 
-// findWorktreePathByBranch finds the worktree path for a given branch name by parsing git worktree list.
-// It matches exactly against the refs/heads/<branchName> ref to avoid false positives on
-// branch names that are substrings of one another.
+// findWorktreePathByBranch finds an unbound worktree path for a given branch.
+// It is retained for legacy callers, while lifecycle teardown uses the shared
+// marker-aware inventory in resolveIssueWorktree.
 func findWorktreePathByBranch(repoPath, branchName string) string {
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	items, err := worktree.List(repoPath)
 	if err != nil {
 		return ""
 	}
-
-	// Each worktree entry in porcelain format:
-	//   worktree <path>
-	//   HEAD <sha>
-	//   branch refs/heads/<name>   (or "detached")
-	//   (empty line)
 	wantRef := "refs/heads/" + branchName
-	lines := strings.Split(string(output), "\n")
-	var currentPath string
-	for _, line := range lines {
-		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
-			currentPath = rest
-		} else if rest, ok := strings.CutPrefix(line, "branch "); ok {
-			if rest == wantRef {
-				return currentPath
-			}
+	for _, item := range items {
+		if item.IssueID == "" && item.Branch == wantRef {
+			return item.Path
 		}
 	}
-
 	return ""
 }
 
