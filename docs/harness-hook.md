@@ -82,7 +82,7 @@ the legacy `armature-task-id` file in the same git dir when `armature-issue-id` 
 for compatibility with worktrees claimed before the `armature-issue-id` rename (commit
 `d52d78be`). `armature-issue-id` always takes precedence when both files are present.
 
-When a task is claimed with `arm claim --worktree <path>`, the task ID is written to the
+When a task is claimed with `arm claim --worktree`, the task ID is written to the
 worktree's git-specific directory, ensuring it is found during step 1 when the hook runs.
 
 ## Decision Logging and Violation Gate
@@ -662,9 +662,9 @@ When the harness stops:
 
 **Fix (preferred):** Claim the task with `--worktree` before launching the harness:
 ```bash
-arm claim TASK-001 --worktree ./task-001-work
+arm claim TASK-001 --worktree
 # then launch harness from the worktree directory
-cd ./task-001-work
+cd ./.worktrees/TASK-001
 ARMATURE_HOOK_PLATFORM=claude claude .
 ```
 
@@ -787,7 +787,7 @@ If D8 reports violations, investigate whether the artifacts should have been in-
 ## How Hooks Integrate with Armature Workflow
 
 1. **Coordinator runs `arm ready`** to find unblocked tasks.
-2. **Coordinator runs `arm claim <task-id> --worktree <path>`** to reserve a task and create a git worktree. The task ID is written to `<worktree-git-dir>/armature-issue-id`.
+2. **Coordinator runs `arm claim <task-id> --worktree`** to reserve a task and create `.worktrees/<task-id>`. The task ID is written to `<worktree-git-dir>/armature-issue-id`.
 3. **Coordinator launches harness** from the worktree directory with `ARMATURE_HOOK_PLATFORM` set. `ARMATURE_ISSUE_ID` is optional when a worktree binding file exists.
 4. **Model within harness requests tools** (file edits, shell commands).
 5. **Pre-tool hook fires** → `arm harness-hook` reads task binding from file → checks scope → allow/block returned. Scope violations are logged.

@@ -4,14 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
-	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
@@ -260,78 +256,7 @@ func newWorktreeGCCmd() *cobra.Command {
 // empty inventory from a transient failure would mislabel live claims as ghosts and
 // make gc a silent no-op.
 func readManagedWorktrees(repoPath string) ([]worktree.Meta, error) {
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git worktree list: %w", err)
-	}
-
-	var worktrees []worktree.Meta
-	lines := strings.Split(string(output), "\n")
-
-	var currentPath string
-	var currentBranch string
-
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
-			currentPath = rest
-		} else if rest, ok := strings.CutPrefix(line, "branch "); ok {
-			currentBranch = rest
-			// Once we have both path and branch, check if this is a managed worktree
-			if isManaged(repoPath, currentPath) {
-				issueID, err := readWorktreeIssueBinding(currentPath)
-				if err != nil {
-					return nil, fmt.Errorf("read worktree binding for %s: %w", currentPath, err)
-				}
-				worktrees = append(worktrees, worktree.Meta{
-					Path:    currentPath,
-					Branch:  currentBranch,
-					IssueID: issueID,
-				})
-			}
-		} else if rest, ok := strings.CutPrefix(line, "detached"); ok {
-			// Detached worktrees under .worktrees/ are also managed
-			_ = rest
-			if isManaged(repoPath, currentPath) {
-				issueID, err := readWorktreeIssueBinding(currentPath)
-				if err != nil {
-					return nil, fmt.Errorf("read worktree binding for %s: %w", currentPath, err)
-				}
-				worktrees = append(worktrees, worktree.Meta{
-					Path:    currentPath,
-					Branch:  "detached",
-					IssueID: issueID,
-				})
-			}
-		}
-	}
-
-	return worktrees, nil
-}
-
-// readWorktreeIssueBinding reads the authoritative armature-issue-id binding for
-// the worktree at worktreePath, so reconciliation keys worktree→issue identity on
-// the marker the claim wrote (and the removal layer verifies) rather than on the
-// path basename — which truncates slash-bearing issue IDs — or the git-replicated
-// absolute Issue.WorktreePath, which is meaningless outside the claiming clone.
-// A resolve failure or a missing marker yields "" (Reconcile falls back to the
-// path basename), but a marker that EXISTS and cannot be read (e.g. permission
-// denied) is surfaced as an error via ReadIssueBindingFileErr, matching the
-// fail-closed style of readManagedWorktrees. Swallowing that error would truncate
-// a slash-bearing ID to its basename, landing the worktree in Unrecognized while
-// its live claim lands in Ghosts — the same double-report checkExistingWorktreeBinding
-// avoids by using the ...Err variant.
-func readWorktreeIssueBinding(worktreePath string) (string, error) {
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
-	if err != nil {
-		return "", nil // can't resolve git dir; fall back to basename
-	}
-	return harnesshook.ReadIssueBindingFileErr(gitDir)
+	return worktree.ListManaged(repoPath)
 }
 
 // isManaged reports whether path is a managed worktree: it must live directly
@@ -340,11 +265,13 @@ func readWorktreeIssueBinding(worktreePath string) (string, error) {
 // merely contains the string) as managed, making them gc-removal candidates.
 // Both sides are symlink-normalized so a symlinked repo root still matches.
 func isManaged(repoPath, path string) bool {
-	return strings.HasPrefix(worktree.NormalizePath(path), managedWorktreeRoot(repoPath))
+	root := managedWorktreeRoot(repoPath)
+	normalized := worktree.NormalizePath(path)
+	return normalized != root && worktree.IsUnderRoot(normalized, root)
 }
 
 // managedWorktreeRoot returns this clone's managed worktree directory as a
-// normalized, trailing-separator prefix (<repoPath>/.worktrees/). Used both to
+// normalized root (<repoPath>/.worktrees). Used both to
 // classify managed worktrees and to scope Reconcile's ghost detection to
 // locally-owned claims.
 func managedWorktreeRoot(repoPath string) string {
@@ -357,7 +284,7 @@ func managedWorktreeRoot(repoPath string) string {
 	if resolved, err := filepath.Abs(repoPath); err == nil {
 		abs = resolved
 	}
-	return worktree.NormalizePath(filepath.Join(abs, ".worktrees")) + string(os.PathSeparator)
+	return worktree.NormalizePath(filepath.Join(abs, ".worktrees"))
 }
 
 // loadIssuesForReconcile loads current-truth issues the same way production read

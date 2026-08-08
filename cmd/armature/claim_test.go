@@ -588,6 +588,32 @@ func TestClaimStillAppendsClaimOpToLog(t *testing.T) {
 	assert.Contains(t, buf.String(), "task-01", "output should mention the claimed task")
 }
 
+func TestCanonicalWorktreePathRejectsTraversalBeforeMutation_REQ_LNGHZN_S5_T1(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "repo")
+	path, err := canonicalWorktreePath(root, "team/task-1")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, ".worktrees", "team", "task-1"), path)
+
+	_, err = canonicalWorktreePath(root, "../escaped")
+	assert.Error(t, err)
+	_, err = canonicalWorktreePath(root, filepath.Join(string(filepath.Separator), "escaped"))
+	assert.Error(t, err)
+}
+
+func TestClaimRejectsTraversalBeforeClaimAppend_REQ_LNGHZN_S5_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "../escaped", "--worktree"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "escapes canonical worktree root")
+	assert.NoDirExists(t, filepath.Join(repo, ".worktrees"), "invalid IDs must not create a worktree root")
+	assert.NoDirExists(t, filepath.Join(filepath.Dir(repo), "escaped"), "invalid IDs must not mutate outside the repository")
+}
+
 // TestDeriveBranchName verifies that deriveBranchName returns correct branch names for all issue types.
 func TestDeriveBranchName(t *testing.T) {
 	tests := []struct {
@@ -701,17 +727,32 @@ func TestCreateWorktreeAndBranchFailsWhenWorktreeCannotBeCreated(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	issue := materialize.Issue{Type: "task"}
 
-	// Create the first worktree successfully
+	// Create an unrelated, unbound worktree that holds the branch. The chosen
+	// policy adopts only correctly bound worktrees and rejects this collision.
 	worktree1 := filepath.Join(t.TempDir(), "worktree1")
-	err := createWorktreeAndBranch(repo, worktree1, "task-01", issue)
-	require.NoError(t, err, "first worktree creation should succeed")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", worktree1)
 
-	// Now try to create a second worktree with the same task/branch
-	// This should fail because the branch is already checked out
+	// Now try to create a second worktree with the same task/branch.
+	// This must fail closed rather than adopting an unbound worktree.
 	worktree2 := filepath.Join(t.TempDir(), "worktree2")
-	err = createWorktreeAndBranch(repo, worktree2, "task-01", issue)
+	err := createWorktreeAndBranch(repo, worktree2, "task-01", issue)
 	require.Error(t, err, "creating worktree with already-checked-out branch should fail")
 	assert.Contains(t, err.Error(), "worktree")
+}
+
+func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+
+	require.NoError(t, err, "a correctly bound existing worktree should be adopted")
+	assert.DirExists(t, canonicalPath)
+	assert.NoDirExists(t, legacyPath)
+	assert.Equal(t, "task/task-01", strings.TrimSpace(runOutput(t, canonicalPath, "branch", "--show-current")))
 }
 
 // TestClaimDoesNotCreateWorktreeWhenOverlapFails verifies that when claim fails due to
@@ -1097,7 +1138,7 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 		TargetID:  "task-01",
 		Timestamp: staleClaimTime,
 		WorkerID:  otherWorker,
-		Payload:   ops.Payload{TTL: 1},
+		Payload:   ops.Payload{TTL: 1, WorktreePath: "/legacy/task-01"},
 	}
 	require.NoError(t, ops.AppendOp(logPath, staleClaimOp))
 
@@ -1134,6 +1175,8 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 		"task should be rolled back to open after stale takeover failure (not remain claimed)")
 	assert.Equal(t, "", issueAfter.ClaimedBy,
 		"ClaimedBy must be cleared so other workers can pick up the task")
+	assert.Equal(t, "/legacy/task-01", issueAfter.WorktreePath,
+		"failed stale takeover must restore the prior worktree path")
 }
 
 // TestClaimRejectsForeignWorktree verifies the P2 bug fix: when a --worktree path is given

@@ -4,7 +4,6 @@ package worktree
 import (
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -17,7 +16,7 @@ type Meta struct {
 	Branch string
 	// IssueID is the authoritative worktree→issue binding, read from the
 	// worktree's own armature-issue-id marker file (the same binding the
-	// removal layer verifies via harnesshook.ReadIssueBindingFileErr). When
+	// removal layer verifies). When
 	// set, it — not the path basename — determines the worktree's issue
 	// identity during reconciliation, so a slash-bearing issue ID (or any ID
 	// that does not round-trip through filepath.Base) is classified correctly.
@@ -43,11 +42,9 @@ type ReconcileResult struct {
 // Reconcile classifies managed worktrees against the set of issues and their claim state.
 //
 // Classification is driven from THIS clone's on-disk worktrees (the []Meta), not
-// from the git-replicated absolute issue.WorktreePath: the removal layer
-// (removeWorktreeForIssueTracked) locates a worktree by branch in THIS clone, so
-// selection must key on the same clone-local signal to agree with it. Each local
-// worktree's issue is derived from its path (the base name is the issue ID), then
-// classified by the issue's status AND claim staleness:
+// from the git-replicated absolute issue.WorktreePath. Each local worktree's
+// authoritative marker identity is preferred (with a path-basename fallback for
+// legacy callers), then classified by the issue's status AND claim staleness:
 //   - terminal issue (merged/cancelled) -> GCRemovalSet (a clone-local terminal
 //     worktree is gc-ready even when the recorded WorktreePath points at a foreign
 //     or reused clone)
@@ -104,7 +101,16 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 		case isTerminalStatus(issue.Status):
 			result.GCRemovalSet = append(result.GCRemovalSet, issueID)
 		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
-			result.BoundWorktrees = append(result.BoundWorktrees, issueID)
+			// A claim's absolute WorktreePath identifies the clone that owns the
+			// claim. A marker in this clone is not enough to call a local path
+			// bound when the materialized claim points at another clone; classify
+			// that local checkout as an orphan so it cannot be mistaken for the
+			// claimant's live worktree.
+			if issue.WorktreePath == "" || NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
+				result.BoundWorktrees = append(result.BoundWorktrees, issueID)
+			} else {
+				result.Orphans = append(result.Orphans, issueID)
+			}
 		default:
 			// Unclaimed, or a claim past its TTL: worktree with no live claim.
 			result.Orphans = append(result.Orphans, issueID)
@@ -146,14 +152,14 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 
 // isUnderManagedRoot reports whether normPath falls under one of the supplied
 // managed roots. With no roots supplied, scoping is disabled and it returns true
-// (legacy behavior). Roots are expected to be NormalizePath'd, trailing-separator
-// prefixes; normPath is expected to already be normalized by the caller.
+// (legacy behavior). Both roots and paths are normalized, and a path-separator
+// boundary is required so a sibling such as .worktrees-old cannot match.
 func isUnderManagedRoot(normPath string, managedRoots []string) bool {
 	if len(managedRoots) == 0 {
 		return true
 	}
 	for _, root := range managedRoots {
-		if root != "" && strings.HasPrefix(normPath, root) {
+		if root != "" && IsUnderRoot(normPath, root) {
 			return true
 		}
 	}

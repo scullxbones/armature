@@ -50,6 +50,24 @@ func TestReconcile_BoundWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Empty(t, result.Ghosts)
 }
 
+func TestReconcile_ForeignLiveClaimIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []Meta{{Path: "/local/.worktrees/task-foreign", Branch: "refs/heads/task/task-foreign", IssueID: "task-foreign"}}
+	issues := map[string]*materialize.Issue{
+		"task-foreign": {
+			ID:           "task-foreign",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-remote",
+			WorktreePath: "/remote/.worktrees/task-foreign",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, testNow)
+
+	assert.Empty(t, result.BoundWorktrees)
+	assert.Equal(t, []string{"task-foreign"}, result.Orphans)
+}
+
 func TestReconcile_Orphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	// Worktree exists but issue has no claim (or issue doesn't exist)

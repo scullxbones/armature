@@ -33,6 +33,8 @@ class TestFindLintFiles(unittest.TestCase):
                 "docs/getting-started.md",
                 "docs/use-cases.md",
                 "docs/commands.md",
+                "docs/harness-hook.md",
+                "docs/sensitive-environments.md",
                 "docs/design/architecture.md",
                 "docs/design/roles.md",
             ):
@@ -51,6 +53,8 @@ class TestFindLintFiles(unittest.TestCase):
                 "docs/getting-started.md",
                 "docs/use-cases.md",
                 "docs/commands.md",
+                "docs/harness-hook.md",
+                "docs/sensitive-environments.md",
                 "docs/design/architecture.md",
                 "docs/design/roles.md",
             })
@@ -127,7 +131,7 @@ class TestAngleBracketPlaceholder(unittest.TestCase):
         self.assertTrue(has_angle_bracket_placeholder(tokens))
 
     def test_does_not_flag_plain_command(self):
-        tokens = tokenize_shell_line("arm claim TASK-01 --worktree /tmp/wt")
+        tokens = tokenize_shell_line("arm claim TASK-01 --worktree")
         self.assertFalse(has_angle_bracket_placeholder(tokens))
 
 

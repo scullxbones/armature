@@ -6,10 +6,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // FixAction is a single deterministic remediation planned by PlanFixes.
@@ -57,15 +57,16 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //     worker went silent mid-work; transition to blocked pending manual investigation
 //     rather than silently discarding in-flight work.
 //   - claimed/in-progress + missing worktree: `arm claim --worktree` always creates
-//     the task's worktree as part of a successful claim (at `.worktrees/<issue-id>`),
-//     so a claimed or in-progress issue whose `task/<id>` branch has no live worktree
-//     registered against repoPath indicates the worktree was torn down (or its git
+//     the task's canonical worktree as part of a successful claim (at
+//     `.worktrees/<issue-id>`), so a claimed or in-progress issue whose canonical
+//     path has no live marker-bound worktree registered against repoPath indicates
+//     the worktree was torn down (or its git
 //     metadata corrupted) out from under an active claim — the same class of failure
 //     this fix pass exists to recover from, independent of whether the TTL has
 //     expired yet. This check is skipped entirely — for every issue, not just the
-//     ones it would otherwise flag — whenever GitWorktreeBranches cannot positively
-//     confirm which branches have live worktrees (repoPath empty, not a git repo, or
-//     any other git failure). Treating "couldn't determine" the same as "confirmed
+//     ones it would otherwise flag — whenever the marker-aware inventory cannot
+//     positively confirm which worktrees are live (repoPath empty, not a git repo,
+//     or any other git failure). Treating "couldn't determine" the same as "confirmed
 //     missing" would misfire on every currently claimed/in-progress issue in the
 //     graph from a single transient git error — exactly the mass-false-positive risk
 //     this fix pass exists to avoid, not reintroduce. This check is further scoped to
@@ -111,7 +112,12 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 		fixed[id] = true
 	}
 
-	if liveBranches, err := adapters.GitWorktreeBranches(repoPath); err == nil {
+	if repoPath != "" {
+		inventory, err := worktree.ListManaged(repoPath)
+		if err != nil {
+			// A failed inventory cannot prove a missing canonical worktree.
+			return actions
+		}
 		for id, issue := range allIssues {
 			if issue == nil || fixed[id] {
 				continue
@@ -122,8 +128,15 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			if issue.ClaimedBy != workerID {
 				continue
 			}
-			branch := materialize.DeriveBranchName(issue.Type, id)
-			if branch == "" || liveBranches[branch] {
+			canonicalPath := worktree.NormalizePath(worktree.CanonicalPath(repoPath, id))
+			found := false
+			for _, item := range inventory {
+				if item.IssueID == id && worktree.NormalizePath(item.Path) == canonicalPath {
+					found = true
+					break
+				}
+			}
+			if found {
 				continue
 			}
 			actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
