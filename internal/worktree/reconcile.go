@@ -27,8 +27,10 @@ type ReconcileResult struct {
 }
 
 // Reconcile classifies managed worktrees against the set of issues and their claim state.
-// A BOUND worktree is associated with an issue that references it (via WorktreePath) and the worktree exists on disk.
-// An ORPHAN is a worktree on disk that doesn't match any known issue.
+// A BOUND worktree is associated with an issue that references it (via WorktreePath), holds a live
+// claim (issue.ClaimedBy is set), and the worktree exists on disk.
+// An ORPHAN is a worktree on disk with no live claim: either no issue references it, or the
+// referencing issue exists but its ClaimedBy is empty.
 // A GHOST is an issue with a recorded worktree_path that doesn't exist on disk.
 // GCRemovalSet contains issues in merged/cancelled with an existing worktree.
 func Reconcile(worktrees []WorktreeMeta, issues map[string]*materialize.Issue) ReconcileResult {
@@ -59,12 +61,16 @@ func Reconcile(worktrees []WorktreeMeta, issues map[string]*materialize.Issue) R
 
 		if hasWorktreePath {
 			if worktreeExists {
-				if isTerminal {
+				switch {
+				case isTerminal:
 					// Terminal status: in removal set
 					result.GCRemovalSet = append(result.GCRemovalSet, issue.ID)
-				} else {
-					// Non-terminal: bound worktree (actively in use)
+				case issue.ClaimedBy != "":
+					// Live claim held: bound worktree (actively in use)
 					result.BoundWorktrees = append(result.BoundWorktrees, issue.ID)
+				default:
+					// Worktree exists but no live claim: orphan per contract
+					result.Orphans = append(result.Orphans, issue.ID)
 				}
 				worktreeClaimed[issue.WorktreePath] = true
 			} else {

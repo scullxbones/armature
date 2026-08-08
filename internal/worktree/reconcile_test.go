@@ -139,6 +139,7 @@ func TestReconcile_NoGCRemovalDone_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-06": {
 			ID:           "task-06",
 			Status:       ops.StatusDone,
+			ClaimedBy:    "worker-1",
 			WorktreePath: "/repo/.worktrees/task-06",
 		},
 	}
@@ -230,4 +231,65 @@ func TestReconcile_GhostWithoutWorktree_NotInRemovalSet_REQ_LNGHZN_S5_T2(t *test
 	assert.Len(t, result.Ghosts, 1)
 	assert.Contains(t, result.Ghosts, "task-07")
 	assert.Empty(t, result.GCRemovalSet)
+}
+
+func TestReconcile_UnclaimedWorktreeIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	// Issue references an existing worktree but holds no live claim (ClaimedBy empty):
+	// per the contract this is an ORPHAN (worktree with no live claim), not bound.
+	worktrees := []WorktreeMeta{
+		{Path: "/repo/.worktrees/task-08", Branch: "task/task-08"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-08": {
+			ID:           "task-08",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "",
+			WorktreePath: "/repo/.worktrees/task-08",
+		},
+	}
+
+	result := Reconcile(worktrees, issues)
+
+	assert.Empty(t, result.BoundWorktrees)
+	assert.Len(t, result.Orphans, 1)
+	assert.Contains(t, result.Orphans, "task-08")
+	assert.Empty(t, result.Ghosts)
+}
+
+// TestWorktreeListFlagsOrphans_REQ_LNGHZN_S5_T2 is the contract-named acceptance test:
+// worktree list must flag orphans (worktree on disk with no live claim).
+func TestWorktreeListFlagsOrphans_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []WorktreeMeta{
+		{Path: "/repo/.worktrees/task-09", Branch: "task/task-09"}, // bound (claimed)
+		{Path: "/repo/.worktrees/task-10", Branch: "task/task-10"}, // orphan (unclaimed)
+	}
+	issues := map[string]*materialize.Issue{
+		"task-09": {ID: "task-09", Status: ops.StatusInProgress, ClaimedBy: "worker-1", WorktreePath: "/repo/.worktrees/task-09"},
+		"task-10": {ID: "task-10", Status: ops.StatusInProgress, ClaimedBy: "", WorktreePath: "/repo/.worktrees/task-10"},
+	}
+
+	result := Reconcile(worktrees, issues)
+
+	assert.Contains(t, result.BoundWorktrees, "task-09")
+	assert.Contains(t, result.Orphans, "task-10")
+}
+
+// TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2 is the contract-named acceptance test:
+// gc's removal set must contain issues in merged status with an existing worktree.
+func TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	worktrees := []WorktreeMeta{
+		{Path: "/repo/.worktrees/task-11", Branch: "task/task-11"},
+	}
+	issues := map[string]*materialize.Issue{
+		"task-11": {ID: "task-11", Status: ops.StatusMerged, ClaimedBy: "worker-1", WorktreePath: "/repo/.worktrees/task-11"},
+	}
+
+	result := Reconcile(worktrees, issues)
+
+	assert.Contains(t, result.GCRemovalSet, "task-11")
+	assert.NotContains(t, result.BoundWorktrees, "task-11")
+	assert.NotContains(t, result.Orphans, "task-11")
 }
