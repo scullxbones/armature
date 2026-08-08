@@ -9,6 +9,7 @@ import (
 )
 
 func TestReconcile_EmptyInputs(t *testing.T) {
+	t.Parallel()
 	result := Reconcile([]WorktreeMeta{}, map[string]*materialize.Issue{})
 
 	assert.Empty(t, result.BoundWorktrees)
@@ -18,6 +19,7 @@ func TestReconcile_EmptyInputs(t *testing.T) {
 }
 
 func TestReconcile_BoundWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Worktree exists, issue has claim and worktree_path
 	worktrees := []WorktreeMeta{
 		{Path: "/repo/.worktrees/task-01", Branch: "task/task-01"},
@@ -40,6 +42,7 @@ func TestReconcile_BoundWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_Orphan_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Worktree exists but issue has no claim (or issue doesn't exist)
 	worktrees := []WorktreeMeta{
 		{Path: "/repo/.worktrees/task-02", Branch: "task/task-02"},
@@ -62,6 +65,7 @@ func TestReconcile_Orphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_Ghost_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Issue has worktree_path recorded but worktree doesn't exist on disk
 	worktrees := []WorktreeMeta{}
 	issues := map[string]*materialize.Issue{
@@ -82,6 +86,7 @@ func TestReconcile_Ghost_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_GCRemovalMerged_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Issue is merged with an existing worktree: should be in GCRemovalSet
 	worktrees := []WorktreeMeta{
 		{Path: "/repo/.worktrees/task-04", Branch: "task/task-04"},
@@ -104,6 +109,7 @@ func TestReconcile_GCRemovalMerged_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_GCRemovalCancelled_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Issue is cancelled with an existing worktree: should be in GCRemovalSet
 	worktrees := []WorktreeMeta{
 		{Path: "/repo/.worktrees/task-05", Branch: "task/task-05"},
@@ -123,6 +129,7 @@ func TestReconcile_GCRemovalCancelled_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_NoGCRemovalDone_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Issue is done (not merged) with an existing worktree: should NOT be in GCRemovalSet
 	// (done means it hasn't been confirmed as merged yet)
 	worktrees := []WorktreeMeta{
@@ -143,6 +150,7 @@ func TestReconcile_NoGCRemovalDone_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_MixedScenario_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Complex scenario with multiple types
 	worktrees := []WorktreeMeta{
 		{Path: "/repo/.worktrees/task-01", Branch: "task/task-01"}, // bound
@@ -189,6 +197,7 @@ func TestReconcile_MixedScenario_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_WorktreeWithoutIssue_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Worktree exists but there's no corresponding issue at all (truly orphaned)
 	worktrees := []WorktreeMeta{
 		{Path: "/repo/.worktrees/unknown", Branch: "task/unknown"},
@@ -204,6 +213,7 @@ func TestReconcile_WorktreeWithoutIssue_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestReconcile_GhostWithoutWorktree_NotInRemovalSet_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	// Issue is merged but worktree doesn't exist: ghost should exist but NOT be in gc removal set
 	// (can't remove a worktree that doesn't exist)
 	worktrees := []WorktreeMeta{}

@@ -34,10 +34,7 @@ func newWorktreeListCmd() *cobra.Command {
 			ctx := currentCtx(cmd)
 
 			// Read all managed worktrees from git worktree list
-			worktrees, err := readManagedWorktrees(ctx.RepoPath)
-			if err != nil {
-				return err
-			}
+			worktrees := readManagedWorktrees(ctx.RepoPath)
 
 			// Load all issues from materialized state
 			issues, err := materialize.LoadAllIssues(filepath.Join(ctx.IssuesDir, "issues"))
@@ -104,10 +101,7 @@ func newWorktreeGCCmd() *cobra.Command {
 			ctx := currentCtx(cmd)
 
 			// Read all managed worktrees
-			worktrees, err := readManagedWorktrees(ctx.RepoPath)
-			if err != nil {
-				return err
-			}
+			worktrees := readManagedWorktrees(ctx.RepoPath)
 
 			// Load all issues
 			issues, err := materialize.LoadAllIssues(filepath.Join(ctx.IssuesDir, "issues"))
@@ -124,8 +118,8 @@ func newWorktreeGCCmd() *cobra.Command {
 				// Dry run: just report what would be removed
 				if format == "json" || format == "agent" {
 					jsonResult := map[string]interface{}{
-						"dry_run":       true,
-						"would_remove":  result.GCRemovalSet,
+						"dry_run":            true,
+						"would_remove":       result.GCRemovalSet,
 						"would_remove_count": len(result.GCRemovalSet),
 					}
 					data, _ := json.MarshalIndent(jsonResult, "", "  ") //nolint:errcheck
@@ -198,13 +192,13 @@ func newWorktreeGCCmd() *cobra.Command {
 
 // readManagedWorktrees reads all managed worktrees from git worktree list --porcelain.
 // Filters to only worktrees under .worktrees/ directory.
-func readManagedWorktrees(repoPath string) ([]worktree.WorktreeMeta, error) {
+func readManagedWorktrees(repoPath string) []worktree.WorktreeMeta {
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		// No worktrees or git command failed; return empty list
-		return []worktree.WorktreeMeta{}, nil
+		return []worktree.WorktreeMeta{}
 	}
 
 	var worktrees []worktree.WorktreeMeta
@@ -241,7 +235,7 @@ func readManagedWorktrees(repoPath string) ([]worktree.WorktreeMeta, error) {
 		}
 	}
 
-	return worktrees, nil
+	return worktrees
 }
 
 // isManaged checks if a worktree path is under .worktrees/ (a managed worktree).
