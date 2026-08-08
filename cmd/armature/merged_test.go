@@ -58,12 +58,12 @@ func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
 // TestMergedRemovesTaskWorktree verifies that merged removes a worktree for task-type issues.
 func TestMergedRemovesTaskWorktree(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify worktree exists
@@ -102,12 +102,12 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test bug", "--type", "bug", "--id", "bug-01"})
 	require.NoError(t, cmd2.Execute())
 
-	worktreePath := filepath.Join(t.TempDir(), "bug-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "bug-01")
 
 	// Claim the bug to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "bug-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "bug-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify worktree exists
@@ -180,12 +180,12 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"})
 	require.NoError(t, cmd2.Execute())
 
-	worktreePath := filepath.Join(t.TempDir(), "story-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "story-01")
 
 	// Claim the story to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "story-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "story-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify worktree exists
@@ -225,12 +225,12 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test feature", "--type", "feature", "--id", "feature-01"})
 	require.NoError(t, cmd2.Execute())
 
-	worktreePath := filepath.Join(t.TempDir(), "feature-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "feature-01")
 
 	// Claim the feature to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "feature-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "feature-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify worktree exists
@@ -291,12 +291,12 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 // TestMergedWarnsOnPassThroughEntries verifies that merged warns to stderr when armature-hook.log contains pass-through entries.
 func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Create armature-hook.log with pass-through entries
@@ -345,12 +345,11 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 // TestMergedNoWarningWithoutPassThroughEntries verifies that merged does not warn when hook.log has no pass-through entries.
 func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Optionally create armature-hook.log without pass-through entries (or don't create it at all)
@@ -385,12 +384,12 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 // TestMergedHandlesMissingWorktree verifies that merged handles the case where a worktree was already deleted.
 func TestMergedHandlesMissingWorktree(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Transition task to done
@@ -423,12 +422,12 @@ func TestMergedHandlesMissingWorktree(t *testing.T) {
 // already gone requires persisting the git-dir path separately (future work, F6).
 func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Read the actual git dir from the worktree so we can write the hook log.
@@ -491,12 +490,12 @@ func TestMergedRejectsNonDoneStatus(t *testing.T) {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
 	require.NoError(t, cmd2.Execute())
 
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify worktree exists
@@ -534,11 +533,11 @@ func TestMergedRejectsNonDoneStatus(t *testing.T) {
 func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 	t.Run("happy path: op recorded and worktree removed", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
-		worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 		claimCmd := newRootCmd()
 		claimCmd.SetOut(new(bytes.Buffer))
-		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, claimCmd.Execute())
 		assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
@@ -581,10 +580,10 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		createCmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
 		require.NoError(t, createCmd.Execute())
 
-		worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 		claimCmd := newRootCmd()
 		claimCmd.SetOut(new(bytes.Buffer))
-		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, claimCmd.Execute())
 		assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
@@ -657,12 +656,10 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
-
 	// Claim the task
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Materialize to update status
@@ -786,12 +783,12 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 // properly claimed worktrees.
 func TestMergedRemovesBoundWorktree(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "bound-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a properly bound worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Verify worktree exists and IS bound
@@ -866,10 +863,10 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 	assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
@@ -913,12 +910,12 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 // and does NOT tear down the worktree when violations are present.
 func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Create armature-hook.log with violation entries
@@ -971,12 +968,12 @@ func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 // tear down the worktree.
 func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Create armature-hook.log with violation entries
@@ -1024,12 +1021,12 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 // produce warnings only and do NOT cause merged to fail.
 func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Claim the task to create a worktree
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Create armature-hook.log with ONLY pass-through entries (no violations)
@@ -1145,13 +1142,12 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 // for whatever unrelated branch reuses that name.
 func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 
 	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
 
 	claimCmd := newRootCmd()
 	claimCmd.SetOut(new(bytes.Buffer))
-	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	// Sanity check: claiming from the default branch should have recorded it

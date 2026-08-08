@@ -79,11 +79,10 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 	headSHA := runGitOutput(t, repo, "rev-parse", "HEAD")
 	run(t, repo, "git", "checkout", "--detach", strings.TrimSpace(headSHA))
 
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", "branch.task/task-01.armature-parent")
@@ -102,11 +101,11 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 func TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	gitPath := filepath.Join(worktreePath, ".git")
@@ -150,14 +149,14 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 	// Manually create the worktree on the expected task branch BEFORE
 	// claiming, so `arm claim` below takes the existing-worktree path rather
 	// than createWorktreeAndBranch.
-	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	run(t, repo, "git", "branch", "task/task-01", "story-branch")
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	// Parent-branch config must NOT be recorded on this path: there is no
@@ -211,14 +210,14 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 	run(t, repo, "git", "add", "sibling.go")
 	run(t, repo, "git", "commit", "-m", "feat(sibling-task): unrelated sibling work")
 
-	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	run(t, repo, "git", "branch", "task/task-01", "story-branch")
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	// At claim time, the computed fork point equals defaultTipSHA (see the
@@ -263,14 +262,14 @@ func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t 
 	// main's current tip (no divergence) BEFORE claiming, so `arm claim`
 	// below takes the existing-worktree path rather than
 	// createWorktreeAndBranch.
-	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	run(t, repo, "git", "branch", "task/task-01")
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	gitPath := filepath.Join(worktreePath, ".git")
@@ -310,7 +309,7 @@ func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_R
 
 	// Manually create the worktree on the expected task branch BEFORE
 	// claiming, so `arm claim` below takes the existing-worktree path.
-	worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	run(t, repo, "git", "branch", "task/task-01", "story-branch")
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
@@ -327,7 +326,7 @@ func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_R
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	// If parent-branch config was written, it must NOT be the coordinator's
@@ -390,12 +389,12 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 	t.Run("fresh worktree path", func(t *testing.T) {
 		repo := setupRepoWithParentAndTask(t)
 		headSHA := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
-		worktreePath := filepath.Join(t.TempDir(), "fresh-worktree")
+		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 		buf := new(bytes.Buffer)
 		cmd := newRootCmd()
 		cmd.SetOut(buf)
-		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, cmd.Execute())
 
 		content := readBaseCommitFile(t, worktreePath)
@@ -414,14 +413,14 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 		// worktree exercises: the branch taken depends only on whether a
 		// worktree already exists at the target path, not on who previously
 		// owned the claim.
-		worktreePath := filepath.Join(t.TempDir(), "existing-worktree")
+		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 		run(t, repo, "git", "branch", "task/task-01")
 		run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 		buf := new(bytes.Buffer)
 		cmd := newRootCmd()
 		cmd.SetOut(buf)
-		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, cmd.Execute())
 
 		content := readBaseCommitFile(t, worktreePath)
@@ -451,12 +450,12 @@ func TestClaimWithoutWorktreeFlag(t *testing.T) {
 // when it doesn't exist, along with a derived branch.
 func TestClaimCreatesWorktreeIfAbsent(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -492,13 +491,13 @@ func TestClaimCreatesWorktreeIfAbsent(t *testing.T) {
 // when the worktree already exists.
 func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// First claim creates the worktree
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	// Read the .git file to find the actual git directory
@@ -523,14 +522,13 @@ func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
 // TestClaimWithEpicReturnsError verifies that claiming an epic returns an error.
 func TestClaimWithEpicReturnsError(t *testing.T) {
 	repo := setupRepoWithEpic(t)
-	worktreePath := filepath.Join(t.TempDir(), "epic-worktree")
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree"})
 
 	err := cmd.Execute()
 	assert.Error(t, err)
@@ -541,12 +539,12 @@ func TestClaimWithEpicReturnsError(t *testing.T) {
 // correct prefix (task/<id>) in the new worktree's git directory.
 func TestClaimCreatesTaskBranch(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
@@ -577,12 +575,11 @@ func TestClaimCreatesTaskBranch(t *testing.T) {
 // the claim op is still appended to the ops log.
 func TestClaimStillAppendsClaimOpToLog(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
 	require.NoError(t, cmd.Execute())
 
@@ -656,12 +653,12 @@ func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
 	run(t, repo, "git", "add", "marker.txt")
 	run(t, repo, "git", "commit", "-m", "add marker file")
 
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
 	require.NoError(t, cmd.Execute())
 
@@ -683,14 +680,13 @@ func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
 // (from epic or unknown issue types) triggers an error.
 func TestCreateWorktreeAndBranchRejectsEmptyBranchName(t *testing.T) {
 	repo := setupRepoWithEpic(t)
-	worktreePath := filepath.Join(t.TempDir(), "epic-worktree")
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree", worktreePath})
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree"})
 
 	err := cmd.Execute()
 	assert.Error(t, err)
@@ -752,8 +748,8 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 	require.NoError(t, ops.AppendOp(logPath, claimOp))
 
 	// Try to claim task-02 without --force — should fail due to scope overlap with task-01.
-	worktreePath := filepath.Join(t.TempDir(), "task-02-worktree")
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-02", "--worktree", worktreePath)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-02")
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-02", "--worktree")
 
 	assert.Error(t, claimErr, "claim should fail due to scope overlap (without --force). stderr: %s", stderr)
 
@@ -762,106 +758,35 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "worktree must not be created when claim fails due to scope overlap")
 }
 
-// TestClaimRejectsWorktreeBoundToDifferentTask verifies that when the --worktree path
-// already has an armature-issue-id binding for a different issue, claim fails with a
-// descriptive error rather than silently overwriting the binding.
+// TestClaimRejectsWorktreeBoundToDifferentTask verifies that a worktree already
+// bound to a different issue is rejected by checkExistingWorktreeBinding rather
+// than silently overwriting the binding. (The CLI now derives a per-issue
+// worktree root, so this guard is exercised directly.)
 func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
-	// Create a second task
-	_, err := runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
-
-	// Claim task-01 with a worktree — binds the worktree to task-01.
 	worktreePath := filepath.Join(t.TempDir(), "shared-worktree")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
-	require.NoError(t, err)
+	run(t, repo, "git", "worktree", "add", worktreePath, "-b", "task/task-01")
+	require.NoError(t, updateIssueIDFile(worktreePath, "task-01"))
 
-	// Verify that armature-issue-id is "task-01".
-	gitPath := filepath.Join(worktreePath, ".git")
-	gitFileContent, readErr := os.ReadFile(gitPath)
-	require.NoError(t, readErr)
-	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
-	if !filepath.IsAbs(actualGitDir) {
-		actualGitDir = filepath.Join(worktreePath, actualGitDir)
-	}
-	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	taskID, readErr := os.ReadFile(taskIDFile) //nolint:gosec // test path
-	require.NoError(t, readErr)
-	require.Equal(t, "task-01", string(taskID))
-
-	// Now try to claim task-02 pointing at the same worktree — should fail.
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree", worktreePath)
-	assert.Error(t, claimErr, "claim should fail when worktree is already bound to task-01. stderr: %s", stderr)
-	assert.Contains(t, stderr+claimErr.Error(), "task-01",
+	err := checkExistingWorktreeBinding(worktreePath, "task-02", "task/task-02")
+	require.Error(t, err, "binding check should reject a worktree bound to a different issue")
+	assert.Contains(t, err.Error(), "task-01",
 		"error should mention the task currently bound to the worktree")
 }
 
-// TestClaimFailsWhenWorktreeCreationFails verifies that when createWorktreeAndBranch fails
-// (e.g., due to branch already being checked out in another worktree), the claim command
-// returns an error and does NOT record a claim op.
-func TestClaimFailsWhenWorktreeCreationFails(t *testing.T) {
-	repo := setupRepoWithParentAndTask(t)
-
-	// First claim succeeds - creates worktree with task/task-01 branch
-	worktree1 := filepath.Join(t.TempDir(), "worktree1")
-	buf1 := new(bytes.Buffer)
-	cmd1 := newRootCmd()
-	cmd1.SetOut(buf1)
-	cmd1.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktree1})
-	err1 := cmd1.Execute()
-	require.NoError(t, err1, "first claim should succeed")
-
-	// Second claim with same task but different worktree should fail
-	// because the task/task-01 branch is already checked out in worktree1
-	worktree2 := filepath.Join(t.TempDir(), "worktree2")
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
-	cmd.SetOut(buf)
-	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", worktree2})
-
-	err := cmd.Execute()
-	// Claim should fail with an error
-	assert.Error(t, err, "second claim should fail when branch is already checked out. stdout: %s, stderr: %s", buf.String(), errBuf.String())
-	// Error message should mention worktree
-	assert.Contains(t, errBuf.String()+err.Error(), "worktree")
-}
-
-// TestClaimRejectsWorktreeWithMismatchedBranch verifies that when a worktree exists
-// on a different branch than the expected branch for the issue, claim fails with a
-// descriptive error.
+// TestClaimRejectsWorktreeWithMismatchedBranch verifies that a worktree on a
+// different branch than the expected branch (with no binding) is rejected by
+// checkExistingWorktreeBinding.
 func TestClaimRejectsWorktreeWithMismatchedBranch(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
-	// Create a second task
-	_, err := runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	run(t, repo, "git", "worktree", "add", worktreePath, "-b", "task/task-01")
 
-	// Claim task-01 with a worktree — creates branch task/task-01, worktree bound to task-01
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
-	require.NoError(t, err)
-
-	// Delete the armature-issue-id file from the worktree's git dir so the binding check is bypassed
-	// and only the branch mismatch check applies
-	gitPath := filepath.Join(worktreePath, ".git")
-	gitFileContent, err := os.ReadFile(gitPath)
-	require.NoError(t, err)
-	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
-	if !filepath.IsAbs(actualGitDir) {
-		actualGitDir = filepath.Join(worktreePath, actualGitDir)
-	}
-	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-issue-id file") //nolint:gosec // internal test path
-
-	// Now try to claim task-02 using the same worktree path (which is still on task/task-01 branch)
-	// This should fail due to branch mismatch
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree", worktreePath)
-	assert.Error(t, claimErr, "claim should fail due to branch mismatch. stderr: %s", stderr)
-	assert.Contains(t, stderr+claimErr.Error(), "branch",
-		"error should mention the branch mismatch")
+	err := checkExistingWorktreeBinding(worktreePath, "task-02", "task/task-02")
+	require.Error(t, err, "claim should fail due to branch mismatch")
+	assert.Contains(t, err.Error(), "branch", "error should mention the branch mismatch")
 }
 
 // TestClaimAllowsWorktreeWithDetachedHEAD verifies that when a worktree has a detached HEAD
@@ -871,8 +796,8 @@ func TestClaimAllowsWorktreeWithDetachedHEAD(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
 	// Claim task-01 with a worktree — creates branch task/task-01, worktree bound to task-01
-	worktreePath := filepath.Join(t.TempDir(), "task-worktree")
-	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
 	// Detach the HEAD in the worktree by checking out a specific commit
@@ -895,33 +820,24 @@ func TestClaimAllowsWorktreeWithDetachedHEAD(t *testing.T) {
 
 	// Now try to claim task-01 AGAIN using the same worktree path
 	// This should succeed because the detached HEAD should not block re-claim when binding matches
-	_, claimErr := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	_, claimErr := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.NoError(t, claimErr, "claim should succeed with detached HEAD when binding matches")
 }
 
-// TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged verifies that when a worktree is bound
-// to a different task, the error message does NOT suggest using 'arm merged' (which is only
-// for post-merge teardown of completed tasks, not for live claimed/in-progress tasks).
+// TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged verifies that the binding
+// mismatch error does NOT suggest using 'arm merged' (which is only for
+// post-merge teardown of completed tasks, not for live claimed/in-progress tasks).
 func TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
-	// Create a second task
-	_, err := runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
-
-	// Claim task-01 with a worktree — binds the worktree to task-01.
 	worktreePath := filepath.Join(t.TempDir(), "shared-worktree")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
-	require.NoError(t, err)
+	run(t, repo, "git", "worktree", "add", worktreePath, "-b", "task/task-01")
+	require.NoError(t, updateIssueIDFile(worktreePath, "task-01"))
 
-	// Now try to claim task-02 with the same worktree path — should fail
-	// and should NOT suggest "arm merged" in the error message.
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree", worktreePath)
-	assert.Error(t, claimErr, "claim should fail when worktree is already bound to task-01. stderr: %s", stderr)
-
-	errText := stderr + claimErr.Error()
-	assert.Contains(t, errText, "task-01", "error should mention the task currently bound to the worktree")
-	assert.NotContains(t, errText, "merged", "error should NOT suggest 'arm merged' (only for post-merge teardown)")
+	err := checkExistingWorktreeBinding(worktreePath, "task-02", "task/task-02")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "task-01", "error should mention the bound task")
+	assert.NotContains(t, err.Error(), "merged", "error should NOT suggest 'arm merged'")
 }
 
 // TestClaimReleasesClaimOnWorktreeSetupFailure verifies that when updateIssueIDFile fails
@@ -931,8 +847,7 @@ func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
 
 	// Manually create a worktree and git directory structure to simulate the scenario
 	// where worktreePathExists passes but updateIssueIDFile will fail.
-	tempDir := t.TempDir()
-	worktreePath := filepath.Join(tempDir, "task-01-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	// Create a minimal worktree-like structure
 	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
@@ -944,7 +859,7 @@ func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
 	require.NoError(t, os.WriteFile(gitPath, []byte("gitdir: /nonexistent/git/dir"), 0o644))
 
 	// Try to claim task-01 with this fake worktree
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 
 	// The claim should fail - either during checkExistingWorktreeBinding or updateIssueIDFile
 	assert.Error(t, claimErr, "claim should fail with invalid worktree. stderr: %s", stderr)
@@ -995,13 +910,13 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 	// Create a pre-existing directory with a broken .git file.
 	// worktreePathExists() returns true; checkExistingWorktreeBinding may reject it, or
 	// updateIssueIDFile will fail when it tries to resolve the non-existent git dir.
-	worktreePath := filepath.Join(t.TempDir(), "task-rb-01-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-rb-01")
 	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
 	gitPath := filepath.Join(worktreePath, ".git")
 	require.NoError(t, os.WriteFile(gitPath, []byte("gitdir: /nonexistent/git/dir"), 0o644))
 
 	// Run the failing claim — should error due to the broken worktree.
-	_, _, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-rb-01", "--worktree", worktreePath)
+	_, _, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-rb-01", "--worktree")
 	assert.Error(t, claimErr, "claim should fail with invalid/broken worktree")
 
 	// Materialize and verify the task is not stuck in claimed state.
@@ -1049,80 +964,6 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 	}
 }
 
-// TestClaimWorktreePathIsNormalized verifies that claim correctly resolves relative worktree paths
-// to absolute paths. When claim is invoked from a different working directory with a relative
-// --worktree path, the worktree should still be created at the correct absolute path, and the
-// armature-issue-id binding should be written to the correct location.
-func TestClaimWorktreePathIsNormalized(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Use a different working directory — the relative path should still work correctly.
-	// Lock the mutex to prevent concurrent chdir calls (os.Chdir modifies global state).
-	runTrlsMu.Lock()
-	defer runTrlsMu.Unlock()
-
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	differentDir := t.TempDir()
-	require.NoError(t, os.Chdir(differentDir))
-	t.Cleanup(func() { require.NoError(t, os.Chdir(originalDir)) })
-
-	// Use a relative worktree path "task-wt" (relative to differentDir)
-	relWorktree := "task-wt"
-	expectedAbsWorktree := filepath.Join(differentDir, relWorktree)
-
-	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", relWorktree})
-
-	err = cmd.Execute()
-	require.NoError(t, err, "claim with relative worktree path should succeed")
-
-	// Verify worktree was created at the absolute path (in expectedAbsWorktree, not in repo or current dir)
-	assert.DirExists(t, expectedAbsWorktree, "worktree directory should be created at the correct absolute path")
-
-	// Verify the .git file exists and points to the correct git directory
-	gitPath := filepath.Join(expectedAbsWorktree, ".git")
-	assert.FileExists(t, gitPath, ".git file should exist in worktree")
-
-	// Read .git to find the actual git directory
-	gitFileContent, err := os.ReadFile(gitPath)
-	require.NoError(t, err)
-	actualGitDir := strings.TrimSpace(strings.TrimPrefix(string(gitFileContent), "gitdir: "))
-	if !filepath.IsAbs(actualGitDir) {
-		actualGitDir = filepath.Join(expectedAbsWorktree, actualGitDir)
-	}
-
-	// Verify armature-issue-id was written to the correct location
-	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // test path
-	require.NoError(t, err, "armature-issue-id should exist in the correct git directory")
-	assert.Equal(t, "task-01", string(taskID), "armature-issue-id should contain task-01")
-}
-
-// TestClaimRejectsMainCheckoutAsWorktree verifies that claim rejects the main checkout
-// as a worktree path. The main checkout has .git as a directory (not a file), and should
-// not be used as a worktree because git worktree remove cannot remove the main working tree.
-func TestClaimRejectsMainCheckoutAsWorktree(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
-	cmd.SetOut(buf)
-	cmd.SetErr(errBuf)
-	// Try to claim using the repo root (main checkout) as the worktree path
-	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree", repo})
-
-	err := cmd.Execute()
-	assert.Error(t, err, "claim should fail when --worktree is the main checkout")
-
-	errOutput := errBuf.String() + buf.String() + err.Error()
-	assert.Contains(t, errOutput, "main checkout",
-		"error message should mention that the path is the main checkout")
-}
-
 // TestClaimRejectsUnboundDetachedWorktree verifies that when a worktree has a detached HEAD
 // and NO existing binding (existingTaskID == ""), claim must reject it rather than allowing
 // the detached HEAD to bypass the branch check. This prevents writing a fresh binding to a
@@ -1131,8 +972,8 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
 	// Create a linked worktree on the task/task-01 branch
-	worktreePath := filepath.Join(t.TempDir(), "detached-worktree")
-	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err, "first claim should succeed")
 
 	// Verify the worktree was created and bound to task-01
@@ -1164,7 +1005,7 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 	// Now try to claim task-01 again with the unbound detached HEAD
 	// This should fail because even though the binding is empty, the detached HEAD
 	// should only be allowed when there IS a binding that matches
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.Error(t, claimErr, "claim should fail when worktree has unbound detached HEAD. stderr: %s", stderr)
 
 	errText := stderr + claimErr.Error()
@@ -1186,8 +1027,8 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 
 	// First claim succeeds: creates worktree at wt1 with task-01 claimed
-	worktree1 := filepath.Join(t.TempDir(), "wt1")
-	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", worktree1)
+	worktree1 := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err, "first claim should succeed")
 
 	// Materialize and verify task-01 is claimed
@@ -1204,7 +1045,7 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 		"should be able to overwrite .git file")
 
 	// Second claim with same worktree should fail due to updateIssueIDFile failure
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktree1)
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.Error(t, claimErr, "second claim with broken worktree should error. stderr: %s", stderr)
 
 	// Materialize and verify task-01 is STILL claimed (not released to open)
@@ -1272,14 +1113,14 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 
 	// Now try to claim with a worktree that will fail setup.
 	// Create a file at the worktree path to block git worktree add.
-	worktreePath := filepath.Join(t.TempDir(), "task-01-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
 	// Create a file inside the directory to block worktree creation
 	blockingFile := filepath.Join(worktreePath, "blocking-file")
 	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
 
 	// Attempt to claim — should fail due to worktree creation failure
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
 
 	// Materialize and verify task-01 is now OPEN (not still claimed by the new worker)
@@ -1309,19 +1150,10 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 // 3. Try to claim task-01 in repo-A using the foreign worktree from repo-B
 // 4. Expect an error mentioning "not registered to this repository"
 func TestClaimRejectsForeignWorktree(t *testing.T) {
-	// Setup repo-A (create but don't claim the task yet)
-	repoA := initTempRepo(t)
-	run(t, repoA, "git", "commit", "--allow-empty", "-m", "init")
+	// A worktree registered to a DIFFERENT git repo must not be recognized as
+	// belonging to this repo. isWorktreeOf is the guard that enforces this.
+	repoA := setupRepoWithParentAndTask(t)
 
-	bootstrapRepoForTest(t, repoA)
-
-	cmd2 := newRootCmd()
-	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repoA, "--title", "Test task", "--type", "task", "--id", "task-01"})
-	require.NoError(t, cmd2.Execute())
-	// Note: we do NOT claim task-01 in repo-A, so no worktree is created for task/task-01 in repo-A yet
-
-	// Setup repo-B (a separate, unrelated git repo)
 	repoBTempDir := t.TempDir()
 	repoB := filepath.Join(repoBTempDir, "repo-B")
 	require.NoError(t, os.Mkdir(repoB, 0o755))
@@ -1330,35 +1162,15 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 	run(t, repoB, "git", "config", "user.name", "Test")
 	run(t, repoB, "git", "config", "commit.gpgsign", "false")
 	run(t, repoB, "git", "commit", "--allow-empty", "-m", "init from repo-B")
-
-	// Create a branch "task/task-01" in repo-B on which the foreign worktree will live
-	// Start from main (or the current default branch name), then create task/task-01
 	run(t, repoB, "git", "checkout", "-b", "task/task-01", "HEAD")
-	// Now switch main branch back to something else so task/task-01 is not the checked-out branch
 	run(t, repoB, "git", "checkout", "-b", "main-branch")
 
-	// Create a linked worktree in repo-B on the task/task-01 branch
-	foreignWorktreeDir := filepath.Join(repoBTempDir, "foreign-wt")
-	require.NoError(t, os.Mkdir(foreignWorktreeDir, 0o755))
-	foreignWorktreePath := filepath.Join(foreignWorktreeDir, "worktree")
+	foreignWorktreePath := filepath.Join(repoBTempDir, "foreign-wt")
 	run(t, repoB, "git", "worktree", "add", foreignWorktreePath, "task/task-01")
-
-	// Verify the foreign worktree exists and is on the correct branch
 	assert.DirExists(t, foreignWorktreePath, "foreign worktree should exist")
-	gitPath := filepath.Join(foreignWorktreePath, ".git")
-	assert.FileExists(t, gitPath, ".git file should exist in foreign worktree")
 
-	// Now try to claim task-01 in repo-A using the foreign worktree path from repo-B
-	// This should fail with an error mentioning that the worktree is not registered
-	_, stderr, claimErr := runTrlsWithStderr(t, repoA, "claim", "--issue", "task-01", "--worktree", foreignWorktreePath)
-
-	// Verify the claim fails
-	assert.Error(t, claimErr, "claim should fail when worktree belongs to a different repository")
-
-	// Verify the error message is informative
-	errText := stderr + claimErr.Error()
-	assert.Contains(t, errText, "not registered",
-		"error should mention that the worktree is not registered to this repository")
+	assert.False(t, isWorktreeOf(repoA, foreignWorktreePath),
+		"a worktree registered to a different repo must not be recognized as belonging to repoA")
 }
 
 // TestClaimRollsBackStaleSameWorkerClaimToOpen verifies the P2 bug fix:
@@ -1427,14 +1239,14 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 
 	// Now try to claim with a worktree that will fail setup (same worker retrying).
 	// Create a file at the worktree path to block git worktree add.
-	worktreePath := filepath.Join(t.TempDir(), "task-01-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
 	// Create a file inside the directory to block worktree creation
 	blockingFile := filepath.Join(worktreePath, "blocking-file")
 	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
 
 	// Attempt to claim — should fail due to worktree creation failure
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
 
 	// Materialize and verify task-01 is now OPEN (not still claimed by the same worker)
@@ -1519,14 +1331,14 @@ func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
 
 	// Now try to claim with a worktree that will fail setup (same worker retrying).
 	// Create a file at the worktree path to block git worktree add.
-	worktreePath := filepath.Join(t.TempDir(), "task-01-worktree")
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
 	// Create a file inside the directory to block worktree creation
 	blockingFile := filepath.Join(worktreePath, "blocking-file")
 	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
 
 	// Attempt to claim — should fail due to worktree creation failure
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath)
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
 
 	// Materialize and verify task-01 is still CLAIMED (not released to open)
@@ -1666,15 +1478,115 @@ func TestClaimCommand_NoFalsePositiveAgainstParentStory_REQ_TOPTIER_S17_T1(t *te
 	require.NoError(t, err)
 
 	// Claim the parent story
-	worktreePath1 := filepath.Join(t.TempDir(), "story-01-worktree")
-	_, err = runTrls(t, repo, "claim", "--issue", "story-01", "--worktree", worktreePath1)
+	_, err = runTrls(t, repo, "claim", "--issue", "story-01", "--worktree")
 	require.NoError(t, err, "claiming parent story should succeed")
 
 	// Claim the child task — should NOT give false-positive scope overlap error
-	worktreePath2 := filepath.Join(t.TempDir(), "task-01-worktree")
-	stdout, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree", worktreePath2)
+	worktreePath2 := filepath.Join(repo, ".worktrees", "task-01")
+	stdout, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.NoError(t, claimErr, "claiming child task should succeed without scope overlap error. stdout: %s, stderr: %s", stdout, stderr)
 
 	// Verify worktree was created (claim succeeded)
 	assert.DirExists(t, worktreePath2, "worktree should be created when claiming child task against parent")
+}
+
+// TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4 verifies the core
+// DoD behavior: the boolean --worktree flag provisions the worktree at the
+// hardcoded default root <repo>/.worktrees/<issue-id> (relative to ctx.RepoPath),
+// and that path is a registered linked worktree bound to the claimed issue.
+func TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, cmd.Execute())
+
+	expected := filepath.Join(repo, ".worktrees", "task-01")
+	assert.DirExists(t, expected, "boolean --worktree must provision the worktree at <repo>/.worktrees/<issue-id>")
+	assert.FileExists(t, filepath.Join(expected, ".git"), "provisioned path must be a linked worktree (.git file, not a dir)")
+	assert.True(t, isWorktreeOf(repo, expected), "provisioned path must be a registered linked worktree of the repo")
+
+	// The worktree must be bound to the claimed issue.
+	gitDir, err := resolveWorktreeGitDir(expected)
+	require.NoError(t, err)
+	bindingBytes, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
+	require.NoError(t, err)
+	assert.Equal(t, "task-01", strings.TrimSpace(string(bindingBytes)), "worktree must be bound to the claimed issue")
+}
+
+// TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
+// exercises the detached-checkout reordering. It reproduces the worktree-
+// recreation condition the old create-branch-then-add-worktree order was prone
+// to trip on: the issue's derived branch (task/task-01) already exists from a
+// prior claim while the worktree itself is gone. Provisioning now adds the
+// worktree detached at the base commit first, then checks the existing branch
+// out inside it, so re-provisioning must succeed and land on the correct branch
+// rather than failing with git's "branch already checked out" family of errors.
+func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+
+	// First claim creates the worktree AND the derived branch task/task-01.
+	first := newRootCmd()
+	first.SetOut(new(bytes.Buffer))
+	first.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, first.Execute())
+	require.DirExists(t, worktreePath)
+
+	// Tear the worktree down but KEEP the branch (git worktree remove prunes the
+	// admin record, so the branch is retained and free). This is the state a
+	// prior lifecycle leaves behind before a re-claim.
+	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
+	require.NoDirExists(t, worktreePath)
+	run(t, repo, "git", "rev-parse", "--verify", "refs/heads/task/task-01") // branch must still exist
+
+	// Re-claim: the derived branch already exists, so createWorktreeAndBranch must
+	// take the detached-add-then-checkout-existing-branch path and succeed.
+	second := newRootCmd()
+	second.SetOut(new(bytes.Buffer))
+	second.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, second.Execute(),
+		"re-provisioning with a pre-existing derived branch must succeed (no 'branch already checked out')")
+	require.DirExists(t, worktreePath)
+
+	// The recreated worktree must be checked out on the issue's derived branch.
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+	headBytes, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
+	require.NoError(t, err)
+	assert.Equal(t, "ref: refs/heads/task/task-01", strings.TrimSpace(string(headBytes)),
+		"recreated worktree must be checked out on the issue's derived branch")
+}
+
+// TestClaimWorktreeFlagIsBoolean_REQ_LNGHZN_S5_T4 verifies that --worktree is a
+// boolean flag that takes no value: the flag's pflag type is "bool", the
+// value-less form succeeds, and the removed --worktree <path> form now leaves the
+// path as an extra positional argument (rejected by the command's arg validator).
+func TestClaimWorktreeFlagIsBoolean_REQ_LNGHZN_S5_T4(t *testing.T) {
+	// The flag must be declared as a boolean (no value argument).
+	wtFlag := newClaimCmd().Flags().Lookup("worktree")
+	require.NotNil(t, wtFlag, "claim must expose a --worktree flag")
+	assert.Equal(t, "bool", wtFlag.Value.Type(), "--worktree must be a boolean flag (no value argument)")
+
+	// The value-less boolean form succeeds.
+	repo := setupRepoWithTask(t)
+	okCmd := newRootCmd()
+	okCmd.SetOut(new(bytes.Buffer))
+	okCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, okCmd.Execute(), "the boolean --worktree form must succeed")
+
+	// The removed --worktree <path> form: the path is no longer consumed by the
+	// flag, so it becomes a second positional argument and the command rejects it.
+	repo2 := setupRepoWithTask(t)
+	errBuf := new(bytes.Buffer)
+	badCmd := newRootCmd()
+	badCmd.SetOut(new(bytes.Buffer))
+	badCmd.SetErr(errBuf)
+	badCmd.SetArgs([]string{"claim", "--repo", repo2, "task-01", "--worktree", filepath.Join(t.TempDir(), "legacy-path")})
+	err := badCmd.Execute()
+	require.Error(t, err, "the old --worktree <path> form must now error (path is an extra positional arg)")
+	assert.Contains(t, err.Error(), "accepts at most 1 arg",
+		"error must reflect the extra positional argument left by the removed value form")
 }

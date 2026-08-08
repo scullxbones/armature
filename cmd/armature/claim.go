@@ -145,6 +145,46 @@ func deriveBranchName(issueType, issueID string) string {
 	return materialize.DeriveBranchName(issueType, issueID)
 }
 
+// addWorktreeDetached provisions a linked worktree at worktreePath checked out
+// detached at baseRef (a SHA or ref). Using a detached checkout means no branch
+// is held by the new worktree yet, so a subsequent branch checkout inside it
+// cannot trip git's "branch already checked out" guard. Uses raw git rather than
+// the adapter so this reordering stays within cmd/armature (the adapter's
+// AddWorktree only supports the branch-first form).
+func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "add", "--detach", worktreePath, baseRef)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git worktree add --detach: %w\n%s", err, out)
+	}
+	return nil
+}
+
+// checkoutBranchInWorktree creates or checks out branchName inside the worktree
+// at worktreePath. If the branch already exists it is checked out as-is; if not,
+// it is created at the worktree's current (detached) HEAD. Idempotent: a no-op
+// when the worktree is already on branchName.
+func checkoutBranchInWorktree(worktreePath, branchName string) error {
+	// Fast-path idempotency and existing-branch handling: if the branch already
+	// exists, check it out; otherwise create it from the current detached HEAD.
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	verify := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--verify", "refs/heads/"+branchName)
+	branchExists := verify.Run() == nil
+
+	args := []string{"-C", worktreePath, "checkout"}
+	if branchExists {
+		args = append(args, branchName)
+	} else {
+		args = append(args, "-b", branchName)
+	}
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git checkout %s: %w\n%s", branchName, err, out)
+	}
+	return nil
+}
+
 // createWorktreeAndBranch creates a new worktree and branches for a task/bug.
 // It uses a git client to create a worktree at the given path with a derived branch name.
 // If the branch is already checked out in another worktree or if worktree creation fails,
@@ -178,15 +218,24 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// updated parent tip, instead of trusting a SHA recorded once at claim time.
 	parentBranch, parentErr := gitClient.CurrentBranch()
 
-	// Create a branch from HEAD for this task/bug (idempotent: no-op if already exists)
-	// The branch inherits all commits and files from HEAD, unlike an orphan branch.
-	if err := gitClient.CreateBranchFrom(branchName, "HEAD"); err != nil {
-		return fmt.Errorf("create branch: %w", err)
+	// Provision the worktree detached at the base commit FIRST, then create or
+	// check out the issue branch inside the worktree. The old order
+	// (create-branch-then-add-worktree) could hit git's "branch already checked
+	// out" failure when the branch pre-existed; provisioning detached and then
+	// checking the branch out inside the worktree avoids that entirely.
+	detachRef := "HEAD"
+	if headErr == nil && headSHA != "" {
+		detachRef = headSHA
+	}
+	if err := addWorktreeDetached(repoPath, worktreePath, detachRef); err != nil {
+		return fmt.Errorf("add worktree: %w", err)
 	}
 
-	// Add worktree pointing to the branch
-	if err := gitClient.AddWorktree(branchName, worktreePath); err != nil {
-		return fmt.Errorf("add worktree: %w", err)
+	// Create-or-checkout the issue branch inside the worktree. Because the
+	// worktree is detached, no other worktree holds the branch, so this never
+	// trips git's "branch already checked out" guard.
+	if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
+		return fmt.Errorf("checkout branch in worktree: %w", err)
 	}
 
 	// Create the issue ID file in the worktree's .git directory
@@ -395,6 +444,7 @@ func newClaimCmd() *cobra.Command {
 	var issueID string
 	var ttl int
 	var force bool
+	var worktreeFlag bool
 	var worktreePath string
 
 	cmd := &cobra.Command{
@@ -406,19 +456,20 @@ Claiming an issue marks it as assigned to your worker ID and sets a TTL (time-to
 If the TTL expires without progress, the claim becomes stale and may be reassigned.
 This command also detects and warns about scope overlaps with concurrently claimed issues.
 When you claim a task, its parent story (if open) is automatically advanced to in-progress.
-A --worktree path is required; it creates a new worktree and issue-specific branch if absent,
-or updates the armature-issue-id file if the worktree exists.`,
+The --worktree flag is required; it provisions a worktree at .worktrees/<issue-id>
+(relative to the repo root) with an issue-specific branch if absent, or updates the
+armature-issue-id file if the worktree already exists.`,
 		Example: `  # Claim an issue by ID with a worktree
-  $ arm claim E6-S4-T2 --worktree ./e6-s4-t2
+  $ arm claim E6-S4-T2 --worktree
 
   # Claim with a custom TTL of 120 minutes
-  $ arm claim --issue E6-S4-T2 --ttl 120 --worktree ./task-work
+  $ arm claim --issue E6-S4-T2 --ttl 120 --worktree
 
   # Claim despite scope overlap warning
-  $ arm claim E6-S4-T2 --force --worktree ./task-work
+  $ arm claim E6-S4-T2 --force --worktree
 
   # Claim using flag style
-  $ arm claim --issue another-task-id --worktree ./another-work`,
+  $ arm claim --issue another-task-id --worktree`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
@@ -428,9 +479,14 @@ or updates the armature-issue-id file if the worktree exists.`,
 			if issueID == "" {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
-			if worktreePath == "" {
+			if !worktreeFlag {
 				return fmt.Errorf("--worktree is required")
 			}
+
+			// The worktree is always provisioned at the hardcoded default root
+			// .worktrees/<issue-id> relative to the repo root, so every worker
+			// dispatch gets an isolated, predictable worktree location.
+			worktreePath = filepath.Join(ctx.RepoPath, ".worktrees", issueID)
 
 			// Normalize worktreePath to an absolute path to ensure all subsequent
 			// operations (worktreePathExists, updateIssueIDFile, etc.) resolve paths
@@ -440,13 +496,6 @@ or updates the armature-issue-id file if the worktree exists.`,
 				return fmt.Errorf("resolve worktree path: %w", err)
 			}
 			worktreePath = absWorktreePath
-
-			// Reject the main checkout as a worktree — it can't be removed by git worktree remove.
-			// The main checkout has .git as a directory; a linked worktree has .git as a file.
-			gitEntry := filepath.Join(worktreePath, ".git")
-			if info, statErr := os.Stat(gitEntry); statErr == nil && info.IsDir() {
-				return fmt.Errorf("--worktree %s is the main checkout; pass a linked worktree path (created with git worktree add) instead", worktreePath)
-			}
 
 			issuesDir := ctx.IssuesDir
 
@@ -753,6 +802,6 @@ or updates the armature-issue-id file if the worktree exists.`,
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
 	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
 	cmd.Flags().BoolVar(&force, "force", false, "override scope overlap warning and proceed with claim")
-	cmd.Flags().StringVar(&worktreePath, "worktree", "", "path to task worktree (required)")
+	cmd.Flags().BoolVar(&worktreeFlag, "worktree", false, "provision a worktree at .worktrees/<issue-id> (required)")
 	return cmd
 }

@@ -82,11 +82,11 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	// Step 4: Claim the issue before recording progress. Claim creates the real
 	// worker worktree and branch that the later merge will promote to merged.
 	t.Logf("Step 4: Claim issue")
-	worktreePath := filepath.Join(h.TempDir, "task-worktree")
+	worktreePath := filepath.Join(h.WorkDir, ".worktrees", "TEST-001")
 	deliveryBase := gitRevision(t, h.WorkDir)
 
 	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "TEST-001",
-		"--worktree", worktreePath)
+		"--worktree")
 	require.NoError(t, err, "claim failed: %s", out)
 	assert.Contains(t, out, "TEST-001", "claim should output issue ID")
 	assertMaterializedField(t, h, "status", "claimed")
