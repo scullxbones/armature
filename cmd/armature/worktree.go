@@ -38,7 +38,9 @@ func newWorktreeListCmd() *cobra.Command {
 			// and make gc silently remove nothing.
 			worktrees, err := readManagedWorktrees(ctx.RepoPath)
 			if err != nil {
-				return fmt.Errorf("read managed worktrees: %w", err)
+				return worktreeLifecycleError(
+					"read managed worktrees", "git inventory unavailable",
+					"verify --repo points at a git checkout, run `git worktree list --porcelain`, then retry `arm worktree list`", err)
 			}
 
 			// Load current-truth issues via the snapshot store, exactly as
@@ -49,7 +51,9 @@ func newWorktreeListCmd() *cobra.Command {
 			// (.armature/issues), yielding zero issues and a silent no-op.
 			issues, err := loadIssuesForReconcile(ctx)
 			if err != nil {
-				return fmt.Errorf("load issues: %w", err)
+				return worktreeLifecycleError(
+					"load claim state", "worktree inventory read succeeded but materialized claim state is unavailable",
+					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree list`", err)
 			}
 
 			// Reconcile, scoping ghost detection to worktrees this clone owns so a
@@ -66,9 +70,11 @@ func newWorktreeListCmd() *cobra.Command {
 					"ghosts":       result.Ghosts,
 					"gc_ready":     result.GCRemovalSet,
 					"unrecognized": result.Unrecognized,
+					"ambiguous":    result.GCAmbiguous,
 				}
-				data, _ := json.MarshalIndent(jsonResult, "", "  ") //nolint:errcheck
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				if err := writeWorktreeJSON(cmd, jsonResult); err != nil {
+					return err
+				}
 			} else {
 				// Human format
 				if len(result.BoundWorktrees) > 0 {
@@ -105,10 +111,16 @@ func newWorktreeListCmd() *cobra.Command {
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", path)
 					}
 				}
+				if len(result.GCAmbiguous) > 0 {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "AMBIGUOUS GC CANDIDATES (nothing removed):")
+					for _, id := range result.GCAmbiguous {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", id)
+					}
+				}
 
 				if len(result.BoundWorktrees) == 0 && len(result.Orphans) == 0 &&
 					len(result.Ghosts) == 0 && len(result.GCRemovalSet) == 0 &&
-					len(result.Unrecognized) == 0 {
+					len(result.Unrecognized) == 0 && len(result.GCAmbiguous) == 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No worktrees found or all are in order.")
 				}
 			}
@@ -133,13 +145,17 @@ func newWorktreeGCCmd() *cobra.Command {
 			// proceeding on an empty inventory (see list command).
 			worktrees, err := readManagedWorktrees(ctx.RepoPath)
 			if err != nil {
-				return fmt.Errorf("read managed worktrees: %w", err)
+				return worktreeLifecycleError(
+					"read managed worktrees", "git inventory unavailable",
+					"verify --repo points at a git checkout, run `git worktree list --porcelain`, then retry `arm worktree gc`", err)
 			}
 
 			// Load current-truth issues via the snapshot store (see list command).
 			issues, err := loadIssuesForReconcile(ctx)
 			if err != nil {
-				return fmt.Errorf("load issues: %w", err)
+				return worktreeLifecycleError(
+					"load claim state", "worktree inventory read succeeded but materialized claim state is unavailable",
+					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree gc`", err)
 			}
 
 			// Reconcile to find what should be removed, scoping ghost detection to
@@ -156,8 +172,9 @@ func newWorktreeGCCmd() *cobra.Command {
 						"would_remove":       result.GCRemovalSet,
 						"would_remove_count": len(result.GCRemovalSet),
 					}
-					data, _ := json.MarshalIndent(jsonResult, "", "  ") //nolint:errcheck
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					if err := writeWorktreeJSON(cmd, jsonResult); err != nil {
+						return err
+					}
 				} else {
 					if len(result.GCRemovalSet) > 0 {
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: would remove %d worktree(s):\n", len(result.GCRemovalSet))
@@ -183,22 +200,22 @@ func newWorktreeGCCmd() *cobra.Command {
 			failed := []string{}
 			skipped := []string{}
 
-			for _, issueID := range result.GCRemovalSet {
-				issue, ok := issues[issueID]
+			for _, selected := range result.GCRemovals {
+				issue, ok := issues[selected.IssueID]
 				if !ok {
 					continue
 				}
 
-				outcome, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr())
+				outcome, err := removeWorktreeAtPathTracked(ctx.RepoPath, *issue, selected.Path, cmd.ErrOrStderr())
 				switch {
 				case err != nil:
-					failed = append(failed, issueID)
+					failed = append(failed, selected.IssueID)
 				case outcome == worktreeRemoved:
-					removed = append(removed, issueID)
+					removed = append(removed, selected.IssueID)
 				default:
 					// worktreeSkipped: not found by branch, or binding mismatch.
 					// Nothing was removed, so it must not be reported as removed.
-					skipped = append(skipped, issueID)
+					skipped = append(skipped, selected.IssueID)
 				}
 			}
 
@@ -212,8 +229,9 @@ func newWorktreeGCCmd() *cobra.Command {
 					"failed":        failed,
 					"failed_count":  len(failed),
 				}
-				data, _ := json.MarshalIndent(jsonResult, "", "  ") //nolint:errcheck
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				if err := writeWorktreeJSON(cmd, jsonResult); err != nil {
+					return err
+				}
 				// Consistency with the human branch below: a removal failure is a
 				// non-zero exit regardless of output format.
 				if len(failed) > 0 {
@@ -303,4 +321,19 @@ func loadIssuesForReconcile(ctx *config.Context) (map[string]*materialize.Issue,
 		return map[string]*materialize.Issue{}, nil
 	}
 	return snap.Issues, nil
+}
+
+func worktreeLifecycleError(operation, state, next string, cause error) error {
+	return fmt.Errorf("%s: %w\nstate: %s\nnext: %s", operation, cause, state, next)
+}
+
+func writeWorktreeJSON(cmd *cobra.Command, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode worktree result: %w", err)
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(data)); err != nil {
+		return fmt.Errorf("write worktree result: %w", err)
+	}
+	return nil
 }

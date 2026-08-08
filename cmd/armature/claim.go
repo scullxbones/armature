@@ -206,6 +206,19 @@ func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel strin
 		rollbackStatus = prior.status
 		payload.To = rollbackStatus
 	}
+	// The claim op already refreshed all lease timestamps before worktree setup
+	// ran. Carry the complete pre-claim snapshot in the compensating op so replay
+	// restores the exact lease, rather than only status and path. For stale or
+	// foreign takeovers, the zero-valued snapshot deliberately clears every
+	// lease field while the status transition releases the claim.
+	payload.RestoreClaim = true
+	if priorWasActive {
+		payload.RestoreClaimedBy = prior.claimedBy
+		payload.RestoreClaimedAt = prior.claimedAt
+		payload.RestoreClaimTTL = prior.claimTTL
+		payload.RestoreLastHeartbeat = prior.lastHeartbeat
+		payload.RestoreLastClaimingWorkerActivity = prior.claimingWorkerActivity
+	}
 	// Always restore the pre-claim path, regardless of whether the failed claim
 	// was a first claim, stale takeover, or active retry. The claim op is
 	// append-only and materializes its canonical path before provisioning; if
@@ -337,6 +350,20 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 		}
 	}
 
+	if adopted {
+		// Adoption moves a pre-existing worktree; it must never turn a
+		// merge-base against a default ref into claim-time provenance. Only
+		// metadata recorded by the original claim is trusted. Without it,
+		// reject the move and leave the legacy worktree where it was so the
+		// delivery gate cannot later misattribute sibling commits.
+		adoptedGitClient := adapters.New(worktreePath)
+		if !hasTrustedBranchPointMetadata(adoptedGitClient, worktreePath, branchName) {
+			return cleanupPartialWorktree(fmt.Errorf(
+				"adopted worktree has no recorded branch-point provenance; re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override"),
+				"adopt worktree")
+		}
+	}
+
 	// Best-effort project-isolation mitigation: if the MAIN tree uses a go.work
 	// file, drop this worktree from its `use` directives so the main tree's
 	// gopls does not walk the worktree. A no-op when there is no main-tree
@@ -351,22 +378,38 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 		return cleanupPartialWorktree(err, "write issue ID file")
 	}
 
-	if err := persistBranchPointMetadata(gitClient, worktreePath, branchName, headSHA, headErr, parentBranch, parentErr); err != nil {
+	if adopted {
+		// Keep any existing base/parent metadata untouched. The only new
+		// claim-time marker that is safe to add is the immutable branch binding.
+		if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
+			return cleanupPartialWorktree(err, "persist claimed branch metadata")
+		}
+	} else if err := persistBranchPointMetadata(gitClient, worktreePath, branchName, headSHA, headErr, parentBranch, parentErr); err != nil {
 		return cleanupPartialWorktree(err, "persist branch-point metadata")
 	}
 	return nil
 }
 
+// hasTrustedBranchPointMetadata reports whether a pre-existing worktree carries
+// claim-time provenance that the delivery gate can use. Default-branch
+// merge-bases are intentionally not considered: the current repository shape
+// cannot prove where an adopted branch was originally cut.
+func hasTrustedBranchPointMetadata(gitClient *adapters.Client, worktreePath, branchName string) bool {
+	if _, err := deliverygate.RecordedBaseCommit(worktreePath); err == nil {
+		return true
+	}
+	parentBranch, err := gitClient.ReadGitConfig(parentBranchConfigKey(branchName))
+	return err == nil && parentBranch != "" && parentBranch != "HEAD"
+}
+
 // persistBranchPointMetadata records the branch-point metadata (parent branch
 // git config, base-commit file) the delivery gate later reads via
 // dynamicBaseCommit/recordedBaseCommit in transition.go. Both idempotent:
-// safe to call whether or not either record already exists. Shared by
-// createWorktreeAndBranch (new-worktree claim path) and the existing-worktree
-// claim path, so a task worktree registered from a pre-existing worktree
-// (e.g. one created from a story branch already containing sibling task
-// commits) gets the same metadata as a freshly created one — without it, the
-// delivery gate falls back to a default-branch merge-base and can
-// misattribute sibling commits to this task's scope.
+// safe to call whether or not either record already exists. It is used only
+// for newly provisioned worktrees, where HEAD and the current parent branch
+// are observed at the moment Armature creates the worktree. Pre-existing and
+// adopted worktrees must preserve their original records or fail closed; the
+// current repository's default refs are not provenance.
 func persistBranchPointMetadata(
 	gitClient *adapters.Client,
 	worktreePath, branchName string,
@@ -765,79 +808,19 @@ armature-issue-id file if the worktree already exists.`,
 					return rollbackClaim(cmd, logPath, issueID, workerID, "update task ID file", err, prior)
 				}
 
-				// Also persist branch-point metadata (parent branch config,
-				// base-commit file), same as the new-worktree path in
-				// createWorktreeAndBranch: a task worktree can be registered
-				// from a pre-existing worktree (e.g. one created from a story
-				// branch already containing sibling task commits), and without
-				// this metadata the delivery gate falls back to a
-				// default-branch merge-base and can misattribute sibling
-				// commits to this task's scope, wrongly blocking a valid
-				// `done` transition. Best-effort: a failure here only
-				// degrades the gate's base-commit precision (it still falls
-				// back to getBaseCommit), so it must not block the claim
-				// itself the way a failed updateIssueIDFile does.
-				//
-				// Critically, HEAD must be resolved from a git client rooted
-				// at worktreePath itself, NOT ctx.RepoPath (the coordinator's
-				// own checkout): the coordinator's repo can be on an
-				// unrelated branch by the time it registers a pre-existing
-				// worktree, and reading HEAD there would record a
-				// confidently WRONG base-commit (not merely a missing one) —
-				// silently corrupting scope checks later.
-				//
-				// The parent BRANCH NAME cannot be derived this way, though:
-				// gitClient.CurrentBranch() rooted at the worktree returns
-				// the worktree's OWN branch (expectedBranch itself), which is
-				// self-referential and equally wrong as a "parent" — there is
-				// no reliable signal for the true parent branch name from the
-				// worktree alone. So on this path we deliberately do NOT
-				// persist parent-branch config; the delivery gate falls back
-				// to getBaseCommit's honest default-branch merge-base instead
-				// of a confidently wrong recorded parent.
+				// A pre-existing canonical worktree may already carry trusted
+				// claim-time provenance. Preserve it; never synthesize a base from
+				// origin/main, main, or another current default ref. If it lacks
+				// provenance, the claim remains replay-compatible but the delivery
+				// gate will fail closed with an explicit re-claim/override action.
+				// This keeps legacy worktrees usable for inspection without turning
+				// the current repository shape into false evidence.
 				worktreeGitClient := adapters.New(worktreePath)
-				headSHA, headErr := worktreeGitClient.ResolveRevision("HEAD")
-
-				// Persisting the worktree's raw current HEAD as the
-				// base-commit is only correct for a genuinely fresh worktree
-				// ("at registration time the worktree has not yet diverged,
-				// so its tip IS the true fork point"). That assumption is
-				// FALSE whenever this worktree was cut from a branch that
-				// already contains sibling-task commits (e.g. a story
-				// branch) — HEAD there already includes those sibling
-				// commits, and naively persisting it would misattribute them
-				// to this task's diff and wrongly block a valid `done`
-				// transition. Rather than skip persistence entirely whenever
-				// HEAD has diverged (the prior, overly conservative
-				// behavior), compute the ACTUAL fork point — the merge-base
-				// of HEAD against the first resolvable candidate base ref
-				// (origin/main, main, etc.; see candidateBaseRefs) — and
-				// persist that unconditionally. This reuses the same
-				// git-config/marker-file mechanism the fresh-worktree path
-				// uses (persistBranchPointMetadata), just with a computed
-				// fork point instead of a trusted-fresh HEAD, so sibling
-				// commits already on the parent branch at registration time
-				// are correctly excluded from this task's scope regardless
-				// of whether HEAD has diverged from a candidate base.
-				baseSHA := headSHA
-				if headErr == nil {
-					for _, ref := range candidateBaseRefs {
-						if _, resolveErr := worktreeGitClient.ResolveRevision(ref); resolveErr != nil {
-							continue
-						}
-						mergeBase, mbErr := worktreeGitClient.MergeBase("HEAD", ref)
-						if mbErr != nil {
-							continue
-						}
-						baseSHA = mergeBase
-						break
+				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
+					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
+						return rollbackClaim(cmd, logPath, issueID, workerID, "persist claimed branch metadata", err, prior)
 					}
 				}
-				//nolint:errcheck // best-effort metadata persistence; see comment above
-				_ = persistBranchPointMetadata(
-					worktreeGitClient, worktreePath, expectedBranch,
-					baseSHA, headErr, "", fmt.Errorf("parent branch not derivable from existing-worktree claim path"),
-				)
 			}
 
 			// Auto-advance any open ancestor story/epic to in-progress.

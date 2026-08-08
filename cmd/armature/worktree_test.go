@@ -142,6 +142,39 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the worktree directory from disk")
 }
 
+func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-duplicate", "--title", "Duplicate", "--type", "task", "--scope", "duplicate.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-duplicate", "--worktree")
+	require.NoError(t, err)
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-duplicate")
+	legacyPath := filepath.Join(t.TempDir(), "legacy-duplicate")
+	run(t, repo, "git", "worktree", "add", "-b", "legacy-duplicate", legacyPath)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-duplicate"))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-duplicate", "--to", "merged", "--force")
+	require.NoError(t, err)
+	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.NoError(t, err)
+	var result struct {
+		Removed []string `json:"removed"`
+		Skipped []string `json:"skipped"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Contains(t, result.Removed, "task-duplicate")
+	assert.NotContains(t, result.Skipped, "task-duplicate")
+	_, statErr := os.Stat(canonicalPath)
+	assert.True(t, os.IsNotExist(statErr), "GC must remove the exact recorded canonical path")
+	_, statErr = os.Stat(legacyPath)
+	assert.NoError(t, statErr, "GC must not remove a duplicate marker at an external legacy path")
+}
+
 // TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2 verifies
 // that a worktree directory removed outside git is not treated as a live bound
 // worktree while git still reports its stale registration as prunable.

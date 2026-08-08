@@ -35,6 +35,13 @@ type ReconcileResult struct {
 	Ghosts []string
 	// GCRemovalSet: issues in merged/cancelled status with a local worktree on disk
 	GCRemovalSet []string
+	// GCRemovals carries the exact selected worktree metadata for each ID in
+	// GCRemovalSet. Callers must remove these paths, not look them up again by
+	// issue ID, because multiple marker-bound worktrees can exist for one issue.
+	GCRemovals []Meta
+	// GCAmbiguous lists terminal issues with more than one candidate and no
+	// uniquely recorded path. Ambiguous candidates are never removed.
+	GCAmbiguous []string
 	// Unrecognized: worktree paths on disk that map to no known issue (reported by PATH)
 	Unrecognized []string
 }
@@ -73,12 +80,16 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 		Orphans:        []string{},
 		Ghosts:         []string{},
 		GCRemovalSet:   []string{},
+		GCRemovals:     []Meta{},
+		GCAmbiguous:    []string{},
 		Unrecognized:   []string{},
 	}
 
-	// accountedFor tracks issues that have a local worktree, so the ghost pass
-	// (which looks for live claims with NO local worktree) can skip them.
-	accountedFor := make(map[string]bool)
+	// recordedPathMatches tracks the exact local path recorded by a live claim.
+	// A wrong-path marker for the same issue is still an orphan and must not hide
+	// the recorded-path ghost.
+	recordedPathMatches := make(map[string]bool)
+	gcCandidates := make(map[string][]Meta)
 
 	// First pass: drive classification from THIS clone's on-disk worktrees.
 	// Identity comes from the authoritative armature-issue-id binding (wt.IssueID)
@@ -95,11 +106,13 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 			result.Unrecognized = append(result.Unrecognized, wt.Path)
 			continue
 		}
-		accountedFor[issueID] = true
+		if issue.WorktreePath != "" && NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
+			recordedPathMatches[issueID] = true
+		}
 
 		switch {
 		case isTerminalStatus(issue.Status):
-			result.GCRemovalSet = append(result.GCRemovalSet, issueID)
+			gcCandidates[issueID] = append(gcCandidates[issueID], wt)
 		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
 			// A claim's absolute WorktreePath identifies the clone that owns the
 			// claim. A marker in this clone is not enough to call a local path
@@ -117,6 +130,20 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 		}
 	}
 
+	// Select terminal worktrees by exact recorded path where available. If the
+	// recorded path cannot disambiguate multiple marker-bound candidates, leave
+	// the issue out of the removal set rather than guessing.
+	for issueID, candidates := range gcCandidates {
+		issue := issues[issueID]
+		selected, ok := selectGCRemoval(issue, candidates)
+		if !ok {
+			result.GCAmbiguous = append(result.GCAmbiguous, issueID)
+			continue
+		}
+		result.GCRemovalSet = append(result.GCRemovalSet, issueID)
+		result.GCRemovals = append(result.GCRemovals, selected)
+	}
+
 	// Second pass: issues holding a live claim whose worktree is missing on disk
 	// are ghosts. A terminal issue whose worktree is gone is the expected end
 	// state, not an anomaly, so terminal issues are excluded.
@@ -124,7 +151,7 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 		if issue == nil || issue.WorktreePath == "" {
 			continue
 		}
-		if accountedFor[issue.ID] {
+		if recordedPathMatches[issue.ID] {
 			continue
 		}
 		// The worktree is missing on disk (that's the ghost condition), so the
@@ -145,9 +172,40 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	sort.Strings(result.Orphans)
 	sort.Strings(result.Ghosts)
 	sort.Strings(result.GCRemovalSet)
+	sort.Slice(result.GCRemovals, func(i, j int) bool {
+		if result.GCRemovals[i].IssueID == result.GCRemovals[j].IssueID {
+			return result.GCRemovals[i].Path < result.GCRemovals[j].Path
+		}
+		return result.GCRemovals[i].IssueID < result.GCRemovals[j].IssueID
+	})
+	sort.Strings(result.GCAmbiguous)
 	sort.Strings(result.Unrecognized)
 
 	return result
+}
+
+func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, bool) {
+	if len(candidates) == 0 {
+		return Meta{}, false
+	}
+	if issue != nil && issue.WorktreePath != "" {
+		var matches []Meta
+		for _, candidate := range candidates {
+			if NormalizePathAllowingMissing(candidate.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
+				matches = append(matches, candidate)
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0], true
+		}
+		if len(matches) > 1 {
+			return Meta{}, false
+		}
+	}
+	if len(candidates) == 1 {
+		return candidates[0], true
+	}
+	return Meta{}, false
 }
 
 // isUnderManagedRoot reports whether normPath falls under one of the supplied

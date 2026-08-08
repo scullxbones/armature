@@ -93,6 +93,35 @@ func TestPlanFixes_UsesCanonicalMarkerInventory_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Empty(t, actions, "a canonical marker-bound worktree must satisfy doctor --fix")
 }
 
+func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
+	repoDir := initGitRepo(t)
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	runGit(t, repoDir, "worktree", "add", "-b", "task/legacy-task-01", legacyPath)
+	gitDir := worktreeGitDir(t, legacyPath)
+	// The inventory must retain the legacy marker binding while honoring the
+	// explicit path recorded by claims made before canonical provisioning.
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "armature-task-id"), []byte("legacy-task-01\n"), 0o644))
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "legacy-task-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{Title: "Legacy worktree task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "legacy-task-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{TTL: 240, WorktreePath: legacyPath}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "a live marker-bound worktree at the recorded legacy path must not be repaired")
+}
+
 func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)

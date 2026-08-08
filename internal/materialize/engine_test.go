@@ -114,6 +114,45 @@ func TestApplyTransition_ClearWorktreePathRestoresEmpty_REQ_LNGHZN_S5_T1(t *test
 		"ClearWorktreePath must restore the WorktreePath to empty")
 }
 
+// TestApplyTransition_RestoresCompleteClaimSnapshot_REQ_LNGHZN_S5_T1 verifies
+// that a failed same-worker retry restores the full lease snapshot, not only
+// the status and worktree path. The explicit marker makes zero-valued fields
+// unambiguous in the append-only compensating transition.
+func TestApplyTransition_RestoresCompleteClaimSnapshot_REQ_LNGHZN_S5_T1(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, WorktreePath: "/legacy/task-01"}}))
+	issue := state.Issues["task-01"]
+	issue.Status = ops.StatusInProgress
+	issue.LastHeartbeat = 240
+	issue.LastClaimingWorkerActivity = 250
+	issue.ClaimTTL = 90
+	before := *issue
+
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{
+			To:                                before.Status,
+			WorktreePath:                      before.WorktreePath,
+			RestoreClaim:                      true,
+			RestoreClaimedBy:                  before.ClaimedBy,
+			RestoreClaimedAt:                  before.ClaimedAt,
+			RestoreClaimTTL:                   before.ClaimTTL,
+			RestoreLastHeartbeat:              before.LastHeartbeat,
+			RestoreLastClaimingWorkerActivity: before.LastClaimingWorkerActivity,
+		}}))
+	after := state.Issues["task-01"]
+	assert.Equal(t, before.Status, after.Status)
+	assert.Equal(t, before.ClaimedBy, after.ClaimedBy)
+	assert.Equal(t, before.ClaimedAt, after.ClaimedAt)
+	assert.Equal(t, before.ClaimTTL, after.ClaimTTL)
+	assert.Equal(t, before.LastHeartbeat, after.LastHeartbeat)
+	assert.Equal(t, before.LastClaimingWorkerActivity, after.LastClaimingWorkerActivity)
+	assert.Equal(t, before.WorktreePath, after.WorktreePath)
+}
+
 func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T) {
 	t.Parallel()
 	state := NewState()
