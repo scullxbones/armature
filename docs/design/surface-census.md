@@ -171,6 +171,9 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
 | `scope-delete` | main.go:243, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
 | `doctor` | main.go:247, doctor.go | Diagnose DAG health | **kept-evidence** | Validator. Checks for broken refs, cycles, orphans. |
+| `worktree` | main.go, worktree.go | Manage managed worktrees | **kept-evidence** | Container for worktree reconciliation subcommands. |
+| `worktree list` | worktree.go | List managed worktrees with bound issue and claim status | **kept-evidence** | Subcommand of `worktree`. Flags orphans (worktree, no live claim) and ghosts (claim recording a missing worktree). |
+| `worktree gc` | worktree.go | Remove worktrees for merged/cancelled issues | **kept-evidence** | Subcommand of `worktree`. Supports --dry-run to preview removals. Only mutates state by removing worktrees. |
 | `completion` | main.go:251, cmd_completion.go | Bash/zsh completion | **kept-evidence** | Shell integration. Cobra-generated. |
 | `hook` | main.go:255, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
@@ -237,7 +240,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--dry-run` | sync, dag apply, dag revert, import, doctor | bool | Preview without writing ops | **kept-evidence** |
+| `--dry-run` | sync, dag apply, dag revert, import, doctor, worktree gc | bool | Preview without writing ops (for `worktree gc`, preview removals without removing) | **kept-evidence** |
 | `--into` | sync | string | Target branch for merge checks | **kept-evidence** |
 
 ### DAG/Decompose Flags
@@ -367,7 +370,7 @@ Enumerated in sources.go flag description:
 - **Confidence States**: 3 (all kept-evidence)
 - **Issue Fields**: 37 (33 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 19 (all kept-evidence)
-- **CLI Commands**: 47 (all kept-evidence, 4 groups)
+- **CLI Commands**: 50 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
