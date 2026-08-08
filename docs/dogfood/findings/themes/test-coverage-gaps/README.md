@@ -26,6 +26,8 @@ Green tests and green per-task reviews create false confidence in (at least) fou
 
 4. **Task-scoped review can't see whole-story defects**: When a story is decomposed into tasks and each task's DoD/acceptance is reviewed independently against its own scope, interface drift between tasks (call-site signature mismatches, log format inconsistency, entry-ID conventions) is invisible to any single task's review. Only a review — or verification pass — with the whole story's diff in scope catches it, and by design that only happens once, at the end, after all individual gates already reported green.
 
+5. **Existence-only assertions mask a wholly-inert feature**: When tests assert only `NotEmpty(output)` / `NotNil(jsonKey)` / "runs without error", they pass regardless of whether the feature does anything — an empty reconcile still emits non-empty text and non-nil (empty) arrays. On PR #89 this let `arm worktree list`/`gc` read issues from the wrong directory (a total no-op) survive *multiple* review rounds; each round hardened logic downstream of a reconcile that was always fed zero issues. A test that cannot fail when the feature is a no-op is not a test. See [Hollow tests let a dead worktree-lifecycle path survive multiple review rounds](../../raw/2026-08-08T1900Z-claude-validation-hollow-tests-masked-dead-worktree-path.md).
+
 ## Impact
 
 - End-to-end workflows broken while CI is green — discovered late (during code review or manual testing) with higher remediation cost.
@@ -39,4 +41,5 @@ Green tests and green per-task reviews create false confidence in (at least) fou
 - Replace inline `setUp()` fixtures in `test_reviewer_eval_report.py` with loads from the canonical `cases.json` and `reviewer_eval_results.json` files so tests cannot diverge from the source of truth.
 - The armature-worker skill's Definition of Done could require a cross-layer JSON fixture test when both a type and its skill documentation are in scope.
 - When a task removes a config field, require a grep across generated shell templates / embedded strings for references to that field's old value, not just Go struct usages.
+- Ban existence-only assertions (`NotEmpty`/`NotNil`/"runs without error") as the sole check for a command's behavior; require at least one assertion on a specific classified outcome that would fail if the feature were a no-op (e.g. a named worktree lands in `gc_ready` and is `os.Stat`-gone after `gc`).
 - Treat a whole-story deep review (not just the final verification task's own scope) as a mandatory gate before opening a PR for any multi-task DAG story — the per-task review discipline has now repeatedly missed cross-task drift that only a story-wide pass catches.
