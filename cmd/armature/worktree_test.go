@@ -134,6 +134,52 @@ func TestWorktreeListCmd_JSONFormat_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.NotNil(t, result["orphans"])
 	assert.NotNil(t, result["ghosts"])
 	assert.NotNil(t, result["gc_ready"])
+	assert.NotNil(t, result["unrecognized"])
+}
+
+// TestIsManaged_PrefixMatch_REQ_LNGHZN_S5_T2 verifies isManaged uses a
+// path-prefix test rooted at <repo>/.worktrees/, not a naive substring match.
+func TestIsManaged_PrefixMatch_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+
+	managed := filepath.Join(repo, ".worktrees", "task-01")
+	assert.True(t, isManaged(repo, managed), "path under repo/.worktrees must be managed")
+
+	// A sibling directory that merely contains the substring ".worktrees" but is
+	// not under this repo's managed root must NOT be classified as managed.
+	notManaged := filepath.Join(t.TempDir(), ".worktrees-backup", "task-01")
+	assert.False(t, isManaged(repo, notManaged), "unrelated path must not be managed")
+
+	// The managed root itself (no trailing child) is not a managed worktree.
+	assert.False(t, isManaged(repo, filepath.Join(repo, ".worktrees")), "bare .worktrees dir is not a worktree")
+}
+
+// TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3 drives `arm claim --worktree`
+// end-to-end and asserts the worktree mitigation ran with the correct effect:
+// with no go.work in the main tree, the mitigation is a no-op — it neither
+// creates a go.work in the main tree nor a bare go.work in the worktree (the
+// latter would break `go build ./...` inside the worktree).
+func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-mit", "--title", "Mit task", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "claim", "task-mit", "--worktree")
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(repo, "go.work"))
+	assert.True(t, os.IsNotExist(statErr), "no go.work should be created in the main tree")
+
+	wt := filepath.Join(repo, ".worktrees", "task-mit")
+	_, statErr = os.Stat(filepath.Join(wt, "go.work"))
+	assert.True(t, os.IsNotExist(statErr), "no go.work should be created in the worktree")
 }
 
 // TestWorktreeGCCmd_DryRun_REQ_LNGHZN_S5_T2 verifies GC with --dry-run doesn't remove worktrees
