@@ -160,7 +160,7 @@ For each wave of ready tasks:
 
 1. Claim and get context for each task:
    ```bash
-   arm claim TASK-ID --ttl 120 --worktree /tmp/arm-task-TASK-ID
+   arm claim TASK-ID --ttl 120 --worktree
    arm render-context TASK-ID --format agent
    ```
    **`--worktree` is REQUIRED for worker dispatch.** This is an invariant, not merely a
@@ -171,9 +171,9 @@ For each wave of ready tasks:
    event cwd → session cwd → env var) has no per-task `.git` directory to resolve from,
    breaking the isolation that makes per-task enforcement possible.
 
-   When you pass `--worktree <path>` to `arm claim`:
-   - `arm claim` creates an isolated git worktree on a task-specific branch
-   - The task ID is written to `<worktree-git-dir>/armature-issue-id`
+   When you pass `--worktree` to `arm claim`:
+   - `arm claim` auto-provisions a git worktree at `.worktrees/<issue-id>` on a task-specific branch
+   - The task ID is written to the worktree's git-dir `armature-issue-id` file
    - Workers edit files inside the worktree (step 1 of binding resolution)
    - The hook reads the binding from the file path being edited (step 1 succeeds)
    - Events are evaluated under the correct task's policy
@@ -185,8 +185,8 @@ For each wave of ready tasks:
      agent's code is being changed
    - Scope enforcement becomes meaningless; multiple agents cannot be parallelized safely
 
-   Do not pre-create the worktree with `git worktree add`; let `arm claim` handle creation
-   (it sets up binding and branch correctly).
+   Do not pre-create the worktree with `git worktree add`; let `arm claim --worktree` handle
+   creation (it sets up binding, branch, and default location correctly).
 
    Set `--ttl` to exceed your expected worker runtime. Default is 60 minutes; use
    `--ttl 240` or higher for complex tasks. If the TTL expires while a worker is
@@ -246,7 +246,7 @@ Each worker's context package must contain:
 4. **Repository location:**
    Use the isolated git worktree created for this task by `arm claim --worktree`, not the main repository:
    ```
-   Working directory: /tmp/arm-task-TASK-ID
+   Working directory: .worktrees/TASK-ID
    ```
 
 5. **Task-specific branch:**

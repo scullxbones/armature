@@ -20,7 +20,7 @@ arm worker-init --check || arm worker-init              # register once per clon
 
 ```
 arm ready                                               # list actionable issues
-arm claim ID --worktree /path/to/wt --ttl 60            # claim an issue with worktree
+arm claim ID --worktree --ttl 60                        # claim an issue with worktree
 arm render-context ID --budget 4000                      # get task context
 ```
 

@@ -45,7 +45,7 @@ arm ready
 Claim, dispatch, and complete each task.
 
 ```bash
-arm claim TASK-001 --worktree ./task-001-work
+arm claim TASK-001 --worktree
 arm render-context TASK-001 --format agent
 # dispatch agent with the render-context output
 arm transition TASK-001 --to done --outcome "Implemented auth middleware"
@@ -95,7 +95,7 @@ Downstream tasks only unblock after `merged`. This prevents agents from starting
 
 ```bash
 arm ready                                      # find unblocked tasks
-arm claim TASK-ID --worktree ./task-worktree
+arm claim TASK-ID --worktree
 arm render-context TASK-ID --format agent       # get task spec for agent
 # dispatch agent — agent implements, transitions to done
 ```
@@ -329,8 +329,8 @@ arm ready
 Pre-claim and render context for each task in the wave, then dispatch agents concurrently:
 
 ```bash
-arm claim TASK-042 --worktree ./task-042-work && arm render-context TASK-042 --format agent > ctx-042.json
-arm claim TASK-043 --worktree ./task-043-work && arm render-context TASK-043 --format agent > ctx-043.json
+arm claim TASK-042 --worktree && arm render-context TASK-042 --format agent > ctx-042.json
+arm claim TASK-043 --worktree && arm render-context TASK-043 --format agent > ctx-043.json
 # dispatch agents with their context packages; agents transition to done when complete
 ```
 
