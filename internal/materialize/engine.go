@@ -125,6 +125,7 @@ func (s *State) applyClaim(op ops.Op) error {
 	issue.ClaimedBy = op.WorkerID
 	issue.ClaimedAt = op.Timestamp
 	issue.ClaimTTL = op.Payload.TTL
+	issue.WorktreePath = op.Payload.WorktreePath
 	issue.LastHeartbeat = op.Timestamp
 	issue.Updated = op.Timestamp
 	issue.LastClaimingWorkerActivity = op.Timestamp
