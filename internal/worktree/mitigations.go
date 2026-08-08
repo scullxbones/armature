@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ProjectType represents the type of project detected in a repository.
@@ -116,105 +117,34 @@ func applyGoWorkIsolation(repoRoot, worktreeRoot string) error {
 // determineGoVersion extracts the Go version from the repo root's go.mod or go.work.
 // Returns a sensible default if neither file is found or the version cannot be determined.
 func determineGoVersion(repoRoot string) string {
-	// Try to read go.mod first
-	goModPath := filepath.Join(repoRoot, "go.mod")
-	// #nosec G304 - repoRoot is internal, paths are not user-controlled
-	if content, err := os.ReadFile(goModPath); err == nil {
-		// Parse the go version from go.mod
-		if version := parseGoVersionFromGoMod(string(content)); version != "" {
+	for _, name := range []string{"go.mod", "go.work"} {
+		// #nosec G304 - repoRoot is internal, paths are not user-controlled
+		content, err := os.ReadFile(filepath.Join(repoRoot, name))
+		if err != nil {
+			continue
+		}
+		if version := parseGoVersion(string(content)); version != "" {
 			return version
 		}
 	}
-
-	// Try to read go.work
-	goWorkPath := filepath.Join(repoRoot, "go.work")
-	// #nosec G304 - repoRoot is internal, paths are not user-controlled
-	if content, err := os.ReadFile(goWorkPath); err == nil {
-		// Parse the go version from go.work
-		if version := parseGoVersionFromGoWork(string(content)); version != "" {
-			return version
-		}
-	}
-
 	// Default to a conservative version
 	return "1.20"
 }
 
-// parseGoVersionFromGoMod extracts the go version directive from go.mod content.
-// Returns the version string (e.g., "1.26") or empty string if not found.
-func parseGoVersionFromGoMod(content string) string {
-	return parseGoVersionFromLine(content, "go ")
-}
-
-// parseGoVersionFromGoWork extracts the go version directive from go.work content.
-// Returns the version string (e.g., "1.26") or empty string if not found.
-func parseGoVersionFromGoWork(content string) string {
-	return parseGoVersionFromLine(content, "go ")
-}
-
-// parseGoVersionFromLine extracts the go version from a line starting with the given prefix.
-// Handles the first line of the form "go <version>".
-func parseGoVersionFromLine(content, prefix string) string {
-	// Simple line-by-line parser looking for "go <version>"
-	lines := splitLines(content)
-	for _, line := range lines {
-		// Trim whitespace
-		line = trimSpace(line)
-
-		// Check if the line starts with "go "
-		if len(line) > len(prefix) && hasPrefix(line, prefix) {
-			// Extract the version after "go "
-			version := line[len(prefix):]
-			// Trim any trailing whitespace or comments
-			version = trimSpace(version)
-			// Handle comments (e.g., "1.26 // some comment")
-			for i := 0; i < len(version); i++ {
-				if version[i] == '/' && i+1 < len(version) && version[i+1] == '/' {
-					version = version[:i]
-					break
-				}
-			}
-			version = trimSpace(version)
-			if version != "" {
-				return version
-			}
+// parseGoVersion extracts the version from the first "go <version>" directive in
+// go.mod/go.work content, stripping any trailing line comment. Returns "" if absent.
+func parseGoVersion(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "go ")
+		if !ok {
+			continue
+		}
+		if i := strings.Index(rest, "//"); i >= 0 {
+			rest = rest[:i]
+		}
+		if version := strings.TrimSpace(rest); version != "" {
+			return version
 		}
 	}
 	return ""
-}
-
-// splitLines splits content by newlines (simple implementation).
-func splitLines(content string) []string {
-	var lines []string
-	var current string
-	for _, c := range content {
-		if c == '\n' {
-			lines = append(lines, current)
-			current = ""
-		} else {
-			current += string(c)
-		}
-	}
-	if current != "" {
-		lines = append(lines, current)
-	}
-	return lines
-}
-
-// trimSpace removes leading and trailing whitespace.
-func trimSpace(s string) string {
-	start := 0
-	for start < len(s) && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
-		start++
-	}
-	end := len(s)
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\r') {
-		end--
-	}
-	return s[start:end]
-}
-
-// hasPrefix checks if s starts with prefix.
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
