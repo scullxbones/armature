@@ -125,6 +125,20 @@ func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	if issueID == "" || filepath.IsAbs(issueID) {
 		return "", fmt.Errorf("invalid issue ID %q for canonical worktree path", issueID)
 	}
+	// Reject "." / ".." path components in the ID. The filepath.Rel containment
+	// check below catches escapes, but an ID like "team/../task-1" cleans to
+	// "task-1" — it stays under the root yet aliases the distinct valid ID
+	// "task-1", so both would wedge at the same .worktrees/task-1 path. Upstream
+	// (arm create / dag apply) does not reject "."/".." in IDs, so this guard is
+	// reachable and must keep ID→path injective. Split on both "/" (the ID's own
+	// separator) and the OS separator.
+	for _, seg := range strings.FieldsFunc(issueID, func(r rune) bool {
+		return r == '/' || r == filepath.Separator
+	}) {
+		if seg == "." || seg == ".." {
+			return "", fmt.Errorf("issue ID %q must not contain '.' or '..' path components", issueID)
+		}
+	}
 	root := worktree.CanonicalRoot(repoPath)
 	path := worktree.CanonicalPath(repoPath, issueID)
 	rel, err := filepath.Rel(root, path)

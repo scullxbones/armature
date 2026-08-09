@@ -16,6 +16,73 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestIssueWorktreeHasViolations_FailsClosedOnUnreadableInventory_REQ_LNGHZN_S5
+// verifies that a worktree-inventory read error propagates out of the merged
+// violation gate instead of being swallowed into "no violations". Returning
+// ok=false on an inventory error would let `arm merged` append the merged op and
+// exit 0 while the target worktree is UNREADABLE and may contain violations —
+// a fail-OPEN gate violating I5 (deterministic gates fail closed) and I6
+// (done ≠ merged).
+func TestIssueWorktreeHasViolations_FailsClosedOnUnreadableInventory_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+	// A tempdir with no git repository makes `git worktree list` fail, so the
+	// inventory cannot be read.
+	notARepo := t.TempDir()
+	issue := materialize.Issue{ID: "task-01", Type: "task"}
+
+	_, err := issueWorktreeHasViolations(notARepo, issue)
+	require.Error(t, err, "unreadable inventory must fail closed, not report zero violations")
+}
+
+// TestRemoveWorktreeForIssueTracked_FailsClosedOnUnreadableInventory_REQ_LNGHZN_S5
+// verifies the removal path also propagates the inventory read error (outcome
+// stays worktreeSkipped) rather than silently skipping teardown.
+func TestRemoveWorktreeForIssueTracked_FailsClosedOnUnreadableInventory_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+	notARepo := t.TempDir()
+	issue := materialize.Issue{ID: "task-01", Type: "task"}
+
+	outcome, err := removeWorktreeForIssueTracked(notARepo, issue, new(bytes.Buffer))
+	require.Error(t, err, "unreadable inventory must surface an error, not a silent skip")
+	assert.Equal(t, worktreeSkipped, outcome)
+}
+
+// TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5
+// verifies that when more than one worktree carries the issue's marker and none
+// uniquely matches the recorded WorktreePath (a legacy explicit-path worktree
+// alongside the canonical .worktrees/<id> one, with an empty WorktreePath), the
+// merged violation gate FAILS CLOSED with an error rather than returning
+// ok=false ("nothing to gate"). Returning ok=false would let `arm merged`
+// append the merged op and exit 0 without inspecting either candidate's hook
+// log — a fail-OPEN gate violating I5 (deterministic gates fail closed) and I6
+// (done ≠ merged). This mirrors how gc treats duplicate markers as GCAmbiguous
+// and exits non-zero (TestReconcile_GCAmbiguousDuplicateMarkersRemovesNothing).
+func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	// Claim to create the canonical .worktrees/task-01 worktree bound to task-01.
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, claimCmd.Execute())
+
+	// Create a SECOND, legacy explicit-path worktree and bind it to the SAME
+	// issue marker, producing a duplicate-marker set.
+	legacyPath := filepath.Join(t.TempDir(), "legacy-worktree")
+	run(t, repo, "git", "worktree", "add", legacyPath, "-b", "legacy/task-01")
+	legacyGitDir, err := resolveWorktreeGitDir(legacyPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(legacyGitDir, "armature-issue-id"),
+		[]byte("task-01\n"), 0o600))
+
+	// With an empty recorded WorktreePath, SelectByIssue cannot disambiguate the
+	// two marker-bound worktrees. The gate must surface an error, not (false,nil).
+	issue := materialize.Issue{ID: "task-01", Type: "task"}
+	_, gateErr := issueWorktreeHasViolations(repo, issue)
+	require.Error(t, gateErr, "ambiguous marker-bound worktrees must fail closed, not report zero violations")
+	assert.Contains(t, gateErr.Error(), "ambiguous", "error should name the ambiguity condition")
+}
+
 // TestMergedCmd_DoesNotMaterialize verifies that arm merged reads the index and issue from
 // disk via store.ReadIndex()/store.ReadIssue() without triggering full rematerialization.
 //

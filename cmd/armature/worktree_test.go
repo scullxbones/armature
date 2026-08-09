@@ -11,6 +11,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGCExitError_AmbiguousExitsNonZero_REQ_LNGHZN_S5 verifies that `arm worktree
+// gc` fails closed for the two classes that must never look like a clean run:
+// removal failures and ambiguous terminal issues reconcile refused to GC. An
+// ambiguous candidate previously exited 0, silently dropping it from gc's output.
+func TestGCExitError_AmbiguousExitsNonZero_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+
+	// Nothing failed or ambiguous: clean exit.
+	assert.NoError(t, gcExitError(nil, nil))
+
+	// Ambiguous alone must exit non-zero and name the class.
+	err := gcExitError(nil, []string{"task-13"})
+	require.Error(t, err, "ambiguous GC candidates must not exit clean")
+	assert.Contains(t, err.Error(), "ambiguous")
+
+	// A removal failure alone exits non-zero.
+	assert.Error(t, gcExitError([]string{"task-1"}, nil))
+
+	// A removal failure takes precedence in the message over ambiguity.
+	both := gcExitError([]string{"task-1"}, []string{"task-13"})
+	require.Error(t, both)
+	assert.Contains(t, both.Error(), "failed to remove")
+}
+
 // TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5 verifies that
 // when a managed worktree directory is deleted out from under git (leaving a
 // prunable administrative registration), a subsequent addWorktreeDetached at the

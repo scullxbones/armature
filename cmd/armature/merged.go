@@ -50,13 +50,21 @@ func readHookLogForViolations(gitDir string) bool {
 }
 
 // resolveIssueWorktree locates the worktree for an issue's branch and resolves its
-// git dir and binding. Returns ok=false when no matching worktree exists or its
-// git dir can't be resolved. binding is the content of armature-issue-id ("" when
-// absent). Shared by the merged violation gate and worktree removal (finding 7).
-func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePath, gitDir, binding string, ok bool) {
+// git dir and binding. Returns ok=false, nil err ONLY when there is genuinely no
+// bound worktree to gate on (CountByIssue==0 and no legacy branch fallback).
+// A non-nil err means either the worktree inventory (or the found worktree's git
+// dir) could not be read, OR the marker-bound set is AMBIGUOUS (CountByIssue>0 but
+// SelectByIssue cannot uniquely resolve a target — e.g. duplicate legacy+canonical
+// markers). In both error cases callers MUST fail closed rather than treat the
+// worktree as "not found / nothing to gate", or `arm merged` would append the
+// merged op and exit 0 while a worktree that may contain violations is never
+// inspected (I5 deterministic gates fail closed; I6 done≠merged). binding is the
+// content of armature-issue-id ("" when absent). Shared by the merged violation
+// gate and worktree removal (finding 7).
+func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePath, gitDir, binding string, ok bool, err error) {
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
-		return "", "", "", false
+		return "", "", "", false, fmt.Errorf("read worktree inventory: %w", err)
 	}
 	// Marker identity is authoritative. This also handles a detached worktree
 	// and prevents an unrelated worktree holding the expected branch from being
@@ -68,9 +76,16 @@ func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePat
 	// worktree — the merged violation-gate and removal path force-remove (--force),
 	// so guessing here could discard uncommitted changes in the wrong worktree.
 	if worktree.CountByIssue(worktrees, issue.ID) > 0 {
-		item, ok := worktree.SelectByIssue(worktrees, issue.ID, issue.WorktreePath)
-		if !ok {
-			return "", "", "", false
+		item, selectOK := worktree.SelectByIssue(worktrees, issue.ID, issue.WorktreePath)
+		if !selectOK {
+			// One or more worktrees carry this issue's marker but none uniquely
+			// matches the recorded WorktreePath (e.g. a legacy explicit-path
+			// worktree alongside the canonical .worktrees/<id> one sharing a
+			// marker, with an empty/non-matching issue.WorktreePath). This is the
+			// same duplicate-marker condition gc reports as GCAmbiguous and exits
+			// non-zero on; merged must be consistent and FAIL CLOSED rather than
+			// return "not found" and let the violation gate be skipped (I5/I6).
+			return "", "", "", false, fmt.Errorf("issue %s has ambiguous marker-bound worktrees; disambiguate before merging", issue.ID)
 		}
 		worktreePath = item.Path
 	} else if branchName := deriveBranchName(issue.Type, issue.ID); branchName != "" {
@@ -86,15 +101,17 @@ func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePat
 		}
 	}
 	if worktreePath == "" {
-		return "", "", "", false
+		return "", "", "", false, nil
 	}
 
 	gitDir, err = resolveWorktreeGitDir(worktreePath)
 	if err != nil {
-		return "", "", "", false
+		// A located-but-unresolvable worktree is UNREADABLE, not "not found":
+		// propagate so callers fail closed instead of skipping the gate.
+		return "", "", "", false, fmt.Errorf("resolve worktree git dir for %s: %w", worktreePath, err)
 	}
 
-	return worktreePath, gitDir, harnesshook.ReadIssueBindingFile(gitDir), true
+	return worktreePath, gitDir, harnesshook.ReadIssueBindingFile(gitDir), true, nil
 }
 
 // issueWorktreeHasViolations reports whether the hook log of the issue's worktree
@@ -102,16 +119,21 @@ func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePat
 // issue OR unbound (an unbound worktree on the issue's branch is exactly the
 // enforcement-gap case violations exist to catch — finding 1); a worktree bound to
 // a different issue is skipped.
-func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) bool {
-	_, gitDir, binding, ok := resolveIssueWorktree(repoPath, issue)
+func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) (bool, error) {
+	_, gitDir, binding, ok, err := resolveIssueWorktree(repoPath, issue)
+	if err != nil {
+		// Inventory/git-dir unreadable: fail closed — the caller must refuse to
+		// mark merged rather than silently treat this as "no violations".
+		return false, err
+	}
 	if !ok {
-		return false
+		return false, nil
 	}
 	if binding != "" && binding != issue.ID {
 		// Bound to a different issue; not ours to gate on.
-		return false
+		return false, nil
 	}
-	return readHookLogForViolations(gitDir)
+	return readHookLogForViolations(gitDir), nil
 }
 
 // worktreeRemoveOutcome distinguishes an actual worktree removal from a
@@ -142,9 +164,14 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 // skipped as a no-op (worktreeSkipped). A returned error is a genuine removal
 // failure and is orthogonal to the outcome (outcome is worktreeSkipped on error).
 func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, errWriter io.Writer) (worktreeRemoveOutcome, error) {
-	worktreePath, _, binding, ok := resolveIssueWorktree(repoPath, issue)
+	worktreePath, _, binding, ok, err := resolveIssueWorktree(repoPath, issue)
+	if err != nil {
+		// Inventory/git-dir unreadable: fail closed so a removal is never skipped
+		// merely because the worktree could not be inspected.
+		return worktreeSkipped, err
+	}
 	if !ok {
-		// No branch for this type, worktree missing, or git dir unresolvable; nothing to remove.
+		// No branch for this type or worktree missing; nothing to remove.
 		return worktreeSkipped, nil
 	}
 
@@ -263,9 +290,19 @@ func newMergedCmd() *cobra.Command {
 			// Check for violations in the hook log BEFORE recording the merge op.
 			// If violations are found and --force is not set, exit with error and
 			// do NOT proceed with the merge (preserving the worktree as evidence).
-			if !force && issueWorktreeHasViolations(ctx.RepoPath, *issue) {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
-				return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
+			if !force {
+				hasViolations, err := issueWorktreeHasViolations(ctx.RepoPath, *issue)
+				if err != nil {
+					// Fail closed: refuse to mark merged when the worktree
+					// inventory cannot be read, so an unreadable worktree that may
+					// contain violations is never silently merged (I5/I6).
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: cannot verify hook log for %s: %v\n", issueID, err)
+					return fmt.Errorf("issue %s cannot be merged: worktree inventory unreadable (use --force to override): %w", issueID, err)
+				}
+				if hasViolations {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
+					return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
+				}
 			}
 
 			// Record the merge op FIRST, before removing the worktree.

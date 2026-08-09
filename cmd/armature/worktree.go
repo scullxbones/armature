@@ -222,20 +222,23 @@ func newWorktreeGCCmd() *cobra.Command {
 			// Report results
 			if format == "json" || format == "agent" {
 				jsonResult := map[string]interface{}{
-					"removed":       removed,
-					"removed_count": len(removed),
-					"skipped":       skipped,
-					"skipped_count": len(skipped),
-					"failed":        failed,
-					"failed_count":  len(failed),
+					"removed":         removed,
+					"removed_count":   len(removed),
+					"skipped":         skipped,
+					"skipped_count":   len(skipped),
+					"failed":          failed,
+					"failed_count":    len(failed),
+					"ambiguous":       result.GCAmbiguous,
+					"ambiguous_count": len(result.GCAmbiguous),
 				}
 				if err := writeWorktreeJSON(cmd, jsonResult); err != nil {
 					return err
 				}
-				// Consistency with the human branch below: a removal failure is a
-				// non-zero exit regardless of output format.
-				if len(failed) > 0 {
-					return fmt.Errorf("failed to remove %d worktree(s)", len(failed))
+				// Consistency with the human branch below: a removal failure or an
+				// ambiguous terminal issue is a non-zero exit regardless of output
+				// format, so gc never reports a misleading clean run.
+				if exitErr := gcExitError(failed, result.GCAmbiguous); exitErr != nil {
+					return exitErr
 				}
 			} else {
 				if len(removed) > 0 {
@@ -255,7 +258,18 @@ func newWorktreeGCCmd() *cobra.Command {
 					for _, id := range failed {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s\n", id)
 					}
-					return fmt.Errorf("failed to remove %d worktree(s)", len(failed))
+				}
+				// Surface ambiguous terminal issues that reconcile refused to GC.
+				// list already renders these; gc must too, and must exit non-zero,
+				// or an ambiguous candidate is silently dropped from a "clean" run.
+				if len(result.GCAmbiguous) > 0 {
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "AMBIGUOUS GC CANDIDATES (nothing removed):")
+					for _, id := range result.GCAmbiguous {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s\n", id)
+					}
+				}
+				if exitErr := gcExitError(failed, result.GCAmbiguous); exitErr != nil {
+					return exitErr
 				}
 			}
 
@@ -321,6 +335,20 @@ func loadIssuesForReconcile(ctx *config.Context) (map[string]*materialize.Issue,
 		return map[string]*materialize.Issue{}, nil
 	}
 	return snap.Issues, nil
+}
+
+// gcExitError builds the non-zero exit for `arm worktree gc` from the two
+// classes that must not be reported as a clean run: removal failures and
+// ambiguous terminal issues reconcile refused to GC. Returns nil when both are
+// empty. A removal failure takes precedence in the message.
+func gcExitError(failed, ambiguous []string) error {
+	if len(failed) > 0 {
+		return fmt.Errorf("failed to remove %d worktree(s)", len(failed))
+	}
+	if len(ambiguous) > 0 {
+		return fmt.Errorf("%d ambiguous GC candidate(s) not removed; resolve manually", len(ambiguous))
+	}
+	return nil
 }
 
 func worktreeLifecycleError(operation, state, next string, cause error) error {
