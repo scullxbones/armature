@@ -40,7 +40,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "merged", "--issue", "TASK-1")
+	_, err = runTrls(t, repo, "merged", "--issue", "TASK-1", "--force")
 	require.NoError(t, err)
 
 	// dag-summary

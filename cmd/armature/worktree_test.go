@@ -212,6 +212,55 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the worktree directory from disk")
 }
 
+// TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5 verifies that gc reports
+// a failed removal instead of silently force-deleting tracked or untracked
+// worker output.
+func TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prepare func(t *testing.T, path string)
+		file    string
+	}{
+		{
+			name: "untracked",
+			prepare: func(t *testing.T, path string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(path, "untracked-worker-output.txt"), []byte("must survive gc\n"), 0o600))
+			},
+			file: "untracked-worker-output.txt",
+		},
+		{
+			name: "tracked",
+			prepare: func(t *testing.T, path string) {
+				t.Helper()
+				dirtyPath := filepath.Join(path, "tracked-worker-output.txt")
+				require.NoError(t, os.WriteFile(dirtyPath, []byte("committed\n"), 0o600))
+				run(t, path, "git", "add", "tracked-worker-output.txt")
+				run(t, path, "git", "commit", "-m", "worker output")
+				require.NoError(t, os.WriteFile(dirtyPath, []byte("must survive gc\n"), 0o600))
+			},
+			file: "tracked-worker-output.txt",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := setupWorktreeReconcileFixture(t)
+			tc.prepare(t, fx.gcPath)
+			dirtyPath := filepath.Join(fx.gcPath, tc.file)
+
+			out, err := runTrls(t, fx.repo, "worktree", "gc", "--format", "json")
+			require.Error(t, err, "gc must fail when git refuses to remove a dirty worktree")
+			var result struct {
+				Failed []string `json:"failed"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+			assert.Contains(t, result.Failed, "task-gc")
+			contents, readErr := os.ReadFile(dirtyPath)
+			require.NoError(t, readErr)
+			assert.Equal(t, "must survive gc\n", string(contents))
+		})
+	}
+}
+
 func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -322,6 +371,62 @@ func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	// Still on disk after a dry run.
 	_, statErr := os.Stat(fx.gcPath)
 	assert.NoError(t, statErr, "dry-run must not remove the worktree")
+}
+
+// TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10 verifies
+// that a clean dry run has a successful exit status. Ambiguity, rather than an
+// empty removal set, is what makes a dry run fail.
+func TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+
+	out, err := runTrls(t, repo, "worktree", "gc", "--dry-run", "--format", "json")
+	require.NoError(t, err)
+	var result struct {
+		WouldRemove []string `json:"would_remove"`
+		Ambiguous   []string `json:"ambiguous"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Empty(t, result.WouldRemove)
+	assert.Empty(t, result.Ambiguous)
+}
+
+func setupAmbiguousGCRepo(t *testing.T) (string, string) {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-ambig", "--title", "Ambiguous", "--type", "task", "--scope", "ambig.go")
+	require.NoError(t, err)
+	for _, leaf := range []string{"task-ambig-a", "task-ambig-b"} {
+		path := filepath.Join(repo, ".worktrees", leaf)
+		run(t, repo, "git", "worktree", "add", "-b", leaf, path)
+		require.NoError(t, updateIssueIDFile(path, "task-ambig"))
+	}
+	_, err = runTrls(t, repo, "transition", "--issue", "task-ambig", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+	return repo, "task-ambig"
+}
+
+// TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10 requires dry-run
+// to expose the same unsafe ambiguity and exit status as a real gc run.
+func TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10(t *testing.T) {
+	repo, issueID := setupAmbiguousGCRepo(t)
+
+	out, dryErr := runTrls(t, repo, "worktree", "gc", "--dry-run", "--format", "json")
+	require.Error(t, dryErr)
+	var res struct {
+		Ambiguous []string `json:"ambiguous"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &res))
+	assert.Contains(t, res.Ambiguous, issueID)
+
+	_, stderr, humanErr := runTrlsWithStderr(t, repo, "worktree", "gc", "--dry-run", "--format", "human")
+	require.Error(t, humanErr)
+	assert.Contains(t, stderr, issueID)
 }
 
 // TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2 verifies the human format renders

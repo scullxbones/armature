@@ -328,6 +328,44 @@ func TestImportCommand_InvalidType(t *testing.T) {
 	assert.NotContains(t, out, "imp-bad-1")
 }
 
+// TestIssueIDIngressRejectsPathSeparators_REQ_LNGHZN_S5 verifies every
+// user-facing creation boundary rejects a path-shaped ID before appending any
+// create op. This keeps IDs from becoming filesystem paths later in lifecycle
+// commands or materialization.
+func TestIssueIDIngressRejectsPathSeparators_REQ_LNGHZN_S5(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		_, err := runTrls(t, repo, "create", "--id", "team/task-01", "--title", "bad", "--type", "task")
+		require.Error(t, err)
+		out, logErr := runTrls(t, repo, "log")
+		require.NoError(t, logErr)
+		assert.NotContains(t, out, "team/task-01")
+	})
+
+	t.Run("import", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		file := filepath.Join(t.TempDir(), "issues.csv")
+		require.NoError(t, os.WriteFile(file, []byte("id,title,type\nteam/task-01,Bad,task\n"), 0o600))
+		_, err := runTrls(t, repo, "import", file)
+		require.Error(t, err)
+		out, logErr := runTrls(t, repo, "log")
+		require.NoError(t, logErr)
+		assert.NotContains(t, out, "team/task-01")
+	})
+
+	t.Run("decompose", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		file := filepath.Join(t.TempDir(), "plan.json")
+		plan := `{"version":1,"title":"bad ids","issues":[{"id":"team/task-01","title":"Bad","type":"task","scope":"bad.go"}]}`
+		require.NoError(t, os.WriteFile(file, []byte(plan), 0o600))
+		_, err := runTrls(t, repo, "dag", "apply", "--plan", file)
+		require.Error(t, err)
+		out, logErr := runTrls(t, repo, "log")
+		require.NoError(t, logErr)
+		assert.NotContains(t, out, "team/task-01")
+	})
+}
+
 func TestStaleReviewCommand_NoStale(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -1410,6 +1448,42 @@ func TestDoctorCmd_Strict(t *testing.T) {
 	// With --strict: warnings become errors, should fail.
 	_, err = runTrls(t, repo, "doctor", "--strict")
 	assert.Error(t, err, "doctor --strict should fail when uncited issues exist")
+}
+
+// TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8 verifies
+// the CLI reports a managed checkout with no binding and promotes that warning
+// to a non-zero exit under --strict.
+func TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	stray := filepath.Join(repo, ".worktrees", "stray")
+	run(t, repo, "git", "worktree", "add", "-b", "stray-branch", stray)
+
+	out, err := runTrls(t, repo, "doctor", "--strict")
+	require.Error(t, err)
+	assert.Contains(t, out, "D9")
+	assert.Contains(t, out, "stray")
+}
+
+// TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5 verifies that a
+// moved but still bound live worktree is an advisory path-drift finding, not a
+// missing-worktree repair that releases the claimant's reservation.
+func TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	recordedPath := filepath.Join(repo, ".worktrees", "task-01")
+	movedPath := filepath.Join(repo, "moved-task-01")
+	run(t, repo, "git", "worktree", "move", recordedPath, movedPath)
+
+	out, err := runTrls(t, repo, "doctor", "--fix", "--format", "json")
+	require.NoError(t, err)
+	assert.Contains(t, out, "path drift")
+	assert.Contains(t, out, movedPath)
+
+	status, err := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, "claimed\n", status, "path drift must not release the live claim")
+	assert.DirExists(t, movedPath)
 }
 
 // TestDecomposeApplySchemaFlag verifies that --schema prints a valid JSON Schema

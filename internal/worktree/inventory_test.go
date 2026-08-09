@@ -93,7 +93,7 @@ func TestListManagedUsesCanonicalRootAndMarkerIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	assert.Equal(t, managedPath, items[0].Path)
-	assert.Equal(t, "team/task-01", items[0].IssueID)
+	assert.Equal(t, "team/task-01", items[0].Binding)
 
 	_, err = ListManaged(filepath.Join(t.TempDir(), "not-a-repo"))
 	assert.Error(t, err)
@@ -118,19 +118,19 @@ func TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6(t *testing.T) {
 
 	// No bound entry -> NotFound. There is genuinely nothing to act on; a
 	// caller may legitimately fall through to a read-only gate lookup.
-	_, res := SelectByIssue([]Meta{{Path: "/other", IssueID: "other"}}, "task-01", "/repo/.worktrees/task-01")
+	_, res := SelectByIssue([]Meta{{Path: "/other", Binding: "other"}}, "task-01", "/repo/.worktrees/task-01")
 	assert.Equal(t, NotFound, res)
 
 	// Exactly one bound entry -> Bound, regardless of recorded path.
-	single := []Meta{{Path: "/repo/.worktrees/task-01", IssueID: "task-01"}}
+	single := []Meta{{Path: "/repo/.worktrees/task-01", Binding: "task-01"}}
 	got, res := SelectByIssue(single, "task-01", "")
 	require.Equal(t, Bound, res)
 	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
 
 	// Two bound entries + recorded path -> the recorded-path entry wins.
 	dup := []Meta{
-		{Path: "/legacy/explicit", IssueID: "task-01"},
-		{Path: "/repo/.worktrees/task-01", IssueID: "task-01"},
+		{Path: "/legacy/explicit", Binding: "task-01"},
+		{Path: "/repo/.worktrees/task-01", Binding: "task-01"},
 	}
 	got, res = SelectByIssue(dup, "task-01", "/repo/.worktrees/task-01")
 	require.Equal(t, Bound, res)
@@ -155,8 +155,8 @@ func TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 	t.Parallel()
 
 	dup := []Meta{
-		{Path: "/legacy/explicit", IssueID: "task-01"},
-		{Path: "/repo/.worktrees/task-01", IssueID: "task-01"},
+		{Path: "/legacy/explicit", Binding: "task-01"},
+		{Path: "/repo/.worktrees/task-01", Binding: "task-01"},
 	}
 
 	// The defining case: selection is Ambiguous here, existence is true. A live
@@ -166,17 +166,16 @@ func TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 	assert.True(t, AnyBound(dup, "task-01", ""))
 
 	// No bound entry -> false.
-	assert.False(t, AnyBound([]Meta{{Path: "/other", IssueID: "other"}}, "task-01", ""))
+	assert.False(t, AnyBound([]Meta{{Path: "/other", Binding: "other"}}, "task-01", ""))
 
 	// One bound entry, no recorded path -> true.
-	single := []Meta{{Path: "/legacy/explicit", IssueID: "task-01"}}
+	single := []Meta{{Path: "/legacy/explicit", Binding: "task-01"}}
 	assert.True(t, AnyBound(single, "task-01", ""))
 
-	// Recorded path present: it must match a bound entry. A bound worktree at a
-	// different path belongs to another clone's claim, so it is not evidence
-	// this clone's recorded worktree is alive.
+	// A recorded path may drift after `git worktree move`; the binding is still
+	// live evidence and must suppress destructive claim release.
 	assert.True(t, AnyBound(dup, "task-01", "/repo/.worktrees/task-01"))
-	assert.False(t, AnyBound(single, "task-01", "/repo/.worktrees/task-01"))
+	assert.True(t, AnyBound(single, "task-01", "/repo/.worktrees/task-01"))
 }
 
 // TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5 verifies a managed

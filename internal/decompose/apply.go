@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -60,6 +61,15 @@ func validateTypes(plan *Plan) error {
 		if !issuetype.IsValid(issue.Type) {
 			return fmt.Errorf("issue %s (%s) has invalid type %q: valid types are %s",
 				issue.ID, issue.Title, issue.Type, strings.Join(issuetype.All(), ", "))
+		}
+	}
+	return nil
+}
+
+func validateIssueIDs(plan *Plan) error {
+	for _, issue := range plan.Issues {
+		if err := issueid.Validate(issue.ID); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -122,6 +132,9 @@ func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts Apply
 	if err := validateTypes(plan); err != nil {
 		return nil, err
 	}
+	if err := validateIssueIDs(plan); err != nil {
+		return nil, err
+	}
 
 	warnings := ValidatePlan(plan)
 
@@ -151,6 +164,9 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 // ApplyPlanWithOptions is like ApplyPlan but respects ApplyOptions and accepts a clock.Clock parameter.
 func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) (int, error) {
 	if err := validateTypes(plan); err != nil {
+		return 0, err
+	}
+	if err := validateIssueIDs(plan); err != nil {
 		return 0, err
 	}
 

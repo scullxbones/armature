@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -20,12 +21,15 @@ import (
 // Entries are matched at the start of the line body (immediately after the
 // RFC3339 timestamp), so injected newlines inside logged fields cannot forge
 // entries mid-line (finding 8; fields are also sanitized at write time).
-func hookLogContainsEntry(gitDir, kind string) bool {
+func hookLogContainsEntry(gitDir, kind string) (bool, error) {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	data, err := os.ReadFile(logPath) //nolint:gosec // log path is derived from trusted git directory
 	if err != nil {
-		// Log doesn't exist or can't be read; no entries found
-		return false
+		if os.IsNotExist(err) {
+			// A missing log means this worktree recorded no hook evidence.
+			return false, nil
+		}
+		return false, fmt.Errorf("read hook log %s: %w", logPath, err)
 	}
 
 	for line := range strings.SplitSeq(string(data), "\n") {
@@ -33,19 +37,19 @@ func hookLogContainsEntry(gitDir, kind string) bool {
 		// (first space-delimited token) and match the kind at line-body start.
 		_, rest, found := strings.Cut(line, " ")
 		if found && strings.HasPrefix(rest, kind) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // readHookLogForPassThroughs reports whether the hook log contains pass-through entries.
-func readHookLogForPassThroughs(gitDir string) bool {
+func readHookLogForPassThroughs(gitDir string) (bool, error) {
 	return hookLogContainsEntry(gitDir, "pass-through:")
 }
 
 // readHookLogForViolations reports whether the hook log contains violation entries.
-func readHookLogForViolations(gitDir string) bool {
+func readHookLogForViolations(gitDir string) (bool, error) {
 	return hookLogContainsEntry(gitDir, "violation:")
 }
 
@@ -132,7 +136,7 @@ func unboundWorktreeOnBranch(worktrees []worktree.Meta, issue materialize.Issue)
 	}
 	wantRef := "refs/heads/" + branchName
 	for _, candidate := range worktrees {
-		if candidate.IssueID == "" && candidate.Branch == wantRef {
+		if candidate.Binding == "" && candidate.Branch == wantRef {
 			return candidate.Path
 		}
 	}
@@ -153,13 +157,16 @@ func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) (bool,
 		return false, err
 	}
 	if !ok {
+		if issue.Status == ops.StatusDone {
+			return false, fmt.Errorf("no worktree or hook-log target exists for done issue %s", issue.ID)
+		}
 		return false, nil
 	}
 	if binding != "" && binding != issue.ID {
 		// Bound to a different issue; not ours to gate on.
 		return false, nil
 	}
-	return readHookLogForViolations(gitDir), nil
+	return readHookLogForViolations(gitDir)
 }
 
 // worktreeRemoveOutcome distinguishes an actual worktree removal from a
@@ -221,9 +228,9 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 }
 
 // removeWorktreeAtPathTracked removes exactly selectedPath after refreshing the
-// inventory and revalidating its marker binding. GC passes the path selected by
-// reconciliation; it must not re-resolve the issue's worktree by marker alone
-// because a legacy and a canonical worktree can share one marker identity.
+// inventory and revalidating its binding. GC passes the path selected by
+// reconciliation; it must not re-resolve the issue's worktree by binding alone
+// because a legacy and a canonical worktree can share one binding identity.
 func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selectedPath string, errWriter io.Writer) (worktreeRemoveOutcome, error) {
 	items, err := worktree.List(repoPath)
 	if err != nil {
@@ -241,9 +248,9 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if !found {
 		return worktreeSkipped, nil
 	}
-	if selected.IssueID != issue.ID {
+	if selected.Binding != issue.ID {
 		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is now bound to %s, not %s; skipping removal\n",
-			selected.Path, selected.IssueID, issue.ID)
+			selected.Path, selected.Binding, issue.ID)
 		return worktreeSkipped, nil
 	}
 
@@ -260,29 +267,34 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 			selected.Path, binding, issue.ID)
 		return worktreeSkipped, nil
 	}
-	if readHookLogForPassThroughs(gitDir) {
+	hasPassThroughs, err := readHookLogForPassThroughs(gitDir)
+	if err != nil {
+		return worktreeSkipped, fmt.Errorf("read hook log for %s: %w", issue.ID, err)
+	}
+	if hasPassThroughs {
 		_, _ = fmt.Fprintf(errWriter, "Warning: %s has pass-through entries in armature-hook.log\n", issue.ID)
 	}
 
-	// Clear persisted branch-point metadata (parent-branch config, base-commit
-	// file) BEFORE removing the worktree: resolveWorktreeGitDir needs the
-	// worktree to still exist to locate its git directory. Without this, a
-	// stale value would survive branch deletion/recreation and the
-	// "if absent" guards in writeParentBranchConfigIfAbsent/
-	// writeBaseCommitFileIfAbsent would never overwrite it with the fresh,
-	// correct parent for a branch name later reused with a genuinely
-	// different parent. Best-effort: never blocks the merged-confirmation flow.
-	branchName := strings.TrimPrefix(selected.Branch, "refs/heads/")
-	if branchName == "" || branchName == "detached" {
+	// Read immutable claim provenance before removal while the worktree's
+	// git-dir record still exists. A current scratch branch is not evidence of
+	// the branch the issue was claimed under.
+	branchName, recorded, err := deliverygate.RecordedClaimedBranch(selected.Path)
+	if err != nil {
+		return worktreeSkipped, fmt.Errorf("read recorded claimed branch for %s: %w", issue.ID, err)
+	}
+	if !recorded {
 		branchName = deriveBranchName(issue.Type, issue.ID)
 	}
 	gitClient := adapters.New(repoPath)
-	clearBranchPointMetadata(gitClient, selected.Path, branchName)
 
-	// Remove the worktree.
+	// Normal teardown is deliberately non-force: dirty or locked worktrees
+	// retain both their content and all provenance for recovery.
 	if err := gitClient.RemoveWorktree(selected.Path); err != nil {
 		return worktreeSkipped, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
+	// Per-worktree metadata disappeared with the successful removal; only the
+	// shared config must be cleared afterwards.
+	clearParentBranchMetadata(gitClient, branchName)
 
 	return worktreeRemoved, nil
 }

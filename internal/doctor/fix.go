@@ -59,12 +59,12 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //   - claimed/in-progress + missing worktree: `arm claim --worktree` records the
 //     task's worktree path (the canonical `.worktrees/<issue-id>` path for new
 //     claims), so a claimed or in-progress issue whose recorded path has no live
-//     marker-bound worktree registered against repoPath indicates the worktree was
+//     binding-bound worktree registered against repoPath indicates the worktree was
 //     torn down (or its git metadata corrupted) out from under an active claim —
 //     the same class of failure this fix pass exists to recover from, independent
 //     of whether the TTL has expired yet. This check is skipped entirely — for
 //     every issue, not just the ones it would otherwise flag — whenever the
-//     marker-aware inventory cannot positively confirm which worktrees are live
+//     binding-aware inventory cannot positively confirm which worktrees are live
 //     (repoPath empty, not a git repo, or any other git failure). Treating
 //     "couldn't determine" the same as "confirmed missing" would misfire on every
 //     currently claimed/in-progress issue in the graph from a single transient git
@@ -116,7 +116,7 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 		// List the complete local inventory here rather than only the canonical
 		// .worktrees root. Claims made before managed auto-provisioning can carry
 		// an explicit legacy WorktreePath outside that root; if that path is still
-		// marker-bound and registered in this clone, it is live and must not be
+		// binding-bound and registered in this clone, it is live and must not be
 		// repaired as a missing worktree.
 		inventory, err := worktree.List(repoPath)
 		if err != nil {
@@ -133,23 +133,44 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			if issue.ClaimedBy != workerID {
 				continue
 			}
-			// EXISTENCE, not selection. The question here is only "does this
-			// issue still own a live worktree in this clone?", and a positive
-			// answer PREVENTS an action — releasing a live worker's claim — so
-			// over-inclusion is the safe direction. worktree.SelectByIssue must
-			// NOT be used: it fails closed on ambiguity, so an issue owning two
-			// bound worktrees would resolve to nothing and its live claim would
-			// be released. AnyBound answers true in exactly that case.
-			if worktree.AnyBound(inventory, id, issue.WorktreePath) {
+			location, livePath := worktree.LocateBinding(inventory, id, issue.WorktreePath)
+			switch location {
+			case worktree.BindingAtRecordedPath:
 				continue
+			case worktree.BindingElsewhere:
+				// A moved worktree remains live by its binding. Surface the drift
+				// without emitting any op: releasing it would discard a claimant's
+				// reservation based solely on stale path metadata.
+				actions = append(actions, reportWorktreePathDrift(id, issue.WorktreePath, livePath))
+				continue
+			case worktree.BindingAmbiguous:
+				actions = append(actions, reportAmbiguousWorktreeBinding(id))
+				continue
+			case worktree.BindingNone:
+				actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
+				fixed[id] = true
 			}
-			actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
-			fixed[id] = true
 		}
 	}
 
 	sort.Slice(actions, func(i, j int) bool { return actions[i].IssueID < actions[j].IssueID })
 	return actions
+}
+
+// reportWorktreePathDrift creates an output-only doctor advisory. An empty Ops
+// slice is intentional: applying the plan must leave durable state untouched.
+func reportWorktreePathDrift(id, recordedPath, livePath string) FixAction {
+	return FixAction{
+		IssueID: id,
+		Reason:  fmt.Sprintf("claimed + worktree path drift: recorded %s, live binding at %s; claim preserved", recordedPath, livePath),
+	}
+}
+
+func reportAmbiguousWorktreeBinding(id string) FixAction {
+	return FixAction{
+		IssueID: id,
+		Reason:  "claimed + ambiguous worktree binding: claim preserved; disambiguate manually",
+	}
 }
 
 // ApplyFixes appends the ops for each planned fix to the given ops log, in

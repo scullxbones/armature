@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
 )
@@ -172,6 +173,9 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 
 		for _, issue := range state.Issues {
+			if err := issueid.Validate(issue.ID); err != nil {
+				return nil, Result{}, fmt.Errorf("validate materialized issue ID %q: %w", issue.ID, err)
+			}
 			if err := WriteIssue(issuesStateDir, *issue); err != nil {
 				return nil, Result{}, fmt.Errorf("write issue %s: %w", issue.ID, err)
 			}

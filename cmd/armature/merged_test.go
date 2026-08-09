@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,10 +77,10 @@ func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(
 		[]byte("task-01\n"), 0o600))
 
 	// With an empty recorded WorktreePath, SelectByIssue cannot disambiguate the
-	// two marker-bound worktrees. The gate must surface an error, not (false,nil).
+	// two binding-bound worktrees. The gate must surface an error, not (false,nil).
 	issue := materialize.Issue{ID: "task-01", Type: "task"}
 	_, gateErr := issueWorktreeHasViolations(repo, issue)
-	require.Error(t, gateErr, "ambiguous marker-bound worktrees must fail closed, not report zero violations")
+	require.Error(t, gateErr, "ambiguous binding-bound worktrees must fail closed, not report zero violations")
 	assert.Contains(t, gateErr.Error(), "ambiguous", "error should name the ambiguity condition")
 }
 
@@ -112,7 +113,7 @@ func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
 	mtimeBefore := stat.ModTime()
 
 	// Run merged — must use ReadIndex+ReadIssue, not Load.
-	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
+	_, err = runTrls(t, repo, "merged", "--issue", "task-01", "--force")
 	require.NoError(t, err)
 
 	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
@@ -155,6 +156,107 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 
 	// Verify worktree is removed
 	assert.NoDirExists(t, worktreePath, "worktree should be removed after merged")
+}
+
+// TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5 verifies the public teardown
+// boundary refuses to discard either tracked or untracked work. `--force` is
+// an override for the merged gate, not authorization to delete a worker's
+// files.
+func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prepare func(t *testing.T, repo, worktreePath string)
+	}{
+		{
+			name: "tracked changes",
+			prepare: func(t *testing.T, repo, worktreePath string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("before\n"), 0o600))
+				run(t, repo, "git", "add", "tracked.txt")
+				run(t, repo, "git", "commit", "-m", "test: add tracked fixture")
+				require.NoError(t, os.WriteFile(filepath.Join(worktreePath, "tracked.txt"), []byte("after\n"), 0o600))
+			},
+		},
+		{
+			name: "untracked changes",
+			prepare: func(t *testing.T, repo, worktreePath string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(worktreePath, "untracked.txt"), []byte("preserve me\n"), 0o600))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := setupRepoWithTask(t)
+			worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+
+			claim := newRootCmd()
+			claim.SetOut(new(bytes.Buffer))
+			claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+			require.NoError(t, claim.Execute())
+			recordedBranch, recorded, recordErr := deliverygate.RecordedClaimedBranch(worktreePath)
+			require.NoError(t, recordErr)
+			require.True(t, recorded)
+			recordedBase, baseErr := deliverygate.RecordedBaseCommit(worktreePath)
+			require.NoError(t, baseErr)
+			parentBefore := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentBranchConfigKey(recordedBranch)))
+			require.NotEmpty(t, parentBefore)
+
+			tc.prepare(t, repo, worktreePath)
+			transition := newRootCmd()
+			transition.SetOut(new(bytes.Buffer))
+			transition.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "complete"})
+			require.NoError(t, transition.Execute())
+			_, err := runTrls(t, repo, "materialize")
+			require.NoError(t, err)
+
+			merged := newRootCmd()
+			merged.SetOut(new(bytes.Buffer))
+			merged.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
+			err = merged.Execute()
+			require.Error(t, err, "dirty worktree teardown must fail even with --force")
+			assert.DirExists(t, worktreePath)
+			branchAfter, stillRecorded, recordErr := deliverygate.RecordedClaimedBranch(worktreePath)
+			require.NoError(t, recordErr)
+			assert.True(t, stillRecorded)
+			assert.Equal(t, recordedBranch, branchAfter)
+			baseAfter, baseErr := deliverygate.RecordedBaseCommit(worktreePath)
+			require.NoError(t, baseErr)
+			assert.Equal(t, recordedBase, baseAfter)
+			assert.Equal(t, parentBefore, strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentBranchConfigKey(recordedBranch))))
+			if tc.name == "tracked changes" {
+				contents, readErr := os.ReadFile(filepath.Join(worktreePath, "tracked.txt"))
+				require.NoError(t, readErr)
+				assert.Equal(t, "after\n", string(contents))
+			} else {
+				contents, readErr := os.ReadFile(filepath.Join(worktreePath, "untracked.txt"))
+				require.NoError(t, readErr)
+				assert.Equal(t, "preserve me\n", string(contents))
+			}
+		})
+	}
+}
+
+// TestMergedClearsParentBranchMetadataFromRecordedClaim_REQ_LNGHZN_S5_T9
+// verifies teardown uses immutable claim-time provenance rather than the
+// branch currently checked out in the worktree.
+func TestMergedClearsParentBranchMetadataFromRecordedClaim_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	claim, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err, claim)
+
+	parentBefore := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent"))
+	require.NotEmpty(t, parentBefore)
+	run(t, worktreePath, "git", "checkout", "-b", "scratch/parked")
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "complete")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
+	require.NoError(t, err)
+	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", "branch.task/task-01.armature-parent").Output()
+	assert.Error(t, configErr, "recorded task branch config must be cleared after successful scratch-branch teardown")
 }
 
 // TestMergedRemovesBugWorktree verifies that merged removes a worktree for bug-type issues.
@@ -229,7 +331,7 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 	// Call merged command (no worktree was created for this story; command must handle gracefully)
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
-	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
 }
 
@@ -317,7 +419,7 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 	// Call merged command
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
-	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01"})
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
 
 	// Verify worktree is removed
@@ -351,7 +453,7 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 	// Call merged command (no worktree was created; should handle gracefully)
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
-	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01"})
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
 }
 
@@ -448,8 +550,10 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 	assert.NotContains(t, errOutput, "pass-through", "should not warn about pass-through when none exist")
 }
 
-// TestMergedHandlesMissingWorktree verifies that merged handles the case where a worktree was already deleted.
-func TestMergedHandlesMissingWorktree(t *testing.T) {
+// TestMergedMissingWorktreeFailsClosed_REQ_LNGHZN_S5 verifies that a done
+// issue cannot become merged when its required hook-log target disappeared:
+// done is not merged, and absence is not proof that no violation occurred.
+func TestMergedMissingWorktreeFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
@@ -473,20 +577,46 @@ func TestMergedHandlesMissingWorktree(t *testing.T) {
 	// Manually remove the worktree (simulating it being deleted before merged is called)
 	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
 
-	// Call merged command (should not fail even though worktree is gone)
+	// A done issue has lost the evidence target, so merged must not append a
+	// merged op or silently treat the missing worktree as clean.
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err := mergedCmd.Execute()
-	// Should succeed gracefully or at least not crash
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no worktree or hook-log target")
+	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, showErr)
+	assert.Equal(t, "done\n", status, "missing target must leave the issue done, not merged")
+}
+
+// TestMergedUnreadableHookLogFailsClosed_REQ_LNGHZN_S5 verifies that a hook
+// log which exists but cannot be read is not collapsed into "no violations".
+func TestMergedUnreadableHookLogFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	claim, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err, claim)
+
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
 	require.NoError(t, err)
+	require.NoError(t, os.Mkdir(filepath.Join(gitDir, "armature-hook.log"), 0o700), "a directory at the log path is unreadable as a log")
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "complete")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
+	require.Error(t, err)
+	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, showErr)
+	assert.Equal(t, "done\n", status, "unreadable hook evidence must leave the issue done")
 }
 
 // TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved verifies that when the worktree has
 // already been deleted before `arm merged` is called, no pass-through warning is emitted
-// (because the warning requires the worktree to be present to read its hook log), and
-// that the command does not error or panic. Emitting the warning when the worktree is
-// already gone requires persisting the git-dir path separately (future work, F6).
+// because the gate fails closed before it can inspect a hook log.
 func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
@@ -532,13 +662,11 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	mergedCmd.SetErr(errBuf)
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err = mergedCmd.Execute()
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	// The implementation can only check hook log entries when the worktree is still
-	// present (because it needs to find it via git worktree list). After the worktree
-	// is removed, git worktree list no longer reports it, so the hook log path cannot
-	// be resolved and no warning is emitted. This is correct current behavior.
-	// TODO(F6): emit warning even when worktree is already gone (requires persisting git-dir).
+	// present (because it needs to find it via git worktree list). After removal
+	// it is unavailable, so no pass-through warning can be emitted.
 	assert.NotContains(t, errBuf.String(), "pass-through", "no warning expected when worktree is already gone")
 }
 
