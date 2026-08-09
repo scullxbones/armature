@@ -3732,3 +3732,4 @@
 ["note","LNGHZN-S5",1786285271,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Reopened after PR #89 review remediation was split into tracked tasks T6-T8. The story's acceptance ('All child tasks merged') cannot hold while PR #89 is open and T6-T8 are unmerged. Five prior remediation rounds landed as untracked fix(LNGHZN-S5) commits; T6 tracks the consolidation that closes the two remaining open review threads.","note_id":"note-1786285271955304279"}]
 ["claim","LNGHZN-S5-T6",1786285280,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60}]
 ["transition","LNGHZN-S5-T6",1786285284,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
+["claim","LNGHZN-S5-T6",1786285868,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S5-T6"}]
