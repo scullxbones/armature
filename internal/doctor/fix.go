@@ -133,28 +133,14 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			if issue.ClaimedBy != workerID {
 				continue
 			}
-			found := false
-			for _, item := range inventory {
-				if item.IssueID != id {
-					continue
-				}
-				if issue.WorktreePath == "" {
-					// No recorded path: marker identity is authoritative. Any
-					// live worktree bound to this issue's marker — canonical or
-					// legacy — is sufficient evidence the claim is still active,
-					// so it must not be false-released. A legacy worktree at a
-					// non-canonical path whose marker binds it to the issue is
-					// exactly the active-claim case an earlier canonical-only
-					// check wrongly skipped.
-					found = true
-					break
-				}
-				if worktree.NormalizePathAllowingMissing(item.Path) == worktree.NormalizePathAllowingMissing(issue.WorktreePath) {
-					found = true
-					break
-				}
-			}
-			if found {
+			// EXISTENCE, not selection. The question here is only "does this
+			// issue still own a live worktree in this clone?", and a positive
+			// answer PREVENTS an action — releasing a live worker's claim — so
+			// over-inclusion is the safe direction. worktree.SelectByIssue must
+			// NOT be used: it fails closed on ambiguity, so an issue owning two
+			// bound worktrees would resolve to nothing and its live claim would
+			// be released. AnyBound answers true in exactly that case.
+			if worktree.AnyBound(inventory, id, issue.WorktreePath) {
 				continue
 			}
 			actions = append(actions, releaseMissingWorktreeClaim(id, issue, workerID, nowUnix))
