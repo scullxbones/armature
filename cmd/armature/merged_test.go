@@ -1250,3 +1250,52 @@ func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 	out2 := runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent")
 	assert.Equal(t, "other-parent-branch", strings.TrimSpace(out2))
 }
+
+// TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9
+// verifies that worktree teardown clears branch-point provenance keyed on the
+// branch the issue was actually CLAIMED under (read from the immutable
+// armature-claimed-branch marker), not the branch the worktree happens to be
+// parked on at removal time. A worktree checked out onto a scratch branch
+// before `arm merged` must still leave no stale branch.task/task-01.armature-parent
+// entry behind — the previous behaviour keyed off the current worktree branch
+// (the scratch branch) and cleared the wrong key.
+func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+
+	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, claimCmd.Execute())
+
+	// Claiming from the default branch records it as the parent for task/task-01.
+	out := runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent")
+	require.Equal(t, defaultBranch, strings.TrimSpace(out))
+
+	// Park the worktree on an unrelated scratch branch. The current branch is
+	// now NOT the branch the issue was claimed under.
+	run(t, worktreePath, "git", "checkout", "-b", "scratch/parked")
+
+	transitionCmd := newRootCmd()
+	transitionCmd.SetOut(new(bytes.Buffer))
+	transitionCmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
+		"--outcome", "Completed", "--force"})
+	require.NoError(t, transitionCmd.Execute())
+
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
+	require.NoError(t, mergedCmd.Execute())
+
+	// The parent-branch config keyed on the CLAIMED branch (task/task-01) must
+	// be cleared even though the worktree was parked on scratch/parked.
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", "branch.task/task-01.armature-parent")
+	getCmd.Dir = repo
+	_, getErr := getCmd.Output()
+	assert.Error(t, getErr, "parent-branch config for the claimed branch should be unset after arm merged")
+}

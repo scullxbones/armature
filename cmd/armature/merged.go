@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -272,8 +273,16 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	// writeBaseCommitFileIfAbsent would never overwrite it with the fresh,
 	// correct parent for a branch name later reused with a genuinely
 	// different parent. Best-effort: never blocks the merged-confirmation flow.
-	branchName := strings.TrimPrefix(selected.Branch, "refs/heads/")
-	if branchName == "" || branchName == "detached" {
+	// Key the provenance clearing on the branch the issue was actually
+	// CLAIMED under, not the branch the worktree happens to be parked on at
+	// removal time. The immutable armature-claimed-branch marker (written at
+	// claim time) is the authority: a worktree torn down while checked out on
+	// a scratch branch must still clear branch.<task-branch>.armature-parent,
+	// not the (irrelevant) scratch branch's key. Fall back to the derived
+	// issue branch (task/<id>) only as a legacy fallback for pre-marker
+	// worktrees, or when the marker cannot be read.
+	branchName, recorded, err := deliverygate.RecordedClaimedBranch(selected.Path)
+	if err != nil || !recorded || branchName == "" {
 		branchName = deriveBranchName(issue.Type, issue.ID)
 	}
 	gitClient := adapters.New(repoPath)
