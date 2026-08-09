@@ -324,6 +324,65 @@ func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.NoError(t, statErr, "dry-run must not remove the worktree")
 }
 
+// setupAmbiguousGCRepo builds a repo where a terminal issue has two marker-bound
+// candidate worktrees under .worktrees/ and no uniquely recorded path, so
+// reconcile classifies it as GCAmbiguous. Returns the repo path and the issue ID.
+func setupAmbiguousGCRepo(t *testing.T) (string, string) {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "task-ambig", "--title", "Ambiguous", "--type", "task", "--scope", "ambig.go")
+	require.NoError(t, err)
+
+	// Two marker-bound candidates under .worktrees/ with no recorded path to
+	// disambiguate (the issue was never claimed with a worktree).
+	for _, leaf := range []string{"task-ambig-a", "task-ambig-b"} {
+		p := filepath.Join(repo, ".worktrees", leaf)
+		run(t, repo, "git", "worktree", "add", "-b", leaf, p)
+		require.NoError(t, updateIssueIDFile(p, "task-ambig"))
+	}
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-ambig", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+	return repo, "task-ambig"
+}
+
+// TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10 verifies that a
+// --dry-run agrees with a real gc run about an ambiguous/anomalous repo: it
+// surfaces the ambiguous candidate in output AND exits non-zero, so agent
+// automation cannot read a preview as all-clear.
+func TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10(t *testing.T) {
+	repo, issueID := setupAmbiguousGCRepo(t)
+
+	// JSON dry run: reports the ambiguous candidate and exits non-zero.
+	out, dryErr := runTrls(t, repo, "worktree", "gc", "--dry-run", "--format", "json")
+	require.Error(t, dryErr, "dry-run must exit non-zero when candidates are ambiguous")
+	var res struct {
+		DryRun    bool     `json:"dry_run"`
+		Ambiguous []string `json:"ambiguous"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &res))
+	assert.True(t, res.DryRun)
+	assert.Contains(t, res.Ambiguous, issueID, "dry-run JSON must list ambiguous candidates")
+
+	// Human dry run: names the ambiguous candidate on stderr and exits non-zero.
+	_, stderr, humanErr := runTrlsWithStderr(t, repo, "worktree", "gc", "--dry-run", "--format", "human")
+	require.Error(t, humanErr, "human dry-run must exit non-zero when candidates are ambiguous")
+	assert.Contains(t, stderr, issueID, "dry-run human output must name the ambiguous candidate")
+
+	// A real run agrees: same non-zero exit and same candidate reported.
+	realOut, realErr := runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.Error(t, realErr, "real gc must also exit non-zero on the same repo")
+	var realRes struct {
+		Ambiguous []string `json:"ambiguous"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(realOut)), &realRes))
+	assert.Equal(t, realRes.Ambiguous, res.Ambiguous, "dry-run and real run must agree on ambiguous candidates")
+}
+
 // TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2 verifies the human format renders
 // the class headings and the classified issue IDs.
 func TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2(t *testing.T) {

@@ -165,12 +165,18 @@ func newWorktreeGCCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if dryRun {
-				// Dry run: just report what would be removed
+				// Dry run: report what would be removed. It must also surface
+				// ambiguous terminal candidates and exit non-zero exactly as a real
+				// run does — otherwise an agent could read a preview as all-clear
+				// while the repo is in an anomalous state (nothing failed yet, so
+				// only ambiguity can drive the non-zero exit here).
 				if format == "json" || format == "agent" {
 					jsonResult := map[string]interface{}{
 						"dry_run":            true,
 						"would_remove":       result.GCRemovalSet,
 						"would_remove_count": len(result.GCRemovalSet),
+						"ambiguous":          result.GCAmbiguous,
+						"ambiguous_count":    len(result.GCAmbiguous),
 					}
 					if err := writeWorktreeJSON(cmd, jsonResult); err != nil {
 						return err
@@ -184,8 +190,16 @@ func newWorktreeGCCmd() *cobra.Command {
 					} else {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), "dry-run: no worktrees to remove")
 					}
+					// Surface ambiguous terminal issues on stderr, matching a real run.
+					if len(result.GCAmbiguous) > 0 {
+						_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "AMBIGUOUS GC CANDIDATES (nothing would be removed):")
+						for _, id := range result.GCAmbiguous {
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s\n", id)
+						}
+					}
 				}
-				return nil
+				// A dry run and a real run must agree on whether the repo is anomalous.
+				return gcExitError(nil, result.GCAmbiguous)
 			}
 
 			// Actually remove worktrees. Route each removal through the
