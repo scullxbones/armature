@@ -119,26 +119,24 @@ func deriveBranchName(issueType, issueID string) string {
 }
 
 // canonicalWorktreePath validates the issue ID before it is used in any
-// filesystem or git operation. Slash-bearing IDs are supported, but absolute
-// IDs and traversal outside the repository's canonical .worktrees root are
-// rejected before the claim op is appended.
+// filesystem or git operation. Slash-bearing IDs are rejected to ensure
+// prefix-free worktree paths — one managed worktree can never contain another.
+// Absolute IDs and traversal outside the repository's canonical .worktrees root
+// are rejected before the claim op is appended.
 func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	if issueID == "" || filepath.IsAbs(issueID) {
 		return "", fmt.Errorf("invalid issue ID %q for canonical worktree path", issueID)
 	}
-	// Reject "." / ".." path components in the ID. The filepath.Rel containment
-	// check below catches escapes, but an ID like "team/../task-1" cleans to
-	// "task-1" — it stays under the root yet aliases the distinct valid ID
-	// "task-1", so both would wedge at the same .worktrees/task-1 path. Upstream
-	// (arm create / dag apply) does not reject "."/".." in IDs, so this guard is
-	// reachable and must keep ID→path injective. Split on both "/" (the ID's own
-	// separator) and the OS separator.
-	for _, seg := range strings.FieldsFunc(issueID, func(r rune) bool {
-		return r == '/' || r == filepath.Separator
-	}) {
-		if seg == "." || seg == ".." {
-			return "", fmt.Errorf("issue ID %q must not contain '.' or '..' path components", issueID)
-		}
+	// Reject any ID containing path separators. Slash-bearing IDs like "team/task-1"
+	// would nest one managed worktree inside another, creating a recursive-deletion
+	// hazard: removing the worktree for "team" would delete the worktree for "team/task-1".
+	if strings.Contains(issueID, "/") || strings.Contains(issueID, string(filepath.Separator)) {
+		return "", fmt.Errorf("issue ID %q must not contain path separators: slash-bearing IDs would nest one managed worktree inside another", issueID)
+	}
+	// Explicitly reject "." and ".." as bare IDs to maintain ID→path injectivity.
+	// (The filepath.Rel containment check below may not catch these edge cases.)
+	if issueID == "." || issueID == ".." {
+		return "", fmt.Errorf("issue ID %q must not contain '.' or '..' path components", issueID)
 	}
 	root := worktree.CanonicalRoot(repoPath)
 	path := worktree.CanonicalPath(repoPath, issueID)
