@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -337,19 +338,43 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	if inventoryErr != nil {
 		return fmt.Errorf("inspect existing worktrees: %w", inventoryErr)
 	}
+	// Collect the FULL bound set before deciding anything. Stopping at the first
+	// match would adopt whichever worktree git happens to list first and never
+	// notice a second one carrying the same binding — leaving that duplicate
+	// behind as a force-removable candidate holding in-flight work. Ambiguity
+	// must be observed before it can be refused.
+	var bound []worktree.Meta
 	for _, item := range inventory {
-		if worktree.NormalizePath(item.Path) == worktree.NormalizePath(worktreePath) {
+		if item.IssueID == issueID {
+			bound = append(bound, item)
 			continue
 		}
-		if item.IssueID != issueID {
-			// Someone else's worktree holding our branch is an error, but only
-			// because of the branch: an unrelated worktree elsewhere is fine.
-			if item.Branch == "refs/heads/"+branchName {
-				return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
-			}
-			continue
+		// Someone else's worktree holding our branch is an error, but only
+		// because of the branch: an unrelated worktree elsewhere is fine.
+		if item.Branch == "refs/heads/"+branchName {
+			return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
 		}
-		if item.Branch != "refs/heads/"+branchName {
+	}
+	if len(bound) > 1 {
+		// Same condition worktree.SelectByIssue reports as Ambiguous and gc
+		// reports as GCAmbiguous. Adoption cannot pick one without guessing, and
+		// the loser of a guess stays behind as a --force removal candidate.
+		paths := make([]string, 0, len(bound))
+		for _, item := range bound {
+			paths = append(paths, item.Path)
+		}
+		slices.Sort(paths)
+		return fmt.Errorf(
+			"issue %s is bound to %d worktrees (%s); remove the armature-issue-id binding from the ones you do not want before claiming",
+			issueID, len(bound), strings.Join(paths, ", "))
+	}
+	// At most one bound worktree survives the ambiguity check above.
+	if len(bound) == 1 {
+		item := bound[0]
+		switch {
+		case worktree.NormalizePath(item.Path) == worktree.NormalizePath(worktreePath):
+			// Already at the canonical path; nothing to adopt.
+		case item.Branch != "refs/heads/"+branchName:
 			// Bound to this issue but not on the issue branch: detached (very
 			// likely mid-rebase) or moved to a scratch branch. FAIL CLOSED.
 			//
@@ -368,21 +393,24 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 			return fmt.Errorf(
 				"worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming",
 				item.Path, issueID, head, branchName, branchName)
+		default:
+			_, statErr := os.Stat(worktreePath)
+			switch {
+			case statErr == nil:
+				// Canonical path already occupied; leave the bound worktree alone.
+			case !os.IsNotExist(statErr):
+				return fmt.Errorf("check canonical worktree path: %w", statErr)
+			default:
+				if err := os.MkdirAll(filepath.Dir(worktreePath), 0o750); err != nil {
+					return fmt.Errorf("create canonical worktree root: %w", err)
+				}
+				if err := gitClient.MoveWorktree(item.Path, worktreePath); err != nil {
+					return fmt.Errorf("adopt bound worktree: %w", err)
+				}
+				adopted = true
+				adoptedFrom = item.Path
+			}
 		}
-		if _, statErr := os.Stat(worktreePath); statErr == nil {
-			break
-		} else if !os.IsNotExist(statErr) {
-			return fmt.Errorf("check canonical worktree path: %w", statErr)
-		}
-		if err := os.MkdirAll(filepath.Dir(worktreePath), 0o750); err != nil {
-			return fmt.Errorf("create canonical worktree root: %w", err)
-		}
-		if err := gitClient.MoveWorktree(item.Path, worktreePath); err != nil {
-			return fmt.Errorf("adopt bound worktree: %w", err)
-		}
-		adopted = true
-		adoptedFrom = item.Path
-		break
 	}
 	if !adopted {
 		if err := addWorktreeDetached(repoPath, worktreePath, detachRef); err != nil {
