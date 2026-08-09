@@ -107,10 +107,78 @@ func TestRootMembershipAndIssueLookupUseBoundaries(t *testing.T) {
 	assert.False(t, IsUnderRoot(root+"-old", root))
 	assert.False(t, IsUnderRoot(filepath.Join(filepath.Dir(root), "other"), root))
 
-	items := []Meta{{Path: "/one", IssueID: "task-01"}}
-	found, ok := FindByIssue(items, "task-01")
-	require.True(t, ok)
-	assert.Equal(t, "/one", found.Path)
-	_, ok = FindByIssue(items, "missing")
+}
+
+// TestSelectByIssue_WorktreePathFirstAndFailsClosed_REQ_LNGHZN_S5 verifies the
+// WorktreePath-first precedence and fail-closed-on-ambiguity policy that keeps a
+// legacy explicit-path worktree and the canonical .worktrees/<id> worktree
+// sharing one marker from resolving to the wrong destructive target.
+func TestSelectByIssue_WorktreePathFirstAndFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+
+	// No bound entry -> fail closed.
+	_, ok := SelectByIssue([]Meta{{Path: "/other", IssueID: "other"}}, "task-01", "/repo/.worktrees/task-01")
 	assert.False(t, ok)
+
+	// Exactly one bound entry -> returned as-is regardless of recorded path.
+	single := []Meta{{Path: "/repo/.worktrees/task-01", IssueID: "task-01"}}
+	got, ok := SelectByIssue(single, "task-01", "")
+	require.True(t, ok)
+	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
+
+	// Two bound entries + recorded path -> the recorded-path entry wins.
+	dup := []Meta{
+		{Path: "/legacy/explicit", IssueID: "task-01"},
+		{Path: "/repo/.worktrees/task-01", IssueID: "task-01"},
+	}
+	got, ok = SelectByIssue(dup, "task-01", "/repo/.worktrees/task-01")
+	require.True(t, ok)
+	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
+
+	// Two bound entries + empty recorded path -> fail closed (ambiguous).
+	_, ok = SelectByIssue(dup, "task-01", "")
+	assert.False(t, ok)
+
+	// Two bound entries + recorded path matching neither -> fail closed.
+	_, ok = SelectByIssue(dup, "task-01", "/somewhere/else")
+	assert.False(t, ok)
+
+	assert.Equal(t, 2, CountByIssue(dup, "task-01"))
+	assert.Equal(t, 0, CountByIssue(dup, "missing"))
+}
+
+// TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5 verifies a managed
+// worktree whose directory was deleted leaves a prunable registration that
+// HasPrunableRegistration detects at its exact path (and that a live worktree is
+// not reported as prunable).
+func TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	runInventoryGit(t, repo, "init", "-q")
+	runInventoryGit(t, repo, "config", "user.email", "test@example.com")
+	runInventoryGit(t, repo, "config", "user.name", "Test")
+	runInventoryGit(t, repo, "config", "commit.gpgsign", "false")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
+	runInventoryGit(t, repo, "add", "README.md")
+	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")
+
+	wtPath := filepath.Join(repo, ".worktrees", "task-01")
+	require.NoError(t, os.MkdirAll(filepath.Dir(wtPath), 0755))
+	runInventoryGit(t, repo, "worktree", "add", "-b", "task/task-01", wtPath)
+
+	// Live worktree: not prunable.
+	got, err := HasPrunableRegistration(repo, wtPath)
+	require.NoError(t, err)
+	assert.False(t, got)
+
+	// Delete the directory out from under git: registration survives, prunable.
+	require.NoError(t, os.RemoveAll(wtPath))
+	got, err = HasPrunableRegistration(repo, wtPath)
+	require.NoError(t, err)
+	assert.True(t, got)
+
+	// A different, unregistered path is never reported prunable.
+	got, err = HasPrunableRegistration(repo, filepath.Join(repo, ".worktrees", "task-02"))
+	require.NoError(t, err)
+	assert.False(t, got)
 }

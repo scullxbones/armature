@@ -11,6 +11,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5 verifies that
+// when a managed worktree directory is deleted out from under git (leaving a
+// prunable administrative registration), a subsequent addWorktreeDetached at the
+// same canonical path succeeds by clearing that stale registration with an
+// exact-path --force add, instead of failing with "missing but already
+// registered worktree" and looping every re-claim.
+func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	wtPath := filepath.Join(repo, ".worktrees", "task-01")
+	require.NoError(t, os.MkdirAll(filepath.Dir(wtPath), 0o755))
+	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD"))
+	require.DirExists(t, wtPath)
+
+	// Delete the worktree directory out from under git: its registration under
+	// .git/worktrees survives and git marks it prunable.
+	require.NoError(t, os.RemoveAll(wtPath))
+
+	// A plain re-add would fail; addWorktreeDetached must detect the prunable
+	// registration and clear it via an exact-path --force add.
+	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD"))
+	assert.DirExists(t, wtPath)
+}
+
 // worktreeReconcileFixture is a repo wired with real claim/transition ops so the
 // worktree commands exercise the true production read path (snapshot store ->
 // materialize -> Reconcile). Hand-editing state JSON is useless here: the

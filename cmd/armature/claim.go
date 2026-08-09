@@ -141,8 +141,24 @@ func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 // the adapter so this reordering stays within cmd/armature (the adapter's
 // AddWorktree only supports the branch-first form).
 func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
+	addArgs := []string{"worktree", "add", "--detach", worktreePath, baseRef}
+	// If the managed worktree directory was deleted out from under git, git keeps
+	// the administrative registration and marks it prunable. worktree.List skips
+	// prunable blocks, so the adoption loop never sees the path and a plain
+	// `git worktree add <path>` fails with "missing but already registered
+	// worktree", leaving every re-claim to loop. Clear that stale registration
+	// with an exact-path `add --force` (git's documented fix for this exact
+	// error) rather than a broad `git worktree prune`, which could drop unrelated
+	// registrations.
+	prunable, err := worktree.HasPrunableRegistration(repoPath, worktreePath)
+	if err != nil {
+		return fmt.Errorf("check prunable worktree registration: %w", err)
+	}
+	if prunable {
+		addArgs = []string{"worktree", "add", "--force", "--detach", worktreePath, baseRef}
+	}
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "add", "--detach", worktreePath, baseRef)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repoPath}, addArgs...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree add --detach: %w\n%s", err, out)
 	}

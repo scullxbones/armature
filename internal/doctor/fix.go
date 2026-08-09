@@ -133,19 +133,23 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			if issue.ClaimedBy != workerID {
 				continue
 			}
-			canonicalPath := worktree.NormalizePathAllowingMissing(worktree.CanonicalPath(repoPath, id))
 			found := false
 			for _, item := range inventory {
-				expectedPath := canonicalPath
-				if issue.WorktreePath != "" {
-					expectedPath = worktree.NormalizePathAllowingMissing(issue.WorktreePath)
-				} else if !worktree.IsUnderRoot(item.Path, worktree.CanonicalRoot(repoPath)) {
-					// Without a recorded path, the managed lifecycle contract
-					// only promises the canonical location. Legacy arbitrary
-					// worktrees are not enough evidence to suppress remediation.
+				if item.IssueID != id {
 					continue
 				}
-				if item.IssueID == id && worktree.NormalizePathAllowingMissing(item.Path) == expectedPath {
+				if issue.WorktreePath == "" {
+					// No recorded path: marker identity is authoritative. Any
+					// live worktree bound to this issue's marker — canonical or
+					// legacy — is sufficient evidence the claim is still active,
+					// so it must not be false-released. A legacy worktree at a
+					// non-canonical path whose marker binds it to the issue is
+					// exactly the active-claim case an earlier canonical-only
+					// check wrongly skipped.
+					found = true
+					break
+				}
+				if worktree.NormalizePathAllowingMissing(item.Path) == worktree.NormalizePathAllowingMissing(issue.WorktreePath) {
 					found = true
 					break
 				}

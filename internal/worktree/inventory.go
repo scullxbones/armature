@@ -128,14 +128,81 @@ func IsUnderRoot(path, root string) bool {
 	return path == root || strings.HasPrefix(path, root+string(filepath.Separator))
 }
 
-// FindByIssue returns the first inventory entry whose marker binds it to id.
-func FindByIssue(items []Meta, id string) (Meta, bool) {
+// CountByIssue reports how many inventory entries are marker-bound to id.
+// Callers use it to distinguish "no bound worktree" (a legacy branch fallback
+// may still apply) from "one or more bound worktrees" (where SelectByIssue's
+// WorktreePath-first precedence must govern selection).
+func CountByIssue(items []Meta, id string) int {
+	n := 0
 	for _, item := range items {
 		if item.IssueID == id {
-			return item, true
+			n++
 		}
 	}
+	return n
+}
+
+// SelectByIssue resolves the single inventory entry bound to id, applying the
+// WorktreePath-first precedence used across the worktree lifecycle (mirroring
+// selectGCRemoval in reconcile.go): a single bound entry is returned as-is;
+// with multiple bound entries, only the one whose normalized path equals the
+// recorded worktreePath is returned. It fails closed (ok=false) whenever more
+// than one entry is bound and none uniquely matches the recorded path — including
+// when worktreePath is empty — so a legacy explicit-path worktree and the
+// canonical .worktrees/<id> worktree that share one marker can never be resolved
+// to the wrong destructive target.
+func SelectByIssue(items []Meta, id, worktreePath string) (Meta, bool) {
+	var bound []Meta
+	for _, item := range items {
+		if item.IssueID == id {
+			bound = append(bound, item)
+		}
+	}
+	switch len(bound) {
+	case 0:
+		return Meta{}, false
+	case 1:
+		return bound[0], true
+	}
+	if worktreePath == "" {
+		return Meta{}, false
+	}
+	want := NormalizePath(worktreePath)
+	var matches []Meta
+	for _, item := range bound {
+		if NormalizePath(item.Path) == want {
+			matches = append(matches, item)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], true
+	}
 	return Meta{}, false
+}
+
+// HasPrunableRegistration reports whether repoPath has a worktree registration
+// for the exact path that git considers prunable — its working directory was
+// deleted but the administrative registration under .git/worktrees survives.
+// worktree.List deliberately skips prunable blocks, so callers that need to
+// detect this stale-registration case (which makes `git worktree add <path>`
+// fail with "missing but already registered worktree") use this instead. It is
+// scoped to the exact path so callers can clear only this registration with an
+// exact-path re-add, never a broad `git worktree prune` that could drop
+// unrelated registrations.
+func HasPrunableRegistration(repoPath, path string) (bool, error) {
+	// #nosec G204 - git and its arguments are controlled by Armature.
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git worktree list --porcelain: %w", err)
+	}
+	want := NormalizePathAllowingMissing(path)
+	for _, block := range parsePorcelainBlocks(string(out)) {
+		if block.prunable && block.path != "" && NormalizePathAllowingMissing(block.path) == want {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type porcelainBlock struct {
