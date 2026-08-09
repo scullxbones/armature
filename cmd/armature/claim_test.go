@@ -781,6 +781,41 @@ func TestCreateWorktreeAndBranchFailsClosedOnBoundDetachedWorktree_REQ_LNGHZN_S5
 	assert.DirExists(t, legacyPath, "the bound worktree must be left untouched")
 }
 
+// TestCreateWorktreeAndBranchFailsClosedOnAmbiguousBinding_REQ_LNGHZN_S5_T6
+// covers the ordering hazard in adoption. Two worktrees carry this issue's
+// binding and the correctly-branched one is listed FIRST, so a loop that adopts
+// on first match never observes the second. The claim would then record the
+// adopted path as the winner, leaving the other duplicate behind as a
+// force-removal candidate still holding in-flight work.
+//
+// The full bound set must be collected before anything is moved, and ambiguity
+// refused — the same policy worktree.SelectByIssue and `arm worktree gc` apply.
+func TestCreateWorktreeAndBranchFailsClosedOnAmbiguousBinding_REQ_LNGHZN_S5_T6(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	// First in git's inventory: bound AND on the issue branch (the tempting one).
+	onBranchPath := filepath.Join(t.TempDir(), "aaa-on-branch")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", onBranchPath)
+	require.NoError(t, updateIssueIDFile(onBranchPath, "task-01"))
+
+	// Second: same binding, detached — the one a first-match loop would miss.
+	detachedPath := filepath.Join(t.TempDir(), "zzz-detached")
+	head := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	run(t, repo, "git", "worktree", "add", "--detach", detachedPath, head)
+	require.NoError(t, updateIssueIDFile(detachedPath, "task-01"))
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+
+	require.Error(t, err, "two worktrees sharing one binding must fail closed, not adopt the first")
+	assert.Contains(t, err.Error(), "bound to 2 worktrees")
+	assert.Contains(t, err.Error(), detachedPath, "the error must name every candidate")
+	assert.Contains(t, err.Error(), onBranchPath, "the error must name every candidate")
+	assert.NoDirExists(t, canonicalPath, "nothing may be provisioned while bindings are ambiguous")
+	assert.DirExists(t, onBranchPath, "neither candidate may be moved")
+	assert.DirExists(t, detachedPath, "neither candidate may be moved")
+}
+
 // TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6
 // is the same defect reached via a scratch branch rather than a detached HEAD.
 func TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6(t *testing.T) {
