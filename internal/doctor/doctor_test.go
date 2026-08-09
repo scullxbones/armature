@@ -145,6 +145,70 @@ func TestRunChecks_D2_StaleClaims_InjectedTime(t *testing.T) {
 	assert.Contains(t, d2.Items, "claimed-task")
 }
 
+func TestEvaluateD9UnrecognizedWorktrees_REQ_LNGHZN_S5_T8(t *testing.T) {
+	t.Parallel()
+
+	t.Run("clean_when_none", func(t *testing.T) {
+		t.Parallel()
+		f := doctor.EvaluateD9UnrecognizedWorktrees(nil)
+		assert.Equal(t, "D9", f.Check)
+		assert.Equal(t, doctor.SeverityOK, f.Severity)
+		assert.Empty(t, f.Items)
+	})
+
+	t.Run("warns_and_lists_paths", func(t *testing.T) {
+		t.Parallel()
+		f := doctor.EvaluateD9UnrecognizedWorktrees([]string{"/repo/.worktrees/b", "/repo/.worktrees/a"})
+		assert.Equal(t, "D9", f.Check)
+		assert.Equal(t, doctor.SeverityWarning, f.Severity)
+		// Deterministic, sorted output.
+		assert.Equal(t, []string{"/repo/.worktrees/a", "/repo/.worktrees/b"}, f.Items)
+	})
+}
+
+func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testing.T) {
+	t.Parallel()
+
+	repoDir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
+		cmd.Dir = repoDir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "command %v failed: %s", args, out)
+	}
+	run("git", "init")
+	run("git", "config", "user.email", "test@test.com")
+	run("git", "config", "user.name", "Test")
+	run("git", "config", "commit.gpgsign", "false")
+	run("git", "config", "gc.auto", "0")
+	run("git", "config", "maintenance.auto", "false")
+	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
+
+	// A managed worktree under .worktrees/ carrying no issue binding marker.
+	strayPath := filepath.Join(repoDir, ".worktrees", "stray")
+	run("git", "worktree", "add", "-b", "stray-branch", strayPath)
+
+	// Minimal .armature state so doctor.Run can materialize.
+	issuesDir := filepath.Join(repoDir, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "state", "issues"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "config.json"), []byte(`{"mode":"single-branch"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "worker-01.log"), []byte(""), 0o644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), repoDir, false, time.Now())
+	require.NoError(t, err)
+
+	d9 := findCheck(t, report, "D9")
+	assert.Equal(t, doctor.SeverityWarning, d9.Severity, "unrecognized managed worktree must be a health problem")
+	require.NotEmpty(t, d9.Items)
+	assert.Contains(t, strings.Join(d9.Items, "\n"), "stray")
+
+	// The anomaly must be a warning (fails --strict) not an error (fails plain doctor).
+	assert.True(t, report.HasWarnings(), "--strict must fail on the unrecognized worktree")
+	assert.False(t, report.HasErrors(), "plain doctor must not error on the unrecognized worktree")
+}
+
 func findCheck(t *testing.T, report doctor.Report, checkID string) doctor.Finding {
 	t.Helper()
 	for _, f := range report.Checks {
