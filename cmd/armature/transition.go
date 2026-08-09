@@ -492,8 +492,8 @@ func worktreeIssueBinding(worktreePath string) (string, error) {
 // enumerates EVERY worktree linked to the repository via `git worktree list
 // --porcelain` (listAllWorktreePaths) and checks each one's own
 // armature-issue-id marker file directly, rather than first narrowing to
-// "whichever worktree currently has refs/heads/feat/<id> checked out" the
-// way findWorktreePathByBranch does. Branch-name lookup is not enough: a
+// "whichever worktree currently has refs/heads/feat/<id> checked out" via a
+// branch-name lookup. Branch-name lookup is not enough: a
 // claimed worktree left in a detached HEAD (mid-rebase, mid-bisect) or
 // checked out to an unrelated scratch branch has no worktree whose HEAD
 // matches the story branch, so a branch-first scan would miss it entirely
@@ -639,15 +639,3 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 
 	return nil
 }
-
-// verifyIssueWorktreeBinding, verifyIssueBranchBinding, recordedBaseCommit,
-// dynamicBaseCommit, candidateBaseRefs, and getBaseCommit have moved to
-// internal/deliverygate (basecommit.go) as VerifyIssueWorktreeBinding,
-// VerifyIssueBranchBinding, RecordedBaseCommit, DynamicBaseCommit,
-// CandidateBaseRefs, and GetBaseCommit, so this read-side base-commit
-// resolution logic is independently unit-testable via package import
-// instead of living unexported in this cmd/armature (main package) file.
-// candidateBaseRefs is kept here as a thin alias because claim.go's
-// existing-worktree claim path also consults it when proving a worktree
-// hasn't diverged before persisting branch-point metadata.
-var candidateBaseRefs = deliverygate.CandidateBaseRefs

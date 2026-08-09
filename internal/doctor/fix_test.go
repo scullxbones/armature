@@ -122,6 +122,40 @@ func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testi
 	assert.Empty(t, actions, "a live marker-bound worktree at the recorded legacy path must not be repaired")
 }
 
+// TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGHZN_S5
+// covers the marker-is-authoritative policy: a claimed issue owned by the fixer
+// with issue.WorktreePath == "" but a live worktree marker-bound to it at a
+// non-canonical (legacy) path must NOT be false-released. Before the fix the
+// loop skipped any non-canonical worktree when no path was recorded, so an
+// active legacy claim was wrongly reset to open.
+func TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
+	repoDir := initGitRepo(t)
+	// Live worktree bound to the issue's marker at a legacy path outside
+	// .worktrees, while the claim recorded NO WorktreePath.
+	legacyPath := filepath.Join(t.TempDir(), "legacy-nopath-01")
+	runGit(t, repoDir, "worktree", "add", "-b", "task/legacy-nopath-01", legacyPath)
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeGitDir(t, legacyPath), "armature-issue-id"), []byte("legacy-nopath-01\n"), 0644))
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "legacy-nopath-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{Title: "Legacy worktree, no recorded path", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "legacy-nopath-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "a live marker-bound legacy worktree must suppress remediation even without a recorded WorktreePath")
+}
+
 func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)

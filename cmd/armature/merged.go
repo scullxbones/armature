@@ -60,8 +60,18 @@ func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePat
 	}
 	// Marker identity is authoritative. This also handles a detached worktree
 	// and prevents an unrelated worktree holding the expected branch from being
-	// selected ahead of the actually bound worktree.
-	if item, found := worktree.FindByIssue(worktrees, issue.ID); found {
+	// selected ahead of the actually bound worktree. When more than one worktree
+	// shares the issue's marker (e.g. a legacy explicit-path worktree alongside
+	// the canonical .worktrees/<id> one), apply the WorktreePath-first precedence
+	// used everywhere else (reconcile.go's selectGCRemoval, removeWorktreeAtPathTracked)
+	// and FAIL CLOSED on ambiguity rather than force-removing/inspecting the wrong
+	// worktree — the merged violation-gate and removal path force-remove (--force),
+	// so guessing here could discard uncommitted changes in the wrong worktree.
+	if worktree.CountByIssue(worktrees, issue.ID) > 0 {
+		item, ok := worktree.SelectByIssue(worktrees, issue.ID, issue.WorktreePath)
+		if !ok {
+			return "", "", "", false
+		}
 		worktreePath = item.Path
 	} else if branchName := deriveBranchName(issue.Type, issue.ID); branchName != "" {
 		// Legacy fallback: an unbound worktree on the expected branch may still
@@ -152,8 +162,8 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 
 // removeWorktreeAtPathTracked removes exactly selectedPath after refreshing the
 // inventory and revalidating its marker binding. GC passes the path selected by
-// reconciliation; it must not call FindByIssue again because a legacy and a
-// canonical worktree can share one marker identity.
+// reconciliation; it must not re-resolve the issue's worktree by marker alone
+// because a legacy and a canonical worktree can share one marker identity.
 func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selectedPath string, errWriter io.Writer) (worktreeRemoveOutcome, error) {
 	items, err := worktree.List(repoPath)
 	if err != nil {
@@ -215,23 +225,6 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	}
 
 	return worktreeRemoved, nil
-}
-
-// findWorktreePathByBranch finds an unbound worktree path for a given branch.
-// It is retained for legacy callers, while lifecycle teardown uses the shared
-// marker-aware inventory in resolveIssueWorktree.
-func findWorktreePathByBranch(repoPath, branchName string) string {
-	items, err := worktree.List(repoPath)
-	if err != nil {
-		return ""
-	}
-	wantRef := "refs/heads/" + branchName
-	for _, item := range items {
-		if item.IssueID == "" && item.Branch == wantRef {
-			return item.Path
-		}
-	}
-	return ""
 }
 
 func newMergedCmd() *cobra.Command {
