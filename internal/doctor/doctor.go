@@ -16,6 +16,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // Severity of a check finding.
@@ -80,6 +81,7 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
 	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
+	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
 
 	return Report{Checks: checks}
 }
@@ -140,6 +142,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	checks = append(checks, checkD6UncitedIssues(allIssues))
 	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
 	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
+	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
 
 	return Report{Checks: checks}, nil
 }
@@ -508,6 +511,40 @@ func checkD7WorkerIDMismatches(warnings []string) Finding {
 		f.Severity = SeverityWarning
 		f.Message = "Worker-ID mismatched ops detected"
 		f.Items = warnings
+	}
+	return f
+}
+
+// checkD9UnrecognizedWorktrees reports managed worktrees carrying no issue
+// binding. It reads this clone's managed inventory and reuses the worktree
+// reconciliation classification (the Unrecognized class) rather than
+// reinventing detection. A git/inventory failure fails open to OK, matching D1.
+func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materialize.Issue, now time.Time) Finding {
+	if repoPath == "" {
+		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
+	}
+	worktrees, err := worktree.ListManaged(repoPath)
+	if err != nil {
+		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
+	}
+	result := worktree.Reconcile(worktrees, allIssues, now, worktree.CanonicalRoot(repoPath))
+	return EvaluateD9UnrecognizedWorktrees(result.Unrecognized)
+}
+
+// EvaluateD9UnrecognizedWorktrees turns the reconciler's Unrecognized class into
+// a doctor finding. A worktree at a managed path with no issue binding is an
+// enforced health problem: reported here and, being a warning, promoted to an
+// error by `arm doctor --strict` so an agent cannot proceed past it. Note that
+// `arm worktree list` intentionally keeps exit code 0 on the same anomaly — it
+// is the inventory command that exists to report it.
+func EvaluateD9UnrecognizedWorktrees(unrecognized []string) Finding {
+	f := Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
+	if len(unrecognized) > 0 {
+		items := append([]string(nil), unrecognized...)
+		sort.Strings(items)
+		f.Severity = SeverityWarning
+		f.Message = "Managed worktrees with no issue binding"
+		f.Items = items
 	}
 	return f
 }

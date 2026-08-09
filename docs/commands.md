@@ -331,7 +331,7 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ## doctor
 
-Run repository health checks (D1-D7).
+Run repository health checks (D1-D9).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -356,6 +356,16 @@ arm doctor --fix             # apply it
 
 **Doctor Checks:**
 See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D6), their triggers, and remediation steps.
+
+**D9 — Unrecognized managed worktrees.** A worktree living under the managed
+`.worktrees/` root that carries no issue binding is reported as a health problem
+(warning). Because it is a warning, plain `arm doctor` still exits 0 but flags it,
+and `arm doctor --strict` promotes it to an error and exits non-zero — so an agent
+cannot proceed past an unrecognized managed worktree. This enforces the anomaly
+rather than merely printing it. Note that `arm worktree list` deliberately keeps
+exit code 0 on the same anomaly: it is the routine inventory command that exists to
+report it, so it must not fail on what it is designed to surface. Remediate by
+binding the worktree to its issue or removing the stray checkout.
 
 ---
 
