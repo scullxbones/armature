@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,43 @@ func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testi
 
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a live marker-bound worktree at the recorded legacy path must not be repaired")
+}
+
+// TestPlanFixes_AmbiguousBindingDoesNotReleaseLiveClaim_REQ_LNGHZN_S5_T6 pins
+// why doctor asks the EXISTENCE question and not the selection one. Two
+// worktrees carry this issue's binding and no recorded path picks between them,
+// so selection is Ambiguous and fails closed. If doctor resolved through
+// selection it would read that refusal as "no worktree" and release a live
+// worker's claim — turning a fail-closed guard into a destructive act.
+func TestPlanFixes_AmbiguousBindingDoesNotReleaseLiveClaim_REQ_LNGHZN_S5_T6(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	stateDir := filepath.Join(issuesDir, "state")
+	logPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
+	repoDir := initGitRepo(t)
+
+	// Two worktrees, one binding, no recorded path to disambiguate them.
+	for i, name := range []string{"legacy-dup-01", "canonical-dup-01"} {
+		path := filepath.Join(t.TempDir(), name)
+		runGit(t, repoDir, "worktree", "add", "-b", "task/dup-"+strconv.Itoa(i), path)
+		gitDir := worktreeGitDir(t, path)
+		require.NoError(t, os.WriteFile(filepath.Join(gitDir, "armature-task-id"), []byte("dup-task-01\n"), 0o644))
+	}
+
+	now := time.Now()
+	claimedAt := now.Add(-1 * time.Minute).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "dup-task-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{Title: "Duplicate binding task", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "dup-task-01", Timestamp: claimedAt, WorkerID: "fixer-01",
+			Payload: ops.Payload{TTL: 240}},
+	}))
+
+	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	require.NoError(t, err)
+
+	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	assert.Empty(t, actions, "an ambiguous binding is still evidence the claim is alive; it must never be released")
 }
 
 // TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGHZN_S5

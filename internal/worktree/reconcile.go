@@ -2,7 +2,6 @@
 package worktree
 
 import (
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -92,15 +91,14 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	gcCandidates := make(map[string][]Meta)
 
 	// First pass: drive classification from THIS clone's on-disk worktrees.
-	// Identity comes from the authoritative armature-issue-id binding (wt.IssueID)
-	// the caller reads off each worktree; only when that is absent do we fall back
-	// to the path basename (legacy callers/tests). The basename is a weak signal —
-	// it truncates slash-bearing IDs — so the binding is preferred whenever present.
+	// Identity is the armature-issue-id binding (wt.IssueID) and nothing else.
+	// A worktree carrying no binding is Unrecognized — its directory basename is
+	// NOT an identity and must never be promoted to one. Inferring an issue from
+	// the basename would report a live claim as BOUND while doctor and the
+	// delivery gate, which both require the binding, reject the very same
+	// worktree: the anomaly would be suppressed exactly where an agent reads it.
 	for _, wt := range worktrees {
 		issueID := wt.IssueID
-		if issueID == "" {
-			issueID = extractIssueIDFromWorktreePath(wt.Path)
-		}
 		issue := issues[issueID]
 		if issueID == "" || issue == nil {
 			result.Unrecognized = append(result.Unrecognized, wt.Path)
@@ -227,16 +225,4 @@ func isUnderManagedRoot(normPath string, managedRoots []string) bool {
 // isTerminalStatus returns true if the issue status is one where worktrees should be removed.
 func isTerminalStatus(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusCancelled
-}
-
-// extractIssueIDFromWorktreePath extracts the issue ID from a worktree path.
-// Expected format: <repo-root>/.worktrees/<issue-id>
-// Returns the base name if extractable, empty string otherwise. The caller
-// validates the derived ID against the known issue set.
-func extractIssueIDFromWorktreePath(path string) string {
-	base := filepath.Base(path)
-	if base != "" && base != "." && base != ".." {
-		return base
-	}
-	return ""
 }

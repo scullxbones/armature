@@ -49,69 +49,94 @@ func readHookLogForViolations(gitDir string) bool {
 	return hookLogContainsEntry(gitDir, "violation:")
 }
 
-// resolveIssueWorktree locates the worktree for an issue's branch and resolves its
-// git dir and binding. Returns ok=false, nil err ONLY when there is genuinely no
-// bound worktree to gate on (CountByIssue==0 and no legacy branch fallback).
-// A non-nil err means either the worktree inventory (or the found worktree's git
-// dir) could not be read, OR the marker-bound set is AMBIGUOUS (CountByIssue>0 but
-// SelectByIssue cannot uniquely resolve a target — e.g. duplicate legacy+canonical
-// markers). In both error cases callers MUST fail closed rather than treat the
-// worktree as "not found / nothing to gate", or `arm merged` would append the
-// merged op and exit 0 while a worktree that may contain violations is never
-// inspected (I5 deterministic gates fail closed; I6 done≠merged). binding is the
-// content of armature-issue-id ("" when absent). Shared by the merged violation
-// gate and worktree removal (finding 7).
-func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePath, gitDir, binding string, ok bool, err error) {
+// resolveBoundWorktree resolves the worktree an issue owns, by binding alone.
+//
+// This is the SELECTION half of the split (see worktree.SelectByIssue): it is
+// the only resolver in this file whose result may reach a destructive git
+// operation, and it therefore consults nothing but the issue binding. Branch
+// name is not identity and is never used here.
+//
+// A non-nil error means the bound set is Ambiguous. Callers MUST fail closed:
+// guessing would force-remove a worktree that may hold uncommitted work, and
+// reporting "nothing found" would let `arm merged` append the merged op while a
+// worktree that may contain violations is never inspected (I5 gates fail
+// closed; I6 done≠merged).
+//
+// It takes an inventory the caller has already read rather than reading its
+// own, so a caller that needs the inventory for more than selection does not
+// shell out to git twice.
+func resolveBoundWorktree(worktrees []worktree.Meta, issue materialize.Issue) (worktree.Meta, worktree.Resolution, error) {
+	item, res := worktree.SelectByIssue(worktrees, issue.ID, issue.WorktreePath)
+	if res == worktree.Ambiguous {
+		// Several worktrees carry this issue's binding and the recorded path
+		// picks none of them — e.g. a legacy explicit-path worktree alongside
+		// the canonical .worktrees/<id> one. This is the same condition gc
+		// reports as GCAmbiguous and exits non-zero on.
+		return worktree.Meta{}, res, fmt.Errorf("issue %s has ambiguous bound worktrees; disambiguate before merging", issue.ID)
+	}
+	return item, res, nil
+}
+
+// findGateTarget returns the git dir whose hook log the merged violation gate
+// must read, and the binding recorded in it ("" when absent).
+//
+// This is deliberately NOT resolveBoundWorktree, and deliberately returns a git
+// dir rather than a worktree path: it is allowed to widen beyond the binding,
+// so its result must be structurally incapable of reaching a removal. Only a
+// read of a hook log can be done with what this returns.
+//
+// The widening: when no worktree carries the issue's binding, an UNBOUND
+// worktree sitting on the issue's expected branch is still gated on. That is
+// precisely the enforcement gap violations exist to catch — a worktree whose
+// binding was never written or was deleted would otherwise pass unexamined. A
+// worktree bound to a DIFFERENT issue is never eligible merely because its
+// branch matches. Widening here is safe only because it is one-directional:
+// it can add work for the gate, never authorize a destructive act.
+func findGateTarget(repoPath string, issue materialize.Issue) (gitDir, binding string, found bool, err error) {
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
-		return "", "", "", false, fmt.Errorf("read worktree inventory: %w", err)
+		return "", "", false, fmt.Errorf("read worktree inventory: %w", err)
 	}
-	// Marker identity is authoritative. This also handles a detached worktree
-	// and prevents an unrelated worktree holding the expected branch from being
-	// selected ahead of the actually bound worktree. When more than one worktree
-	// shares the issue's marker (e.g. a legacy explicit-path worktree alongside
-	// the canonical .worktrees/<id> one), apply the WorktreePath-first precedence
-	// used everywhere else (reconcile.go's selectGCRemoval, removeWorktreeAtPathTracked)
-	// and FAIL CLOSED on ambiguity rather than force-removing/inspecting the wrong
-	// worktree — the merged violation-gate and removal path force-remove (--force),
-	// so guessing here could discard uncommitted changes in the wrong worktree.
-	if worktree.CountByIssue(worktrees, issue.ID) > 0 {
-		item, selectOK := worktree.SelectByIssue(worktrees, issue.ID, issue.WorktreePath)
-		if !selectOK {
-			// One or more worktrees carry this issue's marker but none uniquely
-			// matches the recorded WorktreePath (e.g. a legacy explicit-path
-			// worktree alongside the canonical .worktrees/<id> one sharing a
-			// marker, with an empty/non-matching issue.WorktreePath). This is the
-			// same duplicate-marker condition gc reports as GCAmbiguous and exits
-			// non-zero on; merged must be consistent and FAIL CLOSED rather than
-			// return "not found" and let the violation gate be skipped (I5/I6).
-			return "", "", "", false, fmt.Errorf("issue %s has ambiguous marker-bound worktrees; disambiguate before merging", issue.ID)
-		}
-		worktreePath = item.Path
-	} else if branchName := deriveBranchName(issue.Type, issue.ID); branchName != "" {
-		// Legacy fallback: an unbound worktree on the expected branch may still
-		// be torn down by merged, but a worktree bound to another issue is never
-		// eligible merely because its branch happens to match.
-		wantRef := "refs/heads/" + branchName
-		for _, item := range worktrees {
-			if item.IssueID == "" && item.Branch == wantRef {
-				worktreePath = item.Path
-				break
-			}
-		}
+	item, res, err := resolveBoundWorktree(worktrees, issue)
+	if err != nil {
+		return "", "", false, err
+	}
+	worktreePath := item.Path
+	if res == worktree.NotFound {
+		worktreePath = unboundWorktreeOnBranch(worktrees, issue)
 	}
 	if worktreePath == "" {
-		return "", "", "", false, nil
+		return "", "", false, nil
 	}
 
 	gitDir, err = resolveWorktreeGitDir(worktreePath)
 	if err != nil {
 		// A located-but-unresolvable worktree is UNREADABLE, not "not found":
 		// propagate so callers fail closed instead of skipping the gate.
-		return "", "", "", false, fmt.Errorf("resolve worktree git dir for %s: %w", worktreePath, err)
+		return "", "", false, fmt.Errorf("resolve worktree git dir for %s: %w", worktreePath, err)
 	}
+	return gitDir, harnesshook.ReadIssueBindingFile(gitDir), true, nil
+}
 
-	return worktreePath, gitDir, harnesshook.ReadIssueBindingFile(gitDir), true, nil
+// unboundWorktreeOnBranch returns the path of a worktree that carries NO issue
+// binding but sits on the issue's expected branch, or "" when there is none.
+//
+// This is the one place branch name is consulted, and it is deliberately not
+// identity: the result is only ever used to widen a read (the violation gate)
+// or to explain a refusal (the removal warning). A worktree bound to a
+// different issue is never returned — its binding says whose it is.
+func unboundWorktreeOnBranch(worktrees []worktree.Meta, issue materialize.Issue) string {
+	branchName := deriveBranchName(issue.Type, issue.ID)
+	if branchName == "" {
+		return ""
+	}
+	wantRef := "refs/heads/" + branchName
+	for _, candidate := range worktrees {
+		if candidate.IssueID == "" && candidate.Branch == wantRef {
+			return candidate.Path
+		}
+	}
+	return ""
 }
 
 // issueWorktreeHasViolations reports whether the hook log of the issue's worktree
@@ -120,10 +145,11 @@ func resolveIssueWorktree(repoPath string, issue materialize.Issue) (worktreePat
 // enforcement-gap case violations exist to catch — finding 1); a worktree bound to
 // a different issue is skipped.
 func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) (bool, error) {
-	_, gitDir, binding, ok, err := resolveIssueWorktree(repoPath, issue)
+	gitDir, binding, ok, err := findGateTarget(repoPath, issue)
 	if err != nil {
-		// Inventory/git-dir unreadable: fail closed — the caller must refuse to
-		// mark merged rather than silently treat this as "no violations".
+		// Inventory/git-dir unreadable, or ambiguous bindings: fail closed — the
+		// caller must refuse to mark merged rather than silently treat this as
+		// "no violations".
 		return false, err
 	}
 	if !ok {
@@ -164,27 +190,34 @@ func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter 
 // skipped as a no-op (worktreeSkipped). A returned error is a genuine removal
 // failure and is orthogonal to the outcome (outcome is worktreeSkipped on error).
 func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, errWriter io.Writer) (worktreeRemoveOutcome, error) {
-	worktreePath, _, binding, ok, err := resolveIssueWorktree(repoPath, issue)
+	// Removal is destructive, so it resolves by binding ONLY — never through
+	// findGateTarget's branch widening. An unbound worktree that merely holds
+	// this issue's branch may be a user's own checkout; the gate may read it,
+	// but nothing may remove it.
+	worktrees, err := worktree.List(repoPath)
 	if err != nil {
-		// Inventory/git-dir unreadable: fail closed so a removal is never skipped
-		// merely because the worktree could not be inspected.
+		return worktreeSkipped, fmt.Errorf("read worktree inventory: %w", err)
+	}
+	item, res, err := resolveBoundWorktree(worktrees, issue)
+	if err != nil {
+		// Bindings ambiguous: fail closed so a removal is never guessed at, and
+		// never silently skipped as "not found".
 		return worktreeSkipped, err
 	}
-	if !ok {
-		// No branch for this type or worktree missing; nothing to remove.
+	if res != worktree.Bound {
+		// Nothing carries this issue's binding, so nothing may be removed. If an
+		// unbound worktree is nonetheless sitting on the issue's branch, say so:
+		// it is the worktree the operator probably expected to be torn down, and
+		// silence would read as "already gone". This is a report, not a target —
+		// the path is never passed to removal.
+		if path := unboundWorktreeOnBranch(worktrees, issue); path != "" {
+			_, _ = fmt.Fprintf(errWriter,
+				"Warning: worktree at %s is on branch %s but not bound to %s; skipping removal\n",
+				path, deriveBranchName(issue.Type, issue.ID), issue.ID)
+		}
 		return worktreeSkipped, nil
 	}
-
-	// Verify binding before removal: if the armature-issue-id file is missing or
-	// names a different issue, skip removal to protect user-created worktrees that
-	// happen to match the branch name (P2 bug fix).
-	if binding != issue.ID {
-		branchName := deriveBranchName(issue.Type, issue.ID)
-		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is on branch %s but not bound to %s (binding=%q); skipping removal\n",
-			worktreePath, branchName, issue.ID, binding)
-		return worktreeSkipped, nil
-	}
-	return removeWorktreeAtPathTracked(repoPath, issue, worktreePath, errWriter)
+	return removeWorktreeAtPathTracked(repoPath, issue, item.Path, errWriter)
 }
 
 // removeWorktreeAtPathTracked removes exactly selectedPath after refreshing the

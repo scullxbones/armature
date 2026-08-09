@@ -752,6 +752,51 @@ func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *
 	assert.Equal(t, "task/task-01", strings.TrimSpace(runOutput(t, canonicalPath, "branch", "--show-current")))
 }
 
+// TestCreateWorktreeAndBranchFailsClosedOnBoundDetachedWorktree_REQ_LNGHZN_S5_T6
+// covers the duplicate-worktree defect. A worktree bound to this issue but
+// DETACHED (the state a worker is in mid-rebase) must not be skipped over:
+// skipping it provisions a second canonical worktree for the same issue, after
+// which `arm merged` selects the new one and gc force-removes the original
+// along with whatever uncommitted work it still held.
+//
+// Selection is by binding, so the detached worktree IS found; because it cannot
+// be relocated safely mid-operation, the claim fails closed and provisions
+// nothing. Refusing is what preserves the work.
+func TestCreateWorktreeAndBranchFailsClosedOnBoundDetachedWorktree_REQ_LNGHZN_S5_T6(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+
+	// Detach it, as an in-progress rebase would.
+	head := strings.TrimSpace(runGitOutput(t, legacyPath, "rev-parse", "HEAD"))
+	run(t, legacyPath, "git", "checkout", "--detach", head)
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+
+	require.Error(t, err, "a bound worktree that is not on the issue branch must fail closed")
+	assert.Contains(t, err.Error(), legacyPath, "the error must name the worktree the operator has to deal with")
+	assert.NoDirExists(t, canonicalPath, "no duplicate worktree may be provisioned")
+	assert.DirExists(t, legacyPath, "the bound worktree must be left untouched")
+}
+
+// TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6
+// is the same defect reached via a scratch branch rather than a detached HEAD.
+func TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+	run(t, legacyPath, "git", "checkout", "-b", "scratch/experiment")
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+
+	require.Error(t, err, "a bound worktree parked on a scratch branch must fail closed")
+	assert.NoDirExists(t, canonicalPath, "no duplicate worktree may be provisioned")
+}
+
 func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))

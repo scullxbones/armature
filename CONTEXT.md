@@ -262,8 +262,40 @@ A structured, schema-validated finding aid summarizing an activity log for revie
 _Avoid_: Summary report, activity evidence
 
 **Issue Binding**:
-The association between a claimed leaf issue and a specific worktree, established when `arm claim` writes the issue ID into the worktree's local git state. Issue binding is what allows the harness hook to enforce that issue's scope within that worktree, and it holds for any leaf issue (Task or Bug), not only Tasks. It is distinct from the claim itself: the claim records reservation in the ops log; the binding records the active issue in the worktree. Invariant: one harness process operates under exactly one issue binding at a time.
-_Avoid_: Task binding, claim, worktree assignment
+The association between a claimed leaf issue and a specific worktree, established when `arm claim` writes the issue ID into the worktree's local git state. Issue binding is what allows the harness hook to enforce that issue's scope within that worktree, and it holds for any leaf issue (Task or Bug), not only Tasks. It is distinct from the claim itself: the claim records reservation in the ops log; the binding records the active issue in the worktree. Invariant: one harness process operates under exactly one issue binding at a time. **The binding is the sole authority for worktree identity.** A branch name and a directory basename are descriptions, never identity: a worktree detached mid-rebase is still bound to its issue, and a stranger's worktree holding the expected branch is still not. No code may establish, infer, or synthesize a binding from either.
+_Avoid_: Task binding, claim, worktree assignment, marker
+
+**Managed Worktree**:
+A worktree Armature provisioned and owns, living under the canonical worktree root and carrying an issue binding. Managed worktrees are the ones reconciliation classifies and `arm worktree gc` may remove; a worktree a person created for their own purposes is unmanaged and is never a removal candidate, whatever its branch. Distinct from the ops worktree, which holds coordination state rather than issue work.
+_Avoid_: Ops worktree, code worktree, checkout
+
+**Canonical Worktree Path**:
+The path Armature provisions a managed worktree at, derived from the issue ID under the canonical worktree root. It is distinct from the **recorded worktree path** materialized onto the issue from the claim op, which is the path that claim actually used — usually the canonical one, but a legacy or explicitly-placed worktree can differ. Where several worktrees share one binding, the recorded path is the tiebreak that decides which is real.
+_Avoid_: Worktree root, recorded path, worktree location
+
+**Adoption**:
+Claim-time reuse of an existing worktree already bound to the issue, moved to the canonical worktree path instead of provisioning a second one. Adoption preserves the worktree's branch and uncommitted work, and is selected by binding alone. A bound worktree that is not on the issue branch is not adopted and not provisioned around: the claim fails closed, because the alternatives — relocating an in-progress git operation, or checking out over it — both risk the work adoption exists to protect.
+_Avoid_: Reuse, takeover, migration
+
+**Bound Worktree**:
+The reconciliation class for a worktree whose binding names an issue holding a live claim, at the path that claim recorded. Bound is the healthy steady state of a managed worktree.
+_Avoid_: Claimed, active, assigned
+
+**Orphan Worktree**:
+The reconciliation class for a worktree whose binding names a known issue that holds no live claim — unclaimed, past its claim TTL, or claimed in another clone. An orphan is a real worktree with no live owner, not an error.
+_Avoid_: Ghost, stale worktree, unrecognized worktree
+
+**Ghost Worktree**:
+The reconciliation class for the inverse of an orphan: an issue holding a live claim whose recorded worktree path has no worktree on disk. A terminal issue whose worktree is gone is the expected end state, not a ghost.
+_Avoid_: Orphan, missing worktree, stale claim
+
+**Unrecognized Worktree**:
+The reconciliation class for a worktree carrying no issue binding, or one naming an issue Armature does not know. Unrecognized is what a worktree whose binding was lost or never written becomes; it is never repaired by inferring an issue from the directory name, because doctor and the delivery gate will reject the same worktree.
+_Avoid_: Orphan, unmanaged worktree, unknown
+
+**Ambiguous Binding**:
+The condition where more than one worktree carries the same issue's binding and the recorded worktree path picks none of them. Ambiguity is reported and refused, never resolved by guessing: the operations that consume a resolved worktree remove it forcibly, so choosing wrongly discards uncommitted work. Distinct from a worktree simply not being found, which is an ordinary outcome.
+_Avoid_: Duplicate worktree, conflict, not found
 
 **Hook Pass-through**:
 The condition where the harness hook allows a tool operation without evaluating scope or verification policy. Pass-through occurs when no task is bound to the current worktree or when the bound task is no longer in an active state (claimed or in-progress). Pass-through events are logged to the worktree's hook log.
