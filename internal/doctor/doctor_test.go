@@ -166,6 +166,44 @@ func TestEvaluateD9UnrecognizedWorktrees_REQ_LNGHZN_S5_T8(t *testing.T) {
 	})
 }
 
+func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing.T) {
+	t.Parallel()
+
+	// RunChecks documents allIssues == nil as "skip checks requiring issue
+	// details". A bound managed worktree must not surface as a D9 anomaly in
+	// that mode: with no issue map there is no way to recognize the binding.
+	repoDir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
+		cmd.Dir = repoDir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "command %v failed: %s", args, out)
+	}
+	run("git", "init")
+	run("git", "config", "user.email", "test@test.com")
+	run("git", "config", "user.name", "Test")
+	run("git", "config", "commit.gpgsign", "false")
+	run("git", "config", "gc.auto", "0")
+	run("git", "config", "maintenance.auto", "false")
+	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
+
+	// A managed worktree bound to a real issue via the binding marker.
+	boundPath := filepath.Join(repoDir, ".worktrees", "T-001")
+	run("git", "worktree", "add", "-b", "bound-branch", boundPath)
+	bindingPath := filepath.Join(repoDir, ".git", "worktrees", "T-001", "armature-issue-id")
+	require.NoError(t, os.WriteFile(bindingPath, []byte("T-001\n"), 0o644))
+
+	index := materialize.Index{
+		"T-001": {Status: "in-progress", Type: "task"},
+	}
+	report := doctor.RunChecks(index, nil, nil, repoDir, time.Now())
+
+	d9 := findCheck(t, report, "D9")
+	assert.Equal(t, doctor.SeverityOK, d9.Severity, "D9 must be skipped when issue details were omitted")
+	assert.Empty(t, d9.Items)
+}
+
 func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testing.T) {
 	t.Parallel()
 

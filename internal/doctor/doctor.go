@@ -519,8 +519,11 @@ func checkD7WorkerIDMismatches(warnings []string) Finding {
 // binding. It reads this clone's managed inventory and reuses the worktree
 // reconciliation classification (the Unrecognized class) rather than
 // reinventing detection. A git/inventory failure fails open to OK, matching D1.
+// A nil allIssues means the caller omitted issue details (per RunChecks'
+// contract); without the issue map no binding can be recognized, so the check
+// is skipped rather than misreporting every bound worktree as unrecognized.
 func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materialize.Issue, now time.Time) Finding {
-	if repoPath == "" {
+	if repoPath == "" || allIssues == nil {
 		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
 	}
 	worktrees, err := worktree.ListManaged(repoPath)
