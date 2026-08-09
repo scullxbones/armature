@@ -66,11 +66,12 @@ func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testi
 // snapshot store re-materializes from the op log on every load, so the classes
 // below are driven entirely by ops.
 type worktreeReconcileFixture struct {
-	repo       string
-	boundPath  string // .worktrees/task-bound  (claimed, live)   -> bound
-	orphanPath string // .worktrees/task-orphan (on disk, no claim) -> orphan
-	ghostPath  string // .worktrees/task-ghost  (claimed, removed) -> ghost
-	gcPath     string // .worktrees/task-gc     (merged, on disk)  -> gc_ready / removed
+	repo             string
+	boundPath        string // .worktrees/task-bound   (claimed, live)          -> bound
+	orphanPath       string // .worktrees/task-orphan  (bound, claim released)  -> orphan
+	ghostPath        string // .worktrees/task-ghost   (claimed, removed)       -> ghost
+	gcPath           string // .worktrees/task-gc      (merged, on disk)        -> gc_ready / removed
+	unrecognizedPath string // .worktrees/task-unbound (on disk, NO binding)    -> unrecognized
 }
 
 // setupWorktreeReconcileFixture builds a repo with one worktree in each
@@ -114,9 +115,22 @@ func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	_, err = runTrls(t, repo, "transition", "--issue", "task-gc", "--to", "merged", "--force")
 	require.NoError(t, err)
 
-	// task-orphan: a managed worktree on disk that no issue claims -> orphan.
+	// task-orphan: a BOUND worktree whose claim was released -> orphan. Claim it
+	// so the binding is written, then transition back to open so no live claim
+	// remains. An orphan is a real worktree with a binding and no live owner; a
+	// worktree with no binding at all is a different class entirely (below).
+	_, err = runTrls(t, repo, "claim", "task-orphan", "--worktree")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-orphan", "--to", "open")
+	require.NoError(t, err)
 	orphanPath := filepath.Join(repo, ".worktrees", "task-orphan")
-	run(t, repo, "git", "worktree", "add", orphanPath, "-b", "task/task-orphan")
+
+	// task-unbound: a worktree git knows about, at a canonical-looking path, with
+	// NO armature-issue-id binding -> unrecognized. Its basename would name a
+	// plausible issue ID, which is precisely why identity must not be inferred
+	// from it.
+	unrecognizedPath := filepath.Join(repo, ".worktrees", "task-unbound")
+	run(t, repo, "git", "worktree", "add", unrecognizedPath, "-b", "task/task-unbound")
 
 	// Materialize so on-disk state reflects the ops (belt and suspenders; the
 	// snapshot store also materializes on load).
@@ -124,11 +138,12 @@ func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	require.NoError(t, err)
 
 	return worktreeReconcileFixture{
-		repo:       repo,
-		boundPath:  filepath.Join(repo, ".worktrees", "task-bound"),
-		orphanPath: orphanPath,
-		ghostPath:  ghostPath,
-		gcPath:     filepath.Join(repo, ".worktrees", "task-gc"),
+		repo:             repo,
+		boundPath:        filepath.Join(repo, ".worktrees", "task-bound"),
+		orphanPath:       orphanPath,
+		ghostPath:        ghostPath,
+		gcPath:           filepath.Join(repo, ".worktrees", "task-gc"),
+		unrecognizedPath: unrecognizedPath,
 	}
 }
 
@@ -157,6 +172,12 @@ func TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, res["orphans"], "task-orphan", "unclaimed managed worktree must be an orphan")
 	assert.Contains(t, res["gc_ready"], "task-gc", "merged worktree still on disk must be gc_ready")
 	assert.Contains(t, res["ghosts"], "task-ghost", "claimed-but-removed worktree must be a ghost")
+
+	// A worktree carrying no binding is unrecognized, never classified against
+	// the issue its directory name happens to resemble.
+	assert.Contains(t, res["unrecognized"], fx.unrecognizedPath, "unbound worktree must be unrecognized")
+	assert.NotContains(t, res["bound"], "task-unbound")
+	assert.NotContains(t, res["orphans"], "task-unbound")
 
 	// Cross-class: a bound worktree is never simultaneously an orphan/gc target.
 	assert.NotContains(t, res["orphans"], "task-bound")

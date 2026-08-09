@@ -31,7 +31,7 @@ func TestReconcile_BoundWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	// Worktree exists, issue has claim and worktree_path
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-01", Branch: "task/task-01"},
+		{Path: "/repo/.worktrees/task-01", Branch: "task/task-01", IssueID: "task-01"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-01": {
@@ -72,7 +72,7 @@ func TestReconcile_Orphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	// Worktree exists but issue has no claim (or issue doesn't exist)
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-02", Branch: "task/task-02"},
+		{Path: "/repo/.worktrees/task-02", Branch: "task/task-02", IssueID: "task-02"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-02": {
@@ -116,7 +116,7 @@ func TestReconcile_GCRemovalMerged_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	// Issue is merged with an existing worktree: should be in GCRemovalSet
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-04", Branch: "task/task-04"},
+		{Path: "/repo/.worktrees/task-04", Branch: "task/task-04", IssueID: "task-04"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-04": {
@@ -139,7 +139,7 @@ func TestReconcile_GCRemovalCancelled_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	// Issue is cancelled with an existing worktree: should be in GCRemovalSet
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-05", Branch: "task/task-05"},
+		{Path: "/repo/.worktrees/task-05", Branch: "task/task-05", IssueID: "task-05"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-05": {
@@ -160,7 +160,7 @@ func TestReconcile_NoGCRemovalDone_REQ_LNGHZN_S5_T2(t *testing.T) {
 	// Issue is done (not merged) with an existing worktree: should NOT be in GCRemovalSet
 	// (done means it hasn't been confirmed as merged yet)
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-06", Branch: "task/task-06"},
+		{Path: "/repo/.worktrees/task-06", Branch: "task/task-06", IssueID: "task-06"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-06": {
@@ -181,10 +181,10 @@ func TestReconcile_MixedScenario_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	// Complex scenario with multiple types
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-01", Branch: "task/task-01"}, // bound
-		{Path: "/repo/.worktrees/task-02", Branch: "task/task-02"}, // orphan
+		{Path: "/repo/.worktrees/task-01", Branch: "task/task-01", IssueID: "task-01"}, // bound
+		{Path: "/repo/.worktrees/task-02", Branch: "task/task-02", IssueID: "task-02"}, // orphan
 		// task-03 is a ghost (recorded but not on disk)
-		{Path: "/repo/.worktrees/task-04", Branch: "task/task-04"}, // gc removal
+		{Path: "/repo/.worktrees/task-04", Branch: "task/task-04", IssueID: "task-04"}, // gc removal
 	}
 	issues := map[string]*materialize.Issue{
 		"task-01": {
@@ -222,6 +222,33 @@ func TestReconcile_MixedScenario_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, result.Ghosts, "task-03")
 	assert.Len(t, result.GCRemovalSet, 1)
 	assert.Contains(t, result.GCRemovalSet, "task-04")
+}
+
+// TestReconcile_UnboundCanonicalWorktreeIsUnrecognized_REQ_LNGHZN_S5_T6 is the
+// regression guard for the basename-inference defect. A worktree sitting at the
+// canonical .worktrees/<issue-id> path, for an issue holding a LIVE claim, but
+// carrying no armature-issue-id binding, must reconcile as Unrecognized — never
+// BOUND. Reporting BOUND here would tell an agent the worktree is healthy while
+// doctor and the delivery gate, which both require the binding, reject it.
+func TestReconcile_UnboundCanonicalWorktreeIsUnrecognized_REQ_LNGHZN_S5_T6(t *testing.T) {
+	t.Parallel()
+
+	// Path basename matches the issue ID exactly; only the binding is missing.
+	worktrees := []Meta{{Path: "/repo/.worktrees/task-unbound", Branch: "task/task-unbound"}}
+	issues := map[string]*materialize.Issue{
+		"task-unbound": {
+			ID:           "task-unbound",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-1",
+			WorktreePath: "/repo/.worktrees/task-unbound",
+		},
+	}
+
+	result := Reconcile(worktrees, issues, testNow)
+
+	assert.Equal(t, []string{"/repo/.worktrees/task-unbound"}, result.Unrecognized)
+	assert.Empty(t, result.BoundWorktrees, "an unbound worktree must never be reported as bound")
+	assert.Empty(t, result.Orphans)
 }
 
 func TestReconcile_WorktreeWithoutIssue_REQ_LNGHZN_S5_T2(t *testing.T) {
@@ -285,9 +312,9 @@ func TestReconcile_NonLiveClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2(t *test
 func TestReconcile_SortedOutput_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-c", Branch: "task/task-c"},
-		{Path: "/repo/.worktrees/task-a", Branch: "task/task-a"},
-		{Path: "/repo/.worktrees/task-b", Branch: "task/task-b"},
+		{Path: "/repo/.worktrees/task-c", Branch: "task/task-c", IssueID: "task-c"},
+		{Path: "/repo/.worktrees/task-a", Branch: "task/task-a", IssueID: "task-a"},
+		{Path: "/repo/.worktrees/task-b", Branch: "task/task-b", IssueID: "task-b"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-a": {ID: "task-a", Status: ops.StatusInProgress, ClaimedBy: "w", WorktreePath: "/repo/.worktrees/task-a"},
@@ -313,7 +340,7 @@ func TestReconcile_SymlinkNormalization_REQ_LNGHZN_S5_T2(t *testing.T) {
 	symWorktree := filepath.Join(linkDir, "task-09")
 
 	// git reports the resolved path; the issue recorded the symlinked path.
-	worktrees := []Meta{{Path: realWorktree, Branch: "task/task-09"}}
+	worktrees := []Meta{{Path: realWorktree, Branch: "task/task-09", IssueID: "task-09"}}
 	issues := map[string]*materialize.Issue{
 		"task-09": {ID: "task-09", Status: ops.StatusInProgress, ClaimedBy: "w", WorktreePath: symWorktree},
 	}
@@ -330,7 +357,7 @@ func TestReconcile_UnclaimedWorktreeIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 	// Issue references an existing worktree but holds no live claim (ClaimedBy empty):
 	// per the contract this is an ORPHAN (worktree with no live claim), not bound.
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-08", Branch: "task/task-08"},
+		{Path: "/repo/.worktrees/task-08", Branch: "task/task-08", IssueID: "task-08"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-08": {
@@ -354,8 +381,8 @@ func TestReconcile_UnclaimedWorktreeIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 func TestWorktreeListFlagsOrphans_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-09", Branch: "task/task-09"}, // bound (claimed)
-		{Path: "/repo/.worktrees/task-10", Branch: "task/task-10"}, // orphan (unclaimed)
+		{Path: "/repo/.worktrees/task-09", Branch: "task/task-09", IssueID: "task-09"}, // bound (claimed)
+		{Path: "/repo/.worktrees/task-10", Branch: "task/task-10", IssueID: "task-10"}, // orphan (unclaimed)
 	}
 	issues := map[string]*materialize.Issue{
 		"task-09": {ID: "task-09", Status: ops.StatusInProgress, ClaimedBy: "worker-1", WorktreePath: "/repo/.worktrees/task-09"},
@@ -463,7 +490,7 @@ func TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 func TestReconcile_TerminalForeignPathLocalWorktree_IsGCRemoval_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	worktrees := []Meta{
-		{Path: "/local/clone/.worktrees/task-foreign", Branch: "task/task-foreign"},
+		{Path: "/local/clone/.worktrees/task-foreign", Branch: "task/task-foreign", IssueID: "task-foreign"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-foreign": {
@@ -489,7 +516,7 @@ func TestReconcile_TerminalForeignPathLocalWorktree_IsGCRemoval_REQ_LNGHZN_S5_T2
 func TestReconcile_StaleClaimIsOrphanNotBound_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-stale", Branch: "task/task-stale"},
+		{Path: "/repo/.worktrees/task-stale", Branch: "task/task-stale", IssueID: "task-stale"},
 	}
 	// Claimed at t=100 with a 1-minute TTL; now is well past 100+60=160.
 	now := time.Unix(100_000, 0)
@@ -515,7 +542,7 @@ func TestReconcile_StaleClaimIsOrphanNotBound_REQ_LNGHZN_S5_T2(t *testing.T) {
 func TestReconcile_FreshClaimStillBound_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-fresh", Branch: "task/task-fresh"},
+		{Path: "/repo/.worktrees/task-fresh", Branch: "task/task-fresh", IssueID: "task-fresh"},
 	}
 	// Claimed at t=100 with a 60-minute TTL; now is well within 100+3600.
 	now := time.Unix(200, 0)
@@ -597,7 +624,7 @@ func TestReconcile_StaleClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2(t *testin
 func TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	worktrees := []Meta{
-		{Path: "/repo/.worktrees/task-11", Branch: "task/task-11"},
+		{Path: "/repo/.worktrees/task-11", Branch: "task/task-11", IssueID: "task-11"},
 	}
 	issues := map[string]*materialize.Issue{
 		"task-11": {ID: "task-11", Status: ops.StatusMerged, ClaimedBy: "worker-1", WorktreePath: "/repo/.worktrees/task-11"},

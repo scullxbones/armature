@@ -317,22 +317,57 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	}
 	adopted := false
 	adoptedFrom := ""
-	// Deliberate checked-out-branch policy: if the issue already owns a
-	// correctly bound worktree elsewhere, adopt it by moving the registered
-	// worktree to the canonical path. This preserves its branch and uncommitted
-	// files and avoids Git's branch-already-checked-out guard. An unbound or
-	// differently-bound worktree is never adopted; the detached-first path will
-	// fail closed and clean up its temporary registration instead.
+	// Deliberate checked-out-branch policy: if the issue already owns a bound
+	// worktree elsewhere, adopt it by moving the registered worktree to the
+	// canonical path. This preserves its branch and uncommitted files and avoids
+	// Git's branch-already-checked-out guard.
+	//
+	// Selection is by BINDING, never by branch. A worktree bound to this issue is
+	// this issue's worktree whether it is on the issue branch, detached mid-rebase,
+	// or parked on a scratch branch; filtering on branch here would skip it and
+	// provision a SECOND canonical worktree for the same issue. The materialized
+	// path would then select the new one at `arm merged`, leaving the original as
+	// the sole terminal GC candidate for a `git worktree remove --force` that
+	// discards whatever in-flight work it still held.
+	//
+	// An unbound or differently-bound worktree is never adopted; the
+	// detached-first path will fail closed and clean up its temporary
+	// registration instead.
 	inventory, inventoryErr := worktree.List(repoPath)
 	if inventoryErr != nil {
 		return fmt.Errorf("inspect existing worktrees: %w", inventoryErr)
 	}
 	for _, item := range inventory {
-		if worktree.NormalizePath(item.Path) == worktree.NormalizePath(worktreePath) || item.Branch != "refs/heads/"+branchName {
+		if worktree.NormalizePath(item.Path) == worktree.NormalizePath(worktreePath) {
 			continue
 		}
 		if item.IssueID != issueID {
-			return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
+			// Someone else's worktree holding our branch is an error, but only
+			// because of the branch: an unrelated worktree elsewhere is fine.
+			if item.Branch == "refs/heads/"+branchName {
+				return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
+			}
+			continue
+		}
+		if item.Branch != "refs/heads/"+branchName {
+			// Bound to this issue but not on the issue branch: detached (very
+			// likely mid-rebase) or moved to a scratch branch. FAIL CLOSED.
+			//
+			// Neither recovery is safe to automate. Moving it would relocate a
+			// working directory whose in-progress operation state under
+			// .git/worktrees/<n>/rebase-merge holds absolute paths that
+			// `git worktree move` does not rewrite; checking the branch out
+			// afterwards would destroy the very rebase the worker is running.
+			// Refusing preserves the uncommitted work by not acting on it, and
+			// matches how ambiguity is handled everywhere else in this lifecycle
+			// (I5: deterministic gates fail closed, a human disambiguates).
+			head := item.Branch
+			if head == "" {
+				head = "detached HEAD"
+			}
+			return fmt.Errorf(
+				"worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming",
+				item.Path, issueID, head, branchName, branchName)
 		}
 		if _, statErr := os.Stat(worktreePath); statErr == nil {
 			break

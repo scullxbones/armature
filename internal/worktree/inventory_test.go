@@ -109,21 +109,22 @@ func TestRootMembershipAndIssueLookupUseBoundaries(t *testing.T) {
 
 }
 
-// TestSelectByIssue_WorktreePathFirstAndFailsClosed_REQ_LNGHZN_S5 verifies the
-// WorktreePath-first precedence and fail-closed-on-ambiguity policy that keeps a
-// legacy explicit-path worktree and the canonical .worktrees/<id> worktree
-// sharing one marker from resolving to the wrong destructive target.
-func TestSelectByIssue_WorktreePathFirstAndFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
+// TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6 verifies that selection
+// reports THREE outcomes, not two. A single bool cannot distinguish "nothing to
+// act on" from "more than one candidate and no way to choose", and callers that
+// collapse the two skip a fail-closed gate instead of refusing (I5/I6).
+func TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6(t *testing.T) {
 	t.Parallel()
 
-	// No bound entry -> fail closed.
-	_, ok := SelectByIssue([]Meta{{Path: "/other", IssueID: "other"}}, "task-01", "/repo/.worktrees/task-01")
-	assert.False(t, ok)
+	// No bound entry -> NotFound. There is genuinely nothing to act on; a
+	// caller may legitimately fall through to a read-only gate lookup.
+	_, res := SelectByIssue([]Meta{{Path: "/other", IssueID: "other"}}, "task-01", "/repo/.worktrees/task-01")
+	assert.Equal(t, NotFound, res)
 
-	// Exactly one bound entry -> returned as-is regardless of recorded path.
+	// Exactly one bound entry -> Bound, regardless of recorded path.
 	single := []Meta{{Path: "/repo/.worktrees/task-01", IssueID: "task-01"}}
-	got, ok := SelectByIssue(single, "task-01", "")
-	require.True(t, ok)
+	got, res := SelectByIssue(single, "task-01", "")
+	require.Equal(t, Bound, res)
 	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
 
 	// Two bound entries + recorded path -> the recorded-path entry wins.
@@ -131,20 +132,51 @@ func TestSelectByIssue_WorktreePathFirstAndFailsClosed_REQ_LNGHZN_S5(t *testing.
 		{Path: "/legacy/explicit", IssueID: "task-01"},
 		{Path: "/repo/.worktrees/task-01", IssueID: "task-01"},
 	}
-	got, ok = SelectByIssue(dup, "task-01", "/repo/.worktrees/task-01")
-	require.True(t, ok)
+	got, res = SelectByIssue(dup, "task-01", "/repo/.worktrees/task-01")
+	require.Equal(t, Bound, res)
 	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
 
-	// Two bound entries + empty recorded path -> fail closed (ambiguous).
-	_, ok = SelectByIssue(dup, "task-01", "")
-	assert.False(t, ok)
+	// Two bound entries + empty recorded path -> Ambiguous, NOT NotFound. This
+	// is the distinction the old bool erased: the caller must refuse, not treat
+	// it as "no worktree" and continue.
+	_, res = SelectByIssue(dup, "task-01", "")
+	assert.Equal(t, Ambiguous, res)
 
-	// Two bound entries + recorded path matching neither -> fail closed.
-	_, ok = SelectByIssue(dup, "task-01", "/somewhere/else")
-	assert.False(t, ok)
+	// Two bound entries + recorded path matching neither -> Ambiguous.
+	_, res = SelectByIssue(dup, "task-01", "/somewhere/else")
+	assert.Equal(t, Ambiguous, res)
+}
 
-	assert.Equal(t, 2, CountByIssue(dup, "task-01"))
-	assert.Equal(t, 0, CountByIssue(dup, "missing"))
+// TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6 pins the difference
+// between the two questions. Existence asks "is any worktree bound to this
+// issue?" and answers YES where selection refuses, because finding one PREVENTS
+// a destructive act (doctor releasing a live claim) rather than causing one.
+func TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
+	t.Parallel()
+
+	dup := []Meta{
+		{Path: "/legacy/explicit", IssueID: "task-01"},
+		{Path: "/repo/.worktrees/task-01", IssueID: "task-01"},
+	}
+
+	// The defining case: selection is Ambiguous here, existence is true. A live
+	// claim owning two bound worktrees must never be reported as having none.
+	_, res := SelectByIssue(dup, "task-01", "")
+	require.Equal(t, Ambiguous, res)
+	assert.True(t, AnyBound(dup, "task-01", ""))
+
+	// No bound entry -> false.
+	assert.False(t, AnyBound([]Meta{{Path: "/other", IssueID: "other"}}, "task-01", ""))
+
+	// One bound entry, no recorded path -> true.
+	single := []Meta{{Path: "/legacy/explicit", IssueID: "task-01"}}
+	assert.True(t, AnyBound(single, "task-01", ""))
+
+	// Recorded path present: it must match a bound entry. A bound worktree at a
+	// different path belongs to another clone's claim, so it is not evidence
+	// this clone's recorded worktree is alive.
+	assert.True(t, AnyBound(dup, "task-01", "/repo/.worktrees/task-01"))
+	assert.False(t, AnyBound(single, "task-01", "/repo/.worktrees/task-01"))
 }
 
 // TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5 verifies a managed
