@@ -44,7 +44,7 @@ func worktreePathExists(path string) (bool, error) {
 }
 
 // isWorktreeOf checks if a worktree at worktreePath is registered to the git
-// repository at repoPath. It uses the shared marker-aware inventory so claim's
+// repository at repoPath. It uses the shared binding-aware inventory so claim's
 // foreign-repository guard cannot drift from list, GC, merged, or Doctor.
 func isWorktreeOf(repoPath, worktreePath string) bool {
 	worktrees, err := worktree.List(repoPath)
@@ -345,7 +345,7 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// must be observed before it can be refused.
 	var bound []worktree.Meta
 	for _, item := range inventory {
-		if item.IssueID == issueID {
+		if item.Binding == issueID {
 			bound = append(bound, item)
 			continue
 		}

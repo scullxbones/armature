@@ -215,7 +215,7 @@ func newWorktreeGCCmd() *cobra.Command {
 			skipped := []string{}
 
 			for _, selected := range result.GCRemovals {
-				issue, ok := issues[selected.IssueID]
+				issue, ok := issues[selected.Binding]
 				if !ok {
 					continue
 				}
@@ -223,13 +223,13 @@ func newWorktreeGCCmd() *cobra.Command {
 				outcome, err := removeWorktreeAtPathTracked(ctx.RepoPath, *issue, selected.Path, cmd.ErrOrStderr())
 				switch {
 				case err != nil:
-					failed = append(failed, selected.IssueID)
+					failed = append(failed, selected.Binding)
 				case outcome == worktreeRemoved:
-					removed = append(removed, selected.IssueID)
+					removed = append(removed, selected.Binding)
 				default:
 					// worktreeSkipped: not found by branch, or binding mismatch.
 					// Nothing was removed, so it must not be reported as removed.
-					skipped = append(skipped, selected.IssueID)
+					skipped = append(skipped, selected.Binding)
 				}
 			}
 

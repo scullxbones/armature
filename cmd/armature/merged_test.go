@@ -48,14 +48,14 @@ func TestRemoveWorktreeForIssueTracked_FailsClosedOnUnreadableInventory_REQ_LNGH
 }
 
 // TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5
-// verifies that when more than one worktree carries the issue's marker and none
+// verifies that when more than one worktree carries the issue's binding and none
 // uniquely matches the recorded WorktreePath (a legacy explicit-path worktree
 // alongside the canonical .worktrees/<id> one, with an empty WorktreePath), the
 // merged violation gate FAILS CLOSED with an error rather than returning
 // ok=false ("nothing to gate"). Returning ok=false would let `arm merged`
 // append the merged op and exit 0 without inspecting either candidate's hook
 // log — a fail-OPEN gate violating I5 (deterministic gates fail closed) and I6
-// (done ≠ merged). This mirrors how gc treats duplicate markers as GCAmbiguous
+// (done ≠ merged). This mirrors how gc treats duplicate bindings as GCAmbiguous
 // and exits non-zero (TestReconcile_GCAmbiguousDuplicateMarkersRemovesNothing).
 func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(t *testing.T) {
 	repo := setupRepoWithTask(t)
@@ -67,7 +67,7 @@ func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(
 	require.NoError(t, claimCmd.Execute())
 
 	// Create a SECOND, legacy explicit-path worktree and bind it to the SAME
-	// issue marker, producing a duplicate-marker set.
+	// issue binding, producing a duplicate-binding set.
 	legacyPath := filepath.Join(t.TempDir(), "legacy-worktree")
 	run(t, repo, "git", "worktree", "add", legacyPath, "-b", "legacy/task-01")
 	legacyGitDir, err := resolveWorktreeGitDir(legacyPath)
@@ -76,10 +76,10 @@ func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(
 		[]byte("task-01\n"), 0o600))
 
 	// With an empty recorded WorktreePath, SelectByIssue cannot disambiguate the
-	// two marker-bound worktrees. The gate must surface an error, not (false,nil).
+	// two binding-bound worktrees. The gate must surface an error, not (false,nil).
 	issue := materialize.Issue{ID: "task-01", Type: "task"}
 	_, gateErr := issueWorktreeHasViolations(repo, issue)
-	require.Error(t, gateErr, "ambiguous marker-bound worktrees must fail closed, not report zero violations")
+	require.Error(t, gateErr, "ambiguous binding-bound worktrees must fail closed, not report zero violations")
 	assert.Contains(t, gateErr.Error(), "ambiguous", "error should name the ambiguity condition")
 }
 

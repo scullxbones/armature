@@ -13,15 +13,15 @@ import (
 type Meta struct {
 	Path   string
 	Branch string
-	// IssueID is the authoritative worktree→issue binding, read from the
-	// worktree's own armature-issue-id marker file (the same binding the
+	// Binding is the authoritative worktree→issue binding, read from the
+	// worktree's own armature-issue-id binding file (the same binding the
 	// removal layer verifies). When
 	// set, it — not the path basename — determines the worktree's issue
 	// identity during reconciliation, so a slash-bearing issue ID (or any ID
 	// that does not round-trip through filepath.Base) is classified correctly.
-	// An empty IssueID falls back to the path basename, preserving behavior for
+	// An empty Binding falls back to the path basename, preserving behavior for
 	// callers/tests that do not populate the binding.
-	IssueID string
+	Binding string
 }
 
 // ReconcileResult holds the classification of all worktrees and detected anomalies.
@@ -36,7 +36,7 @@ type ReconcileResult struct {
 	GCRemovalSet []string
 	// GCRemovals carries the exact selected worktree metadata for each ID in
 	// GCRemovalSet. Callers must remove these paths, not look them up again by
-	// issue ID, because multiple marker-bound worktrees can exist for one issue.
+	// issue ID, because multiple binding-bound worktrees can exist for one issue.
 	GCRemovals []Meta
 	// GCAmbiguous lists terminal issues with more than one candidate and no
 	// uniquely recorded path. Ambiguous candidates are never removed.
@@ -49,7 +49,7 @@ type ReconcileResult struct {
 //
 // Classification is driven from THIS clone's on-disk worktrees (the []Meta), not
 // from the git-replicated absolute issue.WorktreePath. Each local worktree's
-// authoritative marker identity is preferred (with a path-basename fallback for
+// authoritative binding identity is preferred (with a path-basename fallback for
 // legacy callers), then classified by the issue's status AND claim staleness:
 //   - terminal issue (merged/cancelled) -> GCRemovalSet (a clone-local terminal
 //     worktree is gc-ready even when the recorded WorktreePath points at a foreign
@@ -85,20 +85,20 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	}
 
 	// recordedPathMatches tracks the exact local path recorded by a live claim.
-	// A wrong-path marker for the same issue is still an orphan and must not hide
+	// A wrong-path binding for the same issue is still an orphan and must not hide
 	// the recorded-path ghost.
 	recordedPathMatches := make(map[string]bool)
 	gcCandidates := make(map[string][]Meta)
 
 	// First pass: drive classification from THIS clone's on-disk worktrees.
-	// Identity is the armature-issue-id binding (wt.IssueID) and nothing else.
+	// Identity is the armature-issue-id binding (wt.Binding) and nothing else.
 	// A worktree carrying no binding is Unrecognized — its directory basename is
 	// NOT an identity and must never be promoted to one. Inferring an issue from
 	// the basename would report a live claim as BOUND while doctor and the
 	// delivery gate, which both require the binding, reject the very same
 	// worktree: the anomaly would be suppressed exactly where an agent reads it.
 	for _, wt := range worktrees {
-		issueID := wt.IssueID
+		issueID := wt.Binding
 		issue := issues[issueID]
 		if issueID == "" || issue == nil {
 			result.Unrecognized = append(result.Unrecognized, wt.Path)
@@ -113,7 +113,7 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 			gcCandidates[issueID] = append(gcCandidates[issueID], wt)
 		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
 			// A claim's absolute WorktreePath identifies the clone that owns the
-			// claim. A marker in this clone is not enough to call a local path
+			// claim. A binding in this clone is not enough to call a local path
 			// bound when the materialized claim points at another clone; classify
 			// that local checkout as an orphan so it cannot be mistaken for the
 			// claimant's live worktree.
@@ -129,7 +129,7 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	}
 
 	// Select terminal worktrees by exact recorded path where available. If the
-	// recorded path cannot disambiguate multiple marker-bound candidates, leave
+	// recorded path cannot disambiguate multiple binding-bound candidates, leave
 	// the issue out of the removal set rather than guessing.
 	for issueID, candidates := range gcCandidates {
 		issue := issues[issueID]
@@ -171,10 +171,10 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	sort.Strings(result.Ghosts)
 	sort.Strings(result.GCRemovalSet)
 	sort.Slice(result.GCRemovals, func(i, j int) bool {
-		if result.GCRemovals[i].IssueID == result.GCRemovals[j].IssueID {
+		if result.GCRemovals[i].Binding == result.GCRemovals[j].Binding {
 			return result.GCRemovals[i].Path < result.GCRemovals[j].Path
 		}
-		return result.GCRemovals[i].IssueID < result.GCRemovals[j].IssueID
+		return result.GCRemovals[i].Binding < result.GCRemovals[j].Binding
 	})
 	sort.Strings(result.GCAmbiguous)
 	sort.Strings(result.Unrecognized)

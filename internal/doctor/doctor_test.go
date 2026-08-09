@@ -185,7 +185,7 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
 
-	// A managed worktree under .worktrees/ carrying no issue binding marker.
+	// A managed worktree under .worktrees/ carrying no issue binding.
 	strayPath := filepath.Join(repoDir, ".worktrees", "stray")
 	run("git", "worktree", "add", "-b", "stray-branch", strayPath)
 

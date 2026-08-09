@@ -340,8 +340,8 @@ func TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2(t *testing.T) 
 // verifies that the delivery gate cannot be silently bypassed by running
 // `arm transition` from a checkout other than the one a story was actually
 // claimed into. Before the fix, isClaimedWorktreeForIssue only inspected the
-// invoking checkout's own armature-issue-id marker; invoking from the main
-// coordinator repo (never claimed, no marker) made the story-type gate
+// invoking checkout's own armature-issue-id binding; invoking from the main
+// coordinator repo (never claimed, no binding) made the story-type gate
 // probe return false and skip the gate entirely -- with
 // SkippedDeliveryGate: false recorded, leaving no audit trail that anything
 // was bypassed. See
@@ -367,7 +367,7 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 
 	// Invoke the transition from the MAIN repo checkout, not the worktree the
 	// story was claimed into. Before the fix, this made
-	// isClaimedWorktreeForIssue read the main repo's own (absent) marker,
+	// isClaimedWorktreeForIssue read the main repo's own (absent) binding,
 	// return false, and skip the gate -- letting the dirty claimed worktree
 	// pass "done" undetected.
 	_, err = runTrls(t, repo, "transition", "--issue", "gate-story-02", "--to", "done", "--outcome", "test", "--force")
@@ -379,12 +379,12 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 // reproduces the self-unassign delivery-gate bypass: `arm unassign` is
 // self-service with no permission check and clears ClaimedBy via a
 // transition->open op, but it does not touch the worktree's
-// armature-issue-id marker or its working tree contents. A worker could
+// armature-issue-id binding or its working tree contents. A worker could
 // previously claim a story into a worktree, make dirty/out-of-scope/
 // uncommitted changes, self-unassign, and then `transition --to done
 // --force` — since the gate was keyed solely on ClaimedBy != "", it never
 // ran against the still-bound, still-dirty worktree. The gate must now run
-// against any worktree whose marker still names this issue, regardless of
+// against any worktree whose binding still names this issue, regardless of
 // materialized claim state.
 func TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
@@ -403,7 +403,7 @@ func TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZ
 	_, err = runTrls(t, repo, "unassign", "--issue", "gate-story-released-01")
 	require.NoError(t, err)
 
-	// The released worktree still carries its armature-issue-id marker (kept
+	// The released worktree still carries its armature-issue-id binding (kept
 	// so it can be reused safely) and is now dirtied — exactly the exploit
 	// scenario: claim, dirty, self-unassign, done --force.
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
@@ -443,9 +443,9 @@ func TestTransitionDoneReopenedThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4
 // TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGHZN_S4_T2
 // verifies the legitimate case the gate must still allow: a story is
 // claimed, its worktree is later fully removed and pruned (no lingering
-// marker anywhere), and it is released. Since no worktree anywhere still
-// carries this issue's marker, the coordinator-level completion flow stays
-// exempt, distinct from the self-unassign exploit above where the marker
+// binding anywhere), and it is released. Since no worktree anywhere still
+// carries this issue's binding, the coordinator-level completion flow stays
+// exempt, distinct from the self-unassign exploit above where the binding
 // and dirty contents linger.
 func TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
@@ -478,7 +478,7 @@ func TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGH
 // resolveClaimedStoryWorktree located the claimed worktree by first finding
 // whichever worktree had refs/heads/feat/<id> checked out
 // (deriveBranchName + findWorktreePathByBranch) and only then checked its
-// marker file -- so a claimed worktree that wasn't currently on its story
+// binding file -- so a claimed worktree that wasn't currently on its story
 // branch (detached HEAD mid-rebase/mid-bisect, or checked out to a scratch
 // branch) was invisible to the scan and the gate silently skipped, exactly
 // as in the original bug. See
@@ -505,7 +505,7 @@ func TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2(t *tes
 	// Leave the claimed worktree in a detached HEAD, as if mid-rebase or
 	// mid-bisect: no worktree now has refs/heads/feat/gate-story-03 checked
 	// out, so a branch-first scan finds nothing even though the worktree's
-	// own armature-issue-id marker still names gate-story-03.
+	// own armature-issue-id binding still names gate-story-03.
 	run(t, wt, "git", "checkout", "--detach")
 
 	// Invoke the transition from the MAIN repo checkout, not the (now
@@ -542,7 +542,7 @@ func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t
 	require.NoError(t, err)
 
 	// Simulate manual removal and pruning after claim. This removes the only
-	// marker file, while materialized state still records the story as claimed.
+	// binding file, while materialized state still records the story as claimed.
 	run(t, repo, "git", "worktree", "remove", wt, "--force")
 	run(t, repo, "git", "worktree", "prune")
 
@@ -554,14 +554,14 @@ func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t
 
 // TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_REQ_LNGHZN_S4
 // reproduces the open review-thread bug: a task is claimed (creating a
-// worktree+marker), self-unassigned (clearing ClaimedBy), then amended to an
-// unmapped type (epic) — WITHOUT the worktree marker ever being removed.
+// worktree+binding), self-unassigned (clearing ClaimedBy), then amended to an
+// unmapped type (epic) — WITHOUT the worktree binding ever being removed.
 // Before the fix, the gate's default trigger was keyed off
 // `ClaimedBy != "" || Type in {task,bug,feature}`: after unassign clears
 // ClaimedBy and the amend retypes away from task/bug/feature, BOTH halves of
 // that predicate go false, and the (task-only) story-specific worktree scan
 // never runs for a non-story type, so the gate was skipped outright even
-// though the worktree's own armature-issue-id marker still names this issue
+// though the worktree's own armature-issue-id binding still names this issue
 // and the tree is dirty. deliverygateRequired must catch this by looking for
 // a live binding first, independent of Type/ClaimedBy.
 func TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_REQ_LNGHZN_S4(t *testing.T) {
@@ -584,7 +584,7 @@ func TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_RE
 	_, err = runTrls(t, repo, "amend", "gate-unassign-retype-01", "--type", "epic")
 	require.NoError(t, err)
 
-	// The lingering worktree still carries its armature-issue-id marker and
+	// The lingering worktree still carries its armature-issue-id binding and
 	// is now dirtied — the gate must still catch this instead of treating
 	// the unassigned, retyped-to-epic issue as exempt.
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
@@ -920,7 +920,7 @@ func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testin
 
 // TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2 verifies that the delivery
 // gate fails closed when the claimed worktree's HEAD is on some branch other
-// than the expected task/<issueID> branch. The armature-issue-id marker file
+// than the expected task/<issueID> branch. The armature-issue-id binding file
 // checked by verifyIssueWorktreeBinding persists in .git regardless of which
 // branch is checked out, so a worker could check out an unrelated scratch
 // branch after claiming, commit clean, correctly-scoped, correctly-referenced

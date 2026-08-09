@@ -59,12 +59,12 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //   - claimed/in-progress + missing worktree: `arm claim --worktree` records the
 //     task's worktree path (the canonical `.worktrees/<issue-id>` path for new
 //     claims), so a claimed or in-progress issue whose recorded path has no live
-//     marker-bound worktree registered against repoPath indicates the worktree was
+//     binding-bound worktree registered against repoPath indicates the worktree was
 //     torn down (or its git metadata corrupted) out from under an active claim —
 //     the same class of failure this fix pass exists to recover from, independent
 //     of whether the TTL has expired yet. This check is skipped entirely — for
 //     every issue, not just the ones it would otherwise flag — whenever the
-//     marker-aware inventory cannot positively confirm which worktrees are live
+//     binding-aware inventory cannot positively confirm which worktrees are live
 //     (repoPath empty, not a git repo, or any other git failure). Treating
 //     "couldn't determine" the same as "confirmed missing" would misfire on every
 //     currently claimed/in-progress issue in the graph from a single transient git
@@ -116,7 +116,7 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 		// List the complete local inventory here rather than only the canonical
 		// .worktrees root. Claims made before managed auto-provisioning can carry
 		// an explicit legacy WorktreePath outside that root; if that path is still
-		// marker-bound and registered in this clone, it is live and must not be
+		// binding-bound and registered in this clone, it is live and must not be
 		// repaired as a missing worktree.
 		inventory, err := worktree.List(repoPath)
 		if err != nil {

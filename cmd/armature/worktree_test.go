@@ -242,7 +242,7 @@ func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *te
 	_, statErr := os.Stat(canonicalPath)
 	assert.True(t, os.IsNotExist(statErr), "GC must remove the exact recorded canonical path")
 	_, statErr = os.Stat(legacyPath)
-	assert.NoError(t, statErr, "GC must not remove a duplicate marker at an external legacy path")
+	assert.NoError(t, statErr, "GC must not remove a duplicate binding at an external legacy path")
 }
 
 // TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2 verifies
@@ -324,7 +324,7 @@ func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.NoError(t, statErr, "dry-run must not remove the worktree")
 }
 
-// setupAmbiguousGCRepo builds a repo where a terminal issue has two marker-bound
+// setupAmbiguousGCRepo builds a repo where a terminal issue has two binding-bound
 // candidate worktrees under .worktrees/ and no uniquely recorded path, so
 // reconcile classifies it as GCAmbiguous. Returns the repo path and the issue ID.
 func setupAmbiguousGCRepo(t *testing.T) (string, string) {
@@ -337,7 +337,7 @@ func setupAmbiguousGCRepo(t *testing.T) (string, string) {
 	_, err = runTrls(t, repo, "create", "--id", "task-ambig", "--title", "Ambiguous", "--type", "task", "--scope", "ambig.go")
 	require.NoError(t, err)
 
-	// Two marker-bound candidates under .worktrees/ with no recorded path to
+	// Two binding-bound candidates under .worktrees/ with no recorded path to
 	// disambiguate (the issue was never claimed with a worktree).
 	for _, leaf := range []string{"task-ambig-a", "task-ambig-b"} {
 		p := filepath.Join(repo, ".worktrees", leaf)

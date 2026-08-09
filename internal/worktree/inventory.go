@@ -10,8 +10,8 @@ import (
 )
 
 // List returns the complete, non-prunable worktree inventory for repoPath.
-// Identity is read from each worktree's binding marker; branch and path are
-// observations only. A failed git listing or unreadable marker fails closed.
+// Identity is read from each worktree's binding; branch and path are
+// observations only. A failed git listing or unreadable binding fails closed.
 func List(repoPath string) ([]Meta, error) {
 	// #nosec G204 - git and its arguments are controlled by Armature.
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
@@ -34,7 +34,7 @@ func List(repoPath string) ([]Meta, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read worktree binding for %s: %w", block.path, err)
 		}
-		result = append(result, Meta{Path: block.path, Branch: block.branch, IssueID: issueID})
+		result = append(result, Meta{Path: block.path, Branch: block.branch, Binding: issueID})
 	}
 	return result, nil
 }
@@ -66,8 +66,8 @@ func ResolveGitDir(worktreePath string) (string, error) {
 	return gitDir, nil
 }
 
-// ReadBinding reads the current issue marker, falling back to the legacy task
-// marker. Missing markers mean an unbound worktree; unreadable markers fail
+// ReadBinding reads the current issue binding, falling back to the legacy task
+// binding. Missing bindings mean an unbound worktree; unreadable bindings fail
 // closed so inventory consumers never silently downgrade a corrupted binding.
 func ReadBinding(gitDir string) (string, error) {
 	for _, name := range []string{"armature-issue-id", "armature-task-id"} {
@@ -84,7 +84,7 @@ func ReadBinding(gitDir string) (string, error) {
 }
 
 // ListManaged returns the inventory entries directly under the canonical
-// repository-local .worktrees root. It deliberately retains marker identity
+// repository-local .worktrees root. It deliberately retains binding identity
 // and detached state from List so all lifecycle consumers use one policy.
 func ListManaged(repoPath string) ([]Meta, error) {
 	all, err := List(repoPath)
@@ -228,7 +228,7 @@ func AnyBound(items []Meta, id, worktreePath string) bool {
 func boundEntries(items []Meta, id string) []Meta {
 	var bound []Meta
 	for _, item := range items {
-		if item.IssueID == id {
+		if item.Binding == id {
 			bound = append(bound, item)
 		}
 	}

@@ -133,7 +133,7 @@ func unboundWorktreeOnBranch(worktrees []worktree.Meta, issue materialize.Issue)
 	}
 	wantRef := "refs/heads/" + branchName
 	for _, candidate := range worktrees {
-		if candidate.IssueID == "" && candidate.Branch == wantRef {
+		if candidate.Binding == "" && candidate.Branch == wantRef {
 			return candidate.Path
 		}
 	}
@@ -222,9 +222,9 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 }
 
 // removeWorktreeAtPathTracked removes exactly selectedPath after refreshing the
-// inventory and revalidating its marker binding. GC passes the path selected by
-// reconciliation; it must not re-resolve the issue's worktree by marker alone
-// because a legacy and a canonical worktree can share one marker identity.
+// inventory and revalidating its binding. GC passes the path selected by
+// reconciliation; it must not re-resolve the issue's worktree by binding alone
+// because a legacy and a canonical worktree can share one binding identity.
 func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selectedPath string, errWriter io.Writer) (worktreeRemoveOutcome, error) {
 	items, err := worktree.List(repoPath)
 	if err != nil {
@@ -242,9 +242,9 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if !found {
 		return worktreeSkipped, nil
 	}
-	if selected.IssueID != issue.ID {
+	if selected.Binding != issue.ID {
 		_, _ = fmt.Fprintf(errWriter, "Warning: worktree at %s is now bound to %s, not %s; skipping removal\n",
-			selected.Path, selected.IssueID, issue.ID)
+			selected.Path, selected.Binding, issue.ID)
 		return worktreeSkipped, nil
 	}
 
