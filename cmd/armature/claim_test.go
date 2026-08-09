@@ -638,16 +638,11 @@ func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T)
 	_, err = canonicalWorktreePath(root, "..")
 	assert.Error(t, err)
 
-	// On platforms where filepath.Separator is "/" (e.g., Linux), backslash is
-	// a valid filename character and should be accepted as part of an ID.
-	// On Windows where filepath.Separator is "\", we'd reject "team\task-1".
-	// Don't add special Windows-only logic; let the current separator guide the behavior.
-	if filepath.Separator == '/' {
-		// On Linux/Unix, backslash is a valid character
-		path, err := canonicalWorktreePath(root, "team\\task-1")
-		require.NoError(t, err, "backslash should be accepted on Unix-like systems")
-		assert.Equal(t, filepath.Join(root, ".worktrees", "team\\task-1"), path)
-	}
+	// Backslashes are rejected on every platform: append-only logs can be
+	// replayed on a host where they are path separators.
+	_, err = canonicalWorktreePath(root, "team\\task-1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "path separators")
 }
 
 // TestDeriveBranchName verifies that deriveBranchName returns correct branch names for all issue types.
@@ -1739,6 +1734,84 @@ func TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4(t *testing.T)
 	bindingBytes, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
 	require.NoError(t, err)
 	assert.Equal(t, "task-01", strings.TrimSpace(string(bindingBytes)), "worktree must be bound to the claimed issue")
+}
+
+// TestClaimProvisionExcludesManagedWorktrees_REQ_LNGHZN_S5 verifies that a
+// successful fresh `arm claim --worktree` protects the linked worktree from a
+// later broad `git add .`, including repositories created before bootstrap
+// began adding the .worktrees/ exclusion.
+func TestClaimProvisionExcludesManagedWorktrees_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	excludeBefore, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(excludeBefore), ".worktrees/", "fixture must model an existing installation without the managed-worktree exclusion")
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, claim.Execute())
+
+	// This is the user-visible regression: a linked worktree must not be staged
+	// as a gitlink by the ordinary repository-wide staging command.
+	run(t, repo, "git", "add", ".")
+	staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
+	assert.NotContains(t, staged, ".worktrees/task-01", "managed worktree must remain excluded from broad staging")
+}
+
+// TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5
+// exercises the public re-claim path for an installation created before
+// bootstrap started adding .worktrees/ to .git/info/exclude.  A canonical
+// worktree that already exists is just as dangerous to stage accidentally as
+// a freshly provisioned one.
+func TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", worktreePath)
+
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	excludeBefore, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(excludeBefore), ".worktrees/", "fixture must model an older installation")
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, claim.Execute())
+
+	excludeAfter, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(excludeAfter), ".worktrees/", "successful re-claim must repair the managed-worktree exclusion")
+	run(t, repo, "git", "add", ".")
+	staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
+	assert.NotContains(t, staged, ".worktrees/task-01", "existing managed worktree must remain excluded from broad staging")
+}
+
+// TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5 verifies the ordering
+// contract at the CLI seam: exclusion installation is a claim-time safety
+// precondition, so failure leaves no claim op, no status change, and no
+// worktree path behind for a later command to misinterpret.
+func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	require.NoError(t, os.Remove(excludePath))
+	require.NoError(t, os.Mkdir(excludePath, 0o700), "a directory at the exclusion-file path makes its write fail deterministically")
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	err := claim.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exclude managed worktree directory")
+
+	status, err := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, ops.StatusOpen+"\n", status, "failed exclusion setup must leave the issue unclaimed")
+	path, err := runTrls(t, repo, "show", "task-01", "--field", "worktree_path")
+	require.NoError(t, err)
+	assert.Equal(t, "\n", path, "failed exclusion setup must not record a managed worktree path")
+	_, statErr := os.Stat(filepath.Join(repo, ".worktrees", "task-01"))
+	assert.True(t, os.IsNotExist(statErr), "failed exclusion setup must not create a worktree")
 }
 
 // TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4

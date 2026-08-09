@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -49,6 +50,9 @@ func newCreateCmd() *cobra.Command {
 
 			if id == "" {
 				id = fmt.Sprintf("%s-%d", nodeType, nowEpoch())
+			}
+			if err := issueid.Validate(id); err != nil {
+				return err
 			}
 
 			payload := ops.Payload{

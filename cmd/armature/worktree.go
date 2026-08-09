@@ -165,12 +165,15 @@ func newWorktreeGCCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if dryRun {
-				// Dry run: just report what would be removed
+				// Dry-run must report the same anomalous ambiguity that a real run
+				// would refuse, so automation never treats this preview as all-clear.
 				if format == "json" || format == "agent" {
 					jsonResult := map[string]interface{}{
 						"dry_run":            true,
 						"would_remove":       result.GCRemovalSet,
 						"would_remove_count": len(result.GCRemovalSet),
+						"ambiguous":          result.GCAmbiguous,
+						"ambiguous_count":    len(result.GCAmbiguous),
 					}
 					if err := writeWorktreeJSON(cmd, jsonResult); err != nil {
 						return err
@@ -184,8 +187,14 @@ func newWorktreeGCCmd() *cobra.Command {
 					} else {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), "dry-run: no worktrees to remove")
 					}
+					if len(result.GCAmbiguous) > 0 {
+						_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "AMBIGUOUS GC CANDIDATES (nothing would be removed):")
+						for _, id := range result.GCAmbiguous {
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s\n", id)
+						}
+					}
 				}
-				return nil
+				return gcExitError(nil, result.GCAmbiguous)
 			}
 
 			// Actually remove worktrees. Route each removal through the
@@ -201,7 +210,7 @@ func newWorktreeGCCmd() *cobra.Command {
 			skipped := []string{}
 
 			for _, selected := range result.GCRemovals {
-				issue, ok := issues[selected.IssueID]
+				issue, ok := issues[selected.Binding]
 				if !ok {
 					continue
 				}
@@ -209,13 +218,13 @@ func newWorktreeGCCmd() *cobra.Command {
 				outcome, err := removeWorktreeAtPathTracked(ctx.RepoPath, *issue, selected.Path, cmd.ErrOrStderr())
 				switch {
 				case err != nil:
-					failed = append(failed, selected.IssueID)
+					failed = append(failed, selected.Binding)
 				case outcome == worktreeRemoved:
-					removed = append(removed, selected.IssueID)
+					removed = append(removed, selected.Binding)
 				default:
 					// worktreeSkipped: not found by branch, or binding mismatch.
 					// Nothing was removed, so it must not be reported as removed.
-					skipped = append(skipped, selected.IssueID)
+					skipped = append(skipped, selected.Binding)
 				}
 			}
 

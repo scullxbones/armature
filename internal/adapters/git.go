@@ -626,10 +626,9 @@ func (c *Client) HeadSHA() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// RemoveWorktree removes a linked worktree at the given path. It runs
-// "git worktree remove --force <path>" so that it works even if the worktree
-// has uncommitted changes. Returns an error if git reports a failure (e.g.
-// the path is not a registered worktree).
+// RemoveWorktree removes a linked worktree at the given path without forcing
+// deletion. Git therefore rejects dirty tracked or untracked content, which
+// preserves work until an operator deliberately resolves it.
 // MoveWorktree relocates a linked worktree's directory and updates git's worktree
 // registration atomically via `git worktree move`. Unlike a manual rename paired
 // with RemoveWorktree/AddWorktree, this cannot leave a partially-registered
@@ -644,9 +643,20 @@ func (c *Client) MoveWorktree(oldPath, newPath string) error {
 }
 
 func (c *Client) RemoveWorktree(path string) error {
-	cmd := c.cmd("worktree", "remove", "--force", path)
+	cmd := c.cmd("worktree", "remove", path)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree remove %s: %w\n%s", path, err, out)
+	}
+	return nil
+}
+
+// RemovePartiallyProvisionedWorktree forcibly removes the exact worktree path
+// that claim created while rolling back a failed provision. Lifecycle teardown
+// must use RemoveWorktree so it cannot discard worker changes.
+func (c *Client) RemovePartiallyProvisionedWorktree(path string) error {
+	cmd := c.cmd("worktree", "remove", "--force", path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("force-remove partial worktree %s: %w\n%s", path, err, out)
 	}
 	return nil
 }

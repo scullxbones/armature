@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/importbf"
+	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
@@ -44,6 +45,9 @@ func newImportCmd() *cobra.Command {
 			}
 
 			for _, item := range items {
+				if err := issueid.Validate(item.ID); err != nil {
+					return fmt.Errorf("item %s: %w", item.ID, err)
+				}
 				if item.Type != "" && !issuetype.IsValid(item.Type) {
 					return fmt.Errorf("item %s: invalid type %q: valid types are %s",
 						item.ID, item.Type, strings.Join(issuetype.All(), ", "))

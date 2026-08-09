@@ -45,9 +45,9 @@ arm worktree list
 ```
 
 This classifies worktrees into categories:
-- **Bound:** Worktree exists and has an active claim (the normal state)
-- **Orphan:** Worktree exists on disk but no active claim holds it (needs reclamation or cleanup)
-- **Ghost:** Issue has a recorded worktree_path but the worktree doesn't exist on disk
+- **Bound:** A worktree whose issue binding names a live claim at that claim's recorded path (the healthy steady state).
+- **Orphan:** A worktree whose issue binding names a known issue with no live claim; it is real work with no current owner, not an error by itself.
+- **Ghost:** The inverse of an orphan: a live claim whose recorded worktree path has no worktree on disk. A terminal issue whose worktree is gone is expected, not a ghost.
 - **GC Removal Set:** Merged/cancelled issues with an existing worktree (ready for cleanup)
 
 ### Reclamation & Garbage Collection

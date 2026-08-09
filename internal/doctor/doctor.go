@@ -16,6 +16,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // Severity of a check finding.
@@ -140,6 +141,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	checks = append(checks, checkD6UncitedIssues(allIssues))
 	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
 	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
+	checks = append(checks, checkD9UnrecognizedManagedWorktrees(repoPath, allIssues, now))
 
 	return Report{Checks: checks}, nil
 }
@@ -510,4 +512,25 @@ func checkD7WorkerIDMismatches(warnings []string) Finding {
 		f.Items = warnings
 	}
 	return f
+}
+
+// checkD9UnrecognizedManagedWorktrees reports worktrees under the managed root
+// whose binding is absent or names no known issue. Inventory failure is an
+// explicit warning, never a false "OK": plain doctor remains diagnostic while
+// --strict refuses to treat unknown lifecycle state as healthy.
+func checkD9UnrecognizedManagedWorktrees(repoPath string, allIssues map[string]*materialize.Issue, now time.Time) Finding {
+	if repoPath == "" {
+		return Finding{Check: "D9", Severity: SeverityWarning, Message: "Unable to inspect managed worktrees: repository path is unavailable"}
+	}
+	items, err := worktree.ListManaged(repoPath)
+	if err != nil {
+		return Finding{Check: "D9", Severity: SeverityWarning, Message: fmt.Sprintf("Unable to inspect managed worktrees: %v", err)}
+	}
+	result := worktree.Reconcile(items, allIssues, now, worktree.CanonicalRoot(repoPath))
+	if len(result.Unrecognized) == 0 {
+		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
+	}
+	paths := append([]string(nil), result.Unrecognized...)
+	sort.Strings(paths)
+	return Finding{Check: "D9", Severity: SeverityWarning, Message: "Managed worktrees with no issue binding", Items: paths}
 }

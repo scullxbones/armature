@@ -91,7 +91,7 @@ func TestPlanFixes_UsesCanonicalMarkerInventory_REQ_LNGHZN_S5_T2(t *testing.T) {
 	require.NoError(t, err)
 
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
-	assert.Empty(t, actions, "a canonical marker-bound worktree must satisfy doctor --fix")
+	assert.Empty(t, actions, "a canonical binding-bound worktree must satisfy doctor --fix")
 }
 
 func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testing.T) {
@@ -103,7 +103,7 @@ func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testi
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	runGit(t, repoDir, "worktree", "add", "-b", "task/legacy-task-01", legacyPath)
 	gitDir := worktreeGitDir(t, legacyPath)
-	// The inventory must retain the legacy marker binding while honoring the
+	// The inventory must retain the legacy binding while honoring the
 	// explicit path recorded by claims made before canonical provisioning.
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "armature-task-id"), []byte("legacy-task-01\n"), 0o644))
 
@@ -120,7 +120,7 @@ func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testi
 	require.NoError(t, err)
 
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
-	assert.Empty(t, actions, "a live marker-bound worktree at the recorded legacy path must not be repaired")
+	assert.Empty(t, actions, "a live binding-bound worktree at the recorded legacy path must not be repaired")
 }
 
 // TestPlanFixes_AmbiguousBindingDoesNotReleaseLiveClaim_REQ_LNGHZN_S5_T6 pins
@@ -157,12 +157,14 @@ func TestPlanFixes_AmbiguousBindingDoesNotReleaseLiveClaim_REQ_LNGHZN_S5_T6(t *t
 	require.NoError(t, err)
 
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
-	assert.Empty(t, actions, "an ambiguous binding is still evidence the claim is alive; it must never be released")
+	require.Len(t, actions, 1, "an ambiguous binding must be reported without releasing the live claim")
+	assert.Empty(t, actions[0].Ops, "the advisory must not append a release op")
+	assert.Contains(t, actions[0].Reason, "ambiguous worktree binding")
 }
 
 // TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGHZN_S5
-// covers the marker-is-authoritative policy: a claimed issue owned by the fixer
-// with issue.WorktreePath == "" but a live worktree marker-bound to it at a
+// covers the binding-is-authoritative policy: a claimed issue owned by the fixer
+// with issue.WorktreePath == "" but a live worktree binding-bound to it at a
 // non-canonical (legacy) path must NOT be false-released. Before the fix the
 // loop skipped any non-canonical worktree when no path was recorded, so an
 // active legacy claim was wrongly reset to open.
@@ -172,7 +174,7 @@ func TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGH
 	stateDir := filepath.Join(issuesDir, "state")
 	logPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
 	repoDir := initGitRepo(t)
-	// Live worktree bound to the issue's marker at a legacy path outside
+	// Live worktree bound to the issue at a legacy path outside
 	// .worktrees, while the claim recorded NO WorktreePath.
 	legacyPath := filepath.Join(t.TempDir(), "legacy-nopath-01")
 	runGit(t, repoDir, "worktree", "add", "-b", "task/legacy-nopath-01", legacyPath)
@@ -191,7 +193,7 @@ func TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGH
 	require.NoError(t, err)
 
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
-	assert.Empty(t, actions, "a live marker-bound legacy worktree must suppress remediation even without a recorded WorktreePath")
+	assert.Empty(t, actions, "a live binding-bound legacy worktree must suppress remediation even without a recorded WorktreePath")
 }
 
 func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {

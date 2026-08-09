@@ -16,6 +16,7 @@ import (
 	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/harnesshook"
+	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worktree"
@@ -44,7 +45,7 @@ func worktreePathExists(path string) (bool, error) {
 }
 
 // isWorktreeOf checks if a worktree at worktreePath is registered to the git
-// repository at repoPath. It uses the shared marker-aware inventory so claim's
+// repository at repoPath. It uses the shared binding-aware inventory so claim's
 // foreign-repository guard cannot drift from list, GC, merged, or Doctor.
 func isWorktreeOf(repoPath, worktreePath string) bool {
 	worktrees, err := worktree.List(repoPath)
@@ -121,22 +122,11 @@ func deriveBranchName(issueType, issueID string) string {
 // canonicalWorktreePath validates the issue ID before it is used in any
 // filesystem or git operation. Slash-bearing IDs are rejected to ensure
 // prefix-free worktree paths — one managed worktree can never contain another.
-// Absolute IDs and traversal outside the repository's canonical .worktrees root
-// are rejected before the claim op is appended.
+// Absolute, traversal, and separator-bearing IDs are rejected before the claim
+// op is appended.
 func canonicalWorktreePath(repoPath, issueID string) (string, error) {
-	if issueID == "" || filepath.IsAbs(issueID) {
-		return "", fmt.Errorf("invalid issue ID %q for canonical worktree path", issueID)
-	}
-	// Reject any ID containing path separators. Slash-bearing IDs like "team/task-1"
-	// would nest one managed worktree inside another, creating a recursive-deletion
-	// hazard: removing the worktree for "team" would delete the worktree for "team/task-1".
-	if strings.Contains(issueID, "/") || strings.Contains(issueID, string(filepath.Separator)) {
-		return "", fmt.Errorf("issue ID %q must not contain path separators: slash-bearing IDs would nest one managed worktree inside another", issueID)
-	}
-	// Explicitly reject "." and ".." as bare IDs to maintain ID→path injectivity.
-	// (The filepath.Rel containment check below may not catch these edge cases.)
-	if issueID == "." || issueID == ".." {
-		return "", fmt.Errorf("issue ID %q must not contain '.' or '..' path components", issueID)
+	if err := issueid.Validate(issueID); err != nil {
+		return "", err
 	}
 	root := worktree.CanonicalRoot(repoPath)
 	path := worktree.CanonicalPath(repoPath, issueID)
@@ -343,7 +333,7 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// must be observed before it can be refused.
 	var bound []worktree.Meta
 	for _, item := range inventory {
-		if item.IssueID == issueID {
+		if item.Binding == issueID {
 			bound = append(bound, item)
 			continue
 		}
@@ -426,7 +416,7 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 			if moveErr := gitClient.MoveWorktree(worktreePath, adoptedFrom); moveErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to restore adopted worktree at %s: %v\n", adoptedFrom, moveErr)
 			}
-		} else if rmErr := gitClient.RemoveWorktree(worktreePath); rmErr != nil {
+		} else if rmErr := gitClient.RemovePartiallyProvisionedWorktree(worktreePath); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to clean up partial worktree at %s: %v\n", worktreePath, rmErr)
 		}
 		return fmt.Errorf("%s: %w", label, cause)
@@ -471,7 +461,7 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 
 	if adopted {
 		// Keep any existing base/parent metadata untouched. The only new
-		// claim-time marker that is safe to add is the immutable branch binding.
+		// claim-time record that is safe to add is the immutable branch binding.
 		if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
 			return cleanupPartialWorktree(err, "persist claimed branch metadata")
 		}
@@ -624,7 +614,7 @@ const claimedBranchFileName = deliverygate.ClaimedBranchFileName
 // overwritten by a later, possibly different, value). Skips writing entirely
 // when branchName is "" — a legitimately branchless issue type (e.g. epic,
 // story before it gets a worktree) has nothing to record, and writing an
-// empty marker would be indistinguishable from "not yet recorded" on the
+// empty record would be indistinguishable from "not yet recorded" on the
 // read side, defeating the pre-migration fallback in
 // deliverygate.RecordedClaimedBranch.
 func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
@@ -649,23 +639,11 @@ func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
 	return nil
 }
 
-// clearBranchPointMetadata unsets the persisted parent-branch git config and
-// removes the base-commit file for branchName/worktreePath. Called from `arm
-// merged` alongside RemoveWorktree so that if the branch is later deleted and
-// the same branch name is reused for a genuinely different parent, the
-// "if absent" guards in writeParentBranchConfigIfAbsent/
-// writeBaseCommitFileIfAbsent don't see a stale leftover value and skip
-// recording the fresh, correct one. Must be called BEFORE gitClient.RemoveWorktree,
-// since resolveWorktreeGitDir needs the worktree to still exist to locate its
-// git directory. Best-effort: errors are ignored, matching the rest of the
-// cleanup in this area (RemoveWorktree failures are the only ones that block
-// `arm merged`).
-func clearBranchPointMetadata(gitClient *adapters.Client, worktreePath, branchName string) {
+// clearParentBranchMetadata unsets shared parent-branch configuration after a
+// successful removal. Per-worktree base and claimed-branch files disappear
+// with their worktree and must stay intact if removal fails.
+func clearParentBranchMetadata(gitClient *adapters.Client, branchName string) {
 	_ = gitClient.UnsetGitConfig(parentBranchConfigKey(branchName)) //nolint:errcheck // best-effort cleanup
-	if actualGitDir, err := resolveWorktreeGitDir(worktreePath); err == nil {
-		_ = os.Remove(filepath.Join(actualGitDir, baseCommitFileName))    //nolint:errcheck // best-effort cleanup
-		_ = os.Remove(filepath.Join(actualGitDir, claimedBranchFileName)) //nolint:errcheck // best-effort cleanup
-	}
 }
 
 // updateIssueIDFile writes the issue ID to the armature-issue-id file in the worktree's .git directory.
@@ -730,8 +708,8 @@ armature-issue-id file if the worktree already exists.`,
 			}
 
 			// Validate and resolve the canonical path before any claim append or
-			// filesystem/git mutation. This permits slash-bearing IDs but rejects
-			// absolute and traversal IDs that would escape .worktrees.
+			// filesystem/git mutation. Separator-bearing, absolute, and traversal
+			// IDs are rejected rather than becoming filesystem paths.
 			worktreePath, err = canonicalWorktreePath(ctx.RepoPath, issueID)
 			if err != nil {
 				return err
@@ -849,6 +827,16 @@ armature-issue-id file if the worktree already exists.`,
 						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
 					appendOp(ctx, logPath, noteOp2) //nolint:errcheck,gosec
 				}
+			}
+
+			// The canonical managed-worktree root must be excluded before the claim
+			// is recorded. Older installations may not have received bootstrap's
+			// exclusion; leaving the claim in place when this safety precondition
+			// fails would make a later broad `git add .` stage a linked worktree as
+			// a gitlink. This intentionally applies to both new and existing
+			// canonical worktrees.
+			if err := updateGitExclude(ctx.RepoPath, ".worktrees/", ""); err != nil {
+				return fmt.Errorf("exclude managed worktree directory: %w", err)
 			}
 
 			op := ops.Op{

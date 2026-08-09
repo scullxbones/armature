@@ -10,8 +10,8 @@ import (
 )
 
 // List returns the complete, non-prunable worktree inventory for repoPath.
-// Identity is read from each worktree's binding marker; branch and path are
-// observations only. A failed git listing or unreadable marker fails closed.
+// Identity is read from each worktree's binding file; branch and path are
+// observations only. A failed git listing or unreadable binding fails closed.
 func List(repoPath string) ([]Meta, error) {
 	// #nosec G204 - git and its arguments are controlled by Armature.
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
@@ -34,7 +34,7 @@ func List(repoPath string) ([]Meta, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read worktree binding for %s: %w", block.path, err)
 		}
-		result = append(result, Meta{Path: block.path, Branch: block.branch, IssueID: issueID})
+		result = append(result, Meta{Path: block.path, Branch: block.branch, Binding: issueID})
 	}
 	return result, nil
 }
@@ -66,8 +66,8 @@ func ResolveGitDir(worktreePath string) (string, error) {
 	return gitDir, nil
 }
 
-// ReadBinding reads the current issue marker, falling back to the legacy task
-// marker. Missing markers mean an unbound worktree; unreadable markers fail
+// ReadBinding reads the current issue binding, falling back to the legacy task
+// binding. Missing bindings mean an unbound worktree; unreadable bindings fail
 // closed so inventory consumers never silently downgrade a corrupted binding.
 func ReadBinding(gitDir string) (string, error) {
 	for _, name := range []string{"armature-issue-id", "armature-task-id"} {
@@ -84,7 +84,7 @@ func ReadBinding(gitDir string) (string, error) {
 }
 
 // ListManaged returns the inventory entries directly under the canonical
-// repository-local .worktrees root. It deliberately retains marker identity
+// repository-local .worktrees root. It deliberately retains binding identity
 // and detached state from List so all lifecycle consumers use one policy.
 func ListManaged(repoPath string) ([]Meta, error) {
 	all, err := List(repoPath)
@@ -194,6 +194,36 @@ func SelectByIssue(items []Meta, id, worktreePath string) (Meta, Resolution) {
 	return Meta{}, Ambiguous
 }
 
+// BindingLocation describes how a claim's binding appears in this clone's
+// inventory. It preserves the distinction between absence, a correct recorded
+// location, a live moved worktree, and duplicate ownership.
+type BindingLocation int
+
+const (
+	BindingNone BindingLocation = iota
+	BindingAtRecordedPath
+	BindingElsewhere
+	BindingAmbiguous
+)
+
+// LocateBinding reports the binding location and the one live path when it is
+// unambiguous. A recorded path is historical claim state; git worktree move
+// can legitimately change the local path while retaining the same binding.
+func LocateBinding(items []Meta, id, recordedPath string) (BindingLocation, string) {
+	bound := boundEntries(items, id)
+	if len(bound) == 0 {
+		return BindingNone, ""
+	}
+	if len(bound) > 1 {
+		return BindingAmbiguous, ""
+	}
+	path := bound[0].Path
+	if recordedPath == "" || NormalizePathAllowingMissing(path) == NormalizePathAllowingMissing(recordedPath) {
+		return BindingAtRecordedPath, path
+	}
+	return BindingElsewhere, path
+}
+
 // AnyBound reports whether any inventory entry is bound to id.
 //
 // This is an EXISTENCE question: "does this issue still own a live worktree
@@ -207,28 +237,19 @@ func SelectByIssue(items []Meta, id, worktreePath string) (Meta, Resolution) {
 // would release a live worker's claim. Where SelectByIssue reports Ambiguous,
 // this reports true.
 //
-// When worktreePath is recorded it must match a bound entry: an absolute
-// recorded path identifies the clone that owns the claim, so a bound worktree
-// at some other path is not evidence that THIS clone's recorded worktree is
-// alive. With no recorded path the binding alone is sufficient, which is what
-// keeps a legacy explicit-path worktree from being mistaken for a dead claim.
+// A binding at a different path is still positive evidence: `git worktree
+// move` retains the binding while the historical claim path remains unchanged.
+// Doctor reports that path drift but must never release the live claim.
 func AnyBound(items []Meta, id, worktreePath string) bool {
-	for _, item := range boundEntries(items, id) {
-		if worktreePath == "" {
-			return true
-		}
-		if NormalizePathAllowingMissing(item.Path) == NormalizePathAllowingMissing(worktreePath) {
-			return true
-		}
-	}
-	return false
+	location, _ := LocateBinding(items, id, worktreePath)
+	return location != BindingNone
 }
 
 // boundEntries returns the entries whose binding names id.
 func boundEntries(items []Meta, id string) []Meta {
 	var bound []Meta
 	for _, item := range items {
-		if item.IssueID == id {
+		if item.Binding == id {
 			bound = append(bound, item)
 		}
 	}
