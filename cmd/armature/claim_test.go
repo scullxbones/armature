@@ -569,6 +569,28 @@ func TestCanonicalWorktreePathRejectsTraversalBeforeMutation_REQ_LNGHZN_S5_T1(t 
 	assert.Error(t, err)
 }
 
+// TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5 verifies that an
+// ID containing "." or ".." path components is rejected even when it does not
+// escape the canonical root. "team/../task-1" cleans to "task-1" (inside root)
+// but aliases the distinct valid ID "task-1", so both would wedge at the same
+// .worktrees/task-1 path. The containment check alone cannot catch this; the
+// ID→path mapping must stay injective. arm create / dag apply do not reject
+// such IDs upstream, so this guard is reachable.
+func TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "repo")
+
+	// The plain ID resolves normally.
+	plain, err := canonicalWorktreePath(root, "task-1")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, ".worktrees", "task-1"), plain)
+
+	// The ".."-aliased ID that would collide with it must be rejected.
+	for _, id := range []string{"team/../task-1", "a/./b", "..", ".", "team/.."} {
+		_, err := canonicalWorktreePath(root, id)
+		assert.Error(t, err, "ID %q with '.'/'..' path components must be rejected", id)
+	}
+}
+
 func TestClaimRejectsTraversalBeforeClaimAppend_REQ_LNGHZN_S5_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -578,7 +600,11 @@ func TestClaimRejectsTraversalBeforeClaimAppend_REQ_LNGHZN_S5_T1(t *testing.T) {
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "../escaped", "--worktree"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "escapes canonical worktree root")
+	// "../escaped" is rejected before any mutation. It now trips the "."/".."
+	// path-component guard (which runs before the containment check); either
+	// rejection is acceptable, so assert the offending ID is named rather than a
+	// single message.
+	assert.Contains(t, err.Error(), "../escaped")
 	assert.NoDirExists(t, filepath.Join(repo, ".worktrees"), "invalid IDs must not create a worktree root")
 	assert.NoDirExists(t, filepath.Join(filepath.Dir(repo), "escaped"), "invalid IDs must not mutate outside the repository")
 }
