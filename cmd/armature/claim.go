@@ -19,6 +19,7 @@ import (
 	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -211,12 +212,65 @@ type priorClaimState struct {
 	worktreePath string
 }
 
+// claimStillOwnedBy reports whether issueID is, right now, claimed by
+// workerID with exactly claimTimestamp as its ClaimedAt (the timestamp of
+// the specific claim op this process appended, not just "some claim by this
+// worker"). It re-loads store from the op log to see the latest materialized
+// state, including any claim op a second worker may have appended after this
+// worker's claim went stale mid-provisioning.
+//
+// This is the single ownership check shared by rollbackClaim (before
+// appending a compensating op) and createWorktreeAndBranch's
+// cleanupPartialWorktree (before a destructive filesystem action). Both
+// exist to close the same race: ops are append-only and replay last-write-
+// wins, so acting on stale in-memory state here would land the action after
+// a legitimate second claim and destroy it — a compensating transition op
+// would revert the new claimant's status, and `git worktree remove --force`
+// would discard whatever uncommitted work the new claimant had already
+// started. Comparing ClaimedAt (not just ClaimedBy) is what distinguishes
+// "still my claim" from "same worker re-claimed later", which must also be
+// treated as superseded.
+//
+// If the reload itself fails, ownership is reported as false (fail safe):
+// an unreadable store is not evidence this worker still owns the claim, so
+// the caller must skip the destructive/compensating action just as it would
+// for a confirmed takeover. The reload error is returned so callers can
+// mention it in their own warning or error.
+func claimStillOwnedBy(store *snapshot.Store, issueID, workerID string, claimTimestamp int64) (bool, error) {
+	if _, err := store.Load(context.Background()); err != nil {
+		return false, err
+	}
+	issue := store.Issue(issueID)
+	return issue != nil && issue.ClaimedBy == workerID && issue.ClaimedAt == claimTimestamp, nil
+}
+
 // rollbackClaim releases (or restores) the claim after a post-claim worktree
 // setup step fails, then returns the error to surface. A same-worker ACTIVE
 // claim keeps its prior status; a stale same-worker claim or a different-worker
 // takeover is released to open. opLabel names the failed step in the returned
 // error. Shared by the create-worktree and update-issue-ID failure paths.
-func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel string, cause error, prior priorClaimState) error {
+//
+// Before touching shared state, it re-confirms via claimStillOwnedBy that
+// this worker still owns the exact claim (claimTimestamp) it is compensating
+// for. If a second worker legitimately took over the claim while this
+// process was still provisioning (the first worker's claim went stale
+// mid-provisioning), appending the compensating op unconditionally would
+// land AFTER the second worker's claim op in the append-only log; on replay,
+// last-write-wins means that compensating op would erase the second worker's
+// active claim or revert the issue's status out from under them. Anything
+// other than "my claim, my timestamp" means skip the write entirely.
+func rollbackClaim(
+	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
+	cause error, prior priorClaimState, claimTimestamp int64,
+) error {
+	owns, err := claimStillOwnedBy(store, issueID, workerID, claimTimestamp)
+	if err != nil {
+		return fmt.Errorf("%s: %w (claim superseded; no rollback appended: reload store failed: %v)", opLabel, cause, err)
+	}
+	if !owns {
+		return fmt.Errorf("%s: %w (claim superseded; no rollback appended)", opLabel, cause)
+	}
+
 	rollbackStatus := ops.StatusOpen
 	priorWasActive := prior.claimedBy == workerID &&
 		!claimPkg.IsClaimStale(prior.claimedAt, prior.lastHeartbeat, prior.claimingWorkerActivity, prior.claimTTL, nowEpoch())
@@ -266,7 +320,12 @@ func rollbackClaim(cmd *cobra.Command, logPath, issueID, workerID, opLabel strin
 // It uses a git client to create a worktree at the given path with a derived branch name.
 // If the branch is already checked out in another worktree or if worktree creation fails,
 // it returns an error (the user should reuse the existing worktree or unassign/reassign the task).
-func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue) error {
+//
+// stillOwns is consulted by cleanupPartialWorktree before any destructive
+// action on failure (see that closure below for why: the same claim-took-
+// longer-than-TTL race that motivates rollbackClaim's ownership recheck
+// applies here too, and --force discards uncommitted work).
+func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool) error {
 	// Determine branch name based on issue type
 	branchName := deriveBranchName(issue.Type, issueID)
 
@@ -412,6 +471,20 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// blocks a later re-claim (the path already exists but isn't bound to the
 	// issue). Cleanup is best-effort and logged if it itself fails.
 	cleanupPartialWorktree := func(cause error, label string) error {
+		// Re-check ownership immediately before doing anything destructive: by
+		// the time a post-provisioning step fails, this worker's claim may have
+		// gone stale and a second worker may have legitimately claimed the
+		// issue and be actively using a worktree bound at this same canonical
+		// path. Ops are append-only and replay last-write-wins, so that second
+		// worker's claim is now the truth regardless of what this process still
+		// believes; moving the path back over their worktree (adopted case) or
+		// `git worktree remove --force` (fresh case) would silently discard
+		// whatever work they had already started. Leaving the path alone is the
+		// only safe move once ownership cannot be confirmed.
+		if !stillOwns() {
+			fmt.Fprintf(os.Stderr, "worktree at %s superseded by a newer claim; leaving in place\n", worktreePath)
+			return fmt.Errorf("%s: %w", label, cause)
+		}
 		if adoptedFrom != "" {
 			if moveErr := gitClient.MoveWorktree(worktreePath, adoptedFrom); moveErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to restore adopted worktree at %s: %v\n", adoptedFrom, moveErr)
@@ -839,12 +912,33 @@ armature-issue-id file if the worktree already exists.`,
 				return fmt.Errorf("exclude managed worktree directory: %w", err)
 			}
 
+			// claimTimestamp is this process's own claim op timestamp, captured
+			// once here so it can be compared (not just ClaimedBy) against the
+			// materialized state later. A worker can re-claim the same issue
+			// serially; comparing only ClaimedBy would treat a later re-claim by
+			// the same worker as "still my claim" when it is really a different
+			// one, so both rollbackClaim and stillOwnsClaim below key off this
+			// exact timestamp.
+			claimTimestamp := nowEpoch()
 			op := ops.Op{
-				Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch(),
+				Type: ops.OpClaim, TargetID: issueID, Timestamp: claimTimestamp,
 				WorkerID: workerID, Payload: ops.Payload{TTL: ttl, WorktreePath: worktreePath},
 			}
 			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				return err
+			}
+
+			// stillOwnsClaim re-loads the store to confirm this worker's claim
+			// (at claimTimestamp) has not been superseded, before either
+			// rollbackClaim appends a compensating op or createWorktreeAndBranch's
+			// cleanup does anything destructive. See claimStillOwnedBy for why.
+			stillOwnsClaim := func() bool {
+				owns, err := claimStillOwnedBy(store, issueID, workerID, claimTimestamp)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warning: reload store to verify claim ownership failed: %v\n", err)
+					return false
+				}
+				return owns
 			}
 
 			// Refresh store after appending claim Op
@@ -877,14 +971,14 @@ armature-issue-id file if the worktree already exists.`,
 			// Worktree setup is deferred to here so it only happens after all claim
 			// validations pass and this worker has won the claim race.
 			if !worktreeExists {
-				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, *issue); err != nil {
-					return rollbackClaim(cmd, logPath, issueID, workerID, "create worktree", err, prior)
+				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, *issue, stillOwnsClaim); err != nil {
+					return rollbackClaim(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimTimestamp)
 				}
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-					return rollbackClaim(cmd, logPath, issueID, workerID, "update task ID file", err, prior)
+					return rollbackClaim(cmd, store, logPath, issueID, workerID, "update task ID file", err, prior, claimTimestamp)
 				}
 
 				// A pre-existing canonical worktree may already carry trusted
@@ -897,7 +991,7 @@ armature-issue-id file if the worktree already exists.`,
 				worktreeGitClient := adapters.New(worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
-						return rollbackClaim(cmd, logPath, issueID, workerID, "persist claimed branch metadata", err, prior)
+						return rollbackClaim(cmd, store, logPath, issueID, workerID, "persist claimed branch metadata", err, prior, claimTimestamp)
 					}
 				}
 			}

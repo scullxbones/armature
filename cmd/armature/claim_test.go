@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,7 +20,13 @@ import (
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/snapshot"
 )
+
+// alwaysOwns is the stillOwns callback for createWorktreeAndBranch tests
+// that are not exercising the ownership-supersession race; it preserves
+// pre-existing cleanup behavior (restore/force-remove on failure).
+func alwaysOwns() bool { return true }
 
 // setupRepoWithEpic creates a repo with an epic issue.
 func setupRepoWithEpic(t *testing.T) string {
@@ -766,7 +774,7 @@ func TestCreateWorktreeAndBranchFailsWhenWorktreeCannotBeCreated(t *testing.T) {
 	// Now try to create a second worktree with the same task/branch.
 	// This must fail closed rather than adopting an unbound worktree.
 	worktree2 := filepath.Join(t.TempDir(), "worktree2")
-	err := createWorktreeAndBranch(repo, worktree2, "task-01", issue)
+	err := createWorktreeAndBranch(repo, worktree2, "task-01", issue, alwaysOwns)
 	require.Error(t, err, "creating worktree with already-checked-out branch should fail")
 	assert.Contains(t, err.Error(), "worktree")
 }
@@ -780,7 +788,7 @@ func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *
 	require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, baseSHA), "adoption requires original claim provenance")
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 
 	require.NoError(t, err, "a correctly bound existing worktree should be adopted")
 	assert.DirExists(t, canonicalPath)
@@ -809,7 +817,7 @@ func TestCreateWorktreeAndBranchFailsClosedOnBoundDetachedWorktree_REQ_LNGHZN_S5
 	run(t, legacyPath, "git", "checkout", "--detach", head)
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 
 	require.Error(t, err, "a bound worktree that is not on the issue branch must fail closed")
 	assert.Contains(t, err.Error(), legacyPath, "the error must name the worktree the operator has to deal with")
@@ -841,7 +849,7 @@ func TestCreateWorktreeAndBranchFailsClosedOnAmbiguousBinding_REQ_LNGHZN_S5_T6(t
 	require.NoError(t, updateIssueIDFile(detachedPath, "task-01"))
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 
 	require.Error(t, err, "two worktrees sharing one binding must fail closed, not adopt the first")
 	assert.Contains(t, err.Error(), "bound to 2 worktrees")
@@ -862,7 +870,7 @@ func TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6
 	run(t, legacyPath, "git", "checkout", "-b", "scratch/experiment")
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 
 	require.Error(t, err, "a bound worktree parked on a scratch branch must fail closed")
 	assert.NoDirExists(t, canonicalPath, "no duplicate worktree may be provisioned")
@@ -894,7 +902,7 @@ func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *
 	require.NotEqual(t, parentTip, coordinatorTip)
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 	require.NoError(t, err)
 
 	gitPath, err := resolveWorktreeGitDir(canonicalPath)
@@ -918,11 +926,176 @@ func TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5(t
 	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"})
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no recorded branch-point provenance")
 	assert.DirExists(t, legacyPath, "failed adoption must restore the original worktree")
 	assert.NoDirExists(t, canonicalPath)
+}
+
+// TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded covers
+// the adoption (move-back) arm of cleanupPartialWorktree. It reuses the same
+// provenance-rejection failure as
+// TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5,
+// but with stillOwns reporting the claim has been superseded by a second
+// worker. cleanupPartialWorktree must not move the canonical path back to
+// legacyPath in that case: doing so would relocate whatever the second
+// worker's worktree now holds at the canonical path out from under them.
+func TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"},
+		func() bool { return false })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no recorded branch-point provenance")
+	assert.DirExists(t, canonicalPath, "a superseded claim must leave the second worker's worktree at the canonical path")
+	assert.NoDirExists(t, legacyPath, "a superseded claim must not move the worktree back to the legacy path")
+}
+
+// TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned covers
+// the non-adoption (force-remove) arm of cleanupPartialWorktree when stillOwns
+// confirms this worker still owns the claim: existing behavior (best-effort
+// `git worktree remove --force` of the partially provisioned worktree) must
+// be preserved. Failure is induced via an issue ID containing a space, which
+// deriveBranchName turns into an invalid git ref, so the worktree is added
+// detached but checkoutBranchInWorktree then fails.
+func TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	canonicalPath := filepath.Join(repo, ".worktrees", "bad-id")
+
+	err := createWorktreeAndBranch(repo, canonicalPath, "bad id", materialize.Issue{Type: "task"}, alwaysOwns)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checkout branch in worktree")
+	assert.NoDirExists(t, canonicalPath, "an owned claim's partial worktree must still be force-removed on failure")
+}
+
+// TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded is the
+// same failure as TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned
+// but with stillOwns reporting the claim has been superseded: the force-remove
+// must be skipped, leaving the (possibly now-adopted-by-someone-else) worktree
+// in place rather than discarding whatever it holds.
+func TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	canonicalPath := filepath.Join(repo, ".worktrees", "bad-id")
+
+	err := createWorktreeAndBranch(repo, canonicalPath, "bad id", materialize.Issue{Type: "task"},
+		func() bool { return false })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checkout branch in worktree")
+	assert.DirExists(t, canonicalPath, "a superseded claim must not force-remove a worktree that may now belong to someone else")
+}
+
+// setupSingleWorkerClaimStore claims issueID for workerID directly against the
+// op log (bypassing the claim command's worktree provisioning), and returns a
+// loaded store plus the timestamp of the appended claim op. Used by the
+// rollbackClaim ownership-recheck tests below, which need control over the
+// exact claim timestamp rollbackClaim is asked to compensate for.
+func setupSingleWorkerClaimStore(t *testing.T, ctx *config.Context, issueID, workerID string, claimTimestamp int64) *snapshot.Store {
+	t.Helper()
+	logPath := opsLogPath(ctx.IssuesDir, workerID)
+	claimOp := ops.Op{
+		Type: ops.OpClaim, TargetID: issueID, Timestamp: claimTimestamp,
+		WorkerID: workerID, Payload: ops.Payload{TTL: 60},
+	}
+	require.NoError(t, appendOp(ctx, logPath, claimOp))
+	store := newSnapshotStore(ctx)
+	_, err := store.Load(context.Background())
+	require.NoError(t, err)
+	return store
+}
+
+// rollbackClaimTestCmd builds a *cobra.Command wired with the executionState
+// rollbackClaim needs (mustState/appendHighStakesOp), mirroring the pattern
+// architecture_test.go uses to construct execution state without going
+// through the root command's PersistentPreRunE.
+func rollbackClaimTestCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{}
+	state := &executionState{ctx: ctx}
+	state.pusher, state.tracker = initPushDeps(ctx)
+	cmd.SetContext(context.WithValue(context.Background(), executionStateKey{}, state))
+	return cmd
+}
+
+// TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5 covers
+// the race the whole PR #95 review finding is about: worker-a's claim goes
+// stale mid-provisioning, worker-b legitimately claims the issue, and
+// worker-a's failure path then calls rollbackClaim for its own (now-stale)
+// claim. rollbackClaim must re-load the store, see worker-b now owns the
+// claim, and skip appending a compensating op entirely -- appending one would
+// land after worker-b's claim in the append-only log and, on replay, erase
+// worker-b's active claim.
+func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	claimTimestampA := nowEpoch()
+	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA)
+
+	// worker-b claims well past worker-a's TTL, so applyClaim treats worker-a's
+	// claim as stale and lets worker-b's claim through.
+	claimTimestampB := claimTimestampA + 60*60 + 1
+	logPathB := opsLogPath(ctx.IssuesDir, "worker-b")
+	claimOpB := ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: claimTimestampB,
+		WorkerID: "worker-b", Payload: ops.Payload{TTL: 60},
+	}
+	require.NoError(t, appendOp(ctx, logPathB, claimOpB))
+	_, err := store.Load(context.Background())
+	require.NoError(t, err)
+
+	cmd := rollbackClaimTestCmd(ctx)
+	logPathA := opsLogPath(ctx.IssuesDir, "worker-a")
+	prior := priorClaimState{status: ops.StatusOpen}
+	cause := fmt.Errorf("boom")
+
+	err = rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimTimestampA)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "superseded")
+	assert.Contains(t, err.Error(), "boom")
+
+	// No compensating op may have been appended: worker-b's claim must survive
+	// exactly as it was.
+	_, err = store.Load(context.Background())
+	require.NoError(t, err)
+	issue := store.Issue("task-01")
+	require.NotNil(t, issue)
+	assert.Equal(t, "worker-b", issue.ClaimedBy)
+	assert.Equal(t, claimTimestampB, issue.ClaimedAt)
+}
+
+// TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5
+// verifies existing behavior is preserved when the ownership recheck passes:
+// worker-a's claim is still the current one at the exact timestamp rollback
+// was called for, so the compensating op is appended as before.
+func TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	claimTimestampA := nowEpoch()
+	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA)
+
+	cmd := rollbackClaimTestCmd(ctx)
+	logPathA := opsLogPath(ctx.IssuesDir, "worker-a")
+	prior := priorClaimState{status: ops.StatusOpen}
+	cause := fmt.Errorf("boom")
+
+	err := rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimTimestampA)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "claim released")
+	assert.NotContains(t, err.Error(), "superseded")
+
+	_, err = store.Load(context.Background())
+	require.NoError(t, err)
+	issue := store.Issue("task-01")
+	require.NotNil(t, issue)
+	assert.Equal(t, ops.StatusOpen, issue.Status)
+	assert.Equal(t, "", issue.ClaimedBy)
 }
 
 // TestClaimDoesNotCreateWorktreeWhenOverlapFails verifies that when claim fails due to
