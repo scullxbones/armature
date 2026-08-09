@@ -559,23 +559,29 @@ func TestClaimStillAppendsClaimOpToLog(t *testing.T) {
 
 func TestCanonicalWorktreePathRejectsTraversalBeforeMutation_REQ_LNGHZN_S5_T1(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "repo")
-	path, err := canonicalWorktreePath(root, "team/task-1")
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, ".worktrees", "team", "task-1"), path)
 
+	// Slash-bearing IDs are now rejected to prevent nested worktree hazards
+	_, err := canonicalWorktreePath(root, "team/task-1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "path separators")
+
+	// Plain IDs without separators are accepted
+	path, err := canonicalWorktreePath(root, "team")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, ".worktrees", "team"), path)
+
+	// Traversal IDs are still rejected
 	_, err = canonicalWorktreePath(root, "../escaped")
 	assert.Error(t, err)
 	_, err = canonicalWorktreePath(root, filepath.Join(string(filepath.Separator), "escaped"))
 	assert.Error(t, err)
 }
 
-// TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5 verifies that an
-// ID containing "." or ".." path components is rejected even when it does not
-// escape the canonical root. "team/../task-1" cleans to "task-1" (inside root)
-// but aliases the distinct valid ID "task-1", so both would wedge at the same
-// .worktrees/task-1 path. The containment check alone cannot catch this; the
-// ID→path mapping must stay injective. arm create / dag apply do not reject
-// such IDs upstream, so this guard is reachable.
+// TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5 verifies that IDs
+// containing path separators or "." / ".." components are rejected. With separators
+// now banned entirely, IDs like "team/../task-1" and "a/./b" are rejected for
+// containing separators. Bare "." and ".." are still explicitly rejected to maintain
+// ID→path injectivity.
 func TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "repo")
 
@@ -584,10 +590,10 @@ func TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, ".worktrees", "task-1"), plain)
 
-	// The ".."-aliased ID that would collide with it must be rejected.
+	// IDs with separators or "." / ".." must be rejected.
 	for _, id := range []string{"team/../task-1", "a/./b", "..", ".", "team/.."} {
 		_, err := canonicalWorktreePath(root, id)
-		assert.Error(t, err, "ID %q with '.'/'..' path components must be rejected", id)
+		assert.Error(t, err, "ID %q must be rejected (separator or '.' / '..' component)", id)
 	}
 }
 
@@ -607,6 +613,41 @@ func TestClaimRejectsTraversalBeforeClaimAppend_REQ_LNGHZN_S5_T1(t *testing.T) {
 	assert.Contains(t, err.Error(), "../escaped")
 	assert.NoDirExists(t, filepath.Join(repo, ".worktrees"), "invalid IDs must not create a worktree root")
 	assert.NoDirExists(t, filepath.Join(filepath.Dir(repo), "escaped"), "invalid IDs must not mutate outside the repository")
+}
+
+// TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5 verifies that
+// slash-bearing issue IDs are rejected outright to prevent nested worktree hazards.
+// Without this guard, removing the worktree for "team" would recursively delete
+// the worktree for "team/task-1", losing uncommitted work.
+func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "repo")
+
+	// Slash-bearing IDs are rejected
+	_, err := canonicalWorktreePath(root, "team/task-1")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "path separators")
+
+	// Plain IDs without slashes are accepted
+	path, err := canonicalWorktreePath(root, "team")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, ".worktrees", "team"), path)
+
+	// Bare "." and ".." are still rejected
+	_, err = canonicalWorktreePath(root, ".")
+	assert.Error(t, err)
+	_, err = canonicalWorktreePath(root, "..")
+	assert.Error(t, err)
+
+	// On platforms where filepath.Separator is "/" (e.g., Linux), backslash is
+	// a valid filename character and should be accepted as part of an ID.
+	// On Windows where filepath.Separator is "\", we'd reject "team\task-1".
+	// Don't add special Windows-only logic; let the current separator guide the behavior.
+	if filepath.Separator == '/' {
+		// On Linux/Unix, backslash is a valid character
+		path, err := canonicalWorktreePath(root, "team\\task-1")
+		require.NoError(t, err, "backslash should be accepted on Unix-like systems")
+		assert.Equal(t, filepath.Join(root, ".worktrees", "team\\task-1"), path)
+	}
 }
 
 // TestDeriveBranchName verifies that deriveBranchName returns correct branch names for all issue types.
