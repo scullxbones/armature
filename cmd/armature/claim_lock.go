@@ -1,0 +1,58 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// acquireClaimLock takes an exclusive, non-blocking, per-issue advisory lock
+// scoped to this clone, serializing concurrent `arm claim` invocations against
+// the same issue within a single clone. It closes the destructive-filesystem
+// race described on createWorktreeAndBranch's cleanupPartialWorktree: the
+// ownership recheck there (stillOwns) ends before the destructive
+// `git worktree remove --force` / MoveWorktree call it guards, so a second
+// worker's claim landing in that exact window could still have its worktree
+// discarded. That race is inherently same-clone-only — a remote claimant
+// provisions into its own filesystem entirely and never touches this path —
+// so an OS-level file lock scoped to this clone is sufficient to make it
+// impossible rather than merely unlikely.
+//
+// The lock file lives in the MAIN repo's git common dir (resolved the same
+// way resolveWorktreeGitDir resolves any other worktree's git dir; for the
+// main repo this is simply <repoPath>/.git), so it is shared across every
+// linked worktree of this clone and survives worktree creation/removal.
+// It is intentionally never deleted: reacquiring it later (a legitimate
+// retry after release) just reopens and re-locks the same file.
+//
+// On success, the returned release func MUST be called (typically via
+// `defer`) to drop the lock; the OS also releases it if the process exits
+// without calling release. If the lock is already held by another process,
+// acquireClaimLock returns a clear, actionable error naming the issue.
+func acquireClaimLock(repoPath, issueID string) (release func(), err error) {
+	gitDir, err := resolveWorktreeGitDir(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve git dir for claim lock: %w", err)
+	}
+	lockPath := filepath.Join(gitDir, fmt.Sprintf("armature-claim-%s.lock", issueID))
+
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // path is built from a validated issue ID, not user-controlled
+	if err != nil {
+		return nil, fmt.Errorf("open claim lock file: %w", err)
+	}
+
+	locked, lockErr := tryFlock(f)
+	if lockErr != nil {
+		_ = f.Close() //nolint:errcheck // already returning lockErr; a close failure on the abandoned fd is not actionable
+		return nil, fmt.Errorf("acquire claim lock: %w", lockErr)
+	}
+	if !locked {
+		_ = f.Close() //nolint:errcheck // already returning the lock-held error; a close failure on the abandoned fd is not actionable
+		return nil, fmt.Errorf("another claim for %s is in progress in this clone", issueID)
+	}
+
+	return func() {
+		_ = unlockFlock(f) //nolint:errcheck // best-effort release; process exit also releases OS-level locks
+		_ = f.Close()      //nolint:errcheck // best-effort close in a release func with no error return
+	}, nil
+}

@@ -990,16 +990,16 @@ func TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded(t *test
 }
 
 // setupSingleWorkerClaimStore claims issueID for workerID directly against the
-// op log (bypassing the claim command's worktree provisioning), and returns a
-// loaded store plus the timestamp of the appended claim op. Used by the
+// op log (bypassing the claim command's worktree provisioning), stamping the
+// claim op with claimToken, and returns a loaded store. Used by the
 // rollbackClaim ownership-recheck tests below, which need control over the
-// exact claim timestamp rollbackClaim is asked to compensate for.
-func setupSingleWorkerClaimStore(t *testing.T, ctx *config.Context, issueID, workerID string, claimTimestamp int64) *snapshot.Store {
+// exact claim token rollbackClaim is asked to compensate for.
+func setupSingleWorkerClaimStore(t *testing.T, ctx *config.Context, issueID, workerID string, claimTimestamp int64, claimToken string) *snapshot.Store {
 	t.Helper()
 	logPath := opsLogPath(ctx.IssuesDir, workerID)
 	claimOp := ops.Op{
 		Type: ops.OpClaim, TargetID: issueID, Timestamp: claimTimestamp,
-		WorkerID: workerID, Payload: ops.Payload{TTL: 60},
+		WorkerID: workerID, Payload: ops.Payload{TTL: 60, ClaimToken: claimToken},
 	}
 	require.NoError(t, appendOp(ctx, logPath, claimOp))
 	store := newSnapshotStore(ctx)
@@ -1034,7 +1034,8 @@ func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *te
 	ctx.StateDir = getTestStateDir(t, repo)
 
 	claimTimestampA := nowEpoch()
-	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA)
+	claimTokenA := "token-worker-a"
+	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA, claimTokenA)
 
 	// worker-b claims well past worker-a's TTL, so applyClaim treats worker-a's
 	// claim as stale and lets worker-b's claim through.
@@ -1042,7 +1043,7 @@ func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *te
 	logPathB := opsLogPath(ctx.IssuesDir, "worker-b")
 	claimOpB := ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: claimTimestampB,
-		WorkerID: "worker-b", Payload: ops.Payload{TTL: 60},
+		WorkerID: "worker-b", Payload: ops.Payload{TTL: 60, ClaimToken: "token-worker-b"},
 	}
 	require.NoError(t, appendOp(ctx, logPathB, claimOpB))
 	_, err := store.Load(context.Background())
@@ -1053,19 +1054,21 @@ func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *te
 	prior := priorClaimState{status: ops.StatusOpen}
 	cause := fmt.Errorf("boom")
 
-	err = rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimTimestampA)
+	err = rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimTokenA)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "superseded")
 	assert.Contains(t, err.Error(), "boom")
 
-	// No compensating op may have been appended: worker-b's claim must survive
-	// exactly as it was.
+	// No compensating op may have been appended (or if one was, replay must
+	// discard it via IfClaimToken): worker-b's claim must survive exactly as
+	// it was.
 	_, err = store.Load(context.Background())
 	require.NoError(t, err)
 	issue := store.Issue("task-01")
 	require.NotNil(t, issue)
 	assert.Equal(t, "worker-b", issue.ClaimedBy)
 	assert.Equal(t, claimTimestampB, issue.ClaimedAt)
+	assert.Equal(t, "token-worker-b", issue.ClaimToken)
 }
 
 // TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5
@@ -1078,14 +1081,15 @@ func TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5(
 	ctx.StateDir = getTestStateDir(t, repo)
 
 	claimTimestampA := nowEpoch()
-	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA)
+	claimTokenA := "token-worker-a"
+	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA, claimTokenA)
 
 	cmd := rollbackClaimTestCmd(ctx)
 	logPathA := opsLogPath(ctx.IssuesDir, "worker-a")
 	prior := priorClaimState{status: ops.StatusOpen}
 	cause := fmt.Errorf("boom")
 
-	err := rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimTimestampA)
+	err := rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimTokenA)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "claim released")
 	assert.NotContains(t, err.Error(), "superseded")
@@ -1096,6 +1100,59 @@ func TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5(
 	require.NotNil(t, issue)
 	assert.Equal(t, ops.StatusOpen, issue.Status)
 	assert.Equal(t, "", issue.ClaimedBy)
+	assert.Equal(t, "", issue.ClaimToken)
+}
+
+// TestRollbackClaimSameWorkerSameSecondDistinctTokensPreventsClobber_REQ_LNGHZN_S5_T9
+// covers finding 3: ClaimedBy+ClaimedAt is not a unique claim identity because
+// nowEpoch() has 1-second resolution, so two claims by the SAME worker on the
+// SAME issue within the same second are otherwise indistinguishable. Here
+// worker-a claims twice at the identical timestamp (simulating a same-second
+// retry) with two distinct tokens; the first claim's rollback must be scoped
+// to its own token and must not clobber the second, still-active claim, even
+// though ClaimedBy and ClaimedAt alone cannot tell them apart.
+func TestRollbackClaimSameWorkerSameSecondDistinctTokensPreventsClobber_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	sameTimestamp := nowEpoch()
+	tokenFirst := "token-first"
+	tokenSecond := "token-second"
+	require.NotEqual(t, tokenFirst, tokenSecond, "distinct tokens are the whole point of this test")
+
+	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", sameTimestamp, tokenFirst)
+
+	// worker-a re-claims at the EXACT SAME timestamp (same second) with a new
+	// token. ClaimedAt is identical to the first claim; only ClaimToken differs.
+	logPathA := opsLogPath(ctx.IssuesDir, "worker-a")
+	secondClaimOp := ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: sameTimestamp,
+		WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: tokenSecond},
+	}
+	require.NoError(t, appendOp(ctx, logPathA, secondClaimOp))
+	_, err := store.Load(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, tokenSecond, store.Issue("task-01").ClaimToken, "the second same-second claim must be the materialized one")
+
+	cmd := rollbackClaimTestCmd(ctx)
+	prior := priorClaimState{status: ops.StatusOpen}
+	cause := fmt.Errorf("boom")
+
+	// The FIRST claim's rollback, keyed to tokenFirst, must be recognized as
+	// superseded even though ClaimedBy ("worker-a") and ClaimedAt (sameTimestamp)
+	// are identical to the second, still-active claim.
+	err = rollbackClaim(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, tokenFirst)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "superseded")
+
+	_, err = store.Load(context.Background())
+	require.NoError(t, err)
+	issue := store.Issue("task-01")
+	require.NotNil(t, issue)
+	assert.Equal(t, "worker-a", issue.ClaimedBy)
+	assert.Equal(t, tokenSecond, issue.ClaimToken, "the second claim must survive the first claim's rollback")
+	assert.NotEqual(t, ops.StatusOpen, issue.Status, "the second claim must not have been released to open")
 }
 
 // TestClaimDoesNotCreateWorktreeWhenOverlapFails verifies that when claim fails due to
