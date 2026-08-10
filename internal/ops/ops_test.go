@@ -224,6 +224,13 @@ func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 	}
 }
 
+func TestGenerateSchema_DocumentsClaimFields_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	schema := GenerateSchema()
+	assert.Contains(t, schema, "claim_token", "schema must document the claim op's claim_token field")
+	assert.Contains(t, schema, "if_claim_token", "schema must document the transition op's if_claim_token field")
+}
+
 func TestHeartbeatRateLimiter(t *testing.T) {
 	t.Parallel()
 	rl := NewRateLimiter()
