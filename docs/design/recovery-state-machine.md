@@ -217,9 +217,14 @@ Rollback's compensating `transition` op stamps `if_claim_token` with the exact
 token of the claim it is compensating for
 (`ops.Payload.IfClaimToken`). `materialize.applyTransition` treats a non-empty
 `if_claim_token` as a condition, not an instruction: it applies the op only if
-the issue's current `claim_token` still matches, `claimed_by` still matches
-the op's `WorkerID`, and the issue's status is not terminal (`done`, `merged`,
-`cancelled`) — otherwise it is a deterministic no-op. This makes the
+`Issue.ClaimHeldBy(WorkerID, IfClaimToken)` reports true, which requires the
+issue's status to be *exactly* `claimed` and its `claimed_by`/`claim_token` to
+match the op's `WorkerID`/`IfClaimToken` — otherwise it is a deterministic
+no-op. The exact-`claimed` requirement subsumes the old terminal-status check
+(`done`, `merged`, `cancelled` are all simply not `claimed`) and additionally
+covers the live non-terminal statuses `in-progress` and `blocked`, which also
+make the rollback a no-op; a separate terminal-status check is redundant and
+must not be reintroduced. This makes the
 compensating op safe regardless of where it lands in the log or what order it
 replays relative to a superseding claim: correctness is a property of replay,
 not of append-time ordering. `claim_token` is also why this closes the
@@ -246,6 +251,23 @@ before appending the claim op and holding it through the end of the command
 (including rollback and cleanup). A concurrent `arm claim` for the same issue
 in the same clone fails fast with a clear error instead of racing. See
 `cmd/armature/claim_lock.go`.
+
+**3. Deliberately out of scope.** The destructive cleanup in `claim.go`'s
+`cleanupPartialWorktree` acts only on a worktree this process just created or
+moved, at the canonical path, in this clone. The complete set of commands
+that mutate git worktrees is: `arm bootstrap` (the `_armature` worktree, a
+different path), `arm merged` (removes a worktree for an already-`done`
+issue), and `arm claim` (serialized in-clone by `acquireClaimLock`). `arm
+transition` never creates, moves, or opens a worktree — it appends an op and
+may run a read-only delivery gate. Therefore a transition landing inside the
+window between the `stillOwns()` recheck and the destructive call cannot
+corrupt anything: the resulting state is indistinguishable from the legal
+serial schedule in which cleanup completes and the transition lands
+immediately after. That ordering is always reachable and no lock can prevent
+it. Consequently, serializing `arm transition` through the per-issue claim
+lock is explicitly rejected: it removes no reachable bad state, and because
+`acquireClaimLock` is non-blocking and fails fast, it would make an unrelated
+concurrent `arm claim` turn ordinary transitions into hard errors.
 
 ---
 
