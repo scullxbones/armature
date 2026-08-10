@@ -59,3 +59,36 @@ func TestAcquireClaimLockIsPerIssue_REQ_LNGHZN_S5_T9(t *testing.T) {
 	require.NoError(t, err)
 	releaseB()
 }
+
+// TestAcquireClaimLockContractHoldsOnBuildPlatform_REQ_LNGHZN_S5_T9 pins the
+// contract acquireClaimLock relies on from internal/filelock's TryLock/Unlock
+// on whichever platform this test binary was built for
+// (internal/filelock/filelock_unix.go on unix,
+// internal/filelock/filelock_windows.go on windows): a first acquisition
+// must succeed, a concurrent second acquisition for the same issue must be
+// reported as held (not silently granted), and release must be genuine so a
+// later acquisition succeeds again. This is the same contract
+// internal/filelock/filelock_other.go's fail-closed fallback deliberately
+// refuses to provide on any platform that is neither unix nor windows — see
+// that file's tryLock, which returns (false, non-nil error) unconditionally
+// rather than (true, nil), so acquireClaimLock surfaces a hard error
+// instead of silently reporting success with no real exclusion. The CI
+// host running this test is unix, so the windows and "other" build
+// variants cannot be exercised at runtime here; see the task report's
+// TEST_EXCEPTION for the cross-compile verification of those variants.
+func TestAcquireClaimLockContractHoldsOnBuildPlatform_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	repo := initTempRepo(t)
+
+	release1, err := acquireClaimLock(repo, "contract-task")
+	require.NoError(t, err, "first acquisition on this build platform must succeed")
+
+	_, err = acquireClaimLock(repo, "contract-task")
+	require.Error(t, err, "a concurrent acquisition must be refused, never silently granted")
+
+	release1()
+
+	release2, err := acquireClaimLock(repo, "contract-task")
+	require.NoError(t, err, "acquisition must succeed again after a genuine release")
+	release2()
+}
