@@ -124,15 +124,23 @@ type Payload struct {
 	SkippedDeliveryGate bool   `json:"skipped_delivery_gate,omitempty"`
 	// IfClaimToken marks a transition op as a conditional compensating rollback
 	// (see cmd/armature's rollbackClaim). When non-empty, materialize.applyTransition
-	// applies the op ONLY IF the target issue's current ClaimToken still matches,
-	// ClaimedBy still matches the authoring WorkerID, and the issue's status is
-	// not terminal (done/merged/cancelled); otherwise the op is a deterministic
-	// no-op. This is what makes the compensating op safe regardless of where it
-	// lands in the append-only, last-write-wins op log: a second worker's
-	// legitimate takeover (a new claim op with a different token) can never be
-	// erased by a stale rollback, no matter the order ops are appended or
-	// replayed in. Absent (empty string) on every ordinary transition and every
-	// legacy op, which replay unconditionally as before (backward compatible).
+	// applies the op ONLY IF materialize.Issue.ClaimHeldBy(WorkerID, IfClaimToken)
+	// reports true for the target issue — the single canonical ownership
+	// predicate shared with cmd/armature's claimStillOwnedBy, requiring the
+	// issue's current Status to be exactly "claimed" AND its ClaimedBy/ClaimToken
+	// to match this op's WorkerID/IfClaimToken exactly; otherwise the op is a
+	// deterministic no-op. Requiring Status == "claimed" subsumes the older
+	// terminal-only check (done/merged/cancelled are all simply not "claimed")
+	// and additionally guards against a live, non-terminal transition (e.g. to
+	// in-progress or blocked) landing between the claim and the rollback, since
+	// claim-owning commands do not hold the per-issue claim lock against
+	// transition commands. This is what makes the compensating op safe
+	// regardless of where it lands in the append-only, last-write-wins op log: a
+	// second worker's legitimate takeover (a new claim op with a different
+	// token), or any other command's status change, can never be erased by a
+	// stale rollback, no matter the order ops are appended or replayed in.
+	// Absent (empty string) on every ordinary transition and every legacy op,
+	// which replay unconditionally as before (backward compatible).
 	IfClaimToken string `json:"if_claim_token,omitempty"`
 
 	// note

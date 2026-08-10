@@ -239,7 +239,18 @@ func newClaimToken() (string, error) {
 // the specific claim op this process appended, not just "some claim by this
 // worker"). It re-loads store from the op log to see the latest materialized
 // state, including any claim op a second worker may have appended after this
-// worker's claim went stale mid-provisioning.
+// worker's claim went stale mid-provisioning, AND any transition (e.g. to
+// in-progress or blocked) a different command may have applied to this issue
+// in the meantime — transition commands do not take the per-issue claim lock
+// (acquireClaimLock has exactly one caller, in this file), so that race is
+// real, not theoretical.
+//
+// The actual ownership test is delegated entirely to materialize.Issue's
+// ClaimHeldBy — the single canonical predicate, shared with
+// materialize.applyTransition's IfClaimToken guard, for "is this still
+// exactly this claim". Do not reintroduce an ad-hoc field comparison here;
+// that duplication is exactly what let this predicate drift out of sync with
+// its sibling copy across several review rounds before ClaimHeldBy existed.
 //
 // This is the fast-path ownership check consulted by rollbackClaim (before
 // appending a compensating op) and createWorktreeAndBranch's
@@ -248,10 +259,11 @@ func newClaimToken() (string, error) {
 // attempting a doomed cleanup. It is UX only, NOT the correctness boundary:
 // correctness now rests on materialize.applyTransition's replay-time
 // IfClaimToken validation (see ops.Payload.IfClaimToken), which re-checks the
-// exact same condition when the compensating op is actually applied,
-// wherever in the append-only log it lands. A worker that skips this
-// precheck (or races between it and the destructive action) is still safe;
-// this function exists purely to fail fast with a good message before that.
+// exact same ClaimHeldBy condition when the compensating op is actually
+// applied, wherever in the append-only log it lands. A worker that skips
+// this precheck (or races between it and the destructive action) is still
+// safe; this function exists purely to fail fast with a good message before
+// that.
 //
 // If the reload itself fails, ownership is reported as false (fail safe):
 // an unreadable store is not evidence this worker still owns the claim, so
@@ -263,7 +275,7 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 		return false, err
 	}
 	issue := store.Issue(issueID)
-	return issue != nil && issue.ClaimedBy == workerID && issue.ClaimToken == claimToken, nil
+	return issue.ClaimHeldBy(workerID, claimToken), nil
 }
 
 // rollbackClaim releases (or restores) the claim after a post-claim worktree
@@ -278,10 +290,13 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 // correctness guarantee is downstream: the compensating transition op below
 // always stamps Payload.IfClaimToken = claimToken, so even if a second
 // worker's legitimate takeover (a new claim op with a different token) lands
-// between this check and the append below — or anywhere else in the
-// append-only, last-write-wins op log relative to this op — replay itself
-// (materialize.applyTransition) refuses to apply the compensating op once
-// the claim it targets no longer holds. Log ordering no longer matters.
+// — or a different command's transition of this issue to in-progress or
+// blocked lands — between this check and the append below, or anywhere else
+// in the append-only, last-write-wins op log relative to this op, replay
+// itself (materialize.applyTransition, via Issue.ClaimHeldBy — the single
+// canonical ownership predicate this function's own check also delegates to)
+// refuses to apply the compensating op once the claim it targets no longer
+// holds. Log ordering no longer matters.
 func rollbackClaim(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
 	cause error, prior priorClaimState, claimToken string,
@@ -354,7 +369,12 @@ func rollbackClaim(
 // stillOwns is consulted by cleanupPartialWorktree before any destructive
 // action on failure (see that closure below for why: the same claim-took-
 // longer-than-TTL race that motivates rollbackClaim's ownership recheck
-// applies here too, and --force discards uncommitted work).
+// applies here too, and --force discards uncommitted work). Callers build
+// stillOwns from claimStillOwnedBy, which itself delegates to
+// materialize.Issue's ClaimHeldBy — the single canonical ownership
+// predicate — so this contract is exactly "is the issue, right now, in
+// StatusClaimed with this exact workerID/claimToken pair", never a looser
+// or differently-scoped check assembled ad hoc at this call site.
 func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool) error {
 	// Determine branch name based on issue type
 	branchName := deriveBranchName(issue.Type, issueID)
@@ -992,7 +1012,9 @@ armature-issue-id file if the worktree already exists.`,
 			// stillOwnsClaim re-loads the store to confirm this worker's claim
 			// (identified by claimToken) has not been superseded, before either
 			// rollbackClaim appends a compensating op or createWorktreeAndBranch's
-			// cleanup does anything destructive. See claimStillOwnedBy for why.
+			// cleanup does anything destructive. See claimStillOwnedBy's doc
+			// comment for the canonical ownership predicate this delegates to
+			// (materialize.Issue.ClaimHeldBy).
 			stillOwnsClaim := func() bool {
 				owns, err := claimStillOwnedBy(store, issueID, workerID, claimToken)
 				if err != nil {
