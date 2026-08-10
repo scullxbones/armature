@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -2232,4 +2233,134 @@ func TestClaimWorktreeFlagIsBoolean_REQ_LNGHZN_S5_T4(t *testing.T) {
 	require.Error(t, err, "the old --worktree <path> form must now error (path is an extra positional arg)")
 	assert.Contains(t, err.Error(), "accepts at most 1 arg",
 		"error must reflect the extra positional argument left by the removed value form")
+}
+
+// injectFutureSameWorkerClaim appends a claim op for issueID that carries the
+// SAME effective owner identity `arm claim` will use (resolved exactly as
+// resolveWorkerAndLog does, including any ARM_LOG_SLOT suffix) but a
+// DIFFERENT claimToken and a timestamp far in the future. Since op replay
+// sorts by timestamp (see sortOpsByTimestamp) rather than log-append order,
+// and materialize.applyClaim overwrites unconditionally whenever
+// issue.ClaimedBy == op.WorkerID (the "same worker" branch never checks
+// staleness), this future-dated op always wins the replay regardless of when
+// `arm claim` itself later appends its own claim op — deterministically
+// reproducing, without any real concurrency, the two-different-clones race
+// described in cmd/armature/claim.go's `won` doc comment: two `arm claim`
+// invocations sharing a workerID (worker.GetWorkerID is per-clone; nothing
+// enforces global uniqueness across clones) racing for the same issue.
+func injectFutureSameWorkerClaim(t *testing.T, ctx *config.Context, issueID, impostorToken string) (ownerID string) {
+	t.Helper()
+	ownerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpClaim, TargetID: issueID, Timestamp: nowEpoch() + 10_000,
+		WorkerID: ownerID, Payload: ops.Payload{TTL: 60, ClaimToken: impostorToken},
+	}))
+	return ownerID
+}
+
+// TestClaimCommand_SupersededBySameWorkerDifferentTokenLosesRaceAndSkipsWorktree_REQ_LNGHZN_S5_T9
+// is the regression test for the finding: cmd/armature/claim.go's `won` check
+// used to compare only issueAfter.ClaimedBy == workerID, which cannot tell
+// "my own claim op is still current" apart from "a DIFFERENT claim op that
+// happens to carry the same workerID has superseded mine" -- exactly the
+// shape of the two-clones-same-workerID race the per-issue flock in
+// acquireClaimLock (scoped to one clone) cannot serialize. Here a
+// future-timestamped claim op for the same issue and the same effective
+// owner identity, but a different token, is injected before `arm claim`
+// runs; once `arm claim` appends its own (older-timestamped) op and reloads,
+// replay applies the injected op last (sorted by timestamp) and it wins.
+// The command must report the claim as lost -- not proceed to provision a
+// worktree, which is the observable, wider-reaching consequence the finding
+// calls out (this is the gate that decides whether provisioning happens at
+// all, unlike the exit-guard call sites this predicate already covered).
+func TestClaimCommand_SupersededBySameWorkerDifferentTokenLosesRaceAndSkipsWorktree_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	ownerID := injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
+
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
+	require.NoError(t, err, "losing a claim race is a normal outcome, not an error")
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(claimOut)), &result), "output: %s", claimOut)
+	assert.Equal(t, false, result["claimed"])
+	assert.Equal(t, "lost_claim_race", result["reason"])
+	assert.Equal(t, ownerID, result["claimed_by"],
+		"claimed_by reports the same effective owner identity this worker used, not a different worker")
+	assert.Equal(t, true, result["superseded_by_same_worker"],
+		"the superseding claim carried the same workerID, so this must be flagged distinctly from an ordinary different-worker loss")
+
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	assert.NoDirExists(t, worktreePath, "a lost claim race must never provision a worktree")
+}
+
+// TestClaimCommand_SupersededBySameWorkerDifferentTokenHumanFormat_REQ_LNGHZN_S5_T9
+// covers the human-format output for the same-worker-superseded case: it must
+// not print "claimed by <own worker id>", which would read as nonsense
+// ("lost the race to yourself"), but instead make the same-worker
+// supersession explicit.
+func TestClaimCommand_SupersededBySameWorkerDifferentTokenHumanFormat_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
+
+	// --format human is explicit because autoDetectTTYPolicy auto-upgrades the
+	// default "human" format to "agent" (JSON) under a non-TTY test harness;
+	// only an explicitly-set format flag is exempt from that override.
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "human")
+	require.NoError(t, err, "losing a claim race is a normal outcome, not an error")
+	assert.Contains(t, claimOut, "Claim lost")
+	assert.Contains(t, claimOut, "superseded by a different claim from this same worker ID",
+		"human output must distinguish same-worker supersession from an ordinary different-worker loss")
+
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	assert.NoDirExists(t, worktreePath, "a lost claim race must never provision a worktree")
+}
+
+// TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9 pins the
+// ordinary (pre-existing) different-worker lost-race JSON shape so it keeps
+// its exact prior keys/values -- required so existing agent consumers and
+// TestClaimCommand_LostRaceReportsClearResult (main_test.go) don't break --
+// while additionally verifying the new superseded_by_same_worker field
+// correctly reads false for a genuinely different claimant.
+func TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
+	require.NoError(t, err, "losing a claim race is a normal outcome, not an error")
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(claimOut)), &result), "output: %s", claimOut)
+	assert.Equal(t, false, result["claimed"])
+	assert.Equal(t, "lost_claim_race", result["reason"])
+	assert.NotEqual(t, "other-worker-abc", result["claimed_by"], "claimed_by must report the original winner, not the loser")
+	assert.Equal(t, false, result["superseded_by_same_worker"],
+		"a genuinely different claimant must not be flagged as a same-worker supersession")
+}
+
+// TestClaimCommand_OrdinaryWinStillProvisionsWorktree_REQ_LNGHZN_S5_T9 guards
+// against a false negative from delegating `won` to
+// materialize.Issue.ClaimHeldBy: on the legitimate, uncontested path,
+// applyClaim sets Status/ClaimedBy/ClaimToken unconditionally from this
+// process's own op, so ClaimHeldBy(workerID, claimToken) must report true
+// immediately after the append-and-reload, exactly as the old
+// ClaimedBy == workerID comparison did. A worktree must still be provisioned.
+func TestClaimCommand_OrdinaryWinStillProvisionsWorktree_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
+	require.NoError(t, err)
+	assert.NotContains(t, claimOut, "lost_claim_race", "an uncontested claim must never report a lost race")
+
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	assert.DirExists(t, worktreePath, "a won claim must provision a worktree")
 }

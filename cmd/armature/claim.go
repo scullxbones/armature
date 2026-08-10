@@ -1033,19 +1033,53 @@ armature-issue-id file if the worktree already exists.`,
 			if issueAfter == nil {
 				return fmt.Errorf("issue %s not found after claim", issueID)
 			}
-			won := issueAfter.ClaimedBy == workerID
+			// won asks "did THIS claim op win?", not the looser "is *a* claim by
+			// this worker current?" that a bare issueAfter.ClaimedBy == workerID
+			// comparison would ask. The two questions coincide on every legitimate
+			// path -- materialize.applyClaim sets Status/ClaimedBy/ClaimToken
+			// unconditionally and atomically on a won claim, so immediately after
+			// the append-and-reload above, this op's own claimToken is current
+			// whenever we genuinely won -- but they diverge exactly in the case
+			// this predicate exists to catch: the same workerID claiming the same
+			// issue concurrently from two different clones (acquireClaimLock's
+			// flock is per-clone; nothing enforces a worker ID's global
+			// uniqueness across clones). Both reload and both see
+			// ClaimedBy == workerID; only ClaimHeldBy's claimToken comparison
+			// tells the loser it lost. This is the third call site delegating to
+			// materialize.Issue.ClaimHeldBy -- alongside claimStillOwnedBy in this
+			// file and applyTransition's IfClaimToken guard in
+			// internal/materialize/engine.go -- and, per ClaimHeldBy's own doc
+			// comment, no ad-hoc ClaimedBy == comparison belongs anywhere on the
+			// claim path; delegate to it instead of writing a fourth copy.
+			won := issueAfter.ClaimHeldBy(workerID, claimToken)
 			if !won {
+				// supersededBySameWorker distinguishes losing to a genuinely
+				// different claimant from being superseded by a different claim
+				// that happens to carry this same workerID (the two-clones race
+				// above). Without this, "claimed_by" reporting our own workerID
+				// back to us reads as nonsense ("lost the race to yourself").
+				// claimed_by/reason/claimed/issue keep their exact prior meaning
+				// and values for the ordinary different-worker case so existing
+				// agent consumers and TestClaimCommand_LostRaceReportsClearResult
+				// (main_test.go) keep working unchanged; this only adds a field.
+				supersededBySameWorker := issueAfter.ClaimedBy == workerID
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
-				if format == "json" || format == "agent" {
+				switch {
+				case format == "json" || format == "agent":
 					result := map[string]any{
-						"issue":      issueID,
-						"claimed":    false,
-						"claimed_by": issueAfter.ClaimedBy,
-						"reason":     "lost_claim_race",
+						"issue":                     issueID,
+						"claimed":                   false,
+						"claimed_by":                issueAfter.ClaimedBy,
+						"reason":                    "lost_claim_race",
+						"superseded_by_same_worker": supersededBySameWorker,
 					}
 					data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-				} else {
+				case supersededBySameWorker:
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+						"Claim lost for %s (superseded by a different claim from this same worker ID, %s)\n",
+						issueID, issueAfter.ClaimedBy)
+				default:
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claim lost for %s (claimed by %s)\n", issueID, issueAfter.ClaimedBy)
 				}
 				return nil
