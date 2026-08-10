@@ -28,9 +28,18 @@ import (
 // snapshot must be taken inside the lock; and the lock must be a real lock
 // on every shipped platform (see internal/filelock, which is a real lock on
 // unix and windows and fails closed everywhere else per I5: deterministic
-// gates fail closed). Four review rounds each found the next-widest
+// gates fail closed). Several review rounds each found the next-widest
 // read-decide-mutate window because the guard kept getting placed at the
-// narrowest point fixing the named symptom instead of at this rule.
+// narrowest point fixing the named symptom instead of at this rule --
+// most recently, the "do I still own this claim?" ownership check itself
+// (used by both rollbackClaim and cleanupPartialWorktree below) was written
+// out by hand at each call site and drifted out of sync with its sibling
+// copy in materialize.applyTransition. That predicate is now defined in
+// exactly one place, materialize.Issue.ClaimHeldBy (status must be exactly
+// "claimed" and workerID/claimToken must match exactly), and every call
+// site -- including materialize's own replay-time IfClaimToken guard --
+// delegates to it. Do not reintroduce a second, ad-hoc field comparison
+// anywhere in this file; call ClaimHeldBy (via claimStillOwnedBy) instead.
 //
 // acquireClaimLock takes an exclusive, non-blocking, per-issue advisory lock
 // scoped to this clone, serializing concurrent `arm claim` invocations against

@@ -172,6 +172,56 @@ func TestApplyTransition_IfClaimTokenAgainstTerminalIssueIsNoOp_REQ_LNGHZN_S5_T9
 	}
 }
 
+// TestApplyTransition_IfClaimTokenAgainstLiveNonTerminalTransitionIsNoOp_REQ_LNGHZN_S5_T9
+// is the non-terminal sibling of the terminal-state test above, and is the
+// direct regression test for the PR #95 root cause: claim-owning commands do
+// not hold the per-issue claim lock against transition commands
+// (acquireClaimLock has exactly one caller, in cmd/armature/claim.go), so a
+// concurrent `claimed -> in-progress` or `claimed -> blocked` transition can
+// land between a claim and its own compensating rollback. Before
+// Issue.ClaimHeldBy existed, applyTransition's IfClaimToken guard checked
+// only for a TERMINAL status (done/merged/cancelled) plus a raw
+// ClaimToken/ClaimedBy comparison — so a rollback whose token and claimant
+// still matched sailed through even though the issue had moved on to a live,
+// non-terminal status via a different command. That let a stale claim's
+// rollback silently revert workflow progress a newer, non-claim command had
+// already made. ClaimHeldBy's Status == StatusClaimed requirement closes
+// this: any non-claimed status — terminal OR live — makes the rollback a
+// deterministic no-op, leaving status and claimant untouched.
+func TestApplyTransition_IfClaimTokenAgainstLiveNonTerminalTransitionIsNoOp_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	for _, liveStatus := range []string{ops.StatusInProgress, ops.StatusBlocked} {
+		t.Run(liveStatus, func(t *testing.T) {
+			t.Parallel()
+			state := NewState()
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+				WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: "token-a"}}))
+			// A different command (e.g. `arm transition`, which does not hold the
+			// claim lock) moves the issue to a live, non-terminal status while
+			// worker-a's ClaimedBy/ClaimToken are untouched (only a transition to
+			// `open` clears them).
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 250,
+				WorkerID: "worker-a", Payload: ops.Payload{To: liveStatus}}))
+			require.Equal(t, liveStatus, state.Issues["task-01"].Status)
+			require.Equal(t, "worker-a", state.Issues["task-01"].ClaimedBy)
+			require.Equal(t, "token-a", state.Issues["task-01"].ClaimToken)
+
+			// worker-a's own provisioning-failure rollback arrives afterward,
+			// targeting the exact claim (same worker, same token) it was written
+			// to compensate for.
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+				WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusOpen, IfClaimToken: "token-a"}}))
+
+			issue := state.Issues["task-01"]
+			assert.Equal(t, liveStatus, issue.Status, "a conditional rollback must not revert a live non-terminal transition made by another command")
+			assert.Equal(t, "worker-a", issue.ClaimedBy, "claimant must be untouched by the no-op rollback")
+			assert.Equal(t, "token-a", issue.ClaimToken, "claim token must be untouched by the no-op rollback")
+		})
+	}
+}
+
 // TestApplyTransition_RestoreClaimTokenRestoresPriorToken_REQ_LNGHZN_S5_T9
 // verifies RestoreClaimToken is applied alongside the other Restore* lease
 // fields, so an active same-worker retry's rollback restores its OWN prior

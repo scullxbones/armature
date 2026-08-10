@@ -989,17 +989,22 @@ func TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded(t *test
 	assert.DirExists(t, canonicalPath, "a superseded claim must not force-remove a worktree that may now belong to someone else")
 }
 
-// setupSingleWorkerClaimStore claims issueID for workerID directly against the
-// op log (bypassing the claim command's worktree provisioning), stamping the
-// claim op with claimToken, and returns a loaded store. Used by the
-// rollbackClaim ownership-recheck tests below, which need control over the
-// exact claim token rollbackClaim is asked to compensate for.
-func setupSingleWorkerClaimStore(t *testing.T, ctx *config.Context, issueID, workerID string, claimTimestamp int64, claimToken string) *snapshot.Store {
+// setupSingleWorkerClaimStore claims "task-01" for "worker-a" directly
+// against the op log (bypassing the claim command's worktree provisioning),
+// stamping the claim op with claimToken, and returns a loaded store. Used by
+// the rollbackClaim/claimStillOwnedBy ownership-recheck tests below, which
+// need control over the exact claim token being compensated for or
+// rechecked. The issue ID and worker ID are fixed rather than threaded
+// through as parameters: every current caller targets the same fixture
+// issue created by setupRepoWithParentAndTask under the same worker
+// identity, and a parameter that never varies across call sites fails the
+// unparam lint check.
+func setupSingleWorkerClaimStore(t *testing.T, ctx *config.Context, claimTimestamp int64, claimToken string) *snapshot.Store {
 	t.Helper()
-	logPath := opsLogPath(ctx.IssuesDir, workerID)
+	logPath := opsLogPath(ctx.IssuesDir, "worker-a")
 	claimOp := ops.Op{
-		Type: ops.OpClaim, TargetID: issueID, Timestamp: claimTimestamp,
-		WorkerID: workerID, Payload: ops.Payload{TTL: 60, ClaimToken: claimToken},
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: claimTimestamp,
+		WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: claimToken},
 	}
 	require.NoError(t, appendOp(ctx, logPath, claimOp))
 	store := newSnapshotStore(ctx)
@@ -1035,7 +1040,7 @@ func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *te
 
 	claimTimestampA := nowEpoch()
 	claimTokenA := "token-worker-a"
-	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA, claimTokenA)
+	store := setupSingleWorkerClaimStore(t, ctx, claimTimestampA, claimTokenA)
 
 	// worker-b claims well past worker-a's TTL, so applyClaim treats worker-a's
 	// claim as stale and lets worker-b's claim through.
@@ -1082,7 +1087,7 @@ func TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5(
 
 	claimTimestampA := nowEpoch()
 	claimTokenA := "token-worker-a"
-	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", claimTimestampA, claimTokenA)
+	store := setupSingleWorkerClaimStore(t, ctx, claimTimestampA, claimTokenA)
 
 	cmd := rollbackClaimTestCmd(ctx)
 	logPathA := opsLogPath(ctx.IssuesDir, "worker-a")
@@ -1121,7 +1126,7 @@ func TestRollbackClaimSameWorkerSameSecondDistinctTokensPreventsClobber_REQ_LNGH
 	tokenSecond := "token-second"
 	require.NotEqual(t, tokenFirst, tokenSecond, "distinct tokens are the whole point of this test")
 
-	store := setupSingleWorkerClaimStore(t, ctx, "task-01", "worker-a", sameTimestamp, tokenFirst)
+	store := setupSingleWorkerClaimStore(t, ctx, sameTimestamp, tokenFirst)
 
 	// worker-a re-claims at the EXACT SAME timestamp (same second) with a new
 	// token. ClaimedAt is identical to the first claim; only ClaimToken differs.
@@ -1153,6 +1158,83 @@ func TestRollbackClaimSameWorkerSameSecondDistinctTokensPreventsClobber_REQ_LNGH
 	assert.Equal(t, "worker-a", issue.ClaimedBy)
 	assert.Equal(t, tokenSecond, issue.ClaimToken, "the second claim must survive the first claim's rollback")
 	assert.NotEqual(t, ops.StatusOpen, issue.Status, "the second claim must not have been released to open")
+}
+
+// TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_T9
+// is the direct regression test for the PR #95 root cause. worker-a wins a
+// claim, then a DIFFERENT command (e.g. `arm transition`, which does not
+// hold the per-issue claim lock -- acquireClaimLock has exactly one caller,
+// in this file) moves the issue to in-progress. That transition does not
+// touch ClaimedBy/ClaimToken (only a transition to `open` clears them), so
+// worker-a's own claim op still "matches" on those two fields alone. Before
+// claimStillOwnedBy delegated to materialize.Issue.ClaimHeldBy (which
+// requires Status == StatusClaimed), this function would have reported
+// worker-a as still owning the claim despite the issue having moved on.
+func TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	claimTimestamp := nowEpoch()
+	claimToken := "token-worker-a"
+	store := setupSingleWorkerClaimStore(t, ctx, claimTimestamp, claimToken)
+
+	// A different command transitions the issue to in-progress. ClaimedBy and
+	// ClaimToken are left exactly as the claim op set them.
+	logPath := opsLogPath(ctx.IssuesDir, "worker-a")
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: claimTimestamp + 10,
+		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusInProgress},
+	}))
+
+	owns, err := claimStillOwnedBy(store, "task-01", "worker-a", claimToken)
+	require.NoError(t, err)
+	assert.False(t, owns, "claimStillOwnedBy must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
+}
+
+// TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededByTransition_REQ_LNGHZN_S5_T9
+// covers the actual defect from the PR #95 review finding end to end: a
+// provisioning failure whose stillOwns callback is wired to the real
+// claimStillOwnedBy (not a test double) must leave a partially provisioned
+// worktree in place once a concurrent, lock-free transition (to in-progress)
+// has superseded the claim -- mirroring
+// TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded above,
+// but driven by a live status transition instead of a second claim op.
+// Pre-fix, the old field-only ownership check in claimStillOwnedBy would
+// have reported worker-a as still owning the claim (ClaimedBy/ClaimToken
+// still matched), so cleanupPartialWorktree would have force-removed the
+// worktree out from under whatever newer workflow activity was using it.
+func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededByTransition_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	claimTimestamp := nowEpoch()
+	claimToken := "token-worker-a"
+	store := setupSingleWorkerClaimStore(t, ctx, claimTimestamp, claimToken)
+
+	logPath := opsLogPath(ctx.IssuesDir, "worker-a")
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: claimTimestamp + 10,
+		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusInProgress},
+	}))
+
+	stillOwns := func() bool {
+		owns, err := claimStillOwnedBy(store, "task-01", "worker-a", claimToken)
+		require.NoError(t, err)
+		return owns
+	}
+
+	// The issue ID passed to createWorktreeAndBranch here is deliberately
+	// unrelated to "task-01": it only needs to induce the same
+	// checkoutBranchInWorktree failure the sibling still-owned/superseded
+	// tests above use (an invalid git ref from a space in the issue ID).
+	// stillOwns is the thing actually under test.
+	canonicalPath := filepath.Join(repo, ".worktrees", "bad-id")
+	err := createWorktreeAndBranch(repo, canonicalPath, "bad id", materialize.Issue{Type: "task"}, stillOwns)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checkout branch in worktree")
+	assert.DirExists(t, canonicalPath, "a claim superseded by a concurrent transition to in-progress must not force-remove its partially provisioned worktree")
 }
 
 // TestClaimDoesNotCreateWorktreeWhenOverlapFails verifies that when claim fails due to

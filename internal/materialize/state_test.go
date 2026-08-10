@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 func TestIssueStateRoundTrip(t *testing.T) {
@@ -91,4 +93,59 @@ func TestLoadIssueNormalization(t *testing.T) {
 
 	assert.Equal(t, []string{"src/auth/**", "src/db/**", "src/cache/**"}, loaded.Scope)
 	assert.Equal(t, []string{"docs/plan.md"}, loaded.ContextFiles)
+}
+
+// TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9 is direct unit coverage of the single
+// canonical "do I still own this claim?" predicate, ClaimHeldBy. It must be
+// true only for an exact workerID+claimToken match while Status is exactly
+// ops.StatusClaimed, and false for every other status (including every
+// terminal one, which the predicate deliberately folds into "not claimed"
+// rather than checking separately — see the method's doc comment), a wrong
+// worker, a wrong token, an empty token, and a nil receiver.
+func TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil receiver is never held", func(t *testing.T) {
+		t.Parallel()
+		var issue *Issue
+		assert.False(t, issue.ClaimHeldBy("worker-a", "token-a"))
+	})
+
+	t.Run("empty claim token is never held, even if fields happen to match", func(t *testing.T) {
+		t.Parallel()
+		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: ""}
+		assert.False(t, issue.ClaimHeldBy("worker-a", ""))
+	})
+
+	t.Run("wrong worker is not held", func(t *testing.T) {
+		t.Parallel()
+		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: "token-a"}
+		assert.False(t, issue.ClaimHeldBy("worker-b", "token-a"))
+	})
+
+	t.Run("wrong token is not held", func(t *testing.T) {
+		t.Parallel()
+		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: "token-a"}
+		assert.False(t, issue.ClaimHeldBy("worker-a", "token-b"))
+	})
+
+	t.Run("exact worker and token in claimed status is held", func(t *testing.T) {
+		t.Parallel()
+		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: "token-a"}
+		assert.True(t, issue.ClaimHeldBy("worker-a", "token-a"))
+	})
+
+	for _, status := range []string{
+		ops.StatusOpen, ops.StatusInProgress, ops.StatusBlocked, ops.StatusDone, ops.StatusMerged, ops.StatusCancelled,
+	} {
+		t.Run("not held in status "+status, func(t *testing.T) {
+			t.Parallel()
+			// ClaimedBy/ClaimToken deliberately still match: only a transition to
+			// `open` clears them, so an in-progress or blocked issue can carry a
+			// matching worker/token while no longer being "claimed". The predicate
+			// must reject on status alone in every one of these cases.
+			issue := &Issue{Status: status, ClaimedBy: "worker-a", ClaimToken: "token-a"}
+			assert.False(t, issue.ClaimHeldBy("worker-a", "token-a"))
+		})
+	}
 }

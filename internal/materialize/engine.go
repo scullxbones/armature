@@ -161,12 +161,19 @@ func (s *State) applyTransition(op ops.Op) error {
 	// replay order is not under this op's control (append-only log, last-write-
 	// wins), so the only way to make a stale rollback harmless regardless of
 	// where it lands is to have replay itself refuse to apply it once the claim
-	// it targets no longer holds. A mismatch (different/cleared token, a
-	// different current claimant, or a terminal issue) makes this a deterministic
-	// no-op: return nil without touching the issue at all.
+	// it targets no longer holds. Delegate the "is this still the exact claim
+	// being compensated for" question to Issue.ClaimHeldBy -- the single
+	// canonical predicate shared with cmd/armature's claimStillOwnedBy -- rather
+	// than re-deriving field comparisons here. ClaimHeldBy requires
+	// Status == StatusClaimed, which subsumes the old terminal-only check
+	// (done/merged/cancelled are all simply not "claimed") and additionally
+	// covers a live, non-terminal transition (in-progress, blocked) made by a
+	// different command in the meantime, since claim-owning commands do not hold
+	// the per-issue claim lock against transition commands (acquireClaimLock has
+	// exactly one caller). Any mismatch makes this a deterministic no-op: return
+	// nil without touching the issue at all.
 	if op.Payload.IfClaimToken != "" {
-		terminal := issue.Status == ops.StatusDone || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled
-		if terminal || issue.ClaimToken != op.Payload.IfClaimToken || issue.ClaimedBy != op.WorkerID {
+		if !issue.ClaimHeldBy(op.WorkerID, op.Payload.IfClaimToken) {
 			return nil
 		}
 	}
