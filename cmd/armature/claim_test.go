@@ -1199,6 +1199,39 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "worktree must not be created when claim fails due to scope overlap")
 }
 
+// TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9 pins the fix-1
+// ordering invariant: acquireClaimLock must be called before claim reads any
+// issue or worktree state, not merely before the claim-op append. It proves
+// this by holding the per-issue claim lock externally (as a concurrent
+// same-clone claim would) for an issue ID that does not even exist in the
+// store, then running `arm claim` for that same issue in-process. If the
+// lock were acquired after the store/issue lookup (the pre-fix ordering),
+// the command would fail fast with "issue not found" — it would never reach
+// the lock acquisition at all. Only a lock acquired BEFORE that lookup
+// produces the lock-contention error observed here.
+func TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Do NOT create issue "does-not-exist" — the store lookup for it would
+	// fail with "issue not found" if reached. Hold the claim lock for it
+	// externally, simulating a concurrent same-clone claim in flight.
+	release, lockErr := acquireClaimLock(repo, "does-not-exist")
+	require.NoError(t, lockErr)
+	t.Cleanup(release)
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "does-not-exist", "--worktree")
+	require.Error(t, claimErr, "claim must fail while the lock is held. stderr: %s", stderr)
+	assert.Contains(t, claimErr.Error(), "does-not-exist")
+	assert.Contains(t, claimErr.Error(), "in progress",
+		"failure must be the lock-contention error, not \"issue not found\" — "+
+			"which is only possible if the lock is acquired before the store/issue read")
+	assert.NotContains(t, claimErr.Error(), "not found",
+		"a pre-fix ordering would surface \"issue %s not found\" instead of the lock error", "does-not-exist")
+}
+
 // TestClaimRejectsWorktreeBoundToDifferentTask verifies that a worktree already
 // bound to a different issue is rejected by checkExistingWorktreeBinding rather
 // than silently overwriting the binding. (The CLI now derives a per-issue

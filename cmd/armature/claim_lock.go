@@ -4,8 +4,34 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/scullxbones/armature/internal/filelock"
 )
 
+// Concurrency model for arm claim.
+//
+// Two mutable substrates are in play, and each is guarded differently:
+//
+//   - Substrate A — the op log, cross-clone: OPTIMISTIC. Every claim op
+//     carries a unique Payload.ClaimToken; compensating ops are conditional
+//     (Payload.IfClaimToken) and validated at replay in
+//     materialize.applyTransition. Order-independent: no locking, no
+//     ordering assumptions across clones or machines.
+//   - Substrate B — this clone's filesystem/git worktree state, same-clone
+//     only: PESSIMISTIC. A per-issue flock (acquireClaimLock, below) on
+//     <git-common-dir>/armature-claim-<issue>.lock, held from before the
+//     FIRST read of issue or worktree state through the claim append,
+//     provisioning, all destructive cleanup, and rollback.
+//
+// THE RULE, which any change to claim's read/mutate sequence must satisfy:
+// any read whose value influences a filesystem mutation or the rollback
+// snapshot must be taken inside the lock; and the lock must be a real lock
+// on every shipped platform (see internal/filelock, which is a real lock on
+// unix and windows and fails closed everywhere else per I5: deterministic
+// gates fail closed). Four review rounds each found the next-widest
+// read-decide-mutate window because the guard kept getting placed at the
+// narrowest point fixing the named symptom instead of at this rule.
+//
 // acquireClaimLock takes an exclusive, non-blocking, per-issue advisory lock
 // scoped to this clone, serializing concurrent `arm claim` invocations against
 // the same issue within a single clone. It closes the destructive-filesystem
@@ -41,7 +67,7 @@ func acquireClaimLock(repoPath, issueID string) (release func(), err error) {
 		return nil, fmt.Errorf("open claim lock file: %w", err)
 	}
 
-	locked, lockErr := tryFlock(f)
+	locked, lockErr := filelock.TryLock(f)
 	if lockErr != nil {
 		_ = f.Close() //nolint:errcheck // already returning lockErr; a close failure on the abandoned fd is not actionable
 		return nil, fmt.Errorf("acquire claim lock: %w", lockErr)
@@ -52,7 +78,7 @@ func acquireClaimLock(repoPath, issueID string) (release func(), err error) {
 	}
 
 	return func() {
-		_ = unlockFlock(f) //nolint:errcheck // best-effort release; process exit also releases OS-level locks
-		_ = f.Close()      //nolint:errcheck // best-effort close in a release func with no error return
+		_ = filelock.Unlock(f) //nolint:errcheck // best-effort release; process exit also releases OS-level locks
+		_ = f.Close()          //nolint:errcheck // best-effort close in a release func with no error return
 	}, nil
 }

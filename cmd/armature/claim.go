@@ -820,6 +820,31 @@ armature-issue-id file if the worktree already exists.`,
 
 			issuesDir := ctx.IssuesDir
 
+			// Serialize same-clone claims for this issue with an OS-level advisory
+			// lock, acquired here — before the FIRST read of issue or worktree
+			// state — and held through the end of this command (claim-op append,
+			// worktree provisioning, and any rollback). The lock must precede every
+			// read whose value later informs a filesystem mutation or the rollback
+			// snapshot (allOps, the store load/Issue lookup that seeds `prior`,
+			// worktreePathExists, isWorktreeOf, checkExistingWorktreeBinding, and
+			// store.Index() for the scope-overlap scan): acquiring it only around
+			// the claim-op append left a window where two same-clone invocations
+			// could both observe stale pre-claim state, both proceed, and the
+			// second one's rollback would restore the FIRST one's stale `prior`
+			// snapshot over an active claim it does not own. Acquiring earlier is
+			// the fix, not sprinkling re-reads after a later lock. See
+			// acquireClaimLock's doc comment for the full substrate model.
+			//
+			// One accepted side effect: a claim for a nonexistent issue now still
+			// creates the lock file (it is created before the issue lookup below
+			// can fail). That is harmless — 0600, confined to the git common dir,
+			// intentionally never deleted, and transparently reused on retry.
+			releaseClaimLock, err := acquireClaimLock(ctx.RepoPath, issueID)
+			if err != nil {
+				return err
+			}
+			defer releaseClaimLock()
+
 			// allOps is retained here because HasOverlapDismissalNote (below) needs the raw
 			// op log to detect prior dismissal notes — data the store's Index does not expose.
 			// The store.Load call below independently materializes state; this read is not redundant.
@@ -882,21 +907,6 @@ armature-issue-id file if the worktree already exists.`,
 			if err != nil {
 				return err
 			}
-
-			// Serialize same-clone claims for this issue with an OS-level advisory
-			// lock, held from before the claim op is appended through the end of
-			// this command (including worktree provisioning and any rollback).
-			// This closes the destructive-filesystem race described on
-			// cleanupPartialWorktree: that race is inherently same-clone-only (a
-			// remote claimant provisions into its own filesystem entirely), so a
-			// lock scoped to this clone's git common dir is sufficient to make it
-			// impossible rather than merely unlikely, without needing to reach
-			// across processes on different machines. See acquireClaimLock.
-			releaseClaimLock, err := acquireClaimLock(ctx.RepoPath, issueID)
-			if err != nil {
-				return err
-			}
-			defer releaseClaimLock()
 
 			// Capture the prior status and claimed-by before writing the claim op.
 			// If worktree setup fails, we'll use this to determine rollback behavior:
