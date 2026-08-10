@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/leanovate/gopter"
@@ -227,8 +228,32 @@ func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 func TestGenerateSchema_DocumentsClaimFields_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 	schema := GenerateSchema()
-	assert.Contains(t, schema, "claim_token", "schema must document the claim op's claim_token field")
-	assert.Contains(t, schema, "if_claim_token", "schema must document the transition op's if_claim_token field")
+
+	claimHeaderPrefix := "#   " + OpClaim + ":"
+	transitionHeaderPrefix := "#   " + OpTransition + ":"
+
+	var claimLine string
+	inTransitionBlock := false
+	transitionHasIfClaimToken := false
+
+	for _, line := range strings.Split(schema, "\n") {
+		switch {
+		case strings.HasPrefix(line, claimHeaderPrefix):
+			claimLine = line
+			inTransitionBlock = false
+		case strings.HasPrefix(line, transitionHeaderPrefix):
+			inTransitionBlock = true
+		case strings.HasPrefix(line, "#   ") && strings.Contains(line, ":"):
+			// A different op's header line ends the transition block.
+			inTransitionBlock = false
+		}
+		if inTransitionBlock && strings.Contains(line, "if_claim_token") {
+			transitionHasIfClaimToken = true
+		}
+	}
+
+	assert.Contains(t, claimLine, "claim_token", "claim op's schema line must document the claim_token field")
+	assert.True(t, transitionHasIfClaimToken, "transition op must document the if_claim_token field")
 }
 
 func TestHeartbeatRateLimiter(t *testing.T) {
