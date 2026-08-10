@@ -12,7 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"github.com/scullxbones/armature/internal/filelock"
 )
 
 // ===== Log File Operations (from ops/log.go) =====
@@ -199,7 +200,7 @@ func lockLog(logPath string) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open log lock %s: %w", logPath, err)
 	}
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+	if err := filelock.Lock(lock); err != nil {
 		_ = lock.Close() //nolint:errcheck // cleanup on error path
 		return nil, fmt.Errorf("lock log %s: %w", logPath, err)
 	}
