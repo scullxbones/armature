@@ -124,6 +124,7 @@ func (s *State) applyClaim(op ops.Op) error {
 	issue.Status = ops.StatusClaimed
 	issue.ClaimedBy = op.WorkerID
 	issue.ClaimedAt = op.Timestamp
+	issue.ClaimToken = op.Payload.ClaimToken
 	issue.ClaimTTL = op.Payload.TTL
 	issue.WorktreePath = op.Payload.WorktreePath
 	issue.LastHeartbeat = op.Timestamp
@@ -155,6 +156,20 @@ func (s *State) applyTransition(op ops.Op) error {
 	if !ok {
 		return fmt.Errorf("transition: issue %s not found", op.TargetID)
 	}
+	// A non-empty IfClaimToken marks this op as a conditional compensating
+	// rollback (see ops.Payload.IfClaimToken). Validate it BEFORE any mutation:
+	// replay order is not under this op's control (append-only log, last-write-
+	// wins), so the only way to make a stale rollback harmless regardless of
+	// where it lands is to have replay itself refuse to apply it once the claim
+	// it targets no longer holds. A mismatch (different/cleared token, a
+	// different current claimant, or a terminal issue) makes this a deterministic
+	// no-op: return nil without touching the issue at all.
+	if op.Payload.IfClaimToken != "" {
+		terminal := issue.Status == ops.StatusDone || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled
+		if terminal || issue.ClaimToken != op.Payload.IfClaimToken || issue.ClaimedBy != op.WorkerID {
+			return nil
+		}
+	}
 	newStatus := op.Payload.To
 	// Capture claimant-ness before any field clearing below: a transition to
 	// `open` zeroes ClaimedBy as part of this same op, but the claimant's own
@@ -164,6 +179,7 @@ func (s *State) applyTransition(op ops.Op) error {
 	if newStatus == ops.StatusOpen {
 		issue.ClaimedBy = ""
 		issue.ClaimedAt = 0
+		issue.ClaimToken = ""
 		if issue.Status == ops.StatusDone && issue.Outcome != "" {
 			issue.PriorOutcomes = append(issue.PriorOutcomes, issue.Outcome)
 			issue.Outcome = ""
@@ -196,6 +212,7 @@ func (s *State) applyTransition(op ops.Op) error {
 		issue.ClaimTTL = op.Payload.RestoreClaimTTL
 		issue.LastHeartbeat = op.Payload.RestoreLastHeartbeat
 		issue.LastClaimingWorkerActivity = op.Payload.RestoreLastClaimingWorkerActivity
+		issue.ClaimToken = op.Payload.RestoreClaimToken
 	}
 	if op.Payload.Outcome != "" {
 		issue.Outcome = op.Payload.Outcome

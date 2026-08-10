@@ -82,6 +82,13 @@ type Payload struct {
 	// claim
 	TTL          int    `json:"ttl,omitempty"`
 	WorktreePath string `json:"worktree_path,omitempty"`
+	// ClaimToken is a unique per-claim nonce generated at claim time (see
+	// cmd/armature's newClaimToken). It gives a claim an identity that survives
+	// same-worker re-claims within the same wall-clock second (ClaimedAt alone
+	// has only 1-second resolution) and lets a compensating transition (below)
+	// name the exact claim it is rolling back, rather than "the current claim
+	// by this worker" which op-log replay ordering can make ambiguous.
+	ClaimToken string `json:"claim_token,omitempty"`
 	// RestoreClaim marks a transition as an explicit compensating claim
 	// snapshot. It is used by a failed claim retry to restore every lease field
 	// captured before the retry appended its claim op. A marker is required so
@@ -93,6 +100,11 @@ type Payload struct {
 	RestoreClaimTTL                   int    `json:"restore_claim_ttl,omitempty"`
 	RestoreLastHeartbeat              int64  `json:"restore_last_heartbeat,omitempty"`
 	RestoreLastClaimingWorkerActivity int64  `json:"restore_last_claiming_worker_activity,omitempty"`
+	// RestoreClaimToken restores the pre-claim-attempt ClaimToken alongside the
+	// other Restore* lease fields, for the same reason: an active same-worker
+	// retry's rollback must put back its OWN prior claim's token, not leave the
+	// just-superseded token in place.
+	RestoreClaimToken string `json:"restore_claim_token,omitempty"`
 	// ClearWorktreePath is an explicit clear-signal for a transition op (used by
 	// claim rollback): when true, applyTransition sets the issue's WorktreePath
 	// back to empty. This distinguishes "restore to empty" from "no change" —
@@ -110,6 +122,18 @@ type Payload struct {
 	Branch              string `json:"branch,omitempty"`
 	PR                  string `json:"pr,omitempty"`
 	SkippedDeliveryGate bool   `json:"skipped_delivery_gate,omitempty"`
+	// IfClaimToken marks a transition op as a conditional compensating rollback
+	// (see cmd/armature's rollbackClaim). When non-empty, materialize.applyTransition
+	// applies the op ONLY IF the target issue's current ClaimToken still matches,
+	// ClaimedBy still matches the authoring WorkerID, and the issue's status is
+	// not terminal (done/merged/cancelled); otherwise the op is a deterministic
+	// no-op. This is what makes the compensating op safe regardless of where it
+	// lands in the append-only, last-write-wins op log: a second worker's
+	// legitimate takeover (a new claim op with a different token) can never be
+	// erased by a stale rollback, no matter the order ops are appended or
+	// replayed in. Absent (empty string) on every ordinary transition and every
+	// legacy op, which replay unconditionally as before (backward compatible).
+	IfClaimToken string `json:"if_claim_token,omitempty"`
 
 	// note
 	Msg    string `json:"msg,omitempty"`

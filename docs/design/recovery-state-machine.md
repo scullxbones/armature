@@ -198,6 +198,57 @@ For each combination, it specifies:
 
 ---
 
+## Claim Compensation Race Prevention (LNGHZN-S5-T9)
+
+`arm claim`'s worktree provisioning can fail partway through after the `claim`
+op has already been appended (e.g. a filesystem error, a branch conflict). On
+failure, the command appends a compensating `transition` op ("rollback") and,
+for a fresh worktree, force-removes the partially provisioned directory. Two
+races around this recovery path were closed here:
+
+**1. Replay-order-independent compensating ops (`claim_token` /
+`if_claim_token`).** Ops are append-only and replay is last-write-wins, so if
+a second worker's claim legitimately takes over while the first worker's
+provisioning is still failing, an unconditional compensating op could land
+*after* the second worker's claim in the log and erase it on replay. Every
+claim op now carries a unique per-claim nonce, `claim_token` (16 random bytes,
+hex-encoded; `ops.Payload.ClaimToken`, materialized as `Issue.ClaimToken`).
+Rollback's compensating `transition` op stamps `if_claim_token` with the exact
+token of the claim it is compensating for
+(`ops.Payload.IfClaimToken`). `materialize.applyTransition` treats a non-empty
+`if_claim_token` as a condition, not an instruction: it applies the op only if
+the issue's current `claim_token` still matches, `claimed_by` still matches
+the op's `WorkerID`, and the issue's status is not terminal (`done`, `merged`,
+`cancelled`) — otherwise it is a deterministic no-op. This makes the
+compensating op safe regardless of where it lands in the log or what order it
+replays relative to a superseding claim: correctness is a property of replay,
+not of append-time ordering. `claim_token` is also why this closes the
+`ClaimedAt`-uniqueness gap: `ClaimedAt` has only 1-second (epoch) resolution,
+so two claims by the same worker on the same issue within the same second were
+previously indistinguishable by `ClaimedBy + ClaimedAt` alone; `claim_token`
+gives every claim a distinct identity regardless of timing.
+
+Legacy ops with no `claim_token` / `if_claim_token` are unaffected: an absent
+`if_claim_token` (empty string, the default) makes a transition apply
+unconditionally exactly as before — this is purely additive and backward
+compatible.
+
+**2. Per-clone claim lock (destructive-filesystem race).** Between the
+ownership recheck and the destructive filesystem action (`git worktree
+remove --force`, or moving an adopted worktree back), a second worker could
+land a legitimate claim and start using the worktree at the canonical path —
+letting the first worker's cleanup discard the second worker's uncommitted
+work. This race is inherently same-clone-only (a remote claimant provisions
+into an entirely separate filesystem), so `arm claim` now takes an OS-level
+advisory lock (`flock`, non-blocking) scoped to the issue, in a lock file
+under the main repo's git common dir (`armature-claim-<issue-id>.lock`),
+before appending the claim op and holding it through the end of the command
+(including rollback and cleanup). A concurrent `arm claim` for the same issue
+in the same clone fails fast with a clear error instead of racing. See
+`cmd/armature/claim_lock.go`.
+
+---
+
 ## References
 
 - **D1 Dogfood Finding:** `2026-06-27T1954Z-5207ee28-coordination-session-recovery-branch-divergence.md`

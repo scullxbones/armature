@@ -50,8 +50,15 @@ type Issue struct {
 	AssessmentAttestations []review.AssessmentAttestation `json:"assessment_attestations,omitempty"`
 	ClaimedBy              string                         `json:"claimed_by,omitempty"`
 	ClaimedAt              int64                          `json:"claimed_at,omitempty"`
-	ClaimTTL               int                            `json:"claim_ttl,omitempty"`
-	LastHeartbeat          int64                          `json:"last_heartbeat,omitempty"`
+	// ClaimToken is the unique per-claim nonce (see ops.Payload.ClaimToken) of
+	// the claim currently held. Cleared whenever ClaimedBy/ClaimedAt are
+	// cleared (transition to open). Used by applyTransition to validate a
+	// compensating rollback op is still targeting the exact claim it was
+	// written to compensate for, rather than a later one. Omitted (empty) for
+	// issues materialized from op logs written before this field existed.
+	ClaimToken    string `json:"claim_token,omitempty"`
+	ClaimTTL      int    `json:"claim_ttl,omitempty"`
+	LastHeartbeat int64  `json:"last_heartbeat,omitempty"`
 	// LastClaimingWorkerActivity is bumped only by applyClaim, applyHeartbeat,
 	// and applyTransition, and only when the op's WorkerID matches ClaimedBy.
 	// Unlike Updated (which every op handler bumps, regardless of which worker

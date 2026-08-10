@@ -45,6 +45,159 @@ func TestApplyClaimOp(t *testing.T) {
 	assert.Equal(t, int64(200), issue.ClaimedAt)
 }
 
+// TestApplyClaimOp_SetsClaimToken verifies applyClaim materializes the
+// winning claim op's ClaimToken onto the issue, which is what lets a later
+// compensating transition (IfClaimToken) name the exact claim it targets.
+func TestApplyClaimOp_SetsClaimToken(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, ClaimToken: "token-a"}}))
+	assert.Equal(t, "token-a", state.Issues["task-01"].ClaimToken)
+}
+
+// TestApplyTransition_IfClaimTokenMismatchIsNoOp_REQ_LNGHZN_S5_T9 is the core
+// replay-time guarantee this task adds: a compensating rollback op whose
+// IfClaimToken no longer matches the issue's current ClaimToken must be a
+// deterministic no-op, regardless of WHERE in the append-only log it lands
+// relative to the claim that superseded it. This test applies the superseding
+// claim (worker-b, a fresh token) BEFORE the stale rollback (worker-a,
+// compensating for its own now-superseded token) — the op order a naive
+// "check-then-append" race would produce — and asserts worker-b's claim
+// survives untouched.
+func TestApplyTransition_IfClaimTokenMismatchIsNoOp_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: "token-a"}}))
+	// worker-b takes over well past worker-a's TTL (applyClaim treats
+	// worker-a's claim as stale), landing in the log BEFORE worker-a's
+	// rollback below.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200 + 60*60 + 1,
+		WorkerID: "worker-b", Payload: ops.Payload{TTL: 60, ClaimToken: "token-b"}}))
+
+	// worker-a's stale compensating rollback, naming its own (now superseded)
+	// token. This is the op a naive implementation would append unconditionally.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 200 + 60*60 + 2,
+		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusOpen, IfClaimToken: "token-a"}}))
+
+	issue := state.Issues["task-01"]
+	assert.Equal(t, "worker-b", issue.ClaimedBy, "worker-b's claim must survive a stale rollback for a different token")
+	assert.Equal(t, "token-b", issue.ClaimToken)
+	assert.Equal(t, ops.StatusClaimed, issue.Status, "the stale rollback must not have transitioned the issue back to open")
+}
+
+// TestApplyTransition_IfClaimTokenMismatchIsNoOp_ReverseOrder_REQ_LNGHZN_S5_T9
+// is the same scenario as the test above but with the ops applied in the
+// OPPOSITE order (rollback first, then the superseding claim) to prove the
+// guarantee genuinely does not depend on op ordering: whichever op is applied
+// second, the final materialized state must be identical (worker-b owns the
+// claim). This is the property that makes rollback correctness a replay-time
+// concern rather than an append-time race.
+func TestApplyTransition_IfClaimTokenMismatchIsNoOp_ReverseOrder_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: "token-a"}}))
+
+	// This time the stale rollback is applied FIRST.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 200 + 60*60 + 2,
+		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusOpen, IfClaimToken: "token-a"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200 + 60*60 + 1,
+		WorkerID: "worker-b", Payload: ops.Payload{TTL: 60, ClaimToken: "token-b"}}))
+
+	issue := state.Issues["task-01"]
+	assert.Equal(t, "worker-b", issue.ClaimedBy)
+	assert.Equal(t, "token-b", issue.ClaimToken)
+	assert.Equal(t, ops.StatusClaimed, issue.Status)
+}
+
+// TestApplyTransition_IfClaimTokenMatchAppliesAsBefore_REQ_LNGHZN_S5_T9
+// verifies the normal (non-superseded) path still works: a compensating
+// rollback whose IfClaimToken matches the issue's current ClaimToken, from
+// the still-current claimant, applies exactly as an unconditional rollback
+// would have.
+func TestApplyTransition_IfClaimTokenMatchAppliesAsBefore_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: "token-a"}}))
+
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusOpen, IfClaimToken: "token-a"}}))
+
+	issue := state.Issues["task-01"]
+	assert.Equal(t, ops.StatusOpen, issue.Status)
+	assert.Equal(t, "", issue.ClaimedBy)
+	assert.Equal(t, "", issue.ClaimToken)
+}
+
+// TestApplyTransition_IfClaimTokenAgainstTerminalIssueIsNoOp_REQ_LNGHZN_S5_T9
+// verifies a conditional rollback can never reopen a done/merged/cancelled
+// issue, even if by some (impossible in practice, but not assumed away)
+// coincidence its ClaimToken and ClaimedBy still matched: terminal status is
+// checked first and unconditionally blocks the op.
+func TestApplyTransition_IfClaimTokenAgainstTerminalIssueIsNoOp_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	for _, terminal := range []string{ops.StatusDone, ops.StatusMerged, ops.StatusCancelled} {
+		t.Run(terminal, func(t *testing.T) {
+			t.Parallel()
+			state := NewState()
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+				WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+				WorkerID: "worker-a", Payload: ops.Payload{TTL: 60, ClaimToken: "token-a"}}))
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 250,
+				WorkerID: "worker-a", Payload: ops.Payload{To: terminal}}))
+			require.Equal(t, terminal, state.Issues["task-01"].Status)
+
+			// A stale rollback arrives after the issue has already reached a
+			// terminal state (e.g. worker-a's provisioning failure handler runs
+			// late, after the issue was independently completed and merged).
+			require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+				WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusOpen, IfClaimToken: "token-a"}}))
+
+			issue := state.Issues["task-01"]
+			assert.Equal(t, terminal, issue.Status, "a conditional rollback must never reopen a terminal issue")
+			assert.Equal(t, "worker-a", issue.ClaimedBy)
+		})
+	}
+}
+
+// TestApplyTransition_RestoreClaimTokenRestoresPriorToken_REQ_LNGHZN_S5_T9
+// verifies RestoreClaimToken is applied alongside the other Restore* lease
+// fields, so an active same-worker retry's rollback restores its OWN prior
+// claim's token rather than leaving the just-superseded retry's token in place.
+func TestApplyTransition_RestoreClaimTokenRestoresPriorToken_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, ClaimToken: "token-original"}}))
+	state.Issues["task-01"].Status = ops.StatusInProgress
+
+	// A same-worker retry claims again (new token), then its provisioning
+	// fails and rolls back, restoring the original token via RestoreClaim.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{TTL: 60, ClaimToken: "token-retry"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 400,
+		WorkerID: "w1", Payload: ops.Payload{
+			To: ops.StatusInProgress, IfClaimToken: "token-retry",
+			RestoreClaim: true, RestoreClaimedBy: "w1", RestoreClaimedAt: 200, RestoreClaimToken: "token-original",
+		}}))
+
+	assert.Equal(t, "token-original", state.Issues["task-01"].ClaimToken)
+}
+
 // TestApplyTransition_RestoresWorktreePathFromPayload_REQ_LNGHZN_S5_T1 verifies
 // that a transition op carrying a WorktreePath restores it onto the issue. This
 // is the mechanism a claim rollback relies on to put back the pre-claim (legacy)
