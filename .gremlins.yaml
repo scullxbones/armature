@@ -12,6 +12,17 @@ unleash:
   # look like stalled make check runs.
   timeout-coefficient: 2
 
+  # Files the build tags exclude on the analysis runner (linux) can never be
+  # reached by any test run here, yet gremlins still mutates them — every such
+  # mutant lands as "not covered", measuring the runner's GOOS rather than test
+  # quality. `_windows.go` is excluded by Go's implicit GOOS constraint;
+  # filelock_other.go by its explicit `!unix && !windows` tag. That these files
+  # compile is gated separately by `make crosscompile`; their behavior is
+  # exercised on the platforms that actually build them.
+  exclude-files:
+    - "_windows\\.go$"
+    - "filelock_other\\.go$"
+
   # Quality gates (ratchet: only raise, never lower).
   # threshold-mcover: % of mutation sites reachable by tests (analogous to code coverage).
   # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
