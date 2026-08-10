@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
 
 # Variables
 GO ?= go
@@ -13,7 +13,7 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${G
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build"
+	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build, crosscompile"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
@@ -29,11 +29,12 @@ help:
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
 	@echo "  make clean               - Remove build artifacts and test outputs"
 	@echo "  make build               - Build CLI binary to ./bin/arm"
+	@echo "  make crosscompile        - Build (no test) every platform .goreleaser.yaml ships, to catch platform-specific compile breakage"
 	@echo "  make skill               - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build test coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check
+check: lint build test coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
@@ -132,6 +133,19 @@ clean:
 build:
 	mkdir -p bin
 	GOFLAGS=-buildvcs=false CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o bin/arm ./cmd/armature
+
+# Platform list mirrors .goreleaser.yaml's builds.goos/goarch/ignore exactly:
+# linux+darwin get amd64/arm64; windows ships amd64 only (goreleaser ignores
+# windows/arm64). Build-only (no tests) so this stays fast enough for `check`;
+# it exists to catch platform-specific compile breakage like undefined
+# syscall constants on non-unix platforms before it ships silently broken.
+crosscompile:
+	@for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
+		os=$${platform%/*}; arch=$${platform#*/}; \
+		echo "Cross-compiling $$os/$$arch..."; \
+		GOOS=$$os GOARCH=$$arch GOFLAGS=-buildvcs=false CGO_ENABLED=0 $(GO) build -o /dev/null ./... || exit 1; \
+	done
+	@echo "Cross-compile check passed for all shipped platforms"
 
 install: build
 	mkdir -p $(INSTALL_DIR)
