@@ -1,0 +1,34 @@
+# Theme: Sandbox Environment Produces False Verdicts From Deterministic Gates
+
+## Summary
+
+Armature's gates are deterministic by constitutional commitment (I5). That only holds if they rule on repository content. Agent harnesses running under a sandbox inject state into the repo and restrict the filesystem in ways the gates cannot distinguish from real work product, so a mandatory gate returns a confident, reproducible, wrong answer.
+
+Two mechanisms recur:
+
+- **Injected state.** The Claude Code sandbox bind-mounts `/dev/null` character devices over `.bashrc`, `.zshrc`, `.gitconfig`, `.mcp.json`, `.claude/*` at the repo root. Git reports them as untracked, so `arm doctor` D8 attributes them to the most-recently-completed task as out-of-scope artifacts. The same mount mechanism makes `.git/config.lock` unwritable, which is why `git config set` — and therefore `arm claim --worktree` — fails outright inside the sandbox.
+- **Restricted filesystem.** `/tmp` outside the session scratchpad is read-only, as is the shared Go build cache (`~/.cache/go-build`). Both the coordinator skill's documented worktree path (`/tmp/arm-task-*`) and the repo's own mandatory quality gate (`make check`) therefore fail on the happy path until a sandbox override is used.
+
+The cost is not the individual diagnostic round-trip. It is that **a check which is always red is a check nobody reads**, and D8 will fail for every task run under this harness, in every repository, forever. `arm doctor` is where D1–D8 all live, so the credibility loss is borne by every other diagnostic in that command. The delivery gate's variant is worse, because its error names `--skip-delivery-gate` as the remedy: the path of least resistance out of an environment artifact is to disable an I5 gate, and a worker who does that once learns that gate failures are usually noise.
+
+Note the distinction worth preserving between the two false-positive shapes: `CleanTree` flags files that **are** gitignored and should be ignored outright; D8 flags files that are **neither tracked nor gitignored**, so it is not strictly wrong — but they are still not the task's artifacts, and no worker can make them go away.
+
+## Evidence
+
+- [`arm doctor` D8 flagged sandbox bind-mount device files as out-of-scope artifacts](../../raw/2026-07-25T2345Z-claude-validation-d8-flags-sandbox-device-files.md) — ~16 dotfiles reported as LNGHZN-S4-T2 violations; `ls -la` showed major/minor `1,3` character devices.
+- [Sandbox `/dev/null` overlay nodes appear as untracked files, causing false `arm doctor` D8 errors](../../raw/2026-08-08-tooling-sandbox-devnull-false-d8-artifacts.md) — Same failure three weeks later on LNGHZN-S5, plus the key confirmation: **D8 is clean with the sandbox disabled**. The armature-auditor subagent, itself running sandboxed, independently re-reported the false verdict and attributed it to the wrong task.
+- [Deterministic gates judge files git does not treat as working-tree content](../../raw/2026-08-09T1510Z-claude-validation-delivery-gate-counts-ignored-artifacts.md) — The delivery gate counts `bin/`, `coverage.out`, `mutesting-report/` as an unclean tree, though `git status --porcelain` is empty and all are gitignored. Running the mandatory gate is what puts the tree into the state the gate rejects.
+- [`arm claim --worktree` fails under sandboxed harnesses that deny /tmp writes](../../raw/2026-07-19T1500Z-claude-tooling-worktree-sandbox-readonly.md) — The coordinator skill's documented `/tmp/arm-task-*` path fails; claim succeeded only after bypassing the sandbox.
+- [`arm claim --worktree` silently hangs under sandbox instead of erroring](../../raw/2026-07-23T2200Z-claude-permissions-worktree-claim-hang.md) — Worse than failing: no output, killed at the 2-minute timeout, **claim op already recorded server-side** while the worktree was never created. Leaves a claimed task with no worktree.
+- [Sandbox/tmp friction during TOPTIER-S5 coordinator dispatch](../../raw/2026-07-24T1055Z-claude-tooling-worktree-sandbox-friction.md) — Adds the build-cache dimension: `go build`/`go test` inside a successfully-created worktree still fail read-only against `~/.cache/go-build`. Notes a haiku worker without escalation instructions would simply report "cannot build."
+- [Sandbox environment restrictions caused several near-misses coordinating LNGHZN-S4](../../raw/2026-07-25T2335Z-claude-tooling-sandbox-tmp-and-worktree-teardown.md) — Adds worktree teardown: `arm merged` intermittently fails `git worktree remove` with "Device or resource busy" under WSL, leaving permanently un-removable metadata.
+- [Hook insists on "built-in Grep/Glob tool" that isn't registered in this session](../../raw/2026-08-02T1505Z-claude-permissions-grep-glob-tools-unavailable.md) — Harness-level rather than armature-level, but the same shape: a policy hook blocks every text-search command and directs the agent to tools that are not available in the session.
+- [Five friction points coordinating ARCHIMP-S19 from a secondary worktree](../../raw/2026-07-20T0300Z-claude-tooling-archimp-s19-coordination-friction.md) — Item 2 is this theme squarely: *every* `arm` command touching `.armature/state` fails read-only inside a worktree under the sandbox. Item 1 is a separate and more serious bug worth reading on its own — `arm claim --worktree` run from a secondary worktree based the new task branch on the **main checkout's** currently-checked-out branch rather than the invoking worktree's HEAD, so workers were dispatched onto branches missing files they were told to edit. That base-resolution gap is now tracked as `LNGHZN-S9` (LH F1.1).
+
+## Candidate Follow-Ups
+
+- **`CleanTree`: honor `.gitignore`**, matching `git status --porcelain` — which is what "clean working tree" means everywhere else in the toolchain. Failing that, name the specific ignored paths the gate tolerates, so the remedy is never "turn the gate off."
+- **D8: rule only on paths the repository could plausibly own** — restrict the scan to tracked files or files the task's diff touched, or support a configurable ignore list for harness-injected paths.
+- Adopt the general principle both fixes share: *a deterministic gate should only rule on artifacts a worker can actually control.* This is worth stating once rather than fixing per check — it is the gate-side analogue of GAP T4.3's honest-guarantees framing for the harness hook.
+- Have `arm claim --worktree` fall back to a configurable worktree root (or `$TMPDIR`) when the requested path is unwritable, and fail loudly rather than hanging when worktree creation cannot proceed — the claim op should not be recorded when its worktree was never created.
+- Consider whether `arm doctor` should detect that it is running sandboxed and mark environment-derived findings as such, since the auditor subagent cannot currently tell.
