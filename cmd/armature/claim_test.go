@@ -2336,6 +2336,76 @@ func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *te
 	})
 }
 
+func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *testing.T) {
+	setup := func(t *testing.T) (string, string, string, string) {
+		t.Helper()
+		repo := setupRepoWithTask(t)
+		parentPath := filepath.Join(repo, "parent")
+		run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+		require.NoError(t, os.WriteFile(filepath.Join(parentPath, "parent.go"), []byte("package parent\n"), 0o644))
+		run(t, parentPath, "git", "add", "parent.go")
+		run(t, parentPath, "git", "commit", "-m", "feat(parent): advance source")
+		sourceTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
+		run(t, repo, "git", "branch", "task/task-01", sourceTip)
+		return repo, parentPath, sourceTip, filepath.Join(repo, "child")
+	}
+	assertNoClaimSideEffects := func(t *testing.T, repo, destination string) {
+		t.Helper()
+		assert.NoDirExists(t, destination)
+		_, err := runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+		issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+		require.NoError(t, err)
+		assert.Equal(t, ops.StatusOpen, issue.Status)
+	}
+
+	t.Run("conflicting parent is preserved and rejected", func(t *testing.T) {
+		repo, parentPath, _, destination := setup(t)
+		parentKey := parentBranchConfigKey("task/task-01")
+		run(t, repo, "git", "config", parentKey, "other-parent")
+
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
+		err := claim.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match --from branch")
+		assert.Equal(t, "other-parent", strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentKey)))
+		assertNoClaimSideEffects(t, repo, destination)
+	})
+
+	t.Run("conflicting base is preserved and rejected", func(t *testing.T) {
+		repo, parentPath, _, destination := setup(t)
+		baseKey := "branch.task/task-01.armature-base-commit"
+		run(t, repo, "git", "config", baseKey, strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD")))
+
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
+		err := claim.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match --from tip")
+		assert.Equal(t, strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD")), strings.TrimSpace(runGitOutput(t, repo, "config", "--get", baseKey)))
+		assertNoClaimSideEffects(t, repo, destination)
+	})
+
+	t.Run("matching provenance permits same-tip reuse", func(t *testing.T) {
+		repo, parentPath, sourceTip, destination := setup(t)
+		parentKey := parentBranchConfigKey("task/task-01")
+		baseKey := "branch.task/task-01.armature-base-commit"
+		run(t, repo, "git", "config", parentKey, "feature-parent")
+		run(t, repo, "git", "config", baseKey, sourceTip)
+
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
+		require.NoError(t, claim.Execute())
+		assert.Equal(t, sourceTip, strings.TrimSpace(runGitOutput(t, destination, "rev-parse", "HEAD")))
+		assert.Equal(t, "feature-parent", strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentKey)))
+		assert.Equal(t, sourceTip, strings.TrimSpace(runGitOutput(t, repo, "config", "--get", baseKey)))
+	})
+}
+
 func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
