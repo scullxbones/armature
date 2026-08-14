@@ -507,23 +507,35 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     tokens = strip_redirects(tokens)
 
     # Canonical provisioning uses value-less `--worktree`, but `claim --from`
-    # requires an explicit new destination. Permit either Cobra spelling for
-    # that paired form while rejecting value-taking worktree examples elsewhere.
-    claim_from = tokens[:2] == ["arm", "claim"] and any(
-        token.startswith("--from=") and len(token) > len("--from=")
-        or token == "--from"
-        and index+1 < len(tokens)
-        and not tokens[index+1].startswith("-")
-        for index, token in enumerate(tokens)
+    # requires an explicit new destination. Permit either Cobra spelling only
+    # when both flags carry a nonempty value; reject value-taking examples
+    # elsewhere so stale guidance does not drift until execution.
+    def has_flag_value(flag):
+        return any(
+            token.startswith(flag + "=") and len(token) > len(flag) + 1
+            or token == flag
+            and index + 1 < len(tokens)
+            and not tokens[index + 1].startswith("-")
+            for index, token in enumerate(tokens)
+        )
+
+    claim_from = tokens[:2] == ["arm", "claim"] and has_flag_value("--from")
+    worktree_value = has_flag_value("--worktree")
+    has_worktree = any(
+        token == "--worktree" or token.startswith("--worktree=") for token in tokens
     )
+    if claim_from and has_worktree and not worktree_value:
+        return False, f"claim --from requires an explicit --worktree <new-path> in: {arm_command}"
+
+    allow_valued_worktree = claim_from and worktree_value
     for index, token in enumerate(tokens):
-        if token.startswith("--worktree=") and not claim_from:
+        if token.startswith("--worktree=") and not allow_valued_worktree:
             return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
         if (
             token == "--worktree"
             and index + 1 < len(tokens)
             and not tokens[index + 1].startswith("-")
-            and not claim_from
+            and not allow_valued_worktree
         ):
             return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
     if tokens and tokens[0] == "arm":
