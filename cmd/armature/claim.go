@@ -200,6 +200,21 @@ func checkoutBranchInWorktree(worktreePath, branchName string) error {
 	return nil
 }
 
+// branchTipIfExists returns the tip of branchName when it exists locally. An
+// absent branch is a normal result; other git failures are surfaced to callers.
+func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branchName)
+	out, err := cmd.Output()
+	if err == nil {
+		return strings.TrimSpace(string(out)), true, nil
+	}
+	if _, ok := err.(*exec.ExitError); ok {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("resolve branch %s: %w", branchName, err)
+}
+
 // priorClaimState captures the issue's claim-related fields as they were before
 // this claim's op was appended, so a failed post-claim worktree setup step can
 // decide whether to keep the prior status or release the claim.
@@ -828,6 +843,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 			var err error
+			var fromTip string
 			// pflag's optional-value support sets NoOptDefVal without consuming a
 			// following token. Recover the documented spaced form here while
 			// retaining the established value-less form for existing agents.
@@ -891,6 +907,10 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if fromBranch == "" || fromBranch == "HEAD" {
 					return fmt.Errorf("--from worktree %s must be on a branch", fromWorktreePath)
 				}
+				fromTip, err = adapters.New(fromWorktreePath).ResolveRevision("HEAD")
+				if err != nil {
+					return fmt.Errorf("resolve --from worktree tip: %w", err)
+				}
 			}
 
 			issuesDir := ctx.IssuesDir
@@ -949,6 +969,15 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			expectedBranch := deriveBranchName(issue.Type, issueID)
 			if expectedBranch == "" {
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
+			}
+			if fromWorktreePath != "" {
+				existingTip, exists, tipErr := branchTipIfExists(ctx.RepoPath, expectedBranch)
+				if tipErr != nil {
+					return tipErr
+				}
+				if exists && existingTip != fromTip {
+					return fmt.Errorf("existing branch %s tip %s does not match --from tip %s; use a new issue branch or align it manually", expectedBranch, existingTip, fromTip)
+				}
 			}
 
 			// Check whether the worktree path already exists. Capture the state here
