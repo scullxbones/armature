@@ -201,6 +201,26 @@ _Avoid_: Definition of done, acceptance
 A machine-readable record that a deterministic check ran and what it reported for an issue or requirement. Verification evidence supports review but does not by itself establish semantic conformance with the intended work.
 _Avoid_: Conformance assessment, acceptance, outcome
 
+**Gate Profile**:
+A repository-configured named command that runs a deterministic gate. Armature knows only the profile's name and command, never the toolchain behind it; the name `full` is reserved for the publish profile.
+_Avoid_: Build target, CI job, pipeline
+
+**Fast Gate**:
+The diff-routed gate profile run during implementation and remediation. A green fast gate is sufficient to iterate but never confers delivery.
+_Avoid_: Publish gate, full check, smoke test
+
+**Publish Gate**:
+The complete deterministic gate, run at exactly two boundaries: the final task head and story integration. Only a publish gate confers delivery.
+_Avoid_: Fast gate, CI, merge authority
+
+**Gate Evidence**:
+An append-only record, written by the same process that executed a gate profile, binding profile, command, commit SHA, timestamps, and exit status. Gate evidence from a dirty tree or a self-report is uncitable; a gate criterion is satisfied only by evidence whose SHA matches the review bundle head. Reported is not evidenced.
+_Avoid_: Gate report, pass claim, prose confirmation
+
+**Vertical Slice**:
+A task scope containing a change together with every surface its own publish gate derives from — code, tests, documentation, and census rows co-located. The opposite, a horizontal split of code from its gated documentation, is a planning defect.
+_Avoid_: Layered task, doc task, follow-up task
+
 **Conformance Assessment**:
 A structured LLM-as-judge evaluation of whether delivered work is semantically faithful to an issue's definition of done and acceptance. A conformance assessment informs review; it neither reruns deterministic checks nor acts as a completion gate.
 _Avoid_: Verification evidence, acceptance, outcome

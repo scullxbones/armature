@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "title": "Gate Efficiency: two-tier gates, evidence-based acceptance, bounded review",
+  "issues": [
+    {
+      "id": "LNGHZN-S10",
+      "title": "Gate efficiency story",
+      "type": "story",
+      "scope": "",
+      "priority": "high",
+      "dod": "All ratified decisions in docs/design/gate-efficiency.md (D1-D8) are delivered: two-tier gates are normative, check-fast exists with deterministic routing, gate evidence is recorded and consumed in review, validate is strict by default and enforced at plan release, and vertical-slice coupling is detected at planning time.",
+      "parent": "",
+      "blocked_by": null,
+      "notes": [
+        "Spec: docs/design/gate-efficiency.md; ADR: docs/adr/0014-two-tier-gates-and-evidence-based-acceptance.md"
+      ],
+      "acceptance": [
+        "All child tasks merged and confirmed on main",
+        "Cumulative full gate green at story integration head",
+        "arm validate exits 0 (strict) at story close"
+      ]
+    },
+    {
+      "id": "LNGHZN-S10-T1",
+      "title": "Make two-tier gate workflow, bounded review, and effort defaults normative in skills",
+      "type": "task",
+      "scope": "docs/agents/workflow.md, internal/skillsembed/skills/armature-coordinator/SKILL.md, internal/skillsembed/skills/armature-reviewer/SKILL.md, internal/skillsembed/skills/armature-worker/SKILL.md",
+      "context_files": ["docs/design/gate-efficiency.md"],
+      "priority": "high",
+      "dod": "Skill and workflow text makes normative: fast gate for iteration and full gate at exactly the final task head and story integration (D1); one comprehensive review, parallel perspectives aggregated, one consolidated remediation, hard-scoped confirmation with critical-severity escape, cap of 3 cycles then human escalation (D5); medium effort default with planning-time high assignment and auto-escalation at remediation cycle 2, transcript-free dispatch, evidence-based gate acceptance rule (D6, D4 acceptance text).",
+      "parent": "LNGHZN-S10",
+      "blocked_by": [],
+      "notes": [
+        "Text-only task: pays off on the next story before any tooling lands.",
+        "Reviewer chat output contract: rating + actionable findings only; full assessment JSON to a file under .armature/review/, referenced by path.",
+        "Acceptance rule text: gate criterion satisfied iff evidence op has exit=0, profile=full, SHA == bundle head; otherwise rerun, never indeterminate."
+      ],
+      "acceptance": [
+        "make validate-skills green",
+        "make check green at task head",
+        "Coordinator skill states the remediation cap of 3 and hard-scoped confirmation review",
+        "Worker skill forbids full make check on intermediate remediations and requires it once at final task head"
+      ]
+    },
+    {
+      "id": "LNGHZN-S10-T2",
+      "title": "Add make check-fast with diff routing; single-run test/coverage in full gate",
+      "type": "task",
+      "scope": "Makefile, scripts/check-fast.sh (new), scripts/test-check-fast.sh (new), docs/agents/quality-gates.md",
+      "context_files": ["docs/design/gate-efficiency.md"],
+      "priority": "high",
+      "dod": "make check-fast routes deterministically from git diff against merge-base HEAD origin/main (BASE= override): Go changes run lint+build+tests for changed packages plus reverse importers; skills/docs-skills changes run skill/doc validation; cmd or census-surface changes run census-drift-check; docs-only changes run adr-principles only. The full gate runs the unit suite once with -coverprofile and the coverage threshold reads that profile instead of re-running tests.",
+      "parent": "LNGHZN-S10",
+      "blocked_by": [],
+      "notes": [
+        "Routing must be deterministic from repo state alone (I5); no worker judgment about which tests matter.",
+        "test-check-fast.sh follows the test-census-drift-check pattern: verify routing for a doc-only diff, a cmd flag diff, and an internal package diff with a cmd reverse importer."
+      ],
+      "acceptance": [
+        "scripts/test-check-fast.sh passes: doc-only diff runs no mutate, coverage, or crosscompile",
+        "scripts/test-check-fast.sh passes: cmd flag diff routes census-drift-check plus cmd package tests",
+        "make check runs the unit suite exactly once (coverage read from the same run)",
+        "make check green at task head"
+      ]
+    },
+    {
+      "id": "LNGHZN-S10-T3",
+      "title": "Gate evidence: config-declared profiles, arm gate run, evidence ops in review bundle",
+      "type": "task",
+      "scope": "internal/config/config.go, internal/config/config_test.go, internal/ops/gate_evidence.go (new), internal/ops/gate_evidence_test.go (new), cmd/armature/gate.go (new), cmd/armature/gate_test.go (new), internal/review/bundle_evidence.go (new), internal/review/bundle_evidence_test.go (new), docs/commands.md, docs/design/surface-census.md",
+      "context_files": ["docs/design/gate-efficiency.md", "docs/adr/0014-two-tier-gates-and-evidence-based-acceptance.md"],
+      "priority": "high",
+      "dod": "Config gains a gates map ({name: {command: []string}}) with profile name 'full' reserved as the publish profile. arm gate run <profile> executes the configured command, streams output to a log file, and appends an evidence op (profile, command, head SHA, start, end, exit) to the invoking worker's own log; a dirty tree records the run as uncommitted/uncitable; unconfigured repos get a clear error. ReviewBundle includes gate evidence ops so reviewers can cite them.",
+      "parent": "LNGHZN-S10",
+      "blocked_by": [],
+      "notes": [
+        "Armature ships no toolchain knowledge: profiles are repo config, like hooks (product-boundary decision from grilling).",
+        "Evidence op is written by the process that observed the exit status; self-report never counts.",
+        "Vertical slice: docs/commands.md entry and surface-census.md rows for arm gate land in this task."
+      ],
+      "acceptance": [
+        "TestGateRunRecordsEvidence_REQ_LNGHZN_S10_T3 passes",
+        "TestGateRunDirtyTreeUncitable_REQ_LNGHZN_S10_T3 passes",
+        "TestGateRunUnconfiguredRepoErrors_REQ_LNGHZN_S10_T3 passes",
+        "TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3 passes",
+        "make check green at task head (census includes arm gate)"
+      ]
+    },
+    {
+      "id": "LNGHZN-S10-T4",
+      "title": "Validate strict by default, warning burn-down, plan-release enforcement",
+      "type": "task",
+      "scope": "cmd/armature/validate.go, cmd/armature/validate_test.go, internal/validate/validate.go, internal/validate/validate_test.go, cmd/armature/dag_transition.go, cmd/armature/dag_transition_test.go, docs/commands.md, docs/design/surface-census.md",
+      "context_files": ["docs/design/gate-efficiency.md"],
+      "priority": "medium",
+      "dod": "arm validate runs strict by default: warnings are errors, green output is silent (summary line only). All pre-existing warnings in this repo are fixed or their rules corrected — no waivers, no scoping. dag transition to released/verified states requires validate green, so findings die at plan release. Full gate includes arm validate --ci.",
+      "parent": "LNGHZN-S10",
+      "blocked_by": ["LNGHZN-S10-T3"],
+      "notes": [
+        "Partial/scoped validation was explicitly rejected: the system validates whole or not at all.",
+        "Serialized after T3 because both tasks own docs/commands.md and surface-census.md (D8 co-location rule applied to this very plan).",
+        "Burn-down may touch additional files carrying current warnings; worker lists them in the outcome."
+      ],
+      "acceptance": [
+        "TestValidateStrictDefault_REQ_LNGHZN_S10_T4 passes",
+        "TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4 passes",
+        "arm validate exits 0 with silent output on this repo",
+        "make check green at task head"
+      ]
+    },
+    {
+      "id": "LNGHZN-S10-T5",
+      "title": "Detect cross-task gate coupling at plan release (vertical-slice rule)",
+      "type": "task",
+      "scope": "internal/validate/coupling.go (new), internal/validate/coupling_test.go (new), docs/design/gate-efficiency.md",
+      "context_files": ["docs/design/gate-efficiency.md"],
+      "priority": "medium",
+      "dod": "Plan validation fails when one task's scope touches a censused surface (cmd/**) while a different task in the same story owns the documentation or census files that surface's drift check reads (docs/commands.md, docs/design/surface-census.md). The error names both tasks and the coupled files and states the remedy: co-locate the census/doc lines with the code task.",
+      "parent": "LNGHZN-S10",
+      "blocked_by": ["LNGHZN-S10-T4"],
+      "notes": [
+        "Runs as part of strict validate at plan release (depends on T4 enforcement point).",
+        "Motivating deadlock: docs/dogfood/findings/raw/2026-08-14T2021Z-5207ee28-coordination-sequential-doc-task-blocks-code-gate.md"
+      ],
+      "acceptance": [
+        "TestPlanCouplingDetection_REQ_LNGHZN_S10_T5 passes",
+        "TestPlanCouplingCoLocatedScopePasses_REQ_LNGHZN_S10_T5 passes",
+        "make check green at task head"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+# Gate Efficiency — Two-Tier Gates, Evidence-Based Acceptance, Bounded Review
+
+Status: ratified in grilling session 2026-08-14 (human decisions by Brian
+Scully). Source handoff: S9 coordination cost analysis. This document is the
+citable spec for the gate-efficiency story.
+
+## Problem
+
+Coordinating `LNGHZN-S9` showed two dominant cost drivers:
+
+- **Wall clock**: repeated full `make check` runs (~10 min each; mutate 153s,
+  coverage-check 140s, test 133s, crosscompile 69s) triggered by small
+  remediations were an estimated 60–80% of elapsed time.
+- **Tokens**: serial defect discovery (review → fix → review → fix), prose-only
+  gate reports forcing reruns, and unrelated `arm validate` warning noise were
+  an estimated 45–60% of token spend.
+
+Evidence (do not re-derive):
+
+- `docs/dogfood/findings/raw/2026-08-14T2021Z-5207ee28-coordination-sequential-doc-task-blocks-code-gate.md`
+- `docs/dogfood/findings/raw/2026-08-14T2130Z-5207ee28-coordination-worker-green-gate-not-reproducible.md`
+- `docs/dogfood/findings/raw/2026-08-14T1933Z-5207ee28-skills-coordinator-custom-worktree-syntax-stale.md`
+- `docs/dogfood/findings/raw/2026-08-14T1931Z-5207ee28-coordination-doctor-ok-with-coordinator-blocking-warnings.md`
+
+## Ratified decisions
+
+### D1 — Two-tier gate model (normative)
+
+Two gate profiles with distinct roles:
+
+- **Fast gate** (`make check-fast`): deterministic, diff-routed; used during
+  implementation and remediation. Workers MUST NOT run the full gate on
+  intermediate remediations.
+- **Publish gate** (`make check`): unchanged in content; mandatory exactly
+  twice per task lifecycle — once at the final task head, once cumulatively at
+  story integration.
+
+A green fast gate is sufficient to iterate; only a publish gate confers
+delivery. Constitution I5 is preserved: the publish gate still decides.
+
+### D2 — check-fast routing
+
+A routing script computes changed files against `merge-base HEAD origin/main`
+(overridable via `BASE=`) and maps surfaces to steps:
+
+| Changed surface | Steps |
+|---|---|
+| `**/*.go` | lint + build + `go test` on changed packages **plus reverse importers** (`go list`) |
+| `skills/**`, `docs/skills/**` | validate-skills, validate-doc-examples |
+| `cmd/**`, `docs/design/surface-census.md`, `docs/commands.md` | census-drift-check |
+| docs only | adr-principles lint only |
+
+Acceptance anchors: a documentation-only remediation runs no mutation,
+coverage, or crosscompile; a CLI flag change runs census plus `cmd` package
+tests.
+
+### D3 — Full-gate single-run test/coverage
+
+`check` currently runs the unit suite twice (`test`, then `coverage-check`
+re-runs it). The full gate runs the suite once with `-coverprofile`; the
+threshold check reads the profile. Saves ~140s per full gate with no rigor
+change.
+
+### D4 — Gate evidence (config-declared, wrapper-recorded)
+
+- `.armature/config.json` gains a `gates` map alongside `hooks`:
+  `{"fast": {"command": [...]}, "full": {"command": [...]}}`. The profile name
+  `full` is **reserved**: it is the publish profile acceptance keys on.
+  Armature carries no knowledge of make/Go; unconfigured repos get an error
+  from `arm gate run` and today's behavior otherwise (opt-in feature).
+- `arm gate run <profile>` executes the configured command, streams output to a
+  log file, and appends an **evidence op** to the worker's own log (I3):
+  `{profile, command, head SHA, start, end, exit}`. A dirty tree is executed
+  but recorded `uncommitted` — citable as nothing. Self-reported gate results
+  never count as evidence.
+- ReviewBundle includes gate evidence. Acceptance rule: a reviewer or
+  coordinator may treat a behavioral gate criterion as satisfied **iff** an
+  evidence op exists with `exit=0`, `profile=full`, and SHA equal to the bundle
+  head. Older SHA, fast profile, or no op ⇒ rerun required — never
+  "indeterminate".
+
+### D5 — Bounded, consolidated review
+
+Normative coordinator/reviewer guidance:
+
+1. One comprehensive initial review (all findings, not first-found).
+2. Independent perspectives, if used, run **in parallel** and aggregate into
+   one findings list.
+3. One consolidated remediation request.
+4. One narrow confirmation review, **hard-scoped** to the remediated findings;
+   out-of-scope findings are recorded but block only at critical severity.
+5. Cap: **3 remediation cycles** per task, then stop and escalate to the human
+   (I7).
+
+Reviewer chat responses contain only rating and actionable findings; full
+schema-valid assessment JSON is written under `.armature/review/`, referenced
+by path.
+
+### D6 — Effort and context hygiene
+
+- Reasoning effort defaults to **medium** for workers and task reviews. High
+  effort is explicitly assigned at planning time (concurrency, security,
+  cross-cutting refactors) or **auto-escalated when a task enters remediation
+  cycle 2**. Story-level final audits remain high.
+- Dispatch workers with the rendered task spec and relevant file paths only —
+  never an inherited transcript. Reviewers get bundle paths, not inlined
+  content. Remediation dispatches state what changed; unchanged skills and
+  bundles are not re-read.
+
+### D7 — Strict validation, enforced at introduction
+
+- `arm validate` runs strict **by default**: warnings are errors, green means
+  silent. No scoping flags — the system validates whole or not at all
+  (partial validation rejected by decision). Rules that fire on intentional
+  states get fixed or deleted, not waived.
+- Rollout includes burning down all existing warnings.
+- Validate-green is enforced at **plan release** (findings die at the point of
+  introduction) and inside the `full` gate.
+
+### D8 — Vertical-slice planning validation
+
+Plan-release validation fails when one task's scope touches a censused surface
+(`cmd/**`) while a different task in the same story owns the documentation or
+census files that surface's drift check reads (`docs/commands.md`,
+`docs/design/surface-census.md`). Remedy is co-location: the flag's census row
+and command documentation belong to the task adding the flag. Stories deliver
+vertical slices, not horizontal layers.
+
+## Story shape
+
+| Task | Scope theme | Depends on |
+|---|---|---|
+| T1 | Workflow/skill guidance (D1 normative text, D5, D6) | — |
+| T2 | `make check-fast` routing + single-run test/coverage (D2, D3) | — |
+| T3 | Gate evidence end-to-end (D4) | — |
+| T4 | Strict validate default + burn-down + plan-release enforcement (D7) | — |
+| T5 | Vertical-slice plan validation (D8) | T4 |
+
+T1–T4 are parallelizable. T1 is text-only and pays off on the next story even
+before tooling lands.
