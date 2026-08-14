@@ -215,6 +215,26 @@ class TestClaimWorktreeSyntax(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIn("explicit --worktree", error)
 
+    def test_rejects_empty_spaced_worktree_with_from(self):
+        valid, error = validate_command(
+            'arm claim TASK --worktree "" --from /tmp/story-worktree',
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("explicit --worktree", error)
+
+    def test_rejects_empty_spaced_from_with_worktree(self):
+        valid, error = validate_command(
+            'arm claim TASK --worktree /tmp/new-task-worktree --from ""',
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("obsolete value-taking --worktree syntax", error)
+
 
 class TestExtractArmCommands(unittest.TestCase):
     def test_semicolon_separated_commands_split_correctly(self):
