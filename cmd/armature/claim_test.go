@@ -2358,6 +2358,29 @@ func TestClaimFromFlagRejectsUnresolvableFrom_REQ_LNGHZN_S9_T1(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestClaimFromFlagRejectsDetachedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parentPath := filepath.Join(repo, "detached-parent")
+	run(t, repo, "git", "worktree", "add", "--detach", parentPath)
+	destination := filepath.Join(repo, "child")
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
+	err := claim.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be on a branch")
+	assert.NoDirExists(t, destination)
+	_, err = runTrls(t, repo, "rev-parse", "--verify", "refs/heads/task/task-01")
+	assert.Error(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, ops.StatusOpen, issue.Status)
+}
+
 func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")

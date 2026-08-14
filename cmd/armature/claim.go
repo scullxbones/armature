@@ -891,6 +891,13 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
 					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
 				}
+				fromBranch, branchErr := adapters.New(fromWorktreePath).CurrentBranch()
+				if branchErr != nil {
+					return fmt.Errorf("resolve --from worktree branch: %w", branchErr)
+				}
+				if fromBranch == "" || fromBranch == "HEAD" {
+					return fmt.Errorf("--from worktree %s must be on a branch", fromWorktreePath)
+				}
 			}
 
 			issuesDir := ctx.IssuesDir
