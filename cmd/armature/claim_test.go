@@ -2364,3 +2364,66 @@ func TestClaimCommand_OrdinaryWinStillProvisionsWorktree_REQ_LNGHZN_S5_T9(t *tes
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	assert.DirExists(t, worktreePath, "a won claim must provision a worktree")
 }
+
+// TestClaimUsesConfigDefaultTTLWhenFlagNotSet_REQ_LNGHZN_S7_T1 verifies that
+// arm claim's --ttl flag defaults to config.json's default_ttl when --ttl is
+// not explicitly passed, rather than the previously hardcoded 60.
+func TestClaimUsesConfigDefaultTTLWhenFlagNotSet_REQ_LNGHZN_S7_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cfg := config.DefaultConfig("go")
+	cfg.DefaultTTL = 45
+	require.NoError(t, config.WriteConfig(filepath.Join(repo, ".armature", "config.json"), cfg))
+
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, 45, issue.ClaimTTL, "claim TTL should default to config.json's default_ttl")
+}
+
+// TestClaimExplicitTTLOverridesConfigDefault_REQ_LNGHZN_S7_T1 verifies that an
+// explicit --ttl flag always wins over config.json's default_ttl.
+func TestClaimExplicitTTLOverridesConfigDefault_REQ_LNGHZN_S7_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cfg := config.DefaultConfig("go")
+	cfg.DefaultTTL = 45
+	require.NoError(t, config.WriteConfig(filepath.Join(repo, ".armature", "config.json"), cfg))
+
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--ttl", "120")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, 120, issue.ClaimTTL, "explicit --ttl must override config.json's default_ttl")
+}
+
+// TestRenderContextUsesConfigTokenBudgetWhenFlagNotSet_REQ_LNGHZN_S7_T1 verifies
+// that render-context's --budget flag defaults to config.json's token_budget
+// when --budget is not explicitly passed, rather than the previously
+// hardcoded 4000. A tiny configured budget forces truncation down to a
+// single context layer.
+func TestRenderContextUsesConfigTokenBudgetWhenFlagNotSet_REQ_LNGHZN_S7_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cfg := config.DefaultConfig("go")
+	cfg.TokenBudget = 1
+	require.NoError(t, config.WriteConfig(filepath.Join(repo, ".armature", "config.json"), cfg))
+
+	tinyOut, err := runTrls(t, repo, "render-context", "--issue", "task-01", "--format", "agent")
+	require.NoError(t, err)
+
+	// An explicit, generous --budget must override the tiny configured default
+	// and produce strictly more content.
+	overriddenOut, err := runTrls(t, repo, "render-context", "--issue", "task-01", "--format", "agent", "--budget", "999999")
+	require.NoError(t, err)
+
+	assert.Less(t, len(tinyOut), len(overriddenOut),
+		"config.json's tiny token_budget should truncate content relative to an explicit generous --budget override")
+}

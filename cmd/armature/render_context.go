@@ -33,6 +33,11 @@ func newRenderContextCmd() *cobra.Command {
 			}
 
 			appCtx := currentCtx(cmd)
+			// token_budget in config.json is the single source of --budget's
+			// default; an explicit --budget always overrides it.
+			if !cmd.Flags().Changed("budget") && appCtx.Config.TokenBudget > 0 {
+				rcBudget = appCtx.Config.TokenBudget
+			}
 			var state *materialize.State
 			if rcAt != "" {
 				// Time-travel: replay ops as they existed at the given commit SHA.

@@ -820,6 +820,13 @@ armature-issue-id file if the worktree already exists.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 			var err error
+			// default_ttl in config.json is the single source of --ttl's default;
+			// an explicit --ttl always overrides it. It already governs staleness
+			// detection elsewhere (hook.go, workers.go) — this makes claim's
+			// default consistent with that same config value.
+			if !cmd.Flags().Changed("ttl") && ctx.Config.DefaultTTL > 0 {
+				ttl = ctx.Config.DefaultTTL
+			}
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
