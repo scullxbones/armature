@@ -3777,3 +3777,4 @@
 ["decision","LNGHZN-S9-T1",1786738995,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"topic":"census-gate-scope","choice":"include-surface-census","rationale":"make check requires every new command flag and changed flag type to be reflected in docs/design/surface-census.md; neither story task originally scoped that mandatory gate file"}]
 ["amend","LNGHZN-S9-T1",1786738995,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/claim.go","cmd/armature/claim_test.go","docs/design/surface-census.md"]}]
 ["transition","LNGHZN-S9-T1",1786738995,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
+["claim","LNGHZN-S9-T1",1786738999,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S9-T1","claim_token":"e45b9cfc7b1e12ecec7709ac9706f904"}]
