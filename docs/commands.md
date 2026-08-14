@@ -98,16 +98,19 @@ Claim a ready task and associate it with a git worktree.
 
 **Flags:**
 - `--force`: Override scope overlap warning and proceed with claim.
+- `--from string`: Seed an explicit new `--worktree <path>` from the current branch and tip of this parent worktree.
 - `--issue string`: Issue ID to claim.
 - `--ttl int`: Claim TTL in minutes (default 60).
-- `--worktree [path]`: Enable worktree provisioning (required). Without a value, provisions at `.worktrees/<issue-id>`; with an explicit path, provisions there instead. Both forms create a binding-managed worktree and a derived branch (`task/<id>`, `fix/<id>`, or `feat/<id>`).
-- `--from string`: Seed an explicit new `--worktree <path>` from the current branch and tip of this parent worktree.
+- `--worktree [new-path]`: Enable worktree provisioning (required). Without a value, provisions at `.worktrees/<issue-id>`; with an explicit path, provisions there instead. Both forms create a binding-managed worktree and a derived branch (`task/<id>`, `fix/<id>`, or `feat/<id>`).
 
 **Example:**
 ```bash
 arm claim TASK-001 --worktree
 arm claim TASK-001 --worktree ./child --from ./parent
 arm claim TASK-001 --ttl 120 --worktree
+
+# Create a sub-task worktree from the current story worktree
+arm claim TASK-002 --worktree /path/to/new-task-worktree --from /path/to/story-worktree
 ```
 
 ---

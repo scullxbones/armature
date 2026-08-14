@@ -93,6 +93,11 @@ work) or auto-escalates when a task enters remediation cycle 2 — treat a
 second remediation dispatch as a signal to reason harder, not just to repeat
 the previous pass.
 
+When a coordinator creates a sub-task worktree from a story worktree, it should use
+`arm claim SUBTASK-ID --worktree /path/to/new-task-worktree --from /path/to/story-worktree`
+so the new task worktree retains the story branch and tip as its recorded parent
+provenance.
+
 ### 3. Record Progress
 
 While implementing, record progress and decisions:
