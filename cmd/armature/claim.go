@@ -215,6 +215,21 @@ func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
 	return "", false, fmt.Errorf("resolve branch %s: %w", branchName, err)
 }
 
+// branchConfigIfExists returns a branch-scoped config value when present. An
+// unset key is a normal result; failures to query git config are surfaced.
+func branchConfigIfExists(repoPath, key string) (string, bool, error) {
+	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "config", "--local", "--get", key)
+	out, err := cmd.Output()
+	if err == nil {
+		return strings.TrimSpace(string(out)), true, nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("read config %s: %w", key, err)
+}
+
 // priorClaimState captures the issue's claim-related fields as they were before
 // this claim's op was appended, so a failed post-claim worktree setup step can
 // decide whether to keep the prior status or release the claim.
@@ -710,6 +725,10 @@ func parentBranchConfigKey(branchName string) string {
 	return deliverygate.ParentBranchConfigKey(branchName)
 }
 
+func baseCommitConfigKey(branchName string) string {
+	return "branch." + branchName + ".armature-base-commit"
+}
+
 // writeParentBranchConfigIfAbsent records parentBranch as the branch
 // branchName diverged from, but only if no such record exists yet — the
 // same idempotency guard as writeBaseCommitFileIfAbsent, and for the same
@@ -843,7 +862,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 			var err error
-			var fromTip string
+			var fromBranch, fromTip string
 			// pflag's optional-value support sets NoOptDefVal without consuming a
 			// following token. Recover the documented spaced form here while
 			// retaining the established value-less form for existing agents.
@@ -900,9 +919,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
 					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
 				}
-				fromBranch, branchErr := adapters.New(fromWorktreePath).CurrentBranch()
-				if branchErr != nil {
-					return fmt.Errorf("resolve --from worktree branch: %w", branchErr)
+				fromBranch, err = adapters.New(fromWorktreePath).CurrentBranch()
+				if err != nil {
+					return fmt.Errorf("resolve --from worktree branch: %w", err)
 				}
 				if fromBranch == "" || fromBranch == "HEAD" {
 					return fmt.Errorf("--from worktree %s must be on a branch", fromWorktreePath)
@@ -979,6 +998,24 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					return fmt.Errorf(
 						"existing branch %s tip %s does not match --from tip %s; use a new issue branch or align it manually",
 						expectedBranch, existingTip, fromTip)
+				}
+				existingParent, exists, configErr := branchConfigIfExists(ctx.RepoPath, parentBranchConfigKey(expectedBranch))
+				if configErr != nil {
+					return configErr
+				}
+				if exists && existingParent != fromBranch {
+					return fmt.Errorf(
+						"existing branch %s parent %s does not match --from branch %s",
+						expectedBranch, existingParent, fromBranch)
+				}
+				existingBase, exists, configErr := branchConfigIfExists(ctx.RepoPath, baseCommitConfigKey(expectedBranch))
+				if configErr != nil {
+					return configErr
+				}
+				if exists && existingBase != fromTip {
+					return fmt.Errorf(
+						"existing branch %s base commit %s does not match --from tip %s",
+						expectedBranch, existingBase, fromTip)
 				}
 			}
 
