@@ -2291,32 +2291,7 @@ func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
 		"recreated worktree must be checked out on the issue's derived branch")
 }
 
-// TestClaimWorktreeFlagAcceptsDestinationPath_REQ_LNGHZN_S9_T1 verifies that
-// --worktree accepts a caller-selected destination path while retaining the
-// value-less form used by existing workers.
-func TestClaimWorktreeFlagAcceptsDestinationPath_REQ_LNGHZN_S9_T1(t *testing.T) {
-	wtFlag := newClaimCmd().Flags().Lookup("worktree")
-	require.NotNil(t, wtFlag, "claim must expose a --worktree flag")
-	assert.Equal(t, "string", wtFlag.Value.Type(), "--worktree must accept a destination path")
-
-	// The value-less boolean form succeeds.
-	repo := setupRepoWithTask(t)
-	okCmd := newRootCmd()
-	okCmd.SetOut(new(bytes.Buffer))
-	okCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
-	require.NoError(t, okCmd.Execute(), "the boolean --worktree form must succeed")
-
-	// A caller-selected destination is accepted when it does not exist.
-	repo2 := setupRepoWithTask(t)
-	destination := filepath.Join(t.TempDir(), "task-worktree")
-	customCmd := newRootCmd()
-	customCmd.SetOut(new(bytes.Buffer))
-	customCmd.SetArgs([]string{"claim", "--repo", repo2, "task-01", "--worktree", destination})
-	require.NoError(t, customCmd.Execute())
-	assert.DirExists(t, destination)
-}
-
-func TestClaimFromParentWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
@@ -2334,26 +2309,81 @@ func TestClaimFromParentWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
 	assert.Equal(t, parentTip, strings.TrimSpace(runGitOutput(t, childPath, "rev-parse", "HEAD")))
 	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent"))
 	assert.Equal(t, "feature-parent", parentBranch)
+	childGitDir, err := resolveWorktreeGitDir(childPath)
+	require.NoError(t, err)
+	baseCommit, err := os.ReadFile(filepath.Join(childGitDir, "armature-base-commit"))
+	require.NoError(t, err)
+	assert.Equal(t, parentTip, strings.TrimSpace(string(baseCommit)))
+}
 
-	rejectedPath := filepath.Join(repo, "existing")
-	require.NoError(t, os.Mkdir(rejectedPath, 0o755))
+func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	create := newRootCmd()
+	create.SetOut(new(bytes.Buffer))
+	create.SetArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"})
+	require.NoError(t, create.Execute())
+
+	boundPath := filepath.Join(repo, "bound")
+	bind := newRootCmd()
+	bind.SetOut(new(bytes.Buffer))
+	bind.SetArgs([]string{"claim", "task-02", "--repo", repo, "--worktree", boundPath})
+	require.NoError(t, bind.Execute())
+	boundGitDir, err := resolveWorktreeGitDir(boundPath)
+	require.NoError(t, err)
+	bindingBefore, err := os.ReadFile(filepath.Join(boundGitDir, "armature-issue-id"))
+	require.NoError(t, err)
+
 	rejected := newRootCmd()
 	rejected.SetOut(new(bytes.Buffer))
-	rejected.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", rejectedPath, "--from", parentPath})
-	err := rejected.Execute()
+	rejected.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", boundPath, "--from", repo})
+	err = rejected.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must not exist")
+	bindingAfter, err := os.ReadFile(filepath.Join(boundGitDir, "armature-issue-id"))
+	require.NoError(t, err)
+	assert.Equal(t, string(bindingBefore), string(bindingAfter))
+}
 
-	invalidSource := newRootCmd()
-	invalidSource.SetOut(new(bytes.Buffer))
-	invalidSource.SetArgs([]string{
-		"claim", "task-01", "--repo", repo,
-		"--worktree", filepath.Join(repo, "other-child"),
-		"--from", filepath.Join(repo, "not-a-worktree"),
-	})
-	err = invalidSource.Execute()
+func TestClaimFromFlagRejectsUnresolvableFrom_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(repo, "child")
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", filepath.Join(repo, "missing")})
+	err := claim.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not an existing worktree")
+	assert.NoDirExists(t, destination)
+	_, err = runTrls(t, repo, "rev-parse", "--verify", "refs/heads/task/task-01")
+	assert.Error(t, err)
+}
+
+func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+
+	fresh := newRootCmd()
+	fresh.SetOut(new(bytes.Buffer))
+	fresh.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
+	require.NoError(t, fresh.Execute())
+	require.DirExists(t, canonicalPath)
+
+	existing := newRootCmd()
+	existing.SetOut(new(bytes.Buffer))
+	existing.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
+	require.NoError(t, existing.Execute())
+	gitDir, err := resolveWorktreeGitDir(canonicalPath)
+	require.NoError(t, err)
+	binding, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
+	require.NoError(t, err)
+	assert.Equal(t, "task-01", strings.TrimSpace(string(binding)))
+
+	surplus := newRootCmd()
+	surplus.SetOut(new(bytes.Buffer))
+	surplus.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree=unused", "surplus"})
+	err = surplus.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "accepts at most 1 arg")
 }
 
 // injectFutureSameWorkerClaim appends a claim op for issueID that carries the
