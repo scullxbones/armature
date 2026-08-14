@@ -506,13 +506,25 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
 
     tokens = strip_redirects(tokens)
 
-    # `--worktree` is a boolean flag since canonical auto-provisioning was
-    # introduced. Reject the removed value-taking spelling in copyable current
-    # guidance instead of allowing a stale example to drift until execution.
+    # Canonical provisioning uses value-less `--worktree`, but `claim --from`
+    # requires an explicit new destination. Permit either Cobra spelling for
+    # that paired form while rejecting value-taking worktree examples elsewhere.
+    claim_from = tokens[:2] == ["arm", "claim"] and any(
+        token.startswith("--from=") and len(token) > len("--from=")
+        or token == "--from"
+        and index+1 < len(tokens)
+        and not tokens[index+1].startswith("-")
+        for index, token in enumerate(tokens)
+    )
     for index, token in enumerate(tokens):
-        if token.startswith("--worktree="):
+        if token.startswith("--worktree=") and not claim_from:
             return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
-        if token == "--worktree" and index + 1 < len(tokens) and not tokens[index + 1].startswith("-"):
+        if (
+            token == "--worktree"
+            and index + 1 < len(tokens)
+            and not tokens[index + 1].startswith("-")
+            and not claim_from
+        ):
             return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
     if tokens and tokens[0] == "arm":
         tokens = tokens[1:]
