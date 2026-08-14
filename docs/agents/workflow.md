@@ -74,6 +74,26 @@ arm merged --issue TASK-ID
 
 This removes the linked worktree and frees its resources. The `.worktrees/` directory remains gitignored, so worktree contents are never committed.
 
+## Two-Tier Gate Model (normative)
+
+There are two gate profiles, with distinct roles in the workflow:
+
+- **Fast gate** (`make check-fast`) — deterministic, diff-routed. Runs during
+  implementation and on every intermediate remediation cycle. A green fast
+  gate is sufficient to keep iterating. Workers MUST NOT run the full gate on
+  intermediate remediations.
+- **Full/publish gate** (`make check`) — unchanged in content from before this
+  model; mandatory exactly twice per task's lifecycle: once at the task's
+  final head (the worker's responsibility before transitioning to `done`, see
+  the armature-worker skill), and once cumulatively at story integration (the
+  coordinator's wave verification gate, see the armature-coordinator skill).
+
+Only a green full gate confers delivery — a green fast gate never substitutes
+for it. This preserves Constitution I5 (deterministic gates decide): the full
+gate is still the thing that decides, the fast gate only shortens iteration.
+See `docs/design/gate-efficiency.md` (D1) for the full rationale and evidence
+op acceptance rule (D4).
+
 ## Before closing out work
 
 ```bash
