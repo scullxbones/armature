@@ -70,6 +70,19 @@ output is sufficient.**
 The issue is already claimed. Do NOT run `arm claim`. Do NOT run `arm worker-init`
 again.
 
+**Transcript-free dispatch (normative).** Dispatch consists of the rendered
+task spec and relevant file paths only — never an inherited transcript from a
+prior agent. If you are re-dispatched for a remediation cycle, expect a
+statement of what changed rather than a re-read of unchanged skills or
+bundles; do not re-read files that were not called out as changed.
+
+**Effort default (normative).** Task execution and task-level reviews default
+to **medium** reasoning effort. High effort is assigned explicitly at
+planning time (e.g., for concurrency, security, or cross-cutting refactor
+work) or auto-escalates when a task enters remediation cycle 2 — treat a
+second remediation dispatch as a signal to reason harder, not just to repeat
+the previous pass.
+
 ### 3. Record Progress
 
 While implementing, record progress and decisions:
@@ -100,12 +113,27 @@ Do not leave issues uncited.
 
 ### 5. Pre-Transition Verification (mandatory)
 
-Before transitioning any task to `done`, you **must** run the following checks.
-Do NOT transition if either fails — fix the errors first.
+**Two-tier gate model (normative).** There are two gate profiles, and they play
+different roles:
+
+- **Fast gate** (`make check-fast`) — deterministic, diff-routed. Use this
+  during implementation and on every intermediate remediation cycle. It is
+  sufficient to keep iterating. Workers **MUST NOT** run the full gate on
+  intermediate remediations — that wastes wall-clock time re-running suites
+  the remediation could not have touched.
+- **Full gate** (`make check`) — the publish gate. It is mandatory **exactly
+  once at the final task head**, immediately before transitioning to `done`.
+  A green fast gate never substitutes for it: only a green full gate confers
+  delivery.
+
+Run the fast gate as often as you like while iterating. Before transitioning
+any task to `done`, you **must** run the full gate at the final task head.
+Do NOT transition if it fails — fix the errors first.
 
 ```bash
-go build ./...   # must exit zero; stops transition if compilation fails
-make check       # lint + test + coverage-check + mutate + validate-skills + build
+go build ./...    # must exit zero; stops transition if compilation fails
+make check-fast    # fast gate — use during implementation and intermediate remediation
+make check          # full/publish gate — mandatory once, at the final task head, before done
 ```
 
 If `make check` is unavailable (e.g., the repo has no Makefile), fall back to:
@@ -116,9 +144,10 @@ go run ./cmd/armature --help   # confirms the binary at least compiles
 
 **Completion order (never deviate):**
 1. Run `go build ./...` — fix any compile errors.
-2. Run `make check` — fix any lint/test/coverage failures.
-3. Stage scoped files and commit with a conventional commit message (`<type>(ISSUE-ID): ...`) — the delivery gate's Clean Tree and Commit Reference checks require this to already be done before you transition.
-4. `arm transition ISSUE-ID --to done --outcome "..."` — only after the build, checks, and commit above are complete.
+2. Iterate with `make check-fast` during implementation and remediation; do not run the full gate on these intermediate passes.
+3. Run `make check` (the full gate) once at the final task head — fix any lint/test/coverage failures.
+4. Stage scoped files and commit with a conventional commit message (`<type>(ISSUE-ID): ...`) — the delivery gate's Clean Tree and Commit Reference checks require this to already be done before you transition.
+5. `arm transition ISSUE-ID --to done --outcome "..."` — only after the build, full gate, and commit above are complete.
 
 ### 5b. Cross-Layer JSON Fixture Testing (when applicable)
 
