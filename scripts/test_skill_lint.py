@@ -166,15 +166,32 @@ class TestClaimWorktreeSyntax(unittest.TestCase):
 
         self.assertTrue(valid, error)
 
-    def test_rejects_value_taking_worktree_without_from(self):
+    def test_accepts_explicit_destination_without_from(self):
         valid, error = validate_command(
             "arm claim --worktree /tmp/new-task-worktree",
             self.valid_subcommands,
             self.valid_flags,
         )
 
-        self.assertFalse(valid)
-        self.assertIn("obsolete value-taking --worktree syntax", error)
+        self.assertTrue(valid, error)
+
+    def test_accepts_canonical_worktree_without_from(self):
+        valid, error = validate_command(
+            "arm claim --worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertTrue(valid, error)
+
+    def test_accepts_equals_destination_without_from(self):
+        valid, error = validate_command(
+            "arm claim --worktree=/tmp/new-task-worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertTrue(valid, error)
 
     def test_accepts_equals_destination_with_from(self):
         valid, error = validate_command(
@@ -193,7 +210,7 @@ class TestClaimWorktreeSyntax(unittest.TestCase):
         )
 
         self.assertFalse(valid)
-        self.assertIn("obsolete value-taking --worktree syntax", error)
+        self.assertIn("nonempty --from source", error)
 
     def test_rejects_valueless_worktree_with_from(self):
         valid, error = validate_command(
@@ -230,6 +247,26 @@ class TestClaimWorktreeSyntax(unittest.TestCase):
             'arm claim TASK --worktree /tmp/new-task-worktree --from ""',
             self.valid_subcommands,
             self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("nonempty --from source", error)
+
+    def test_rejects_empty_equals_from_with_worktree(self):
+        valid, error = validate_command(
+            "arm claim TASK --worktree /tmp/new-task-worktree --from=",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("nonempty --from source", error)
+
+    def test_rejects_valued_worktree_outside_claim(self):
+        valid, error = validate_command(
+            "arm ready --worktree /tmp/new-task-worktree",
+            {"ready"},
+            {"ready": {"--worktree"}},
         )
 
         self.assertFalse(valid)

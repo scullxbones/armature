@@ -506,10 +506,9 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
 
     tokens = strip_redirects(tokens)
 
-    # Canonical provisioning uses value-less `--worktree`, but `claim --from`
-    # requires an explicit new destination. Permit either Cobra spelling only
-    # when both flags carry a nonempty value; reject value-taking examples
-    # elsewhere so stale guidance does not drift until execution.
+    # `claim` accepts canonical value-less provisioning and a nonempty explicit
+    # destination in either Cobra spelling. A supplied `--from` must likewise
+    # carry a nonempty source; other commands reject value-taking worktrees.
     def has_flag_value(flag):
         return any(
             token.startswith(flag + "=") and len(token) > len(flag) + 1
@@ -520,15 +519,19 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
             for index, token in enumerate(tokens)
         )
 
-    claim_from = tokens[:2] == ["arm", "claim"] and has_flag_value("--from")
+    is_claim = tokens[:2] == ["arm", "claim"]
+    has_from = any(token == "--from" or token.startswith("--from=") for token in tokens)
+    from_value = has_flag_value("--from")
     worktree_value = has_flag_value("--worktree")
     has_worktree = any(
         token == "--worktree" or token.startswith("--worktree=") for token in tokens
     )
-    if claim_from and has_worktree and not worktree_value:
+    if is_claim and has_from and not from_value:
+        return False, f"claim --from requires a nonempty --from source in: {arm_command}"
+    if is_claim and has_from and has_worktree and not worktree_value:
         return False, f"claim --from requires an explicit --worktree <new-path> in: {arm_command}"
 
-    allow_valued_worktree = claim_from and worktree_value
+    allow_valued_worktree = is_claim and worktree_value
     for index, token in enumerate(tokens):
         if token.startswith("--worktree=") and not allow_valued_worktree:
             return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
