@@ -866,6 +866,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 
 			customWorktreePath := worktreePath != defaultWorktreeFlagValue
+			if fromWorktreePath != "" && !customWorktreePath {
+				return fmt.Errorf("--from requires an explicit --worktree <new-path> destination")
+			}
 			if customWorktreePath {
 				worktreePath, err = filepath.Abs(worktreePath)
 				if err != nil {
