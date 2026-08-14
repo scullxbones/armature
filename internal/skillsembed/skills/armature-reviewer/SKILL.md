@@ -172,6 +172,24 @@ Citations recorded here are subject to the mandatory verification rules:
   same as missing evidence for that purpose
 - Activity citations follow the upgrade-only rule (lift indeterminate verdicts on behavioral criteria only)
 
+### 3a. Gate Evidence Acceptance Rule (normative)
+
+When a criterion asserts a behavioral gate outcome (e.g., "the full gate
+passes", "`make check` is green"), you may treat it as **satisfied** only
+from **citable gate evidence**: an evidence op with `exit=0`, `profile=full`,
+and `sha` equal to the bundle's `delivery.head_sha`.
+
+- **Older SHA, `profile=fast`, or no evidence op at all ⇒ rerun required.**
+  Do not accept a self-reported "tests pass" claim from the outcome text,
+  activity log prose, or worker narration as gate evidence — only the
+  recorded evidence op counts.
+- Never assign `indeterminate` as a way to route around missing gate
+  evidence. If the required evidence op is absent or stale, the criterion is
+  `not_satisfied` with `missing_evidence` stating that a full-profile gate run
+  at the bundle head is required, not an ambiguous or soft rating.
+- A fast-profile gate run is valid evidence of iteration but never satisfies a
+  full-gate criterion, regardless of SHA or exit code.
+
 ### 4. Assign Ratings
 
 After evaluating all criteria, derive the **Rating**:
@@ -263,6 +281,15 @@ After completing Step 5a self-check, output the ConformanceAssessment JSON to st
 Do **not** call `arm review record` — recording is the coordinator's responsibility. The coordinator passes the
 assessment to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"` after receiving it, so the
 fingerprint validation is bound to the exact bundle it dispatched.
+
+**Bounded chat response (normative).** Write the full ConformanceAssessment
+JSON to a file under `.armature/review/` and reference it **by path**. Your
+chat/text response to the coordinator contains **only** the rating (Green /
+Yellow / Red) and the actionable findings — never the inlined full assessment
+JSON, never a restated copy of the bundle contents. This keeps the
+coordinator's context free of duplicated JSON it can read from disk when it
+needs it, and keeps remediation dispatches (see the coordinator's bounded
+review protocol) working from findings, not transcripts.
 
 ```bash
 # Output the assessment JSON so the coordinator can capture it:

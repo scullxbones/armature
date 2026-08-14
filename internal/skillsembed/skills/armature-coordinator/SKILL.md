@@ -218,6 +218,19 @@ Claim collisions are handled at pre-claim time by the coordinator.
 
 ## Dispatch Protocol
 
+**Transcript-free dispatch (normative).** Dispatch every worker and reviewer
+with the rendered task spec and relevant file paths only — never an inherited
+transcript. Reviewers receive bundle **paths**, not inlined bundle content.
+Remediation dispatches state what changed since the last pass; unchanged
+skills and bundles are not re-read or re-sent.
+
+**Effort defaults (normative).** Reasoning effort defaults to **medium** for
+worker dispatch and task-level reviews. Assign **high** effort explicitly at
+planning time for concurrency, security, or cross-cutting refactor work, and
+auto-escalate to high when a task's remediation reaches **cycle 2** (see the
+bounded review protocol in section a.2). Story-level final audits (the
+armature-auditor pass in Story Completion) remain high effort always.
+
 Each worker's context package must contain:
 
 0. **Skill invocation (VERY FIRST instruction):**
@@ -307,6 +320,22 @@ The recovery step:
 This is common when workers return from background dispatch without explicit handoff, or when TTL expiration causes a race with the heartbeat mechanism. Recovery is safe — `arm transition` is idempotent once an issue is already `done`.
 
 ### a.2. Semantic Review (Reviewer Dispatch)
+
+**Bounded, consolidated review protocol (normative).** Review is not an
+open-ended back-and-forth. Per task:
+
+1. **One comprehensive initial review** — the reviewer reports all findings in
+   one pass, not the first defect found.
+2. If independent perspectives are used, they run **in parallel** and are
+   aggregated into **one** findings list before remediation is requested —
+   never dispatched as a serial review → fix → review → fix chain.
+3. **One consolidated remediation request** covering every finding from step 1/2.
+4. **One narrow confirmation review**, hard-scoped to only the findings that
+   were remediated; findings outside that scope are recorded but block
+   further progress only at critical severity.
+5. **Cap: 3 remediation cycles** per task. If the task is still not green
+   after 3 cycles, stop dispatching remediation and escalate to the human
+   (Constitution I7 — accountability does not transfer to the system).
 
 For each task that completed in the wave, dispatch semantic conformance review using task-scoped delivery bundles:
 
@@ -504,10 +533,19 @@ if echo "$CHANGED_FILES" | grep -E '\.(go|mod|sum)$' | grep -q . || \
 fi
 ```
 
+**Two-tier gate model (normative).** `make check` here is the **full/publish
+gate**. Per the story-lifecycle rule, the full gate runs mandatorily exactly
+twice: once at each task's final head (worker's responsibility, see the
+armature-worker skill) and once cumulatively at story integration (this
+step). Workers iterate against the cheaper fast gate (`make check-fast`) and
+MUST NOT run the full gate on intermediate remediations — do not ask a worker
+to re-run `make check` mid-remediation; that is what the wave verification
+gate below is for.
+
 **Code profile** (run when `WAVE_TYPE=code`):
 ```bash
 go build ./...   # compilation gate
-make check       # lint + test + coverage-check + mutate + validate-skills + build
+make check       # full/publish gate — lint + test + coverage-check + mutate + validate-skills + build
 arm validate --quiet                                    # citation integrity
 arm doctor                                              # repo health
 ```
