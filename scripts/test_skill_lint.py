@@ -195,6 +195,26 @@ class TestClaimWorktreeSyntax(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIn("obsolete value-taking --worktree syntax", error)
 
+    def test_rejects_valueless_worktree_with_from(self):
+        valid, error = validate_command(
+            "arm claim TASK --worktree --from /tmp/story-worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("explicit --worktree", error)
+
+    def test_rejects_empty_equals_worktree_with_from(self):
+        valid, error = validate_command(
+            "arm claim TASK --worktree= --from /tmp/story-worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("explicit --worktree", error)
+
 
 class TestExtractArmCommands(unittest.TestCase):
     def test_semicolon_separated_commands_split_correctly(self):
