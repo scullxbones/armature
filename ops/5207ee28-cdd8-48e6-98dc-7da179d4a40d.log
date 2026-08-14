@@ -4015,3 +4015,4 @@
 ["link","LNGHZN-S10-T5",1786748962,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"LNGHZN-S10-T4","rel":"blocked_by"}]
 ["dag-transition","LNGHZN-S10",1786748962,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"LNGHZN-S10"}]
 ["source-link","LNGHZN-S10",1786748966,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"7675b1c9-f6ef-4036-b75d-677ccc70b7ee","source_url":"docs/design/gate-efficiency.md"}]
+["source-link","LNGHZN-S10-T1",1786748967,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"7675b1c9-f6ef-4036-b75d-677ccc70b7ee","source_url":"docs/design/gate-efficiency.md"}]
