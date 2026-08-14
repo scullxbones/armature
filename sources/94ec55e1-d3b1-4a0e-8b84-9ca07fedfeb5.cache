@@ -39,6 +39,14 @@ The ten open-category survivors were scored on a six-axis rubric (§Creative bel
 
 **Gap-analysis adjacency:** T3.2 reconciles *unbound* worktrees during recovery; this proposal makes worktrees a first-class managed resource so there is far less to reconcile. Recording the path in the claim op is also what makes T3's recovery deterministic.
 
+#### F1.1 — `arm claim --from`: Armature-owned branch creation for sub-task worktrees *(follow-on, added 2026-08-11)*
+
+**What:** `arm claim <id> --worktree <new-path> --from <parent-worktree-path>` cuts the new task branch live from the parent worktree's current branch, persisting the same parent-branch config and base-commit metadata the fresh-worktree claim path already writes. `--from` is accepted only when `<new-path>` does not yet exist; the parent resolves as an existing worktree and its current branch serves both as the ref to branch from and as the recorded parent. No merge-base computation is needed, since the branch is cut from the parent's tip at that moment.
+
+**Why this is a follow-on and not part of F1 proper:** F1 as originally written provisions a worktree *from the target base*, which is the right behavior for a task dispatched off `main`. It does not cover the case where a sub-task is cut from an already-open story worktree — there, the parent's branch has commits the base does not, and provisioning from base silently drops them. Today that case is worked around by pre-creating the branch by hand and having Armature adopt it after the fact, which defeats F1's central claim that worktrees are an Armature-managed resource: the one piece of provenance that matters (what this branch was actually cut from) is exactly the piece Armature did not write. Tier-1 dynamic base-commit resolution therefore cannot answer for sub-tasks.
+
+**Provenance:** this was identified during `LNGHZN-S5`'s PR #89 review (thread `claim.go:666`), not in the original long-horizon round. It is recorded here so `LNGHZN-S9` has a citable source ID in the same shape as every other item, and so F1 is not read as complete while the sub-task path is still unmanaged. Sequenced as item 14a in `docs/design/next-work-sequencing.md`.
+
 ### F2. Scope-disjoint wave planning: `arm ready --waves`
 
 **What:** `arm ready` gains a planning mode that partitions the ready queue into dispatch waves whose members have pairwise-disjoint scopes (and no shared `blocked_by` frontier), emitting the wave structure in `--format agent`. A companion check warns at claim time when a to-be-claimed issue's scope intersects an actively claimed issue's scope.
@@ -180,7 +188,7 @@ Serialize the coordinator's session-spanning state — active wave membership, c
 Three dependency chains matter; otherwise items are independent:
 
 1. **F3 (events) → D2 (hooks redesign)** — the hook `on:` vocabulary is the event vocabulary.
-2. **F1 (managed worktrees) → C10 (handoff)** — the claim-recorded worktree path is half the handoff bundle; both feed gap-analysis T3.
+2. **F1 (managed worktrees) → C10 (handoff)** — the claim-recorded worktree path is half the handoff bundle; both feed gap-analysis T3. F1.1 (`--from`) extends the same claim-recorded metadata to sub-task branches; it does not gate C10, since a handoff bundle built from F1's data alone is already useful, but sub-task entries in that bundle will carry incomplete provenance until F1.1 lands.
 3. **T5.2 (versioned ops) → C2 (compaction) → C5 (redaction)** — compaction and redaction both touch the permanence guarantees and must respect the versioning contract.
 
 D5 (dotdir collapse) and D3 (shim deletion) have expiry dates: they are only cheap before v0.1.0 ships to real adopters. Everything in Part 3 scored ≥24/30 on the rubric or carries an explicit override rationale; the full kill list from adversarial review is recorded in §Method.
