@@ -976,7 +976,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					return tipErr
 				}
 				if exists && existingTip != fromTip {
-					return fmt.Errorf("existing branch %s tip %s does not match --from tip %s; use a new issue branch or align it manually", expectedBranch, existingTip, fromTip)
+					return fmt.Errorf(
+						"existing branch %s tip %s does not match --from tip %s; use a new issue branch or align it manually",
+						expectedBranch, existingTip, fromTip)
 				}
 			}
 
