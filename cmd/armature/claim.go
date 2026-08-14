@@ -849,6 +849,12 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					args = nil
 				}
 			}
+			// A value provided with --worktree=PATH has already been consumed by
+			// pflag, so any remaining positional token is surplus when --issue is
+			// also set. Do not silently ignore it after extracting the issue ID.
+			if worktreePath != defaultWorktreeFlagValue && issueID != "" && len(args) > 0 {
+				return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args)+1)
+			}
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
