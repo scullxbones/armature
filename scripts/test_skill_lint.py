@@ -19,6 +19,7 @@ from skill_lint import (
     has_angle_bracket_placeholder,
     strip_redirects,
     tokenize_shell_line,
+    validate_command,
 )
 
 
@@ -149,6 +150,50 @@ class TestExtractFlags(unittest.TestCase):
 
     def test_flag_with_equals_value(self):
         self.assertEqual(extract_flags(["--ttl=60"]), {"--ttl"})
+
+
+class TestClaimWorktreeSyntax(unittest.TestCase):
+    def setUp(self):
+        self.valid_subcommands = {"claim"}
+        self.valid_flags = {"claim": {"--worktree", "--from"}}
+
+    def test_accepts_explicit_destination_with_from(self):
+        valid, error = validate_command(
+            "arm claim --worktree /tmp/new-task-worktree --from /tmp/story-worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertTrue(valid, error)
+
+    def test_rejects_value_taking_worktree_without_from(self):
+        valid, error = validate_command(
+            "arm claim --worktree /tmp/new-task-worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("obsolete value-taking --worktree syntax", error)
+
+    def test_accepts_equals_destination_with_from(self):
+        valid, error = validate_command(
+            "arm claim --worktree=/tmp/new-task-worktree --from /tmp/story-worktree",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertTrue(valid, error)
+
+    def test_rejects_value_taking_worktree_with_missing_from_value(self):
+        valid, error = validate_command(
+            "arm claim --worktree /tmp/new-task-worktree --from",
+            self.valid_subcommands,
+            self.valid_flags,
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("obsolete value-taking --worktree syntax", error)
 
 
 class TestExtractArmCommands(unittest.TestCase):
