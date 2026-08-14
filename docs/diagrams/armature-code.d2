@@ -1,0 +1,555 @@
+direction: right
+
+title: {
+  shape: text
+  near: top-center
+  label: "Armature — C4 Code / Go Package Map"
+  style.font-size: 28
+  style.bold: true
+  style.font-color: "#000000"
+}
+
+subtitle: {
+  shape: text
+  near: top-center
+  label: "Every production package is shown. Package arrows are direct first-party imports; cmd/armature fan-out is grouped by layer."
+  style.font-size: 16
+  style.font-color: "#000000"
+}
+
+classes: {
+  entry: {
+    shape: rectangle
+    style.fill: "#DCEEFF"
+    style.stroke: "#003B70"
+    style.font-color: "#000000"
+  }
+  usecase: {
+    shape: rectangle
+    style.fill: "#E5F1FF"
+    style.stroke: "#004C8C"
+    style.font-color: "#000000"
+  }
+  domain: {
+    shape: rectangle
+    style.fill: "#E1F7E8"
+    style.stroke: "#006B35"
+    style.font-color: "#000000"
+  }
+  presentation: {
+    shape: rectangle
+    style.fill: "#F0E4FF"
+    style.stroke: "#5B21B6"
+    style.font-color: "#000000"
+  }
+  infrastructure: {
+    shape: rectangle
+    style.fill: "#F2F2F2"
+    style.stroke: "#374151"
+    style.font-color: "#000000"
+  }
+  governance: {
+    shape: rectangle
+    style.fill: "#FFF0CC"
+    style.stroke: "#8A4500"
+    style.font-color: "#000000"
+  }
+  support: {
+    shape: rectangle
+    style.fill: "#FFE5EA"
+    style.stroke: "#9F1239"
+    style.font-color: "#000000"
+  }
+}
+
+entrypoint: {
+  label: "Executable"
+  style.fill: "#F8FAFC"
+  style.stroke: "#344054"
+  style.font-color: "#000000"
+
+  cli: {
+    class: entry
+    label: "cmd/armature"
+    technology: "Go + Cobra"
+    description: "main, root command, command handlers, command-specific orchestration"
+  }
+}
+
+usecases: {
+  label: "Application and workflow modules"
+  style.fill: "#F8FBFF"
+  style.stroke: "#84ADFF"
+  style.font-color: "#000000"
+
+  bootstrap: {
+    class: usecase
+    label: "internal/bootstrap"
+    description: "Plan harness installation across supported platforms"
+  }
+
+  claim: {
+    class: usecase
+    label: "internal/claim"
+    description: "Claim ownership, TTL staleness, races, and scope overlap"
+  }
+
+  context: {
+    class: usecase
+    label: "internal/context"
+    description: "Assemble and truncate the worker context layers"
+  }
+
+  decompose: {
+    class: usecase
+    label: "internal/decompose"
+    description: "Plan decoding, DAG apply/revert, and decomposition context"
+  }
+
+  importbf: {
+    class: usecase
+    label: "internal/importbf"
+    description: "Convert brownfield issue data into importable work"
+  }
+
+  ready: {
+    class: usecase
+    label: "internal/ready"
+    description: "Compute actionable issues and stale in-progress claims"
+  }
+
+  snapshot: {
+    class: usecase
+    label: "internal/snapshot"
+    description: "Load ops, materialize state, and expose cached issue/index views"
+  }
+
+  sync: {
+    class: usecase
+    label: "internal/sync"
+    description: "Check merge compatibility before promotion"
+  }
+
+  worker: {
+    class: usecase
+    label: "internal/worker"
+    description: "Resolve and persist worker identity"
+  }
+
+  worktree: {
+    class: usecase
+    label: "internal/worktree"
+    description: "Provision, bind, reconcile, inspect, and garbage-collect worktrees"
+  }
+
+  hooks: {
+    class: usecase
+    label: "internal/hooks"
+    description: "Run configured Git hook behavior"
+  }
+}
+
+governance: {
+  label: "Governance and assurance modules"
+  style.fill: "#FFFBF5"
+  style.stroke: "#F7B27A"
+  style.font-color: "#000000"
+
+  audit: {
+    class: governance
+    label: "internal/audit"
+    description: "Pre-merge audit entries and filtering"
+  }
+
+  deliverygate: {
+    class: governance
+    label: "internal/deliverygate"
+    description: "Clean-tree, scope, binding, base, and commit provenance checks"
+  }
+
+  doctor: {
+    class: governance
+    label: "internal/doctor"
+    description: "Repository health diagnostics and safe repair actions"
+  }
+
+  harnesshook: {
+    class: governance
+    label: "internal/harnesshook"
+    description: "Platform events, bindings, activity evidence, and hook decisions"
+  }
+
+  harnesspolicy: {
+    class: governance
+    label: "internal/harnesspolicy"
+    description: "Resolve task scope and deterministic verification policy"
+  }
+
+  review: {
+    class: governance
+    label: "internal/review"
+    description: "ReviewBundle, ConformanceAssessment, validation, fingerprints, attestation"
+  }
+
+  validate: {
+    class: governance
+    label: "internal/validate"
+    description: "DAG, citation, hierarchy, overlap, and source integrity checks"
+  }
+}
+
+domain: {
+  label: "Domain and state modules"
+  style.fill: "#F6FEF9"
+  style.stroke: "#73E2A3"
+  style.font-color: "#000000"
+
+  ops: {
+    class: domain
+    label: "internal/ops"
+    description: "Op, Payload, validated streams, append/commit/push protocol"
+  }
+
+  materialize: {
+    class: domain
+    label: "internal/materialize"
+    description: "State, Issue, replay handlers, checkpoints, derived files"
+  }
+
+  dag: {
+    class: domain
+    label: "internal/dag"
+    description: "Node, DAG, Graph, cycle detection, hierarchy and dependencies"
+  }
+
+  sources: {
+    class: domain
+    label: "internal/sources"
+    description: "Lifecycle, Provider, Manifest, cache, fingerprints, freshness"
+  }
+
+  traceability: {
+    class: domain
+    label: "internal/traceability"
+    description: "Issue references and citation coverage projection"
+  }
+
+  issuetype: {
+    class: domain
+    label: "internal/issuetype"
+    description: "Canonical issue-type vocabulary and hierarchy rules"
+  }
+
+  issueid: {
+    class: domain
+    label: "internal/issueid"
+    description: "Durable issue identifier normalization and validation"
+  }
+
+  scopematch: {
+    class: domain
+    label: "internal/scopematch"
+    description: "Canonical path-scope matching and overlap semantics"
+  }
+
+  commitref: {
+    class: domain
+    label: "internal/commitref"
+    description: "Conventional and merge commit issue-reference patterns"
+  }
+}
+
+presentation: {
+  label: "Presentation modules"
+  style.fill: "#FBF8FF"
+  style.stroke: "#B692F6"
+  style.font-color: "#000000"
+
+  output: {
+    class: presentation
+    label: "internal/output"
+    description: "Human, agent, and JSON command result formatting"
+  }
+
+  tui_core: {
+    class: presentation
+    label: "internal/tui"
+    description: "Screen contract, shared widgets, palette, and TTY behavior"
+  }
+
+  tui_app: {
+    class: presentation
+    label: "internal/tui/app"
+    description: "Top-level Bubble Tea routing and filesystem refresh"
+  }
+
+  tui_dagsum: {
+    class: presentation
+    label: "internal/tui/dagsum"
+    description: "Dependency-graph summary interaction"
+  }
+
+  tui_dagsummary: {
+    class: presentation
+    label: "internal/tui/dagsummary"
+    description: "Draft DAG sign-off interaction"
+  }
+
+  tui_dagtree: {
+    class: presentation
+    label: "internal/tui/dagtree"
+    description: "Dependency-tree navigation"
+  }
+
+  tui_detail: {
+    class: presentation
+    label: "internal/tui/detail"
+    description: "Issue detail pane"
+  }
+
+  tui_ready: {
+    class: presentation
+    label: "internal/tui/ready"
+    description: "Interactive ready queue and claim selection"
+  }
+
+  tui_sources: {
+    class: presentation
+    label: "internal/tui/sources"
+    description: "Source freshness view"
+  }
+
+  tui_stalereview: {
+    class: presentation
+    label: "internal/tui/stalereview"
+    description: "Stale assessment decisions"
+  }
+
+  tui_validate: {
+    class: presentation
+    label: "internal/tui/tuivalidate"
+    description: "Interactive validation and doctor findings"
+  }
+
+  tui_workers: {
+    class: presentation
+    label: "internal/tui/workers"
+    description: "Worker and active-claim list"
+  }
+}
+
+infrastructure: {
+  label: "Infrastructure and cross-cutting modules"
+  style.fill: "#F8F9FC"
+  style.stroke: "#98A2B3"
+  style.font-color: "#000000"
+
+  adapters: {
+    class: infrastructure
+    label: "internal/adapters"
+    description: "Filesystem, Git, shell, HTTP, and append-log ports"
+  }
+
+  config: {
+    class: infrastructure
+    label: "internal/config"
+    description: "Repository/worker configuration and command context"
+  }
+
+  platform: {
+    class: infrastructure
+    label: "internal/platform"
+    description: "Git-config-backed platform values"
+  }
+
+  clock: {
+    class: infrastructure
+    label: "internal/clock"
+    description: "Injectable time source"
+  }
+
+  filelock: {
+    class: infrastructure
+    label: "internal/filelock"
+    description: "Advisory whole-file exclusive locks"
+  }
+
+  strictjson: {
+    class: infrastructure
+    label: "internal/strictjson"
+    description: "Shared strict decoding for versioned JSON artifacts"
+  }
+
+  armerrors: {
+    class: infrastructure
+    label: "internal/errors"
+    description: "Typed user-facing and internal errors"
+  }
+
+  exitcodes: {
+    class: infrastructure
+    label: "internal/exitcodes"
+    description: "Stable CLI exit code constants"
+  }
+
+  skillsembed: {
+    class: infrastructure
+    label: "internal/skillsembed"
+    description: "Embedded cross-agent skill filesystem"
+  }
+}
+
+support: {
+  label: "Build, test, and documentation support packages"
+  style.fill: "#FFF8F9"
+  style.stroke: "#FDA4AF"
+  style.font-color: "#000000"
+
+  docvalidate: {
+    class: support
+    label: "internal/docvalidate"
+    description: "Validate canonical Markdown JSON artifacts against schemas"
+  }
+
+  e2eharness: {
+    class: support
+    label: "internal/e2eharness"
+    description: "End-to-end arm CLI fixture harness"
+  }
+
+  skilltranscript: {
+    class: support
+    label: "internal/skilltranscript"
+    description: "Executable transcript harness for deployed skills"
+  }
+}
+
+# cmd/armature imports many packages directly. Group-level arrows keep its fan-out
+# legible while every internal package-to-package import remains explicit below.
+entrypoint.cli -> usecases: "command handlers import workflow modules"
+entrypoint.cli -> governance: "command handlers invoke assurance modules"
+entrypoint.cli -> domain: "handlers use domain types and services"
+entrypoint.cli -> presentation: "renders CLI and TUI output"
+entrypoint.cli -> infrastructure: "uses boundary services"
+entrypoint.cli -> support.docvalidate: "validates documentation examples"
+
+# Application and workflow imports.
+usecases.claim -> domain.ops
+usecases.claim -> domain.scopematch
+usecases.context -> infrastructure.config
+usecases.context -> domain.dag
+usecases.context -> domain.materialize
+usecases.decompose -> infrastructure.adapters
+usecases.decompose -> infrastructure.clock
+usecases.decompose -> domain.issueid
+usecases.decompose -> domain.issuetype
+usecases.decompose -> domain.materialize
+usecases.decompose -> domain.ops
+usecases.decompose -> domain.sources
+usecases.decompose -> infrastructure.strictjson
+usecases.ready -> usecases.claim
+usecases.ready -> domain.dag
+usecases.ready -> domain.issuetype
+usecases.ready -> domain.materialize
+usecases.ready -> domain.ops
+usecases.snapshot -> domain.materialize
+usecases.snapshot -> domain.ops
+usecases.sync -> domain.materialize
+usecases.sync -> domain.ops
+usecases.worker -> infrastructure.platform
+usecases.worktree -> domain.materialize
+usecases.worktree -> domain.ops
+usecases.hooks -> infrastructure.adapters
+usecases.hooks -> infrastructure.config
+
+# Governance imports.
+governance.audit -> usecases.claim
+governance.audit -> domain.ops
+governance.deliverygate -> infrastructure.adapters
+governance.deliverygate -> usecases.claim
+governance.deliverygate -> domain.commitref
+governance.deliverygate -> governance.harnesshook
+governance.deliverygate -> domain.materialize
+governance.deliverygate -> usecases.worktree
+governance.doctor -> infrastructure.adapters
+governance.doctor -> domain.dag
+governance.doctor -> governance.harnesspolicy
+governance.doctor -> domain.materialize
+governance.doctor -> domain.ops
+governance.doctor -> usecases.ready
+governance.doctor -> usecases.worktree
+governance.harnesshook -> governance.harnesspolicy
+governance.harnesshook -> usecases.worktree
+governance.harnesspolicy -> domain.materialize
+governance.harnesspolicy -> domain.scopematch
+governance.harnesspolicy -> domain.sources
+governance.review -> infrastructure.adapters
+governance.review -> domain.commitref
+governance.review -> infrastructure.config
+governance.review -> infrastructure.strictjson
+governance.validate -> domain.dag
+governance.validate -> domain.issuetype
+governance.validate -> domain.materialize
+governance.validate -> domain.ops
+governance.validate -> domain.sources
+governance.validate -> domain.traceability
+
+# Domain imports. dag and issuetype are intentionally pure; ops, sources, and
+# traceability cross the boundary only through internal/adapters.
+domain.ops -> infrastructure.adapters
+domain.materialize -> infrastructure.adapters
+domain.materialize -> usecases.claim
+domain.materialize -> domain.dag
+domain.materialize -> domain.issueid
+domain.materialize -> domain.ops
+domain.materialize -> governance.review
+domain.materialize -> domain.traceability
+domain.sources -> infrastructure.adapters
+domain.traceability -> infrastructure.adapters
+
+# Presentation imports.
+presentation.output -> domain.materialize
+presentation.output -> usecases.ready
+presentation.output -> governance.review
+presentation.output -> governance.validate
+presentation.tui_core -> domain.materialize
+presentation.tui_app -> domain.materialize
+presentation.tui_app -> usecases.snapshot
+presentation.tui_app -> presentation.tui_core
+presentation.tui_app -> presentation.tui_detail
+presentation.tui_dagsum -> domain.materialize
+presentation.tui_dagsum -> presentation.tui_core
+presentation.tui_dagsummary -> presentation.tui_core
+presentation.tui_dagtree -> domain.materialize
+presentation.tui_dagtree -> presentation.tui_core
+presentation.tui_dagtree -> presentation.tui_detail
+presentation.tui_detail -> domain.materialize
+presentation.tui_detail -> presentation.tui_core
+presentation.tui_ready -> usecases.ready
+presentation.tui_ready -> presentation.tui_core
+presentation.tui_sources -> domain.materialize
+presentation.tui_sources -> presentation.tui_core
+presentation.tui_stalereview -> domain.materialize
+presentation.tui_stalereview -> presentation.tui_core
+presentation.tui_validate -> domain.materialize
+presentation.tui_validate -> presentation.tui_core
+presentation.tui_validate -> governance.validate
+presentation.tui_workers -> domain.materialize
+presentation.tui_workers -> presentation.tui_core
+
+# Infrastructure imports.
+infrastructure.adapters -> infrastructure.filelock
+infrastructure.config -> infrastructure.adapters
+infrastructure.platform -> infrastructure.adapters
+
+legend: {
+  label: "Reading the map"
+  style.fill: "#FFFFFF"
+  style.stroke: "#98A2B3"
+  style.font-color: "#000000"
+  l1: "Green = domain/state; blue = workflow; orange = governance"
+  l2: "Purple = presentation; gray = infrastructure; rose = support"
+  l3: "Arrow A → B means package A imports package B"
+  l4: "No arrow implies no production first-party import"
+  l5: "Standard library and third-party imports are intentionally omitted"
+}

@@ -1,0 +1,232 @@
+direction: down
+
+title: {
+  shape: text
+  near: top-center
+  label: "Armature — C4 Component Diagram"
+  style.font-size: 28
+  style.bold: true
+  style.font-color: "#000000"
+}
+
+classes: {
+  person: {
+    shape: c4-person
+    style.fill: "#FFFFFF"
+    style.stroke: "#003B70"
+    style.font-color: "#000000"
+  }
+  external: {
+    shape: rectangle
+    style.fill: "#F2F2F2"
+    style.stroke: "#1F2937"
+    style.font-color: "#000000"
+  }
+  component: {
+    shape: rectangle
+    style.fill: "#DCEEFF"
+    style.stroke: "#003B70"
+    style.font-color: "#000000"
+  }
+  governance: {
+    shape: rectangle
+    style.fill: "#FFF0CC"
+    style.stroke: "#7A3E00"
+    style.font-color: "#000000"
+  }
+  data: {
+    shape: cylinder
+    style.fill: "#DDF7E5"
+    style.stroke: "#005B2B"
+    style.font-color: "#000000"
+  }
+}
+
+operator: {
+  class: person
+  label: "Human operator"
+  description: "Plans, approves, reviews, and owns outcomes"
+}
+
+agent: {
+  class: person
+  label: "AI coding agent"
+  description: "Claims work, reads context, implements, and reports outcomes"
+}
+
+harness: {
+  class: external
+  label: "Agent harness"
+  technology: "Claude / Codex / Devin / compatible tools"
+  description: "Invokes arm commands and lifecycle hooks"
+}
+
+git_remote: {
+  class: external
+  label: "Git remote"
+  technology: "Git"
+  description: "Replicates code branches and the orphan _armature ops branch"
+}
+
+code_host: {
+  class: external
+  label: "Code review host"
+  technology: "GitHub / GitLab"
+  description: "Protects main and provides PR/MR governance"
+}
+
+providers: {
+  class: external
+  label: "Requirement providers"
+  technology: "Filesystem / Confluence / SharePoint"
+  description: "Authoritative source documents fetched only by source lifecycle commands"
+}
+
+armature: {
+  label: "Armature system boundary"
+  style.fill: "#F8FAFC"
+  style.stroke: "#344054"
+  style.stroke-width: 2
+  style.font-color: "#000000"
+
+  interface: {
+    class: component
+    label: "Command and interaction interface"
+    technology: "Go, Cobra, Bubble Tea"
+    description: "Scriptable CLI commands, human TUI flows, stable output formats, and exit codes"
+  }
+
+  workflow: {
+    class: component
+    label: "Work orchestration"
+    technology: "claim, ready, context, decompose, worker, worktree"
+    description: "Builds the DAG workflow, computes ready work, manages claims, assembles task context, and provisions worktrees"
+  }
+
+  ledger: {
+    class: component
+    label: "Append-only coordination ledger"
+    technology: "ops"
+    description: "Defines typed operations and appends each worker's facts to its exclusive JSONL log"
+  }
+
+  projection: {
+    class: component
+    label: "State projection"
+    technology: "materialize, snapshot, dag"
+    description: "Validates and replays operations into deterministic current issue, graph, queue, and checkpoint views"
+  }
+
+  assurance: {
+    class: governance
+    label: "Deterministic assurance"
+    technology: "deliverygate, harnesspolicy, validate, doctor, audit"
+    description: "Enforces delivery provenance, scope, repository health, citation coverage, and deterministic completion checks"
+  }
+
+  semantic_review: {
+    class: governance
+    label: "Semantic review protocol"
+    technology: "review"
+    description: "Prepares review bundles, validates assessments, and records advisory attestations; never decides merges"
+  }
+
+  source_lifecycle: {
+    class: component
+    label: "Source lifecycle and traceability"
+    technology: "sources, traceability"
+    description: "Registers, caches, fingerprints, verifies, and connects requirement sources to issue provenance"
+  }
+
+  integration: {
+    class: component
+    label: "Platform and filesystem boundary"
+    technology: "adapters, config, platform, hooks, bootstrap"
+    description: "Isolates Git, shell, filesystem, HTTP, configuration, installation, and hook concerns"
+  }
+
+  skills: {
+    class: component
+    label: "Embedded agent skills"
+    technology: "skillsembed"
+    description: "Ships planner, coordinator, worker, reviewer, auditor, and activity-indexer instructions"
+  }
+}
+
+local_repo: {
+  label: "Local Git repository"
+  style.fill: "#F7FFF9"
+  style.stroke: "#16803A"
+  style.font-color: "#000000"
+
+  code_tree: {
+    class: data
+    label: "Code worktrees"
+    technology: "main + feature branches"
+    description: "Product code and per-issue managed worktrees"
+  }
+
+  ops_logs: {
+    class: data
+    label: "Ops worktree"
+    technology: "_armature / ops/*.log"
+    description: "Git-tracked append-only source of coordination truth; one log per worker"
+  }
+
+  source_cache: {
+    class: data
+    label: "Source cache"
+    technology: "_armature / sources"
+    description: "Git-tracked provider-normalized documents, manifest, and fingerprints"
+  }
+
+  state: {
+    class: data
+    label: "Materialized state"
+    technology: "_armature / state"
+    description: "Local-only derived indexes, ready queues, issues, traceability, and checkpoints"
+  }
+}
+
+operator -> armature.interface: "runs commands and interactive reviews"
+agent -> harness: "works through"
+harness -> armature.interface: "invokes CLI and hooks"
+
+armature.interface -> armature.workflow: "dispatches use cases"
+armature.interface -> armature.assurance: "requests checks"
+armature.interface -> armature.semantic_review: "prepares / records assessments"
+armature.interface -> armature.source_lifecycle: "manages sources"
+armature.interface -> armature.skills: "deploys skills"
+
+armature.workflow -> armature.projection: "reads current state"
+armature.workflow -> armature.ledger: "records claims, transitions, notes, links"
+armature.assurance -> armature.projection: "evaluates deterministic facts"
+armature.semantic_review -> armature.projection: "loads task contract"
+armature.semantic_review -> local_repo.code_tree: "indexes delivery diff"
+armature.source_lifecycle -> armature.ledger: "records provenance ops"
+armature.projection -> armature.ledger: "replays validated ops"
+
+armature.integration -> local_repo.code_tree: "Git and filesystem operations"
+armature.integration -> local_repo.ops_logs: "Git and filesystem operations"
+armature.ledger -> local_repo.ops_logs: "append, commit, push"
+armature.projection -> local_repo.state: "writes derived views"
+armature.source_lifecycle -> local_repo.source_cache: "persists normalized cache"
+armature.source_lifecycle -> providers: "fetches and verifies explicitly"
+armature.skills -> harness: "installs role contracts"
+
+local_repo.ops_logs -> git_remote: "push / pull"
+local_repo.source_cache -> git_remote: "push / pull"
+local_repo.code_tree -> git_remote: "push / fetch"
+git_remote -> code_host: "hosts protected code workflow"
+operator -> code_host: "reviews and merges PR/MR"
+
+legend: {
+  label: "C4 scope"
+  style.fill: "#FFFFFF"
+  style.stroke: "#98A2B3"
+  style.font-color: "#000000"
+  l1: "People and external systems are outside Armature"
+  l2: "Components are deploy-time parts of the single arm binary"
+  l3: "Cylinders are Git-backed or local filesystem data stores"
+  l4: "Solid arrows show runtime calls or data movement"
+}
