@@ -407,7 +407,7 @@ When multiple agents are dispatched concurrently, two can both see the same task
 
 ### How It Happens
 
-1. Agent A runs `arm claim TASK-099 --worktree ./task-099-a`; Agent B runs `arm claim TASK-099 --worktree ./task-099-b` at nearly the same time.
+1. Agent A runs `arm claim TASK-099 --worktree`; Agent B retries `arm claim TASK-099 --worktree` at nearly the same time; claim arbitration and the canonical `.worktrees/TASK-099` path prevent duplicate ownership.
 2. Both claim ops are appended to their respective log files.
 3. On the next materialization cycle, claim race resolution runs — one claim wins, one loses.
 4. Both writes are merge-safe (MRDT guarantee).
@@ -426,7 +426,7 @@ The losing agent discovers it no longer holds the claim and calls `arm ready` ag
 arm ready
 # TASK-099 is no longer listed as ready (Agent A holds it)
 # TASK-100  Add pagination support   [ready]
-arm claim TASK-100 --worktree ./task-100-work && arm render-context TASK-100 --format agent
+arm claim TASK-100 --worktree && arm render-context TASK-100 --format agent
 ```
 
 ### Observing Conflicts as the Conductor
