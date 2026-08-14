@@ -4041,3 +4041,4 @@
 ["source-link","LNGHZN-S10-T6",1786751183,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"07155333-2b09-4f78-91b2-22cfef03f639","source_url":"docs/dogfood/findings/raw/2026-08-14T2352Z-5207ee28-tooling-scope-overlap-matches-on-directory-not-file.md"}]
 ["claim","LNGHZN-S10-T6",1786751193,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S10-T6","claim_token":"10d5849a9c012f5ac7215b11b5565dcf"}]
 ["heartbeat","LNGHZN-S10-T6",1786751283,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
+["amend","LNGHZN-S10-T6",1786751536,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/claim/overlap.go","internal/claim/overlap_test.go","internal/ready/waves_test.go"]}]
