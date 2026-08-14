@@ -2365,10 +2365,10 @@ func TestClaimCommand_OrdinaryWinStillProvisionsWorktree_REQ_LNGHZN_S5_T9(t *tes
 	assert.DirExists(t, worktreePath, "a won claim must provision a worktree")
 }
 
-// TestClaimUsesConfigDefaultTTLWhenFlagNotSet_REQ_LNGHZN_S7_T1 verifies that
-// arm claim's --ttl flag defaults to config.json's default_ttl when --ttl is
-// not explicitly passed, rather than the previously hardcoded 60.
-func TestClaimUsesConfigDefaultTTLWhenFlagNotSet_REQ_LNGHZN_S7_T1(t *testing.T) {
+// TestDefaultTTLGovernsClaim_REQ_LNGHZN_S7_T1 verifies that arm claim's --ttl
+// flag defaults to config.json's default_ttl when --ttl is not explicitly
+// passed, rather than the previously hardcoded 60.
+func TestDefaultTTLGovernsClaim_REQ_LNGHZN_S7_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	cfg := config.DefaultConfig("go")
@@ -2383,6 +2383,28 @@ func TestClaimUsesConfigDefaultTTLWhenFlagNotSet_REQ_LNGHZN_S7_T1(t *testing.T) 
 	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
 	require.NoError(t, err)
 	assert.Equal(t, 45, issue.ClaimTTL, "claim TTL should default to config.json's default_ttl")
+}
+
+// TestClaimFallsBackToBuiltInTTLWhenConfigAbsent_REQ_LNGHZN_S7_T1 verifies
+// that when config.json's default_ttl is absent (zero-valued) and --ttl is
+// not explicitly passed, claim falls back to the built-in default of 60. The
+// config loader does not distinguish an absent field from an explicit zero
+// (JSON unmarshal into an int leaves it at its zero value either way), so
+// this single case covers both.
+func TestClaimFallsBackToBuiltInTTLWhenConfigAbsent_REQ_LNGHZN_S7_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cfg := config.Config{ProjectType: "go"} // DefaultTTL left at zero value (absent)
+	require.NoError(t, config.WriteConfig(filepath.Join(repo, ".armature", "config.json"), cfg))
+
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, 60, issue.ClaimTTL, "claim TTL should fall back to the built-in default of 60 when config's default_ttl is absent/zero")
 }
 
 // TestClaimExplicitTTLOverridesConfigDefault_REQ_LNGHZN_S7_T1 verifies that an
@@ -2404,12 +2426,12 @@ func TestClaimExplicitTTLOverridesConfigDefault_REQ_LNGHZN_S7_T1(t *testing.T) {
 	assert.Equal(t, 120, issue.ClaimTTL, "explicit --ttl must override config.json's default_ttl")
 }
 
-// TestRenderContextUsesConfigTokenBudgetWhenFlagNotSet_REQ_LNGHZN_S7_T1 verifies
-// that render-context's --budget flag defaults to config.json's token_budget
-// when --budget is not explicitly passed, rather than the previously
-// hardcoded 4000. A tiny configured budget forces truncation down to a
-// single context layer.
-func TestRenderContextUsesConfigTokenBudgetWhenFlagNotSet_REQ_LNGHZN_S7_T1(t *testing.T) {
+// TestTokenBudgetHonoredByRenderContext_REQ_LNGHZN_S7_T1 verifies that
+// render-context's --budget flag defaults to config.json's token_budget when
+// --budget is not explicitly passed, rather than the previously hardcoded
+// 4000. A tiny configured budget forces truncation down to a single context
+// layer.
+func TestTokenBudgetHonoredByRenderContext_REQ_LNGHZN_S7_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	cfg := config.DefaultConfig("go")
@@ -2426,4 +2448,29 @@ func TestRenderContextUsesConfigTokenBudgetWhenFlagNotSet_REQ_LNGHZN_S7_T1(t *te
 
 	assert.Less(t, len(tinyOut), len(overriddenOut),
 		"config.json's tiny token_budget should truncate content relative to an explicit generous --budget override")
+}
+
+// TestRenderContextFallsBackToBuiltInBudgetWhenConfigAbsent_REQ_LNGHZN_S7_T1
+// verifies that when config.json's token_budget is absent (zero-valued) and
+// --budget is not explicitly passed, render-context falls back to the
+// built-in default of 4000. As with the TTL fallback test, the config loader
+// does not distinguish an absent field from an explicit zero, so a single
+// case covers both.
+func TestRenderContextFallsBackToBuiltInBudgetWhenConfigAbsent_REQ_LNGHZN_S7_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	cfg := config.Config{ProjectType: "go"} // TokenBudget left at zero value (absent)
+	require.NoError(t, config.WriteConfig(filepath.Join(repo, ".armature", "config.json"), cfg))
+
+	defaultOut, err := runTrls(t, repo, "render-context", "--issue", "task-01", "--format", "agent")
+	require.NoError(t, err)
+
+	// Passing --budget 4000 explicitly must reproduce the built-in default's
+	// output exactly, confirming the fallback used when config's token_budget
+	// is absent/zero is the same built-in 4000.
+	explicitOut, err := runTrls(t, repo, "render-context", "--issue", "task-01", "--format", "agent", "--budget", "4000")
+	require.NoError(t, err)
+
+	assert.Equal(t, explicitOut, defaultOut,
+		"render-context should fall back to the built-in budget of 4000 when config's token_budget is absent/zero")
 }
