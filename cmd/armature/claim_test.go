@@ -2299,6 +2299,50 @@ func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 	assert.Contains(t, err.Error(), "accepts at most 1 arg")
 }
 
+func TestClaimFromFlagRequiresExplicitNewWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Run("existing canonical worktree remains unchanged", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+		setup := newRootCmd()
+		setup.SetOut(new(bytes.Buffer))
+		setup.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
+		require.NoError(t, setup.Execute())
+
+		gitDir, err := resolveWorktreeGitDir(canonicalPath)
+		require.NoError(t, err)
+		bindingBefore, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
+		require.NoError(t, err)
+		baseBefore, err := os.ReadFile(filepath.Join(gitDir, "armature-base-commit"))
+		require.NoError(t, err)
+
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", "--from", repo})
+		err = claim.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "explicit --worktree <new-path>")
+
+		bindingAfter, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
+		require.NoError(t, err)
+		baseAfter, err := os.ReadFile(filepath.Join(gitDir, "armature-base-commit"))
+		require.NoError(t, err)
+		assert.Equal(t, string(bindingBefore), string(bindingAfter))
+		assert.Equal(t, string(baseBefore), string(baseAfter))
+	})
+
+	t.Run("missing canonical worktree is not provisioned", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", "--from", repo})
+		err := claim.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "explicit --worktree <new-path>")
+		assert.NoDirExists(t, canonicalPath)
+	})
+}
+
 // injectFutureSameWorkerClaim appends a claim op for issueID that carries the
 // SAME effective owner identity `arm claim` will use (resolved exactly as
 // resolveWorkerAndLog does, including any ARM_LOG_SLOT suffix) but a
