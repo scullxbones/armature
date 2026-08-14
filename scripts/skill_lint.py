@@ -515,6 +515,7 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
             token.startswith(flag + "=") and len(token) > len(flag) + 1
             or token == flag
             and index + 1 < len(tokens)
+            and tokens[index + 1]
             and not tokens[index + 1].startswith("-")
             for index, token in enumerate(tokens)
         )
