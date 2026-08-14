@@ -4024,3 +4024,4 @@
 ["link","LNGHZN-S10-T3",1786749017,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"LNGHZN-S7-T1","rel":"blocked_by"}]
 ["claim","LNGHZN-S10-T1",1786749773,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S10-T1","claim_token":"29a7200dc45b32e6c62c46d4fc81d63e"}]
 ["transition","LNGHZN-S10",1786749781,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
+["heartbeat","LNGHZN-S10-T1",1786749841,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
