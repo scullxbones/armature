@@ -2204,15 +2204,13 @@ func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
 		"recreated worktree must be checked out on the issue's derived branch")
 }
 
-// TestClaimWorktreeFlagIsBoolean_REQ_LNGHZN_S5_T4 verifies that --worktree is a
-// boolean flag that takes no value: the flag's pflag type is "bool", the
-// value-less form succeeds, and the removed --worktree <path> form now leaves the
-// path as an extra positional argument (rejected by the command's arg validator).
-func TestClaimWorktreeFlagIsBoolean_REQ_LNGHZN_S5_T4(t *testing.T) {
-	// The flag must be declared as a boolean (no value argument).
+// TestClaimWorktreeFlagAcceptsDestinationPath_REQ_LNGHZN_S9_T1 verifies that
+// --worktree accepts a caller-selected destination path while retaining the
+// value-less form used by existing workers.
+func TestClaimWorktreeFlagAcceptsDestinationPath_REQ_LNGHZN_S9_T1(t *testing.T) {
 	wtFlag := newClaimCmd().Flags().Lookup("worktree")
 	require.NotNil(t, wtFlag, "claim must expose a --worktree flag")
-	assert.Equal(t, "bool", wtFlag.Value.Type(), "--worktree must be a boolean flag (no value argument)")
+	assert.Equal(t, "string", wtFlag.Value.Type(), "--worktree must accept a destination path")
 
 	// The value-less boolean form succeeds.
 	repo := setupRepoWithTask(t)
@@ -2221,18 +2219,54 @@ func TestClaimWorktreeFlagIsBoolean_REQ_LNGHZN_S5_T4(t *testing.T) {
 	okCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, okCmd.Execute(), "the boolean --worktree form must succeed")
 
-	// The removed --worktree <path> form: the path is no longer consumed by the
-	// flag, so it becomes a second positional argument and the command rejects it.
+	// A caller-selected destination is accepted when it does not exist.
 	repo2 := setupRepoWithTask(t)
-	errBuf := new(bytes.Buffer)
-	badCmd := newRootCmd()
-	badCmd.SetOut(new(bytes.Buffer))
-	badCmd.SetErr(errBuf)
-	badCmd.SetArgs([]string{"claim", "--repo", repo2, "task-01", "--worktree", filepath.Join(t.TempDir(), "legacy-path")})
-	err := badCmd.Execute()
-	require.Error(t, err, "the old --worktree <path> form must now error (path is an extra positional arg)")
-	assert.Contains(t, err.Error(), "accepts at most 1 arg",
-		"error must reflect the extra positional argument left by the removed value form")
+	destination := filepath.Join(t.TempDir(), "task-worktree")
+	customCmd := newRootCmd()
+	customCmd.SetOut(new(bytes.Buffer))
+	customCmd.SetArgs([]string{"claim", "--repo", repo2, "task-01", "--worktree", destination})
+	require.NoError(t, customCmd.Execute())
+	assert.DirExists(t, destination)
+}
+
+func TestClaimFromParentWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parentPath := filepath.Join(repo, "parent")
+	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+	require.NoError(t, os.WriteFile(filepath.Join(parentPath, "parent.go"), []byte("package parent\n"), 0o644))
+	run(t, parentPath, "git", "add", "parent.go")
+	run(t, parentPath, "git", "commit", "-m", "feat(parent): advance source worktree")
+	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
+
+	childPath := filepath.Join(repo, "child")
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", childPath, "--from", parentPath})
+	require.NoError(t, claim.Execute())
+
+	assert.Equal(t, parentTip, strings.TrimSpace(runGitOutput(t, childPath, "rev-parse", "HEAD")))
+	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent"))
+	assert.Equal(t, "feature-parent", parentBranch)
+
+	rejectedPath := filepath.Join(repo, "existing")
+	require.NoError(t, os.Mkdir(rejectedPath, 0o755))
+	rejected := newRootCmd()
+	rejected.SetOut(new(bytes.Buffer))
+	rejected.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", rejectedPath, "--from", parentPath})
+	err := rejected.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not exist")
+
+	invalidSource := newRootCmd()
+	invalidSource.SetOut(new(bytes.Buffer))
+	invalidSource.SetArgs([]string{
+		"claim", "task-01", "--repo", repo,
+		"--worktree", filepath.Join(repo, "other-child"),
+		"--from", filepath.Join(repo, "not-a-worktree"),
+	})
+	err = invalidSource.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not an existing worktree")
 }
 
 // injectFutureSameWorkerClaim appends a claim op for issueID that carries the

@@ -25,6 +25,10 @@ import (
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
+// defaultWorktreeFlagValue preserves the established value-less --worktree
+// form while allowing --worktree <path> for a caller-selected new worktree.
+const defaultWorktreeFlagValue = ".armature-default-worktree"
+
 // resolveWorktreeGitDir resolves the actual git directory for a worktree path.
 // It is used by both claim and harness-hook so that both read from the same
 // location. Delegates to internal/deliverygate.ResolveWorktreeGitDir, the
@@ -375,7 +379,7 @@ func rollbackClaim(
 // predicate — so this contract is exactly "is the issue, right now, in
 // StatusClaimed with this exact workerID/claimToken pair", never a looser
 // or differently-scoped check assembled ad hoc at this call site.
-func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool) error {
+func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, fromWorktreePaths ...string) error {
 	// Determine branch name based on issue type
 	branchName := deriveBranchName(issue.Type, issueID)
 
@@ -386,13 +390,17 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 
 	// Create git client for main repo
 	gitClient := adapters.New(repoPath)
+	branchPointClient := gitClient
+	if len(fromWorktreePaths) > 0 && fromWorktreePaths[0] != "" {
+		branchPointClient = adapters.New(fromWorktreePaths[0])
+	}
 
 	// Resolve HEAD before branching: this is the actual point the task branch
 	// diverges from the coordinator's checkout, which may already be a story
 	// branch containing completed sibling-task commits (not necessarily main).
 	// Persisted below so the delivery gate can scope-check against the real
 	// branch-point instead of guessing via merge-base against a default branch.
-	headSHA, headErr := gitClient.ResolveRevision("HEAD")
+	headSHA, headErr := branchPointClient.ResolveRevision("HEAD")
 
 	// Capture the name of the branch this task branch is being cut from
 	// (the coordinator's current checkout — often a story branch). This is
@@ -402,7 +410,7 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	// recompute the branch-point dynamically via merge-base at check time —
 	// which also self-corrects if the task branch is later rebased onto an
 	// updated parent tip, instead of trusting a SHA recorded once at claim time.
-	parentBranch, parentErr := gitClient.CurrentBranch()
+	parentBranch, parentErr := branchPointClient.CurrentBranch()
 
 	// Provision the worktree detached at the base commit FIRST, then create or
 	// check out the issue branch inside the worktree. The old order
@@ -790,8 +798,8 @@ func newClaimCmd() *cobra.Command {
 	var issueID string
 	var ttl int
 	var force bool
-	var worktreeFlag bool
 	var worktreePath string
+	var fromWorktreePath string
 
 	cmd := &cobra.Command{
 		Use:   "claim [issue-id]",
@@ -802,9 +810,9 @@ Claiming an issue marks it as assigned to your worker ID and sets a TTL (time-to
 If the TTL expires without progress, the claim becomes stale and may be reassigned.
 This command also detects and warns about scope overlaps with concurrently claimed issues.
 When you claim a task, its parent story (if open) is automatically advanced to in-progress.
-The --worktree flag is required; it provisions a worktree at .worktrees/<issue-id>
-(relative to the repo root) with an issue-specific branch if absent, or updates the
-armature-issue-id file if the worktree already exists.`,
+The --worktree flag is required. Without a value it provisions the canonical
+.worktrees/<issue-id> path. With --worktree <new-path> --from <parent-worktree-path>,
+it creates a new task worktree from the parent worktree's current branch and tip.`,
 		Example: `  # Claim an issue by ID with a worktree
   $ arm claim E6-S4-T2 --worktree
 
@@ -816,26 +824,57 @@ armature-issue-id file if the worktree already exists.`,
 
   # Claim using flag style
   $ arm claim --issue another-task-id --worktree`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 			var err error
+			// pflag's optional-value support sets NoOptDefVal without consuming a
+			// following token. Recover the documented spaced form here while
+			// retaining the established value-less form for existing agents.
+			if worktreePath == defaultWorktreeFlagValue {
+				switch {
+				case issueID != "" && len(args) == 1:
+					worktreePath = args[0]
+					args = nil
+				case issueID == "" && len(args) == 2:
+					issueID = args[0]
+					worktreePath = args[1]
+					args = nil
+				}
+			}
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
 			if issueID == "" {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
 			}
-			if !worktreeFlag {
+			if worktreePath == "" {
 				return fmt.Errorf("--worktree is required")
 			}
 
-			// Validate and resolve the canonical path before any claim append or
-			// filesystem/git mutation. Separator-bearing, absolute, and traversal
-			// IDs are rejected rather than becoming filesystem paths.
-			worktreePath, err = canonicalWorktreePath(ctx.RepoPath, issueID)
-			if err != nil {
-				return err
+			customWorktreePath := worktreePath != defaultWorktreeFlagValue
+			if customWorktreePath {
+				worktreePath, err = filepath.Abs(worktreePath)
+				if err != nil {
+					return fmt.Errorf("resolve worktree path: %w", err)
+				}
+			} else {
+				// Validate and resolve the canonical path before any claim append or
+				// filesystem/git mutation. Separator-bearing, absolute, and traversal
+				// IDs are rejected rather than becoming filesystem paths.
+				worktreePath, err = canonicalWorktreePath(ctx.RepoPath, issueID)
+				if err != nil {
+					return err
+				}
+			}
+			if fromWorktreePath != "" {
+				fromWorktreePath, err = filepath.Abs(fromWorktreePath)
+				if err != nil {
+					return fmt.Errorf("resolve --from worktree path: %w", err)
+				}
+				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
+					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
+				}
 			}
 
 			issuesDir := ctx.IssuesDir
@@ -899,6 +938,13 @@ armature-issue-id file if the worktree already exists.`,
 			// Check whether the worktree path already exists. Capture the state here
 			// (no side effects yet) so worktree creation can be deferred until after
 			// all claim validations pass.
+			if customWorktreePath {
+				if _, statErr := os.Lstat(worktreePath); statErr == nil {
+					return fmt.Errorf("new worktree path %s must not exist", worktreePath)
+				} else if !os.IsNotExist(statErr) {
+					return fmt.Errorf("check new worktree path: %w", statErr)
+				}
+			}
 			worktreeExists, err := worktreePathExists(worktreePath)
 			if err != nil {
 				return fmt.Errorf("check worktree path: %w", err)
@@ -1088,7 +1134,7 @@ armature-issue-id file if the worktree already exists.`,
 			// Worktree setup is deferred to here so it only happens after all claim
 			// validations pass and this worker has won the claim race.
 			if !worktreeExists {
-				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, *issue, stillOwnsClaim); err != nil {
+				if err := createWorktreeAndBranch(ctx.RepoPath, worktreePath, issueID, *issue, stillOwnsClaim, fromWorktreePath); err != nil {
 					return rollbackClaim(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken)
 				}
 			} else {
@@ -1142,6 +1188,8 @@ armature-issue-id file if the worktree already exists.`,
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to claim")
 	cmd.Flags().IntVar(&ttl, "ttl", 60, "claim TTL in minutes")
 	cmd.Flags().BoolVar(&force, "force", false, "override scope overlap warning and proceed with claim")
-	cmd.Flags().BoolVar(&worktreeFlag, "worktree", false, "provision a worktree at .worktrees/<issue-id> (required)")
+	cmd.Flags().StringVar(&worktreePath, "worktree", "", "provision a worktree (required); omit its value for .worktrees/<issue-id>")
+	cmd.Flags().Lookup("worktree").NoOptDefVal = defaultWorktreeFlagValue
+	cmd.Flags().StringVar(&fromWorktreePath, "from", "", "create the new worktree from this parent worktree's current tip")
 	return cmd
 }
