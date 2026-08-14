@@ -2381,6 +2381,48 @@ func TestClaimFromFlagRejectsDetachedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
 	assert.Equal(t, ops.StatusOpen, issue.Status)
 }
 
+func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Run("mismatched branch is preserved without claim side effects", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		parentPath := filepath.Join(repo, "parent")
+		run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+		require.NoError(t, os.WriteFile(filepath.Join(parentPath, "parent.go"), []byte("package parent\n"), 0o644))
+		run(t, parentPath, "git", "add", "parent.go")
+		run(t, parentPath, "git", "commit", "-m", "feat(parent): advance source")
+		run(t, repo, "git", "branch", "task/task-01", "HEAD")
+		branchBefore := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "refs/heads/task/task-01"))
+		destination := filepath.Join(repo, "child")
+
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
+		err := claim.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match --from tip")
+		assert.NoDirExists(t, destination)
+		assert.Equal(t, branchBefore, strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "refs/heads/task/task-01")))
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+		issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+		require.NoError(t, err)
+		assert.Equal(t, ops.StatusOpen, issue.Status)
+		_, err = exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", "branch.task/task-01.armature-parent").Output()
+		assert.Error(t, err, "a rejected claim must not persist source provenance")
+	})
+
+	t.Run("same tip branch is reusable", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		run(t, repo, "git", "branch", "task/task-01", "HEAD")
+		sourceTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+		destination := filepath.Join(repo, "child")
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", repo})
+		require.NoError(t, claim.Execute())
+		assert.Equal(t, sourceTip, strings.TrimSpace(runGitOutput(t, destination, "rev-parse", "HEAD")))
+	})
+}
+
 func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
