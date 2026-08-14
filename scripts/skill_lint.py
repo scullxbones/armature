@@ -509,7 +509,8 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     # `--worktree` takes an optional value: bare for the canonical
     # `.worktrees/<issue-id>` path, or with an explicit path for a
     # caller-selected worktree. Both spellings are current guidance.
-    # `claim --from` still requires an explicit new destination.
+    # `claim --from` still requires a nonempty source and an explicit
+    # new destination when `--worktree` is also present.
     def has_flag_value(flag):
         return any(
             token.startswith(flag + "=") and len(token) > len(flag) + 1
@@ -520,12 +521,16 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
             for index, token in enumerate(tokens)
         )
 
-    claim_from = tokens[:2] == ["arm", "claim"] and has_flag_value("--from")
+    is_claim = tokens[:2] == ["arm", "claim"]
+    has_from = any(token == "--from" or token.startswith("--from=") for token in tokens)
+    from_value = has_flag_value("--from")
     worktree_value = has_flag_value("--worktree")
     has_worktree = any(
         token == "--worktree" or token.startswith("--worktree=") for token in tokens
     )
-    if claim_from and has_worktree and not worktree_value:
+    if is_claim and has_from and not from_value:
+        return False, f"claim --from requires a nonempty --from source in: {arm_command}"
+    if is_claim and has_from and has_worktree and not worktree_value:
         return False, f"claim --from requires an explicit --worktree <new-path> in: {arm_command}"
     if tokens and tokens[0] == "arm":
         tokens = tokens[1:]
