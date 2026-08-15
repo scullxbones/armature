@@ -956,11 +956,22 @@ armature-issue-id file if the worktree already exists.`,
 			graph := materialize.GraphFromState(snapshot.State)
 
 			for id, entry := range index {
-				if id == issueID || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
+				// Only issues a worker can actually hold compete for scope: type
+				// task, in claimed/in-progress state. A story's scope is by
+				// design the union of its children's scopes, so an in-progress
+				// story (which can persist long after the child that put it
+				// there was claimed/completed by someone else) must never be
+				// treated as a competing claimant. Mirrors the non-task filter
+				// internal/validate applies in its W1 check.
+				if id == issueID || entry.Type != "task" || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
 					continue
 				}
 				if claimPkg.ScopesOverlapEx(issue.Scope, entry.Scope, graph, issueID, id) {
-					msg := fmt.Sprintf("scope overlap with %s (%s)", id, entry.Title)
+					holder := entry.Assignee
+					if holder == "" {
+						holder = "unknown"
+					}
+					msg := fmt.Sprintf("scope overlap with %s (%s), a %s %s held by %s", id, entry.Title, entry.Type, entry.Status, holder)
 					// Same worker claiming serially: auto-dismiss — log a note, no error or warning.
 					if entry.Assignee == workerID {
 						// Only write the dismissal note if it hasn't been written before for this pair.
