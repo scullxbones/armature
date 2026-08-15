@@ -27,7 +27,7 @@ Fix failures; never suppress. Linters: `govet`, `errcheck`, `ineffassign`, `stat
 
 This is the commit/push gate. It's distinct from `arm validate --ci` / `arm doctor`, which is the task-completion sanity check — see [workflow.md](workflow.md).
 
-`check` runs the unit suite exactly once: `coverage` runs `go test -coverprofile=coverage.out`, and `coverage-check` reads that same profile rather than re-running the suite (docs/design/gate-efficiency.md D3). Run `make coverage` before `make coverage-check` if invoking them standalone outside of `check`.
+`check` runs the unit suite exactly once: `coverage` runs `go test -coverprofile=coverage.out`, and `coverage-check` depends on `coverage` then reads that same profile rather than re-running the suite (docs/design/gate-efficiency.md D3). The dependency keeps `make -j check` from racing a stale `coverage.out`. Standalone `make coverage-check` generates a current profile first.
 
 ## `make check-fast` — diff-routed fast gate
 
@@ -63,7 +63,7 @@ make check-fast      # diff-routed fast gate (see above)
 make test-check-fast # test check-fast.sh routing itself
 make lint            # golangci-lint run ./...
 make coverage        # run unit suite once with -coverprofile, generate coverage.html
-make coverage-check  # fail if coverage < 85% (reads coverage.out; run `make coverage` first)
+make coverage-check  # run coverage, then fail if total < 85%
 make mutate          # gremlins mutation testing on ./internal
 make validate-skills # validate embedded skill source
 make skill           # deploy skills to .claude/skills/, .gemini/skills/, .codex/skills/
