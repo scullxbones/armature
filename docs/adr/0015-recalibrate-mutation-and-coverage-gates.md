@@ -76,8 +76,18 @@ as previously written. This ADR is the amendment.
    coverage-check` computes both `cmd/**` and `internal/**` percentages from
    the single `coverage.out` profile already produced by the existing `go
    test -coverprofile` run (no second test run), and fails if either tree is
-   under its threshold: `internal/**` >= 87, `cmd/**` >= 83. Both percentages
+   under its threshold: `internal/**` >= 86, `cmd/**` >= 83. Both percentages
    print unconditionally so drift is visible even when passing.
+
+   Seeds are set a point or so *below* each tree's measured value, not level
+   with it. Seeding level with the measurement rearms the exact brittleness
+   this ADR exists to remove: internal measures 87.22%, so a threshold of 87
+   would leave 0.22 points — roughly eight statements — of margin, and a
+   single feature branch adding ordinary error handling would trip it while
+   saying nothing about test quality. 86 leaves internal ~1.2 points of
+   working room, comparable to the ~0.8 that rounding down already gives cmd
+   at 83. The ratchet still functions; it is simply not armed a hair's
+   breadth from the current value.
 2. **`mutant-coverage` drops from 95 to 92, once, and is de-emphasized to a
    secondary reachability proxy.** `efficacy` stays at 99 unchanged and is
    the primary mutation-quality signal — the one metric that measures

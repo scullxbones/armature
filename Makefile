@@ -20,7 +20,7 @@ help:
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
-	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 87%"
+	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 86%"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
@@ -82,7 +82,7 @@ coverage-check: coverage
 		printf "internal coverage: %.2f%%\n", int_pct; \
 		fail=0; \
 		if (cmd_pct < 83) { printf "FAIL: cmd coverage %.2f%% is below 83%% threshold (short by %.2f points)\n", cmd_pct, 83-cmd_pct; fail=1 } \
-		if (int_pct < 87) { printf "FAIL: internal coverage %.2f%% is below 87%% threshold (short by %.2f points)\n", int_pct, 87-int_pct; fail=1 } \
+		if (int_pct < 86) { printf "FAIL: internal coverage %.2f%% is below 86%% threshold (short by %.2f points)\n", int_pct, 86-int_pct; fail=1 } \
 		if (ct==0) { print "FAIL: no coverage lines matched armature/cmd/ — tree missing from profile"; fail=1 } \
 		if (it==0) { print "FAIL: no coverage lines matched armature/internal/ — tree missing from profile"; fail=1 } \
 		exit fail \
