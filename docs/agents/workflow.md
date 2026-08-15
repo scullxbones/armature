@@ -78,11 +78,15 @@ This removes the linked worktree and frees its resources. The `.worktrees/` dire
 
 There are two gate profiles, with distinct roles in the workflow:
 
-- **Fast gate** (`make check-fast`) — deterministic, diff-routed. Runs during
-  implementation and on every intermediate remediation cycle. A green fast
-  gate is sufficient to keep iterating. Workers MUST NOT run the full gate on
-  intermediate remediations. After the last remediation commit, the new HEAD
-  is the final task head — that run is a publish gate, not an intermediate one.
+- **Fast gate** — runs during implementation and on every intermediate
+  remediation cycle. A green fast gate is sufficient to keep iterating.
+  Workers MUST NOT run the full gate on intermediate remediations. After the
+  last remediation commit, the new HEAD is the final task head — that run is
+  a publish gate, not an intermediate one. The command is `make check-fast`
+  **when that target exists** (LNGHZN-S10-T2). Until then, iterate with
+  targeted existing checks (`make lint`, `make validate-skills`, `go test` on
+  changed packages) — do not invoke a missing `check-fast` target and do not
+  substitute `make check`.
 - **Full/publish gate** (`make check`) — unchanged in content from before this
   model; mandatory at the task's clean delivery HEAD (the worker's
   responsibility: commit first, then run the full gate before `done`, see the
