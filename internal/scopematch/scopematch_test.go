@@ -1,6 +1,10 @@
 package scopematch
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 // TestOverlaps_IgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7 verifies the
 // canonical implementation, added by LNGHZN-S10-T7 as the single source both
@@ -78,11 +82,71 @@ func TestOverlaps_GlobVsGlobNoIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	}
 }
 
+// TestOverlaps_WildcardDirectoryScopeIncludesDescendants verifies that a
+// trailing-slash directory scope that also contains a wildcard (e.g.
+// "src/*/") still covers descendants of any matched directory. CleanScope
+// reports isDir, but throwing that flag away makes the segment matcher
+// require equal length, and Allows' descendant-prefix check is a literal
+// string prefix against "src/*/" — both miss src/auth/login.go.
+func TestOverlaps_WildcardDirectoryScopeIncludesDescendants(t *testing.T) {
+	t.Parallel()
+	if !Overlaps("src/*/", "src/auth/login.go") {
+		t.Fatal("src/*/ is a directory scope matching src/auth/, so it must overlap src/auth/login.go")
+	}
+	if !Overlaps("src/auth/login.go", "src/*/") {
+		t.Fatal("overlap check must be symmetric")
+	}
+	if !Overlaps("src/*/", "src/billing/*.go") {
+		t.Fatal("src/*/ covers every file under any src/<dir>/, including src/billing/*.go")
+	}
+	if Overlaps("src/*/", "lib/foo.go") {
+		t.Fatal("src/*/ must not overlap a path outside src/")
+	}
+}
+
+// TestOverlaps_RepeatedDoublestarDoesNotHang verifies that a pair of
+// non-intersecting patterns with many "**" segments finishes in bounded
+// time. Naive suffix-slice recursion revisits the same (i, j) states
+// combinatorially; ten **/a repetitions already require hundreds of
+// millions of calls and can hang arm claim / arm validate.
+func TestOverlaps_RepeatedDoublestarDoesNotHang(t *testing.T) {
+	t.Parallel()
+	const reps = 10
+	a := strings.Repeat("**/a/", reps) + "x"
+	b := strings.Repeat("**/a/", reps) + "y"
+	type result struct{ ab, ba bool }
+	done := make(chan result, 1)
+	go func() {
+		done <- result{Overlaps(a, b), Overlaps(b, a)}
+	}()
+	select {
+	case got := <-done:
+		if got.ab {
+			t.Fatal("repeated **/a ending in distinct literals must not intersect")
+		}
+		if got.ba {
+			t.Fatal("overlap check must be symmetric")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Overlaps hung on repeated **/a patterns; intersection must memoize suffix-index pairs")
+	}
+}
+
 // TestMatchPatternSegments_DoublestarBacktracking exercises the "**"
 // backtracking loops in matchPatternSegments directly (white-box, same
 // package) for both the a[0]=="**" and b[0]=="**" branches, including cases
 // where the loop finds a match partway through and cases where it exhausts
 // without finding one.
+func TestGlobPatternsMayIntersect_RootScope(t *testing.T) {
+	t.Parallel()
+	if !globPatternsMayIntersect(".", "src/foo.go") {
+		t.Fatal("repo-root scope must intersect any path")
+	}
+	if !globPatternsMayIntersect("src/foo.go", ".") {
+		t.Fatal("intersection with repo-root must be symmetric")
+	}
+}
+
 func TestMatchPatternSegments_DoublestarBacktracking(t *testing.T) {
 	t.Parallel()
 
@@ -166,6 +230,16 @@ func TestAllows_ExactPathMatch(t *testing.T) {
 	}
 	if Allows([]string{"internal/foo.go"}, "internal/bar.go") {
 		t.Fatal("expected no match for different path")
+	}
+}
+
+func TestAllows_WildcardDirectoryScopeIncludesDescendants(t *testing.T) {
+	t.Parallel()
+	if !Allows([]string{"src/*/"}, "src/auth/login.go") {
+		t.Fatal("expected src/*/ directory scope to cover descendants of a matched directory")
+	}
+	if Allows([]string{"src/*/"}, "lib/foo.go") {
+		t.Fatal("expected src/*/ not to cover a path outside src/")
 	}
 }
 
