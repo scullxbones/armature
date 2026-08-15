@@ -27,8 +27,12 @@ on this branch (`chore/gate-threshold-recalibration`, based on
   reachability — from the same `go test` coverage profile. They differ only
   in denominator: mutant coverage counts only mutable AST sites
   (conditionals, arithmetic), statement coverage counts all statements.
-  Measured offset on this branch: mutant coverage runs meaningfully higher
-  than statement coverage on the same tree in both cmd and internal. The
+  Measured offset on this branch: cmd 83.79% statement vs 95.45% mutant
+  (+11.7 points); internal 87.22% statement vs 95.21% mutant (+8.0 points).
+  An untested function contributes many uncovered statements but only a few
+  mutable sites, so the mutant ratio is diluted upward. Correcting for that
+  offset, the 85% statement and 95% mutant thresholds encoded almost exactly
+  the same real demand. The
   apparent ~10-point gap between the 85% statement threshold and the 95%
   mutant-coverage threshold is a unit artifact of what each metric counts,
   not a difference in rigor — both gates were sitting knife-edge on
@@ -39,9 +43,13 @@ on this branch (`chore/gate-threshold-recalibration`, based on
   expensive part of mutation testing (executing covered mutants and checking
   whether tests kill them) has never once failed. gremlins never executes
   NOT COVERED mutants, so nearly all of `make mutate`'s runtime is spent
-  reconfirming a result that has never varied, while `coverage-check` — the
-  cheap, purely reachability-based gate — is the one that actually fails on
-  cmd today.
+  reconfirming a result that has never varied. The gate that actually broke
+  CI was `mutant-coverage`, and it broke on a feature branch (PR #97) whose
+  own new code was undertested — 306 statements added to cmd with only 61%
+  of them covered, dragging the tree from 83.99% to 82.49% and mutant
+  coverage from 95.45% to 93.68%. That is a reachability regression, and
+  per-tree statement coverage detects it more cheaply and more legibly than
+  mutation testing does.
 - The mutant-coverage gate penalizes defensive error handling: a majority of
   cmd's uncovered statements are `if err != nil` branches on filesystem/git
   I/O. Writing more defensive code mechanically lowers the metric even when
