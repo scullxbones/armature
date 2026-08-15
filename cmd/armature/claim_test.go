@@ -1282,6 +1282,93 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "worktree must not be created when claim fails due to scope overlap")
 }
 
+// TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8 verifies that
+// an in-progress story with an overlapping aggregate scope does not block
+// claiming a task that lives in a different story. A story's scope is by
+// design the union of its children's scopes, and it can remain "in-progress"
+// long after the child that put it there has been claimed/completed by
+// someone else — so it must never be treated as a competing claimant.
+func TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	// Story in another subtree, sitting in-progress with an aggregate scope
+	// that overlaps the task we're about to claim.
+	_, err = runTrls(t, repo, "create", "--title", "Other story", "--type", "story", "--id", "story-other")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "story-other", "--scope", "cmd/armature/claim.go")
+	require.NoError(t, err)
+
+	// Task to claim, unrelated to story-other.
+	_, err = runTrls(t, repo, "create", "--title", "Task to claim", "--type", "task", "--id", "task-target")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "task-target", "--scope", "cmd/armature/claim.go")
+	require.NoError(t, err)
+
+	// Put story-other into in-progress, held by a different worker, without
+	// any of its children actually being claimed.
+	otherWorker := "other-worker-uuid"
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, otherWorker+".log")
+	transitionOp := ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "story-other",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  otherWorker,
+		Payload:   ops.Payload{To: ops.StatusInProgress},
+	}
+	require.NoError(t, ops.AppendOp(logPath, transitionOp))
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-target", "--worktree")
+	require.NoError(t, claimErr, "an in-progress story's aggregate scope must not block an unrelated task claim. stderr: %s", stderr)
+}
+
+// TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8 verifies that
+// the filter narrowing the overlap check to claimable issues does not weaken
+// genuine collision detection: a claimed task with overlapping scope must
+// still block, and the error must name the conflicting issue's type and its
+// holder so the block is diagnosable without reading source.
+func TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "cmd/armature/claim.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "amend", "--issue", "task-02", "--scope", "cmd/armature/claim.go")
+	require.NoError(t, err)
+
+	// Claim task-01 from a different worker, simulating a concurrent claim.
+	otherWorker := "other-worker-uuid"
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, otherWorker+".log")
+	claimOp := ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: time.Now().Unix(),
+		WorkerID:  otherWorker,
+		Payload:   ops.Payload{TTL: 60},
+	}
+	require.NoError(t, ops.AppendOp(logPath, claimOp))
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-02", "--worktree")
+	require.Error(t, claimErr, "a genuinely overlapping claimed task must still block the claim. stderr: %s", stderr)
+	assert.Contains(t, claimErr.Error(), "task-01")
+	assert.Contains(t, claimErr.Error(), "task",
+		"error should name the conflicting issue's type so a false block is diagnosable without reading source")
+	assert.Contains(t, claimErr.Error(), otherWorker,
+		"error should name the conflicting issue's holder so a false block is diagnosable without reading source")
+}
+
 // TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9 pins the fix-1
 // ordering invariant: acquireClaimLock must be called before claim reads any
 // issue or worktree state, not merely before the claim-op append. It proves
