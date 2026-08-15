@@ -134,6 +134,9 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	if err != nil {
 		return fmt.Errorf("prepare review bundle: %w", err)
 	}
+	if err := review.AttachGateEvidence(bundle, ctx.IssuesDir); err != nil {
+		return fmt.Errorf("attach gate evidence: %w", err)
+	}
 
 	// Marshal bundle to JSON
 	bundleJSON, err := json.MarshalIndent(bundle, "", "  ")

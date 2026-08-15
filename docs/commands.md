@@ -369,6 +369,30 @@ binding the worktree to its issue or removing the stray checkout.
 
 ---
 
+## gate
+
+Run a repository-configured quality-gate profile and record wrapper-observed evidence.
+
+**Synopsis:**
+`arm gate run <profile>`
+
+**Subcommands:**
+
+### gate run
+
+Execute the command declared for `<profile>` in the `gates` map of `.armature/config.json`, stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`). Profile name `full` is reserved as the publish profile. A dirty working tree still executes but records the run as `uncommitted` (not citable). Repos with no `gates` map get a clear error — armature does not infer make or Go.
+
+**Synopsis:**
+`arm gate run <profile>`
+
+**Example:**
+```bash
+arm gate run full
+arm gate run fast
+```
+
+---
+
 ## heartbeat
 
 Send heartbeat for an active claim.

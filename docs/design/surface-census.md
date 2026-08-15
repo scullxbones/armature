@@ -178,6 +178,8 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `completion` | main.go:251, cmd_completion.go | Bash/zsh completion | **kept-evidence** | Shell integration. Cobra-generated. |
 | `hook` | main.go:255, hook.go | Manage harness hooks | **kept-evidence** | Configuration. Enable/disable/debug hooks. |
 | `hook run` | hook.go:31 | Run a named harness hook | **kept-evidence** | Subcommand of `hook`. |
+| `gate` | main.go, gate.go | Run configured quality-gate profiles | **kept-evidence** | Container for `gate run`. Profiles come from `.armature/config.json` `gates` map; `full` is reserved as the publish profile. |
+| `gate run` | gate.go | Execute a named gate profile and append evidence | **kept-evidence** | Subcommand of `gate`. Streams output to `.armature/gates/` and appends a `gate-evidence` op to the invoking worker log. Dirty trees record `uncommitted` (not citable). |
 | `tui` | main.go:259, tui.go | TUI for issue navigation | **kept-evidence** | Interactive mode. Lists and filters issues. |
 | `context-history` | main.go:263, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
 | `harness-hook` | main.go:267, harness_hook.go | Harness hook runner (internal) | **kept-evidence** | Internal. Runs on pre-commit and post-merge. |
