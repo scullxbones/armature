@@ -217,6 +217,7 @@ func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 		OpScopeDelete,
 		OpReparent,
 		OpAssessmentAttested,
+		OpGateEvidence,
 	}
 
 	for _, opType := range requiredOpTypes {

@@ -31,6 +31,14 @@ func TestAppendAndReadGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.True(t, got[0].Citable())
 }
 
+func TestIsAuditOnly_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	assert.True(t, IsAuditOnly(OpSourceFingerprint))
+	assert.True(t, IsAuditOnly(OpGateEvidence))
+	assert.False(t, IsAuditOnly(OpNote))
+	assert.False(t, IsAuditOnly(OpCreate))
+}
+
 func TestGateEvidenceDirtyNotCitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
 	ev := GateEvidence{Profile: "full", Exit: 0, Uncommitted: true}

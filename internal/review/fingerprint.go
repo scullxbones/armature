@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // activityScannerBufferSize is the initial buffer size handed to bufio.Scanner
@@ -68,6 +70,7 @@ func FingerprintResult(assessment ConformanceAssessment) string {
 // The format is "sha256:<64-char-hex-string>".
 // Note: LogPath is excluded from Activity when hashing because it is worktree-local
 // and differs across clones/worktrees even when the activity facts are identical.
+// GateEvidence is included: attestation must bind the evidence the reviewer saw.
 func ComputeBundleID(bundle ReviewBundle) string {
 	// Serialize the bundle (without bundleID itself) to canonical JSON
 	// We hash the core review data
@@ -104,12 +107,14 @@ func ComputeBundleID(bundle ReviewBundle) string {
 			DeliveryHeadCount int
 			EarlierCount      int
 		}
+		GateEvidence []ops.GateEvidence
 	}{
 		SchemaVersion: bundle.SchemaVersion,
 		Issue:         bundle.Issue,
 		Contract:      bundle.Contract,
 		Delivery:      bundle.Delivery,
 		Activity:      activityForHash,
+		GateEvidence:  bundle.GateEvidence,
 	}
 
 	jsonData, err := json.Marshal(data)

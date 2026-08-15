@@ -89,6 +89,52 @@ func TestGateRunFailedCommandRecordsEvidence(t *testing.T) {
 	assert.Equal(t, "full", ev.Profile)
 }
 
+// TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3 is the P1 seam: when
+// invoked from a linked task worktree, HEAD, cleanliness, and the configured
+// command must use that checkout — not the parent repo ResolveContext walks to.
+func TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{
+		"full": {"test", "-f", "wt-only"},
+	})
+	parentHEAD := gitRevParse(t, repo, "HEAD")
+
+	worktreeDir := t.TempDir()
+	run(t, repo, "git", "worktree", "add", worktreeDir, "-b", "task/task-01")
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "wt-only"), []byte("marker"), 0o644))
+	run(t, worktreeDir, "git", "add", "wt-only")
+	run(t, worktreeDir, "git", "commit", "-m", "feat(task-01): worktree-only marker")
+	worktreeHEAD := gitRevParse(t, worktreeDir, "HEAD")
+	require.NotEqual(t, parentHEAD, worktreeHEAD, "fixture must diverge parent and worktree HEAD")
+
+	_, err := runTrls(t, worktreeDir, "gate", "run", "full")
+	require.NoError(t, err, "command must run in the worktree where wt-only exists")
+
+	ev := requireOneGateEvidence(t, repo)
+	assert.Equal(t, worktreeHEAD, ev.HeadSHA, "evidence must record the invoking worktree HEAD, not the parent")
+	assert.NotEqual(t, parentHEAD, ev.HeadSHA)
+	assert.Equal(t, 0, ev.Exit)
+	assert.False(t, ev.Uncommitted)
+}
+
+// TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3 covers a clean checkout
+// whose configured command leaves a non-ignored file: the run must still be
+// recorded uncommitted so evidence cannot cite a tree that no longer matches HEAD.
+func TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{
+		"full": {"touch", "generated-by-gate.txt"},
+	})
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.NoError(t, err, "the configured command itself should succeed")
+
+	ev := requireOneGateEvidence(t, repo)
+	assert.True(t, ev.Uncommitted, "a gate that dirties the tree must not be citable")
+	assert.Equal(t, 0, ev.Exit)
+	assert.FileExists(t, filepath.Join(repo, "generated-by-gate.txt"))
+}
+
 func writeGatesConfig(t *testing.T, repo string, commands map[string][]string) {
 	t.Helper()
 	path := filepath.Join(repo, ".armature", "config.json")

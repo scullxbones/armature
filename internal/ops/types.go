@@ -30,6 +30,18 @@ const (
 	OpAssessmentAttested = "assessment-attested"
 )
 
+// IsAuditOnly reports ops that record evidence or metadata without mutating
+// issue DAG state. Their target_id is not an issue ID (source UUID, gate
+// profile name) and must not be treated as unknown or as an orphaned issue.
+func IsAuditOnly(opType string) bool {
+	switch opType {
+	case OpSourceFingerprint, OpGateEvidence:
+		return true
+	default:
+		return false
+	}
+}
+
 // Issue statuses.
 // Note: the op type handler registry (mapping op type string to handler function)
 // lives in materialize.RegisteredOpTypes() — see internal/materialize/engine.go.

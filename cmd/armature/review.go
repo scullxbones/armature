@@ -102,10 +102,7 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	// current directory, exactly as main.go resolves ctx before the parent-repo
 	// walk) so the resolution finds the invoking worktree's own git dir rather
 	// than the already-resolved parent repo root.
-	invocationPath, _ := cmd.Root().PersistentFlags().GetString("repo")
-	if invocationPath == "" {
-		invocationPath = "."
-	}
+	invocationPath := invocationRepoPath(cmd)
 	binding, err := harnesshook.ResolveBindingFromDir(invocationPath)
 	if err != nil {
 		return fmt.Errorf("resolve git dir for activity log: %w", err)
@@ -238,11 +235,7 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 	// when the flag wasn't explicitly passed — an explicit --branch always
 	// means exactly what it says.
 	if !cmd.Flags().Changed("branch") {
-		invocationPath, _ := cmd.Root().PersistentFlags().GetString("repo")
-		if invocationPath == "" {
-			invocationPath = "."
-		}
-		if resolved, err := adapters.New(invocationPath).CurrentBranch(); err == nil && resolved != "" {
+		if resolved, err := adapters.New(invocationRepoPath(cmd)).CurrentBranch(); err == nil && resolved != "" {
 			branch = resolved
 		}
 	}

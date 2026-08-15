@@ -116,6 +116,21 @@ func currentCtx(cmd *cobra.Command) *config.Context {
 	return mustState(cmd).ctx
 }
 
+// invocationRepoPath is the checkout the command was invoked against: --repo,
+// or "." when the flag is unset. ResolveContext walks a linked worktree up to
+// the parent repo, so callers that need HEAD, dirtiness, or a process cwd for
+// *this* checkout must use this path rather than Context.RepoPath.
+func invocationRepoPath(cmd *cobra.Command) string {
+	if cmd == nil || cmd.Root() == nil {
+		return "."
+	}
+	path, err := cmd.Root().PersistentFlags().GetString("repo")
+	if err != nil || path == "" {
+		return "."
+	}
+	return path
+}
+
 // stateDirFor returns the worker-specific state directory.
 // In dual-branch mode, state lives at the worktree root (not inside .armature/).
 func stateDirFor(ctx *config.Context, workerID string) string {

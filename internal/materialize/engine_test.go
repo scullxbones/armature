@@ -480,6 +480,7 @@ func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent, ops.OpAssessmentAttested,
+		ops.OpGateEvidence,
 	}
 
 	for _, expected := range expectedTypes {
@@ -522,6 +523,7 @@ func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
+		ops.OpGateEvidence,
 	}
 	for _, opType := range standardOps {
 		assert.True(t, registeredSet[opType], "standard op type %q must be in RegisteredOpTypes", opType)
@@ -1697,6 +1699,26 @@ func TestIssue_PreferredModel_RoundTripsJSON(t *testing.T) {
 	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-rtrip.json"))
 	require.NoError(t, err)
 	assert.Equal(t, "claude-sonnet-5", loaded.PreferredModel)
+}
+
+func TestApplyOp_GateEvidenceIsRecognizedNoOp_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	before := state.Issues["task-01"].Status
+
+	err := state.ApplyOp(ops.Op{
+		Type:      ops.OpGateEvidence,
+		TargetID:  "full",
+		Timestamp: 200,
+		WorkerID:  "w1",
+	})
+	require.NoError(t, err, "gate-evidence is audit-only and must not be an unknown op")
+	assert.Equal(t, before, state.Issues["task-01"].Status)
+	assert.Contains(t, RegisteredOpTypes(), ops.OpGateEvidence)
 }
 
 func TestApplyOp_ManagedExecutionOps_ReturnUnknownError(t *testing.T) {

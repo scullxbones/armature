@@ -290,6 +290,31 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	}
 }
 
+func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	// gate-evidence targets the profile name ("full"), which is not an issue ID.
+	// Doctor must treat it as audit-only, the same way it treats source-fingerprint.
+	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
+	require.NoError(t, ops.AppendGateEvidence(logPath, "worker-01", ops.GateEvidence{
+		Profile: "full",
+		Command: []string{"true"},
+		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Start:   100,
+		End:     101,
+		Exit:    0,
+	}))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	require.NoError(t, err)
+
+	d3 := findCheck(t, report, "D3")
+	assert.Equal(t, doctor.SeverityOK, d3.Severity,
+		"gate-evidence targeting a profile name must not be reported as an orphaned issue")
+	assert.NotContains(t, d3.Items, "full")
+}
+
 func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
