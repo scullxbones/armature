@@ -144,19 +144,25 @@ func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	return path, nil
 }
 
-// repositoryRelativeWorktreeExclude returns the git-info/exclude pattern for
-// an explicit destination that resolves inside repoPath. A destination outside
-// the repository has no main-tree path to exclude. Both paths are normalized so
-// symlinked repositories and destinations are classified by their actual
-// location, while the missing worktree leaf remains supported.
-func repositoryRelativeWorktreeExclude(repoPath, worktreePath string) (string, bool) {
+// rejectInRepositoryCustomWorktreeDestination prevents an explicit worktree
+// path inside the coordinator repository from using a clone-wide
+// .git/info/exclude entry. That file is shared by every linked worktree, so a
+// path-specific entry for an arbitrary repository-relative destination could
+// silently hide unrelated files from another worktree. The canonical
+// .worktrees root is safe because its one shared exclusion is an established
+// repository invariant.
+func rejectInRepositoryCustomWorktreeDestination(repoPath, destination string) error {
 	repoRoot := worktree.NormalizePath(repoPath)
-	destination := worktree.NormalizePathAllowingMissing(worktreePath)
-	rel, err := filepath.Rel(repoRoot, destination)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", false
+	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
+	if !worktree.IsUnderRoot(normalizedDestination, repoRoot) {
+		return nil
 	}
-	return "/" + escapeGitExcludePath(filepath.ToSlash(rel)) + "/", true
+	if !worktree.IsUnderRoot(normalizedDestination, worktree.CanonicalRoot(repoPath)) {
+		return fmt.Errorf(
+			"custom worktree destination %s is inside the repository; explicit destinations must be outside the repository or under canonical .worktrees",
+			destination)
+	}
+	return nil
 }
 
 // rejectNestedWorktreeDestination refuses a custom destination below any
@@ -172,28 +178,21 @@ func rejectNestedWorktreeDestination(repoPath, destination string) error {
 	}
 	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
 	for _, registeredPath := range registeredPaths {
-		if worktree.IsUnderRoot(normalizedDestination, worktree.NormalizePathAllowingMissing(registeredPath)) {
+		normalizedRegisteredPath := worktree.NormalizePathAllowingMissing(registeredPath)
+		if normalizedDestination == normalizedRegisteredPath {
+			prunable, err := worktree.HasPrunableRegistration(repoPath, registeredPath)
+			if err != nil {
+				return fmt.Errorf("inspect registered worktree %s: %w", registeredPath, err)
+			}
+			if prunable {
+				continue
+			}
+		}
+		if worktree.IsUnderRoot(normalizedDestination, normalizedRegisteredPath) {
 			return fmt.Errorf("custom worktree destination %s is nested inside registered worktree %s", destination, registeredPath)
 		}
 	}
 	return nil
-}
-
-// escapeGitExcludePath makes each path component literal in a git exclude
-// pattern. A leading slash anchors the complete pattern to this repository;
-// backslash-escaping Git's comment, negation, and wildcard syntax prevents a
-// destination such as `#worktree`, `!worktree`, or `scratch[*]` from changing
-// the meaning of the exclusion or matching an unrelated same-named path.
-func escapeGitExcludePath(path string) string {
-	var escaped strings.Builder
-	for i := 0; i < len(path); i++ {
-		switch path[i] {
-		case '\\', '#', '!', '*', '?', '[', ']':
-			escaped.WriteByte('\\')
-		}
-		escaped.WriteByte(path[i])
-	}
-	return escaped.String()
 }
 
 func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (bool, error) {
@@ -393,7 +392,13 @@ func cleanupClaimExclusions(repoPath string, exclusions []claimExclusion) error 
 		return err
 	}
 	defer release()
+	return cleanupClaimExclusionsLocked(repoPath, exclusions)
+}
 
+func cleanupClaimExclusionsLocked(repoPath string, exclusions []claimExclusion) error {
+	if len(exclusions) == 0 {
+		return nil
+	}
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
 		return fmt.Errorf("inspect worktrees before exclusion rollback: %w", err)
@@ -505,6 +510,20 @@ func rollbackClaim(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
 	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
 ) error {
+	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
+}
+
+func rollbackClaimLocked(
+	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
+	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
+) error {
+	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, true, exclusionSets...)
+}
+
+func rollbackClaimWithExclusionLock(
+	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
+	cause error, prior priorClaimState, claimToken string, exclusionLockHeld bool, exclusionSets ...[]claimExclusion,
+) error {
 	var exclusions []claimExclusion
 	if len(exclusionSets) > 0 {
 		exclusions = exclusionSets[0]
@@ -513,7 +532,11 @@ func rollbackClaim(
 		if len(exclusions) == 0 {
 			return base
 		}
-		if cleanupErr := cleanupClaimExclusions(mustState(cmd).ctx.RepoPath, exclusions); cleanupErr != nil {
+		cleanup := cleanupClaimExclusions
+		if exclusionLockHeld {
+			cleanup = cleanupClaimExclusionsLocked
+		}
+		if cleanupErr := cleanup(mustState(cmd).ctx.RepoPath, exclusions); cleanupErr != nil {
 			return fmt.Errorf("%w; exclusion rollback failed: %v", base, cleanupErr)
 		}
 		return base
@@ -1133,9 +1156,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if err != nil {
 					return fmt.Errorf("resolve worktree path: %w", err)
 				}
-				if err := rejectNestedWorktreeDestination(ctx.RepoPath, worktreePath); err != nil {
-					return err
-				}
 			} else {
 				// Validate and resolve the canonical path before any claim append or
 				// filesystem/git mutation. Separator-bearing, absolute, and traversal
@@ -1145,27 +1165,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					return err
 				}
 			}
-			if fromWorktreePath != "" {
-				fromWorktreePath, err = filepath.Abs(fromWorktreePath)
-				if err != nil {
-					return fmt.Errorf("resolve --from worktree path: %w", err)
-				}
-				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
-					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
-				}
-				fromBranch, err = adapters.New(fromWorktreePath).CurrentBranch()
-				if err != nil {
-					return fmt.Errorf("resolve --from worktree branch: %w", err)
-				}
-				if fromBranch == "" || fromBranch == "HEAD" {
-					return fmt.Errorf("--from worktree %s must be on a branch", fromWorktreePath)
-				}
-				fromTip, err = adapters.New(fromWorktreePath).ResolveRevision("HEAD")
-				if err != nil {
-					return fmt.Errorf("resolve --from worktree tip: %w", err)
-				}
-			}
-
 			issuesDir := ctx.IssuesDir
 
 			// Serialize same-clone claims for this issue with an OS-level advisory
@@ -1192,6 +1191,45 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return err
 			}
 			defer releaseClaimLock()
+			releaseGitExcludeLock, err := acquireGitExcludeLock(ctx.RepoPath)
+			if err != nil {
+				return err
+			}
+			defer releaseGitExcludeLock()
+
+			// The exclusion lock is acquired before any explicit-destination
+			// inspection and held through claim append and provisioning. This
+			// serializes the check/remove performed by merged and GC with the
+			// claim's check-through-provisioning handoff, so a teardown cannot
+			// remove an exclusion after a new claim has reused the destination.
+			if customWorktreePath {
+				if err := rejectNestedWorktreeDestination(ctx.RepoPath, worktreePath); err != nil {
+					return err
+				}
+				if err := rejectInRepositoryCustomWorktreeDestination(ctx.RepoPath, worktreePath); err != nil {
+					return err
+				}
+			}
+			if fromWorktreePath != "" {
+				fromWorktreePath, err = filepath.Abs(fromWorktreePath)
+				if err != nil {
+					return fmt.Errorf("resolve --from worktree path: %w", err)
+				}
+				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
+					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
+				}
+				fromBranch, err = adapters.New(fromWorktreePath).CurrentBranch()
+				if err != nil {
+					return fmt.Errorf("resolve --from worktree branch: %w", err)
+				}
+				if fromBranch == "" || fromBranch == "HEAD" {
+					return fmt.Errorf("--from worktree %s must be on a branch", fromWorktreePath)
+				}
+				fromTip, err = adapters.New(fromWorktreePath).ResolveRevision("HEAD")
+				if err != nil {
+					return fmt.Errorf("resolve --from worktree tip: %w", err)
+				}
+			}
 
 			// allOps is retained here because HasOverlapDismissalNote (below) needs the raw
 			// op log to detect prior dismissal notes — data the store's Index does not expose.
@@ -1349,10 +1387,11 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			// exclusion; leaving the claim in place when this safety precondition
 			// fails would make a later broad `git add .` stage a linked worktree as
 			// a gitlink. This intentionally applies to both new and existing
-			// canonical worktrees.
+			// canonical worktrees. The repository exclusion lock is already held
+			// from destination validation through provisioning, so use the locked
+			// helper rather than attempting to acquire it again.
 			var claimExclusions []claimExclusion
-			var customExclusionPattern string
-			canonicalAdded, err := updateGitExcludeTracked(ctx.RepoPath, ".worktrees/", "")
+			canonicalAdded, err := updateGitExcludeTrackedLocked(ctx.RepoPath, ".worktrees/", "")
 			if err != nil {
 				return fmt.Errorf("exclude managed worktree directory: %w", err)
 			}
@@ -1360,23 +1399,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				claimExclusions = append(claimExclusions, claimExclusion{
 					pattern: ".worktrees/", destination: worktree.CanonicalRoot(ctx.RepoPath), canonical: true,
 				})
-			}
-			if customWorktreePath {
-				if excludePattern, ok := repositoryRelativeWorktreeExclude(ctx.RepoPath, worktreePath); ok {
-					customAdded, excludeErr := updateGitExcludeTracked(ctx.RepoPath, excludePattern, "")
-					if excludeErr != nil {
-						if cleanupErr := cleanupClaimExclusions(ctx.RepoPath, claimExclusions); cleanupErr != nil {
-							return fmt.Errorf("exclude custom worktree destination: %w; exclusion rollback failed: %v", excludeErr, cleanupErr)
-						}
-						return fmt.Errorf("exclude custom worktree destination: %w", excludeErr)
-					}
-					if customAdded {
-						customExclusionPattern = excludePattern
-						claimExclusions = append(claimExclusions, claimExclusion{
-							pattern: excludePattern, destination: worktreePath,
-						})
-					}
-				}
 			}
 
 			// claimToken is this process's own claim op's unique nonce, generated
@@ -1389,7 +1411,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			// stillOwnsClaim below key off this exact token.
 			claimToken, err := newClaimToken()
 			if err != nil {
-				if cleanupErr := cleanupClaimExclusions(ctx.RepoPath, claimExclusions); cleanupErr != nil {
+				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {
 					return fmt.Errorf("generate claim token: %w; exclusion rollback failed: %v", err, cleanupErr)
 				}
 				return fmt.Errorf("generate claim token: %w", err)
@@ -1400,7 +1422,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				WorkerID: workerID, Payload: ops.Payload{TTL: ttl, WorktreePath: worktreePath, ClaimToken: claimToken},
 			}
 			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
-				if cleanupErr := cleanupClaimExclusions(ctx.RepoPath, claimExclusions); cleanupErr != nil {
+				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {
 					return fmt.Errorf("%w; exclusion rollback failed: %v", err, cleanupErr)
 				}
 				return err
@@ -1479,7 +1501,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				default:
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claim lost for %s (claimed by %s)\n", issueID, issueAfter.ClaimedBy)
 				}
-				if cleanupErr := cleanupClaimExclusions(ctx.RepoPath, claimExclusions); cleanupErr != nil {
+				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {
 					return fmt.Errorf("claim lost: exclusion rollback failed: %w", cleanupErr)
 				}
 				return nil
@@ -1494,15 +1516,15 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 				if err := createWorktreeAndBranchWithExclusion(
 					ctx.RepoPath, worktreePath, issueID, *issue,
-					stillOwnsClaim, customExclusionPattern, sourceArgs...,
+					stillOwnsClaim, "", sourceArgs...,
 				); err != nil {
-					return rollbackClaim(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken, claimExclusions)
+					return rollbackClaimLocked(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken, claimExclusions)
 				}
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-					return rollbackClaim(cmd, store, logPath, issueID, workerID, "update task ID file", err, prior, claimToken, claimExclusions)
+					return rollbackClaimLocked(cmd, store, logPath, issueID, workerID, "update task ID file", err, prior, claimToken, claimExclusions)
 				}
 
 				// A pre-existing canonical worktree may already carry trusted
@@ -1515,11 +1537,10 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				worktreeGitClient := adapters.New(worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
-						return rollbackClaim(cmd, store, logPath, issueID, workerID, "persist claimed branch metadata", err, prior, claimToken, claimExclusions)
+						return rollbackClaimLocked(cmd, store, logPath, issueID, workerID, "persist claimed branch metadata", err, prior, claimToken, claimExclusions)
 					}
 				}
 			}
-
 			// Auto-advance any open ancestor story/epic to in-progress.
 			if parentID := issue.Parent; parentID != "" {
 				if parentEntry, ok := index[parentID]; ok && parentEntry.Status == ops.StatusOpen {

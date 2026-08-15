@@ -219,7 +219,7 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 // and removed by worktree gc.
 func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination, "--from", repo)
 	require.NoError(t, err)
@@ -246,20 +246,20 @@ func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *t
 
 func TestWorktreeGCRemovesArmatureOwnedCustomExclusionAndAllowsReuse_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	destination := filepath.Join(repo, "custom-reuse")
+	destination := filepath.Join(t.TempDir(), "custom-reuse")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
 	require.NoError(t, err)
 	exclude, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
-	assert.Contains(t, string(exclude), "/custom-reuse/", "claim must install the custom destination exclusion")
+	assert.NotContains(t, string(exclude), "custom-reuse", "external custom destinations must not change shared exclusions")
 
 	_, err = runTrls(t, repo, "worktree", "gc", "--format", "json")
 	require.NoError(t, err, "a live worktree must not be removed by gc")
 	exclude, err = os.ReadFile(excludePath)
 	require.NoError(t, err)
-	assert.Contains(t, string(exclude), "/custom-reuse/", "a live worktree must retain its exclusion")
+	assert.NotContains(t, string(exclude), "custom-reuse", "external custom destinations must not change shared exclusions")
 
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled", "--force")
 	require.NoError(t, err)
@@ -273,19 +273,12 @@ func TestWorktreeGCRemovesArmatureOwnedCustomExclusionAndAllowsReuse_REQ_LNGHZN_
 
 	exclude, err = os.ReadFile(excludePath)
 	require.NoError(t, err)
-	assert.NotContains(t, string(exclude), "/custom-reuse/", "gc must remove an Armature-owned custom exclusion after removal")
-
-	reusedFile := filepath.Join(destination, "ordinary-project-file.txt")
-	require.NoError(t, os.MkdirAll(destination, 0o755))
-	require.NoError(t, os.WriteFile(reusedFile, []byte("project content\n"), 0o644))
-	run(t, repo, "git", "add", ".")
-	staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
-	assert.Contains(t, staged, "custom-reuse/ordinary-project-file.txt", "a reused destination must be stageable after gc")
+	assert.NotContains(t, string(exclude), "custom-reuse", "external custom destinations do not use shared exclusions")
 }
 
 func TestWorktreeGCPreservesPreExistingCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	destination := filepath.Join(repo, "custom-user-exclude")
+	destination := filepath.Join(t.TempDir(), "custom-user-exclude")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	excludeBefore, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
@@ -310,7 +303,7 @@ func TestWorktreeGCPreservesPreExistingCustomExclusion_REQ_LNGHZN_S9_T1(t *testi
 
 func TestWorktreeGCPreservesDirtyExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	destination := filepath.Join(repo, "custom-dirty")
+	destination := filepath.Join(t.TempDir(), "custom-dirty")
 
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
 	require.NoError(t, err)
@@ -337,7 +330,7 @@ func TestWorktreeListReportsMissingCustomGhostWithCloneLocalEvidence_REQ_LNGHZN_
 		name string
 		path func(repo string) string
 	}{
-		{name: "inside repository", path: func(repo string) string { return filepath.Join(repo, "custom-child") }},
+		{name: "canonical worktree root", path: func(repo string) string { return filepath.Join(repo, ".worktrees", "custom-child") }},
 		{name: "outside repository but registered", path: func(string) string { return filepath.Join(t.TempDir(), "custom-child") }},
 	} {
 		t.Run(destinationFor.name, func(t *testing.T) {

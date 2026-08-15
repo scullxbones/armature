@@ -160,14 +160,14 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 
 func TestMergedRemovesArmatureOwnedCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	destination := filepath.Join(repo, "custom-merged")
+	destination := filepath.Join(t.TempDir(), "custom-merged")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
 	require.NoError(t, err)
 	exclude, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
-	assert.Contains(t, string(exclude), "/custom-merged/", "claim must install the custom destination exclusion")
+	assert.NotContains(t, string(exclude), "custom-merged", "external custom destinations must not change shared exclusions")
 
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force")
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestMergedRemovesArmatureOwnedCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T
 
 	exclude, err = os.ReadFile(excludePath)
 	require.NoError(t, err)
-	assert.NotContains(t, string(exclude), "/custom-merged/", "merged teardown must remove an Armature-owned custom exclusion")
+	assert.NotContains(t, string(exclude), "custom-merged", "external custom destinations must not change shared exclusions")
 	assert.NoDirExists(t, destination, "merged teardown must remove the custom worktree")
 }
 
