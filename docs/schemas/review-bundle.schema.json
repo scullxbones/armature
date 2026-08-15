@@ -141,6 +141,47 @@
           "description": "Absolute path to the activity log file"
         }
       }
+    },
+    "gate_evidence": {
+      "type": "array",
+      "description": "Wrapper-recorded gate runs from worker logs. Included in bundle_id.",
+      "items": {
+        "type": "object",
+        "required": ["profile", "command", "head_sha", "start", "end", "exit"],
+        "properties": {
+          "profile": {
+            "type": "string",
+            "description": "Configured gate profile name"
+          },
+          "command": {
+            "type": "array",
+            "description": "Configured command argv",
+            "items": {
+              "type": "string"
+            }
+          },
+          "head_sha": {
+            "type": "string",
+            "description": "HEAD of the invoking checkout at run start"
+          },
+          "start": {
+            "type": "integer",
+            "description": "Unix epoch seconds when the command started"
+          },
+          "end": {
+            "type": "integer",
+            "description": "Unix epoch seconds when the command finished"
+          },
+          "exit": {
+            "type": "integer",
+            "description": "Process exit code"
+          },
+          "uncommitted": {
+            "type": "boolean",
+            "description": "True when the invoking checkout was dirty before or after the command (not citable)"
+          }
+        }
+      }
     }
   }
 }

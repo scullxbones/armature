@@ -35,6 +35,7 @@ var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpScopeDelete, PayloadField: "deleted_path"},
 	{OpType: OpReparent, PayloadField: "parent"},
 	{OpType: OpAssessmentAttested, PayloadField: "assessment"},
+	{OpType: OpGateEvidence, PayloadField: "profile, command, head_sha, start, end, exit, uncommitted"},
 }
 
 // SchemaDocumentedOpTypes returns the ordered op types documented in the schema.

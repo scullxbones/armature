@@ -119,7 +119,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	noteOnlyOrphans := noteOnlyOrphanTargets(allOps)
 	opsTargetIDs := make([]string, 0, len(allOps))
 	for _, op := range allOps {
-		if op.Type != ops.OpSourceFingerprint && op.TargetID != "" && !noteOnlyOrphans[op.TargetID] {
+		if !ops.IsAuditOnly(op.Type) && op.TargetID != "" && !noteOnlyOrphans[op.TargetID] {
 			opsTargetIDs = append(opsTargetIDs, op.TargetID)
 		}
 	}
@@ -313,8 +313,8 @@ func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
 			} else {
 				ns.deleted = true
 			}
-		case ops.OpSourceFingerprint:
-			// already excluded from D3 entirely
+		case ops.OpSourceFingerprint, ops.OpGateEvidence:
+			// already excluded from D3 entirely (audit-only; target is not an issue)
 		default:
 			otherRefs[op.TargetID] = true
 		}

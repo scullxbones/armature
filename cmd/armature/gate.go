@@ -32,9 +32,12 @@ func newGateRunCmd() *cobra.Command {
 (gates map), stream output to a log file, and append a gate-evidence op to
 the invoking worker's own log.
 
-Profile name "full" is reserved as the publish profile. A dirty working tree
-still runs the command but records the result as uncommitted (not citable).
-Repos with no gates map get a clear error — armature does not infer make/Go.`,
+Profile name "full" is reserved as the publish profile. The command, HEAD,
+and cleanliness checks use the invoking checkout (--repo or the current
+directory), not the parent repo. A working tree that is dirty before the
+command, or that the command dirties, still runs but records the result as
+uncommitted (not citable). Repos with no gates map get a clear error —
+armature does not infer make/Go.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGateProfile(cmd, args[0])
@@ -55,7 +58,12 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		return fmt.Errorf("gate profile %q has an empty command", profile)
 	}
 
-	git := adapters.New(appCtx.RepoPath)
+	// Context.RepoPath is the parent repo when this command runs inside a
+	// linked task worktree. Context.WorktreePath is the ops worktree. Neither
+	// is the checkout under test — use the invocation path for HEAD, dirtiness,
+	// and the configured command so evidence matches the task head.
+	checkout := invocationRepoPath(cmd)
+	git := adapters.New(checkout)
 	headSHA, err := git.ResolveRevision("HEAD")
 	if err != nil {
 		return fmt.Errorf("resolve HEAD: %w", err)
@@ -84,7 +92,7 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 	stderr := io.MultiWriter(cmd.ErrOrStderr(), logFile)
 
 	start := time.Now().Unix()
-	_, runErr := adapters.RunProcess(cmd.Context(), appCtx.RepoPath, gate.Command, stdout, stderr)
+	_, runErr := adapters.RunProcess(cmd.Context(), checkout, gate.Command, stdout, stderr)
 	end := time.Now().Unix()
 
 	exit := 0
@@ -96,6 +104,12 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 			exit = 1
 		}
 	}
+
+	afterDirty, dirtyErr := gateTreeUncommitted(git)
+	if dirtyErr != nil {
+		return fmt.Errorf("recheck working tree: %w", dirtyErr)
+	}
+	uncommitted = uncommitted || afterDirty
 
 	ev := ops.GateEvidence{
 		Profile:     profile,

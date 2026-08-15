@@ -380,7 +380,7 @@ Run a repository-configured quality-gate profile and record wrapper-observed evi
 
 ### gate run
 
-Execute the command declared for `<profile>` in the `gates` map of `.armature/config.json`, stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`). Profile name `full` is reserved as the publish profile. A dirty working tree still executes but records the run as `uncommitted` (not citable). Repos with no `gates` map get a clear error — armature does not infer make or Go.
+Execute the command declared for `<profile>` in the `gates` map of `.armature/config.json` in the invoking checkout (`--repo` or the current directory — not the parent repo `ResolveContext` walks to, and not the ops worktree), stream stdout/stderr to a log file under `.armature/gates/`, and append a `gate-evidence` op to the invoking worker's own log (`profile`, `command`, `head_sha`, `start`, `end`, `exit`). Profile name `full` is reserved as the publish profile. A working tree that is dirty before the command, or that the command dirties, still executes but records the run as `uncommitted` (not citable). Repos with no `gates` map get a clear error — armature does not infer make or Go.
 
 **Synopsis:**
 `arm gate run <profile>`
