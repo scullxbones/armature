@@ -179,3 +179,4 @@
 ["heartbeat","LNGHZN-S10-T3",1786763423,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{}]
 ["decision","LNGHZN-S10-T3",1786763423,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{"topic":"registration-and-bundle-field","choice":"touch main.go, review/types.go, and review.go in addition to listed scope","rationale":"arm gate cannot exist without newGateCmd registration in main.go (census-drift-check requires the command). ReviewBundle cannot include citable evidence without a GateEvidence field on the struct (types.go) and prepare-time AttachGateEvidence (review.go). No other out-of-scope files."}]
 ["heartbeat","LNGHZN-S10-T3",1786764559,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{}]
+["citation-accepted","LNGHZN-S10-T3",1786765148,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~1",{"confirmed_noninteractively":true,"rationale":"Acceptance is locked to named tests plus make check rather than a source quote"}]
