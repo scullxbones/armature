@@ -133,7 +133,7 @@ Find ready tasks and dispatch a worker agent for each one:
 
 ```bash
 arm ready                                      # list unblocked tasks
-arm claim ISSUE-ID --worktree                  # claim; auto-provisions .worktrees/ISSUE-ID
+arm claim ISSUE-ID --worktree                  # claim; auto-provisions .worktrees/ISSUE-ID (or pass a path)
 arm render-context ISSUE-ID --format agent      # get task context for the agent
 # dispatch agent with render-context output
 arm transition ISSUE-ID --to done --outcome "what was done"

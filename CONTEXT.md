@@ -286,11 +286,11 @@ The association between a claimed leaf issue and a specific worktree, establishe
 _Avoid_: Task binding, claim, worktree assignment, marker
 
 **Managed Worktree**:
-A worktree Armature provisioned and owns, living under the canonical worktree root and carrying an issue binding. Managed worktrees are the ones reconciliation classifies and `arm worktree gc` may remove; a worktree a person created for their own purposes is unmanaged and is never a removal candidate, whatever its branch. Distinct from the ops worktree, which holds coordination state rather than issue work.
+A worktree Armature provisioned and owns, carrying an issue binding. The canonical `.worktrees/<issue-id>` path is the default, but an explicit `--worktree <path>` destination is equally managed once claim writes its binding. Managed worktrees are the ones reconciliation classifies and `arm worktree gc` may remove; a worktree a person created for their own purposes is unmanaged and is never a removal candidate, whatever its branch. Distinct from the ops worktree, which holds coordination state rather than issue work.
 _Avoid_: Ops worktree, code worktree, checkout
 
 **Canonical Worktree Path**:
-The path Armature provisions a managed worktree at, derived from the issue ID under the canonical worktree root. It is distinct from the **recorded worktree path** materialized onto the issue from the claim op, which is the path that claim actually used — usually the canonical one, but a legacy or explicitly-placed worktree can differ. Where several worktrees share one binding, the recorded path is the tiebreak that decides which is real.
+The default path Armature provisions for a managed worktree, derived from the issue ID under the canonical worktree root. It is distinct from the **recorded worktree path** materialized onto the issue from the claim op, which is the path that claim actually used — canonical by default, or an explicit destination supplied by the caller. Where several worktrees share one binding, the recorded path is the tiebreak that decides which is real.
 _Avoid_: Worktree root, recorded path, worktree location
 
 **Adoption**:

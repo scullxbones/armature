@@ -1135,12 +1135,33 @@ func printCollapseMigrationBackupGuidance(cmd *cobra.Command, backupDir string) 
 // This is idempotent: if the pattern to add is already present, it won't be duplicated.
 // If removePattern is non-empty and present, it will be removed before the new pattern is added.
 func updateGitExclude(repoPath string, addPattern, removePattern string) error {
-	excludePath := filepath.Join(repoPath, ".git", "info", "exclude")
+	_, err := updateGitExcludeTracked(repoPath, addPattern, removePattern)
+	return err
+}
+
+// updateGitExcludeTracked is updateGitExclude with the additional fact of
+// whether this call added a new pattern. The claim path uses that fact to
+// remove only its own safety entries if provisioning later rolls back.
+func updateGitExcludeTracked(repoPath string, addPattern, removePattern string) (bool, error) {
+	release, err := acquireGitExcludeLock(repoPath)
+	if err != nil {
+		return false, err
+	}
+	defer release()
+	return updateGitExcludeTrackedLocked(repoPath, addPattern, removePattern)
+}
+
+func updateGitExcludeTrackedLocked(repoPath, addPattern, removePattern string) (bool, error) {
+	gitDir, err := resolveCommonGitDir(repoPath)
+	if err != nil {
+		return false, err
+	}
+	excludePath := filepath.Join(gitDir, "info", "exclude")
 
 	// Create the info directory if it doesn't exist
 	infoDir := filepath.Dir(excludePath)
 	if err := os.MkdirAll(infoDir, 0o750); err != nil {
-		return fmt.Errorf("create .git/info directory: %w", err)
+		return false, fmt.Errorf("create .git/info directory: %w", err)
 	}
 
 	// Read the current exclude file (it may not exist yet)
@@ -1148,7 +1169,7 @@ func updateGitExclude(repoPath string, addPattern, removePattern string) error {
 	if data, err := os.ReadFile(excludePath); err == nil { //nolint:gosec // G304: path is constructed from repo/.git/info/exclude
 		currentContent = string(data)
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("read .git/info/exclude: %w", err)
+		return false, fmt.Errorf("read .git/info/exclude: %w", err)
 	}
 
 	// Remove the pattern to remove (if specified)
@@ -1165,17 +1186,22 @@ func updateGitExclude(repoPath string, addPattern, removePattern string) error {
 		newContent = currentContent
 	}
 
-	// Check if the pattern to add is already in the exclude file
-	found := false
-	for line := range strings.SplitSeq(newContent, "\n") {
-		if strings.TrimSpace(line) == addPattern {
-			found = true
-			break
+	// Check if the pattern to add is already in the exclude file. An empty
+	// addPattern is used by rollback for remove-only updates; it must never
+	// append a blank exclusion line.
+	found := addPattern == ""
+	if addPattern != "" {
+		for line := range strings.SplitSeq(newContent, "\n") {
+			if strings.TrimSpace(line) == addPattern {
+				found = true
+				break
+			}
 		}
 	}
 
 	// If not found, append it
-	if !found {
+	added := !found
+	if added {
 		if len(newContent) > 0 && !strings.HasSuffix(newContent, "\n") {
 			newContent += "\n"
 		}
@@ -1183,10 +1209,10 @@ func updateGitExclude(repoPath string, addPattern, removePattern string) error {
 	}
 
 	if err := os.WriteFile(excludePath, []byte(newContent), 0o600); err != nil { //nolint:gosec // G703: path is constructed from repo/.git/info/exclude
-		return fmt.Errorf("write .git/info/exclude: %w", err)
+		return false, fmt.Errorf("write .git/info/exclude: %w", err)
 	}
 
-	return nil
+	return added, nil
 }
 
 // runRepoSetup initializes the repository structure for Armature in dual-branch mode.

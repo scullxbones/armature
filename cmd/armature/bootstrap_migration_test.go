@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,6 +95,33 @@ func TestUpdateGitExclude_REQ_LNGHZN_S1_T2(t *testing.T) {
 	count := strings.Count(contentStr, ".armature/")
 	if count != 1 {
 		t.Errorf("expected .armature/ to appear once, but it appears %d times", count)
+	}
+}
+
+func TestUpdateGitExcludeConcurrentWritersKeepEveryPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".git"), 0o750))
+	const writers = 24
+	var wg sync.WaitGroup
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		pattern := fmt.Sprintf("/concurrent-%d/", i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- updateGitExclude(tmpDir, pattern, "")
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".git", "info", "exclude"))
+	require.NoError(t, err)
+	for i := 0; i < writers; i++ {
+		assert.Contains(t, string(data), fmt.Sprintf("/concurrent-%d/", i))
 	}
 }
 

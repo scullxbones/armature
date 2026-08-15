@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -210,6 +211,85 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	// The worktree is actually gone from disk.
 	_, statErr := os.Stat(fx.gcPath)
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the worktree directory from disk")
+}
+
+// TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1
+// verifies that an Armature-claimed worktree outside .worktrees/ remains in
+// lifecycle inventory: it is bound while claimed, GC-ready after cancellation,
+// and removed by worktree gc.
+func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(repo, "child")
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination, "--from", repo)
+	require.NoError(t, err)
+
+	listed := listJSON(t, repo)
+	assert.Contains(t, listed["bound"], "task-01", "an explicitly claimed custom worktree must be visible as bound")
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+
+	listed = listJSON(t, repo)
+	assert.Contains(t, listed["gc_ready"], "task-01", "a cancelled custom worktree must be visible as GC-ready")
+
+	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.NoError(t, err)
+	var result struct {
+		Removed []string `json:"removed"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Contains(t, result.Removed, "task-01", "gc must remove the cancelled custom worktree")
+	_, statErr := os.Stat(destination)
+	assert.True(t, os.IsNotExist(statErr), "gc must remove the custom worktree directory")
+}
+
+func TestWorktreeGCPreservesDirtyExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(repo, "custom-dirty")
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
+	require.NoError(t, err)
+	workerFile := filepath.Join(destination, "worker-output.txt")
+	require.NoError(t, os.WriteFile(workerFile, []byte("keep this\n"), 0o600))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.Error(t, err, "gc must fail rather than force-delete dirty custom worktree output")
+	var result struct {
+		Failed []string `json:"failed"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Contains(t, result.Failed, "task-01")
+	contents, readErr := os.ReadFile(workerFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "keep this\n", string(contents))
+}
+
+func TestWorktreeListReportsMissingCustomGhostWithCloneLocalEvidence_REQ_LNGHZN_S9_T1(t *testing.T) {
+	for _, destinationFor := range []struct {
+		name string
+		path func(repo string) string
+	}{
+		{name: "inside repository", path: func(repo string) string { return filepath.Join(repo, "custom-child") }},
+		{name: "outside repository but registered", path: func(string) string { return filepath.Join(t.TempDir(), "custom-child") }},
+	} {
+		t.Run(destinationFor.name, func(t *testing.T) {
+			repo := setupRepoWithTask(t)
+			destination := destinationFor.path(repo)
+			claim := newRootCmd()
+			claim.SetOut(new(bytes.Buffer))
+			claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
+			require.NoError(t, claim.Execute())
+			require.NoError(t, os.RemoveAll(destination), "simulate a missing/prunable custom worktree")
+
+			listed := listJSON(t, repo)
+			assert.Contains(t, listed["ghosts"], "task-01", "a missing local custom worktree must be visible as a ghost")
+			assert.NotContains(t, listed["bound"], "task-01")
+		})
+	}
 }
 
 // TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5 verifies that gc reports

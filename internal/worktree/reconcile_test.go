@@ -506,6 +506,43 @@ func TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 	assert.Equal(t, []string{"task-local"}, result.Ghosts)
 }
 
+func TestReconcile_CustomInsideRepositoryGhostUsesLocalEvidence_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-custom": {
+			ID:           "task-custom",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-local",
+			WorktreePath: "/repo/story/task-custom",
+		},
+	}
+
+	result := ReconcileWithLocalEvidence(nil, issues, testNow, []string{"/repo"}, nil)
+	assert.Equal(t, []string{"task-custom"}, result.Ghosts,
+		"a missing live claim at an explicit in-repository destination must be a local ghost")
+}
+
+func TestReconcile_CustomOutsideRepositoryGhostRequiresLocalRegistration_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*materialize.Issue{
+		"task-custom": {
+			ID:           "task-custom",
+			Status:       ops.StatusInProgress,
+			ClaimedBy:    "worker-local",
+			WorktreePath: "/tmp/armature-custom/task-custom",
+		},
+	}
+
+	registered := []string{"/tmp/armature-custom/task-custom"}
+	result := ReconcileWithLocalEvidence(nil, issues, testNow, []string{"/repo/.worktrees"}, registered)
+	assert.Equal(t, []string{"task-custom"}, result.Ghosts,
+		"a missing outside destination is local evidence when Git still has its prunable registration")
+
+	foreign := ReconcileWithLocalEvidence(nil, issues, testNow, []string{"/repo/.worktrees"}, nil)
+	assert.Empty(t, foreign.Ghosts,
+		"a foreign absolute path with no local registration must not become a ghost")
+}
+
 // TestReconcile_TerminalForeignPathLocalWorktree_IsGCRemoval_REQ_LNGHZN_S5_T2
 // (thread 2) covers a merged issue whose git-replicated WorktreePath names a
 // FOREIGN clone, while a real worktree for it exists on THIS clone's branch.

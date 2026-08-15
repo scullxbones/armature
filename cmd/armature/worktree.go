@@ -42,6 +42,12 @@ func newWorktreeListCmd() *cobra.Command {
 					"read managed worktrees", "git inventory unavailable",
 					"verify --repo points at a git checkout, run `git worktree list --porcelain`, then retry `arm worktree list`", err)
 			}
+			registeredPaths, err := worktree.RegisteredPaths(ctx.RepoPath)
+			if err != nil {
+				return worktreeLifecycleError(
+					"read registered worktree paths", "git inventory evidence is unavailable",
+					"run `git worktree list --porcelain` and retry `arm worktree list`", err)
+			}
 
 			// Load current-truth issues via the snapshot store, exactly as
 			// `arm list` does: it materializes from the op log against the
@@ -59,7 +65,7 @@ func newWorktreeListCmd() *cobra.Command {
 			// Reconcile, scoping ghost detection to worktrees this clone owns so a
 			// live claim held by a remote clone (whose absolute WorktreePath can
 			// never match this clone's git worktree list) is not a false ghost.
-			result := worktree.Reconcile(worktrees, issues, time.Now(), managedWorktreeRoot(ctx.RepoPath))
+			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, time.Now(), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -149,6 +155,12 @@ func newWorktreeGCCmd() *cobra.Command {
 					"read managed worktrees", "git inventory unavailable",
 					"verify --repo points at a git checkout, run `git worktree list --porcelain`, then retry `arm worktree gc`", err)
 			}
+			registeredPaths, err := worktree.RegisteredPaths(ctx.RepoPath)
+			if err != nil {
+				return worktreeLifecycleError(
+					"read registered worktree paths", "git inventory evidence is unavailable",
+					"run `git worktree list --porcelain` and retry `arm worktree gc`", err)
+			}
 
 			// Load current-truth issues via the snapshot store (see list command).
 			issues, err := loadIssuesForReconcile(ctx)
@@ -160,7 +172,7 @@ func newWorktreeGCCmd() *cobra.Command {
 
 			// Reconcile to find what should be removed, scoping ghost detection to
 			// worktrees this clone owns (see list command for rationale).
-			result := worktree.Reconcile(worktrees, issues, time.Now(), managedWorktreeRoot(ctx.RepoPath))
+			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, time.Now(), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -292,10 +304,11 @@ func newWorktreeGCCmd() *cobra.Command {
 }
 
 // readManagedWorktrees reads all managed worktrees from git worktree list --porcelain.
-// Filters to only worktrees under .worktrees/ directory. A git failure is returned
-// as an error (not swallowed into an empty list): callers must fail closed, since an
-// empty inventory from a transient failure would mislabel live claims as ghosts and
-// make gc a silent no-op.
+// ListManaged includes canonical-root worktrees and non-main worktrees carrying an
+// issue binding, including explicit destinations. A git failure is returned as an
+// error (not swallowed into an empty list): callers must fail closed, since an empty
+// inventory from a transient failure would mislabel live claims as ghosts and make
+// gc a silent no-op.
 func readManagedWorktrees(repoPath string) ([]worktree.Meta, error) {
 	return worktree.ListManaged(repoPath)
 }
@@ -311,10 +324,10 @@ func isManaged(repoPath, path string) bool {
 	return normalized != root && worktree.IsUnderRoot(normalized, root)
 }
 
-// managedWorktreeRoot returns this clone's managed worktree directory as a
-// normalized root (<repoPath>/.worktrees). Used both to
-// classify managed worktrees and to scope Reconcile's ghost detection to
-// locally-owned claims.
+// managedWorktreeRoot returns this clone's canonical managed worktree directory
+// as a normalized root (<repoPath>/.worktrees). It remains the canonical-root
+// classifier used by existing callers; lifecycle reconciliation uses
+// managedWorktreeRoots so explicit in-repository destinations are local too.
 func managedWorktreeRoot(repoPath string) string {
 	// Resolve repoPath to an absolute path first. In production ctx.RepoPath
 	// defaults to "." (the cwd) when --repo is not passed; git worktree list
@@ -326,6 +339,14 @@ func managedWorktreeRoot(repoPath string) string {
 		abs = resolved
 	}
 	return worktree.NormalizePath(filepath.Join(abs, ".worktrees"))
+}
+
+func managedWorktreeRoots(repoPath string) []string {
+	abs := repoPath
+	if resolved, err := filepath.Abs(repoPath); err == nil {
+		abs = resolved
+	}
+	return []string{managedWorktreeRoot(repoPath), worktree.NormalizePath(abs)}
 }
 
 // loadIssuesForReconcile loads current-truth issues the same way production read
