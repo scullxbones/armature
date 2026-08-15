@@ -351,7 +351,7 @@ func writeClaimExclusionMarker(worktreePath, pattern string) error {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
 	markerPath := filepath.Join(gitDir, claimExclusionMarkerName)
-	if data, readErr := os.ReadFile(markerPath); readErr == nil {
+	if data, readErr := os.ReadFile(markerPath); readErr == nil { //nolint:gosec // markerPath comes from Git's resolved private directory
 		if strings.TrimSuffix(string(data), "\n") == pattern {
 			return nil
 		}
@@ -370,7 +370,7 @@ func readClaimExclusionMarker(worktreePath string) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("resolve worktree git dir: %w", err)
 	}
-	data, err := os.ReadFile(filepath.Join(gitDir, claimExclusionMarkerName))
+	data, err := os.ReadFile(filepath.Join(gitDir, claimExclusionMarkerName)) //nolint:gosec // path is inside Git's resolved private directory
 	if os.IsNotExist(err) {
 		return "", false, nil
 	}
@@ -597,7 +597,13 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", sourceArgs...)
 }
 
-func createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, exclusionPattern string, sourceArgs ...string) error {
+func createWorktreeAndBranchWithExclusion(
+	repoPath, worktreePath, issueID string,
+	issue materialize.Issue,
+	stillOwns func() bool,
+	exclusionPattern string,
+	sourceArgs ...string,
+) error {
 	// Determine branch name based on issue type
 	branchName := deriveBranchName(issue.Type, issueID)
 
@@ -1486,7 +1492,10 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if fromWorktreePath != "" {
 					sourceArgs = []string{fromWorktreePath, fromBranch, fromTip}
 				}
-				if err := createWorktreeAndBranchWithExclusion(ctx.RepoPath, worktreePath, issueID, *issue, stillOwnsClaim, customExclusionPattern, sourceArgs...); err != nil {
+				if err := createWorktreeAndBranchWithExclusion(
+					ctx.RepoPath, worktreePath, issueID, *issue,
+					stillOwnsClaim, customExclusionPattern, sourceArgs...,
+				); err != nil {
 					return rollbackClaim(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken, claimExclusions)
 				}
 			} else {
