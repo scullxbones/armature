@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
 
 # Variables
 GO ?= go
@@ -21,6 +21,7 @@ help:
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 86%"
+	@echo "  make test-coverage-check - Test coverage-check.sh threshold logic itself (pass/fail fixtures)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
@@ -36,7 +37,7 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
+check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
@@ -68,25 +69,7 @@ coverage: build
 # suite exactly once. Declared as a prerequisite so `make -j check` cannot
 # start this target against a stale or missing profile.
 coverage-check: coverage
-	@if [ ! -f coverage.out ]; then \
-		echo "FAIL: coverage.out not found; run 'make coverage' first"; \
-		exit 1; \
-	fi
-	@awk 'NR>1{n=$$2;c=$$3; \
-		if($$0 ~ /armature\/cmd\//){ct+=n; if(c>0) cc+=n} \
-		if($$0 ~ /armature\/internal\//){it+=n; if(c>0) ic+=n}} \
-	END{ \
-		cmd_pct = (ct>0) ? 100*cc/ct : 0; \
-		int_pct = (it>0) ? 100*ic/it : 0; \
-		printf "cmd coverage: %.2f%%\n", cmd_pct; \
-		printf "internal coverage: %.2f%%\n", int_pct; \
-		fail=0; \
-		if (cmd_pct < 83) { printf "FAIL: cmd coverage %.2f%% is below 83%% threshold (short by %.2f points)\n", cmd_pct, 83-cmd_pct; fail=1 } \
-		if (int_pct < 86) { printf "FAIL: internal coverage %.2f%% is below 86%% threshold (short by %.2f points)\n", int_pct, 86-int_pct; fail=1 } \
-		if (ct==0) { print "FAIL: no coverage lines matched armature/cmd/ — tree missing from profile"; fail=1 } \
-		if (it==0) { print "FAIL: no coverage lines matched armature/internal/ — tree missing from profile"; fail=1 } \
-		exit fail \
-	}' coverage.out
+	@scripts/coverage-check.sh . coverage.out
 
 lint: adr-principles
 	@command -v golangci-lint >/dev/null 2>&1 || { \
@@ -147,6 +130,9 @@ census-drift-check:
 
 test-census-drift-check:
 	@scripts/test_census_drift_check.sh .
+
+test-coverage-check:
+	@scripts/test_coverage_check.sh .
 
 check-fast:
 	@scripts/check-fast.sh .
