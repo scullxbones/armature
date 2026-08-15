@@ -33,9 +33,13 @@ outright).
    mandatory exactly twice per task lifecycle: final task head and story
    integration. Only a full gate confers delivery (I5).
 2. Gate commands are **repository configuration**, not product knowledge: a
-   `gates` map in `.armature/config.json`, with the profile name `full`
-   reserved as the publish profile. Repos without configuration keep today's
-   behavior.
+   tracked `gates.json` at the invoking checkout root
+   (`{"full":{"command":["make","check"]}}`), with the profile name `full`
+   reserved as the publish profile. The file is in the reviewed history so a
+   definition change is visible in `Delivery.Diff` and dirties the tree.
+   `arm gate run` reads the command from the `HEAD:gates.json` blob (not
+   the worktree file, not `.armature/config.json`). Repos without
+   configuration keep today's behavior.
 3. `arm gate run <profile>` executes the configured command and appends an
    evidence op — profile, command, head SHA, start/end, exit status — to the
    invoking worker's own log (I3). Dirty-tree runs are recorded as uncitable.

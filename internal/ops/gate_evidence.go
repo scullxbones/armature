@@ -22,6 +22,10 @@ type GateEvidence struct {
 	End         int64    `json:"end"`
 	Exit        int      `json:"exit"`
 	Uncommitted bool     `json:"uncommitted,omitempty"`
+	OutputHash  string   `json:"output_hash,omitempty"`
+	OutputHead  string   `json:"output_head,omitempty"`
+	OutputTail  string   `json:"output_tail,omitempty"`
+	LogPath     string   `json:"log_path,omitempty"`
 }
 
 // Citable reports whether the run can satisfy a gate criterion (clean tree, exit 0).
@@ -65,20 +69,27 @@ func AppendGateEvidenceAndCommit(logPath, worktreePath, workerID string, ev Gate
 }
 
 // ReadGateEvidence returns gate-evidence payloads from a single worker log.
+// Unrelated corrupt lines are skipped (same as ReadLog). A line whose type is
+// gate-evidence but whose payload cannot be decoded is an error.
 func ReadGateEvidence(logPath string) ([]GateEvidence, error) {
 	lines, err := adapters.ReadLogFromOffset(logPath, 0)
 	if err != nil {
 		return nil, err
 	}
 	var out []GateEvidence
+	var nInvalid int
 	for _, line := range lines {
 		ev, ok, err := parseGateEvidenceLine(line)
 		if err != nil {
+			nInvalid++
 			continue
 		}
 		if ok {
 			out = append(out, ev)
 		}
+	}
+	if nInvalid > 0 {
+		return nil, fmt.Errorf("discarded %d invalid gate-evidence line(s)", nInvalid)
 	}
 	return out, nil
 }
@@ -103,17 +114,20 @@ func ReadAllGateEvidence(opsDir string) ([]GateEvidence, error) {
 func parseGateEvidenceLine(line []byte) (GateEvidence, bool, error) {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(line, &raw); err != nil {
-		return GateEvidence{}, false, err
+		return GateEvidence{}, false, nil
 	}
-	if len(raw) < 5 {
-		return GateEvidence{}, false, fmt.Errorf("op array must have at least 5 elements")
+	if len(raw) < 1 {
+		return GateEvidence{}, false, nil
 	}
 	var opType string
 	if err := json.Unmarshal(raw[0], &opType); err != nil {
-		return GateEvidence{}, false, err
+		return GateEvidence{}, false, nil
 	}
 	if opType != OpGateEvidence {
 		return GateEvidence{}, false, nil
+	}
+	if len(raw) < 5 {
+		return GateEvidence{}, false, fmt.Errorf("invalid gate evidence payload: op array must have at least 5 elements")
 	}
 	var ev GateEvidence
 	if err := json.Unmarshal(raw[4], &ev); err != nil {

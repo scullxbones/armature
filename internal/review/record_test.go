@@ -1,11 +1,15 @@
 package review
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1105,4 +1109,119 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 	require.Error(t, err, "Record must reject a digest mismatch even when no activity citations are present, "+
 		"since the attestation stamps activity.Digest unconditionally")
 	assert.Contains(t, err.Error(), "digest mismatch")
+}
+
+func gateEvidenceRecordFixture(t *testing.T, ev ops.GateEvidence) (*ReviewBundle, *ConformanceAssessment) {
+	t.Helper()
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Gate digest"},
+		Contract:      Contract{DefinitionOfDone: "Done", Acceptance: []string{"Works"}},
+		Delivery: Delivery{
+			BaseSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			HeadSHA: ev.HeadSHA,
+			Diff:    "--- a/f.go\n+++ b/f.go\n@@ -1,0 +1,1 @@\n+package main",
+		},
+		Fingerprints: Fingerprints{
+			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		GateEvidence: []ops.GateEvidence{ev},
+	}
+	bundle.BundleID = ComputeBundleID(*bundle)
+	assessment := &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            bundle.BundleID,
+		ContractFingerprint: bundle.Fingerprints.Contract,
+		DeliveryFingerprint: bundle.Fingerprints.Delivery,
+		Results: []CriterionResult{
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
+		},
+	}
+	return bundle, assessment
+}
+
+func TestRecord_GateEvidenceHashVerified_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "full.log")
+	content := []byte("gate output\n")
+	require.NoError(t, os.WriteFile(logPath, content, 0o600))
+	sum := sha256.Sum256(content)
+	ev := ops.GateEvidence{
+		Profile:    "full",
+		Command:    []string{"true"},
+		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Start:      1,
+		End:        2,
+		Exit:       0,
+		OutputHash: hex.EncodeToString(sum[:]),
+		LogPath:    logPath,
+	}
+	bundle, assessment := gateEvidenceRecordFixture(t, ev)
+	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	require.NoError(t, err)
+}
+
+func TestRecord_GateEvidenceTamperedLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "full.log")
+	content := []byte("gate output\n")
+	require.NoError(t, os.WriteFile(logPath, content, 0o600))
+	sum := sha256.Sum256(content)
+	ev := ops.GateEvidence{
+		Profile:    "full",
+		Command:    []string{"true"},
+		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Start:      1,
+		End:        2,
+		Exit:       0,
+		OutputHash: hex.EncodeToString(sum[:]),
+		LogPath:    logPath,
+	}
+	bundle, assessment := gateEvidenceRecordFixture(t, ev)
+	require.NoError(t, os.WriteFile(logPath, []byte("tampered\n"), 0o600))
+	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gate")
+}
+
+func TestRecord_GateEvidenceMissingHashFails_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "full.log")
+	require.NoError(t, os.WriteFile(logPath, []byte("gate output\n"), 0o600))
+	ev := ops.GateEvidence{
+		Profile: "full",
+		Command: []string{"true"},
+		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Start:   1,
+		End:     2,
+		Exit:    0,
+		LogPath: logPath,
+	}
+	bundle, assessment := gateEvidenceRecordFixture(t, ev)
+	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "output_hash")
+}
+
+func TestRecord_GateEvidenceMissingLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	ev := ops.GateEvidence{
+		Profile:    "full",
+		Command:    []string{"true"},
+		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Start:      1,
+		End:        2,
+		Exit:       0,
+		OutputHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		LogPath:    filepath.Join(t.TempDir(), "missing.log"),
+	}
+	bundle, assessment := gateEvidenceRecordFixture(t, ev)
+	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gate")
 }

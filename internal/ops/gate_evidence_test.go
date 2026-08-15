@@ -129,6 +129,49 @@ func TestReadAllGateEvidence_ListError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestReadGateEvidence_InvalidPayloadErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker.log")
+	require.NoError(t, os.WriteFile(logPath, []byte(`["gate-evidence","full",1,"w","not-an-object"]`+"\n"), 0o644))
+	_, err := ReadGateEvidence(logPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid")
+}
+
+func TestReadGateEvidence_UnrelatedCorruptSkipped_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker.log")
+	require.NoError(t, os.WriteFile(logPath, []byte("not-json\n"), 0o644))
+	require.NoError(t, AppendGateEvidence(logPath, "w1", testEvidence()))
+	got, err := ReadGateEvidence(logPath)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+}
+
+func TestAppendGateEvidenceConcurrent_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker.log")
+
+	errCh := make(chan error, 2)
+	for i := range 2 {
+		go func(i int) {
+			ev := testEvidence()
+			ev.Start = int64(i + 1)
+			ev.End = int64(i + 2)
+			errCh <- AppendGateEvidence(logPath, "worker-1", ev)
+		}(i)
+	}
+	for range 2 {
+		require.NoError(t, <-errCh)
+	}
+	got, err := ReadGateEvidence(logPath)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+}
+
 func TestReadAllGateEvidence_ReadError(t *testing.T) {
 	t.Parallel()
 	opsDir := t.TempDir()

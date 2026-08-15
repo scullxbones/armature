@@ -1788,3 +1788,312 @@ func TestDirtyEntriesReportsOldPathForRename(t *testing.T) {
 	assert.Equal(t, "renamed.txt", entries[0].Path)
 	assert.Equal(t, "original.txt", entries[0].OldPath)
 }
+
+func addFileSubmodule(t *testing.T, parent string) {
+	t.Helper()
+	sub := t.TempDir()
+	gitRun := func(dir string, args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun(sub, "init")
+	gitRun(sub, "config", "user.email", "test@test.com")
+	gitRun(sub, "config", "user.name", "Test")
+	gitRun(sub, "config", "commit.gpgsign", "false")
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.txt"), []byte("a"), 0o644))
+	gitRun(sub, "add", "a.txt")
+	gitRun(sub, "commit", "-m", "init")
+	gitRun(parent, "-c", "protocol.file.allow=always", "submodule", "add", sub, "vendor/lib")
+	gitRun(parent, "commit", "-m", "add submodule")
+}
+
+func TestDirtyEntriesIncludingSubmodules_IgnoresLocalIgnoreConfig_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	addFileSubmodule(t, repo)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "vendor/lib", "dirty.txt"), []byte("x"), 0o644))
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("config", "submodule.vendor/lib.ignore", "dirty")
+
+	hidden, err := c.DirtyEntries()
+	require.NoError(t, err)
+	assert.Empty(t, hidden, "DirtyEntries contract is unchanged: local submodule.ignore still hides dirt")
+
+	got, err := c.DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	assert.False(t, got[0].Ignored)
+	assert.Equal(t, "vendor/lib", got[0].Path)
+}
+
+func TestIndexConcealmentEntries_SkipWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "src.txt"), []byte("v1"), 0o600))
+	gitRun("add", "src.txt")
+	gitRun("commit", "-m", "add src")
+
+	got, err := c.IndexConcealmentEntries()
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	gitRun("update-index", "--skip-worktree", "src.txt")
+	got, err = c.IndexConcealmentEntries()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src.txt"}, got)
+}
+
+func TestIndexConcealmentEntries_AssumeUnchanged_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "src.txt"), []byte("v1"), 0o600))
+	gitRun("add", "src.txt")
+	gitRun("commit", "-m", "add src")
+	gitRun("update-index", "--assume-unchanged", "src.txt")
+	got, err := c.IndexConcealmentEntries()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src.txt"}, got)
+}
+
+func TestIndexConcealmentEntries_SkipWorktreeInsideSubmodule_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	addFileSubmodule(t, repo)
+	gitRun := func(dir string, args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	sub := filepath.Join(repo, "vendor/lib")
+	gitRun(sub, "update-index", "--skip-worktree", "a.txt")
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.txt"), []byte("mutated"), 0o644))
+
+	got, err := c.IndexConcealmentEntries()
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join("vendor/lib", "a.txt")}, got)
+}
+
+func TestIndexConcealmentEntries_NotARepo(t *testing.T) {
+	t.Parallel()
+	_, err := adapters.New(t.TempDir()).IndexConcealmentEntries()
+	require.Error(t, err)
+}
+
+func TestDirtyEntriesIncludingSubmodules_ShowsUntrackedWhenConfigHidesThem_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("config", "status.showUntrackedFiles", "no")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "helper.txt"), []byte("x"), 0o644))
+
+	hidden, err := c.DirtyEntries()
+	require.NoError(t, err)
+	assert.Empty(t, hidden, "DirtyEntries contract is unchanged: showUntrackedFiles=no still hides untracked")
+
+	got, err := c.DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	assert.True(t, got[0].Untracked)
+	assert.Equal(t, "helper.txt", got[0].Path)
+}
+
+func TestIsolatedClientIgnoresGITWorkTree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := initTestRepo(t)
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "src.txt"), []byte("v1"), 0o644))
+	gitRun("add", "src.txt")
+	gitRun("commit", "-m", "add src")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "src.txt"), []byte("mutated"), 0o644))
+
+	exportDir := gitArchiveHEAD(t, repo)
+	t.Setenv("GIT_WORK_TREE", exportDir)
+
+	hidden, err := adapters.New(repo).DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	assert.Empty(t, hidden, "default client is fooled by GIT_WORK_TREE pointing at a clean export")
+
+	got, err := adapters.NewIsolated(repo).DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	assert.Equal(t, "src.txt", got[0].Path)
+}
+
+func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) { //nolint:paralleltest // t.Setenv is process-wide
+	repo := initTestRepo(t)
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "src.txt"), []byte("v1"), 0o644))
+	gitRun("add", "src.txt")
+	gitRun("commit", "-m", "add src")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "src.txt"), []byte("mutated"), 0o644))
+
+	exportDir := gitArchiveHEAD(t, repo)
+	gitRun("config", "core.worktree", exportDir)
+
+	hidden, err := adapters.New(repo).DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	assert.Empty(t, hidden, "default client is fooled by core.worktree pointing at a clean export")
+
+	got, err := adapters.NewIsolated(repo).DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	assert.Equal(t, "src.txt", got[0].Path)
+}
+
+func gitArchiveHEAD(t *testing.T, repo string) string {
+	t.Helper()
+	exportDir := t.TempDir()
+	archive := exec.CommandContext(context.Background(), "git", "-C", repo, "archive", "--format=tar", "HEAD")
+	tarOut, err := archive.Output()
+	require.NoError(t, err)
+	untar := exec.CommandContext(context.Background(), "tar", "-C", exportDir, "-xf", "-")
+	untar.Stdin = strings.NewReader(string(tarOut))
+	out, err := untar.CombinedOutput()
+	require.NoError(t, err, "tar: %s", out)
+	return exportDir
+}
+
+func TestDirtyEntriesIncludingSubmodules_SubmoduleUntrackedDespiteShowUntrackedNo_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	addFileSubmodule(t, repo)
+	sub := filepath.Join(repo, "vendor/lib")
+	gitRun := func(dir string, args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun(sub, "config", "status.showUntrackedFiles", "no")
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "helper.txt"), []byte("x"), 0o644))
+
+	got, err := c.DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	found := false
+	for _, e := range got {
+		if e.Path == filepath.Join("vendor/lib", "helper.txt") && e.Untracked {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected untracked helper.txt inside submodule, got %#v", got)
+}
+
+func TestDirtyEntriesIncludingSubmodules_GitlinkWithoutGitIsDirty_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	addFileSubmodule(t, repo)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "vendor/lib", "dirty.txt"), []byte("x"), 0o644))
+	require.NoError(t, os.RemoveAll(filepath.Join(repo, "vendor/lib", ".git")))
+
+	got, err := c.DirtyEntriesIncludingSubmodules()
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	found := false
+	for _, e := range got {
+		if e.Path == "vendor/lib" {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected vendor/lib gitlink without .git to be dirty, got %#v", got)
+}
+
+func TestCheckIgnoreSource_InfoExclude_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	exclude := filepath.Join(repo, ".git", "info", "exclude")
+	f, err := os.OpenFile(exclude, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.WriteString("helper.txt\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "helper.txt"), []byte("x"), 0o644))
+
+	src, ignored, err := c.CheckIgnoreSource("helper.txt")
+	require.NoError(t, err)
+	assert.True(t, ignored)
+	assert.Contains(t, src, filepath.Join(".git", "info", "exclude"))
+}
+
+func TestCheckIgnoreSource_NotIgnored(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	src, ignored, err := adapters.New(repo).CheckIgnoreSource("no-such-ignore-rule.txt")
+	require.NoError(t, err)
+	assert.False(t, ignored)
+	assert.Empty(t, src)
+}
+
+func TestCheckIgnoreSource_NotARepo(t *testing.T) {
+	t.Parallel()
+	_, _, err := adapters.New(t.TempDir()).CheckIgnoreSource("x")
+	require.Error(t, err)
+}
+
+func TestCheckIgnoreSource_Gitignore_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("coverage.out\n"), 0o644))
+	gitRun("add", ".gitignore")
+	gitRun("commit", "-m", "ignore")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "coverage.out"), []byte("x"), 0o644))
+
+	src, ignored, err := c.CheckIgnoreSource("coverage.out")
+	require.NoError(t, err)
+	assert.True(t, ignored)
+	assert.Equal(t, ".gitignore", src)
+}
+
+func TestDirtyEntriesIncludingSubmodules_NotARepo(t *testing.T) {
+	t.Parallel()
+	_, err := adapters.New(t.TempDir()).DirtyEntriesIncludingSubmodules()
+	require.Error(t, err)
+}

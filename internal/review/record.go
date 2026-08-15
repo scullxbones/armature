@@ -80,6 +80,9 @@ func Record(input RecordInput) (*RecordResult, error) {
 					"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",
 				recomputed, input.Bundle.BundleID)
 		}
+		if err := ValidateGateEvidenceLogs(input.Bundle.GateEvidence); err != nil {
+			return nil, fmt.Errorf("gate evidence validation failed: %w", err)
+		}
 	}
 
 	// Activity citations are only meaningful when validated against a bundle's

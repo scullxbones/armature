@@ -74,6 +74,52 @@ func TestConfigGatesRoundTrip(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestLoadGates_MissingFileIsEmpty_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	gates, err := LoadGates(t.TempDir())
+	require.NoError(t, err)
+	assert.Empty(t, gates)
+}
+
+func TestLoadGates_EmptyMap_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, GatesFileName), []byte("{}"), 0o644))
+	gates, err := LoadGates(dir)
+	require.NoError(t, err)
+	assert.Empty(t, gates)
+}
+
+func TestLoadGates_ReadsTrackedFile_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, GatesFileName),
+		[]byte(`{"full":{"command":["make","check"]}}`), 0o644))
+	gates, err := LoadGates(dir)
+	require.NoError(t, err)
+	require.Contains(t, gates, PublishGateProfile)
+	assert.Equal(t, []string{"make", "check"}, gates[PublishGateProfile].Command)
+}
+
+func TestLoadGates_InvalidJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, GatesFileName), []byte("{"), 0o644))
+	_, err := LoadGates(dir)
+	require.Error(t, err)
+}
+
+func TestParseGates_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
+	gates, err := ParseGates([]byte(`{"full":{"command":["make","check"]}}`))
+	require.NoError(t, err)
+	require.Contains(t, gates, PublishGateProfile)
+	assert.Equal(t, []string{"make", "check"}, gates[PublishGateProfile].Command)
+
+	_, err = ParseGates([]byte("{"))
+	require.Error(t, err)
+}
+
 func TestDefaultConfigHasNoOrchestratorSection(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

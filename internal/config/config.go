@@ -2,6 +2,9 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -9,6 +12,10 @@ import (
 
 // PublishGateProfile is the reserved name of the publish (acceptance) gate.
 const PublishGateProfile = "full"
+
+// GatesFileName is the tracked file at the invoking checkout root that
+// declares gate profiles. arm gate run reads this file, not Config.Gates.
+const GatesFileName = "gates.json"
 
 type Config struct {
 	ProjectType            string                `json:"project_type"`
@@ -37,6 +44,30 @@ func (c Config) Gate(name string) (GateConfig, bool) {
 	}
 	gate, ok := c.Gates[name]
 	return gate, ok
+}
+
+// ParseGates decodes a gates.json document (map of profile name → command).
+func ParseGates(data []byte) (map[string]GateConfig, error) {
+	var gates map[string]GateConfig
+	if err := json.Unmarshal(data, &gates); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", GatesFileName, err)
+	}
+	return gates, nil
+}
+
+// LoadGates reads the worktree gates.json at checkoutRoot. A missing file is
+// an empty map (no error). arm gate run does not use this: it reads the
+// HEAD blob via ShowFileAtCommit so skip-worktree cannot substitute a command.
+func LoadGates(checkoutRoot string) (map[string]GateConfig, error) {
+	path := filepath.Join(checkoutRoot, GatesFileName)
+	if !adapters.StatFile(path) {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // path is checkoutRoot/gates.json
+	if err != nil {
+		return nil, err
+	}
+	return ParseGates(data)
 }
 
 func WriteConfig(path string, cfg Config) error {
