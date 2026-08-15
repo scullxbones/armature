@@ -70,6 +70,16 @@ output is sufficient.**
 The issue is already claimed. Do NOT run `arm claim`. Do NOT run `arm worker-init`
 again.
 
+If this is a **remediation** dispatch, the coordinator has already run
+`arm reopen` and `arm claim --worktree` (reusing the existing worktree).
+Confirm with `arm show ISSUE-ID` that status is `claimed` or `in-progress`
+before you edit files. If status is still `done` or `merged`, **stop** —
+the harness hook treats those bindings as stale and passes through (no
+scope enforcement, no hook heartbeats). Tell the coordinator to reopen
+and reclaim; do not write under a stale binding. After the last remediating
+commit, run the full gate at that HEAD and `arm transition ISSUE-ID --to done`
+so the delivery gate evaluates the remediating commit.
+
 **Transcript-free dispatch (normative).** Dispatch consists of the rendered
 task spec and relevant file paths only — never an inherited transcript from a
 prior agent. If you are re-dispatched for a remediation cycle, expect a
