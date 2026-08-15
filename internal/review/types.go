@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // SchemaVersion is the current semantic review protocol version.
@@ -300,6 +302,8 @@ type ReviewBundle struct {
 	Fingerprints Fingerprints `json:"fingerprints"`
 	// Activity optionally captures execution evidence when a worktree activity log exists.
 	Activity *Activity `json:"activity,omitempty"`
+	// GateEvidence is wrapper-recorded gate runs from worker logs so reviewers can cite them.
+	GateEvidence []ops.GateEvidence `json:"gate_evidence,omitempty"`
 }
 
 // Valid validates that the ReviewBundle is well-formed.

@@ -51,6 +51,29 @@ func TestDetectProjectTypePriority(t *testing.T) {
 	assert.Equal(t, "go", DetectProjectType(dir))
 }
 
+func TestConfigGatesRoundTrip(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+
+	cfg := Config{
+		ProjectType: "go",
+		Gates: map[string]GateConfig{
+			PublishGateProfile: {Command: []string{"make", "check"}},
+			"fast":             {Command: []string{"make", "check-fast"}},
+		},
+	}
+	require.NoError(t, WriteConfig(configPath, cfg))
+
+	loaded, err := LoadConfig(configPath)
+	require.NoError(t, err)
+	full, ok := loaded.Gate(PublishGateProfile)
+	require.True(t, ok)
+	assert.Equal(t, []string{"make", "check"}, full.Command)
+	_, ok = loaded.Gate("missing")
+	assert.False(t, ok)
+}
+
 func TestDefaultConfigHasNoOrchestratorSection(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
