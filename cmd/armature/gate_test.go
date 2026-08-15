@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -565,6 +569,118 @@ func TestGateRunLogMode0600_REQ_LNGHZN_S10_T3(t *testing.T) {
 	info, err := os.Stat(ev.LogPath)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm()&0o777)
+}
+
+func TestGateOutputExcerptFitsExactlyTwoChunks(t *testing.T) {
+	in := bytes.Repeat([]byte("x"), gateOutputChunkSize*2)
+	head, tail := gateOutputExcerpt(in)
+	assert.Equal(t, string(in), head)
+	assert.Empty(t, tail)
+}
+
+func TestGateOutputExcerptSplitsLongASCII(t *testing.T) {
+	in := bytes.Repeat([]byte("x"), gateOutputChunkSize*2+1)
+	head, tail := gateOutputExcerpt(in)
+	assert.Equal(t, strings.Repeat("x", gateOutputChunkSize), head)
+	assert.Equal(t, strings.Repeat("x", gateOutputChunkSize), tail)
+}
+
+func TestGateOutputExcerptWalksUTF8Boundaries(t *testing.T) {
+	// 世 is 3 bytes. Place one so the 1024-byte head cut is mid-rune and
+	// one so the tail cut is mid-rune; excerpts must stay valid UTF-8.
+	prefix := append(bytes.Repeat([]byte("a"), gateOutputChunkSize-1), []byte("世")...)
+	suffix := append([]byte("世"), bytes.Repeat([]byte("c"), gateOutputChunkSize-1)...)
+	in := append(append(prefix, bytes.Repeat([]byte("b"), 8)...), suffix...)
+	require.Greater(t, len(in), gateOutputChunkSize*2)
+
+	head, tail := gateOutputExcerpt(in)
+	assert.True(t, utf8.ValidString(head))
+	assert.True(t, utf8.ValidString(tail))
+	assert.Equal(t, strings.Repeat("a", gateOutputChunkSize-1), head)
+	assert.Equal(t, strings.Repeat("c", gateOutputChunkSize-1), tail)
+}
+
+func TestGateRunEmptyGatesMapIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{})
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no gates configured")
+}
+
+func TestGateRunInvalidGatesJSONErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "gates.json"), []byte("{"), 0o644))
+	run(t, repo, "git", "add", "gates.json")
+	run(t, repo, "git", "commit", "-m", "test: invalid gates.json")
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load gates.json at HEAD")
+}
+
+func TestGateRunMissingExecutableRecordsExit1_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{
+		"full": {"definitely-not-a-gate-command-xyzzy"},
+	})
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.Error(t, err)
+
+	ev := requireOneGateEvidence(t, repo)
+	assert.Equal(t, 1, ev.Exit)
+	assert.Equal(t, []string{"definitely-not-a-gate-command-xyzzy"}, ev.Command)
+}
+
+func TestGateRunUntrackedGitignoreDoesNotExempt_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{
+		"full": {"true"},
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("helper.txt\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "helper.txt"), []byte("x"), 0o644))
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.NoError(t, err)
+
+	ev := requireOneGateEvidence(t, repo)
+	assert.True(t, ev.Uncommitted, "an untracked .gitignore must not exempt ignored files")
+	assert.Equal(t, 0, ev.Exit)
+}
+
+func TestGateRunCoreExcludesFileUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{
+		"full": {"true"},
+	})
+	excludes := filepath.Join(t.TempDir(), "excludes")
+	require.NoError(t, os.WriteFile(excludes, []byte("helper.txt\n"), 0o644))
+	run(t, repo, "git", "config", "core.excludesFile", excludes)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "helper.txt"), []byte("x"), 0o644))
+
+	_, err := runTrls(t, repo, "gate", "run", "full")
+	require.NoError(t, err)
+
+	ev := requireOneGateEvidence(t, repo)
+	assert.True(t, ev.Uncommitted, "a file ignored only by core.excludesFile must not be citable")
+	assert.Equal(t, 0, ev.Exit)
+}
+
+func TestIsAbsentAtCommitNonExitError(t *testing.T) {
+	assert.False(t, isAbsentAtCommit(errors.New("does not exist")))
+	assert.False(t, isAbsentAtCommit(nil))
+}
+
+func TestInvocationRepoPathDefaults(t *testing.T) {
+	assert.Equal(t, ".", invocationRepoPath(nil))
+	assert.Equal(t, ".", invocationRepoPath(&cobra.Command{Use: "arm"}))
+
+	root := newRootCmd()
+	assert.Equal(t, ".", invocationRepoPath(root))
+	require.NoError(t, root.PersistentFlags().Set("repo", "/tmp/checkout"))
+	assert.Equal(t, "/tmp/checkout", invocationRepoPath(root))
 }
 
 func writeGatesFile(t *testing.T, repo string, commands map[string][]string) {
