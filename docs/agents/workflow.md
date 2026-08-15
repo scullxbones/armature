@@ -30,10 +30,10 @@ arm claim --issue TASK-ID --worktree
 - Worktree is created at `.worktrees/<issue-id>` (relative to repo root) unless the caller supplies an explicit `--worktree <path>` destination
 - Issue branch is checked out inside the worktree
 - Worktree path is recorded in the claim ops (recoverable if task is re-claimed)
-- Every destination created by `arm claim` is managed by its issue binding, including explicit paths outside `.worktrees/`; an explicit destination inside the repository is excluded from broad Git staging before the claim is recorded.
+- Every destination created by `arm claim` is managed by its issue binding, including explicit paths outside `.worktrees/`. Explicit destinations inside the repository are rejected unless they are under the canonical `.worktrees/` root, because `.git/info/exclude` is shared by every linked worktree.
 - **Best-effort isolation mitigation is automatically applied:**
   - If the **main tree** uses a `go.work` file, the newly provisioned worktree is removed from its `use` directives so the main tree's gopls does not walk the worktree and get confused about module boundaries.
-  - If the main tree has no `go.work` (the common case — this repo has none), this is a no-op for canonical worktrees because `.worktrees/` is gitignored; explicit in-repository destinations are protected by their claim-specific Git exclude pattern.
+  - If the main tree has no `go.work` (the common case — this repo has none), this is a no-op for canonical worktrees because `.worktrees/` is gitignored. Arbitrary in-repository custom destinations are rejected; external custom destinations remain supported without modifying the shared exclusion file.
   - The mitigation **never creates a `go.work`** — not in the worktree and not in the main tree. A bare `go.work` with no `use` directive would break `go build ./...` inside the worktree.
   - It is best-effort and non-fatal: a failure only degrades IDE ergonomics and never fails the claim.
 
@@ -73,7 +73,7 @@ When a task is confirmed merged on main, its worktree is automatically cleaned u
 arm merged --issue TASK-ID
 ```
 
-This removes the binding-selected linked worktree and frees its resources. Canonical `.worktrees/` contents remain gitignored; explicit in-repository destinations are protected from broad staging by claim-installed excludes.
+This removes the binding-selected linked worktree and frees its resources. Canonical `.worktrees/` contents remain gitignored; arbitrary in-repository custom destinations are rejected, while external custom destinations do not need a shared exclusion entry.
 
 ## Two-Tier Gate Model (normative)
 

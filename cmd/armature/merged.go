@@ -196,7 +196,13 @@ func removeClaimExclusionAfterWorktreeRemoval(repoPath, destination, pattern str
 		return err
 	}
 	defer release()
+	return removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, destination, pattern)
+}
 
+func removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, destination, pattern string) error {
+	if pattern == "" {
+		return nil
+	}
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
 		return fmt.Errorf("inspect worktrees before exclusion cleanup: %w", err)
@@ -319,21 +325,32 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("read claim exclusion for %s: %w", issue.ID, err)
 	}
+	releaseClaimExclusionLock := func() {}
+	if hasClaimExclusion {
+		release, lockErr := acquireGitExcludeLock(repoPath)
+		if lockErr != nil {
+			return worktreeSkipped, fmt.Errorf("acquire claim exclusion lock for %s: %w", issue.ID, lockErr)
+		}
+		releaseClaimExclusionLock = release
+	}
 	gitClient := adapters.New(repoPath)
 
 	// Normal teardown is deliberately non-force: dirty or locked worktrees
 	// retain both their content and all provenance for recovery.
 	if err := gitClient.RemoveWorktree(selected.Path); err != nil {
+		releaseClaimExclusionLock()
 		return worktreeSkipped, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
 	// Per-worktree metadata disappeared with the successful removal; only the
 	// shared config must be cleared afterwards.
 	clearParentBranchMetadata(gitClient, branchName)
 	if hasClaimExclusion {
-		if err := removeClaimExclusionAfterWorktreeRemoval(repoPath, selected.Path, claimExclusionPattern); err != nil {
+		if err := removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, selected.Path, claimExclusionPattern); err != nil {
+			releaseClaimExclusionLock()
 			return worktreeRemoved, err
 		}
 	}
+	releaseClaimExclusionLock()
 
 	return worktreeRemoved, nil
 }

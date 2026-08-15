@@ -2192,70 +2192,49 @@ func TestClaimProvisionExcludesManagedWorktrees_REQ_LNGHZN_S5(t *testing.T) {
 	assert.NotContains(t, staged, ".worktrees/task-01", "managed worktree must remain excluded from broad staging")
 }
 
-// TestClaimCustomWorktreeExcludesRepoRelativeDestination_REQ_LNGHZN_S9_T1
-// verifies that an explicit destination inside the repository is protected
-// from broad staging just like the canonical .worktrees/ destination.
-func TestClaimCustomWorktreeExcludesRepoRelativeDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+// TestClaimRejectsRepoRelativeCustomDestination_REQ_LNGHZN_S9_T1 verifies that
+// an explicit destination inside the repository must use the canonical
+// .worktrees/ root, avoiding a shared .git/info/exclude pattern that would
+// affect every linked worktree in the clone.
+func TestClaimRejectsRepoRelativeCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(repo, "child")
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	excludeBefore, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
+	err = claim.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "under canonical .worktrees")
+	assert.NoDirExists(t, destination)
+	excludeAfter, readErr := os.ReadFile(excludePath)
+	require.NoError(t, readErr)
+	assert.Equal(t, string(excludeBefore), string(excludeAfter), "rejected custom destinations must not mutate shared exclusions")
+	status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, statusErr)
+	assert.Equal(t, ops.StatusOpen+"\n", status)
+}
+
+func TestClaimExternalCustomWorktreeDoesNotWriteSharedExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(t.TempDir(), "#literal-worktree")
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	excludeBefore, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
 
 	claim := newRootCmd()
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
 	require.NoError(t, claim.Execute())
 
-	excludePath := filepath.Join(repo, ".git", "info", "exclude")
-	exclude, err := os.ReadFile(excludePath)
+	excludeAfter, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
-	assert.Contains(t, string(exclude), "child/", "an in-repository custom worktree must be excluded by its repository-relative path")
-
-	run(t, repo, "git", "add", ".")
-	staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
-	assert.NotContains(t, staged, "child", "an in-repository custom worktree must remain excluded from broad staging")
-}
-
-func TestClaimCustomWorktreeExcludeIsAnchoredAndLiteral_REQ_LNGHZN_S9_T1(t *testing.T) {
-	cases := []struct {
-		name     string
-		relative string
-		sibling  string
-	}{
-		{name: "hash", relative: "#literal", sibling: "other/#literal"},
-		{name: "bang", relative: "!literal", sibling: "other/!literal"},
-		{name: "space", relative: "space dir", sibling: "other/space dir"},
-		{name: "glob", relative: "glob*?[x]", sibling: "other/globZZxx"},
-		{name: "nested", relative: "nested/shared", sibling: "other/shared"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := setupRepoWithTask(t)
-			destination := filepath.Join(repo, tc.relative)
-			claim := newRootCmd()
-			claim.SetOut(new(bytes.Buffer))
-			claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
-			require.NoError(t, claim.Execute())
-
-			payload := filepath.Join(destination, "payload.txt")
-			require.NoError(t, os.WriteFile(payload, []byte("managed\n"), 0o644))
-			siblingPayload := filepath.Join(repo, tc.sibling, "payload.txt")
-			require.NoError(t, os.MkdirAll(filepath.Dir(siblingPayload), 0o755))
-			require.NoError(t, os.WriteFile(siblingPayload, []byte("unrelated\n"), 0o644))
-
-			relPayload, err := filepath.Rel(repo, payload)
-			require.NoError(t, err)
-			checkIgnore := exec.CommandContext(context.Background(), "git", "-C", repo, "check-ignore", "--no-index", "-q", "--", relPayload)
-			require.NoError(t, checkIgnore.Run(), "literal destination must be ignored by git check-ignore")
-
-			run(t, repo, "git", "add", ".")
-			staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
-			stagedPaths := strings.Split(strings.TrimSpace(staged), "\n")
-			assert.NotContains(t, stagedPaths, filepath.ToSlash(filepath.Join(tc.relative, "payload.txt")), "custom worktree contents must stay out of broad staging")
-			siblingRel, err := filepath.Rel(repo, siblingPayload)
-			require.NoError(t, err)
-			assert.Contains(t, stagedPaths, filepath.ToSlash(siblingRel), "an unrelated same-basename path must remain stageable")
-		})
-	}
+	assert.NotContains(t, string(excludeAfter), "#literal-worktree", "external custom destinations must not write a clone-wide exclusion")
+	assert.Contains(t, string(excludeAfter), ".worktrees/", "claim must retain the canonical managed-worktree exclusion")
+	assert.NotEqual(t, string(excludeBefore), string(excludeAfter), "claim may add the canonical exclusion")
 }
 
 // TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1
@@ -2272,11 +2251,6 @@ func TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1(t *t
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	excludeBefore, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
-	commonGitDir, err := resolveCommonGitDir(repo)
-	require.NoError(t, err)
-	claimLockPath := filepath.Join(commonGitDir, "armature-claim-task-01.lock")
-	assert.NoFileExists(t, claimLockPath)
-
 	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", destination, "--from", parent)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nested inside registered worktree")
@@ -2296,7 +2270,9 @@ func TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1(t *t
 	excludeAfter, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
 	assert.Equal(t, string(excludeBefore), string(excludeAfter), "nested destination rejection must not mutate Git exclusions")
-	assert.NoFileExists(t, claimLockPath, "nested destination rejection must happen before claim-lock creation")
+	release, lockErr := acquireGitExcludeLock(repo)
+	require.NoError(t, lockErr, "nested destination rejection must release the exclusion lock")
+	release()
 }
 
 // TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5
@@ -2371,7 +2347,7 @@ exec "$real_git" "$@"
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 	claim := newRootCmd()
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
@@ -2381,7 +2357,7 @@ exec "$real_git" "$@"
 
 	exclude, err := os.ReadFile(filepath.Join(repo, ".git", "info", "exclude"))
 	require.NoError(t, err)
-	assert.NotContains(t, string(exclude), "/child/", "a failed claim must remove its custom exclusion")
+	assert.NotContains(t, string(exclude), "child", "a failed claim must not add a custom exclusion")
 	assert.NotContains(t, string(exclude), ".worktrees/", "a failed claim must remove its canonical exclusion when no managed worktree remains")
 	assert.NoDirExists(t, destination)
 	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
@@ -2444,7 +2420,7 @@ func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testin
 	run(t, parentPath, "git", "commit", "-m", "feat(parent): advance source worktree")
 	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
 
-	childPath := filepath.Join(repo, "child")
+	childPath := filepath.Join(t.TempDir(), "child")
 	claim := newRootCmd()
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", childPath, "--from", parentPath})
@@ -2470,7 +2446,7 @@ func TestCreateWorktreeAndBranchRejectsUnavailableValidatedSource_REQ_LNGHZN_S9_
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
 	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 	require.NoError(t, os.RemoveAll(parentPath))
 
 	err := createWorktreeAndBranch(
@@ -2500,7 +2476,7 @@ func TestCreateWorktreeAndBranchRejectsChangedValidatedSource_REQ_LNGHZN_S9_T1(t
 	run(t, parentPath, "git", "add", "parent.go")
 	run(t, parentPath, "git", "commit", "-m", "feat(parent): change validated source")
 
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 	err := createWorktreeAndBranch(
 		repo,
 		destination,
@@ -2522,7 +2498,7 @@ func TestClaimFromFlagRollsBackWhenSourceDisappears_REQ_LNGHZN_S9_T1(t *testing.
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 	wrapperDir := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
@@ -2579,7 +2555,7 @@ func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T)
 	create.SetArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"})
 	require.NoError(t, create.Execute())
 
-	boundPath := filepath.Join(repo, "bound")
+	boundPath := filepath.Join(t.TempDir(), "bound")
 	bind := newRootCmd()
 	bind.SetOut(new(bytes.Buffer))
 	bind.SetArgs([]string{"claim", "task-02", "--repo", repo, "--worktree", boundPath})
@@ -2600,9 +2576,30 @@ func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T)
 	assert.Equal(t, string(bindingBefore), string(bindingAfter))
 }
 
+func TestClaimReusesPrunableCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(t.TempDir(), "custom-prunable")
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
+	require.NoError(t, err)
+	require.NoError(t, os.RemoveAll(destination))
+
+	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Second task", "--type", "task", "--scope", "second.go")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-02", "--worktree", destination)
+	require.NoError(t, err)
+
+	assert.DirExists(t, destination)
+	gitDir, err := resolveWorktreeGitDir(destination)
+	require.NoError(t, err)
+	binding, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
+	require.NoError(t, err)
+	assert.Equal(t, "task-02", strings.TrimSpace(string(binding)))
+}
+
 func TestClaimFromFlagRejectsUnresolvableFrom_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 	claim := newRootCmd()
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", filepath.Join(repo, "missing")})
@@ -2618,7 +2615,7 @@ func TestClaimFromFlagRejectsDetachedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "detached-parent")
 	run(t, repo, "git", "worktree", "add", "--detach", parentPath)
-	destination := filepath.Join(repo, "child")
+	destination := filepath.Join(t.TempDir(), "child")
 
 	claim := newRootCmd()
 	claim.SetOut(new(bytes.Buffer))
@@ -2647,7 +2644,7 @@ func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *te
 		run(t, parentPath, "git", "commit", "-m", "feat(parent): advance source")
 		run(t, repo, "git", "branch", "task/task-01", "HEAD")
 		branchBefore := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "refs/heads/task/task-01"))
-		destination := filepath.Join(repo, "child")
+		destination := filepath.Join(t.TempDir(), "child")
 
 		claim := newRootCmd()
 		claim.SetOut(new(bytes.Buffer))
@@ -2670,7 +2667,7 @@ func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *te
 		repo := setupRepoWithTask(t)
 		run(t, repo, "git", "branch", "task/task-01", "HEAD")
 		sourceTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
-		destination := filepath.Join(repo, "child")
+		destination := filepath.Join(t.TempDir(), "child")
 		claim := newRootCmd()
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", repo})
@@ -2690,7 +2687,7 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 		run(t, parentPath, "git", "commit", "-m", "feat(parent): advance source")
 		sourceTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
 		run(t, repo, "git", "branch", "task/task-01", sourceTip)
-		return repo, parentPath, sourceTip, filepath.Join(repo, "child")
+		return repo, parentPath, sourceTip, filepath.Join(t.TempDir(), "child")
 	}
 	assertNoClaimSideEffects := func(t *testing.T, repo, destination string) {
 		t.Helper()
