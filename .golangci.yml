@@ -125,6 +125,7 @@ linters:
             - "github.com/scullxbones/armature/internal/issuetype"
             - "github.com/scullxbones/armature/internal/materialize"
             - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/scopematch"
             - "github.com/scullxbones/armature/internal/sources"
             - "github.com/scullxbones/armature/internal/traceability"
         # output may only import the domain layer beneath it; orchestration packages are forbidden

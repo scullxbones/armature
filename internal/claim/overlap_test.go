@@ -175,7 +175,9 @@ func TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6(t *testing.T) {
 
 // TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6 verifies that a
 // worker-declared " (new)" annotation does not hide a real overlap:
-// "src/foo.go (new)" and "src/*.go" both cover src/foo.go.
+// "src/foo.go (new)" and "src/*.go" both cover src/foo.go. Matching now
+// lives in scopematch.Overlaps (LNGHZN-S10-T7); this stays as a caller
+// tripwire so a future override in claim cannot silently drop the strip.
 func TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -212,44 +214,6 @@ func TestOverlapIntersectsCharacterClass_REQ_LNGHZN_S10_T6(t *testing.T) {
 		"file[ab].go and filea.* both match src/filea.go")
 	assert.True(t, globOverlaps("src/filea.*", "src/file[ab].go"),
 		"overlap check must be symmetric")
-}
-
-// TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6 directly exercises
-// globPatternsIntersect's branches: "*" wildcards on either side, "?"
-// single-character wildcards, literal equality, literal mismatch, and the
-// case where one pattern is a plain literal fully consumed while the other
-// still has remaining non-"*" characters (which must not intersect).
-func TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		a, b string
-		want bool
-	}{
-		{"identical literals", "login.go", "login.go", true},
-		{"different literals, same length", "login.go", "logout.go", false},
-		{"leading star vs literal suffix", "*.go", "login.go", true},
-		{"trailing star vs literal prefix", "login.*", "login.go", true},
-		{"star vs star, different fixed suffixes cannot intersect", "*.go", "*.txt", false},
-		{"star vs star, same fixed suffix intersects", "*.go", "a*.go", true},
-		{"question mark matches any single char", "login?go", "login.go", true},
-		{"question mark on both sides", "l?gin.go", "log?n.go", true},
-		{"literal fully consumed but other side has trailing literal", "login", "login.go", false},
-		{"disjoint literal suffixes with stars", "*.go", "*.txt.go", true},
-		{"no possible common length", "ab", "abc", false},
-		{"character class vs matching literal", "file[ab].go", "filea.go", true},
-		{"character class vs star suffix", "file[ab].go", "filea.*", true},
-		{"unclosed class is a literal bracket", "file[ab.go", "file[ab.go", true},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, c.want, globPatternsIntersect(c.a, c.b), "globPatternsIntersect(%q, %q)", c.a, c.b)
-			assert.Equal(t, c.want, globPatternsIntersect(c.b, c.a), "globPatternsIntersect(%q, %q) (symmetric)", c.b, c.a)
-		})
-	}
 }
 
 // TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6 verifies the
@@ -298,12 +262,9 @@ func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6(t *tes
 }
 
 // globOverlapParityCases mirrors the identically-named table in
-// internal/validate/validate_test.go. The two globOverlaps implementations
-// are intentionally duplicated (validate cannot import claim per the
-// validate-boundary depguard rule in .golangci.yml) and must be kept
-// behaviorally identical — if you change this package's matching semantics,
-// update this table AND the matching table in
-// internal/validate/validate_test.go so the parity test there catches drift.
+// internal/validate/validate_test.go. Both packages now delegate to
+// scopematch.Overlaps (LNGHZN-S10-T7); the tables stay as a drift tripwire
+// so a future caller-side override cannot silently diverge.
 var globOverlapParityCases = []struct {
 	name string
 	a, b string

@@ -12,6 +12,7 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/traceability"
 )
@@ -346,50 +347,31 @@ func blocksReachable(start, target string, blocks map[string][]string) bool {
 }
 
 // firstGlobOverlapPair returns the first pair of patterns (one from a, one from
-// b) found to overlap via globOverlaps, matching claim-time semantics
+// b) found to overlap via scopematch.Overlaps, matching claim-time semantics
 // (claim.ScopesOverlap) rather than exact string equality: a glob like
 // "cmd/armature/*.go" and a literal "cmd/armature/claim.go" must be recognized
 // as overlapping so validate can't pass a claim that would later be rejected
-// by claim.ScopesOverlap. Duplicated locally rather than imported from
-// internal/claim because the validate-boundary depguard rule forbids validate
-// from depending on the orchestration-layer claim package.
-// b) found to overlap via globOverlaps, along with whether any overlap was
-// found at all. Used so warning messages can report the specific pattern pair
-// that matched, rather than dumping both full scope lists when the overlap
-// was only detected via glob matching (scopeIntersection's exact-string
+// by claim.ScopesOverlap. Overlap matching is delegated to
+// internal/scopematch — the single canonical implementation shared with
+// internal/claim — rather than duplicated locally, so the two layers cannot
+// diverge again as they once did. internal/scopematch is a leaf package with
+// no dependency on the orchestration-layer internal/claim package, so it is
+// safe under the validate-boundary depguard rule.
+//
+// firstGlobOverlapPair also reports whether any overlap was found at all.
+// Used so warning messages can report the specific pattern pair that
+// matched, rather than dumping both full scope lists when the overlap was
+// only detected via glob matching (scopeIntersection's exact-string
 // comparison found nothing).
 func firstGlobOverlapPair(a, b []string) (patternA, patternB string, overlaps bool) {
 	for _, x := range a {
 		for _, y := range b {
-			if globOverlaps(x, y) {
+			if scopematch.Overlaps(x, y) {
 				return x, y, true
 			}
 		}
 	}
 	return "", "", false
-}
-
-func globOverlaps(a, b string) bool {
-	if matched, _ := filepath.Match(a, b); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
-		return true
-	}
-	if matched, _ := filepath.Match(b, a); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
-		return true
-	}
-	dirA := globOverlapDir(a)
-	dirB := globOverlapDir(b)
-	if dirA == "" || dirB == "" {
-		return false
-	}
-	return dirA == dirB || strings.HasPrefix(dirA, dirB+"/") || strings.HasPrefix(dirB, dirA+"/")
-}
-
-func globOverlapDir(pattern string) string {
-	i := strings.LastIndexByte(pattern, '/')
-	if i < 0 {
-		return ""
-	}
-	return pattern[:i]
 }
 
 func scopeIntersection(a, b []string) []string {
