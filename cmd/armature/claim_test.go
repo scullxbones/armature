@@ -2192,6 +2192,72 @@ func TestClaimProvisionExcludesManagedWorktrees_REQ_LNGHZN_S5(t *testing.T) {
 	assert.NotContains(t, staged, ".worktrees/task-01", "managed worktree must remain excluded from broad staging")
 }
 
+// TestClaimCustomWorktreeExcludesRepoRelativeDestination_REQ_LNGHZN_S9_T1
+// verifies that an explicit destination inside the repository is protected
+// from broad staging just like the canonical .worktrees/ destination.
+func TestClaimCustomWorktreeExcludesRepoRelativeDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(repo, "child")
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
+	require.NoError(t, claim.Execute())
+
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	exclude, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(exclude), "child/", "an in-repository custom worktree must be excluded by its repository-relative path")
+
+	run(t, repo, "git", "add", ".")
+	staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
+	assert.NotContains(t, staged, "child", "an in-repository custom worktree must remain excluded from broad staging")
+}
+
+func TestClaimCustomWorktreeExcludeIsAnchoredAndLiteral_REQ_LNGHZN_S9_T1(t *testing.T) {
+	cases := []struct {
+		name     string
+		relative string
+		sibling  string
+	}{
+		{name: "hash", relative: "#literal", sibling: "other/#literal"},
+		{name: "bang", relative: "!literal", sibling: "other/!literal"},
+		{name: "space", relative: "space dir", sibling: "other/space dir"},
+		{name: "glob", relative: "glob*?[x]", sibling: "other/globZZxx"},
+		{name: "nested", relative: "nested/shared", sibling: "other/shared"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := setupRepoWithTask(t)
+			destination := filepath.Join(repo, tc.relative)
+			claim := newRootCmd()
+			claim.SetOut(new(bytes.Buffer))
+			claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
+			require.NoError(t, claim.Execute())
+
+			payload := filepath.Join(destination, "payload.txt")
+			require.NoError(t, os.WriteFile(payload, []byte("managed\n"), 0o644))
+			siblingPayload := filepath.Join(repo, tc.sibling, "payload.txt")
+			require.NoError(t, os.MkdirAll(filepath.Dir(siblingPayload), 0o755))
+			require.NoError(t, os.WriteFile(siblingPayload, []byte("unrelated\n"), 0o644))
+
+			relPayload, err := filepath.Rel(repo, payload)
+			require.NoError(t, err)
+			checkIgnore := exec.CommandContext(context.Background(), "git", "-C", repo, "check-ignore", "--no-index", "-q", "--", relPayload)
+			require.NoError(t, checkIgnore.Run(), "literal destination must be ignored by git check-ignore")
+
+			run(t, repo, "git", "add", ".")
+			staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
+			stagedPaths := strings.Split(strings.TrimSpace(staged), "\n")
+			assert.NotContains(t, stagedPaths, filepath.ToSlash(filepath.Join(tc.relative, "payload.txt")), "custom worktree contents must stay out of broad staging")
+			siblingRel, err := filepath.Rel(repo, siblingPayload)
+			require.NoError(t, err)
+			assert.Contains(t, stagedPaths, filepath.ToSlash(siblingRel), "an unrelated same-basename path must remain stageable")
+		})
+	}
+}
+
 // TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5
 // exercises the public re-claim path for an installation created before
 // bootstrap started adding .worktrees/ to .git/info/exclude.  A canonical
@@ -2245,6 +2311,43 @@ func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {
 	assert.Equal(t, "\n", path, "failed exclusion setup must not record a managed worktree path")
 	_, statErr := os.Stat(filepath.Join(repo, ".worktrees", "task-01"))
 	assert.True(t, os.IsNotExist(statErr), "failed exclusion setup must not create a worktree")
+}
+
+func TestClaimWorktreeFailureRollsBackNewExclusions_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	wrapperDir := t.TempDir()
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+for arg in "$@"; do
+  if [ "$arg" = "checkout" ]; then
+    exit 42
+  fi
+done
+exec "$real_git" "$@"
+`, realGit)
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	destination := filepath.Join(repo, "child")
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
+	err = claim.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checkout branch in worktree")
+
+	exclude, err := os.ReadFile(filepath.Join(repo, ".git", "info", "exclude"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(exclude), "/child/", "a failed claim must remove its custom exclusion")
+	assert.NotContains(t, string(exclude), ".worktrees/", "a failed claim must remove its canonical exclusion when no managed worktree remains")
+	assert.NoDirExists(t, destination)
+	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
+	assert.Error(t, branchErr, "failed provisioning must not leave the task branch behind")
+	status, err := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, ops.StatusOpen+"\n", status, "failed provisioning must release the claim")
 }
 
 // TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
@@ -2314,6 +2417,118 @@ func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testin
 	baseCommit, err := os.ReadFile(filepath.Join(childGitDir, "armature-base-commit"))
 	require.NoError(t, err)
 	assert.Equal(t, parentTip, strings.TrimSpace(string(baseCommit)))
+}
+
+// TestCreateWorktreeAndBranchRejectsUnavailableValidatedSource_REQ_LNGHZN_S9_T1
+// proves provisioning fails closed when the validated --from worktree vanishes
+// before the branch is created. The destination, derived branch, and source
+// provenance must remain untouched; falling back to the coordinator HEAD would
+// silently create the task from the wrong parent.
+func TestCreateWorktreeAndBranchRejectsUnavailableValidatedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parentPath := filepath.Join(repo, "parent")
+	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
+	destination := filepath.Join(repo, "child")
+	require.NoError(t, os.RemoveAll(parentPath))
+
+	err := createWorktreeAndBranch(
+		repo,
+		destination,
+		"task-01",
+		materialize.Issue{Type: "task"},
+		alwaysOwns,
+		parentPath,
+		"feature-parent",
+		parentTip,
+	)
+	require.Error(t, err, "a vanished validated source must fail closed")
+	assert.NoDirExists(t, destination)
+	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
+	assert.Error(t, branchErr, "source failure must not create the task branch")
+	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", parentBranchConfigKey("task/task-01")).Output()
+	assert.Error(t, configErr, "source failure must not persist parent provenance")
+}
+
+func TestCreateWorktreeAndBranchRejectsChangedValidatedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parentPath := filepath.Join(repo, "parent")
+	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
+	require.NoError(t, os.WriteFile(filepath.Join(parentPath, "parent.go"), []byte("package parent\n"), 0o644))
+	run(t, parentPath, "git", "add", "parent.go")
+	run(t, parentPath, "git", "commit", "-m", "feat(parent): change validated source")
+
+	destination := filepath.Join(repo, "child")
+	err := createWorktreeAndBranch(
+		repo,
+		destination,
+		"task-01",
+		materialize.Issue{Type: "task"},
+		alwaysOwns,
+		parentPath,
+		"feature-parent",
+		parentTip,
+	)
+	require.Error(t, err, "a changed validated source must fail closed")
+	assert.Contains(t, err.Error(), "tip changed")
+	assert.NoDirExists(t, destination)
+	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
+	assert.Error(t, branchErr, "source failure must not create the task branch")
+}
+
+func TestClaimFromFlagRollsBackWhenSourceDisappears_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parentPath := filepath.Join(repo, "parent")
+	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+	destination := filepath.Join(repo, "child")
+	wrapperDir := t.TempDir()
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	countPath := filepath.Join(wrapperDir, "worktree-list-count")
+	backupPath := parentPath + ".gone"
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+count_file=%q
+source_path=%q
+backup_path=%q
+is_list=0
+for arg in "$@"; do
+  if [ "$arg" = "--porcelain" ]; then
+    is_list=1
+  fi
+done
+if [ "$is_list" = "1" ]; then
+  count=0
+  if [ -f "$count_file" ]; then
+    count=$(cat "$count_file")
+  fi
+  count=$((count + 1))
+  printf '%%s\n' "$count" > "$count_file"
+  if [ "$count" -eq 2 ]; then
+    mv "$source_path" "$backup_path"
+  fi
+fi
+exec "$real_git" "$@"
+`, realGit, countPath, parentPath, backupPath)
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	claim := newRootCmd()
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
+	err = claim.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no longer an existing worktree")
+	assert.NoDirExists(t, destination)
+	assert.DirExists(t, backupPath, "the test source worktree must be moved away, not destroyed")
+	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
+	assert.Error(t, branchErr, "source disappearance must not create the task branch")
+	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", parentBranchConfigKey("task/task-01")).Output()
+	assert.Error(t, configErr, "source disappearance must not persist parent provenance")
+	status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, statusErr)
+	assert.Equal(t, ops.StatusOpen+"\n", status, "source disappearance must roll back the claim")
 }
 
 func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T) {
@@ -2461,27 +2676,13 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 		assertNoClaimSideEffects(t, repo, destination)
 	})
 
-	t.Run("conflicting base is preserved and rejected", func(t *testing.T) {
-		repo, parentPath, _, destination := setup(t)
-		baseKey := "branch.task/task-01.armature-base-commit"
-		run(t, repo, "git", "config", baseKey, strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD")))
-
-		claim := newRootCmd()
-		claim.SetOut(new(bytes.Buffer))
-		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
-		err := claim.Execute()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "does not match --from tip")
-		assert.Equal(t, strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD")), strings.TrimSpace(runGitOutput(t, repo, "config", "--get", baseKey)))
-		assertNoClaimSideEffects(t, repo, destination)
-	})
-
-	t.Run("matching provenance permits same-tip reuse", func(t *testing.T) {
+	t.Run("unused base config does not override canonical marker", func(t *testing.T) {
 		repo, parentPath, sourceTip, destination := setup(t)
 		parentKey := parentBranchConfigKey("task/task-01")
 		baseKey := "branch.task/task-01.armature-base-commit"
 		run(t, repo, "git", "config", parentKey, "feature-parent")
-		run(t, repo, "git", "config", baseKey, sourceTip)
+		staleBase := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+		run(t, repo, "git", "config", baseKey, staleBase)
 
 		claim := newRootCmd()
 		claim.SetOut(new(bytes.Buffer))
@@ -2489,7 +2690,8 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 		require.NoError(t, claim.Execute())
 		assert.Equal(t, sourceTip, strings.TrimSpace(runGitOutput(t, destination, "rev-parse", "HEAD")))
 		assert.Equal(t, "feature-parent", strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentKey)))
-		assert.Equal(t, sourceTip, strings.TrimSpace(runGitOutput(t, repo, "config", "--get", baseKey)))
+		assert.Equal(t, staleBase, strings.TrimSpace(runGitOutput(t, repo, "config", "--get", baseKey)),
+			"the unused legacy key must remain untouched while the canonical marker records the source tip")
 	})
 }
 

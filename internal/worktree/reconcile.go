@@ -68,12 +68,26 @@ type ReconcileResult struct {
 // A live claim's recorded WorktreePath is an absolute path captured in the
 // claiming clone and git-replicated to every clone; a claim owned by a remote
 // clone can never match this clone's local worktrees, so treating it as a ghost
-// here would be a false positive. When one or more managedRoots are supplied
-// (normalized, trailing-separator prefixes of this clone's managed worktree
-// directory), a missing worktree is only a ghost when its recorded path falls
-// under one of them. When none are supplied, ghost scoping is disabled and all
-// live claims are eligible — preserving behavior for callers/tests that don't scope.
+// here would be a false positive. Production supplies the canonical root and
+// the repository root, while callers may supply any local roots appropriate to
+// their inventory. A path outside those roots is local only when it appears in
+// registeredPaths, which is clone-local Git worktree evidence. When no roots or
+// registrations are supplied, ghost scoping is disabled for compatibility.
 func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.Time, managedRoots ...string) ReconcileResult {
+	return ReconcileWithLocalEvidence(worktrees, issues, now, managedRoots, nil)
+}
+
+// ReconcileWithLocalEvidence is Reconcile with an additional set of paths
+// returned by this clone's Git worktree registry. That evidence includes
+// prunable custom worktrees, which List intentionally omits because their
+// directories cannot provide a binding file.
+func ReconcileWithLocalEvidence(
+	worktrees []Meta,
+	issues map[string]*materialize.Issue,
+	now time.Time,
+	managedRoots []string,
+	registeredPaths []string,
+) ReconcileResult {
 	result := ReconcileResult{
 		BoundWorktrees: []string{},
 		Orphans:        []string{},
@@ -160,7 +174,7 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 		normPath := NormalizePathAllowingMissing(issue.WorktreePath)
 		if !isTerminalStatus(issue.Status) && issue.ClaimedBy != "" &&
 			!issue.ClaimStale(now.Unix()) &&
-			isUnderManagedRoot(normPath, managedRoots) {
+			(isUnderManagedRoot(normPath, managedRoots) || isRegisteredPath(normPath, registeredPaths)) {
 			result.Ghosts = append(result.Ghosts, issue.ID)
 		}
 	}
@@ -180,6 +194,15 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 	sort.Strings(result.Unrecognized)
 
 	return result
+}
+
+func isRegisteredPath(normPath string, registeredPaths []string) bool {
+	for _, path := range registeredPaths {
+		if NormalizePathAllowingMissing(path) == normPath {
+			return true
+		}
+	}
+	return false
 }
 
 func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, bool) {

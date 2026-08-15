@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/filelock"
 )
@@ -65,7 +68,7 @@ import (
 // without calling release. If the lock is already held by another process,
 // acquireClaimLock returns a clear, actionable error naming the issue.
 func acquireClaimLock(repoPath, issueID string) (release func(), err error) {
-	gitDir, err := resolveWorktreeGitDir(repoPath)
+	gitDir, err := resolveCommonGitDir(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve git dir for claim lock: %w", err)
 	}
@@ -90,4 +93,71 @@ func acquireClaimLock(repoPath, issueID string) (release func(), err error) {
 		_ = filelock.Unlock(f) //nolint:errcheck // best-effort release; process exit also releases OS-level locks
 		_ = f.Close()          //nolint:errcheck // best-effort close in a release func with no error return
 	}, nil
+}
+
+// acquireGitExcludeLock serializes read-modify-write updates to the clone's
+// shared .git/info/exclude file. It is repository-wide rather than per issue:
+// claims for different issues still mutate the same file and must not lose one
+// another's exclusion pattern.
+func acquireGitExcludeLock(repoPath string) (release func(), err error) {
+	gitDir, err := resolveCommonGitDir(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve git dir for exclude lock: %w", err)
+	}
+	lockPath := filepath.Join(gitDir, "armature-git-exclude.lock")
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // fixed lock name in this clone's git dir
+	if err != nil {
+		return nil, fmt.Errorf("open git exclude lock file: %w", err)
+	}
+	if err := filelock.Lock(f); err != nil {
+		_ = f.Close() //nolint:errcheck // already returning the lock error
+		return nil, fmt.Errorf("acquire git exclude lock: %w", err)
+	}
+
+	return func() {
+		_ = filelock.Unlock(f) //nolint:errcheck // best-effort release
+		_ = f.Close()          //nolint:errcheck // best-effort close
+	}, nil
+}
+
+// resolveCommonGitDir returns the repository's shared Git directory rather
+// than a linked worktree's private administrative directory. Shared claim
+// locks and .git/info/exclude must converge on this path across every linked
+// worktree in the clone.
+func resolveCommonGitDir(repoPath string) (string, error) {
+	// The main worktree's .git directory is already the common directory. This
+	// direct path also preserves updateGitExclude's small filesystem-fixture
+	// contract, where callers provide a .git/info directory without a complete
+	// repository. Linked worktrees have a .git file and use rev-parse below.
+	if info, err := os.Stat(filepath.Join(repoPath, ".git")); err == nil && info.IsDir() {
+		gitDir, absErr := filepath.Abs(filepath.Join(repoPath, ".git"))
+		if absErr != nil {
+			return "", fmt.Errorf("resolve git common dir path: %w", absErr)
+		}
+		if resolved, evalErr := filepath.EvalSymlinks(gitDir); evalErr == nil {
+			gitDir = resolved
+		}
+		return filepath.Clean(gitDir), nil
+	}
+	// #nosec G204 - git binary and arguments are controlled by Armature.
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rev-parse", "--git-common-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("resolve git common dir: %w", err)
+	}
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		return "", fmt.Errorf("resolve git common dir: git returned an empty path")
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(repoPath, dir)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve git common dir path: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	return filepath.Clean(abs), nil
 }

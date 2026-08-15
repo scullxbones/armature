@@ -39,6 +39,28 @@ func List(repoPath string) ([]Meta, error) {
 	return result, nil
 }
 
+// RegisteredPaths returns every non-main path still registered with this local
+// Git clone, including prunable worktrees whose directories are gone. The
+// paths are clone-local evidence: callers must not use replicated issue paths
+// alone to infer ownership in another clone.
+func RegisteredPaths(repoPath string) ([]string, error) {
+	// #nosec G204 - git and its arguments are controlled by Armature.
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
+	}
+	main := NormalizePathAllowingMissing(repoPath)
+	paths := make([]string, 0)
+	for _, block := range parsePorcelainBlocks(string(out)) {
+		if block.path == "" || NormalizePathAllowingMissing(block.path) == main {
+			continue
+		}
+		paths = append(paths, block.path)
+	}
+	return paths, nil
+}
+
 // ResolveGitDir resolves the actual git directory for a linked or main
 // worktree. A linked worktree stores a relative or absolute gitdir pointer in
 // its .git file; the main worktree uses a .git directory directly.
@@ -83,19 +105,25 @@ func ReadBinding(gitDir string) (string, error) {
 	return "", nil
 }
 
-// ListManaged returns the inventory entries directly under the canonical
-// repository-local .worktrees root. It deliberately retains binding identity
-// and detached state from List so all lifecycle consumers use one policy.
+// ListManaged returns canonical .worktrees entries and any non-main worktree
+// carrying an Armature binding. Explicit claim destinations may live outside
+// the canonical root, so their binding is the ownership signal that makes them
+// lifecycle-visible; unbound arbitrary Git worktrees remain outside the managed
+// inventory.
 func ListManaged(repoPath string) ([]Meta, error) {
 	all, err := List(repoPath)
 	if err != nil {
 		return nil, err
 	}
 	root := CanonicalRoot(repoPath)
+	main := NormalizePath(repoPath)
 	managed := make([]Meta, 0, len(all))
 	for _, item := range all {
 		path := NormalizePath(item.Path)
-		if path != root && IsUnderRoot(path, root) {
+		if path == main {
+			continue
+		}
+		if IsUnderRoot(path, root) || item.Binding != "" {
 			managed = append(managed, item)
 		}
 	}

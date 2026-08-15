@@ -27,12 +27,13 @@ When you claim a task with the `--worktree` flag, Armature auto-provisions a wor
 arm claim --issue TASK-ID --worktree
 ```
 
-- Worktree is created at `.worktrees/<issue-id>` (relative to repo root)
+- Worktree is created at `.worktrees/<issue-id>` (relative to repo root) unless the caller supplies an explicit `--worktree <path>` destination
 - Issue branch is checked out inside the worktree
 - Worktree path is recorded in the claim ops (recoverable if task is re-claimed)
+- Every destination created by `arm claim` is managed by its issue binding, including explicit paths outside `.worktrees/`; an explicit destination inside the repository is excluded from broad Git staging before the claim is recorded.
 - **Best-effort isolation mitigation is automatically applied:**
   - If the **main tree** uses a `go.work` file, the newly provisioned worktree is removed from its `use` directives so the main tree's gopls does not walk the worktree and get confused about module boundaries.
-  - If the main tree has no `go.work` (the common case — this repo has none), this is a no-op: the worktree is already isolated because `.worktrees/` is gitignored.
+  - If the main tree has no `go.work` (the common case — this repo has none), this is a no-op for canonical worktrees because `.worktrees/` is gitignored; explicit in-repository destinations are protected by their claim-specific Git exclude pattern.
   - The mitigation **never creates a `go.work`** — not in the worktree and not in the main tree. A bare `go.work` with no `use` directive would break `go build ./...` inside the worktree.
   - It is best-effort and non-fatal: a failure only degrades IDE ergonomics and never fails the claim.
 
@@ -47,7 +48,7 @@ arm worktree list
 This classifies worktrees into categories:
 - **Bound:** A worktree whose issue binding names a live claim at that claim's recorded path (the healthy steady state).
 - **Orphan:** A worktree whose issue binding names a known issue with no live claim; it is real work with no current owner, not an error by itself.
-- **Ghost:** The inverse of an orphan: a live claim whose recorded worktree path has no worktree on disk. A terminal issue whose worktree is gone is expected, not a ghost.
+- **Ghost:** The inverse of an orphan: a live claim whose recorded worktree path has no worktree on disk. Reconciliation reports a missing explicit path as a local ghost only when the path is inside this repository or remains registered by this clone; an arbitrary absolute path replicated from another clone is not local evidence. A terminal issue whose worktree is gone is expected, not a ghost.
 - **GC Removal Set:** Merged/cancelled issues with an existing worktree (ready for cleanup)
 
 ### Reclamation & Garbage Collection
@@ -72,7 +73,7 @@ When a task is confirmed merged on main, its worktree is automatically cleaned u
 arm merged --issue TASK-ID
 ```
 
-This removes the linked worktree and frees its resources. The `.worktrees/` directory remains gitignored, so worktree contents are never committed.
+This removes the binding-selected linked worktree and frees its resources. Canonical `.worktrees/` contents remain gitignored; explicit in-repository destinations are protected from broad staging by claim-installed excludes.
 
 ## Two-Tier Gate Model (normative)
 
