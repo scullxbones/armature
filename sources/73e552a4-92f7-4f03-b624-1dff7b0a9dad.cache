@@ -656,7 +656,7 @@
         </div>
         <div class="field"><span class="fl">Evidence</span>
           <ul>
-            <li><span class="mono">make check</span> = lint + <span class="mono">go test ./...</span> + <span class="mono">go test -coverprofile ./...</span> — the suite compiles and runs twice — + gremlins across <span class="mono">./internal</span> (31 packages, 95% mutation coverage / 99% efficacy) + build.</li>
+            <li><span class="mono">make check</span> = lint + <span class="mono">go test ./...</span> + <span class="mono">go test -coverprofile ./...</span> — the suite compiles and runs twice — + gremlins across <span class="mono">./internal</span> (31 packages, 92% mutation coverage / 99% efficacy) + build.</li>
             <li><span class="mono">quality-gates.md</span>: “must pass before every commit/push.” <span class="mono">ci.yml</span> repeats the identical pipeline on push to <span class="mono">'**'</span>.</li>
             <li>Every fleet worker pays this toll per task; so does every human commit.</li>
           </ul>
