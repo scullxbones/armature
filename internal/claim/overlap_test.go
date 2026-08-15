@@ -154,6 +154,87 @@ func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T6(t *testing
 		"overlap check must be symmetric")
 }
 
+// TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6 verifies that
+// two glob patterns in the same directory that could both match a common
+// filename are reported as overlapping, even though neither pattern
+// literally matches the other (filepath.Match(a, b) and
+// filepath.Match(b, a) are both false, and neither pattern's file, treated
+// literally, satisfies the other via scopematch.Allows). This is the
+// dangerous under-blocking direction the directory-fallback removal
+// exposed: "src/auth/*.go" and "src/auth/login.*" both match
+// "src/auth/login.go", so two workers claiming these scopes concurrently
+// could both write that file.
+func TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, globOverlaps("src/auth/*.go", "src/auth/login.*"),
+		"both patterns can match src/auth/login.go and must be reported as overlapping")
+	assert.True(t, globOverlaps("src/auth/login.*", "src/auth/*.go"),
+		"overlap check must be symmetric")
+}
+
+// TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6 directly exercises
+// globPatternsIntersect's branches: "*" wildcards on either side, "?"
+// single-character wildcards, literal equality, literal mismatch, and the
+// case where one pattern is a plain literal fully consumed while the other
+// still has remaining non-"*" characters (which must not intersect).
+func TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{"identical literals", "login.go", "login.go", true},
+		{"different literals, same length", "login.go", "logout.go", false},
+		{"leading star vs literal suffix", "*.go", "login.go", true},
+		{"trailing star vs literal prefix", "login.*", "login.go", true},
+		{"star vs star, different fixed suffixes cannot intersect", "*.go", "*.txt", false},
+		{"star vs star, same fixed suffix intersects", "*.go", "a*.go", true},
+		{"question mark matches any single char", "login?go", "login.go", true},
+		{"question mark on both sides", "l?gin.go", "log?n.go", true},
+		{"literal fully consumed but other side has trailing literal", "login", "login.go", false},
+		{"disjoint literal suffixes with stars", "*.go", "*.txt.go", true},
+		{"no possible common length", "ab", "abc", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, c.want, globPatternsIntersect(c.a, c.b), "globPatternsIntersect(%q, %q)", c.a, c.b)
+			assert.Equal(t, c.want, globPatternsIntersect(c.b, c.a), "globPatternsIntersect(%q, %q) (symmetric)", c.b, c.a)
+		})
+	}
+}
+
+// TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6 verifies the
+// glob-to-glob over-approximation is bounded by directory equality, not "any
+// two globs overlap": two globs in directories that cannot match a common
+// path are still reported as non-overlapping.
+func TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, globOverlaps("src/auth/*.go", "src/billing/*.go"),
+		"different directories can never share a matched file, regardless of filename pattern")
+	assert.False(t, globOverlaps("src/billing/*.go", "src/auth/*.go"),
+		"overlap check must be symmetric")
+}
+
+// TestOverlapGlobToGlobIntersectionRegression_REQ_LNGHZN_S10_T6 re-confirms,
+// in both directions, that the glob-to-glob intersection fallback did not
+// resurrect the removed ancestor/containing-directory fallback: entries
+// whose directory portions differ still never overlap merely by proximity.
+func TestOverlapGlobToGlobIntersectionRegression_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, globOverlaps("docs/agents/quality-gates.md", "docs/use-cases.md"))
+	assert.False(t, globOverlaps("docs/use-cases.md", "docs/agents/quality-gates.md"))
+
+	assert.False(t, globOverlaps("internal/claim/overlap.go", "internal/claim/overlap_test.go"))
+	assert.False(t, globOverlaps("internal/claim/overlap_test.go", "internal/claim/overlap.go"))
+}
+
 // TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6 verifies
 // that removing the directory fallback did not break genuine overlap
 // detection: identical scope entries still overlap, and an explicit
