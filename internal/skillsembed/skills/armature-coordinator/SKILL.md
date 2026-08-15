@@ -428,13 +428,16 @@ For each task that completed in the wave, dispatch semantic conformance review u
    
    The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). For behavioral criteria, execution evidence from the activity log can lift indeterminate verdicts to satisfied or partially satisfied, but it never substitutes for diff citations on implementation criteria and never suppresses a not_satisfied the diff supports.
    
-   It is a subagent whose final text output is the `ConformanceAssessment` JSON. After the subagent returns, write its output text to a temp file:
+   The reviewer's chat/text response is **not** the `ConformanceAssessment` JSON.
+   It is rating + actionable findings + the path to the assessment file under
+   `.armature/review/` (see the reviewer skill's bounded chat contract). After
+   the subagent returns, extract that path and use it as `$RESULT_FILE`. Do
+   **not** write the reviewer's chat text to `$RESULT_FILE` — `arm review record`
+   will reject a summary as if it were the assessment.
    ```bash
-   RESULT_FILE=$(mktemp)
-   # The reviewer subagent's returned text IS the ConformanceAssessment JSON.
-   # Write it directly to $RESULT_FILE, e.g.:
-   #   echo "$REVIEWER_OUTPUT" > "$RESULT_FILE"
-   # where $REVIEWER_OUTPUT is the text returned by the reviewer subagent.
+   # Reviewer writes e.g. .armature/review/TASK-ID.json and returns that path.
+   RESULT_FILE="<path from reviewer response>"
+   # Confirm the file exists and is JSON before recording.
    ```
 
 4. **Record the assessment** — persist the reviewer's findings:
@@ -534,13 +537,17 @@ fi
 ```
 
 **Two-tier gate model (normative).** `make check` here is the **full/publish
-gate**. Per the story-lifecycle rule, the full gate runs mandatorily exactly
-twice: once at each task's final head (worker's responsibility, see the
+gate**. Per the story-lifecycle rule, the full gate runs mandatorily at each
+task's **current** final head (worker's responsibility, see the
 armature-worker skill) and once cumulatively at story integration (this
 step). Workers iterate against the cheaper fast gate (`make check-fast`) and
-MUST NOT run the full gate on intermediate remediations — do not ask a worker
-to re-run `make check` mid-remediation; that is what the wave verification
-gate below is for.
+MUST NOT run the full gate on **intermediate** remediations. After the
+**last** remediation commit on a task — before the hard-scoped confirmation
+review and before `done` — require one task-scoped full gate at that new
+delivery HEAD. The earlier task-head full-gate run is stale for the
+remediated HEAD; do not treat the last remediation as intermediate. Wave
+verification below is the story-integration run, not a substitute for the
+task-head publish gate.
 
 **Code profile** (run when `WAVE_TYPE=code`):
 ```bash
