@@ -213,6 +213,69 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# ----------------------------------------------------------------------------
+# Test 6: Makefile recipes invoke the routed scripts directly, so both must
+# be committed executable (100755). A 100644 checkout fails with
+# Permission denied on a normal umask.
+# ----------------------------------------------------------------------------
+echo "Test 6: routed gate scripts are committed executable..."
+for script in scripts/check-fast.sh scripts/test-check-fast.sh; do
+    mode=$(git -C "$REPO_ROOT" ls-files -s -- "$script" | awk '{print $1}')
+    if [[ "$mode" == "100755" ]]; then
+        echo "  PASS: $script git mode is 100755"
+    else
+        echo "  FAIL: $script git mode is '${mode:-missing}', expected 100755"
+        FAILURES=$((FAILURES + 1))
+    fi
+    if [[ -x "$REPO_ROOT/$script" ]]; then
+        echo "  PASS: $script is executable on disk"
+    else
+        echo "  FAIL: $script is not executable on disk"
+        FAILURES=$((FAILURES + 1))
+    fi
+done
+
+# ----------------------------------------------------------------------------
+# Test 7: CI must generate coverage.out before coverage-check. `make test`
+# does not write the profile; `make coverage` does. A standalone `make test`
+# immediately before coverage-check both fails the check and duplicates the
+# suite (D3).
+# ----------------------------------------------------------------------------
+echo "Test 7: CI generates coverage.out before coverage-check..."
+CI_YML="$REPO_ROOT/.github/workflows/ci.yml"
+CI_RESULT=$(python3 - "$CI_YML" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+check_job = text.split("e2eharness:")[0]
+runs = []
+for line in check_job.splitlines():
+    stripped = line.strip()
+    if stripped.startswith("run: make "):
+        runs.append(stripped[len("run: make "):])
+
+if "coverage-check" not in runs:
+    print("FAIL: CI check job does not invoke coverage-check")
+    sys.exit(1)
+prior = runs[: runs.index("coverage-check")]
+if "coverage" not in prior:
+    print("FAIL: coverage-check has no preceding make coverage step")
+    sys.exit(1)
+if "test" in prior:
+    print("FAIL: standalone make test still precedes coverage-check")
+    sys.exit(1)
+print("PASS")
+PY
+) && CI_STATUS=0 || CI_STATUS=$?
+
+if [[ $CI_STATUS -eq 0 ]]; then
+    echo "  PASS: CI runs make coverage before coverage-check and does not duplicate make test"
+else
+    echo "  $CI_RESULT"
+    FAILURES=$((FAILURES + 1))
+fi
+
 echo ""
 if [[ $FAILURES -eq 0 ]]; then
     echo "All check-fast routing tests passed"
