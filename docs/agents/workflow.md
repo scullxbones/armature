@@ -81,11 +81,12 @@ There are two gate profiles, with distinct roles in the workflow:
 - **Fast gate** (`make check-fast`) — deterministic, diff-routed. Runs during
   implementation and on every intermediate remediation cycle. A green fast
   gate is sufficient to keep iterating. Workers MUST NOT run the full gate on
-  intermediate remediations.
+  intermediate remediations. After the last remediation commit, the new HEAD
+  is the final task head — that run is a publish gate, not an intermediate one.
 - **Full/publish gate** (`make check`) — unchanged in content from before this
-  model; mandatory exactly twice per task's lifecycle: once at the task's
-  final head (the worker's responsibility before transitioning to `done`, see
-  the armature-worker skill), and once cumulatively at story integration (the
+  model; mandatory at the task's clean delivery HEAD (the worker's
+  responsibility: commit first, then run the full gate before `done`, see the
+  armature-worker skill) and once cumulatively at story integration (the
   coordinator's wave verification gate, see the armature-coordinator skill).
 
 Only a green full gate confers delivery — a green fast gate never substitutes

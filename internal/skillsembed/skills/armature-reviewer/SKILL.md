@@ -3,8 +3,9 @@ name: armature-reviewer
 description: >
   Use when receiving a ReviewBundle from arm review prepare and producing a
   ConformanceAssessment JSON. Evaluates each criterion from the contract against
-  the delivery diff, records evidence as citations, and returns the assessment
-  JSON to the coordinator (which records it via arm review record).
+  the delivery diff, records evidence as citations, writes the assessment JSON
+  under .armature/review/, and returns rating, findings, and that path to the
+  coordinator (which records it via arm review record).
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -12,7 +13,8 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 
 The Reviewer evaluates a prepared ReviewBundle against the contract requirements
 and delivery diff. It produces a ConformanceAssessment JSON with criterion-level
-results, citations, and ratings, then returns the JSON to the coordinator.
+results, citations, and ratings, writes that JSON under `.armature/review/`, and
+returns only the rating, actionable findings, and the assessment path.
 The coordinator is responsible for recording the assessment via `arm review record`.
 
 ## Prerequisites
@@ -35,9 +37,9 @@ Record citations (file paths, line numbers)
     ↓
 Assign status (satisfied, partially_satisfied, not_satisfied, indeterminate)
     ↓
-Produce ConformanceAssessment JSON
+Produce ConformanceAssessment JSON under .armature/review/
     ↓
-Return assessment JSON to coordinator
+Return rating + findings + assessment path to coordinator
     ↓
 Coordinator: arm review record --issue ISSUE-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
     ↓
@@ -277,24 +279,27 @@ Before returning the assessment, verify that every citation is valid:
 
 ### 6. Return the ConformanceAssessment
 
-After completing Step 5a self-check, output the ConformanceAssessment JSON to stdout (or return it to the coordinator).
-Do **not** call `arm review record` — recording is the coordinator's responsibility. The coordinator passes the
-assessment to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"` after receiving it, so the
-fingerprint validation is bound to the exact bundle it dispatched.
+After completing Step 5a self-check, write the full ConformanceAssessment JSON
+to a file under `.armature/review/` (for example
+`.armature/review/<issue-id>.json`). Do **not** call `arm review record` —
+recording is the coordinator's responsibility. The coordinator passes that
+file path to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"`
+so fingerprint validation is bound to the exact bundle it dispatched.
 
-**Bounded chat response (normative).** Write the full ConformanceAssessment
-JSON to a file under `.armature/review/` and reference it **by path**. Your
-chat/text response to the coordinator contains **only** the rating (Green /
-Yellow / Red) and the actionable findings — never the inlined full assessment
-JSON, never a restated copy of the bundle contents. This keeps the
-coordinator's context free of duplicated JSON it can read from disk when it
-needs it, and keeps remediation dispatches (see the coordinator's bounded
-review protocol) working from findings, not transcripts.
+**Bounded chat response (normative).** Your chat/text response to the
+coordinator contains **only**:
 
-```bash
-# Output the assessment JSON so the coordinator can capture it:
-cat assessment.json
-```
+1. the rating (Green / Yellow / Red)
+2. the actionable findings
+3. the path to the assessment file
+
+Never inline the full assessment JSON. Never restate the bundle contents.
+Never `cat` the assessment file into chat. The coordinator records the
+file at the path you return — it does not treat your chat text as the
+assessment JSON. This keeps the coordinator's context free of duplicated
+JSON it can read from disk, and keeps remediation dispatches (see the
+coordinator's bounded review protocol) working from findings, not
+transcripts.
 
 ---
 
@@ -424,7 +429,12 @@ See `references/rubric.md` for detailed guidance on:
 
 ## Returning Results to the Coordinator
 
-After producing the ConformanceAssessment JSON, return it to the coordinator. Do **not** call `arm review record` — that is the coordinator's responsibility. The coordinator records the assessment with `--bundle "$BUNDLE_FILE"` so fingerprint validation is bound to the exact bundle it prepared.
+After producing the ConformanceAssessment JSON, write it under
+`.armature/review/` and return rating + findings + that path. Do **not**
+call `arm review record` — that is the coordinator's responsibility. The
+coordinator records the file at the returned path with
+`--bundle "$BUNDLE_FILE"` so fingerprint validation is bound to the exact
+bundle it prepared.
 
 **Example Workflow:**
 
@@ -432,14 +442,16 @@ After producing the ConformanceAssessment JSON, return it to the coordinator. Do
 # 1. Receive ReviewBundle file path (from coordinator)
 # The coordinator passes: $BUNDLE_FILE
 
-# 2. Review and evaluate
-# ... create assessment.json ...
+# 2. Review and evaluate; write the full assessment to disk
+#    e.g. .armature/review/TASK-42.json
 
-# 3. Output the assessment JSON for the coordinator to capture
-cat assessment.json
+# 3. Chat response to the coordinator (not the JSON body):
+#    Rating: Green
+#    Findings: (none)
+#    Assessment: .armature/review/TASK-42.json
 
 # The coordinator then runs:
-# arm review record --issue TASK-42 --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
+# arm review record --issue TASK-42 --assessment .armature/review/TASK-42.json --bundle "$BUNDLE_FILE"
 ```
 
 The recorded assessment is durable — it's stored as an attestation on the issue and can be inspected via the
