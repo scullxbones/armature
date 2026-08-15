@@ -106,9 +106,10 @@ which reuses the existing worktree). The remediator writes only while the
 task is `claimed` or `in-progress`, then commits, runs the full gate at
 that HEAD, and transitions to `done` again. Do not remediate on a `done`
 or `merged` task — the harness hook treats those bindings as stale and
-skips scope enforcement. Then refresh every review artifact (head, bundle,
-activity index, assessment path) before the confirmation review. See the
-armature-coordinator skill.
+skips scope enforcement. Then refresh every **stale** review artifact
+(head, bundle, activity index, assessment path) and dispatch confirmation
+with the **same** remediating findings list as hard scope — a new bundle
+alone is not confirmation. See the armature-coordinator skill.
 
 ## Before closing out work
 

@@ -59,6 +59,16 @@ The ReviewBundle is a JSON structure produced by `arm review prepare`. It contai
 
 You receive the full ReviewBundle as input (typically via stdin or a JSON file).
 
+**Confirmation mode.** If the coordinator also passes a findings-scope file
+(the remediating set), this is a **hard-scoped confirmation**, not a new
+comprehensive review. Re-evaluate those findings against the new bundle
+and put only that set in the chat findings. The assessment JSON still
+includes one result per contract criterion (schema requirement). Record
+any out-of-scope defect you notice, but treat it as a blocker only at
+critical severity. Do not invent a second findings list or restart the
+serial discovery loop. If no findings-scope file is passed, this is the
+one comprehensive initial review.
+
 ### ReviewBundle Example
 
 ```json artifact_type=review-bundle
@@ -280,10 +290,17 @@ Before returning the assessment, verify that every citation is valid:
 ### 6. Return the ConformanceAssessment
 
 After completing Step 5a self-check, write the full ConformanceAssessment JSON
-to a file under `.armature/review/` (for example
-`.armature/review/<issue-id>.json`). Do **not** call `arm review record` —
-recording is the coordinator's responsibility. The coordinator passes that
-file path to `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"`
+to a **unique** path under `.armature/review/` — include the issue id and a
+short bundle-id prefix, for example
+`.armature/review/<issue-id>-<bundle-id-8>.json`. Do not reuse
+`.armature/review/<issue-id>.json` across passes; confirmation must not
+overwrite the first-pass file the coordinator still has as
+`$RESULT_FILE` context. This file is a **local recording input**, not the
+durable record. `arm review record` writes a compact
+`AssessmentAttestation` (fingerprints, rating, counts) to the append-only
+log; it does not commit this JSON. Do **not** `git add` it and do **not**
+call `arm review record` yourself. The coordinator passes the path to
+`arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"`
 so fingerprint validation is bound to the exact bundle it dispatched.
 
 **Bounded chat response (normative).** Your chat/text response to the
@@ -429,12 +446,12 @@ See `references/rubric.md` for detailed guidance on:
 
 ## Returning Results to the Coordinator
 
-After producing the ConformanceAssessment JSON, write it under
-`.armature/review/` and return rating + findings + that path. Do **not**
-call `arm review record` — that is the coordinator's responsibility. The
-coordinator records the file at the returned path with
-`--bundle "$BUNDLE_FILE"` so fingerprint validation is bound to the exact
-bundle it prepared.
+After producing the ConformanceAssessment JSON, write it to a unique path
+under `.armature/review/` and return rating + findings + that path. Do
+**not** call `arm review record` — that is the coordinator's
+responsibility. The coordinator records the file at the returned path
+with `--bundle "$BUNDLE_FILE"` so fingerprint validation is bound to the
+exact bundle it prepared.
 
 **Example Workflow:**
 
@@ -442,20 +459,26 @@ bundle it prepared.
 # 1. Receive ReviewBundle file path (from coordinator)
 # The coordinator passes: $BUNDLE_FILE
 
-# 2. Review and evaluate; write the full assessment to disk
-#    e.g. .armature/review/TASK-42.json
+# 2. Review and evaluate; write the full assessment to a unique path
+#    e.g. .armature/review/TASK-42-<bundle-id-8>.json
+#    Confirmation mode: if a findings-scope file was passed, evaluate
+#    only those findings (do not start a new comprehensive review).
 
 # 3. Chat response to the coordinator (not the JSON body):
 #    Rating: Green
-#    Findings: (none)
-#    Assessment: .armature/review/TASK-42.json
+#    Findings: (none)   # or the confirmation-scope results
+#    Assessment: .armature/review/TASK-42-<bundle-id-8>.json
 
 # The coordinator then runs:
-# arm review record --issue TASK-42 --assessment .armature/review/TASK-42.json --bundle "$BUNDLE_FILE"
+# arm review record --issue TASK-42 --assessment .armature/review/TASK-42-<bundle-id-8>.json --bundle "$BUNDLE_FILE"
 ```
 
-The recorded assessment is durable — it's stored as an attestation on the issue and can be inspected via the
-issue's materialized state (there is no dedicated `arm review show`/`arm review list` query command today).
+The durable record is the compact `AssessmentAttestation` on the issue
+(fingerprints, rating, counts) — inspectable via materialized state (there
+is no dedicated `arm review show`/`arm review list` today). The JSON file
+under `.armature/review/` is the local input to `arm review record`, not a
+git-native copy of the criterion results. Confirmation scope is the
+findings list the coordinator passes, not a reread of that file.
 
 ---
 
