@@ -332,11 +332,15 @@ open-ended back-and-forth. Per task:
 3. **One consolidated remediation request** covering every finding from step 1/2.
 4. **One narrow confirmation review**, hard-scoped to only the findings that
    were remediated; findings outside that scope are recorded but block
-   further progress only at critical severity. **Refresh the bundle first:**
-   if remediation added a commit, recapture `TASK_HEAD` from `task/$TASK_ID`
-   and rerun `arm review prepare` at that new head. Do not reuse the
-   pre-remediation `$BUNDLE_FILE` — `arm review record` binds the assessment
-   to the supplied bundle, not to the live branch HEAD.
+   further progress only at critical severity. **Refresh the bundle and
+   activity index first:** if remediation added a commit, recapture
+   `TASK_HEAD` from `task/$TASK_ID`, rerun `arm review prepare` at that new
+   head, and re-run the activity indexer (step 2.1) against the new bundle
+   when it has an `activity` section. Do not reuse the pre-remediation
+   `$BUNDLE_FILE` or `$INDEX_OUTPUT` — `arm review record` binds the
+   assessment to the supplied bundle, and a stale index still marks
+   pre-remediation entries as head-anchored, so confirmation can cite
+   evidence `record` rejects against the new `delivery.head_sha`.
 5. **Cap: 3 remediation cycles** per task. If the task is still not green
    after 3 cycles, stop dispatching remediation and escalate to the human
    (Constitution I7 — accountability does not transfer to the system).
@@ -450,10 +454,11 @@ For each task that completed in the wave, dispatch semantic conformance review u
    ```
    This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass both `--assessment "$RESULT_FILE"` and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
 
-5. **Confirmation after remediation — new bundle, new head.** After a
+5. **Confirmation after remediation — new bundle, new head, new index.** After a
    consolidated remediation commit, `task/$TASK_ID` has a new delivery HEAD.
    Before dispatching the hard-scoped confirmation review, refresh the
-   captured range and prepare a new bundle:
+   captured range, prepare a new bundle, and rebuild the activity index from
+   that bundle (do not keep `$INDEX_OUTPUT` from step 2.1):
    ```bash
    TASK_COMMITS["$TASK_ID"]="$WAVE_BASE_SHA..task/$TASK_ID"
    TASK_HEAD=$(git rev-parse "task/$TASK_ID")
@@ -461,10 +466,17 @@ For each task that completed in the wave, dispatch semantic conformance review u
    arm review prepare --issue TASK-ID \
      --base "$TASK_BASE" --head "$TASK_HEAD" \
      --output "$BUNDLE_FILE"
+   HAS_ACTIVITY=$(jq -r 'if .activity then "yes" else "no" end' "$BUNDLE_FILE")
    ```
+   If `HAS_ACTIVITY` is `yes`, re-dispatch **armature-activity-indexer** on
+   this new `$BUNDLE_FILE` into a fresh `$INDEX_OUTPUT` (same procedure as
+   step 2.1). If `no`, unset `$INDEX_OUTPUT` — do not pass the old index.
    Then dispatch the confirmation reviewer with this new `$BUNDLE_FILE` and
-   record against it. Reusing the pre-remediation bundle lets a green
-   confirmation attest the old delivery SHA, fingerprints, and diff.
+   the matching new index (if any), and record against the new bundle.
+   Reusing the pre-remediation bundle lets a green confirmation attest the
+   old delivery SHA, fingerprints, and diff. Reusing the pre-remediation
+   index omits post-remediation evidence and routes the reviewer to entries
+   whose `head_sha` is not the new bundle head.
 
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. Activity evidence informs behavioral criteria only and is never citable directly (citations must reference raw log entry IDs). This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 
