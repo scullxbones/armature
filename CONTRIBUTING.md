@@ -31,8 +31,8 @@ All commits must pass `make check`, which enforces:
 
 - **Lint checks** — `govet`, `errcheck`, `ineffassign`, `staticcheck`, `misspell`, `unconvert`, `goimports`
 - **Tests** — All tests must pass
-- **Coverage** — Minimum 85% code coverage (use `make coverage` to check)
-- **Mutation testing** — Minimum 95% mcover, 99% efficacy with `gremlins`
+- **Coverage** — Per-tree statement coverage: cmd ≥83%, internal ≥86% (use `make coverage` to check)
+- **Mutation testing** — Minimum 92% mcover, 99% efficacy with `gremlins`
 - **Skill validation** — All embedded skills must be valid
 - **Build** — The project must compile successfully
 
@@ -45,7 +45,7 @@ make check              # Run all checks (lint + test + coverage + mutate + vali
 make lint               # Run linters only
 make test               # Run tests only
 make coverage           # Generate coverage report (coverage.html)
-make coverage-check     # Verify coverage ≥85%
+make coverage-check     # Verify per-tree coverage: cmd ≥83%, internal ≥86%
 make mutate             # Run mutation testing
 make validate-skills    # Validate embedded skills
 make build              # Build the arm binary

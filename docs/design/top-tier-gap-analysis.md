@@ -5,7 +5,7 @@
 
 **Grounding:** CONTEXT.md glossary, docs/adr/, docs/design/architecture.md, the dogfood findings corpus (docs/dogfood/findings/), CI/release configuration, and the repository code layout as of this date.
 
-**Headline:** The core engine (event-sourced ops, 85% coverage gate, mutation testing, ADRs, domain glossary) is strong for the project's age. The gaps concentrate in the agent-facing workflow layer — skills, schemas, recovery — and in adopter-facing documentation.
+**Headline:** The core engine (event-sourced ops, per-tree coverage gate (cmd ≥83%, internal ≥86%), mutation testing, ADRs, domain glossary) is strong for the project's age. The gaps concentrate in the agent-facing workflow layer — skills, schemas, recovery — and in adopter-facing documentation.
 
 ---
 
