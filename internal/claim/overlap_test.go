@@ -173,6 +173,47 @@ func TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6(t *testing.T) {
 		"overlap check must be symmetric")
 }
 
+// TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6 verifies that a
+// worker-declared " (new)" annotation does not hide a real overlap:
+// "src/foo.go (new)" and "src/*.go" both cover src/foo.go.
+func TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, globOverlaps("src/foo.go (new)", "src/*.go"),
+		"annotated new-file scope must overlap the glob that covers that file")
+	assert.True(t, globOverlaps("src/*.go", "src/foo.go (new)"),
+		"overlap check must be symmetric")
+	assert.False(t, globOverlaps("src/foo.go (new)", "src/bar.go"),
+		"annotation stripping must not invent overlap between distinct files")
+}
+
+// TestOverlapIntersectsDoublestarAcrossDirectories_REQ_LNGHZN_S10_T6 verifies
+// that glob-to-glob intersection walks the full path, not just equal
+// directory prefixes. src/**/foo.go and src/auth/*.go both include
+// src/auth/foo.go, even though their literal directory strings differ.
+func TestOverlapIntersectsDoublestarAcrossDirectories_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, globOverlaps("src/**/foo.go", "src/auth/*.go"),
+		"src/**/foo.go and src/auth/*.go both match src/auth/foo.go")
+	assert.True(t, globOverlaps("src/auth/*.go", "src/**/foo.go"),
+		"overlap check must be symmetric")
+	assert.False(t, globOverlaps("src/**/foo.go", "src/auth/*.txt"),
+		"foo.go cannot intersect a *.txt glob in the same directory")
+}
+
+// TestOverlapIntersectsCharacterClass_REQ_LNGHZN_S10_T6 verifies that
+// filepath.Match character classes participate in glob intersection:
+// src/file[ab].go and src/filea.* both match src/filea.go.
+func TestOverlapIntersectsCharacterClass_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, globOverlaps("src/file[ab].go", "src/filea.*"),
+		"file[ab].go and filea.* both match src/filea.go")
+	assert.True(t, globOverlaps("src/filea.*", "src/file[ab].go"),
+		"overlap check must be symmetric")
+}
+
 // TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6 directly exercises
 // globPatternsIntersect's branches: "*" wildcards on either side, "?"
 // single-character wildcards, literal equality, literal mismatch, and the
@@ -197,6 +238,9 @@ func TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6(t *testing.T) {
 		{"literal fully consumed but other side has trailing literal", "login", "login.go", false},
 		{"disjoint literal suffixes with stars", "*.go", "*.txt.go", true},
 		{"no possible common length", "ab", "abc", false},
+		{"character class vs matching literal", "file[ab].go", "filea.go", true},
+		{"character class vs star suffix", "file[ab].go", "filea.*", true},
+		{"unclosed class is a literal bracket", "file[ab.go", "file[ab.go", true},
 	}
 
 	for _, c := range cases {
@@ -209,9 +253,10 @@ func TestGlobPatternsIntersect_REQ_LNGHZN_S10_T6(t *testing.T) {
 }
 
 // TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6 verifies the
-// glob-to-glob over-approximation is bounded by directory equality, not "any
-// two globs overlap": two globs in directories that cannot match a common
-// path are still reported as non-overlapping.
+// glob-to-glob over-approximation is bounded by path-segment intersection,
+// not "any two globs overlap": two globs that cannot match a common path
+// (different literal directories, no "**") are still reported as
+// non-overlapping.
 func TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
