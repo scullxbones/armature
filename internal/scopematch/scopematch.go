@@ -34,6 +34,12 @@ import (
 // concurrently — is the dangerous direction; an occasional false-positive
 // warning costs a reviewed `--force`, not silent concurrent writes.
 //
+// Directory scopes are rewritten to cleaned/** before matching (see
+// canonicalSegments) so descendant inclusion is a property of the pattern,
+// not a parallel literal-prefix path that breaks once the directory itself
+// contains a wildcard (e.g. "src/*/"). Intersection is memoized on suffix
+// indexes so pairs of patterns with many "**" segments stay polynomial.
+//
 // This is the single canonical implementation shared by internal/claim
 // (delivery-gate overlap checks) and internal/validate (scope-overlap
 // warnings) so the two layers cannot diverge again as they once did.
@@ -50,10 +56,27 @@ func Overlaps(a, b string) bool {
 	return globPatternsMayIntersect(a, b)
 }
 
+// canonicalSegments is the single scope-entry normalization used by both
+// Allows (pattern vs concrete path) and glob-vs-glob intersection. A
+// trailing-slash directory scope becomes cleaned/** so descendants are
+// matched by the same "**" expansion as an explicit directory glob. The
+// repo-root entry "." is "**".
+func canonicalSegments(raw string) []string {
+	cleaned, isDir := CleanScope(raw)
+	if cleaned == "." {
+		return []string{"**"}
+	}
+	segs := strings.Split(cleaned, "/")
+	if isDir {
+		segs = append(segs, "**")
+	}
+	return segs
+}
+
 // globPatternsMayIntersect reports whether two scope-glob patterns could
 // both match some common concrete path, comparing path segment by segment
 // (with "**" expanding to zero or more segments, via the same backtracking
-// approach as doublestarMatch/matchSegments). Two segments are considered
+// approach as matchSegments). Two segments are considered
 // compatible if they are identical, if one is a literal string the other's
 // wildcard segment matches (via filepath.Match), or if both segments contain
 // wildcard characters — in the last case the exact intersection of the two
@@ -63,47 +86,66 @@ func Overlaps(a, b string) bool {
 // wildcards elsewhere in the pattern, which is what keeps this bounded:
 // "src/auth/*.go" and "src/billing/*.go" still report no overlap.
 func globPatternsMayIntersect(a, b string) bool {
-	cleanedA, _ := CleanScope(a)
-	cleanedB, _ := CleanScope(b)
-	if cleanedA == "." || cleanedB == "." {
+	segA := canonicalSegments(a)
+	segB := canonicalSegments(b)
+	if (len(segA) == 1 && segA[0] == "**") || (len(segB) == 1 && segB[0] == "**") {
 		return true
 	}
-	return matchPatternSegments(strings.Split(cleanedA, "/"), strings.Split(cleanedB, "/"))
+	return matchPatternSegments(segA, segB)
 }
 
 // matchPatternSegments reports whether pattern segment lists a and b could
 // both match some common list of concrete path segments. "**" in either list
-// expands to zero or more segments via backtracking.
+// expands to zero or more segments via backtracking. Results are memoized
+// on (i, j) suffix indexes so a pair of patterns with many "**" segments is
+// polynomial in the segment counts instead of combinatorial in the
+// backtracking tree.
 func matchPatternSegments(a, b []string) bool {
-	if len(a) > 0 && a[0] == "**" {
-		if len(a) == 1 {
+	return matchPatternSegmentsAt(a, b, 0, 0, make(map[segmentKey]bool))
+}
+
+type segmentKey struct{ i, j int }
+
+func matchPatternSegmentsAt(a, b []string, i, j int, memo map[segmentKey]bool) bool {
+	k := segmentKey{i, j}
+	if v, ok := memo[k]; ok {
+		return v
+	}
+	result := computePatternSegments(a, b, i, j, memo)
+	memo[k] = result
+	return result
+}
+
+func computePatternSegments(a, b []string, i, j int, memo map[segmentKey]bool) bool {
+	if i < len(a) && a[i] == "**" {
+		if i+1 == len(a) {
 			return true
 		}
-		for i := 0; i <= len(b); i++ {
-			if matchPatternSegments(a[1:], b[i:]) { //nolint:gosec // G602 false positive: i ranges 0..len(b) inclusive, so b[i:] is always in bounds
+		for t := j; t <= len(b); t++ {
+			if matchPatternSegmentsAt(a, b, i+1, t, memo) {
 				return true
 			}
 		}
 		return false
 	}
-	if len(b) > 0 && b[0] == "**" {
-		if len(b) == 1 {
+	if j < len(b) && b[j] == "**" {
+		if j+1 == len(b) {
 			return true
 		}
-		for i := 0; i <= len(a); i++ {
-			if matchPatternSegments(a[i:], b[1:]) { //nolint:gosec // G602 false positive: i ranges 0..len(a) inclusive, so a[i:] is always in bounds
+		for t := i; t <= len(a); t++ {
+			if matchPatternSegmentsAt(a, b, t, j+1, memo) {
 				return true
 			}
 		}
 		return false
 	}
-	if len(a) == 0 || len(b) == 0 {
-		return len(a) == 0 && len(b) == 0
+	if i == len(a) || j == len(b) {
+		return i == len(a) && j == len(b)
 	}
-	if !segmentsCompatible(a[0], b[0]) {
+	if !segmentsCompatible(a[i], b[j]) {
 		return false
 	}
-	return matchPatternSegments(a[1:], b[1:])
+	return matchPatternSegmentsAt(a, b, i+1, j+1, memo)
 }
 
 // segmentsCompatible reports whether two single-path-segment glob patterns
@@ -153,28 +195,14 @@ func isWildcardSegment(s string) bool {
 // matches the same set of files as "internal/**".
 func Allows(scope []string, path string) bool {
 	cleanedPath := CleanRepoPath(path)
+	pathSegs := strings.Split(cleanedPath, "/")
 	for _, rawScope := range scope {
-		cleaned, isDir := CleanScope(rawScope)
-		if cleaned == "." {
+		segs := canonicalSegments(rawScope)
+		if len(segs) == 1 && segs[0] == "**" {
 			return true
 		}
-		if cleanedPath == cleaned {
+		if matchSegments(segs, pathSegs) {
 			return true
-		}
-		if isDir && strings.HasPrefix(cleanedPath, cleaned+"/") {
-			return true
-		}
-		if strings.Contains(cleaned, "**") {
-			if doublestarMatch(cleaned, cleanedPath) {
-				return true
-			}
-			continue
-		}
-		if strings.ContainsAny(cleaned, "*?[") {
-			matched, err := filepath.Match(cleaned, cleanedPath)
-			if err == nil && matched {
-				return true
-			}
 		}
 	}
 	return false
@@ -218,17 +246,6 @@ func CleanRepoPath(path string) string {
 		return "."
 	}
 	return strings.TrimPrefix(cleaned, "/")
-}
-
-// doublestarMatch reports whether path matches a scope glob pattern
-// containing "**" segments, matching path-segment-by-segment (unlike a
-// plain prefix cut, which ignores everything after the "**" and so both
-// over-allows, e.g. "**/*.go" allowing non-Go files, and under-allows
-// nothing after a suffix, e.g. "internal/**/api.go" matching
-// "internal/foo/bar.go"). "**" spans zero or more path segments, per the
-// conventional doublestar glob semantics.
-func doublestarMatch(pattern, path string) bool {
-	return matchSegments(strings.Split(pattern, "/"), strings.Split(path, "/"))
 }
 
 // matchSegments matches pattern segments against path segments, expanding a
