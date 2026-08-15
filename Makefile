@@ -13,14 +13,14 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${G
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build, crosscompile"
+	@echo "  make check               - Run CI-safe validation: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, crosscompile"
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
-	@echo "  make coverage-check      - Check coverage meets 80% threshold (fails build if not)"
+	@echo "  make coverage-check      - Run coverage then fail if total is below 85%"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
@@ -36,7 +36,7 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build coverage coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
+check: lint build coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
@@ -65,8 +65,9 @@ coverage: build
 
 # Reads the coverage.out profile produced by `coverage` rather than re-running
 # the unit suite (D3, docs/design/gate-efficiency.md): the full gate runs the
-# suite exactly once.
-coverage-check:
+# suite exactly once. Declared as a prerequisite so `make -j check` cannot
+# start this target against a stale or missing profile.
+coverage-check: coverage
 	@if [ ! -f coverage.out ]; then \
 		echo "FAIL: coverage.out not found; run 'make coverage' first"; \
 		exit 1; \

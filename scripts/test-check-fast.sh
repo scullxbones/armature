@@ -258,21 +258,75 @@ for line in check_job.splitlines():
 if "coverage-check" not in runs:
     print("FAIL: CI check job does not invoke coverage-check")
     sys.exit(1)
-prior = runs[: runs.index("coverage-check")]
-if "coverage" not in prior:
-    print("FAIL: coverage-check has no preceding make coverage step")
-    sys.exit(1)
-if "test" in prior:
-    print("FAIL: standalone make test still precedes coverage-check")
+if "test" in runs:
+    print("FAIL: standalone make test still present in CI check job")
     sys.exit(1)
 print("PASS")
 PY
 ) && CI_STATUS=0 || CI_STATUS=$?
 
 if [[ $CI_STATUS -eq 0 ]]; then
-    echo "  PASS: CI runs make coverage before coverage-check and does not duplicate make test"
+    echo "  PASS: CI invokes coverage-check and does not duplicate make test"
 else
     echo "  $CI_RESULT"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# ----------------------------------------------------------------------------
+# Test 8: coverage-check must not start until the current coverage target
+# succeeds. coverage and coverage-check are both .PHONY, so listing them as
+# sibling prerequisites of `check` lets `make -j check` (or inherited
+# MAKEFLAGS=-j) read a stale coverage.out. The ordering dependency lives on
+# coverage-check itself so standalone `make coverage-check` also generates a
+# current profile. Because that makes `coverage` a phony prereq, CI must not
+# invoke `make coverage` and `make coverage-check` as two steps — that would
+# re-run the unit suite and undo D3.
+# ----------------------------------------------------------------------------
+echo "Test 8: coverage-check depends on coverage (parallel-safe, single-run)..."
+MAKEFILE="$REPO_ROOT/Makefile"
+DEP_RESULT=$(python3 - "$MAKEFILE" "$CI_YML" <<'PY'
+import sys
+from pathlib import Path
+
+makefile = Path(sys.argv[1]).read_text().splitlines()
+ci = Path(sys.argv[2]).read_text()
+
+prereqs = None
+for line in makefile:
+    if line.startswith("coverage-check:"):
+        prereqs = line.split(":", 1)[1].split()
+        break
+if prereqs is None:
+    print("FAIL: Makefile has no coverage-check target")
+    sys.exit(1)
+if "coverage" not in prereqs:
+    print("FAIL: coverage-check does not depend on coverage; make -j check can race")
+    sys.exit(1)
+
+check_job = ci.split("e2eharness:")[0]
+runs = []
+for line in check_job.splitlines():
+    stripped = line.strip()
+    if stripped.startswith("run: make "):
+        runs.append(stripped[len("run: make "):])
+
+if "coverage-check" not in runs:
+    print("FAIL: CI check job does not invoke coverage-check")
+    sys.exit(1)
+if "coverage" in runs:
+    print("FAIL: CI still runs standalone make coverage; phony dep would re-run the suite")
+    sys.exit(1)
+if "test" in runs:
+    print("FAIL: standalone make test still present in CI check job")
+    sys.exit(1)
+print("PASS")
+PY
+) && DEP_STATUS=0 || DEP_STATUS=$?
+
+if [[ $DEP_STATUS -eq 0 ]]; then
+    echo "  PASS: coverage-check depends on coverage; CI invokes coverage-check once (no sibling make coverage)"
+else
+    echo "  $DEP_RESULT"
     FAILURES=$((FAILURES + 1))
 fi
 
