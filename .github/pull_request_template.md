@@ -21,7 +21,7 @@ Closes ARMATURE-ISSUE-ID (e.g. `TOPTIER-S9-T1`) — see docs/conventions.md for 
 - [ ] New/changed tests follow the `_REQ_<ISSUE-ID>` naming convention (see docs/conventions.md)
 - [ ] TDD followed — failing test written before the implementation (see docs/agents/quality-gates.md)
 - [ ] I have made corresponding changes to the documentation
-- [ ] `make check` passes (lint + test + coverage ≥85% + mutation testing + skill validation + build — see docs/agents/quality-gates.md)
+- [ ] `make check` passes (lint + test + per-tree coverage: cmd ≥83%, internal ≥86% + mutation testing + skill validation + build — see docs/agents/quality-gates.md)
 
 ## Test Plan
 

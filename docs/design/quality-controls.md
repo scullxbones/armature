@@ -47,7 +47,7 @@ What is in place:
 
 **Status: ACTIVE**
 
-`go test -coverprofile=coverage.out ./...` with a hard threshold: **total coverage must be ≥ 80%**.
+`go test -coverprofile=coverage.out ./...` with a hard, per-tree threshold: `cmd/**` statement coverage must be **≥ 83%**, `internal/**` must be **≥ 86%** (docs/adr/0015-recalibrate-mutation-and-coverage-gates.md Decision 1).
 
 This measures line execution. It is a floor, not a quality signal — see C5 for the mutation gate that measures assertion strength.
 
@@ -59,10 +59,17 @@ This measures line execution. It is a floor, not a quality signal — see C5 for
 
 | Threshold | Value | Meaning |
 |---|---|---|
-| `threshold-mutant-coverage` | 90% | ≥90% of mutation sites must be reachable by tests |
-| `threshold-efficacy` | 75% | ≥75% of executed mutants must be killed |
+| `threshold-mutant-coverage` | 92% | ≥92% of mutation sites must be reachable by tests |
+| `threshold-efficacy` | 99% | ≥99% of executed mutants must be killed |
 
-These thresholds are ratchets: only raise, never lower.
+These thresholds are ratchets, amended by ADR 0015 Decision 3
+(docs/adr/0015-recalibrate-mutation-and-coverage-gates.md): statement-coverage
+thresholds are seeded a point or so below each tree's measured value and
+ratchet upward from there; `mutant-coverage` is a secondary reachability
+proxy held at a single repo-wide 92 after the one-time Decision 2 correction
+(removal of an unintended double gate with per-tree statement coverage), and
+ratchets upward from there. `efficacy` remains ratchet-only-up, unamended.
+Lowering any threshold requires a new ADR.
 
 Gremlins is the end-to-end check on test quality. If fakes plus state-based assertions genuinely verify behavior, mutants die. High coverage + low efficacy is the fingerprint of tautological or interaction-theater tests.
 
@@ -139,7 +146,7 @@ The `internal/traceability` package is the right home for that interim check, an
 |---|---|---|---|
 | C1 Lint | R3, R4, R5 | PARTIAL | `make lint` |
 | C2 Tests + fakes | R1, R2, R7 | PARTIAL | `make test` |
-| C3 Coverage ≥ 80% | R6 | ACTIVE | `make coverage-check` |
+| C3 Coverage (per-tree: cmd ≥83%, internal ≥86%) | R6 | ACTIVE | `make coverage-check` |
 | C4 Mutation (gremlins) | R6 | ACTIVE | `make mutate` |
 | C5 Build / type system | R5 | ACTIVE | `make build` |
 | C6 Clock purity in domain | R3 | GAP | — |

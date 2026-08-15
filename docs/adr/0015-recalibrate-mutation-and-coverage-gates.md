@@ -2,11 +2,11 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Principles touched
 
-I5, I7
+I4, I5, I7
 
 ## Context
 
@@ -17,7 +17,7 @@ threshold 85%), gremlins `threshold.mutant-coverage` in `.gremlins.yaml`
 on this branch (`chore/gate-threshold-recalibration`, based on
 `origin/main`), using the same `coverage.out` profile:
 
-- Statement coverage: cmd 83.79%, internal 87.22%, aggregate total 85.8%.
+- Statement coverage: cmd 83.99%, internal 87.22%, aggregate total 85.8%.
 - The aggregate gate hides per-tree weakness: cmd sits below the previous
   85% aggregate threshold on its own, but the repo total passes because
   internal's stronger coverage subsidizes it. A regression concentrated in
@@ -27,8 +27,8 @@ on this branch (`chore/gate-threshold-recalibration`, based on
   reachability — from the same `go test` coverage profile. They differ only
   in denominator: mutant coverage counts only mutable AST sites
   (conditionals, arithmetic), statement coverage counts all statements.
-  Measured offset on this branch: cmd 83.79% statement vs 95.45% mutant
-  (+11.7 points); internal 87.22% statement vs 95.21% mutant (+8.0 points).
+  Measured offset on this branch: cmd 83.99% statement vs 95.45% mutant
+  (+11.5 points); internal 87.22% statement vs 95.21% mutant (+8.0 points).
   An untested function contributes many uncovered statements but only a few
   mutable sites, so the mutant ratio is diluted upward. Correcting for that
   offset, the 85% statement and 95% mutant thresholds encoded almost exactly
@@ -60,9 +60,9 @@ on this branch (`chore/gate-threshold-recalibration`, based on
   zero uncovered mutants and its exclusion only shrinks the denominator
   without removing any misses; excluding all five TUI-touching files reached
   only 94.87%, still short of the prior 95% threshold. The real fix is a TUI
-  seam extraction, filed as `LNGHZN-S10-T11` and tracked in
-  `docs/design/gate-efficiency.md`; the gate recalibration below is
-  independent of that follow-on and does not require it to land first.
+  seam extraction, filed as `LNGHZN-S10-T11` (`arm show LNGHZN-S10-T11`);
+  the gate recalibration below is independent of that follow-on and does not
+  require it to land first.
 
 `docs/design/quality-controls.md` states the "ratchet: only raise, never
 lower" policy that today's `.gremlins.yaml` comment cites. Lowering
@@ -71,21 +71,21 @@ as previously written. This ADR is the amendment.
 
 ## Decision
 
-1. **Statement coverage becomes per-tree, seeded at each tree's current
-   measured value, and is the primary reachability gate.** `make
+1. **Statement coverage becomes per-tree, seeded a point or so below each
+   tree's measured value, and is the primary reachability gate.** `make
    coverage-check` computes both `cmd/**` and `internal/**` percentages from
    the single `coverage.out` profile already produced by the existing `go
    test -coverprofile` run (no second test run), and fails if either tree is
    under its threshold: `internal/**` >= 86, `cmd/**` >= 83. Both percentages
    print unconditionally so drift is visible even when passing.
 
-   Seeds are set a point or so *below* each tree's measured value, not level
-   with it. Seeding level with the measurement rearms the exact brittleness
+   Consistent with that heading, seeds are set a point or so *below* each
+   tree's measured value, not level with it. Seeding level with the measurement rearms the exact brittleness
    this ADR exists to remove: internal measures 87.22%, so a threshold of 87
    would leave 0.22 points — roughly eight statements — of margin, and a
    single feature branch adding ordinary error handling would trip it while
    saying nothing about test quality. 86 leaves internal ~1.2 points of
-   working room, comparable to the ~0.8 that rounding down already gives cmd
+   working room, comparable to the ~1.0 that rounding down already gives cmd
    at 83. The ratchet still functions; it is simply not armed a hair's
    breadth from the current value.
 2. **`mutant-coverage` drops from 95 to 92, once, and is de-emphasized to a
@@ -95,17 +95,22 @@ as previously written. This ADR is the amendment.
    killed), and the one with a perfect, unbroken record.
 3. **The ratchet policy is amended, not abandoned.** As previously written,
    "ratchet: only raise, never lower" applied to a single number treated as
-   one metric. That framing was wrong: mutant-coverage and statement coverage
-   are two views of the same underlying reachability measurement, and had
-   independently drifted to inconsistent effective strictness. The amended
-   policy: reachability thresholds (statement coverage, mutant-coverage) are
-   seeded at each tree's/gate's currently measured value and ratchet upward
-   from there, same as before. This one-time reduction of mutant-coverage is
-   justified specifically because the metric was double-counting reachability
-   already enforced, more cheaply, by per-tree statement coverage — it is a
-   correction of an unintended double gate, not a relaxation of standards.
-   `efficacy` was never lowered and remains subject to the original
-   ratchet-only-up policy without amendment.
+   one metric. That framing was wrong for statement coverage vs.
+   mutant-coverage together: they are two views of the same underlying
+   reachability measurement, and had independently drifted to inconsistent
+   effective strictness. The amended policy scopes the seeding rule to
+   statement coverage only: statement-coverage thresholds are seeded a point
+   or so below each tree's currently measured value and ratchet upward from
+   there, same directional principle as before. `mutant-coverage` is treated
+   differently: it is a secondary reachability proxy, held at a single
+   repo-wide 92 after this one-time Decision 2 correction, and ratchets
+   upward from 92 going forward — it is not re-seeded against a measured
+   value each time, because the correction is a one-time removal of an
+   unintended double gate (reachability already enforced, more cheaply, by
+   per-tree statement coverage), not a recurring recalibration. `efficacy`
+   was never lowered and remains subject to the original ratchet-only-up
+   policy without amendment. Any lowering of any threshold requires a new
+   ADR.
 4. **Accepted tradeoff: `.gremlins.yaml` stays a single, repo-wide config.**
    A per-tree `mutant-coverage` threshold (mirroring the per-tree coverage
    split) was considered and rejected — internal individually measures
@@ -129,10 +134,21 @@ as previously written. This ADR is the amendment.
 - The `.gremlins.yaml` comment block is rewritten to state the new policy and
   cite this ADR, so a future reader does not reintroduce the old "ratchet:
   only raise, never lower" framing against a metric now understood to be a
-  secondary, seeded-and-ratcheted proxy.
+  secondary reachability proxy held at a fixed repo-wide value and ratcheted
+  upward from there.
 - `LNGHZN-S10-T11` (TUI seam extraction) remains filed and useful on its own
   merits — it will still raise cmd's mutant-coverage and statement coverage
   further — but is no longer a blocking prerequisite for the mutation gate to
   pass.
 - Follow-up work implied: none required immediately; `LNGHZN-S10-T11`
   continues as tracked, independent follow-on work.
+
+## ADR 0014 Amended In Part
+
+ADR 0014 (docs/adr/0014-two-tier-gates-and-evidence-based-acceptance.md)
+Decision 1 states "the full gate is unchanged in content." That refers to
+scope — which checks run — not to the specific pass/fail numbers those
+checks use; this ADR subsequently changed those numbers (coverage and
+mutant-coverage thresholds, per Decisions 1 and 2 above). ADR 0014's
+decision text is left as originally recorded; this section is the
+append-only pointer, mirroring ADR 0013's `## ADR 0003 Superseded`.

@@ -23,16 +23,22 @@ unleash:
     - "_windows\\.go$"
     - "filelock_other\\.go$"
 
-  # Quality gates. mutant-coverage is a de-emphasized reachability proxy:
-  # it measures the same thing as `make coverage-check` (statement coverage,
-  # now enforced per-tree) from the same `go test` coverage profile, differing
-  # only in denominator (mutable AST sites vs. all statements). Statement
-  # coverage is the primary, cheaper reachability gate; mutant-coverage here
-  # is seeded at each measured value and ratchets upward per tree rather than
-  # being held to a single repo-wide number. efficacy remains the primary
-  # mutation-quality signal — it measures what mutant-coverage cannot: whether
-  # covered mutants are actually killed. See ADR 0015
-  # (docs/adr/0015-recalibrate-mutation-and-coverage-gates.md).
+  # Quality gates. mutant-coverage is a de-emphasized SECONDARY reachability
+  # proxy: it measures the same thing as `make coverage-check` (statement
+  # coverage, now enforced per-tree) from the same `go test` coverage
+  # profile, differing only in denominator (mutable AST sites vs. all
+  # statements). Statement coverage is the primary, cheaper reachability
+  # gate. mutant-coverage dropped from 95 to 92 as a ONE-TIME correction of
+  # an unintended double gate: reachability is now enforced primarily and
+  # more cheaply by per-tree statement coverage (Decision 2), so
+  # mutant-coverage no longer needs to carry that signal at 95. It stays a
+  # SINGLE repo-wide number (Decision 4)
+  # — a per-tree split was considered and deliberately rejected as not worth
+  # the added configuration surface. efficacy remains at 99, unchanged, and
+  # is the primary mutation-quality signal — it measures what mutant-coverage
+  # cannot: whether covered mutants are actually killed. See ADR 0015
+  # (docs/adr/0015-recalibrate-mutation-and-coverage-gates.md) Decisions 2
+  # and 4.
   # threshold-mcover: % of mutation sites reachable by tests (analogous to code coverage).
   # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
   threshold:

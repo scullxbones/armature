@@ -19,3 +19,5 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0011](0011-cli-groups-mirror-deep-modules.md) | CLI Command Groups Are Discovered From Deep Module Boundaries | Accepted |
 | [0012](0012-context-files-intent-lifecycle-and-cli-semantics.md) | Context Files Intent, Lifecycle, and CLI Semantics | Accepted |
 | [0013](0013-managed-worktree-auto-provisioning.md) | Managed Worktree Auto-Provisioning with Boolean Flag | Accepted |
+| [0014](0014-two-tier-gates-and-evidence-based-acceptance.md) | Two-Tier Gates and Evidence-Based Acceptance | Proposed (amended in part by ADR-0015) |
+| [0015](0015-recalibrate-mutation-and-coverage-gates.md) | Recalibrate Mutation and Coverage Gates | Accepted |

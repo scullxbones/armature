@@ -31,9 +31,12 @@ Two gate profiles with distinct roles:
 - **Fast gate** (`make check-fast`): deterministic, diff-routed; used during
   implementation and remediation. Workers MUST NOT run the full gate on
   intermediate remediations.
-- **Publish gate** (`make check`): unchanged in content; mandatory exactly
+- **Publish gate** (`make check`): scope unchanged; mandatory exactly
   twice per task lifecycle — once at the final task head, once cumulatively at
-  story integration.
+  story integration. Its scope is unchanged by this document; ADR 0015
+  (docs/adr/0015-recalibrate-mutation-and-coverage-gates.md) subsequently
+  recalibrated the publish gate's coverage and mutant-coverage thresholds —
+  the gate still runs the same checks, at different numbers.
 
 A green fast gate is sufficient to iterate; only a publish gate confers
 delivery. Constitution I5 is preserved: the publish gate still decides.
