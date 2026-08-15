@@ -11,10 +11,18 @@ import (
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// globOverlaps is a test-only alias for scopematch.Overlaps — the single
+// canonical overlap implementation validate.go now delegates to — kept so
+// the table-driven tests below don't need per-call-site churn.
+func globOverlaps(a, b string) bool {
+	return scopematch.Overlaps(a, b)
+}
 
 func makeState(issues ...*materialize.Issue) *materialize.State {
 	s := materialize.NewState()
@@ -1325,15 +1333,61 @@ func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
 	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claimx/foo.go"),
 		"overlap check must be symmetric")
 
-	// Genuine nested-directory overlap (dirB is a real path-segment prefix of
-	// dirA) must still be detected.
-	assert.True(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
-		"internal/claim/sub is genuinely nested under internal/claim and should still overlap")
-	assert.True(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
+	// NOTE(LNGHZN-S10-T7): these two cases previously asserted `true` on the
+	// strength of the now-removed containing/ancestor-directory fallback
+	// (dirA == dirB, or one a path-segment prefix of the other). Per
+	// LNGHZN-S10-T7, overlap is now decided by exact path or glob match
+	// only, so two glob patterns or two literal files that merely share a
+	// directory no longer overlap unless one pattern actually matches the
+	// other (e.g. a "**" or trailing-slash directory scope).
+	assert.False(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
+		"single-segment glob 'internal/claim/*.go' does not match the deeper literal directory 'sub/' — no longer treated as overlapping via directory ancestry")
+	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
 		"overlap check must be symmetric")
 
-	// Identical directories must overlap.
-	assert.True(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"))
+	// Two distinct literal files that merely share a containing directory
+	// must not overlap (this used to be `true` under the removed fallback).
+	assert.False(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"),
+		"two distinct literal files that merely share a containing directory must not overlap")
+}
+
+// TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7 verifies that
+// globOverlaps (delegated to scopematch.Overlaps) no longer reports overlap for
+// two distinct files that merely share a containing or ancestor directory. This
+// is the regression coverage, within internal/validate, for the second copy of
+// the bug fixed in claim by LNGHZN-S10-T6: internal/validate carried its own
+// duplicate globOverlaps/globOverlapDir pair with the same directory-ancestry
+// fallback, so arm claim was fixed but arm validate kept emitting false-positive
+// scope-overlap warnings between distinct files that merely lived under the
+// same directory (e.g. docs/agents/quality-gates.md and docs/use-cases.md).
+func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, globOverlaps("docs/agents/quality-gates.md", "docs/use-cases.md"),
+		"distinct files under an ancestor/descendant directory relationship must not overlap")
+	assert.False(t, globOverlaps("docs/use-cases.md", "docs/agents/quality-gates.md"),
+		"overlap check must be symmetric")
+
+	assert.False(t, globOverlaps("internal/claim/overlap.go", "internal/claim/overlap_test.go"),
+		"two distinct files in the same directory must not overlap merely by sharing that directory")
+	assert.False(t, globOverlaps("internal/claim/overlap_test.go", "internal/claim/overlap.go"),
+		"overlap check must be symmetric")
+}
+
+// TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T7 verifies
+// that delegating to scopematch.Overlaps did not weaken genuine overlap
+// detection: identical scope entries still overlap, and an explicit directory
+// glob like "docs/agents/**" still reports overlap against a file beneath it.
+func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T7(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, globOverlaps("README.md", "README.md"),
+		"identical scope entries must still overlap")
+
+	assert.True(t, globOverlaps("docs/agents/**", "docs/agents/quality-gates.md"),
+		"an explicit directory glob must still overlap a file beneath it")
+	assert.True(t, globOverlaps("docs/agents/quality-gates.md", "docs/agents/**"),
+		"overlap check must be symmetric")
 }
 
 func TestFirstGlobOverlapPair_ReportsMatchedPatterns_PR79(t *testing.T) {
@@ -1383,12 +1437,11 @@ func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T)
 
 // globOverlapParityCases is a table of (patternA, patternB, wantOverlap) cases
 // run against both internal/validate's globOverlaps and internal/claim's
-// globOverlaps (see internal/claim/overlap_test.go's identical table). The two
-// implementations are intentionally duplicated (validate cannot import claim
-// per the validate-boundary depguard rule in .golangci.yml) and must be kept
-// behaviorally identical — if you change one copy's matching semantics, update
-// this table AND the matching table in internal/claim/overlap_test.go so the
-// parity test there catches the drift.
+// globOverlaps (see internal/claim/overlap_test.go's identical table). As of
+// LNGHZN-S10-T7 both are thin wrappers around the single canonical
+// scopematch.Overlaps implementation, so this parity is now structural
+// rather than a maintenance hazard — but the duplicated table is kept as
+// belt-and-suspenders regression coverage in both packages.
 var globOverlapParityCases = []struct {
 	name string
 	a, b string
@@ -1397,9 +1450,20 @@ var globOverlapParityCases = []struct {
 	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
 	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
 	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
-	{"nested dir overlap", "internal/claim/sub/*.go", "internal/claim/*.go", true},
+	// LNGHZN-S10-T7: previously "true" under the now-removed
+	// containing/ancestor-directory fallback. "internal/claim/*.go" is a
+	// single-segment glob and does not match the deeper literal path
+	// "internal/claim/sub/*.go", so these no longer overlap.
+	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
 	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
 	{"root-level files, no dir", "a.go", "b.go", false},
+	{"explicit doublestar directory glob still overlaps nested file", "internal/claim/**", "internal/claim/sub/a.go", true},
+	// PR #102 review finding: glob-vs-glob intersection, not just
+	// glob-vs-literal containment, must be detected (under-blocking is the
+	// dangerous direction) but bounded to patterns that could actually share
+	// a concrete match.
+	{"glob-vs-glob same-segment intersection", "src/auth/*.go", "src/auth/login.*", true},
+	{"glob-vs-glob distinct literal directories cannot intersect", "src/auth/*.go", "src/billing/*.go", false},
 }
 
 func TestGlobOverlaps_ParityWithClaimPackage_PR79(t *testing.T) {

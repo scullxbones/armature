@@ -15,6 +15,130 @@ import (
 	"strings"
 )
 
+// Overlaps reports whether two scope entries overlap: exact path equality,
+// one glob (including a "**" doublestar or trailing-slash directory scope)
+// matching the other, or two glob patterns that could both match some common
+// concrete path (e.g. "src/auth/*.go" and "src/auth/login.*" both match
+// "src/auth/login.go", even though neither pattern matches the other's
+// literal string). It deliberately does NOT fall back to "shares a
+// containing/ancestor directory" — two distinct files or globs that merely
+// live under the same directory are not an overlap; a differing literal path
+// segment (e.g. "auth" vs "billing") rules out any intersection at that
+// segment regardless of wildcards elsewhere in the pattern.
+//
+// When both sides contribute a wildcard to the same path segment (e.g. the
+// "*.go" vs "login.*" example above), computing the precise set of strings
+// each pattern segment can produce and intersecting them is not cheap, so
+// this deliberately over-approximates and reports an overlap. Under-blocking
+// — silently letting two claims with a genuine glob-vs-glob conflict proceed
+// concurrently — is the dangerous direction; an occasional false-positive
+// warning costs a reviewed `--force`, not silent concurrent writes.
+//
+// This is the single canonical implementation shared by internal/claim
+// (delivery-gate overlap checks) and internal/validate (scope-overlap
+// warnings) so the two layers cannot diverge again as they once did.
+func Overlaps(a, b string) bool {
+	if matched, _ := filepath.Match(a, b); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+		return true
+	}
+	if matched, _ := filepath.Match(b, a); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+		return true
+	}
+	if Allows([]string{a}, b) || Allows([]string{b}, a) {
+		return true
+	}
+	return globPatternsMayIntersect(a, b)
+}
+
+// globPatternsMayIntersect reports whether two scope-glob patterns could
+// both match some common concrete path, comparing path segment by segment
+// (with "**" expanding to zero or more segments, via the same backtracking
+// approach as doublestarMatch/matchSegments). Two segments are considered
+// compatible if they are identical, if one is a literal string the other's
+// wildcard segment matches (via filepath.Match), or if both segments contain
+// wildcard characters — in the last case the exact intersection of the two
+// character classes/glob shapes is not computed; they are conservatively
+// assumed compatible. A literal-vs-literal mismatch at any segment (e.g.
+// "auth" vs "billing") is decisive and rules out intersection regardless of
+// wildcards elsewhere in the pattern, which is what keeps this bounded:
+// "src/auth/*.go" and "src/billing/*.go" still report no overlap.
+func globPatternsMayIntersect(a, b string) bool {
+	cleanedA, _ := CleanScope(a)
+	cleanedB, _ := CleanScope(b)
+	if cleanedA == "." || cleanedB == "." {
+		return true
+	}
+	return matchPatternSegments(strings.Split(cleanedA, "/"), strings.Split(cleanedB, "/"))
+}
+
+// matchPatternSegments reports whether pattern segment lists a and b could
+// both match some common list of concrete path segments. "**" in either list
+// expands to zero or more segments via backtracking.
+func matchPatternSegments(a, b []string) bool {
+	if len(a) > 0 && a[0] == "**" {
+		if len(a) == 1 {
+			return true
+		}
+		for i := 0; i <= len(b); i++ {
+			if matchPatternSegments(a[1:], b[i:]) { //nolint:gosec // G602 false positive: i ranges 0..len(b) inclusive, so b[i:] is always in bounds
+				return true
+			}
+		}
+		return false
+	}
+	if len(b) > 0 && b[0] == "**" {
+		if len(b) == 1 {
+			return true
+		}
+		for i := 0; i <= len(a); i++ {
+			if matchPatternSegments(a[i:], b[1:]) { //nolint:gosec // G602 false positive: i ranges 0..len(a) inclusive, so a[i:] is always in bounds
+				return true
+			}
+		}
+		return false
+	}
+	if len(a) == 0 || len(b) == 0 {
+		return len(a) == 0 && len(b) == 0
+	}
+	if !segmentsCompatible(a[0], b[0]) {
+		return false
+	}
+	return matchPatternSegments(a[1:], b[1:])
+}
+
+// segmentsCompatible reports whether two single-path-segment glob patterns
+// could both match some common concrete segment string.
+func segmentsCompatible(s1, s2 string) bool {
+	if s1 == s2 {
+		return true
+	}
+	w1 := isWildcardSegment(s1)
+	w2 := isWildcardSegment(s2)
+	switch {
+	case !w1 && !w2:
+		// Both literal and already known unequal (s1 == s2 handled above).
+		return false
+	case w1 && !w2:
+		matched, err := filepath.Match(s1, s2)
+		return err == nil && matched
+	case !w1 && w2:
+		matched, err := filepath.Match(s2, s1)
+		return err == nil && matched
+	default:
+		// Both segments carry a wildcard; computing the precise
+		// intersection of what each can match is not cheap, so
+		// conservatively assume they can overlap. See Overlaps' doc
+		// comment for why over-approximation here is the safe direction.
+		return true
+	}
+}
+
+// isWildcardSegment reports whether a single path segment contains glob
+// wildcard characters.
+func isWildcardSegment(s string) bool {
+	return strings.ContainsAny(s, "*?[")
+}
+
 // Allows reports whether path is covered by any entry in scope. Scope
 // entries may be:
 //   - "." meaning the entire repository is in scope.
