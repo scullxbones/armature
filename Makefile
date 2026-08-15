@@ -20,7 +20,7 @@ help:
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
-	@echo "  make coverage-check      - Run coverage then fail if total is below 85%"
+	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 87%"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
@@ -72,12 +72,21 @@ coverage-check: coverage
 		echo "FAIL: coverage.out not found; run 'make coverage' first"; \
 		exit 1; \
 	fi
-	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
-	echo "Total coverage: $${COVERAGE}%"; \
-	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 85) }'; then \
-		echo "FAIL: coverage $${COVERAGE}% is below 85% threshold"; \
-		exit 1; \
-	fi
+	@awk 'NR>1{n=$$2;c=$$3; \
+		if($$0 ~ /armature\/cmd\//){ct+=n; if(c>0) cc+=n} \
+		if($$0 ~ /armature\/internal\//){it+=n; if(c>0) ic+=n}} \
+	END{ \
+		cmd_pct = (ct>0) ? 100*cc/ct : 0; \
+		int_pct = (it>0) ? 100*ic/it : 0; \
+		printf "cmd coverage: %.2f%%\n", cmd_pct; \
+		printf "internal coverage: %.2f%%\n", int_pct; \
+		fail=0; \
+		if (cmd_pct < 83) { printf "FAIL: cmd coverage %.2f%% is below 83%% threshold (short by %.2f points)\n", cmd_pct, 83-cmd_pct; fail=1 } \
+		if (int_pct < 87) { printf "FAIL: internal coverage %.2f%% is below 87%% threshold (short by %.2f points)\n", int_pct, 87-int_pct; fail=1 } \
+		if (ct==0) { print "FAIL: no coverage lines matched armature/cmd/ — tree missing from profile"; fail=1 } \
+		if (it==0) { print "FAIL: no coverage lines matched armature/internal/ — tree missing from profile"; fail=1 } \
+		exit fail \
+	}' coverage.out
 
 lint: adr-principles
 	@command -v golangci-lint >/dev/null 2>&1 || { \

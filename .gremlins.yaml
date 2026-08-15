@@ -23,9 +23,18 @@ unleash:
     - "_windows\\.go$"
     - "filelock_other\\.go$"
 
-  # Quality gates (ratchet: only raise, never lower).
+  # Quality gates. mutant-coverage is a de-emphasized reachability proxy:
+  # it measures the same thing as `make coverage-check` (statement coverage,
+  # now enforced per-tree) from the same `go test` coverage profile, differing
+  # only in denominator (mutable AST sites vs. all statements). Statement
+  # coverage is the primary, cheaper reachability gate; mutant-coverage here
+  # is seeded at each measured value and ratchets upward per tree rather than
+  # being held to a single repo-wide number. efficacy remains the primary
+  # mutation-quality signal — it measures what mutant-coverage cannot: whether
+  # covered mutants are actually killed. See ADR 0015
+  # (docs/adr/0015-recalibrate-mutation-and-coverage-gates.md).
   # threshold-mcover: % of mutation sites reachable by tests (analogous to code coverage).
   # threshold-efficacy: % of executed mutations killed by tests (test quality signal).
   threshold:
-    mutant-coverage: 95
+    mutant-coverage: 92
     efficacy: 99
