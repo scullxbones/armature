@@ -32,10 +32,10 @@ jobs:
       - name: Cross-compile
         run: make crosscompile
 
-      - name: Test
-        run: make test
-
       - name: Coverage
+        run: make coverage
+
+      - name: Coverage check
         run: make coverage-check
 
       - name: Mutation
