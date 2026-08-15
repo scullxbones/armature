@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +14,8 @@ import (
 
 // Client wraps git operations (boundary adapter).
 type Client struct {
-	repoPath string
+	repoPath   string
+	isolateEnv bool
 }
 
 const (
@@ -24,6 +26,14 @@ const (
 // New creates a git client for a repository path.
 func New(repoPath string) *Client {
 	return &Client{repoPath: repoPath}
+}
+
+// NewIsolated is like New but the child git process binds to the checkout
+// at repoPath: env overrides (GIT_DIR / GIT_WORK_TREE / …) are stripped and
+// --git-dir/--work-tree are pinned from the filesystem .git (not
+// core.worktree or rev-parse --show-toplevel). Used by arm gate run.
+func NewIsolated(repoPath string) *Client {
+	return &Client{repoPath: repoPath, isolateEnv: true}
 }
 
 // cmd builds a non-interactive git command rooted at the client's repo path.
@@ -42,16 +52,114 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	// writing under .git when a caller (e.g. a test's t.TempDir() cleanup)
 	// tries to remove the repo, causing intermittent "directory not empty"
 	// failures.
-	fullArgs := append([]string{"-C", c.repoPath, "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...) //nolint:gosec // G204: internal args, not user input
-	cmd.Env = append(os.Environ(),
+	prefix := []string{"-C", c.repoPath, "-c", "maintenance.auto=false", "-c", "gc.auto=0"}
+	if c.isolateEnv {
+		if gitDir, workTree, err := resolveIsolatedGitDirs(c.repoPath); err == nil {
+			prefix = []string{
+				"--git-dir=" + gitDir,
+				"--work-tree=" + workTree,
+				"-C", c.repoPath,
+				"-c", "maintenance.auto=false",
+				"-c", "gc.auto=0",
+			}
+		}
+	}
+	prefix = append(prefix, args...)
+	cmd := exec.CommandContext(ctx, "git", prefix...) //nolint:gosec // G204: internal args, not user input
+	env := os.Environ()
+	if c.isolateEnv {
+		env = stripGitOverrideEnv(env)
+	}
+	env = append(env,
 		"LC_ALL=C",
 		"LANG=C",
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_EDITOR=true",
 		"GIT_ASKPASS=true",
 	)
+	cmd.Env = env
 	return cmd
+}
+
+var gitOverrideEnvPrefixes = []string{
+	"GIT_DIR=",
+	"GIT_WORK_TREE=",
+	"GIT_INDEX_FILE=",
+	"GIT_OBJECT_DIRECTORY=",
+	"GIT_COMMON_DIR=",
+}
+
+func resolveIsolatedGitDirs(start string) (gitDir, workTree string, err error) {
+	abs, err := filepath.Abs(start)
+	if err != nil {
+		return "", "", err
+	}
+	cur := abs
+	for {
+		gd, wt, ok, walkErr := gitDirAt(cur)
+		if walkErr != nil {
+			return "", "", walkErr
+		}
+		if ok {
+			return gd, wt, nil
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", "", fmt.Errorf("no .git above %s", abs)
+		}
+		cur = parent
+	}
+}
+
+func gitDirAt(dir string) (gitDir, workTree string, ok bool, err error) {
+	p := filepath.Join(dir, ".git")
+	info, err := os.Lstat(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", "", false, nil
+		}
+		return "", "", false, err
+	}
+	if info.IsDir() {
+		return p, dir, true, nil
+	}
+	data, err := os.ReadFile(p) //nolint:gosec // path is dir/.git
+	if err != nil {
+		return "", "", false, err
+	}
+	line := strings.TrimSpace(string(data))
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = strings.TrimSpace(line[:i])
+	}
+	const prefix = "gitdir: "
+	if !strings.HasPrefix(line, prefix) {
+		return "", "", false, fmt.Errorf("invalid .git file at %s", p)
+	}
+	raw := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if raw == "" {
+		return "", "", false, fmt.Errorf("empty gitdir in %s", p)
+	}
+	if !filepath.IsAbs(raw) {
+		raw = filepath.Join(dir, raw)
+	}
+	return filepath.Clean(raw), dir, true, nil
+}
+
+func stripGitOverrideEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		drop := false
+		for _, p := range gitOverrideEnvPrefixes {
+			if strings.HasPrefix(e, p) {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // Toplevel returns the top-level working directory of the git repository (or
@@ -184,7 +292,59 @@ type DirtyEntry struct {
 // can inspect both sides rather than only seeing the destination. Returns an
 // empty (nil) slice for a clean working tree.
 func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
-	cmd := c.cmd("status", "--porcelain", "--ignored")
+	return c.dirtyEntries("status", "--porcelain", "--ignored")
+}
+
+// DirtyEntriesIncludingSubmodules is like DirtyEntries but does not honor
+// submodule.<name>.ignore, status.ignoreSubmodules, or
+// status.showUntrackedFiles. `-c diff.ignoreSubmodules=none` is not enough:
+// `git status` still hides dirty submodule worktrees under those settings.
+// `--ignore-submodules=none` and `--untracked-files=all` are the status
+// flags that surface them.
+func (c *Client) DirtyEntriesIncludingSubmodules() ([]DirtyEntry, error) {
+	return c.dirtyEntriesRecursive("")
+}
+
+func (c *Client) dirtyEntriesRecursive(prefix string) ([]DirtyEntry, error) {
+	entries, err := c.dirtyEntries("-c", "diff.ignoreSubmodules=none", "status", "--porcelain", "--ignored", "--ignore-submodules=none", "--untracked-files=all")
+	if err != nil {
+		return nil, err
+	}
+	if prefix != "" {
+		for i := range entries {
+			entries[i].Path = filepath.Join(prefix, entries[i].Path)
+			if entries[i].OldPath != "" {
+				entries[i].OldPath = filepath.Join(prefix, entries[i].OldPath)
+			}
+		}
+	}
+	gitlinks, err := c.gitlinkPaths()
+	if err != nil {
+		return nil, err
+	}
+	for _, gl := range gitlinks {
+		subDir := filepath.Join(c.repoPath, gl)
+		childPrefix := gl
+		if prefix != "" {
+			childPrefix = filepath.Join(prefix, gl)
+		}
+		if !populatedSubmodule(subDir) {
+			if nonEmptyDir(subDir) {
+				entries = append(entries, DirtyEntry{Path: childPrefix})
+			}
+			continue
+		}
+		inner, err := c.child(subDir).dirtyEntriesRecursive(childPrefix)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, inner...)
+	}
+	return entries, nil
+}
+
+func (c *Client) dirtyEntries(args ...string) ([]DirtyEntry, error) {
+	cmd := c.cmd(args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
@@ -218,6 +378,137 @@ func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+// IndexConcealmentEntries returns tracked paths whose index flags hide
+// worktree mutations from `git status`: skip-worktree (tag S) or
+// assume-unchanged (lowercase tag under `ls-files -v`). Populated
+// submodules are walked so an inner skip-worktree file is not invisible
+// behind a superproject gitlink.
+func (c *Client) IndexConcealmentEntries() ([]string, error) {
+	return c.indexConcealmentRecursive("")
+}
+
+func (c *Client) indexConcealmentRecursive(prefix string) ([]string, error) {
+	cmd := c.cmd("ls-files", "-v")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files -v: %w", err)
+	}
+	var paths []string
+	for line := range strings.SplitSeq(strings.TrimRight(string(out), "\n"), "\n") {
+		if len(line) < 3 || line[1] != ' ' {
+			continue
+		}
+		tag := line[0]
+		if tag != 'S' && (tag < 'a' || tag > 'z') {
+			continue
+		}
+		rel := line[2:]
+		if prefix != "" {
+			rel = filepath.Join(prefix, rel)
+		}
+		paths = append(paths, rel)
+	}
+	gitlinks, err := c.gitlinkPaths()
+	if err != nil {
+		return nil, err
+	}
+	for _, gl := range gitlinks {
+		subDir := filepath.Join(c.repoPath, gl)
+		if !populatedSubmodule(subDir) {
+			continue
+		}
+		sub := c.child(subDir)
+		childPrefix := gl
+		if prefix != "" {
+			childPrefix = filepath.Join(prefix, gl)
+		}
+		inner, err := sub.indexConcealmentRecursive(childPrefix)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, inner...)
+	}
+	return paths, nil
+}
+
+func (c *Client) gitlinkPaths() ([]string, error) {
+	cmd := c.cmd("ls-files", "-s")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files -s: %w", err)
+	}
+	var paths []string
+	for line := range strings.SplitSeq(strings.TrimRight(string(out), "\n"), "\n") {
+		if !strings.HasPrefix(line, "160000 ") {
+			continue
+		}
+		tab := strings.IndexByte(line, '\t')
+		if tab < 0 || tab+1 >= len(line) {
+			continue
+		}
+		paths = append(paths, line[tab+1:])
+	}
+	return paths, nil
+}
+
+func populatedSubmodule(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil && info != nil
+}
+
+func nonEmptyDir(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	f, err := os.Open(dir) //nolint:gosec // path is a gitlink checkout
+	if err != nil {
+		return false
+	}
+	names, err := f.Readdirnames(1)
+	closeErr := f.Close()
+	return err == nil && closeErr == nil && len(names) > 0
+}
+
+func (c *Client) child(repoPath string) *Client {
+	return &Client{repoPath: repoPath, isolateEnv: c.isolateEnv}
+}
+
+// CheckIgnoreSource reports whether path is ignored and, if so, the
+// check-ignore -v source (e.g. ".gitignore" or an absolute exclude file).
+func (c *Client) CheckIgnoreSource(path string) (string, bool, error) {
+	cmd := c.cmd("check-ignore", "-v", "--no-index", "--", path)
+	out, err := cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("git check-ignore: %w", err)
+	}
+	return parseCheckIgnoreSource(string(out)), true, nil
+}
+
+func parseCheckIgnoreSource(raw string) string {
+	line := strings.TrimSpace(raw)
+	if i := strings.IndexByte(line, '\t'); i >= 0 {
+		line = line[:i]
+	}
+	for i := 0; i < len(line)-2; i++ {
+		if line[i] != ':' || line[i+1] < '0' || line[i+1] > '9' {
+			continue
+		}
+		j := i + 1
+		for j < len(line) && line[j] >= '0' && line[j] <= '9' {
+			j++
+		}
+		if j < len(line) && line[j] == ':' {
+			return line[:i]
+		}
+	}
+	return line
 }
 
 // isBenignEmptyRepoRmError reports whether output from `git rm -rf --quiet .`

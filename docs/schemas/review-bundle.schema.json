@@ -179,6 +179,22 @@
           "uncommitted": {
             "type": "boolean",
             "description": "True when the invoking checkout was dirty before or after the command (not citable)"
+          },
+          "output_hash": {
+            "type": "string",
+            "description": "SHA-256 hex digest of the gate log file"
+          },
+          "output_head": {
+            "type": "string",
+            "description": "First 1KB of gate output (or the full output if shorter)"
+          },
+          "output_tail": {
+            "type": "string",
+            "description": "Last 1KB of gate output when the log was truncated"
+          },
+          "log_path": {
+            "type": "string",
+            "description": "Absolute path to the gate log file re-hashed at record time"
           }
         }
       }
