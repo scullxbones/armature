@@ -116,11 +116,16 @@ Do not leave issues uncited.
 **Two-tier gate model (normative).** There are two gate profiles, and they play
 different roles:
 
-- **Fast gate** (`make check-fast`) — deterministic, diff-routed. Use this
-  during implementation and on every intermediate remediation cycle. It is
-  sufficient to keep iterating. Workers **MUST NOT** run the full gate on
-  intermediate remediations — that wastes wall-clock time re-running suites
-  the remediation could not have touched.
+- **Fast gate** — use during implementation and on every intermediate
+  remediation cycle. It is sufficient to keep iterating. Workers **MUST NOT**
+  run the full gate on intermediate remediations — that wastes wall-clock time
+  re-running suites the remediation could not have touched.
+  - **When `make check-fast` exists** (LNGHZN-S10-T2), run that. It is
+    deterministic and diff-routed.
+  - **Until that target exists**, iterate with targeted existing commands
+    (`make lint`, `make validate-skills`, `go test` on changed packages). Do
+    not invoke a missing `make check-fast` target and do not substitute
+    `make check`.
 - **Full gate** (`make check`) — the publish gate. It is mandatory at the
   **final task head**: the clean delivery commit that will be reviewed and
   transitioned, immediately before `done`. After a remediation that creates a
@@ -135,7 +140,8 @@ gate at the new HEAD.
 
 ```bash
 go build ./...    # must exit zero; stops transition if compilation fails
-make check-fast    # fast gate — use during implementation and intermediate remediation
+# Fast gate (intermediate only): `make check-fast` if that target exists;
+# otherwise targeted lint / validate-skills / package tests — not `make check`.
 make check          # full/publish gate — at the clean delivery HEAD, before done
 ```
 
@@ -147,7 +153,7 @@ go run ./cmd/armature --help   # confirms the binary at least compiles
 
 **Completion order (never deviate):**
 1. Run `go build ./...` — fix any compile errors.
-2. Iterate with `make check-fast` during implementation and remediation; do not run the full gate on these intermediate passes.
+2. Iterate with the fast gate during implementation and remediation (`make check-fast` when that target exists; otherwise targeted existing checks). Do not run the full gate on these intermediate passes.
 3. Stage scoped files and commit with a conventional commit message (`<type>(ISSUE-ID): ...`) — the delivery gate's Clean Tree and Commit Reference checks require this to already be done before you transition. The full gate must run against this clean delivery HEAD, not a dirty pre-commit tree.
 4. Run `make check` (the full gate) once at the commit from step 3. If it fails, fix, commit again, and re-run the full gate at the new HEAD. Do not transition on a failed full gate.
 5. `arm transition ISSUE-ID --to done --outcome "..."` — only after the build, commit, and green full gate above are complete.

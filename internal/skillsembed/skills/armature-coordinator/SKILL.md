@@ -332,7 +332,11 @@ open-ended back-and-forth. Per task:
 3. **One consolidated remediation request** covering every finding from step 1/2.
 4. **One narrow confirmation review**, hard-scoped to only the findings that
    were remediated; findings outside that scope are recorded but block
-   further progress only at critical severity.
+   further progress only at critical severity. **Refresh the bundle first:**
+   if remediation added a commit, recapture `TASK_HEAD` from `task/$TASK_ID`
+   and rerun `arm review prepare` at that new head. Do not reuse the
+   pre-remediation `$BUNDLE_FILE` — `arm review record` binds the assessment
+   to the supplied bundle, not to the live branch HEAD.
 5. **Cap: 3 remediation cycles** per task. If the task is still not green
    after 3 cycles, stop dispatching remediation and escalate to the human
    (Constitution I7 — accountability does not transfer to the system).
@@ -446,6 +450,22 @@ For each task that completed in the wave, dispatch semantic conformance review u
    ```
    This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass both `--assessment "$RESULT_FILE"` and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
 
+5. **Confirmation after remediation — new bundle, new head.** After a
+   consolidated remediation commit, `task/$TASK_ID` has a new delivery HEAD.
+   Before dispatching the hard-scoped confirmation review, refresh the
+   captured range and prepare a new bundle:
+   ```bash
+   TASK_COMMITS["$TASK_ID"]="$WAVE_BASE_SHA..task/$TASK_ID"
+   TASK_HEAD=$(git rev-parse "task/$TASK_ID")
+   BUNDLE_FILE=$(mktemp)
+   arm review prepare --issue TASK-ID \
+     --base "$TASK_BASE" --head "$TASK_HEAD" \
+     --output "$BUNDLE_FILE"
+   ```
+   Then dispatch the confirmation reviewer with this new `$BUNDLE_FILE` and
+   record against it. Reusing the pre-remediation bundle lets a green
+   confirmation attest the old delivery SHA, fingerprints, and diff.
+
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. Activity evidence informs behavioral criteria only and is never citable directly (citations must reference raw log entry IDs). This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 
 ### a.3. Parallel Branch Overlap Audit
@@ -540,8 +560,10 @@ fi
 gate**. Per the story-lifecycle rule, the full gate runs mandatorily at each
 task's **current** final head (worker's responsibility, see the
 armature-worker skill) and once cumulatively at story integration (this
-step). Workers iterate against the cheaper fast gate (`make check-fast`) and
-MUST NOT run the full gate on **intermediate** remediations. After the
+step). Workers iterate against the cheaper fast gate (`make check-fast` when
+that target exists; otherwise targeted existing checks — see the
+armature-worker skill) and MUST NOT run the full gate on **intermediate**
+remediations. After the
 **last** remediation commit on a task — before the hard-scoped confirmation
 review and before `done` — require one task-scoped full gate at that new
 delivery HEAD. The earlier task-head full-gate run is stale for the
