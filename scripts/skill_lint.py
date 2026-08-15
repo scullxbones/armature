@@ -506,14 +506,9 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
 
     tokens = strip_redirects(tokens)
 
-    # `--worktree` is a boolean flag since canonical auto-provisioning was
-    # introduced. Reject the removed value-taking spelling in copyable current
-    # guidance instead of allowing a stale example to drift until execution.
-    for index, token in enumerate(tokens):
-        if token.startswith("--worktree="):
-            return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
-        if token == "--worktree" and index + 1 < len(tokens) and not tokens[index + 1].startswith("-"):
-            return False, f"Command uses obsolete value-taking --worktree syntax in: {arm_command}"
+    # `--worktree` takes an optional value: bare for the canonical
+    # `.worktrees/<issue-id>` path, or with an explicit path for a
+    # caller-selected worktree. Both spellings are current guidance.
     if tokens and tokens[0] == "arm":
         tokens = tokens[1:]
 
