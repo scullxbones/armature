@@ -330,17 +330,25 @@ open-ended back-and-forth. Per task:
    aggregated into **one** findings list before remediation is requested —
    never dispatched as a serial review → fix → review → fix chain.
 3. **One consolidated remediation request** covering every finding from step 1/2.
+   The first review runs after the worker has already transitioned to `done`.
+   **Do not remediate on a `done` (or `merged`) task.** `isBindingStale` treats
+   any status other than `claimed` or `in-progress` as stale, so the harness
+   hook passes through: no scope enforcement, no hook heartbeats, and no
+   second `done` delivery gate on the remediating HEAD. Before dispatching
+   the remediator, reopen and reclaim (workflow step 5 below). After the
+   last remediating commit, the worker runs the full gate and transitions
+   to `done` again. Then refresh every review artifact (step 6) before
+   confirmation — do not reuse pre-remediation `$TASK_HEAD`,
+   `$BUNDLE_FILE`, `$INDEX_OUTPUT`, or `$RESULT_FILE`.
 4. **One narrow confirmation review**, hard-scoped to only the findings that
    were remediated; findings outside that scope are recorded but block
-   further progress only at critical severity. **Refresh the bundle and
-   activity index first:** if remediation added a commit, recapture
-   `TASK_HEAD` from `task/$TASK_ID`, rerun `arm review prepare` at that new
-   head, and re-run the activity indexer (step 2.1) against the new bundle
-   when it has an `activity` section. Do not reuse the pre-remediation
-   `$BUNDLE_FILE` or `$INDEX_OUTPUT` — `arm review record` binds the
-   assessment to the supplied bundle, and a stale index still marks
-   pre-remediation entries as head-anchored, so confirmation can cite
-   evidence `record` rejects against the new `delivery.head_sha`.
+   further progress only at critical severity. **Refresh every captured
+   review artifact first** (workflow step 6): recapture `TASK_HEAD` /
+   `TASK_COMMITS`, rerun `arm review prepare`, rebuild or unset the
+   activity index, and take a new `$RESULT_FILE` from the confirmation
+   reviewer. `arm review record` binds the assessment to the supplied
+   bundle; a stale index still marks pre-remediation entries as
+   head-anchored.
 5. **Cap: 3 remediation cycles** per task. If the task is still not green
    after 3 cycles, stop dispatching remediation and escalate to the human
    (Constitution I7 — accountability does not transfer to the system).
@@ -454,12 +462,32 @@ For each task that completed in the wave, dispatch semantic conformance review u
    ```
    This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass both `--assessment "$RESULT_FILE"` and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
 
-5. **Confirmation after remediation — new bundle, new head, new index.** After a
-   consolidated remediation commit, `task/$TASK_ID` has a new delivery HEAD.
-   Before dispatching the hard-scoped confirmation review, refresh the
-   captured range, prepare a new bundle, and rebuild the activity index from
-   that bundle (do not keep `$INDEX_OUTPUT` from step 2.1):
+5. **Reopen and reclaim before remediating.** Semantic review runs after the
+   worker has already transitioned to `done`. The remediator must re-enter
+   the live-claim lifecycle before writing. Do this **before** any
+   remediating edit, and **before** `arm merged` (merged is terminal —
+   `arm reopen` refuses it):
    ```bash
+   arm reopen TASK-ID
+   arm claim TASK-ID --ttl 120 --worktree
+   arm render-context TASK-ID --format agent
+   ```
+   `arm claim --worktree` reuses the existing `.worktrees/TASK-ID` checkout
+   and rewrites its `armature-issue-id` binding; do not `git worktree add`
+   a second tree. Then dispatch the remediator like any other pre-claimed
+   worker (Dispatch Protocol), stating only what changed. The remediator
+   iterates on the fast gate, commits, runs the full/publish gate at the
+   new delivery HEAD, and runs `arm transition TASK-ID --to done` so the
+   delivery gate evaluates that HEAD. Do not dispatch remediations onto a
+   `done` or `merged` task.
+
+6. **Confirmation after remediation — refresh every review artifact.** After
+   the remediator commits and transitions to `done`, `task/$TASK_ID` has a
+   new delivery HEAD. Before dispatching the hard-scoped confirmation
+   review, recapture the range, prepare a new bundle (new fingerprints),
+   rebuild the activity index, and drop the prior `$RESULT_FILE`:
+   ```bash
+   unset RESULT_FILE INDEX_OUTPUT
    TASK_COMMITS["$TASK_ID"]="$WAVE_BASE_SHA..task/$TASK_ID"
    TASK_HEAD=$(git rev-parse "task/$TASK_ID")
    BUNDLE_FILE=$(mktemp)
@@ -470,13 +498,15 @@ For each task that completed in the wave, dispatch semantic conformance review u
    ```
    If `HAS_ACTIVITY` is `yes`, re-dispatch **armature-activity-indexer** on
    this new `$BUNDLE_FILE` into a fresh `$INDEX_OUTPUT` (same procedure as
-   step 2.1). If `no`, unset `$INDEX_OUTPUT` — do not pass the old index.
-   Then dispatch the confirmation reviewer with this new `$BUNDLE_FILE` and
-   the matching new index (if any), and record against the new bundle.
+   step 2.1). If `no`, leave `$INDEX_OUTPUT` unset — do not pass the old
+   index. Then dispatch the confirmation reviewer with this new
+   `$BUNDLE_FILE` and the matching new index (if any). Extract a **new**
+   `$RESULT_FILE` from that response and record against the new bundle.
    Reusing the pre-remediation bundle lets a green confirmation attest the
    old delivery SHA, fingerprints, and diff. Reusing the pre-remediation
    index omits post-remediation evidence and routes the reviewer to entries
-   whose `head_sha` is not the new bundle head.
+   whose `head_sha` is not the new bundle head. Reusing `$RESULT_FILE`
+   records the first-pass assessment against the new bundle.
 
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. Activity evidence informs behavioral criteria only and is never citable directly (citations must reference raw log entry IDs). This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 

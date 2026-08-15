@@ -99,6 +99,17 @@ gate is still the thing that decides, the fast gate only shortens iteration.
 See `docs/design/gate-efficiency.md` (D1) for the full rationale and evidence
 op acceptance rule (D4).
 
+**Remediation after review (normative).** The first review runs after the
+worker has transitioned to `done`. Before any remediating write, the
+coordinator reopens and reclaims (`arm reopen` then `arm claim --worktree`,
+which reuses the existing worktree). The remediator writes only while the
+task is `claimed` or `in-progress`, then commits, runs the full gate at
+that HEAD, and transitions to `done` again. Do not remediate on a `done`
+or `merged` task — the harness hook treats those bindings as stale and
+skips scope enforcement. Then refresh every review artifact (head, bundle,
+activity index, assessment path) before the confirmation review. See the
+armature-coordinator skill.
+
 ## Before closing out work
 
 ```bash
