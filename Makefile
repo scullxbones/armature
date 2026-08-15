@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check lint adr-principles clean mutate check help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
 
 # Variables
 GO ?= go
@@ -14,6 +14,8 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${G
 help:
 	@echo "Armature Go build targets:"
 	@echo "  make check               - Run CI-safe validation: lint, test, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, build, crosscompile"
+	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
+	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
@@ -34,7 +36,7 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build test coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
+check: lint build coverage coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
@@ -53,12 +55,22 @@ test-e2eharness: build
 	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/e2eharness/...
 
 coverage: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out $(UNIT_PACKAGES)
+	@tmp=$$(mktemp); \
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
+	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
+	rm -f "$$tmp"; \
+	exit $$status
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
-coverage-check: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -coverprofile=coverage.out $(UNIT_PACKAGES)
+# Reads the coverage.out profile produced by `coverage` rather than re-running
+# the unit suite (D3, docs/design/gate-efficiency.md): the full gate runs the
+# suite exactly once.
+coverage-check:
+	@if [ ! -f coverage.out ]; then \
+		echo "FAIL: coverage.out not found; run 'make coverage' first"; \
+		exit 1; \
+	fi
 	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
 	echo "Total coverage: $${COVERAGE}%"; \
 	if ! awk -v coverage="$${COVERAGE}" 'BEGIN { exit !(coverage >= 85) }'; then \
@@ -125,6 +137,12 @@ census-drift-check:
 
 test-census-drift-check:
 	@scripts/test_census_drift_check.sh .
+
+check-fast:
+	@scripts/check-fast.sh .
+
+test-check-fast:
+	@scripts/test-check-fast.sh .
 
 clean:
 	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/
