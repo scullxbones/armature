@@ -177,10 +177,10 @@ More info.
 		require.NotContains(t, output.String(), "historic-command")
 	})
 
-	// Optional flags in square brackets are Cobra synopsis notation, not
-	// copyable shell syntax. Lint must reject them before they ship in an
-	// executable example.
-	t.Run("ObsoleteValueTakingWorktreeFails", func(t *testing.T) {
+	// `--worktree` accepts an optional value: bare for the canonical
+	// `.worktrees/<issue-id>` path, or an explicit path for a caller-selected
+	// worktree. Lint must accept both spellings.
+	t.Run("ValueTakingWorktreePasses", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
@@ -190,9 +190,7 @@ More info.
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
 		output := new(bytes.Buffer)
 		cmd.Stderr = output
-		err := cmd.Run()
-		require.Error(t, err)
-		require.Contains(t, output.String(), "obsolete value-taking --worktree")
+		require.NoError(t, cmd.Run(), output.String())
 	})
 
 	t.Run("BracketedOptionalFlagSyntaxFails", func(t *testing.T) {
