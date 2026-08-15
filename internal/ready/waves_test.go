@@ -317,10 +317,17 @@ func TestComputeWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 func TestComputeWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 	t.Parallel()
 
+	// LNGHZN-S10-T6: task-2 and task-3 both scope src/auth/login.go so every
+	// pair genuinely overlaps (task-1's doublestar covers both, and task-2
+	// vs task-3 is an exact scope match). Previously task-3 scoped
+	// src/auth/logout.go, which "conflicted" with task-2 only via the
+	// removed containing-directory fallback — see
+	// TestComputeWaves_SiblingFilesInSameDirectoryShareAWave_REQ_LNGHZN_S10_T6
+	// below for the corrected-semantics regression coverage of that case.
 	entries := []ReadyEntry{
 		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/**"}},
 		{Issue: "task-2", Title: "Task 2", Priority: "high", Scope: []string{"src/auth/login.go"}},
-		{Issue: "task-3", Title: "Task 3", Priority: "high", Scope: []string{"src/auth/logout.go"}},
+		{Issue: "task-3", Title: "Task 3", Priority: "high", Scope: []string{"src/auth/login.go"}},
 	}
 
 	index := materialize.Index{
@@ -339,4 +346,33 @@ func TestComputeWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 	for i, wave := range waves {
 		require.Len(t, wave, 1, "Wave %d should have exactly one entry", i)
 	}
+}
+
+// TestComputeWaves_SiblingFilesInSameDirectoryShareAWave_REQ_LNGHZN_S10_T6 verifies
+// that two entries scoped to distinct sibling files in the same directory
+// are treated as non-conflicting and land in the same wave. This is the
+// regression coverage, one layer up from internal/claim's globOverlaps, for
+// the false-positive overlap bug fixed by LNGHZN-S10-T6: previously
+// src/auth/login.go and src/auth/logout.go were reported as conflicting
+// merely because they shared the containing directory src/auth.
+func TestComputeWaves_SiblingFilesInSameDirectoryShareAWave_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	entries := []ReadyEntry{
+		{Issue: "task-1", Title: "Task 1", Priority: "high", Scope: []string{"src/auth/login.go"}},
+		{Issue: "task-2", Title: "Task 2", Priority: "high", Scope: []string{"src/auth/logout.go"}},
+	}
+
+	index := materialize.Index{
+		"task-1": {Title: "Task 1", Type: "task"},
+		"task-2": {Title: "Task 2", Type: "task"},
+	}
+
+	nodeIndex := materializeIndexToNodeIndex(index)
+	graph := dag.FromIndex(nodeIndex)
+
+	waves := PartitionWaves(entries, index, graph)
+
+	require.Len(t, waves, 1, "distinct sibling files in the same directory must not conflict, so both entries share one wave")
+	require.Len(t, waves[0], 2, "both entries should be in the single wave")
 }

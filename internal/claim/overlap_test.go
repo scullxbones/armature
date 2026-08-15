@@ -116,12 +116,59 @@ func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
 	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claimx/foo.go"),
 		"overlap check must be symmetric")
 
-	assert.True(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
-		"internal/claim/sub is genuinely nested under internal/claim and should still overlap")
-	assert.True(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
+	// NOTE(LNGHZN-S10-T6): these two cases previously asserted `true` on the
+	// strength of the now-removed containing/ancestor-directory fallback
+	// (dirA == dirB, or one a path-segment prefix of the other). Per
+	// LNGHZN-S10-T6, overlap is now decided by exact path or glob match
+	// only, so two glob patterns or two literal files that merely share a
+	// directory no longer overlap unless one pattern actually matches the
+	// other (e.g. a "**" or trailing-slash directory scope).
+	assert.False(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
+		"single-segment glob 'internal/claim/*.go' does not match the deeper literal directory 'sub/' — no longer treated as overlapping via directory ancestry")
+	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
 		"overlap check must be symmetric")
 
-	assert.True(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"))
+	assert.False(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"),
+		"two distinct literal files that merely share a containing directory must not overlap")
+}
+
+// TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T6 verifies that
+// globOverlaps no longer reports overlap for two distinct files that merely
+// share a containing or ancestor directory. This is the regression coverage
+// for the bug reported in
+// docs/dogfood/findings/raw/2026-08-14T2352Z-5207ee28-tooling-scope-overlap-matches-on-directory-not-file.md,
+// where docs/agents/quality-gates.md (dir "docs/agents") and
+// docs/use-cases.md (dir "docs") were falsely reported as overlapping
+// because "docs/agents" has "docs/" as a string prefix.
+func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, globOverlaps("docs/agents/quality-gates.md", "docs/use-cases.md"),
+		"distinct files under an ancestor/descendant directory relationship must not overlap")
+	assert.False(t, globOverlaps("docs/use-cases.md", "docs/agents/quality-gates.md"),
+		"overlap check must be symmetric")
+
+	assert.False(t, globOverlaps("internal/claim/overlap.go", "internal/claim/overlap_test.go"),
+		"two distinct files in the same directory must not overlap merely by sharing that directory")
+	assert.False(t, globOverlaps("internal/claim/overlap_test.go", "internal/claim/overlap.go"),
+		"overlap check must be symmetric")
+}
+
+// TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6 verifies
+// that removing the directory fallback did not break genuine overlap
+// detection: identical scope entries still overlap, and an explicit
+// directory glob like "docs/agents/**" still reports overlap against a file
+// beneath it.
+func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, globOverlaps("README.md", "README.md"),
+		"identical scope entries must still overlap")
+
+	assert.True(t, globOverlaps("docs/agents/**", "docs/agents/quality-gates.md"),
+		"an explicit directory glob must still overlap a file beneath it")
+	assert.True(t, globOverlaps("docs/agents/quality-gates.md", "docs/agents/**"),
+		"overlap check must be symmetric")
 }
 
 // globOverlapParityCases mirrors the identically-named table in
@@ -139,9 +186,14 @@ var globOverlapParityCases = []struct {
 	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
 	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
 	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
-	{"nested dir overlap", "internal/claim/sub/*.go", "internal/claim/*.go", true},
+	// LNGHZN-S10-T6: previously "true" under the now-removed
+	// containing/ancestor-directory fallback. "internal/claim/*.go" is a
+	// single-segment glob and does not match the deeper literal path
+	// "internal/claim/sub/*.go", so these no longer overlap.
+	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
 	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
 	{"root-level files, no dir", "a.go", "b.go", false},
+	{"explicit doublestar directory glob still overlaps nested file", "internal/claim/**", "internal/claim/sub/a.go", true},
 }
 
 func TestGlobOverlaps_ParityWithValidatePackage_PR79(t *testing.T) {
