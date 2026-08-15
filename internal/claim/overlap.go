@@ -3,7 +3,6 @@ package claim
 import (
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/scullxbones/armature/internal/scopematch"
 )
@@ -54,6 +53,15 @@ func ScopesOverlapEx(scopeA, scopeB []string, graph HierarchyGraph, issueA, issu
 	return ScopesOverlap(scopeA, scopeB)
 }
 
+// globOverlaps reports whether two scope entries overlap: exact path
+// equality, or one glob (including a "**" doublestar or trailing-slash
+// directory scope) matching the other. It deliberately does NOT fall back
+// to "shares a containing/ancestor directory" — two distinct files or globs
+// that merely live under the same directory are not an overlap. Matching is
+// delegated to scopematch.Allows (treating each side in turn as a
+// single-entry scope list matched against the other side as a literal
+// path) so this stays behaviorally identical to how scope containment is
+// decided elsewhere in the codebase.
 func globOverlaps(a, b string) bool {
 	if matched, _ := filepath.Match(a, b); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
 		return true
@@ -61,24 +69,7 @@ func globOverlaps(a, b string) bool {
 	if matched, _ := filepath.Match(b, a); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
 		return true
 	}
-	dirA := extractDir(a)
-	dirB := extractDir(b)
-	if dirA == "" || dirB == "" {
-		return false
-	}
-	return dirA == dirB || hasPrefix(dirA, dirB+"/") || hasPrefix(dirB, dirA+"/")
-}
-
-func extractDir(pattern string) string {
-	i := strings.LastIndexByte(pattern, '/')
-	if i < 0 {
-		return ""
-	}
-	return pattern[:i]
-}
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+	return scopematch.Allows([]string{a}, b) || scopematch.Allows([]string{b}, a)
 }
 
 // IsWithinScope checks if all files in the provided list are within the
