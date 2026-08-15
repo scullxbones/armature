@@ -53,33 +53,31 @@ echo
 HAS_GO=0
 HAS_SKILLS=0
 HAS_CENSUS_SURFACE=0
-HAS_NON_DOCS=0
 
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue
     case "$f" in
         *.go)
             HAS_GO=1
-            HAS_NON_DOCS=1
             ;;
     esac
     case "$f" in
         skills/*|docs/skills/*)
             HAS_SKILLS=1
-            HAS_NON_DOCS=1
             ;;
     esac
     case "$f" in
         cmd/*|docs/design/surface-census.md|docs/commands.md)
             HAS_CENSUS_SURFACE=1
-            HAS_NON_DOCS=1
             ;;
     esac
-    case "$f" in
-        docs/*) ;;
-        *) HAS_NON_DOCS=1 ;;
-    esac
 done <<< "$CHANGED_FILES"
+
+# "docs only" per D2 means none of the three specific routed surfaces above
+# matched — not merely "path starts with docs/". A change confined to any
+# file(s) outside those three categories (README.md, CONTEXT.md, a shell
+# script, etc.) still only needs the adr-principles lint.
+HAS_NON_DOCS=$(( HAS_GO || HAS_SKILLS || HAS_CENSUS_SURFACE ))
 
 RAN_ANY=0
 
