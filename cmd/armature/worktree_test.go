@@ -294,7 +294,7 @@ func TestWorktreeGCPreservesPreExistingCustomExclusion_REQ_LNGHZN_S9_T1(t *testi
 		content += "\n"
 	}
 	content += "/custom-user-exclude/\n"
-	require.NoError(t, os.WriteFile(excludePath, []byte(content), 0o600))
+	require.NoError(t, os.WriteFile(excludePath, []byte(content), 0o600)) //nolint:gosec // G703: excludePath is derived from the test repository's Git directory
 
 	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", destination)
 	require.NoError(t, err)
