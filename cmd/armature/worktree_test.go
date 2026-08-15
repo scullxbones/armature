@@ -244,6 +244,70 @@ func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *t
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the custom worktree directory")
 }
 
+func TestWorktreeGCRemovesArmatureOwnedCustomExclusionAndAllowsReuse_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(repo, "custom-reuse")
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
+	require.NoError(t, err)
+	exclude, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(exclude), "/custom-reuse/", "claim must install the custom destination exclusion")
+
+	_, err = runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.NoError(t, err, "a live worktree must not be removed by gc")
+	exclude, err = os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(exclude), "/custom-reuse/", "a live worktree must retain its exclusion")
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.NoError(t, err)
+	var result struct {
+		Removed []string `json:"removed"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &result))
+	assert.Contains(t, result.Removed, "task-01")
+
+	exclude, err = os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(exclude), "/custom-reuse/", "gc must remove an Armature-owned custom exclusion after removal")
+
+	reusedFile := filepath.Join(destination, "ordinary-project-file.txt")
+	require.NoError(t, os.MkdirAll(destination, 0o755))
+	require.NoError(t, os.WriteFile(reusedFile, []byte("project content\n"), 0o644))
+	run(t, repo, "git", "add", ".")
+	staged := runGitOutput(t, repo, "diff", "--cached", "--name-only")
+	assert.Contains(t, staged, "custom-reuse/ordinary-project-file.txt", "a reused destination must be stageable after gc")
+}
+
+func TestWorktreeGCPreservesPreExistingCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(repo, "custom-user-exclude")
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	excludeBefore, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	content := string(excludeBefore)
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += "/custom-user-exclude/\n"
+	require.NoError(t, os.WriteFile(excludePath, []byte(content), 0o600))
+
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", destination)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worktree", "gc", "--format", "json")
+	require.NoError(t, err)
+
+	excludeAfter, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(excludeAfter), "/custom-user-exclude/", "gc must preserve a pre-existing identical user exclusion")
+}
+
 func TestWorktreeGCPreservesDirtyExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(repo, "custom-dirty")

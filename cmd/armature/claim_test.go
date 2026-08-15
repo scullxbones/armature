@@ -2258,6 +2258,47 @@ func TestClaimCustomWorktreeExcludeIsAnchoredAndLiteral_REQ_LNGHZN_S9_T1(t *test
 	}
 }
 
+// TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1
+// verifies that a custom destination below another linked worktree is rejected
+// before claim state, branch state, exclusion state, or filesystem state can
+// change. The parent worktree is clone-local Git evidence, even though it is
+// not an Armature-managed worktree.
+func TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parent := filepath.Join(repo, "parent")
+	run(t, repo, "git", "worktree", "add", "-b", "parent", parent)
+	destination := filepath.Join(parent, "child")
+
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	excludeBefore, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	commonGitDir, err := resolveCommonGitDir(repo)
+	require.NoError(t, err)
+	claimLockPath := filepath.Join(commonGitDir, "armature-claim-task-01.lock")
+	assert.NoFileExists(t, claimLockPath)
+
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree", destination, "--from", parent)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nested inside registered worktree")
+
+	status, err := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, ops.StatusOpen+"\n", status, "nested destination rejection must not append a claim")
+	worktreePath, err := runTrls(t, repo, "show", "task-01", "--field", "worktree_path")
+	require.NoError(t, err)
+	assert.Equal(t, "\n", worktreePath, "nested destination rejection must not record a destination")
+
+	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
+	assert.Error(t, branchErr, "nested destination rejection must not create the task branch")
+	assert.NoDirExists(t, destination, "nested destination rejection must not create the child path")
+	assert.DirExists(t, parent, "the registered parent worktree must be left untouched")
+
+	excludeAfter, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	assert.Equal(t, string(excludeBefore), string(excludeAfter), "nested destination rejection must not mutate Git exclusions")
+	assert.NoFileExists(t, claimLockPath, "nested destination rejection must happen before claim-lock creation")
+}
+
 // TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5
 // exercises the public re-claim path for an installation created before
 // bootstrap started adding .worktrees/ to .git/info/exclude.  A canonical

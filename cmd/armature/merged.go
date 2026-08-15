@@ -183,6 +183,36 @@ const (
 	worktreeRemoved
 )
 
+// removeClaimExclusionAfterWorktreeRemoval removes a custom exclusion only
+// after Git has removed the linked worktree. The exclusion lock serializes this
+// check with claim-time exclusion updates, and the live inventory check keeps a
+// concurrently recreated destination protected.
+func removeClaimExclusionAfterWorktreeRemoval(repoPath, destination, pattern string) error {
+	if pattern == "" {
+		return nil
+	}
+	release, err := acquireGitExcludeLock(repoPath)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	worktrees, err := worktree.List(repoPath)
+	if err != nil {
+		return fmt.Errorf("inspect worktrees before exclusion cleanup: %w", err)
+	}
+	want := worktree.NormalizePathAllowingMissing(destination)
+	for _, item := range worktrees {
+		if worktree.NormalizePathAllowingMissing(item.Path) == want {
+			return fmt.Errorf("worktree at %s still exists; retaining exclusion", destination)
+		}
+	}
+	if _, err := updateGitExcludeTrackedLocked(repoPath, "", pattern); err != nil {
+		return fmt.Errorf("remove claim exclusion %q: %w", pattern, err)
+	}
+	return nil
+}
+
 // removeWorktreeForIssue removes the git worktree for a given issue if it exists.
 // If the worktree is found, it checks the hook log before removing it; if pass-through
 // entries are present, a warning is emitted to errWriter. If the worktree is already
@@ -285,6 +315,10 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if !recorded {
 		branchName = deriveBranchName(issue.Type, issue.ID)
 	}
+	claimExclusionPattern, hasClaimExclusion, err := readClaimExclusionMarker(selected.Path)
+	if err != nil {
+		return worktreeSkipped, fmt.Errorf("read claim exclusion for %s: %w", issue.ID, err)
+	}
 	gitClient := adapters.New(repoPath)
 
 	// Normal teardown is deliberately non-force: dirty or locked worktrees
@@ -295,6 +329,11 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	// Per-worktree metadata disappeared with the successful removal; only the
 	// shared config must be cleared afterwards.
 	clearParentBranchMetadata(gitClient, branchName)
+	if hasClaimExclusion {
+		if err := removeClaimExclusionAfterWorktreeRemoval(repoPath, selected.Path, claimExclusionPattern); err != nil {
+			return worktreeRemoved, err
+		}
+	}
 
 	return worktreeRemoved, nil
 }
