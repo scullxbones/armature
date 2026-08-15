@@ -658,3 +658,44 @@ func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
 	_, statErr = os.Stat(filepath.Join(wt, "go.work"))
 	assert.True(t, os.IsNotExist(statErr), "no go.work should be created in the worktree")
 }
+
+// TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1 verifies that
+// `arm worktree list --format human` surfaces the same ambiguous-terminal-issue
+// class that gc refuses to touch, so a human operator reviewing `list` output
+// is not left unaware of an issue with two candidate worktrees.
+func TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo, issueID := setupAmbiguousGCRepo(t)
+
+	out, err := runTrls(t, repo, "worktree", "list", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, out, "AMBIGUOUS GC CANDIDATES", "list must render the ambiguous heading")
+	assert.Contains(t, out, issueID, "list must name the ambiguous issue")
+}
+
+// TestWorktreeGCHumanFormatReportsFailure_REQ_LNGHZN_S9_T1 verifies that a
+// real (non-dry-run) `arm worktree gc --format human` invocation prints the
+// "Failed to remove" section and names the issue whose worktree could not be
+// force-removed (a dirty custom claim destination), matching the JSON
+// "failed" list that TestWorktreeGCPreservesDirtyExplicitClaimDestination
+// already asserts for the JSON format.
+func TestWorktreeGCHumanFormatReportsFailure_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(t.TempDir(), "custom-dirty-human")
+
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree", destination)
+	require.NoError(t, err)
+	workerFile := filepath.Join(destination, "worker-output.txt")
+	require.NoError(t, os.WriteFile(workerFile, []byte("keep this\n"), 0o600))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled", "--force")
+	require.NoError(t, err)
+
+	_, stderr, gcErr := runTrlsWithStderr(t, repo, "worktree", "gc", "--format", "human")
+	require.Error(t, gcErr, "gc must fail rather than force-delete dirty custom worktree output")
+	assert.Contains(t, stderr, "Failed to remove", "human format must render the failure section")
+	assert.Contains(t, stderr, "task-01")
+
+	contents, readErr := os.ReadFile(workerFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "keep this\n", string(contents), "the dirty worker output must survive the failed removal attempt")
+}

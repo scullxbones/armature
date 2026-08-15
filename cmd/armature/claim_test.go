@@ -3044,3 +3044,287 @@ func TestRenderContextFallsBackToBuiltInBudgetWhenConfigAbsent_REQ_LNGHZN_S7_T1(
 	assert.Equal(t, explicitOut, defaultOut,
 		"render-context should fall back to the built-in budget of 4000 when config's token_budget is absent/zero")
 }
+
+// TestSourceAdvancedOnlyByArmatureFalseOnNonArmatureChange_REQ_LNGHZN_S9_T1
+// verifies that sourceAdvancedOnlyByArmature returns false when the
+// coordinator repository advanced between the two tips with a change outside
+// .armature/ (e.g. ordinary source edits), since only an internal armature
+// bookkeeping commit is allowed to reconcile transparently with a validated
+// --from source.
+func TestSourceAdvancedOnlyByArmatureFalseOnNonArmatureChange_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	oldTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "source.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "source.go")
+	run(t, repo, "git", "commit", "-m", "feat: ordinary source change")
+	newTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	internalOnly, err := sourceAdvancedOnlyByArmature(repo, repo, oldTip, newTip)
+	require.NoError(t, err)
+	assert.False(t, internalOnly, "a non-.armature/ change must not be treated as an internal advance")
+}
+
+// TestSourceAdvancedOnlyByArmatureErrorsOnUnresolvableRevision_REQ_LNGHZN_S9_T1
+// verifies that a git diff failure (e.g. an unresolvable revision) is
+// surfaced as an error rather than silently reported as "not an internal
+// advance", which would incorrectly fail closed with a misleading message.
+func TestSourceAdvancedOnlyByArmatureErrorsOnUnresolvableRevision_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	newTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	_, err := sourceAdvancedOnlyByArmature(repo, repo, "not-a-real-revision", newTip)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "inspect coordinator source advance")
+}
+
+// TestRollbackClaimReportsExclusionCleanupFailure_REQ_LNGHZN_S9_T1 verifies
+// that rollbackClaim surfaces an exclusion-cleanup failure alongside the
+// original cause instead of silently dropping it, so a worker sees that its
+// safety exclusion may still be present after a failed claim.
+func TestRollbackClaimReportsExclusionCleanupFailure_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+
+	claimTimestamp := nowEpoch()
+	claimToken := "token-worker-a"
+	store := setupSingleWorkerClaimStore(t, ctx, claimTimestamp, claimToken)
+
+	// A broken RepoPath makes cleanupClaimExclusions's worktree.List call fail,
+	// so the compensating transition still succeeds but exclusion cleanup does
+	// not.
+	brokenCtx := *ctx
+	brokenCtx.RepoPath = filepath.Join(t.TempDir(), "does-not-exist")
+	cmd := rollbackClaimTestCmd(&brokenCtx)
+
+	logPathA := opsLogPath(ctx.IssuesDir, "worker-a")
+	prior := priorClaimState{status: ops.StatusOpen}
+	cause := fmt.Errorf("boom")
+	exclusions := []claimExclusion{{pattern: "/custom/", destination: filepath.Join(t.TempDir(), "custom")}}
+
+	err := rollbackClaimWithExclusionLock(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimToken, false, exclusions)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "boom")
+	assert.Contains(t, err.Error(), "exclusion rollback failed")
+}
+
+// TestCreateWorktreeAndBranchRejectsMalformedSourceArgCount_REQ_LNGHZN_S9_T1
+// verifies that createWorktreeAndBranch fails closed when called with a
+// sourceArgs slice that is neither empty (no --from) nor exactly 3 elements
+// (path, branch, tip). This is a defensive internal-contract guard: callers
+// must supply the full validated source triple or none at all.
+func TestCreateWorktreeAndBranchRejectsMalformedSourceArgCount_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(t.TempDir(), "child")
+
+	err := createWorktreeAndBranch(
+		repo, destination, "task-01", materialize.Issue{Type: "task"}, alwaysOwns,
+		"only-one-arg",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires path, branch, and tip")
+	assert.NoDirExists(t, destination)
+}
+
+// TestCreateWorktreeAndBranchRejectsIssueTypeWithNoBranchMapping_REQ_LNGHZN_S9_T1
+// verifies that createWorktreeAndBranch fails closed for an issue type (epic)
+// that deriveBranchName maps to no branch at all, before any worktree or
+// branch is created.
+func TestCreateWorktreeAndBranchRejectsIssueTypeWithNoBranchMapping_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(t.TempDir(), "child")
+
+	err := createWorktreeAndBranch(repo, destination, "epic-01", materialize.Issue{Type: "epic"}, alwaysOwns)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no branch mapping")
+	assert.NoDirExists(t, destination)
+}
+
+// TestCreateWorktreeAndBranchRejectsSourceBranchChange_REQ_LNGHZN_S9_T1
+// verifies that createWorktreeAndBranch fails closed when the validated
+// --from source worktree has switched to a different branch since --from
+// validation ran, even though its tip commit is unchanged.
+func TestCreateWorktreeAndBranchRejectsSourceBranchChange_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	parentPath := filepath.Join(repo, "parent")
+	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
+	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
+
+	// Switch the source worktree to a different branch at the same tip, after
+	// the (simulated) validation that captured "feature-parent" as the source
+	// branch.
+	run(t, parentPath, "git", "checkout", "-b", "feature-parent-renamed")
+
+	destination := filepath.Join(t.TempDir(), "child")
+	err := createWorktreeAndBranch(
+		repo, destination, "task-01", materialize.Issue{Type: "task"}, alwaysOwns,
+		parentPath, "feature-parent", parentTip,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "claim source branch changed")
+	assert.NoDirExists(t, destination)
+}
+
+// TestCreateWorktreeAndBranchRejectsIncompleteSourceArgs_REQ_LNGHZN_S9_T1
+// verifies that a 3-element sourceArgs triple with an empty component (path,
+// branch, or tip) is rejected before any worktree is provisioned.
+func TestCreateWorktreeAndBranchRejectsIncompleteSourceArgs_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	destination := filepath.Join(t.TempDir(), "child")
+
+	err := createWorktreeAndBranch(
+		repo, destination, "task-01", materialize.Issue{Type: "task"}, alwaysOwns,
+		repo, "", "deadbeef",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validated claim source is incomplete")
+	assert.NoDirExists(t, destination)
+}
+
+// TestWriteClaimExclusionMarkerRejectsConflictingPattern_REQ_LNGHZN_S9_T1
+// verifies that writing a second, different exclusion pattern to a worktree
+// that already recorded one fails closed instead of silently overwriting the
+// original claim's marker.
+func TestWriteClaimExclusionMarkerRejectsConflictingPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "marker-wt")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	require.NoError(t, writeClaimExclusionMarker(worktreePath, "/custom-a/"))
+
+	// Same pattern again must be a no-op, not an error.
+	require.NoError(t, writeClaimExclusionMarker(worktreePath, "/custom-a/"))
+
+	err := writeClaimExclusionMarker(worktreePath, "/custom-b/")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already records a different pattern")
+
+	pattern, ok, readErr := readClaimExclusionMarker(worktreePath)
+	require.NoError(t, readErr)
+	require.True(t, ok)
+	assert.Equal(t, "/custom-a/", pattern, "the conflicting write must not have overwritten the original marker")
+}
+
+// TestWriteClaimExclusionMarkerFailsClosedOnUnreadableMarker_REQ_LNGHZN_S9_T1
+// verifies that writeClaimExclusionMarker surfaces a permission-denied read
+// of an existing marker file as an error, rather than treating it as absent
+// and silently overwriting it.
+func TestWriteClaimExclusionMarkerFailsClosedOnUnreadableMarker_REQ_LNGHZN_S9_T1(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: file permissions do not block reads")
+	}
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "unreadable-marker-wt")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+	markerPath := filepath.Join(gitDir, claimExclusionMarkerName)
+	require.NoError(t, os.WriteFile(markerPath, []byte("/custom-a/\n"), 0o600))
+	require.NoError(t, os.Chmod(markerPath, 0o000))
+	t.Cleanup(func() {
+		_ = os.Chmod(markerPath, 0o600) //nolint:errcheck // best-effort cleanup so TempDir removal succeeds
+	})
+
+	writeErr := writeClaimExclusionMarker(worktreePath, "/custom-a/")
+	require.Error(t, writeErr)
+	assert.Contains(t, writeErr.Error(), "read claim exclusion marker")
+}
+
+// TestReadClaimExclusionMarkerRejectsEmptyMarker_REQ_LNGHZN_S9_T1 verifies
+// that an on-disk exclusion marker file containing only whitespace/newline
+// (no actual pattern) is treated as corrupt rather than silently read as "no
+// exclusion recorded".
+func TestReadClaimExclusionMarkerRejectsEmptyMarker_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(t.TempDir(), "empty-marker-wt")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, claimExclusionMarkerName), []byte("\n"), 0o600))
+
+	_, _, readErr := readClaimExclusionMarker(worktreePath)
+	require.Error(t, readErr)
+	assert.Contains(t, readErr.Error(), "claim exclusion marker is empty")
+}
+
+// TestReadClaimExclusionMarkerFailsClosedOnUnresolvableWorktree_REQ_LNGHZN_S9_T1
+// verifies that readClaimExclusionMarker surfaces the git-dir resolution
+// error when called against a path that is not a worktree at all, instead of
+// treating it as "no exclusion recorded".
+func TestReadClaimExclusionMarkerFailsClosedOnUnresolvableWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+	notAWorktree := t.TempDir()
+
+	_, ok, err := readClaimExclusionMarker(notAWorktree)
+	require.Error(t, err)
+	assert.False(t, ok)
+	assert.Contains(t, err.Error(), "resolve worktree git dir")
+}
+
+// TestCleanupClaimExclusionsFailsClosedOnUnresolvableRepo_REQ_LNGHZN_S9_T1
+// verifies that cleanupClaimExclusions (the locking wrapper) surfaces a
+// failure to acquire the shared exclude lock rather than silently skipping
+// cleanup, when repoPath is not a git repository at all.
+func TestCleanupClaimExclusionsFailsClosedOnUnresolvableRepo_REQ_LNGHZN_S9_T1(t *testing.T) {
+	notARepo := t.TempDir()
+
+	err := cleanupClaimExclusions(notARepo, []claimExclusion{{pattern: "/x/", destination: notARepo}})
+	require.Error(t, err)
+}
+
+// TestCleanupClaimExclusionsIsNoOpForEmptySlice_REQ_LNGHZN_S9_T1 verifies
+// that cleanupClaimExclusions is a safe no-op (no lock acquired, no error)
+// when there is nothing to roll back -- the common case where a claim's
+// worktree setup never added a safety exclusion in the first place.
+func TestCleanupClaimExclusionsIsNoOpForEmptySlice_REQ_LNGHZN_S9_T1(t *testing.T) {
+	notARepo := t.TempDir() // would fail closed if the lock were actually acquired
+
+	err := cleanupClaimExclusions(notARepo, nil)
+	require.NoError(t, err)
+}
+
+// TestCleanupClaimExclusionsLockedRemovesUnprotectedPattern_REQ_LNGHZN_S9_T1
+// verifies that cleanupClaimExclusionsLocked removes an exclusion pattern
+// from .git/info/exclude when the worktree it protected no longer exists.
+func TestCleanupClaimExclusionsLockedRemovesUnprotectedPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	gone := filepath.Join(t.TempDir(), "gone")
+
+	added, err := updateGitExcludeTracked(repo, "/gone/", "")
+	require.NoError(t, err)
+	require.True(t, added)
+
+	err = cleanupClaimExclusionsLocked(repo, []claimExclusion{{pattern: "/gone/", destination: gone}})
+	require.NoError(t, err)
+
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	content, readErr := os.ReadFile(excludePath)
+	require.NoError(t, readErr)
+	assert.NotContains(t, string(content), "/gone/", "an exclusion whose destination no longer exists as a worktree must be removed")
+}
+
+// TestCleanupClaimExclusionsLockedPreservesProtectedPattern_REQ_LNGHZN_S9_T1
+// verifies that cleanupClaimExclusionsLocked leaves an exclusion pattern in
+// place when its destination is still a live registered worktree, so rollback
+// never strips protection out from under a worktree that is actually in use.
+func TestCleanupClaimExclusionsLockedPreservesProtectedPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	live := filepath.Join(repo, ".worktrees", "still-here")
+	run(t, repo, "git", "worktree", "add", live, "-b", "still-here-branch")
+
+	added, err := updateGitExcludeTracked(repo, "/still-here/", "")
+	require.NoError(t, err)
+	require.True(t, added)
+
+	err = cleanupClaimExclusionsLocked(repo, []claimExclusion{{pattern: "/still-here/", destination: live}})
+	require.NoError(t, err)
+
+	excludePath := filepath.Join(repo, ".git", "info", "exclude")
+	content, readErr := os.ReadFile(excludePath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "/still-here/", "an exclusion protecting a live worktree must not be removed")
+}
