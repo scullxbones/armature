@@ -55,6 +55,25 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.NotContains(t, out, "ERROR:")
 }
 
+// TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4: D7 rejects partial
+// validation. --scope and --parent must not be registered on arm validate.
+func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "validate", "--scope", "EPIC-001")
+	require.Error(t, err, "D7: --scope is a rejected partial-validation escape hatch")
+	assert.Contains(t, err.Error(), "unknown flag: --scope")
+
+	_, err = runTrls(t, repo, "validate", "--parent", "EPIC-001")
+	require.Error(t, err, "D7: --parent is a rejected partial-validation escape hatch")
+	assert.Contains(t, err.Error(), "unknown flag: --parent")
+}
+
 // TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4: --strict=false
 // keeps warnings as warnings (exit 0) but human output still lists them.
 func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {

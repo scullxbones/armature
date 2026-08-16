@@ -907,17 +907,16 @@ Validate the issue graph and documentation.
 Validation is **strict by default**: warnings are errors, a green run prints a
 single summary line (`OK: no issues found` plus coverage when present), and any
 error exits non-zero. `make check` runs `arm validate --ci` (the CI alias for
-the same fail-closed contract). There are no waivers; rules that fire on
-intentional states are fixed or deleted.
+the same fail-closed contract). There are no waivers and no scoping flags;
+the whole graph is validated or not at all. Rules that fire on intentional
+states are fixed or deleted.
 
 **Subcommands:**
 
 **Flags:**
 - `--ci`: Exit non-zero if errors found (implied by default `--strict`; used by `make check`).
-- `--scope string`: Validate only the subtree rooted at this node ID.
 - `--strict`: Treat warnings as errors (default `true`; pass `--strict=false` to keep warnings as warnings).
 - `--quiet`: Suppress INFO lines on a failing run.
-- `--parent string`: Validate only direct children of this parent node ID.
 
 **Validation Codes:**
 See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all error codes and warnings.

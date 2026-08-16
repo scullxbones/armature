@@ -59,11 +59,7 @@ For CI use (exits non-zero on any error):
 arm validate --ci
 ```
 
-To validate only a subtree:
-
-```bash
-arm validate --scope STORY-ID
-```
+`arm validate` always checks the whole graph. There are no scoping flags.
 
 ### Step 2 — Source Freshness
 
