@@ -328,9 +328,11 @@ open-ended back-and-forth. Per task:
 
 1. **One comprehensive initial review** — the reviewer reports all findings in
    one pass, not the first defect found.
-2. If independent perspectives are used, they run **in parallel** and are
-   aggregated into **one** findings list before remediation is requested —
-   never dispatched as a serial review → fix → review → fix chain.
+2. If independent perspectives are used, they run **in parallel**, each
+   writing a **distinct** `.armature/review/` path (issue + bundle prefix +
+   reviewer token). Aggregate their chat findings into **one** list
+   **before** `arm review record` — never a serial review → fix → review
+   → fix chain, and never one shared assessment file.
 3. **One consolidated remediation request** covering every finding from step 1/2.
    The first review runs after the worker has already transitioned to `done`.
    **Do not remediate on a `done` (or `merged`) task.** `isBindingStale` treats
@@ -352,9 +354,11 @@ open-ended back-and-forth. Per task:
    repeat a comprehensive review. `arm review record` binds the
    assessment to the supplied bundle; a stale index still marks
    pre-remediation entries as head-anchored.
-5. **Cap: 3 remediation cycles** per task. If the task is still not green
-   after 3 cycles, stop dispatching remediation and escalate to the human
-   (Constitution I7 — accountability does not transfer to the system).
+5. **Cap: 3 remediation cycles** per task (executable loop: workflow
+   steps 5–7). After each confirmation, inspect the rating. Non-green
+   repeats reopen / slotted-reclaim / remediate / confirm. After cycle 3
+   still non-green, escalate to the human (Constitution I7) and **stop**.
+   A non-green confirmation never proceeds to a.3 or merge.
 
 For each task that completed in the wave, dispatch semantic conformance review using task-scoped delivery bundles:
 
@@ -437,12 +441,13 @@ For each task that completed in the wave, dispatch semantic conformance review u
 
    The Activity Index is a **finding aid only** — it summarizes the activity log to help the reviewer locate raw entries by category and exit status. The index itself is never citable; citations must reference raw activity log entry IDs (0-based physical line numbers, e.g. `"0"`, `"1"` — see the reviewer skill).
 
-3. **Dispatch the armature-reviewer agent** — pass both the bundle and activity index (if available):
+3. **Dispatch the armature-reviewer agent** — pass both the bundle and activity index (if available). Assign each reviewer a distinct token (`r1`, `r2`, … or that reviewer's `ARM_LOG_SLOT`) and tell them to write `.armature/review/<issue-id>-<bundle-id-8>-<reviewer-token>.json` (see the reviewer skill). Independent perspectives run **in parallel** under distinct tokens.
    ```
    Dispatch armature-reviewer with:
    - bundle file: $BUNDLE_FILE (the reviewer reads the bundle from the file)
    - activity index (if $HAS_ACTIVITY was "yes"): pass the contents of $INDEX_OUTPUT as
      additional context so the reviewer can route to raw entry IDs
+   - reviewer token: r1   # distinct per parallel reviewer of this issue
    ```
    
    The reviewer assesses whether the delivery conforms to the issue contract (acceptance criteria, scope adherence, code quality). For behavioral criteria, execution evidence from the activity log can lift indeterminate verdicts to satisfied or partially satisfied, but it never substitutes for diff citations on implementation criteria and never suppresses a not_satisfied the diff supports.
@@ -450,38 +455,60 @@ For each task that completed in the wave, dispatch semantic conformance review u
    The reviewer's chat/text response is **not** the `ConformanceAssessment` JSON.
    It is rating + actionable findings + the path to the assessment file under
    `.armature/review/` (see the reviewer skill's bounded chat contract). After
-   the subagent returns, extract that path and use it as `$RESULT_FILE`. Do
-   **not** write the reviewer's chat text to `$RESULT_FILE` — `arm review record`
+   every reviewer returns, collect those paths. Do
+   **not** write any reviewer's chat text to `$RESULT_FILE` — `arm review record`
    will reject a summary as if it were the assessment.
    ```bash
-   # Reviewer writes a unique path (see reviewer skill) and returns it.
-   RESULT_FILE="<path from reviewer response>"
-   # Confirm the file exists and is JSON before recording.
+   # Each reviewer writes a DISTINCT path and returns it. Confirm each
+   # file exists and is JSON. Do not share one .armature/review/ file.
+   RESULT_FILES=(.armature/review/TASK-ID-bundle8-r1.json .armature/review/TASK-ID-bundle8-r2.json)
    FINDINGS_FILE=$(mktemp)
-   # Write the reviewer's actionable findings (chat list, not the JSON) to
-   # $FINDINGS_FILE. Confirmation uses this file as hard scope.
+   # Union every reviewer's chat findings (not the JSON bodies) into
+   # $FINDINGS_FILE. Deduplicate by finding text. Confirmation uses
+   # this consolidated list as hard scope.
+   # Choose one assessment to record: most conservative rating
+   # (red > yellow > green). Ties: any of those paths.
+   RESULT_FILE="${RESULT_FILES[0]}"
    ```
+   Do **not** call `arm review record` until `$FINDINGS_FILE` holds that
+   single consolidated list.
 
-4. **Record the assessment** — persist the reviewer's findings:
+4. **Record the assessment** — persist after findings are consolidated:
    ```bash
    arm review record --issue TASK-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
    ```
-   This links the assessment to the issue and updates its review status. Red ratings may block further wave progression until remediated. Pass both `--assessment "$RESULT_FILE"` and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
+   This links the assessment to the issue and updates its review status. Pass both `--assessment "$RESULT_FILE"` and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so the recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated, preventing a stale or mismatched bundle from being credited.
+
+   Read the rating from the reviewer's chat (`Rating: Green|Yellow|Red`) or
+   from the record output (`rating green|yellow|red`). **Green:** this task
+   is done with a.2 — skip steps 5–7. **Yellow or red:** set `CYCLE=1` and
+   enter the remediation loop at step 5. Do not start a.3 or merge on a
+   non-green rating.
 
 5. **Reopen and reclaim before remediating.** Semantic review runs after the
    worker has already transitioned to `done`. The remediator must re-enter
    the live-claim lifecycle before writing. Do this **before** any
    remediating edit, and **before** `arm merged` (merged is terminal —
-   `arm reopen` refuses it):
+   `arm reopen` refuses it).
+
+   `applyHeartbeat` requires `op.WorkerID == issue.ClaimedBy`. ClaimedBy is
+   the slotted identity written at claim time. Claim **as the remediator**:
+   set `ARM_LOG_SLOT` to the same slot the remediator will heartbeat under
+   (the slot you embed in its Dispatch Protocol prompt), then unset it so
+   later coordinator ops stay on the unslotted log.
    ```bash
+   REMEDIATOR_SLOT=t1   # same slot embedded in the remediator prompt
    arm reopen TASK-ID
+   export ARM_LOG_SLOT="$REMEDIATOR_SLOT"
    arm claim TASK-ID --ttl 120 --worktree
+   unset ARM_LOG_SLOT
    arm render-context TASK-ID --format agent
    ```
    `arm claim --worktree` reuses the existing `.worktrees/TASK-ID` checkout
    and rewrites its `armature-issue-id` binding; do not `git worktree add`
    a second tree. Then dispatch the remediator like any other pre-claimed
-   worker (Dispatch Protocol), stating only what changed. The remediator
+   worker (Dispatch Protocol) with `export ARM_LOG_SLOT=$REMEDIATOR_SLOT`
+   as its second instruction, stating only what changed. The remediator
    iterates on the fast gate, commits, runs the full/publish gate at the
    new delivery HEAD, and runs `arm transition TASK-ID --to done` so the
    delivery gate evaluates that HEAD. Do not dispatch remediations onto a
@@ -512,6 +539,7 @@ For each task that completed in the wave, dispatch semantic conformance review u
    - activity index (if $HAS_ACTIVITY was "yes"): $INDEX_OUTPUT
    - findings scope: $FINDINGS_FILE
      (the consolidated remediating set from the initial review)
+   - reviewer token: confirm-CYCLE   # distinct from first-pass tokens
    - instruction: hard-scoped confirmation of those findings only;
      do not start a new comprehensive review. Out-of-scope findings
      are recorded but block only at critical severity.
@@ -524,7 +552,23 @@ For each task that completed in the wave, dispatch semantic conformance review u
    head. Reusing `$RESULT_FILE` records the first-pass assessment against
    the new bundle. Omitting `$FINDINGS_FILE` (or relying on a prior
    reviewer transcript) turns confirmation into a second comprehensive
-   review and restarts the discovery/remediation loop.
+   review and restarts the discovery/remediation loop. Then go to step 7
+   — do not fall through to a.3 from here.
+
+7. **Inspect confirmation rating; loop or escalate.** After the
+   confirmation `arm review record` in step 6, read the rating
+   (`green` / `yellow` / `red`).
+   - **Green:** this task is done with a.2. Do not remediate again.
+   - **Yellow or red, and `CYCLE` < 3:** increment `CYCLE`, replace
+     `$FINDINGS_FILE` with the confirmation's remaining findings (the
+     new remediating set), and repeat steps 5–6. At `CYCLE` 2,
+     auto-escalate remediator effort to high (Dispatch Protocol).
+   - **Yellow or red, and `CYCLE` == 3:** stop. Escalate to the human
+     (Constitution I7). Do not enter a.3, do not merge this task
+     branch, do not run `arm merged` for this task.
+
+   Completion: every wave task is confirmation-green or human-escalated.
+   Only then may the wave proceed to a.3.
 
 **Note:** The reviewer checks *semantic conformance* to the contract — whether the code solves the stated problem cleanly. Activity evidence informs behavioral criteria only and is never citable directly (citations must reference raw log entry IDs). This is independent of the auditor's checks (citation coverage, repo health). Both gates must pass before story sign-off.
 
@@ -834,6 +878,9 @@ git push -u origin HEAD
 | Failure | Cause | Fix |
 |---|---|---|
 | Parallel agents share one log, attribution lost | Forgot to embed `ARM_LOG_SLOT` in each agent's prompt | Include `export ARM_LOG_SLOT=<slot>` as the first instruction in each agent's prompt before dispatch |
+| Remediator heartbeats ignored; claim expires | Remediating `arm claim` ran unslotted; `ClaimedBy` ≠ remediator `WorkerID` | Export the remediator's `ARM_LOG_SLOT` before that `arm claim`; unset after |
+| Confirmation still yellow/red, wave merged anyway | Steps 5–6 ran once and fell through to a.3 | Inspect the confirmation rating; repeat 5–6 until green or cycle 3, then escalate; never enter a.3 on non-green |
+| Parallel reviews clobber one `.armature/review/` file | Path uniqued only by issue + bundle | Distinct `<reviewer-token>` per reviewer; consolidate findings before `arm review record` |
 | Build breaks after merging parallel branches | Skipped integration verification | After each wave, run `make check` before claiming the next wave |
 | Semantic revert when merging parallel task branches | Multiple parallel tasks touched the same file; merge did not account for interdependencies | After each parallel wave, run the Parallel Branch Overlap Audit (section a.3); review semantic compatibility of overlapping files before marking tasks `merged`; add integration tests if needed to exercise combined changes |
 | `arm transition STORY-ID --to done` errors with uncited nodes | Story transitioned before all issues were cited | Run `arm validate`; for each `uncited node: ID`, run `arm sources link` or `arm sources accept-citation --ci`; then retry transition |
