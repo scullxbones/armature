@@ -10,13 +10,13 @@ import (
 
 const testAcceptance = `[{"type":"test_passes","cmd":"go test"}]`
 
-func createValidTask(t *testing.T, repo, id, scope, dod string) {
+func createOverlappingTask(t *testing.T, repo, id, dod string) {
 	t.Helper()
 	_, err := runTrls(t, repo, "create",
 		"--type", "task",
 		"--title", id,
 		"--id", id,
-		"--scope", scope,
+		"--scope", "internal/ops/*.go",
 		"--dod", dod,
 		"--acceptance", testAcceptance,
 	)
@@ -33,8 +33,8 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	createValidTask(t, repo, "tsk-a", "internal/ops/*.go", "Implement ops overlap case")
-	createValidTask(t, repo, "tsk-b", "internal/ops/*.go", "Implement sibling ops overlap")
+	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
+	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
 
 	out, err := runTrls(t, repo, "validate")
 	require.Error(t, err, "default validate must fail closed when warnings exist")
@@ -53,6 +53,25 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.NotContains(t, out, "WARNING:")
 	assert.NotContains(t, out, "INFO:")
 	assert.NotContains(t, out, "ERROR:")
+}
+
+// TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4: --strict=false
+// keeps warnings as warnings (exit 0) but human output still lists them.
+func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
+	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
+
+	out, err := runTrls(t, repo, "validate", "--strict=false")
+	require.NoError(t, err, "--strict=false must keep warnings as warnings (exit 0)")
+	assert.Contains(t, out, "WARNING: scope overlap", "--strict=false human output must list warning-level findings")
+	assert.NotContains(t, out, "ERROR: scope overlap")
 }
 
 func nonEmptyLines(s string) []string {
