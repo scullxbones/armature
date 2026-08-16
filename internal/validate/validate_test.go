@@ -462,6 +462,25 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 	}
 }
 
+func TestW5MissingContextFiles_SkipsNonTasks_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
+	for _, typ := range []string{"story", "epic", "feature"} {
+		t.Run(typ, func(t *testing.T) {
+			t.Parallel()
+			state := makeState(&materialize.Issue{
+				ID:     "ISSUE-1",
+				Type:   typ,
+				Status: "open",
+				Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
+			})
+			graph := graphFromState(state)
+			result := Validate(state, graph, Options{})
+			assert.False(t, containsWarning(result, "missing context_files"),
+				"type=%q: non-task issues with multi-dir scope are intentional", typ)
+		})
+	}
+}
+
 func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 	t.Parallel()
 	// Issues with merged, done, or cancelled status should not trigger phantom scope warnings

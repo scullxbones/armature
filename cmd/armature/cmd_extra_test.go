@@ -410,10 +410,11 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
+	acc := `"acceptance":[{"type":"test_passes"}]`
 	planData := `{"version":1,"title":"Draft Test","issues":[` +
-		`{"id":"DRF-001","title":"Draft task one","type":"task"},` +
-		`{"id":"DRF-002","title":"Draft task two","type":"task"},` +
-		`{"id":"DRF-003","title":"Draft task three","type":"task"}` +
+		`{"id":"DRF-001","title":"Draft task one","type":"task","scope":"cmd/armature/drf1.go","dod":"Draft task one is complete",` + acc + `},` +
+		`{"id":"DRF-002","title":"Draft task two","type":"task","scope":"cmd/armature/drf2.go","dod":"Draft task two is complete",` + acc + `},` +
+		`{"id":"DRF-003","title":"Draft task three","type":"task","scope":"cmd/armature/drf3.go","dod":"Draft task three is complete",` + acc + `}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -502,7 +503,7 @@ func TestSourcesVerifyCommand_AfterSync_OK(t *testing.T) {
 func TestValidateCommand_JSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	out, err := runTrls(t, repo, "validate", "--format", "json")
+	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
 	require.NoError(t, err)
 	assert.Contains(t, out, "{")
 }
@@ -669,8 +670,9 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
 	require.NoError(t, err)
 
-	out, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
-	assert.Contains(t, out, "INFO: phantom scope", "phantom scope should appear as INFO")
+	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
+	require.NoError(t, err)
+	assert.Contains(t, out, "phantom scope", "phantom scope should appear in JSON infos")
 	assert.NotContains(t, out, "WARNING: phantom scope", "phantom scope should not appear as WARNING")
 }
 
@@ -680,7 +682,7 @@ func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "validate", "--format", "json")
+	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"infos"`, "JSON output should include infos field")
 }

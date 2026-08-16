@@ -18,6 +18,9 @@ func setupRepoWithDraftNode(t *testing.T) string {
 		"--type", "task",
 		"--id", "draft-task-01",
 		"--confidence", "draft",
+		"--scope", "cmd/armature/draft.go",
+		"--dod", "Draft task is complete and tested",
+		"--acceptance", `[{"type":"test_passes"}]`,
 	)
 	require.NoError(t, err)
 	return repo

@@ -130,7 +130,12 @@ func scenarioHarness(t *testing.T, issueIDs ...string) *e2eharness.Harness {
 	issues := make([]map[string]any, 0, len(issueIDs))
 	for _, issueID := range issueIDs {
 		issues = append(issues, map[string]any{
-			"id": issueID, "title": issueID + " scenario task", "type": "task", "dod": "scenario complete",
+			"id":         issueID,
+			"title":      issueID + " scenario task",
+			"type":       "task",
+			"dod":        "scenario complete",
+			"scope":      "cmd/armature/" + issueID + ".go",
+			"acceptance": []map[string]any{{"type": "test_passes"}},
 		})
 	}
 	planData, err := json.Marshal(map[string]any{"version": 1, "title": "failure scenarios", "issues": issues})

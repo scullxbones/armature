@@ -450,6 +450,10 @@ func checkW4BroadScope(issues map[string]*materialize.Issue) []string {
 func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 	var warns []string
 	for id, issue := range issues {
+		// Stories/epics/features span many directories by design.
+		if issue.Type != "task" {
+			continue
+		}
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
 			continue
 		}

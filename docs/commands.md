@@ -307,6 +307,9 @@ Promote all draft nodes in a subtree to verified.
 **Synopsis:**
 `arm dag transition [flags]`
 
+Promotion to `verified` (plan release) requires a strict-green `arm validate` of
+the whole graph so findings die at introduction. Demotion to `draft` is not gated.
+
 **Flags:**
 - `--issue string`: Root issue ID of the subtree to promote.
 - `--to string`: Target confidence level (default: `verified`).
@@ -901,13 +904,19 @@ Validate the issue graph and documentation.
 **Synopsis:**
 `arm validate [flags]`
 
+Validation is **strict by default**: warnings are errors, a green run prints a
+single summary line (`OK: no issues found` plus coverage when present), and any
+error exits non-zero. `make check` runs `arm validate --ci` (the CI alias for
+the same fail-closed contract). There are no waivers; rules that fire on
+intentional states are fixed or deleted.
+
 **Subcommands:**
 
 **Flags:**
-- `--ci`: Exit non-zero if errors found.
+- `--ci`: Exit non-zero if errors found (implied by default `--strict`; used by `make check`).
 - `--scope string`: Validate only the subtree rooted at this node ID.
-- `--strict`: Treat warnings as errors.
-- `--quiet`: Suppress INFO lines; still print COVERAGE and OK lines.
+- `--strict`: Treat warnings as errors (default `true`; pass `--strict=false` to keep warnings as warnings).
+- `--quiet`: Suppress INFO lines on a failing run.
 - `--parent string`: Validate only direct children of this parent node ID.
 
 **Validation Codes:**

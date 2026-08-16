@@ -134,7 +134,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `dag context` | dag.go, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
 | `dag revert` | dag.go, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
 | `dag summary` | dag.go, dagsum.go | Summarize draft nodes | **kept-evidence** | Diagnostic and planning tool. Lists unconfirmed nodes in a subtree. |
-| `dag transition` | dag.go, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. |
+| `dag transition` | dag.go, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. Promotion to verified requires a strict-green arm validate of the whole graph. |
 | `link` | main.go, link.go | Add dependency | **kept-evidence** | Couples issues. Only `--rel blocked_by` is a valid input; `blocks` is derived automatically as the inverse. |
 | `unlink` | main.go, unlink.go | Remove dependency | **kept-evidence** | Uncouples issues. Removes from blocked_by/blocks. |
 
@@ -157,7 +157,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `bootstrap` | main.go:86, bootstrap.go | Deploy harness hook to project | **kept-evidence** | Setup command. Installs pre-commit or post-merge hooks. |
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
-| `validate` | main.go:249, validate.go | Validate issue graph | **kept-evidence** | Linter. Runs citation and structure checks. Supports --ci, --strict, --scope, --quiet. |
+| `validate` | main.go:249, validate.go | Validate issue graph | **kept-evidence** | Linter. Strict by default (warnings are errors; green is a single summary line). Supports --ci (used by make check), --strict (default true), --scope, --quiet. |
 | `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Subcommand of `validate`. Used by `make check`. |
 | `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
 | `log` | main.go, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
@@ -230,7 +230,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
 | `--skip-delivery-gate` | transition | bool | Bypass the delivery gate (clean tree, scope containment, commit reference) checked when transitioning to done; override is recorded in the transition op's payload | **kept-evidence** |
-| `--to` | dag transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. | **kept-evidence** |
+| `--to` | dag transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. Promotion to verified runs full-graph strict validate first. | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
@@ -254,7 +254,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--plan` | dag apply, dag revert, dag context | string | Path to plan JSON file | **kept-evidence** |
 | `--example` | dag apply | bool | Print minimal plan example | **kept-evidence** |
 | `--schema` | dag apply | bool | Print JSON Schema | **kept-evidence** |
-| `--strict` | dag apply, doctor, validate | bool | Treat warnings as errors | **kept-evidence** |
+| `--strict` | dag apply, doctor, validate | bool | Treat warnings as errors. Default false on dag apply and doctor; default true on validate (D7). | **kept-evidence** |
 | `--generate-ids` | dag apply | bool | Replace plan IDs with UUIDs | **kept-evidence** |
 | `--root` | dag apply | string | Override inferred root | **kept-evidence** |
 | `--sources` | dag context | string | Comma-separated source IDs to include | **kept-evidence** |
@@ -271,7 +271,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--ci` | validate | bool | Non-interactive mode / bypass prompt | **kept-evidence** |
+| `--ci` | validate | bool | Fail-closed alias used by make check. Implied by default --strict; still accepted so CI scripts keep working. | **kept-evidence** |
 | `--url` | sources add | string | URL or path of source | **kept-evidence** |
 | `--type` | sources add | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
 
@@ -298,7 +298,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |
-| `--quiet` | validate | bool | Suppress INFO lines | **kept-evidence** |
+| `--quiet` | validate | bool | Suppress INFO lines on a failing run. Green output is already a single summary line. | **kept-evidence** |
 | `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |
 | `--parent` | validate | string | Validate only direct children of parent | **kept-evidence** |
 | `--exclude-worker` | materialize | string | Skip ops from worker ID (diagnostic) | **kept-evidence** |

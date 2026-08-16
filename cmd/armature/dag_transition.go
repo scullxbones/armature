@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +20,9 @@ func newDAGTransitionCmd() *cobra.Command {
 		Long: `Promote the confidence of nodes from draft to verified.
 
 This command transitions nodes in a subtree from draft (unverified) confidence
-to verified confidence, setting the dag_confirmed flag.`,
+to verified confidence, setting the dag_confirmed flag. Promotion to verified
+(plan release) requires a strict-green arm validate of the whole graph so
+findings die at introduction. Demotion to draft is not gated.`,
 		Example: `  # Promote a subtree to verified
   $ arm dag transition --issue STORY-001
 
@@ -38,6 +42,18 @@ to verified confidence, setting the dag_confirmed flag.`,
 			}
 			if targetConfidence != "draft" && targetConfidence != "verified" {
 				return fmt.Errorf("invalid --to confidence value %q: must be one of draft, verified", targetConfidence)
+			}
+			if targetConfidence == "verified" {
+				result, valErr := runGraphValidation(cmd, validate.Options{Strict: true})
+				if valErr != nil {
+					return valErr
+				}
+				if !result.OK {
+					if renderErr := output.RenderValidation(cmd.OutOrStdout(), result, false); renderErr != nil {
+						return fmt.Errorf("render validation: %w", renderErr)
+					}
+					return fmt.Errorf("cannot promote to verified: validation failed with %d error(s)", len(result.Errors))
+				}
 			}
 
 			op := ops.Op{

@@ -55,10 +55,12 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 		"title":   "E2E Test Plan",
 		"issues": []map[string]any{
 			{
-				"id":    "TEST-001",
-				"title": "Test task",
-				"type":  "task",
-				"dod":   "Task implementation is complete",
+				"id":         "TEST-001",
+				"title":      "Test task",
+				"type":       "task",
+				"dod":        "Task implementation is complete",
+				"scope":      "cmd/armature/test_001.go",
+				"acceptance": []map[string]any{{"type": "test_passes"}},
 			},
 		},
 	}
@@ -135,6 +137,10 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 			ID:        "definition_of_done",
 			Status:    review.Satisfied,
 			Rationale: "The task completed the declared happy-path lifecycle.",
+		}, {
+			ID:        "acceptance[0]",
+			Status:    review.Satisfied,
+			Rationale: "The declared test-passes criterion was met by the lifecycle.",
 		}},
 	}
 	assessmentJSON, err := json.Marshal(assessment)
