@@ -290,16 +290,23 @@ Before returning the assessment, verify that every citation is valid:
 ### 6. Return the ConformanceAssessment
 
 After completing Step 5a self-check, write the full ConformanceAssessment JSON
-to a **unique** path under `.armature/review/` — include the issue id and a
-short bundle-id prefix, for example
-`.armature/review/<issue-id>-<bundle-id-8>.json`. Do not reuse
-`.armature/review/<issue-id>.json` across passes; confirmation must not
-overwrite the first-pass file the coordinator still has as
-`$RESULT_FILE` context. This file is a **local recording input**, not the
-durable record. `arm review record` writes a compact
-`AssessmentAttestation` (fingerprints, rating, counts) to the append-only
-log; it does not commit this JSON. Do **not** `git add` it and do **not**
-call `arm review record` yourself. The coordinator passes the path to
+to a **unique** path under `.armature/review/` — include the issue id, a
+short bundle-id prefix, **and the reviewer token the coordinator assigned**
+(`r1`, `r2`, … or your `ARM_LOG_SLOT`), for example
+`.armature/review/<issue-id>-<bundle-id-8>-<reviewer-token>.json`. Parallel
+reviewers of the same issue and bundle use distinct tokens so they do not
+overwrite each other; the coordinator unions their chat findings into one
+list before `arm review record`. Do not reuse
+`.armature/review/<issue-id>.json` or
+`.armature/review/<issue-id>-<bundle-id-8>.json` across reviewers or
+passes; confirmation must not overwrite the first-pass file, and a
+second parallel reviewer must not overwrite the first's file the
+coordinator still has as `$RESULT_FILE` context. This file is a **local
+recording input**, not the durable record. `arm review record` writes a
+compact `AssessmentAttestation` (fingerprints, rating, counts) to the
+append-only log; it does not commit this JSON. Do **not** `git add` it
+and do **not** call `arm review record` yourself. The coordinator
+passes the path to
 `arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"`
 so fingerprint validation is bound to the exact bundle it dispatched.
 
@@ -460,17 +467,18 @@ exact bundle it prepared.
 # The coordinator passes: $BUNDLE_FILE
 
 # 2. Review and evaluate; write the full assessment to a unique path
-#    e.g. .armature/review/TASK-42-<bundle-id-8>.json
+#    e.g. .armature/review/TASK-42-<bundle-id-8>-r1.json
+#    Parallel reviewers of the same bundle use distinct tokens (r1, r2, …).
 #    Confirmation mode: if a findings-scope file was passed, evaluate
 #    only those findings (do not start a new comprehensive review).
 
 # 3. Chat response to the coordinator (not the JSON body):
 #    Rating: Green
 #    Findings: (none)   # or the confirmation-scope results
-#    Assessment: .armature/review/TASK-42-<bundle-id-8>.json
+#    Assessment: .armature/review/TASK-42-<bundle-id-8>-r1.json
 
-# The coordinator then runs:
-# arm review record --issue TASK-42 --assessment .armature/review/TASK-42-<bundle-id-8>.json --bundle "$BUNDLE_FILE"
+# The coordinator consolidates parallel findings, then runs:
+# arm review record --issue TASK-42 --assessment .armature/review/TASK-42-<bundle-id-8>-r1.json --bundle "$BUNDLE_FILE"
 ```
 
 The durable record is the compact `AssessmentAttestation` on the issue
