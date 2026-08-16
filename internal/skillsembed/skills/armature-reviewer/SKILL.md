@@ -296,7 +296,7 @@ short bundle-id prefix, **and the reviewer token the coordinator assigned**
 `.armature/review/<issue-id>-<bundle-id-8>-<reviewer-token>.json`. Parallel
 reviewers of the same issue and bundle use distinct tokens so they do not
 overwrite each other; the coordinator unions their chat findings into one
-list before `arm review record`. Do not reuse
+list, then records each distinct path with `arm review record`. Do not reuse
 `.armature/review/<issue-id>.json` or
 `.armature/review/<issue-id>-<bundle-id-8>.json` across reviewers or
 passes; confirmation must not overwrite the first-pass file, and a
@@ -306,9 +306,10 @@ recording input**, not the durable record. `arm review record` writes a
 compact `AssessmentAttestation` (fingerprints, rating, counts) to the
 append-only log; it does not commit this JSON. Do **not** `git add` it
 and do **not** call `arm review record` yourself. The coordinator
-passes the path to
-`arm review record --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"`
-so fingerprint validation is bound to the exact bundle it dispatched.
+records each distinct path with
+`arm review record --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"`,
+then uses the conservative path for loop control, so fingerprint
+validation is bound to the exact bundle it dispatched.
 
 **Bounded chat response (normative).** Your chat/text response to the
 coordinator contains **only**:
@@ -456,9 +457,10 @@ See `references/rubric.md` for detailed guidance on:
 After producing the ConformanceAssessment JSON, write it to a unique path
 under `.armature/review/` and return rating + findings + that path. Do
 **not** call `arm review record` — that is the coordinator's
-responsibility. The coordinator records the file at the returned path
-with `--bundle "$BUNDLE_FILE"` so fingerprint validation is bound to the
-exact bundle it prepared.
+responsibility. The coordinator records each distinct returned path
+with `--bundle "$BUNDLE_FILE"`, then uses the conservative path for
+loop control, so fingerprint validation is bound to the exact bundle
+it prepared.
 
 **Example Workflow:**
 
@@ -477,8 +479,12 @@ exact bundle it prepared.
 #    Findings: (none)   # or the confirmation-scope results
 #    Assessment: .armature/review/TASK-42-<bundle-id-8>-r1.json
 
-# The coordinator consolidates parallel findings, then runs:
-# arm review record --issue TASK-42 --assessment .armature/review/TASK-42-<bundle-id-8>-r1.json --bundle "$BUNDLE_FILE"
+# The coordinator consolidates parallel findings, then records EACH
+# distinct path, then uses the conservative one for loop control:
+# for f in "${RESULT_FILES[@]}"; do
+#   arm review record --issue TASK-42 --assessment "$f" --bundle "$BUNDLE_FILE"
+# done
+# Reviewer does NOT call arm review record.
 ```
 
 The durable record is the compact `AssessmentAttestation` on the issue
