@@ -17,3 +17,4 @@
 ["link","TOPTIER-S7-T1",1786914795,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t4",{"dep":"TOPTIER-S6-T1","rel":"blocked_by"}]
 ["amend","NXTTN-S4-T3",1786914795,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t4",{"context_files":["docs/agents/workflow.md","docs/design/gate-efficiency.md"]}]
 ["link","NXTTN-S3-T1",1786914813,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t4",{"dep":"LNGHZN-S10-T4","rel":"blocked_by"}]
+["link","TOPTIER-S6-T1",1786914813,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t4",{"dep":"LNGHZN-S10-T4","rel":"blocked_by"}]
