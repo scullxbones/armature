@@ -157,7 +157,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `bootstrap` | main.go:86, bootstrap.go | Deploy harness hook to project | **kept-evidence** | Setup command. Installs pre-commit or post-merge hooks. |
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
-| `validate` | main.go:249, validate.go | Validate issue graph | **kept-evidence** | Linter. Strict by default (warnings are errors; green is a single summary line). Supports --ci (used by make check), --strict (default true), --scope, --quiet. |
+| `validate` | main.go:249, validate.go | Validate issue graph | **kept-evidence** | Linter. Strict by default (warnings are errors; green is a single summary line). Validates the whole graph (no --scope/--parent). Supports --ci (used by make check), --strict (default true), --quiet. |
 | `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Subcommand of `validate`. Used by `make check`. |
 | `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
 | `log` | main.go, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
@@ -299,8 +299,6 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines on a failing run. Green output is already a single summary line. | **kept-evidence** |
-| `--scope` | validate | string | Validate only subtree at node ID | **kept-evidence** |
-| `--parent` | validate | string | Validate only direct children of parent | **kept-evidence** |
 | `--exclude-worker` | materialize | string | Skip ops from worker ID (diagnostic) | **kept-evidence** |
 | `--global` | bootstrap | bool | Deploy to ~/.claude/ instead of .claude/ | **kept-evidence** |
 | `--with-hooks` | bootstrap | bool | Also write harness hook configuration | **kept-evidence** |

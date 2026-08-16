@@ -17,8 +17,6 @@ func newValidateCmd() *cobra.Command {
 	var (
 		ci     bool
 		strict bool
-		scope  string
-		parent string
 		quiet  bool
 	)
 
@@ -31,9 +29,9 @@ func newValidateCmd() *cobra.Command {
 This command validates parent-child relationships, dependency links, field requirements,
 and coverage metrics (% of issues cited in documentation). Validation is strict by default:
 warnings are errors, a green run prints a single summary line, and any error exits
-non-zero. --ci is the CI alias for the same fail-closed contract (used by make check).
-Use --strict=false to keep warnings as warnings. Use --scope to validate only a subtree.
-Use --parent to validate only direct children of a parent issue. Use --quiet to suppress
+non-zero. The whole graph is validated; partial or scoped validation is not supported.
+--ci is the CI alias for the same fail-closed contract (used by make check).
+Use --strict=false to keep warnings as warnings. Use --quiet to suppress
 INFO lines on a failing run.`,
 		Example: `  # Validate the full issue graph (strict; silent when green)
   $ arm validate
@@ -44,12 +42,6 @@ INFO lines on a failing run.`,
   # Keep warnings as warnings (non-default)
   $ arm validate --strict=false
 
-  # Validate only a specific subtree
-  $ arm validate --scope parent-issue-id
-
-  # Validate only direct children of a parent issue
-  $ arm validate --parent story-id
-
   # Suppress INFO lines on a failing run
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,9 +49,7 @@ INFO lines on a failing run.`,
 				strict = true
 			}
 			opts := validate.Options{
-				ScopeID:  scope,
-				ParentID: parent,
-				Strict:   strict,
+				Strict: strict,
 			}
 			result, err := runGraphValidation(cmd, opts)
 			if err != nil {
@@ -96,8 +86,6 @@ INFO lines on a failing run.`,
 
 	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found (implied by default --strict)")
 	cmd.Flags().BoolVar(&strict, "strict", true, "Treat warnings as errors (default true)")
-	cmd.Flags().StringVar(&scope, "scope", "", "Validate only the subtree rooted at this node ID")
-	cmd.Flags().StringVar(&parent, "parent", "", "Validate only direct children of this parent node ID")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines on a failing run")
 
 	// Add doc-examples as a subcommand
@@ -107,8 +95,7 @@ INFO lines on a failing run.`,
 }
 
 // runGraphValidation materializes state and runs validate.Validate with
-// citations, coverage, and expanded scopes filled in. Callers set
-// Options.ScopeID / ParentID / Strict.
+// citations, coverage, and expanded scopes filled in. Callers set Options.Strict.
 func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Result, error) {
 	appCtx := currentCtx(cmd)
 	store := newSnapshotStore(appCtx)
