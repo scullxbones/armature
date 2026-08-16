@@ -96,7 +96,12 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a valid task
-	_, err = runTrls(t, repo, "create", "--title", "Good Task", "--type", "task", "--id", "good-01")
+	_, err = runTrls(t, repo, "create", "--title", "Good Task", "--type", "task", "--id", "good-01",
+		"--scope", "cmd/armature/good.go", "--dod", "The fixture task is complete and tested",
+		"--acceptance", `[{"type":"test_passes"}]`)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "sources", "accept-citation", "--issue", "good-01",
+		"--rationale", "test fixture has no external source", "--ci")
 	require.NoError(t, err)
 
 	// Inject a cross-worker op (will be excluded by validation)
@@ -116,7 +121,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 
 	// Run validate and check output (which internally calls materialize)
 	validateOut, err := runTrls(t, repo, "validate", "--format", "json")
-	require.NoError(t, err)
+	require.NoError(t, err, "validate output: %s", validateOut)
 
 	// Parse JSON output
 	var result map[string]any

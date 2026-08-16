@@ -29,19 +29,20 @@ func newValidateCmd() *cobra.Command {
 		Long: `Check the issue graph for structural consistency and traceability coverage.
 
 This command validates parent-child relationships, dependency links, field requirements,
-and coverage metrics (% of issues cited in documentation). Errors prevent merges in CI mode.
-Warnings highlight potential issues. Use --ci to exit non-zero on errors, or --strict to
-treat warnings as errors. Use --scope to validate only a subtree. Use --parent to validate
-only direct children of a parent issue. Use --quiet to suppress INFO lines while still printing
-COVERAGE and OK lines.`,
-		Example: `  # Validate the full issue graph
+and coverage metrics (% of issues cited in documentation). Validation is strict by default:
+warnings are errors, a green run prints a single summary line, and any error exits
+non-zero. --ci is the CI alias for the same fail-closed contract (used by make check).
+Use --strict=false to keep warnings as warnings. Use --scope to validate only a subtree.
+Use --parent to validate only direct children of a parent issue. Use --quiet to suppress
+INFO lines on a failing run.`,
+		Example: `  # Validate the full issue graph (strict; silent when green)
   $ arm validate
 
-  # Validate with strict mode (warnings become errors)
-  $ arm validate --strict
-
-  # Exit non-zero in CI if any errors found
+  # Same fail-closed contract, for CI / make check
   $ arm validate --ci
+
+  # Keep warnings as warnings (non-default)
+  $ arm validate --strict=false
 
   # Validate only a specific subtree
   $ arm validate --scope parent-issue-id
@@ -49,58 +50,21 @@ COVERAGE and OK lines.`,
   # Validate only direct children of a parent issue
   $ arm validate --parent story-id
 
-  # Suppress INFO lines (e.g. phantom-scope notices)
+  # Suppress INFO lines on a failing run
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
-			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
+			if ci {
+				strict = true
 			}
-			for _, w := range snap.Warnings {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
-			state := snap.State
-
-			// Read manifest data
-			manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))
-			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
-			}
-
-			// Read coverage data
-			coverageData, err := adapters.ReadCoverageFile(store.StatePath("traceability.json"))
-			if err != nil {
-				return fmt.Errorf("read coverage: %w", err)
-			}
-			var cov *traceability.Coverage
-			if coverageData != nil {
-				cov = &traceability.Coverage{}
-				if err := json.Unmarshal(coverageData, cov); err != nil {
-					return fmt.Errorf("parse coverage: %w", err)
-				}
-			}
-
-			// Build a Graph projection from state
-			graph := materialize.GraphFromState(state)
-
-			// Expand globs for scope validation
-			scopeGlobs := make(map[string][]string)
-			for _, issue := range state.Issues {
-				scopeGlobs[issue.ID] = issue.Scope
-			}
-			preExpandedScopes := adapters.ExpandGlobs(scopeGlobs)
-
 			opts := validate.Options{
-				ScopeID:           scope,
-				ParentID:          parent,
-				Strict:            strict,
-				ManifestData:      manifestData,
-				Coverage:          cov,
-				PreExpandedScopes: preExpandedScopes,
+				ScopeID:  scope,
+				ParentID: parent,
+				Strict:   strict,
 			}
-			result := validate.Validate(state, graph, opts)
+			result, err := runGraphValidation(cmd, opts)
+			if err != nil {
+				return err
+			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
@@ -117,10 +81,10 @@ COVERAGE and OK lines.`,
 					return err
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			} else {
-				if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
-					return fmt.Errorf("render validation: %w", err)
-				}
+			} else if result.OK {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(result))
+			} else if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
+				return fmt.Errorf("render validation: %w", err)
 			}
 
 			if (ci || strict) && len(result.Errors) > 0 {
@@ -130,14 +94,70 @@ COVERAGE and OK lines.`,
 		},
 	}
 
-	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found")
-	cmd.Flags().BoolVar(&strict, "strict", false, "Treat warnings as errors")
+	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found (implied by default --strict)")
+	cmd.Flags().BoolVar(&strict, "strict", true, "Treat warnings as errors (default true)")
 	cmd.Flags().StringVar(&scope, "scope", "", "Validate only the subtree rooted at this node ID")
 	cmd.Flags().StringVar(&parent, "parent", "", "Validate only direct children of this parent node ID")
-	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines; still prints COVERAGE and OK lines")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines on a failing run")
 
 	// Add doc-examples as a subcommand
 	cmd.AddCommand(newValidateDocExamplesCmd())
 
 	return cmd
+}
+
+// runGraphValidation materializes state and runs validate.Validate with
+// citations, coverage, and expanded scopes filled in. Callers set
+// Options.ScopeID / ParentID / Strict.
+func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Result, error) {
+	appCtx := currentCtx(cmd)
+	store := newSnapshotStore(appCtx)
+	snap, err := store.Load(cmd.Context())
+	if err != nil {
+		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
+	}
+	for _, w := range snap.Warnings {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+	}
+
+	manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))
+	if err != nil {
+		return validate.Result{}, fmt.Errorf("read manifest: %w", err)
+	}
+
+	coverageData, err := adapters.ReadCoverageFile(store.StatePath("traceability.json"))
+	if err != nil {
+		return validate.Result{}, fmt.Errorf("read coverage: %w", err)
+	}
+	var cov *traceability.Coverage
+	if coverageData != nil {
+		cov = &traceability.Coverage{}
+		if err := json.Unmarshal(coverageData, cov); err != nil {
+			return validate.Result{}, fmt.Errorf("parse coverage: %w", err)
+		}
+	}
+
+	state := snap.State
+	scopeGlobs := make(map[string][]string)
+	for _, issue := range state.Issues {
+		scopeGlobs[issue.ID] = issue.Scope
+	}
+
+	opts.ManifestData = manifestData
+	opts.Coverage = cov
+	opts.PreExpandedScopes = adapters.ExpandGlobs(scopeGlobs)
+	return validate.Validate(state, materialize.GraphFromState(state), opts), nil
+}
+
+func validationSummary(result validate.Result) string {
+	if result.Coverage == nil {
+		return "OK: no issues found"
+	}
+	cov := result.Coverage
+	totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
+	if cov.AcceptedRiskNodes > 0 {
+		return fmt.Sprintf("OK: no issues found (COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk))",
+			totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes)
+	}
+	return fmt.Sprintf("OK: no issues found (COVERAGE: %d/%d cited)", totalCited, cov.TotalNodes)
 }

@@ -534,7 +534,10 @@ func TestValidateCommand(t *testing.T) {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"})
+	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
+		"--dod", "Task implementation is complete and verified",
+		"--scope", "cmd/armature/main.go",
+		"--acceptance", `[{"type":"test_passes"}]`})
 	require.NoError(t, cmd2.Execute())
 
 	cmd3 := newRootCmd()
@@ -1465,10 +1468,14 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a draft task (no parent, so no parent-status gate)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft task", "--id", "task-draft-01", "--confidence", "draft")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft task", "--id", "task-draft-01", "--confidence", "draft",
+		"--scope", "cmd/armature/draft_a.go", "--dod", "Draft A is complete and tested",
+		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 	// Create a second draft task outside the scope (different ID)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Another draft", "--id", "task-draft-02", "--confidence", "draft")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Another draft", "--id", "task-draft-02", "--confidence", "draft",
+		"--scope", "cmd/armature/draft_b.go", "--dod", "Draft B is complete and tested",
+		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 
 	// Confirm task-draft-01 is NOT in the ready queue yet
@@ -1514,13 +1521,13 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 
 	// Create two tasks: one will be source-linked, one will remain uncited
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Cited task", "--id", "COV-001",
-		"--scope", "main.go", "--dod", "done")
+		"--scope", "main.go", "--dod", "Cited coverage task is complete")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "amend", "--issue", "COV-001", "--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Uncited task", "--id", "COV-002",
-		"--scope", "main.go", "--dod", "done")
+		"--scope", "other.go", "--dod", "Uncited coverage task is complete")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "amend", "--issue", "COV-002", "--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
@@ -3403,6 +3410,9 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 			"--type", "task",
 			"--id", "src-id-01",
 			"--source", sourceID,
+			"--scope", "cmd/armature/src_id.go",
+			"--dod", "Source-linked task by id is complete",
+			"--acceptance", `[{"type":"test_passes"}]`,
 		)
 		require.NoError(t, err)
 
@@ -3425,6 +3435,9 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 			"--type", "task",
 			"--id", "src-url-01",
 			"--source", tmpFile,
+			"--scope", "cmd/armature/src_url.go",
+			"--dod", "Source-linked task by path is complete",
+			"--acceptance", `[{"type":"test_passes"}]`,
 		)
 		require.NoError(t, err)
 
@@ -3553,9 +3566,13 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 	sourceID := parts[2]
 
 	// Create two tasks.
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Multi-link task A", "--id", "ml-a")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Multi-link task A", "--id", "ml-a",
+		"--scope", "cmd/armature/ml_a.go", "--dod", "Multi-link task A is complete",
+		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Multi-link task B", "--id", "ml-b")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Multi-link task B", "--id", "ml-b",
+		"--scope", "cmd/armature/ml_b.go", "--dod", "Multi-link task B is complete",
+		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 
 	// Link both issues in one invocation.
@@ -3596,7 +3613,9 @@ func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 	require.GreaterOrEqual(t, len(parts), 3)
 	sourceID := parts[2]
 
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Single link task", "--id", "sl-01")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Single link task", "--id", "sl-01",
+		"--scope", "cmd/armature/sl_01.go", "--dod", "Single-link task is complete",
+		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 
 	// Single --issue flag (existing flag path).

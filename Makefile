@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
 
 # Variables
 GO ?= go
@@ -13,7 +13,7 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${G
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check               - Run CI-safe validation: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, crosscompile"
+	@echo "  make check               - Run CI-safe validation: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, crosscompile, arm validate --ci"
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
@@ -37,7 +37,10 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
+check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile validate-graph
+
+validate-graph: build
+	@./bin/arm validate --ci
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .

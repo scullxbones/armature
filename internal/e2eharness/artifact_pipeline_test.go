@@ -31,7 +31,9 @@ func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 		"title":   "CLI artifact pipeline",
 		"issues": []map[string]any{{
 			"id": "PIPE-001", "title": "artifact pipeline", "type": "task",
-			"dod": "CLI artifacts round-trip under strict decoding",
+			"dod":        "CLI artifacts round-trip under strict decoding",
+			"scope":      "pipeline.go",
+			"acceptance": []map[string]any{{"type": "test_passes"}},
 		}},
 	}
 	planJSON, err := json.Marshal(plan)
@@ -73,6 +75,10 @@ func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 			ID:        "definition_of_done",
 			Status:    review.Satisfied,
 			Rationale: "The real CLI artifact boundaries completed successfully.",
+		}, {
+			ID:        "acceptance[0]",
+			Status:    review.Satisfied,
+			Rationale: "The declared test-passes criterion was met by the pipeline.",
 		}},
 	}
 	assessmentPath := filepath.Join(h.TempDir, "assessment.json")

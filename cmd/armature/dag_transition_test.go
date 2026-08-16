@@ -26,13 +26,68 @@ func TestDAGTransitionCmd_RejectsInvalidToValue(t *testing.T) {
 }
 
 // TestDAGTransitionCmd_AcceptsValidToValue verifies the legitimate confidence values
-// still work.
+// still work on a validate-green graph.
 func TestDAGTransitionCmd_AcceptsValidToValue(t *testing.T) {
-	repo := setupRepoWithDraftNode(t)
+	repo := setupRepoWithValidDraftNode(t)
 
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "transition", "--repo", repo, "--issue", "draft-task-01", "--to", "verified"})
 	require.NoError(t, root.Execute())
+}
+
+func setupRepoWithValidDraftNode(t *testing.T) string {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create",
+		"--type", "task",
+		"--title", "Draft task",
+		"--id", "draft-task-01",
+		"--confidence", "draft",
+		"--scope", "cmd/armature/draft.go",
+		"--dod", "Draft task is complete and tested",
+		"--acceptance", testAcceptance,
+	)
+	require.NoError(t, err)
+	return repo
+}
+
+// TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4: promoting a
+// subtree to verified is refused while the graph has validate findings.
+func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--type", "task",
+		"--title", "Draft overlap A",
+		"--id", "draft-a",
+		"--confidence", "draft",
+		"--scope", "internal/ops/*.go",
+		"--dod", "Implement first overlapping draft",
+		"--acceptance", testAcceptance,
+	)
+	require.NoError(t, err)
+	createValidTask(t, repo, "open-b", "internal/ops/*.go", "Implement second overlapping task")
+
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "draft-a", "--to", "verified")
+	require.Error(t, err, "plan release must refuse a graph with validate findings")
+	assert.Contains(t, err.Error(), "validation failed")
+
+	_, err = runTrls(t, repo, "link", "--source", "open-b", "--dep", "draft-a")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "dag", "transition", "--issue", "draft-a", "--to", "verified")
+	require.NoError(t, err)
+	assert.Contains(t, out, "draft-a")
 }

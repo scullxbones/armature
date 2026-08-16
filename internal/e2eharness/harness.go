@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -159,9 +160,25 @@ func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), cmdName, args...) //nolint:gosec // G204: cmdName is from harness configuration
 	cmd.Dir = dir
+	cmd.Env = envWithoutARMLogSlot()
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 	err := cmd.Run()
 	return output.String(), err
+}
+
+// envWithoutARMLogSlot copies the process environment minus ARM_LOG_SLOT.
+// dag apply writes the unsuffixed worker log; an inherited worker slot would
+// send later commands to a different file and break clone rematerialization.
+func envWithoutARMLogSlot() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "ARM_LOG_SLOT=") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
