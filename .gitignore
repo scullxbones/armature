@@ -49,6 +49,8 @@ gha-creds-*.json
 .codex-sqlite/
 .devin/
 
+.grok/
+
 # Python bytecode
 __pycache__/
 *.pyc
