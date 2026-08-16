@@ -479,11 +479,12 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
 4. **Record every assessment** — persist after findings are consolidated.
    `CYCLE` is per-issue. At the start of this task (once, not inside the
    remedia loop), unset any leftover `CYCLE` and recover the highest
-   persisted `a.2 cycle N/3` note for **this** TASK-ID; default 0.
-   Do not reuse another task's `CYCLE`:
+   persisted `a.2 cycle N/3` note for **this** `$TASK_ID`; default 0.
+   Recovered `N` is **completed** remedia cycles. Do not reuse another
+   task's `CYCLE`:
    ```bash
    unset CYCLE
-   CYCLE=$(arm show TASK-ID --format json | jq -r '
+   CYCLE=$(arm show "$TASK_ID" --format json | jq -r '
      [.notes // [] | .[] | strings
        | capture("a\\.2 cycle (?<n>[0-9]+)/3")?
        | select(.) | .n | tonumber]
@@ -491,19 +492,20 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    ')
    CYCLE_FOR="$TASK_ID"
 
-   for ASSESSMENT in "${RESULT_FILES[@]}"; do
-     arm review record --issue TASK-ID --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
-   done
-
+   # Derive ratings first, then record least-conservative → most-conservative
+   # so the last AssessmentAttestation (what arm show reads) matches $RATING.
    # RESULT_FILE = most conservative path (red > yellow > green). Ties: first
    # of that rating. Prefer .rating if present; else derive from results
    # (any not_satisfied => red; else any partially_satisfied or
-   # indeterminate => yellow; else green). If a file has neither, use that
-   # reviewer's chat line `Rating: Green|Yellow|Red`.
+   # indeterminate => yellow; else green).
+   greens=()
+   yellows=()
+   reds=()
    best_rank=0
    RESULT_FILE="${RESULT_FILES[0]}"
    RATING=""
    for f in "${RESULT_FILES[@]}"; do
+     test -s "$f" || { echo "ERROR: assessment missing or empty: $f; do not enter a.3" >&2; exit 1; }
      rating=$(jq -r '
        if .rating then (.rating | tostring | ascii_downcase)
        elif (.results | type) == "array" then
@@ -513,12 +515,12 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
        else empty end
      ' "$f")
      case "$rating" in
-       red) rank=3 ;;
-       yellow) rank=2 ;;
-       green) rank=1 ;;
+       red) rank=3; reds+=("$f") ;;
+       yellow) rank=2; yellows+=("$f") ;;
+       green) rank=1; greens+=("$f") ;;
        *)
-         echo "WARN: $f has no .rating/.results; use that reviewer's chat Rating: Green|Yellow|Red" >&2
-         rank=0
+         echo "ERROR: $f has no .rating/.results; read that reviewer's chat Rating: Green|Yellow|Red and set RATING; do not enter a.3" >&2
+         exit 1
          ;;
      esac
      if [ "$rank" -gt "$best_rank" ]; then
@@ -527,15 +529,25 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
        RATING="$rating"
      fi
    done
+   if [ -z "$RATING" ]; then
+     echo "ERROR: no assessment rating derivable; do not enter a.3" >&2
+     exit 1
+   fi
+   SORTED_RESULT_FILES=("${greens[@]}" "${yellows[@]}" "${reds[@]}")
+   for ASSESSMENT in "${SORTED_RESULT_FILES[@]}"; do
+     arm review record --issue "$TASK_ID" --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE" \
+       || { echo "ERROR: review record failed for $ASSESSMENT; do not enter a.3" >&2; exit 1; }
+   done
    ```
    Pass each `--assessment` path and `--bundle "$BUNDLE_FILE"` as file paths (not raw JSON content) so each recorded assessment is bound to the exact bundle (and its durable identity) the reviewer evaluated.
 
-   Loop-control rating is `$RATING` from the conservative `$RESULT_FILE` above,
-   or that reviewer's chat / matching record output if `$RATING` is empty.
-   **Green:** this task is done with a.2 — skip steps 5–7. **Yellow or red:**
-   if recovered `CYCLE` is already 3, escalate (step 7's cycle-3 branch) and
-   do not remedia. Otherwise if `CYCLE` is 0, set `CYCLE=1`. Enter the
-   remedia loop at step 5. Do not start a.3 or merge on a non-green rating.
+   Loop-control rating is `$RATING` from the conservative `$RESULT_FILE` above.
+   An empty `$RATING` already exited. **Green:** this task is done with a.2 —
+   skip steps 5–7. **Yellow or red:** if recovered `CYCLE` is already 3,
+   escalate (step 7's cycle-3 branch) and do not remedia. Otherwise set
+   `CYCLE=$((CYCLE + 1))` (recovered `N` is completed; next remedia is
+   `N+1`) and enter the remedia loop at step 5. Do not start a.3 or merge
+   on a non-green rating.
 
 5. **Reopen and reclaim before remediating.** Semantic review runs after the
    worker has already transitioned to `done`. The remediator must re-enter
@@ -545,9 +557,10 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
 
    `applyHeartbeat` requires `op.WorkerID == issue.ClaimedBy`. ClaimedBy is
    the slotted identity written at claim time (`<worker-id>~<slot>`). Claim
-   **as the remediator**: set `ARM_LOG_SLOT` to the same slot the remediator
-   will heartbeat under (the slot you embed in its Dispatch Protocol prompt),
-   then unset it so later coordinator ops stay on the unslotted log.
+   **as the remediator**: set `ARM_LOG_SLOT` on the same invocation as
+   `arm claim` (prefix form below). Do not `export` then claim in a later
+   tool call — a fresh-shell harness drops the export and claims unslotted.
+   Prefix keeps later coordinator ops on the unslotted log with no `unset`.
 
    `REMEDIATOR_SLOT` must be unique across the wave (I3). Default:
    `rem-${TASK_ID}` — self-contained, unique per task, valid in
@@ -564,28 +577,35 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    ```bash
    if [ "${CYCLE_FOR:-}" != "$TASK_ID" ]; then
      unset CYCLE
-     CYCLE=$(arm show TASK-ID --format json | jq -r '
+     CYCLE=$(arm show "$TASK_ID" --format json | jq -r '
        [.notes // [] | .[] | strings
          | capture("a\\.2 cycle (?<n>[0-9]+)/3")?
          | select(.) | .n | tonumber]
        | if length == 0 then 0 else max end
      ')
      CYCLE_FOR="$TASK_ID"
+     if [ "$CYCLE" -ge 3 ]; then
+       CLAIMED_BY=$(arm show "$TASK_ID" --field claimed_by)
+       arm note --issue "$TASK_ID" --msg "a.2 cycle 3/3 recovered; escalated (I7); claim=${CLAIMED_BY:-unset} worktree=.worktrees/$TASK_ID"
+       echo "ERROR: recovered cycle $CYCLE; escalate I7; do not remedia / enter a.3" >&2
+       exit 1
+     fi
+     CYCLE=$((CYCLE + 1))
    fi
    # Unique per wave task; rem-${TASK_ID} needs no prior slot memory (not literal t1).
+   # Run this block as one shell invocation. ARM_LOG_SLOT is a one-shot prefix
+   # on claim — do not split the prefix and arm claim across tool calls.
    REMEDIATOR_SLOT="rem-${TASK_ID}"
-   arm reopen TASK-ID
-   export ARM_LOG_SLOT="$REMEDIATOR_SLOT"
-   arm claim TASK-ID --ttl 120 --worktree
-   CLAIMED_BY=$(arm show TASK-ID --field claimed_by)
+   arm reopen "$TASK_ID"
+   ARM_LOG_SLOT="$REMEDIATOR_SLOT" arm claim "$TASK_ID" --ttl 120 --worktree
+   CLAIMED_BY=$(arm show "$TASK_ID" --field claimed_by)
    BASE_ID=$(arm worker-init --check | awk '/^Worker ID:/{print $3}')
    EXPECTED="${BASE_ID}~${REMEDIATOR_SLOT}"
    if [ "$CLAIMED_BY" != "$EXPECTED" ]; then
      echo "ERROR: ClaimedBy=$CLAIMED_BY expected $EXPECTED (ARM_LOG_SLOT dropped before claim?)" >&2
      exit 1
    fi
-   unset ARM_LOG_SLOT
-   arm render-context TASK-ID --format agent
+   arm render-context "$TASK_ID" --format agent
    ```
    `arm claim --worktree` reuses the existing `.worktrees/TASK-ID` checkout
    and rewrites its `armature-issue-id` binding; do not `git worktree add`
@@ -607,7 +627,7 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    TASK_COMMITS["$TASK_ID"]="$WAVE_BASE_SHA..task/$TASK_ID"
    TASK_HEAD=$(git rev-parse "task/$TASK_ID")
    BUNDLE_FILE=$(mktemp)
-   arm review prepare --issue TASK-ID \
+   arm review prepare --issue "$TASK_ID" \
      --base "$TASK_BASE" --head "$TASK_HEAD" \
      --output "$BUNDLE_FILE"
    HAS_ACTIVITY=$(jq -r 'if .activity then "yes" else "no" end' "$BUNDLE_FILE")
@@ -635,7 +655,8 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    # Path the confirmation reviewer returned (distinct token confirm-$CYCLE).
    RESULT_FILE="<path from confirmation reviewer chat>"
    test -s "$RESULT_FILE" || { echo "ERROR: confirmation assessment missing" >&2; exit 1; }
-   arm review record --issue TASK-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
+   arm review record --issue "$TASK_ID" --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE" \
+     || { echo "ERROR: review record failed for $RESULT_FILE; do not enter a.3" >&2; exit 1; }
    ```
    Reusing the pre-remediation bundle lets a green confirmation attest
    the old delivery SHA, fingerprints, and diff. Reusing the
@@ -665,16 +686,19 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
      exit 1
    fi
    if [ "${CYCLE:-0}" -eq 0 ]; then CYCLE=1; fi
-   arm note --issue TASK-ID --msg "a.2 cycle $CYCLE/3 rating=$RATING"
+   # Persist the cycle just completed only. Recovery takes max N; a pending
+   # next-cycle note would make a fresh context escalate after 2 remediations.
+   arm note --issue "$TASK_ID" --msg "a.2 cycle $CYCLE/3 rating=$RATING"
    case "$RATING" in
      green) ;;
      yellow|red)
        if [ "$CYCLE" -ge 3 ]; then
+         CLAIMED_BY=$(arm show "$TASK_ID" --field claimed_by)
+         arm note --issue "$TASK_ID" --msg "a.2 cycle 3/3 $RATING; escalated (I7); claim=${CLAIMED_BY:-unset} worktree=.worktrees/$TASK_ID"
          echo "ERROR: cycle $CYCLE still $RATING; escalate I7; do not enter a.3 / arm merged" >&2
          exit 1
        fi
        CYCLE=$((CYCLE + 1))
-       arm note --issue TASK-ID --msg "a.2 cycle $CYCLE/3 rating=$RATING; repeat 5-6"
        echo "NON-GREEN: cycle $CYCLE $RATING; replace FINDINGS_FILE; repeat steps 5-6; do not enter a.3" >&2
        exit 1
        ;;
@@ -695,16 +719,16 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
      are critical (confirmation mode: out-of-scope findings block only
      at critical severity). That is the T1 trade-off; keep the loop
      as specified.
-   - **Yellow or red, and `CYCLE` was < 3:** the snippet incremented
-     `CYCLE`, persisted that next cycle in a note, and exited 1. The
-     agent remediates: replace `$FINDINGS_FILE` with the confirmation's
-     remaining findings (the new remediating set) and repeat steps
-     5–6. At `CYCLE` 2, auto-escalate remediator effort to high
-     (Dispatch Protocol).
-   - **Yellow or red, and `CYCLE` was already 3:** the snippet exited.
-     The agent escalates to the human (Constitution I7). Do not enter
-     a.3, do not merge this task branch, do not run `arm merged` for
-     this task.
+   - **Yellow or red, and `CYCLE` was < 3:** the snippet persisted the
+     completed cycle, incremented `CYCLE` in memory only, and exited 1.
+     The agent remediates: replace `$FINDINGS_FILE` with the
+     confirmation's remaining findings (the new remediating set) and
+     repeat steps 5–6. At `CYCLE` 2, auto-escalate remediator effort to
+     high (Dispatch Protocol).
+   - **Yellow or red, and `CYCLE` was already 3:** the snippet noted the
+     surviving claim and worktree, then exited. The agent escalates to
+     the human (Constitution I7). Do not enter a.3, do not merge this
+     task branch, do not run `arm merged` for this task.
 
    Confirmation-green tasks may proceed to a.3 / merge individually.
    Cycle-3 escalated tasks stay out of a.3, `arm merged`, and branch
@@ -1019,7 +1043,7 @@ git push -u origin HEAD
 | Failure | Cause | Fix |
 |---|---|---|
 | Parallel agents share one log, attribution lost | Forgot to embed `ARM_LOG_SLOT` in each agent's prompt | Include `export ARM_LOG_SLOT=<slot>` as the first instruction in each agent's prompt before dispatch |
-| Remediator heartbeats ignored; claim expires | Remediating `arm claim` ran unslotted; `ClaimedBy` ≠ remediator `WorkerID` | Export the remediator's `ARM_LOG_SLOT` before that `arm claim`; unset after |
+| Remediator heartbeats ignored; claim expires | Remediating `arm claim` ran unslotted; `ClaimedBy` ≠ remediator `WorkerID` | Prefix `ARM_LOG_SLOT=$REMEDIATOR_SLOT` on the same `arm claim` invocation; assert `ClaimedBy` |
 | Confirmation still yellow/red, wave merged anyway | Steps 5–6 ran once and fell through to a.3 | Inspect the confirmation rating; repeat 5–6 until green or cycle 3, then escalate; never enter a.3 on non-green |
 | Parallel reviews clobber one `.armature/review/` file | Path uniqued only by issue + bundle | Distinct `<reviewer-token>` per reviewer; consolidate findings before `arm review record` |
 | Build breaks after merging parallel branches | Skipped integration verification | After each wave, run `make check` before claiming the next wave |
