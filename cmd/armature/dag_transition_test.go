@@ -78,7 +78,7 @@ func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
 		"--acceptance", testAcceptance,
 	)
 	require.NoError(t, err)
-	createValidTask(t, repo, "open-b", "internal/ops/*.go", "Implement second overlapping task")
+	createOverlappingTask(t, repo, "open-b", "Implement second overlapping task")
 
 	_, err = runTrls(t, repo, "dag", "transition", "--issue", "draft-a", "--to", "verified")
 	require.Error(t, err, "plan release must refuse a graph with validate findings")

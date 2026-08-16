@@ -81,7 +81,7 @@ INFO lines on a failing run.`,
 					return err
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			} else if result.OK {
+			} else if result.OK && len(result.Warnings) == 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(result))
 			} else if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
 				return fmt.Errorf("render validation: %w", err)
