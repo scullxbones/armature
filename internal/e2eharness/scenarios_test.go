@@ -133,6 +133,7 @@ func scenarioHarness(t *testing.T, issueIDs ...string) *e2eharness.Harness {
 			"id":         issueID,
 			"title":      issueID + " scenario task",
 			"type":       "task",
+			"source":     "src-e2e",
 			"dod":        "scenario complete",
 			"scope":      "cmd/armature/" + issueID + ".go",
 			"acceptance": []map[string]any{{"type": "test_passes"}},
