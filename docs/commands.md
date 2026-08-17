@@ -128,6 +128,10 @@ Generate shell completion script.
 
 Promote an inferred node from draft to verified confidence.
 
+Plan release requires a strict-green `arm validate` of the whole graph.
+Happy-path failures name the Graph Finding and withdraw-the-draft
+(`arm dag revert` / `arm transition --to cancelled`).
+
 **Synopsis:**
 `arm confirm <node-id> [flags]`
 
@@ -164,7 +168,7 @@ Create a new work item.
 `arm create [flags]`
 
 **Flags:**
-- `--confidence string`: Confidence level: `draft` or `verified` (default `verified`).
+- `--confidence string`: Ignored. Birth is always draft.
 - `--dod string`: Definition of done.
 - `--id string`: Explicit ID (auto-generated if empty).
 - `--parent string`: Parent node ID.
@@ -193,6 +197,11 @@ Manage the Directed Acyclic Graph (DAG) of issues.
 
 Apply a decomposition plan to the issue graph.
 
+Every issue in the plan must include a `source` (source entry ID). Apply is
+source-atomic: each create is emitted with its source-link in the same batch.
+Writes that would introduce a Graph Finding on a targeted issue are refused.
+`--dry-run` is how a planner iterates.
+
 **Synopsis:**
 `arm dag apply [flags]`
 
@@ -203,7 +212,6 @@ Apply a decomposition plan to the issue graph.
 - `--plan string`: Path to plan JSON file.
 - `--root string`: Override inferred root: attach top-level plan issues to this existing issue ID.
 - `--schema`: Print a JSON Schema document describing the plan format and exit.
-- `--strict`: Treat advisory warnings as errors.
 
 **Example:**
 ```bash
@@ -309,14 +317,26 @@ Promote all draft nodes in a subtree to verified.
 
 Promotion to `verified` (plan release) requires a strict-green `arm validate` of
 the whole graph so a planner cannot release a dirty plan. Demotion to `draft`
-is not gated. `--skip-validate-gate` records a human override on the
-dag-transition op (`Payload.SkippedValidateGate`); it is valid only with
-`--to verified`.
+is not gated. Happy-path failures name the Graph Finding and withdraw-the-draft
+(`arm dag revert` / `arm transition --to cancelled`).
 
 **Flags:**
 - `--issue string`: Root issue ID of the subtree to promote.
 - `--to string`: Target confidence level (default: `verified`).
-- `--skip-validate-gate`: Skip the plan-release validate gate. Recorded on the op. Only valid with `--to verified`.
+
+---
+
+### dag override-release
+
+Record a human Release Override for a draft subtree. Requires a controlling
+terminal, an interactive type-the-id, and a recorded `--reason`. The op sets
+`skipped_validate_gate` plus the reason. Success is never "green."
+
+**Synopsis:**
+`arm dag override-release <issue-id> --reason <text>`
+
+**Flags:**
+- `--reason string`: Recorded reason for the override (required).
 
 ---
 

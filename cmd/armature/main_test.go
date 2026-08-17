@@ -48,6 +48,64 @@ var runTrlsMu sync.Mutex
 
 // getTestContext resolves the execution context for a test repository.
 // This is a test helper that mirrors the production config.ResolveContext behavior.
+func appendRawCreate(logPath, workerID, id, dod, scope string) error {
+	return appendRawCreateConfidence(logPath, workerID, id, dod, scope, "draft")
+}
+
+func appendRawCreateConfidence(logPath, workerID, id, dod, scope, confidence string) error {
+	return ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  id,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			Title:            id,
+			NodeType:         "task",
+			Scope:            []string{scope},
+			DefinitionOfDone: dod,
+			Acceptance:       json.RawMessage(testAcceptance),
+			Confidence:       confidence,
+		},
+	})
+}
+
+func plantOverlappingFooPair(t *testing.T, repo string) {
+	t.Helper()
+	plantVerifiedTask(t, repo, "task-01", "src/foo/*")
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendRawCreateConfidence(logPath, workerID, "task-02", "Task 2 is complete and tested", "src/foo/bar.go", "verified"))
+}
+
+func plantVerifiedTask(t *testing.T, repo, id, scope string) {
+	t.Helper()
+	plantVerifiedTaskUnder(t, repo, id, scope, "")
+}
+
+func plantVerifiedTaskUnder(t *testing.T, repo, id, scope, parent string) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	err = ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  id,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			Title:            id,
+			NodeType:         "task",
+			Parent:           parent,
+			Scope:            []string{scope},
+			DefinitionOfDone: "Task " + id + " is complete and tested",
+			Acceptance:       json.RawMessage(testAcceptance),
+			Confidence:       "verified",
+		},
+	})
+	require.NoError(t, err)
+}
+
 func getTestContext(t *testing.T, repo string) *config.Context {
 	t.Helper()
 	ctx, err := config.ResolveContext(repo)
@@ -311,12 +369,22 @@ func setupRepoWithTask(t *testing.T) string {
 	// setup uses the new layout that commands expect)
 	setupArmatureLayout(t, repo)
 
-	cmd := newRootCmd()
-	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
-		"--dod", "Task implementation is complete and verified"})
-	require.NoError(t, cmd.Execute())
-
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			Title:            "Test task",
+			NodeType:         "task",
+			Scope:            []string{"cmd/armature/task_01.go"},
+			DefinitionOfDone: "Task implementation is complete and verified",
+			Confidence:       "verified",
+		},
+	}))
 	return repo
 }
 
@@ -567,7 +635,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	require.NoError(t, cmd2.Execute())
 
 	// Write a temp plan file
-	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task"}]}`
+	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task","source":"src-test"}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
@@ -794,8 +862,8 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 		"version": 1,
 		"title": "Test Plan",
 		"issues": [
-			{"id": "PLAN-001", "title": "First issue", "type": "task", "dod": "done"},
-			{"id": "PLAN-002", "title": "Second issue", "type": "task", "dod": "done"}
+			{"id": "PLAN-001", "title": "First issue", "type": "task", "dod": "done", "source": "src-test"},
+			{"id": "PLAN-002", "title": "Second issue", "type": "task", "dod": "done", "source": "src-test"}
 		]
 	}`
 	planPath := filepath.Join(repo, "test-plan.json")
@@ -1427,14 +1495,18 @@ func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a verified task
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Verified work", "--id", "verified-01", "--confidence", "verified")
+	// Birth is always draft; promote to verified so it can enter ready.
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Verified work", "--id", "verified-01",
+		"--scope", "cmd/armature/verified.go", "--dod", "Verified work is complete and tested",
+		"--acceptance", testAcceptance)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "verified-01", "--to", "verified")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "ready", "--format", "json")
 	require.NoError(t, err)
 
-	// The verified task should appear in the ready queue
+	// After plan release the task should appear in the ready queue
 	assert.Contains(t, out, "verified-01")
 }
 
@@ -1447,15 +1519,14 @@ func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a task without a confidence flag (legacy behavior)
+	// Create a task without a confidence flag — birth is always draft.
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Legacy task", "--id", "legacy-01")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "ready", "--format", "json")
 	require.NoError(t, err)
 
-	// Task with no confidence field should default to verified and appear in ready
-	assert.Contains(t, out, "legacy-01")
+	assert.NotContains(t, out, "legacy-01", "create without --confidence must emit draft")
 }
 
 func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
@@ -1861,10 +1932,8 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Child A", "--id", "child-a", "--parent", "parent-01")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Unrelated", "--id", "unrelated-01")
-	require.NoError(t, err)
+	plantVerifiedTaskUnder(t, repo, "child-a", "cmd/armature/child_a.go", "parent-01")
+	plantVerifiedTask(t, repo, "unrelated-01", "cmd/armature/unrelated.go")
 
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1883,8 +1952,7 @@ func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Text format task", "--id", "text-01")
-	require.NoError(t, err)
+	plantVerifiedTask(t, repo, "text-01", "cmd/armature/text_01.go")
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -2705,13 +2773,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create first task with scope
-	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
-	require.NoError(t, err)
-
-	// Create a second task with overlapping scope
-	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
-	require.NoError(t, err)
+	plantOverlappingFooPair(t, repo)
 
 	// Claim task-01 as a *different* worker by temporarily overriding the git config.
 	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
@@ -2747,13 +2809,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create first task with scope
-	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
-	require.NoError(t, err)
-
-	// Create a second task with overlapping scope
-	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
-	require.NoError(t, err)
+	plantOverlappingFooPair(t, repo)
 
 	// Claim the first task
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
@@ -2776,11 +2832,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
-	require.NoError(t, err)
-
-	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
-	require.NoError(t, err)
+	plantOverlappingFooPair(t, repo)
 
 	// Same worker claims task-01 first.
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
@@ -2811,11 +2863,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create two tasks with overlapping scopes
-	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
-	require.NoError(t, err)
-
-	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
-	require.NoError(t, err)
+	plantOverlappingFooPair(t, repo)
 
 	// Same worker claims task-01
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
@@ -2869,10 +2917,7 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task", "--scope", "src/foo/*")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task", "--scope", "src/foo/bar.go")
-	require.NoError(t, err)
+	plantOverlappingFooPair(t, repo)
 
 	t.Setenv("ARM_LOG_SLOT", "A")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")

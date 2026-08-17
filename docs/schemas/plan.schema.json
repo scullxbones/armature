@@ -83,6 +83,10 @@
                 {"type": "object"}
               ]
             }
+          },
+          "source": {
+            "type": "string",
+            "description": "Source entry ID (UUID) cited for this issue. Required by apply; apply is source-atomic."
           }
         }
       },

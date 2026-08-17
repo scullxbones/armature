@@ -154,8 +154,11 @@ Only release to the Coordinator after both commands are clean.
 
 ## Writing Good Plan JSON
 
-This section is critical. **Every task in the plan MUST have `dod`, `scope`, and
-`acceptance` fields or `arm validate` will ERROR.** Validate the plan JSON against
+This section is critical. **Every issue in the plan MUST have a `source` (source
+entry ID) or `arm dag apply` will refuse the plan.** Apply is source-atomic:
+each create is emitted with its source-link in the same batch. **Every task
+MUST have `dod`, `scope`, and `acceptance` fields or Plan Release (`dag
+transition` / `confirm`) will fail.** Validate the plan JSON against
 [the plan schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/plan.schema.json) before submitting; see `docs/json-schema-examples.md`
 for worked examples.
 
@@ -226,6 +229,7 @@ if not needed.
       "type": "story",
       "scope": "",
       "priority": "",
+      "source": "00000000-0000-0000-0000-000000000001",
       "dod": "Decomposition plan for the story is created, reviewed, and passes arm validate",
       "parent": "",
       "blocked_by": null,
@@ -241,6 +245,7 @@ if not needed.
       "title": "Implement login endpoint",
       "type": "task",
       "scope": "internal/auth/login.go (new)",
+      "source": "00000000-0000-0000-0000-000000000001",
       "context_files": [
         "docs/auth-architecture.md"
       ],
@@ -260,6 +265,7 @@ if not needed.
       "title": "Write login integration tests",
       "type": "task",
       "scope": "internal/auth/login_test.go (new)",
+      "source": "00000000-0000-0000-0000-000000000001",
       "priority": "medium",
       "dod": "Integration tests cover happy path and error cases",
       "parent": "STORY-001",
@@ -285,7 +291,8 @@ if not needed.
 | `"scope": "various files"` | Worker cannot self-scope | List every file path explicitly |
 | `"acceptance": []` | No pass/fail signal | Name at least one test or command |
 | `"scope": "internal/"` | Too broad, causes overlaps | Name the specific files |
-| Missing `acceptance` field entirely | `arm validate` ERRORs | Add the field, even if `--example` omits it |
+| Missing `source` field | `arm dag apply` refuses the plan | Add the source entry ID; apply is source-atomic |
+| Missing `acceptance` field entirely | Plan Release / `arm validate` ERRORs | Add the field, even if `--example` omits it |
 | Plan without `version: 1, title, issues` wrapper | `arm dag apply` fails validation; bare task objects not accepted | Wrap all issues in `{ "version": 1, "title": "...", "issues": [...] }` |
 | `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
 
@@ -405,8 +412,8 @@ arm create --title "X" --type task --parent STORY-ID
 
 # Decomposition
 arm dag apply --example                         # inspect schema
-arm dag apply --plan plan.json --dry-run        # preview without writing
-arm dag apply --plan plan.json                  # apply the plan
+arm dag apply --plan plan.json --dry-run        # preview without writing; iterate here
+arm dag apply --plan plan.json                  # apply the plan (source-atomic; Introduction check)
 
 # Draft promotion
 arm dag transition --issue ROOT-ID                    # promote root + all children

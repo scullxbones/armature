@@ -30,7 +30,7 @@ This document inventories the actual surfaces of the armature system: issue type
 
 | State | Defined | Used By | Status | Notes |
 |-------|---------|---------|--------|-------|
-| `draft` | internal/ops/types.go:127 (comment), create.go:62, Payload.Confidence | Confidence field in create payload, ready-queue gate (internal/ready/compute.go:~60, ~113), dag-transition promotion, tests | **kept-evidence** | Set via --confidence flag on create. Gates *readiness*, not claiming: `draft` issues are excluded from the ready queue in internal/ready/compute.go (ComputeReady and ExplainNotReady both skip `Confidence == "draft"`). Promoted to `verified` via dag-transition/confirm flow. |
+| `draft` | internal/ops/types.go:127 (comment), create.go:62, Payload.Confidence | Confidence field in create payload, ready-queue gate (internal/ready/compute.go:~60, ~113), dag-transition promotion, tests | **kept-evidence** | Birth is always draft. Gates *readiness*, not claiming: `draft` issues are excluded from the ready queue in internal/ready/compute.go (ComputeReady and ExplainNotReady both skip `Confidence == "draft"`). Promoted to `verified` via dag-transition/confirm flow. |
 | `verified` | internal/ops/types.go:127 (comment: default), materialize assumptions, tests | Default when confidence absent, claim eligibility, tests | **kept-evidence** | Implicit default for issues created without explicit confidence. Claim-eligible state. |
 | `inferred` | claim.go:311 (check) | Claim rejection logic | **kept-evidence** | Provenance confidence value that blocks *claiming* (claim.go:311 rejects `Confidence == "inferred"` specifically — it does not check `draft`). Set during materialization when reconstructing inferred nodes. |
 
@@ -122,7 +122,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `note` | main.go:114, note.go | Add/delete worker note | **kept-evidence** | Progress tracking. Supports deletion by note_id. |
 | `decision` | main.go:118, decision.go | Record structured decision | **kept-evidence** | Couples scope changes with rationale. Affects field filters scope. |
 | `amend` | main.go:122, amend.go | Update issue metadata | **kept-evidence** | Allows corrections after creation. Payload-driven updates. |
-| `confirm` | main.go:126, confirm.go | Interactive confidence promotion | **kept-evidence** | DAG flow. Promotes draft→verified with human confirmation. |
+| `confirm` | main.go:126, confirm.go | Interactive confidence promotion | **kept-evidence** | DAG flow. Promotes draft→verified. Plan Release runs whole-graph strict validate. |
 | `assign` | main.go:130, assign.go | Assign worker to issue | **kept-evidence** | Decouples assignment from claiming. Sets assigned_worker. |
 
 ### DAG Commands (dag group)
@@ -134,7 +134,8 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `dag context` | dag.go, decompose.go | Generate context for plan | **kept-evidence** | Agent-facing tool. Renders existing DAG and sources into plan context. |
 | `dag revert` | dag.go, decompose.go | Remove issues created by plan | **kept-evidence** | Undo plan application. Validates that no children exist. |
 | `dag summary` | dag.go, dagsum.go | Summarize draft nodes | **kept-evidence** | Diagnostic and planning tool. Lists unconfirmed nodes in a subtree. |
-| `dag transition` | dag.go, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. Promotion to verified requires a strict-green arm validate of the whole graph unless `--skip-validate-gate` is recorded on the op. |
+| `dag transition` | dag.go, dag_transition.go | Promote confidence (low-level) | **kept-evidence** | Sets dag_confirmed flag. Underpins confidence workflow. Promotion to verified requires a strict-green arm validate of the whole graph (Plan Release). |
+| `dag override-release` | dag.go, dag_override_release.go | Human Release Override | **kept-evidence** | TTY + type-the-id + reason. Records skipped_validate_gate. Never a green release. Not a flag on agent verbs. |
 | `link` | main.go, link.go | Add dependency | **kept-evidence** | Couples issues. Only `--rel blocked_by` is a valid input; `blocks` is derived automatically as the inverse. |
 | `unlink` | main.go, unlink.go | Remove dependency | **kept-evidence** | Uncouples issues. Removes from blocked_by/blocks. |
 
@@ -215,7 +216,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--acceptance` | create, amend | string | Acceptance criteria as JSON | **kept-evidence** |
 | `--context-file` | create, amend | string[] | Stable reference files | **kept-evidence** |
 | `--id` | create | string | Explicit issue ID (auto-generated if empty) | **kept-evidence** |
-| `--confidence` | create | string | Confidence level (draft or verified) | **kept-evidence** |
+| `--confidence` | create | string | Ignored. Birth is always draft. | **kept-evidence** |
 | `--source` | create, import | string | Source ID/URL to link at creation | **kept-evidence** |
 
 ### Workflow Flags
@@ -230,8 +231,8 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
 | `--skip-delivery-gate` | transition | bool | Bypass the delivery gate (clean tree, scope containment, commit reference) checked when transitioning to done; override is recorded in the transition op's payload | **kept-evidence** |
-| `--to` | dag transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. Promotion to verified runs full-graph strict validate first unless `--skip-validate-gate` is set. | **kept-evidence** |
-| `--skip-validate-gate` | dag transition | bool | Bypass the plan-release validate gate when promoting to verified; override is recorded in the dag-transition op's payload (`skipped_validate_gate`). Rejected for `--to draft`. Happy-path validate failures do not name this flag. | **kept-evidence** |
+| `--to` | dag transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. Promotion to verified runs full-graph strict validate first. | **kept-evidence** |
+| `--reason` | dag override-release | string | Recorded reason for a Release Override. Required. | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
@@ -255,7 +256,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--plan` | dag apply, dag revert, dag context | string | Path to plan JSON file | **kept-evidence** |
 | `--example` | dag apply | bool | Print minimal plan example | **kept-evidence** |
 | `--schema` | dag apply | bool | Print JSON Schema | **kept-evidence** |
-| `--strict` | dag apply, doctor, validate | bool | Treat warnings as errors. Default false on dag apply and doctor; default true on validate (D7). | **kept-evidence** |
+| `--strict` | doctor, validate | bool | Treat warnings as errors. Default false on doctor; default true on validate (D7). | **kept-evidence** |
 | `--generate-ids` | dag apply | bool | Replace plan IDs with UUIDs | **kept-evidence** |
 | `--root` | dag apply | string | Override inferred root | **kept-evidence** |
 | `--sources` | dag context | string | Comma-separated source IDs to include | **kept-evidence** |

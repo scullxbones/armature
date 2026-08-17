@@ -16,6 +16,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/validate"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -223,6 +224,9 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	if ctx == nil {
 		return fmt.Errorf("appendOp: command context unavailable")
 	}
+	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
+		return err
+	}
 	var gc ops.GitCommitter
 	if ctx.WorktreePath != "" {
 		gc = adapters.New(ctx.WorktreePath)
@@ -239,6 +243,9 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 	}
 	ctx := state.ctx
 	tracker := state.tracker
+	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
+		return err
+	}
 	var gc ops.GitCommitter
 	if ctx.WorktreePath != "" {
 		gc = adapters.New(ctx.WorktreePath)
@@ -270,6 +277,9 @@ func appendLowStakesOp(state *executionState, logPath string, op ops.Op) error {
 	}
 	ctx := state.ctx
 	tracker := state.tracker
+	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
+		return err
+	}
 	var gc ops.GitCommitter
 	if ctx.WorktreePath != "" {
 		gc = adapters.New(ctx.WorktreePath)
@@ -302,6 +312,42 @@ func appendLowStakesOp(state *executionState, logPath string, op ops.Op) error {
 // extractFieldsFromIssue extracts specified fields from an Issue and returns their values
 // as a slice of strings in the order requested. For unknown fields, returns empty string.
 // Fields are comma-separated (e.g., "status,title,outcome").
+func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
+	if ctx == nil {
+		return fmt.Errorf("refuseIntroduction: command context unavailable")
+	}
+	var check []ops.Op
+	for _, op := range proposed {
+		if ops.AffectsValidity(op.Type) {
+			check = append(check, op)
+		}
+	}
+	if len(check) == 0 {
+		return nil
+	}
+	// Replay ops in memory so Introduction does not rewrite checkpoint.json
+	// (write handlers must not rematerialize as a side effect of append).
+	opsDir := filepath.Join(ctx.IssuesDir, "ops")
+	allOps, err := readAllOpsFromDir(opsDir)
+	if err != nil {
+		return fmt.Errorf("load ops for introduction check: %w", err)
+	}
+	state := materialize.NewState()
+	for _, existing := range allOps {
+		if applyErr := state.ApplyOp(existing); applyErr != nil {
+			continue
+		}
+	}
+	manifestData, err := adapters.ReadManifestFile(filepath.Join(ctx.IssuesDir, "sources"))
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+	return validate.CheckIntroduction(state, check, validate.Options{
+		Strict:       true,
+		ManifestData: manifestData,
+	})
+}
+
 func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string {
 	if issue == nil {
 		return []string{}

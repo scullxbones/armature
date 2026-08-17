@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -34,17 +33,7 @@ func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	}
 
 	for _, tk := range tasks {
-		cmd := newRootCmd()
-		cmd.SetOut(new(bytes.Buffer))
-		cmd.SetArgs([]string{
-			"create", "--repo", repo,
-			"--title", tk.title,
-			"--type", "task",
-			"--id", tk.id,
-			"--dod", "Task implementation is complete and verified",
-			"--scope", tk.scope,
-		})
-		require.NoError(t, cmd.Execute())
+		plantVerifiedTask(t, repo, tk.id, tk.scope)
 	}
 
 	out, err := runTrls(t, repo, "ready", "--waves", "--format", "json")

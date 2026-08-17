@@ -12,14 +12,12 @@ const testAcceptance = `[{"type":"test_passes","cmd":"go test"}]`
 
 func createOverlappingTask(t *testing.T, repo, id, dod string) {
 	t.Helper()
-	_, err := runTrls(t, repo, "create",
-		"--type", "task",
-		"--title", id,
-		"--id", id,
-		"--scope", "internal/ops/*.go",
-		"--dod", dod,
-		"--acceptance", testAcceptance,
-	)
+	// Plant via raw ops so fixtures can represent a dirty graph without
+	// being refused by the write-time Introduction check.
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	err = appendRawCreate(logPath, workerID, id, dod, "internal/ops/*.go")
 	require.NoError(t, err)
 }
 
@@ -141,15 +139,10 @@ func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
 	require.NoError(t, err)
 
 	longDoD := strings.Repeat("x", 501)
-	_, err = runTrls(t, repo, "create",
-		"--type", "task",
-		"--title", "oversized-dod",
-		"--id", "tsk-e9",
-		"--scope", "internal/ops/*.go",
-		"--dod", longDoD,
-		"--acceptance", testAcceptance,
-	)
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
+	require.NoError(t, appendRawCreate(logPath, workerID, "tsk-e9", longDoD, "internal/ops/*.go"))
 
 	out, err := runTrls(t, repo, "validate", "--strict=false")
 	require.Error(t, err, "--strict=false must still fail closed on E-codes")

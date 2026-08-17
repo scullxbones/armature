@@ -34,6 +34,12 @@ arm worker-init --check || arm worker-init
 
 **`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
 
+Writes that introduce a Graph Finding on an issue they created or targeted
+are refused (Introduction). Happy-path errors name the finding, the fix
+(narrow `--scope`, add `context_files`, or `arm link`), and withdraw-the-draft
+(`arm dag revert` / `arm transition --to cancelled`). Do not look for a skip
+flag. Birth is always draft.
+
 Before transitioning any task to `done` and after completing your work, run:
 ```bash
 arm validate       # zero ERRORs; all issues cited

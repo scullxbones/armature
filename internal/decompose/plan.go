@@ -22,6 +22,9 @@ type PlanIssue struct {
 	BlockedBy    []string        `json:"blocked_by"`
 	Notes        []string        `json:"notes"`
 	Acceptance   json.RawMessage `json:"acceptance,omitempty"`
+	// Source is the source entry ID (UUID) cited for this issue. Apply is
+	// source-atomic: every issue must have one, emitted with the create.
+	Source string `json:"source,omitempty"`
 }
 
 // Plan represents a parsed plan file.

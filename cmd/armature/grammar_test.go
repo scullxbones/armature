@@ -75,6 +75,9 @@ func checkHyphenatedUses(root *cobra.Command) []string {
 		"validate": {
 			"doc-examples": true,
 		},
+		"dag": {
+			"override-release": true,
+		},
 	}
 
 	var violations []string

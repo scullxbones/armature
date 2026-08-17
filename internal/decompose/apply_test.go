@@ -23,10 +23,11 @@ func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
 			{
-				ID:    "PLAN-001",
-				Title: "Multi-scope issue",
-				Type:  "task",
-				Scope: "internal/foo/bar.go, internal/baz/qux.go",
+				ID:     "PLAN-001",
+				Title:  "Multi-scope issue",
+				Type:   "task",
+				Scope:  "internal/foo/bar.go, internal/baz/qux.go",
+				Source: "src-test",
 			},
 		},
 	}
@@ -40,9 +41,12 @@ func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	require.Len(t, readOps, 1)
+	require.GreaterOrEqual(t, len(readOps), 1)
+	assert.Equal(t, ops.OpCreate, readOps[0].Type)
 	assert.Equal(t, []string{"internal/foo/bar.go", "internal/baz/qux.go"}, readOps[0].Payload.Scope,
 		"comma-separated scope should be split into individual entries")
+	assert.Equal(t, ops.OpSourceLink, readOps[1].Type)
+	assert.Equal(t, "src-test", readOps[1].Payload.SourceID)
 }
 
 func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
@@ -55,10 +59,11 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
 			{
-				ID:    "PLAN-001",
-				Title: "Single-scope issue",
-				Type:  "task",
-				Scope: "internal/foo/bar.go",
+				ID:     "PLAN-001",
+				Title:  "Single-scope issue",
+				Type:   "task",
+				Scope:  "internal/foo/bar.go",
+				Source: "src-test",
 			},
 		},
 	}
@@ -72,7 +77,7 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	require.Len(t, readOps, 1)
+	require.GreaterOrEqual(t, len(readOps), 1)
 	assert.Equal(t, []string{"internal/foo/bar.go"}, readOps[0].Payload.Scope,
 		"single scope entry should remain as a single-element slice")
 }
@@ -90,9 +95,10 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
 			{
-				ID:    "PLAN-001",
-				Title: "Issue with injected clock",
-				Type:  "task",
+				ID:     "PLAN-001",
+				Title:  "Issue with injected clock",
+				Type:   "task",
+				Source: "src-test",
 			},
 		},
 	}
@@ -107,7 +113,7 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	require.Len(t, readOps, 1)
+	require.GreaterOrEqual(t, len(readOps), 1)
 	assert.Equal(t, fixedTimestamp, readOps[0].Timestamp,
 		"injected clock timestamp should appear in written op")
 }
@@ -121,11 +127,12 @@ func TestApplyPlanWithOptions_AppliesRootToTopLevelIssues(t *testing.T) {
 		Version: 1,
 		Title:   "Rooted plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "Top-level task", Type: "task"},
+			{ID: "PLAN-001", Title: "Top-level task", Type: "task", Source: "src-test"},
 		},
 	}
 
 	state := materialize.NewState()
+	state.Issues["EPIC-001"] = &materialize.Issue{ID: "EPIC-001", Type: "epic", Status: ops.StatusOpen, Title: "Root epic"}
 	count, err := ApplyPlanWithOptions(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
@@ -133,7 +140,7 @@ func TestApplyPlanWithOptions_AppliesRootToTopLevelIssues(t *testing.T) {
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	require.Len(t, readOps, 1)
+	require.GreaterOrEqual(t, len(readOps), 1)
 	assert.Equal(t, "EPIC-001", readOps[0].Payload.Parent)
 }
 
@@ -144,8 +151,8 @@ func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
 		Version: 1,
 		Title:   "Dry Run Plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "New issue", Type: "task"},
-			{ID: "PLAN-002", Title: "Another issue", Type: "task"},
+			{ID: "PLAN-001", Title: "New issue", Type: "task", Source: "src-test"},
+			{ID: "PLAN-002", Title: "Another issue", Type: "task", Source: "src-test"},
 		},
 	}
 	state := materialize.NewState()
@@ -162,8 +169,8 @@ func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
 		Version: 1,
 		Title:   "Plan with existing",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "New issue", Type: "task"},
-			{ID: "PLAN-EXISTING", Title: "Already exists", Type: "task"},
+			{ID: "PLAN-001", Title: "New issue", Type: "task", Source: "src-test"},
+			{ID: "PLAN-EXISTING", Title: "Already exists", Type: "task", Source: "src-test"},
 		},
 	}
 	state := materialize.NewState()
@@ -175,23 +182,27 @@ func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
 	assert.Equal(t, "PLAN-001", result.WouldCreate[0].ID)
 }
 
-func TestDryRunApplyPlanWithOptions_StrictRejectsWarnings(t *testing.T) {
+func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
-
-	// Create a plan with a duplicate ID to trigger a warning.
+	dir := t.TempDir()
 	plan := &Plan{
 		Version: 1,
-		Title:   "Strict plan",
+		Title:   "Uncited plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "Task one", Type: "task"},
-			{ID: "PLAN-001", Title: "Duplicate ID", Type: "task"},
+			{ID: "PLAN-001", Title: "Task without source", Type: "task", DoD: "done"},
 		},
 	}
 	state := materialize.NewState()
 
-	_, err := DryRunApplyPlanWithOptions(plan, state, ApplyOptions{Strict: true})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "warning")
+	count, err := ApplyPlan(plan, dir, "worker-test", state)
+	require.Error(t, err, "plans without per-issue source must fail apply")
+	assert.Equal(t, 0, count)
+	assert.Contains(t, err.Error(), "source")
+	assert.Contains(t, err.Error(), "PLAN-001")
+
+	_, err = DryRunApplyPlan(plan, state)
+	require.Error(t, err, "dry-run must also refuse an uncited plan")
+	assert.Contains(t, err.Error(), "source")
 }
 
 func TestValidatePlan_DoesNotWarnOnInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
@@ -219,15 +230,14 @@ func TestApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 		Version: 1,
 		Title:   "Plan with invalid type",
 		Issues: []PlanIssue{
-			{ID: "PLAN-002", Title: "Invalid behavior type", Type: "behavior", DoD: "definition"},
+			{ID: "PLAN-002", Title: "Invalid behavior type", Type: "behavior", DoD: "definition", Source: "src-test"},
 		},
 	}
 	state := materialize.NewState()
 	dir := t.TempDir()
 
-	// Non-strict apply must still fail: an invalid type is never
-	// legitimate or salvageable, unlike e.g. a missing DoD.
-	count, err := ApplyPlanWithOptions(plan, dir, "worker-1", state, ApplyOptions{Strict: false}, clock.System)
+	// Invalid type is always fatal, regardless of other plan checks.
+	count, err := ApplyPlanWithOptions(plan, dir, "worker-1", state, ApplyOptions{}, clock.System)
 	require.Error(t, err)
 	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "invalid type")
@@ -246,7 +256,7 @@ func TestDryRunApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	}
 	state := materialize.NewState()
 
-	_, err := DryRunApplyPlanWithOptions(plan, state, ApplyOptions{Strict: false})
+	_, err := DryRunApplyPlanWithOptions(plan, state, ApplyOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid type")
 }

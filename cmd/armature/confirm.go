@@ -20,6 +20,9 @@ func newConfirmCmd() *cobra.Command {
 			if _, err := store.ReadIssue(nodeID); err != nil {
 				return fmt.Errorf("node %q not found", nodeID)
 			}
+			if err := refusePlanRelease(cmd); err != nil {
+				return err
+			}
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
