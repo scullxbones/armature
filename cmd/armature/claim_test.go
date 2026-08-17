@@ -1248,15 +1248,11 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	// Create two tasks with overlapping scopes
-	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "cmd/armature/claim.go")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "amend", "--issue", "task-02", "--scope", "cmd/armature/claim.go")
-	require.NoError(t, err)
+	plantVerifiedTask(t, repo, "task-01", "cmd/armature/claim.go")
+	ctx := getTestContext(t, repo)
+	workerID, workerLog, plantErr := resolveWorkerAndLog(ctx)
+	require.NoError(t, plantErr)
+	require.NoError(t, appendRawCreateConfidence(workerLog, workerID, "task-02", "Task two is complete and tested", "cmd/armature/claim.go", "verified"))
 
 	// Inject a claim op for task-01 from a DIFFERENT worker, simulating a concurrent claim.
 	otherWorker := "other-worker-uuid"
@@ -1338,14 +1334,11 @@ func TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8(t *testing.T
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "cmd/armature/claim.go")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "amend", "--issue", "task-02", "--scope", "cmd/armature/claim.go")
-	require.NoError(t, err)
+	plantVerifiedTask(t, repo, "task-01", "cmd/armature/claim.go")
+	ctx := getTestContext(t, repo)
+	workerID, plantLog, plantErr := resolveWorkerAndLog(ctx)
+	require.NoError(t, plantErr)
+	require.NoError(t, appendRawCreateConfidence(plantLog, workerID, "task-02", "Task two is complete and tested", "cmd/armature/claim.go", "verified"))
 
 	// Claim task-01 from a different worker, simulating a concurrent claim.
 	otherWorker := "other-worker-uuid"

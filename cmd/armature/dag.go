@@ -12,6 +12,7 @@ func newDAGCmd() *cobra.Command {
 
 	cmd.AddCommand(newDAGSummaryCmd())
 	cmd.AddCommand(newDAGTransitionCmd())
+	cmd.AddCommand(newDAGOverrideReleaseCmd())
 	cmd.AddCommand(newDecomposeApplyCmd())
 	cmd.AddCommand(newDecomposeContextCmd())
 	cmd.AddCommand(newDecomposeRevertCmd())

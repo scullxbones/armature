@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,21 +29,21 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// task-01: two scope entries, one of which matches
-	_, err = runTrls(t, repo, "create", "--id", "task-01", "--title", "Task 1", "--type", "task",
-		"--scope", "src/old/foo.go",
-		"--scope", "src/old/bar.go")
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
-
-	// task-02: single matching scope entry
-	_, err = runTrls(t, repo, "create", "--id", "task-02", "--title", "Task 2", "--type", "task",
-		"--scope", "src/old/foo.go")
-	require.NoError(t, err)
-
-	// task-03: no matching scope entry (different path)
-	_, err = runTrls(t, repo, "create", "--id", "task-03", "--title", "Task 3", "--type", "task",
-		"--scope", "src/other/qux.go")
-	require.NoError(t, err)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{Title: "Task 1", NodeType: "task", Scope: []string{"src/old/foo.go", "src/old/bar.go"}, Confidence: "verified"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-02", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{Title: "Task 2", NodeType: "task", Scope: []string{"src/old/foo.go"}, Confidence: "verified"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-03", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{Title: "Task 3", NodeType: "task", Scope: []string{"src/other/qux.go"}, Confidence: "verified"},
+	}))
 
 	// Materialize so index.json exists with scope data before scope-delete reads it via ReadIndex.
 	_, err = runTrls(t, repo, "materialize")

@@ -153,7 +153,11 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a valid ready task (must be verified to appear in ready queue)
-	_, err = runTrls(t, repo, "create", "--title", "Ready Task", "--type", "task", "--id", "ready-01", "--confidence", "verified")
+	_, err = runTrls(t, repo, "create", "--title", "Ready Task", "--type", "task", "--id", "ready-01",
+		"--scope", "cmd/armature/ready.go", "--dod", "Ready task is complete and tested",
+		"--acceptance", `[{"type":"test_passes"}]`)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "ready-01", "--to", "verified")
 	require.NoError(t, err)
 
 	// Inject a cross-worker task (will be excluded)
@@ -273,8 +277,7 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	_, err = runTrls(t, repo, "create", "--title", "Ready Task", "--type", "task", "--id", "ready-01")
-	require.NoError(t, err)
+	plantVerifiedTask(t, repo, "ready-01", "cmd/armature/ready.go")
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	unknownLog := filepath.Join(opsDir, "worker-unknown.log")
@@ -298,7 +301,7 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, cmdErr)
 
-	assert.Contains(t, stdout, "Ready Task")
+	assert.Contains(t, stdout, "ready-01")
 	assert.Contains(t, cmdStderr, "warning:", "command stderr should contain the warning")
 	assert.Empty(t, string(rawStderr), "raw stderr should stay quiet for snapshot-backed warnings")
 }

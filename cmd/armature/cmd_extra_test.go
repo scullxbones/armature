@@ -20,52 +20,30 @@ import (
 )
 
 func TestConfirmCommand_Success(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Materialize so issues/task-01.json exists for ReadIssue.
+	repo := setupRepoWithValidDraftNode(t)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Confirm an existing issue
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"confirm", "--repo", repo, "task-01"})
+	cmd.SetArgs([]string{"confirm", "--repo", repo, "draft-task-01"})
 
 	err = cmd.Execute()
 	require.NoError(t, err)
-	assert.Contains(t, buf.String(), "confirmed task-01")
+	assert.Contains(t, buf.String(), "confirmed draft-task-01")
 }
 
-// TestConfirmCmd_DoesNotMaterialize verifies that arm confirm reads a single issue via
-// store.ReadIssue() and does not trigger rematerialization (store.Load()).
-//
-// RED with store.Load(): Load calls MaterializeAndReturnQuiet which rewrites checkpoint.json,
-// advancing its mtime → mtime assertion fails.
-// GREEN with store.ReadIssue(): no materialization → checkpoint.json mtime unchanged.
+// TestConfirmCmd_DoesNotMaterialize is historical: Plan Release on confirm
+// must Load the graph. The command still uses ReadIssue to resolve the node
+// before the gate; the gate's Load is required and is not a write-path leak.
 func TestConfirmCmd_DoesNotMaterialize(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Materialize first to create checkpoint.json and issues/task-01.json.
+	repo := setupRepoWithValidDraftNode(t)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Capture checkpoint.json mtime before running confirm.
-	stateDir := getTestStateDir(t, repo)
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-	stat, statErr := os.Stat(checkpointPath)
-	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
-	mtimeBefore := stat.ModTime()
-
-	// Run confirm — must use ReadIssue, not Load.
-	_, err = runTrls(t, repo, "confirm", "task-01")
+	_, err = runTrls(t, repo, "confirm", "draft-task-01")
 	require.NoError(t, err)
-
-	// Verify checkpoint.json was NOT rewritten (no rematerialization occurred).
-	statAfter, statErr := os.Stat(checkpointPath)
-	require.NoError(t, statErr)
-	assert.Equal(t, mtimeBefore, statAfter.ModTime(),
-		"checkpoint.json must not be updated by arm confirm: store.ReadIssue must be used, not store.Load")
 }
 
 func TestConfirmCommand_NotFound(t *testing.T) {
@@ -144,13 +122,16 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 
 func TestReadyCommand_JSONFormat(t *testing.T) {
 	repo := setupRepoWithTask(t)
+	plantVerifiedTask(t, repo, "ready-json-01", "cmd/armature/ready_json.go")
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"ready", "--repo", repo, "--format", "json"})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "[")
 }
@@ -386,7 +367,7 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"REV-001","title":"Revertable","type":"task"}]}`
+	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"REV-001","title":"Revertable","type":"task","source":"src-test"}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
@@ -412,9 +393,10 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 
 	acc := `"acceptance":[{"type":"test_passes"}]`
 	planData := `{"version":1,"title":"Draft Test","issues":[` +
-		`{"id":"DRF-001","title":"Draft task one","type":"task","scope":"cmd/armature/drf1.go","dod":"Draft task one is complete",` + acc + `},` +
-		`{"id":"DRF-002","title":"Draft task two","type":"task","scope":"cmd/armature/drf2.go","dod":"Draft task two is complete",` + acc + `},` +
-		`{"id":"DRF-003","title":"Draft task three","type":"task","scope":"cmd/armature/drf3.go","dod":"Draft task three is complete",` + acc + `}` +
+		`{"id":"DRF-001","title":"Draft task one","type":"task","source":"src-test","scope":"cmd/armature/drf1.go","dod":"Draft task one is complete",` + acc + `},` +
+		`{"id":"DRF-002","title":"Draft task two","type":"task","source":"src-test","scope":"cmd/armature/drf2.go","dod":"Draft task two is complete",` + acc + `},` +
+		`{"id":"DRF-003","title":"Draft task three","type":"task","source":"src-test",` +
+		`"scope":"cmd/armature/drf3.go","dod":"Draft task three is complete",` + acc + `}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -958,10 +940,25 @@ func setupRepoWithTwoTasks(t *testing.T) string {
 
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
+	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task two", "--type", "task", "--id", "task-02")
-	require.NoError(t, err)
+	ctx := getTestContext(t, repo)
+	workerID, logPath, resolveErr := resolveWorkerAndLog(ctx)
+	require.NoError(t, resolveErr)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{
+			Title: "Task one", NodeType: "task", Scope: []string{"cmd/armature/one.go"},
+			DefinitionOfDone: "Task one is complete and tested", Confidence: "verified",
+		},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-02", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{
+			Title: "Task two", NodeType: "task", Scope: []string{"cmd/armature/two.go"},
+			DefinitionOfDone: "Task two is complete and tested", Confidence: "verified",
+		},
+	}))
 
 	return repo
 }
@@ -1014,19 +1011,24 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"})
 	require.NoError(t, cmd2.Execute())
 
-	// Materialize so issues/story-01.json exists for ReadIssue in create --parent.
-	_, err := runTrls(t, repo, "materialize")
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
-
-	cmd3 := newRootCmd()
-	cmd3.SetOut(new(bytes.Buffer))
-	cmd3.SetArgs([]string{"create", "--repo", repo, "--title", "My Task", "--type", "task", "--id", "task-01", "--parent", "story-01"})
-	require.NoError(t, cmd3.Execute())
-
-	cmd4 := newRootCmd()
-	cmd4.SetOut(new(bytes.Buffer))
-	cmd4.SetArgs([]string{"create", "--repo", repo, "--title", "Other Task", "--type", "task", "--id", "task-02"})
-	require.NoError(t, cmd4.Execute())
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{
+			Title: "My Task", NodeType: "task", Parent: "story-01",
+			Scope:            []string{"cmd/armature/story_task.go"},
+			DefinitionOfDone: "My Task is complete and tested", Confidence: "verified",
+		},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-02", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{
+			Title: "Other Task", NodeType: "task", Scope: []string{"cmd/armature/other_task.go"},
+			DefinitionOfDone: "Other Task is complete and tested", Confidence: "verified",
+		},
+	}))
 
 	return repo
 }
@@ -1115,8 +1117,8 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	require.NoError(t, err)
 
 	planData := `{"version":1,"title":"Dry Run Plan","issues":[` +
-		`{"id":"DRY-001","title":"Dry run task one","type":"task"},` +
-		`{"id":"DRY-002","title":"Dry run task two","type":"task"}` +
+		`{"id":"DRY-001","title":"Dry run task one","type":"task","source":"src-test"},` +
+		`{"id":"DRY-002","title":"Dry run task two","type":"task","source":"src-test"}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -1212,10 +1214,9 @@ func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
 	assert.NotEmpty(t, entries)
 }
 
-// TestDecomposeApplyStrict verifies that --strict causes non-zero exit when the
-// plan has advisory warnings (e.g. issues missing DoD), and that without
-// --strict the same plan applies successfully.
-func TestDecomposeApplyStrict(t *testing.T) {
+// TestDecomposeApplyUncitedPlan verifies apply --strict is gone and an
+// uncited plan is refused (source-atomic).
+func TestDecomposeApplyUncitedPlan(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1224,27 +1225,18 @@ func TestDecomposeApplyStrict(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Plan with issues missing DoD — these should generate advisory warnings.
-	planData := `{"version":1,"title":"Strict Test","issues":[` +
-		`{"id":"STR-001","title":"Task without dod","type":"task"}` +
+	planData := `{"version":1,"title":"Uncited Test","issues":[` +
+		`{"id":"STR-001","title":"Task without source","type":"task"}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
-	// Without --strict, apply should succeed (warnings are advisory).
 	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
-	require.NoError(t, err, "apply without --strict should succeed even with warnings")
+	require.Error(t, err, "apply must refuse a plan with no per-issue source")
+	assert.Contains(t, err.Error(), "source")
 
-	// With --strict, the same plan applied to a fresh repo should fail.
-	repo2 := initTempRepo(t)
-	run(t, repo2, "git", "commit", "--allow-empty", "-m", "init")
-	_, err = runTrls(t, repo2, "bootstrap")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo2, "worker-init")
-	require.NoError(t, err)
-
-	_, err = runTrls(t, repo2, "dag", "apply", "--plan", planFile, "--strict")
-	assert.Error(t, err, "--strict should cause non-zero exit when warnings exist")
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile, "--strict")
+	require.Error(t, err, "apply --strict is deleted")
 }
 
 // TestDecomposeApplyGenerateIds verifies that --generate-ids replaces the
@@ -1259,8 +1251,8 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 	require.NoError(t, err)
 
 	planData := `{"version":1,"title":"GenIDs Test","issues":[` +
-		`{"id":"GEN-001","title":"Task one","type":"task"},` +
-		`{"id":"GEN-002","title":"Task two","type":"task","parent":"GEN-001"}` +
+		`{"id":"GEN-001","title":"Story one","type":"story","source":"src-test"},` +
+		`{"id":"GEN-002","title":"Task two","type":"task","parent":"GEN-001","source":"src-test"}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -1302,7 +1294,7 @@ func TestDecomposeApplyRoot(t *testing.T) {
 
 	// Plan with no parent set — top-level issues should become children of root-story-01.
 	planData := `{"version":1,"title":"Root Test","issues":[` +
-		`{"id":"ROOT-001","title":"Task under root","type":"task"}` +
+		`{"id":"ROOT-001","title":"Task under root","type":"task","source":"src-test"}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -1683,10 +1675,8 @@ func TestReadyExplain(t *testing.T) {
 
 	// Create a blocker task (open, not merged) and a task that depends on it.
 	// The blocker stays open — so task-blocked is excluded because blocker is not merged.
-	_, err = runTrls(t, repo, "create", "--title", "Blocker task", "--type", "task", "--id", "task-blocker")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Blocked task", "--type", "task", "--id", "task-blocked")
-	require.NoError(t, err)
+	plantVerifiedTask(t, repo, "task-blocker", "cmd/armature/blocker.go")
+	plantVerifiedTask(t, repo, "task-blocked", "cmd/armature/blocked.go")
 	_, err = runTrls(t, repo, "link", "--source", "task-blocked", "--dep", "task-blocker")
 	require.NoError(t, err)
 	// Claim task-blocker so it is in-progress (not merged) — task-blocked remains not ready.

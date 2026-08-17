@@ -1353,3 +1353,71 @@ func TestGlobOverlaps_ParityWithClaimPackage_PR79(t *testing.T) {
 		})
 	}
 }
+
+func TestAffectsValidityCensus_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	for _, typ := range materialize.RegisteredOpTypes() {
+		_, classified := ops.ClassifiedValidity(typ)
+		assert.True(t, classified, "unclassified op type %q: every RegisteredOpTypes() entry must be classified AffectsValidity", typ)
+	}
+}
+
+func wellFormedTask(id, scope string) *materialize.Issue {
+	return &materialize.Issue{
+		ID:               id,
+		Type:             "task",
+		Status:           ops.StatusOpen,
+		Title:            id,
+		Scope:            []string{scope},
+		DefinitionOfDone: "Task " + id + " is complete and tested",
+		Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+		BlockedBy:        []string{},
+		Children:         []string{},
+		Provenance:       materialize.Provenance{Confidence: "draft"},
+	}
+}
+
+func TestIntroductionRefusesDirtyWrite_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	state := makeState(wellFormedTask("EXISTING", "internal/ops/*.go"))
+	proposed := []ops.Op{{
+		Type:     ops.OpCreate,
+		TargetID: "NEW-DIRTY",
+		Payload: ops.Payload{
+			Title:            "Overlapping write",
+			NodeType:         "task",
+			Scope:            []string{"internal/ops/*.go"},
+			DefinitionOfDone: "New overlapping task is complete and tested",
+			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+			Confidence:       "draft",
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.Error(t, err, "a write that introduces a Graph Finding on a targeted issue must be refused")
+	assert.Contains(t, err.Error(), "scope overlap")
+	assert.Contains(t, err.Error(), "NEW-DIRTY")
+	assert.NotContains(t, err.Error(), "override-release")
+	assert.NotContains(t, err.Error(), "skip-validate-gate")
+	assert.Regexp(t, `revert|cancel`, err.Error())
+}
+
+func TestIntroductionIgnoresForeignFindings_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	foreign := wellFormedTask("FOREIGN", "docs/foreign.md")
+	foreign.DefinitionOfDone = "Do this properly so it works correctly"
+	state := makeState(foreign)
+	proposed := []ops.Op{{
+		Type:     ops.OpCreate,
+		TargetID: "CLEAN-NEW",
+		Payload: ops.Payload{
+			Title:            "Unrelated clean task",
+			NodeType:         "task",
+			Scope:            []string{"cmd/armature/clean.go"},
+			DefinitionOfDone: "Clean new task is complete and tested",
+			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+			Confidence:       "draft",
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err, "pre-existing findings on foreign IDs must not block an unrelated write")
+}

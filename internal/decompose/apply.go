@@ -11,6 +11,7 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/validate"
 )
 
 // DryRunResult holds the result of a dry-run apply.
@@ -29,8 +30,6 @@ type DryRunEntry struct {
 
 // ApplyOptions controls optional behaviour for ApplyPlan / DryRunApplyPlan.
 type ApplyOptions struct {
-	// Strict makes advisory warnings from ValidatePlan into errors.
-	Strict bool
 	// GenerateIDs replaces plan-specified IDs with system-generated UUIDs.
 	GenerateIDs bool
 	// Root, when non-empty, is used as the parent for any top-level plan
@@ -39,9 +38,8 @@ type ApplyOptions struct {
 }
 
 // ValidatePlan returns a list of advisory warnings for the plan.
-// These are non-fatal by default; use ApplyOptions.Strict to treat them as errors.
 // It does not report invalid issue types: those are always fatal, see
-// validateTypes.
+// validateTypes. Missing per-issue source is always fatal, see validateSources.
 func ValidatePlan(plan *Plan) []string {
 	var warnings []string
 	for _, issue := range plan.Issues {
@@ -52,10 +50,18 @@ func ValidatePlan(plan *Plan) []string {
 	return warnings
 }
 
+func validateSources(plan *Plan) error {
+	for _, issue := range plan.Issues {
+		if strings.TrimSpace(issue.Source) == "" {
+			return fmt.Errorf("plan issue %s (%s) is missing source; apply is source-atomic", issue.ID, issue.Title)
+		}
+	}
+	return nil
+}
+
 // validateTypes rejects a plan containing any issue with an unrecognized
 // Type. Unlike the advisory warnings in ValidatePlan, this is always a hard
-// error, regardless of ApplyOptions.Strict: an unrecognized type is never a
-// legitimate, salvageable situation.
+// error: an unrecognized type is never a legitimate, salvageable situation.
 func validateTypes(plan *Plan) error {
 	for _, issue := range plan.Issues {
 		if !issuetype.IsValid(issue.Type) {
@@ -135,14 +141,16 @@ func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts Apply
 	if err := validateIssueIDs(plan); err != nil {
 		return nil, err
 	}
+	if err := validateSources(plan); err != nil {
+		return nil, err
+	}
 
 	warnings := ValidatePlan(plan)
 
-	if opts.Strict && len(warnings) > 0 {
-		return nil, fmt.Errorf("plan has %d advisory warning(s) (--strict mode): %s", len(warnings), warnings[0])
-	}
-
 	transformed := preparePlan(plan, opts)
+	if _, err := planOps(transformed, state, "dry-run", clock.System); err != nil {
+		return nil, err
+	}
 
 	result := &DryRunResult{Warnings: warnings}
 	for _, issue := range transformed.Issues {
@@ -169,19 +177,33 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 	if err := validateIssueIDs(plan); err != nil {
 		return 0, err
 	}
-
-	warnings := ValidatePlan(plan)
-
-	if opts.Strict && len(warnings) > 0 {
-		return 0, fmt.Errorf("plan has %d advisory warning(s) (--strict mode): %s", len(warnings), warnings[0])
+	if err := validateSources(plan); err != nil {
+		return 0, err
 	}
 
 	transformed := preparePlan(plan, opts)
+	proposed, err := planOps(transformed, state, workerID, clk)
+	if err != nil {
+		return 0, err
+	}
 
 	logPath := filepath.Join(issuesDir, workerID+".log")
 	count := 0
+	for _, op := range proposed {
+		if err := ops.AppendOp(logPath, op); err != nil {
+			return count, fmt.Errorf("append op for issue %s: %w", op.TargetID, err)
+		}
+		if op.Type == ops.OpCreate {
+			count++
+		}
+	}
 
-	for _, issue := range transformed.Issues {
+	return count, nil
+}
+
+func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Clock) ([]ops.Op, error) {
+	var proposed []ops.Op
+	for _, issue := range plan.Issues {
 		if _, exists := state.Issues[issue.ID]; exists {
 			continue
 		}
@@ -191,7 +213,7 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 			scope = strings.Split(issue.Scope, ", ")
 		}
 
-		op := ops.Op{
+		proposed = append(proposed, ops.Op{
 			Type:      ops.OpCreate,
 			TargetID:  issue.ID,
 			Timestamp: clk(),
@@ -207,16 +229,18 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 				Acceptance:       issue.Acceptance,
 				Confidence:       "draft",
 			},
-		}
-
-		if err := ops.AppendOp(logPath, op); err != nil {
-			return count, fmt.Errorf("append op for issue %s: %w", issue.ID, err)
-		}
-		count++
-
-		// Emit link ops for blocked_by relationships.
+		})
+		proposed = append(proposed, ops.Op{
+			Type:      ops.OpSourceLink,
+			TargetID:  issue.ID,
+			Timestamp: clk(),
+			WorkerID:  workerID,
+			Payload: ops.Payload{
+				SourceID: issue.Source,
+			},
+		})
 		for _, dep := range issue.BlockedBy {
-			linkOp := ops.Op{
+			proposed = append(proposed, ops.Op{
 				Type:      ops.OpLink,
 				TargetID:  issue.ID,
 				Timestamp: clk(),
@@ -225,12 +249,11 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 					Dep: dep,
 					Rel: "blocked_by",
 				},
-			}
-			if err := ops.AppendOp(logPath, linkOp); err != nil {
-				return count, fmt.Errorf("append link op for issue %s -> %s: %w", issue.ID, dep, err)
-			}
+			})
 		}
 	}
-
-	return count, nil
+	if err := validate.CheckIntroduction(state, proposed, validate.Options{Strict: true}); err != nil {
+		return nil, err
+	}
+	return proposed, nil
 }

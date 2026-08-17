@@ -13,7 +13,6 @@ import (
 func newDAGTransitionCmd() *cobra.Command {
 	var issueID string
 	var to string
-	var skipValidateGate bool
 
 	cmd := &cobra.Command{
 		Use:   "transition",
@@ -44,20 +43,9 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 			if targetConfidence != "draft" && targetConfidence != "verified" {
 				return fmt.Errorf("invalid --to confidence value %q: must be one of draft, verified", targetConfidence)
 			}
-			if skipValidateGate && targetConfidence != "verified" {
-				return fmt.Errorf("--skip-validate-gate is only valid with --to verified")
-			}
-			if targetConfidence == "verified" && !skipValidateGate {
-				result, valErr := runGraphValidation(cmd, validate.Options{Strict: true})
-				if valErr != nil {
-					return valErr
-				}
-				if !result.OK {
-					if renderErr := output.RenderValidation(cmd.OutOrStdout(), result, false); renderErr != nil {
-						return fmt.Errorf("render validation: %w", renderErr)
-					}
-					return fmt.Errorf("cannot promote to verified: validation failed with %d error(s) and %d warning(s)",
-						len(result.Errors), len(result.Warnings))
+			if targetConfidence == "verified" {
+				if err := refusePlanRelease(cmd); err != nil {
+					return err
 				}
 			}
 
@@ -67,9 +55,8 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 				Timestamp: nowEpoch(),
 				WorkerID:  workerID,
 				Payload: ops.Payload{
-					IssueID:             issueID,
-					To:                  targetConfidence,
-					SkippedValidateGate: skipValidateGate,
+					IssueID: issueID,
+					To:      targetConfidence,
 				},
 			}
 			if err := appendOp(ctx, logPath, op); err != nil {
@@ -85,7 +72,22 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "root issue ID of the subtree to promote")
 	cmd.Flags().StringVar(&to, "to", "", "target confidence level: draft or verified (default: verified)")
-	cmd.Flags().BoolVar(&skipValidateGate, "skip-validate-gate", false, "skip the plan-release validate gate when promoting to verified")
 	_ = cmd.MarkFlagRequired("issue")
 	return cmd
+}
+
+func refusePlanRelease(cmd *cobra.Command) error {
+	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true})
+	if valErr != nil {
+		return valErr
+	}
+	if result.OK {
+		return nil
+	}
+	if renderErr := output.RenderValidation(cmd.OutOrStdout(), result, false); renderErr != nil {
+		return fmt.Errorf("render validation: %w", renderErr)
+	}
+	return fmt.Errorf("cannot promote to verified: validation failed with %d error(s) and %d warning(s); "+
+		"withdraw the draft (arm dag revert / arm transition --to cancelled)",
+		len(result.Errors), len(result.Warnings))
 }

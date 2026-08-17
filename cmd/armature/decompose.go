@@ -20,7 +20,6 @@ func newDecomposeApplyCmd() *cobra.Command {
 	var exampleFlag bool
 	var schemaFlag bool
 	var dryRunFlag bool
-	var strictFlag bool
 	var generateIDsFlag bool
 	var rootFlag string
 
@@ -125,6 +124,10 @@ plan, or --schema to view the JSON schema.`,
 										"items":       map[string]any{"type": "string"},
 										"description": "Optional free-text notes",
 									},
+									"source": map[string]any{
+										"type":        "string",
+										"description": "Source entry ID (UUID) cited for this issue; required — apply is source-atomic",
+									},
 								},
 							},
 						},
@@ -144,10 +147,11 @@ plan, or --schema to view the JSON schema.`,
 					Title:   "Example Decomposition Plan",
 					Issues: []decompose.PlanIssue{
 						{
-							ID:    "STORY-001",
-							Title: "User authentication story",
-							Type:  "story",
-							Notes: []string{},
+							ID:     "STORY-001",
+							Title:  "User authentication story",
+							Type:   "story",
+							Source: "00000000-0000-0000-0000-000000000001",
+							Notes:  []string{},
 						},
 						{
 							ID:           "TASK-001",
@@ -159,6 +163,7 @@ plan, or --schema to view the JSON schema.`,
 							DoD:          "Login endpoint returns JWT on valid credentials",
 							BlockedBy:    []string{},
 							Notes:        []string{},
+							Source:       "00000000-0000-0000-0000-000000000001",
 						},
 						{
 							ID:        "TASK-002",
@@ -169,6 +174,7 @@ plan, or --schema to view the JSON schema.`,
 							DoD:       "Integration tests cover happy path and error cases",
 							BlockedBy: []string{"TASK-001"},
 							Notes:     []string{},
+							Source:    "00000000-0000-0000-0000-000000000001",
 						},
 					},
 				}
@@ -204,7 +210,6 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			applyOpts := decompose.ApplyOptions{
-				Strict:      strictFlag,
 				GenerateIDs: generateIDsFlag,
 				Root:        rootFlag,
 			}
@@ -241,7 +246,6 @@ plan, or --schema to view the JSON schema.`,
 	cmd.Flags().BoolVar(&exampleFlag, "example", false, "print a minimal valid example plan JSON and exit")
 	cmd.Flags().BoolVar(&schemaFlag, "schema", false, "print a JSON Schema document describing the plan format and exit")
 	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "validate and preview what would be created without writing ops")
-	cmd.Flags().BoolVar(&strictFlag, "strict", false, "treat advisory warnings as errors")
 	cmd.Flags().BoolVar(&generateIDsFlag, "generate-ids", false, "replace plan IDs with system-generated UUIDs")
 	cmd.Flags().StringVar(&rootFlag, "root", "", "override inferred root: attach top-level plan issues to this existing issue ID")
 	return cmd
