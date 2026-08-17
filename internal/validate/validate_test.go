@@ -476,7 +476,26 @@ func TestW5MissingContextFiles_SkipsNonTasks_REQ_LNGHZN_S10_T4(t *testing.T) {
 			graph := graphFromState(state)
 			result := Validate(state, graph, Options{})
 			assert.False(t, containsWarning(result, "missing context_files"),
-				"type=%q: non-task issues with multi-dir scope are intentional", typ)
+				"type=%q: container types with multi-dir scope are intentional", typ)
+		})
+	}
+}
+
+func TestW5MissingContextFiles_NonContainerTypesStillWarn_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
+	for _, typ := range []string{"bug", "", "spike"} {
+		t.Run("type="+typ, func(t *testing.T) {
+			t.Parallel()
+			state := makeState(&materialize.Issue{
+				ID:     "ISSUE-1",
+				Type:   typ,
+				Status: "open",
+				Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
+			})
+			graph := graphFromState(state)
+			result := Validate(state, graph, Options{})
+			assert.True(t, containsWarning(result, "missing context_files"),
+				"type=%q: non-container types with 3-dir scope must still fire W5", typ)
 		})
 	}
 }
@@ -728,166 +747,6 @@ func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
 	assert.True(t, containsError(result, "invalid hierarchy"), "bug under task should be invalid")
-}
-
-// TestParentFilterAllIssues validates that with empty ParentID, all issues are validated.
-func TestParentFilter_NoFilterReturnsAllIssues(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A", "TASK-B"}, BlockedBy: []string{}},
-		&materialize.Issue{
-			ID:               "TASK-A",
-			Type:             "task",
-			Parent:           "STORY-1",
-			BlockedBy:        []string{},
-			Scope:            []string{"a.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-		&materialize.Issue{
-			ID:               "TASK-B",
-			Type:             "task",
-			Parent:           "STORY-1",
-			BlockedBy:        []string{},
-			Scope:            []string{"b.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: ""})
-	// No errors expected in clean state
-	assert.True(t, result.OK)
-}
-
-// TestParentFilterDirectChildrenOnly validates that --parent restricts to direct children.
-func TestParentFilter_RestrictsToDirectChildren(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"STORY-1"}, BlockedBy: []string{}},
-		&materialize.Issue{ID: "STORY-1", Type: "story", Parent: "EPIC-1", Children: []string{"TASK-A", "TASK-B"}, BlockedBy: []string{}},
-		&materialize.Issue{
-			ID:               "TASK-A",
-			Type:             "task",
-			Parent:           "STORY-1",
-			BlockedBy:        []string{},
-			Scope:            []string{"a.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-		&materialize.Issue{
-			ID:               "TASK-B",
-			Type:             "task",
-			Parent:           "STORY-1",
-			BlockedBy:        []string{},
-			Scope:            []string{"b.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-	)
-	// When filtering by STORY-1, only TASK-A and TASK-B should be validated (direct children)
-	// EPIC-1 and STORY-1 itself should not appear
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "STORY-1"})
-	// Validate that the result is OK (no errors from children)
-	assert.True(t, result.OK)
-}
-
-// TestParentFilterExcludesNonChildren validates that non-child issues are excluded.
-func TestParentFilter_ExcludesNonChildren(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A"}, BlockedBy: []string{}},
-		&materialize.Issue{ID: "STORY-2", Type: "story", Children: []string{"TASK-B"}, BlockedBy: []string{}},
-		&materialize.Issue{
-			ID:               "TASK-A",
-			Type:             "task",
-			Parent:           "STORY-1",
-			BlockedBy:        []string{},
-			Scope:            []string{"a.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-		&materialize.Issue{
-			ID:               "TASK-B",
-			Type:             "task",
-			Parent:           "STORY-2",
-			BlockedBy:        []string{},
-			Scope:            []string{"b.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-	)
-	// Filter by STORY-1; only TASK-A should be validated
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "STORY-1"})
-	assert.True(t, result.OK)
-}
-
-// TestParentFilterValidatesChildrenOnly validates that validation only applies to children.
-func TestParentFilter_ValidatesChildrenWithErrors(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A", "TASK-B"}},
-		&materialize.Issue{
-			ID:     "TASK-A",
-			Type:   "task",
-			Parent: "STORY-1",
-			// Missing required fields: scope, acceptance, definition_of_done
-		},
-		&materialize.Issue{ID: "TASK-B", Type: "task", Parent: "STORY-1"},
-	)
-	// When filtering by STORY-1, only direct children (TASK-A, TASK-B) are validated
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "STORY-1"})
-	// TASK-A is missing required fields; should have errors
-	assert.False(t, result.OK)
-	assert.True(t, containsError(result, "missing required field"))
-}
-
-// TestParentFilterEmptyParentScope validates parent filter with non-existent parent ID.
-func TestParentFilter_NonexistentParentID(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-A"}},
-		&materialize.Issue{ID: "TASK-A", Type: "task", Parent: "STORY-1"},
-	)
-	// When filtering by a non-existent parent ID, no children exist
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "NONEXISTENT"})
-	// No children to validate, so OK should be true (no errors)
-	assert.True(t, result.OK)
-}
-
-// TestParentFilterParentNotValidated validates that the parent node itself is not validated.
-func TestParentFilter_ParentNodeNotValidated(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{
-			ID:        "TASK-PARENT",
-			Type:      "task",
-			Parent:    "STORY-1",
-			Children:  []string{"TASK-CHILD"},
-			BlockedBy: []string{},
-			// Missing required fields — but this issue should not be validated
-			// since it's not a direct child of itself
-		},
-		&materialize.Issue{
-			ID:               "TASK-CHILD",
-			Type:             "task",
-			Parent:           "TASK-PARENT",
-			BlockedBy:        []string{},
-			Scope:            []string{"c.go"},
-			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
-			DefinitionOfDone: "Complete the task",
-		},
-	)
-	// When filtering by TASK-PARENT, only TASK-CHILD should be validated
-	// TASK-PARENT itself should not be in the validation set
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "TASK-PARENT"})
-	// TASK-CHILD has no errors; the parent's missing fields should not be reported
-	assert.True(t, result.OK)
 }
 
 // TestCheckE4Cycles_CrossScopeBlockerCycle verifies that graph.ScopedHasCycle detects
@@ -1197,8 +1056,7 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 		},
 	)
 
-	// Build the scoped subset the way issueSubset(state, "STORY-AC", graph) would:
-	// STORY-AC plus its descendants (TSK-A, TSK-C). TSK-B is intentionally excluded.
+	// Narrowed target set: STORY-AC plus its descendants (TSK-A, TSK-C). TSK-B is excluded.
 	scoped := map[string]*materialize.Issue{
 		"STORY-AC": state.Issues["STORY-AC"],
 		"TSK-A":    state.Issues["TSK-A"],
@@ -1324,11 +1182,11 @@ func TestCheckW10PhantomScope_ConsultsFullStateForCrossSubtreeBlocker_PR79(t *te
 			BlockedBy: []string{"TSK-BLOCKER"},
 		},
 	)
-	graph := graphFromState(state)
-
-	// Scoped subset the way `arm validate --scope STORY-DOWNSTREAM` would build it:
-	// STORY-DOWNSTREAM plus its descendants. TSK-BLOCKER is intentionally excluded.
-	targets := issueSubset(state, "STORY-DOWNSTREAM", graph)
+	// Narrowed target set: STORY-DOWNSTREAM plus its descendants. TSK-BLOCKER is excluded.
+	targets := map[string]*materialize.Issue{
+		"STORY-DOWNSTREAM": state.Issues["STORY-DOWNSTREAM"],
+		"TSK-DOWNSTREAM":   state.Issues["TSK-DOWNSTREAM"],
+	}
 	require.NotContains(t, targets, "TSK-BLOCKER", "test setup: TSK-BLOCKER must be outside the scoped subset")
 
 	preExpandedScopes := map[string][]string{

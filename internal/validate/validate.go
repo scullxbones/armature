@@ -18,8 +18,6 @@ import (
 )
 
 type Options struct {
-	ScopeID      string
-	ParentID     string
 	Strict       bool
 	ManifestData []byte                 // Pre-read manifest bytes (may be nil/empty if citations not available)
 	Coverage     *traceability.Coverage // Pre-loaded traceability coverage
@@ -39,10 +37,7 @@ type Result struct {
 func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	var errors, warnings, infos []string
 
-	targets := issueSubset(state, opts.ScopeID, graph)
-	if opts.ParentID != "" {
-		targets = parentFilter(targets, opts.ParentID)
-	}
+	targets := state.Issues
 
 	errors = append(errors, checkE2E3ParentLinks(targets, state)...)
 	errors = append(errors, checkE4Cycles(targets, graph)...)
@@ -72,40 +67,12 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 		infos = append(infos, checkW10PhantomScope(targets, opts.PreExpandedScopes, state.Issues)...)
 	}
 
+	ok := len(errors) == 0
 	if opts.Strict {
-		errors = append(errors, warnings...)
-		warnings = nil
+		ok = ok && len(warnings) == 0
 	}
 
-	return Result{OK: len(errors) == 0, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
-}
-
-func issueSubset(state *materialize.State, scopeID string, graph *dag.Graph) map[string]*materialize.Issue {
-	if scopeID == "" {
-		return state.Issues
-	}
-	subset := make(map[string]*materialize.Issue)
-	// Include the root issue and all its descendants
-	if issue, ok := state.Issues[scopeID]; ok {
-		subset[scopeID] = issue
-	}
-	descendants := graph.Descendants(scopeID)
-	for _, descID := range descendants {
-		if desc, ok := state.Issues[descID]; ok {
-			subset[descID] = desc
-		}
-	}
-	return subset
-}
-
-func parentFilter(issues map[string]*materialize.Issue, parentID string) map[string]*materialize.Issue {
-	subset := make(map[string]*materialize.Issue)
-	for id, issue := range issues {
-		if issue.Parent == parentID {
-			subset[id] = issue
-		}
-	}
-	return subset
+	return Result{OK: ok, Errors: errors, Warnings: warnings, Infos: infos, Coverage: opts.Coverage}
 }
 
 func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materialize.State) []string {
@@ -450,8 +417,9 @@ func checkW4BroadScope(issues map[string]*materialize.Issue) []string {
 func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 	var warns []string
 	for id, issue := range issues {
-		// Stories/epics/features span many directories by design.
-		if issue.Type != "task" {
+		// Container types span many directories by design. Allowlist so a
+		// future or typo'd type still gets the check.
+		if isW5ContainerType(issue.Type) {
 			continue
 		}
 		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
@@ -471,6 +439,10 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []string {
 		}
 	}
 	return warns
+}
+
+func isW5ContainerType(typ string) bool {
+	return typ == "story" || typ == "epic" || typ == "feature"
 }
 
 func checkW6ComplexityMismatch(issues map[string]*materialize.Issue) []string {
@@ -562,9 +534,8 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 		hasMatches := len(expandedFiles) > 0
 
 		// Collect all "(new)" files declared by blocking tasks. Traverse from the
-		// full issue set, not the possibly scope-narrowed `issues` subset, so a
-		// legitimate blocker outside the selected subtree (e.g. via `arm validate
-		// --scope`/`--parent`) is still found.
+		// full issue set so a legitimate blocker is found even when the caller
+		// passed a narrowed target map (library tests).
 		blockerNewFiles := collectBlockerNewFiles(issue, allIssues)
 
 		// Check each scope entry against the expanded files

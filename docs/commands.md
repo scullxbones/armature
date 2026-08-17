@@ -308,11 +308,15 @@ Promote all draft nodes in a subtree to verified.
 `arm dag transition [flags]`
 
 Promotion to `verified` (plan release) requires a strict-green `arm validate` of
-the whole graph so findings die at introduction. Demotion to `draft` is not gated.
+the whole graph so a planner cannot release a dirty plan. Demotion to `draft`
+is not gated. `--skip-validate-gate` records a human override on the
+dag-transition op (`Payload.SkippedValidateGate`); it is valid only with
+`--to verified`.
 
 **Flags:**
 - `--issue string`: Root issue ID of the subtree to promote.
 - `--to string`: Target confidence level (default: `verified`).
+- `--skip-validate-gate`: Skip the plan-release validate gate. Recorded on the op. Only valid with `--to verified`.
 
 ---
 
@@ -904,18 +908,21 @@ Validate the issue graph and documentation.
 **Synopsis:**
 `arm validate [flags]`
 
-Validation is **strict by default**: warnings are errors, a green run prints a
+Validation is **strict by default**: warnings fail the run, a green run prints a
 single summary line (`OK: no issues found` plus coverage when present), and any
-error exits non-zero. `make check` runs `arm validate --ci` (the CI alias for
-the same fail-closed contract). There are no waivers and no scoping flags;
-the whole graph is validated or not at all. Rules that fire on intentional
+error or (under `--strict`) warning exits non-zero. Findings stay in their
+native buckets: JSON `warnings` still lists W-codes when strict. `--ci` is the
+CI alias for the same fail-closed contract (`make validate-graph`); it is not
+part of the per-task `make check` publish gate. `--ci --strict=false` is
+rejected as contradictory. There are no waivers and no scoping flags; the
+whole graph is validated or not at all. Rules that fire on intentional
 states are fixed or deleted.
 
 **Subcommands:**
 
 **Flags:**
-- `--ci`: Exit non-zero if errors found (implied by default `--strict`; used by `make check`).
-- `--strict`: Treat warnings as errors (default `true`; pass `--strict=false` to keep warnings as warnings).
+- `--ci`: Exit non-zero if errors or (implied) warnings found. Used by CI / `make validate-graph`. Contradicts `--strict=false`.
+- `--strict`: Treat warnings as failures (default `true`; pass `--strict=false` to keep warnings as warnings and print INFOs).
 - `--quiet`: Suppress INFO lines on a failing run.
 
 **Validation Codes:**

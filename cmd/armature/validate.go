@@ -30,13 +30,14 @@ This command validates parent-child relationships, dependency links, field requi
 and coverage metrics (% of issues cited in documentation). Validation is strict by default:
 warnings are errors, a green run prints a single summary line, and any error exits
 non-zero. The whole graph is validated; partial or scoped validation is not supported.
---ci is the CI alias for the same fail-closed contract (used by make check).
-Use --strict=false to keep warnings as warnings. Use --quiet to suppress
-INFO lines on a failing run.`,
+--ci is the CI alias for the same fail-closed contract (used by
+make validate-graph / story integration, not make check).
+Use --strict=false to keep warnings as warnings and print INFO lines.
+Use --quiet to suppress INFO lines on a failing run.`,
 		Example: `  # Validate the full issue graph (strict; silent when green)
   $ arm validate
 
-  # Same fail-closed contract, for CI / make check
+  # Same fail-closed contract, for CI / make validate-graph
   $ arm validate --ci
 
   # Keep warnings as warnings (non-default)
@@ -45,6 +46,9 @@ INFO lines on a failing run.`,
   # Suppress INFO lines on a failing run
   $ arm validate --quiet`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if ci && cmd.Flags().Changed("strict") && !strict {
+				return fmt.Errorf("--ci and --strict=false are contradictory")
+			}
 			if ci {
 				strict = true
 			}
@@ -71,20 +75,21 @@ INFO lines on a failing run.`,
 					return err
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-			} else if result.OK && len(result.Warnings) == 0 {
+			} else if strict && result.OK {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(result))
 			} else if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
 				return fmt.Errorf("render validation: %w", err)
 			}
 
-			if (ci || strict) && len(result.Errors) > 0 {
-				return fmt.Errorf("validation failed with %d error(s)", len(result.Errors))
+			if strict && !result.OK {
+				return fmt.Errorf("validation failed with %d error(s) and %d warning(s)",
+					len(result.Errors), len(result.Warnings))
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found (implied by default --strict)")
+	cmd.Flags().BoolVar(&ci, "ci", false, "Exit non-zero if errors found (CI alias; contradicts --strict=false)")
 	cmd.Flags().BoolVar(&strict, "strict", true, "Treat warnings as errors (default true)")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines on a failing run")
 
@@ -137,14 +142,8 @@ func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Res
 }
 
 func validationSummary(result validate.Result) string {
-	if result.Coverage == nil {
-		return "OK: no issues found"
+	if line := output.CoverageLine(result); line != "" {
+		return fmt.Sprintf("OK: no issues found (%s)", line)
 	}
-	cov := result.Coverage
-	totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
-	if cov.AcceptedRiskNodes > 0 {
-		return fmt.Sprintf("OK: no issues found (COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk))",
-			totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes)
-	}
-	return fmt.Sprintf("OK: no issues found (COVERAGE: %d/%d cited)", totalCited, cov.TotalNodes)
+	return "OK: no issues found"
 }

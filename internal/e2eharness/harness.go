@@ -169,8 +169,11 @@ func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 }
 
 // envWithoutARMLogSlot copies the process environment minus ARM_LOG_SLOT.
-// dag apply writes the unsuffixed worker log; an inherited worker slot would
+// Product bug, not a harness design: dag apply (internal/decompose/apply.go)
+// writes workerID+".log" and ignores ARM_LOG_SLOT. An inherited slot would
 // send later commands to a different file and break clone rematerialization.
+// Follow-up (not T4): honor the slot on dag apply and add a slotted E2E test.
+// This strip is a workaround so T4's e2e can run; it is not the fix.
 func envWithoutARMLogSlot() []string {
 	env := os.Environ()
 	out := make([]string, 0, len(env))

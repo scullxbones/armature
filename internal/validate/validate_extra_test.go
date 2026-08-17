@@ -10,30 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIssueSubset_WithScopeID(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "STORY-1", Children: []string{"TASK-1"}, Type: "story"},
-		&materialize.Issue{ID: "TASK-1", Parent: "STORY-1", Type: "task"},
-		&materialize.Issue{ID: "TASK-2", Type: "task"},
-	)
-
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ScopeID: "STORY-1"})
-	// Validation runs on the scoped subset; no errors for clean hierarchy
-	_ = result
-}
-
-func TestIssueSubset_MissingScopeID_ReturnsEmpty(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "TASK-1", Type: "task"},
-	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ScopeID: "NONEXISTENT"})
-	assert.True(t, result.OK)
-}
-
 func TestValidate_StrictMode_PromotesWarnings(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -41,8 +17,9 @@ func TestValidate_StrictMode_PromotesWarnings(t *testing.T) {
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{Strict: true})
-	assert.False(t, result.OK)
-	assert.Nil(t, result.Warnings)
+	assert.False(t, result.OK, "strict treats warnings as a failed run")
+	require.NotEmpty(t, result.Warnings, "strict must keep W-codes in Warnings")
+	assert.Empty(t, result.Errors, "strict must not move W-codes into Errors")
 }
 
 func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
@@ -166,31 +143,6 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{ManifestData: manifestData})
 	assert.True(t, containsError(result, "unknown source"), "expected unknown source error for unregistered source link, got: %v", result.Errors)
-}
-
-func TestValidate_ParentFilter_RestrictsToDirectChildren(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"TASK-1", "TASK-2"}},
-		&materialize.Issue{ID: "TASK-1", Parent: "STORY-1", Type: "task"},
-		&materialize.Issue{ID: "TASK-2", Parent: "STORY-1", Type: "task"},
-		&materialize.Issue{ID: "TASK-3", Parent: "OTHER", Type: "task"},
-	)
-	// Validate with ParentID set — only TASK-1 and TASK-2 should be in scope
-	// TASK-3 belongs to a different parent so any errors on it should not appear
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "STORY-1"})
-	_ = result // no errors expected for clean direct children
-}
-
-func TestValidate_ParentFilter_EmptyWhenNoMatch(t *testing.T) {
-	t.Parallel()
-	state := makeState(
-		&materialize.Issue{ID: "TASK-1", Parent: "STORY-A", Type: "task"},
-	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ParentID: "NONEXISTENT"})
-	assert.True(t, result.OK)
 }
 
 func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {

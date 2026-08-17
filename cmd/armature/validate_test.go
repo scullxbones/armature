@@ -39,8 +39,9 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	out, err := runTrls(t, repo, "validate")
 	require.Error(t, err, "default validate must fail closed when warnings exist")
 	assert.Contains(t, err.Error(), "validation failed")
-	assert.Contains(t, out, "ERROR: scope overlap")
-	assert.NotContains(t, out, "WARNING: scope overlap")
+	assert.Contains(t, err.Error(), "warning(s)", "strict failure must distinguish promoted W-codes from E-codes")
+	assert.Contains(t, out, "WARNING: scope overlap")
+	assert.NotContains(t, out, "ERROR: scope overlap")
 
 	_, err = runTrls(t, repo, "link", "--source", "tsk-b", "--dep", "tsk-a")
 	require.NoError(t, err)
@@ -91,6 +92,49 @@ func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 	require.NoError(t, err, "--strict=false must keep warnings as warnings (exit 0)")
 	assert.Contains(t, out, "WARNING: scope overlap", "--strict=false human output must list warning-level findings")
 	assert.NotContains(t, out, "ERROR: scope overlap")
+}
+
+// TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4: default-strict JSON
+// keeps W-codes under "warnings" so agents can triage severity.
+func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
+	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
+
+	out, err := runTrls(t, repo, "validate", "--format", "json")
+	require.Error(t, err, "default-strict JSON must fail closed on warnings")
+	assert.Contains(t, out, `"warnings"`)
+	assert.Contains(t, out, "scope overlap")
+	assert.NotContains(t, out, `"errors": [
+    "scope overlap`)
+}
+
+// TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4: silent green is
+// strict-only; --strict=false must still print INFO lines.
+func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "validate", "--strict=false")
+	require.NoError(t, err)
+	assert.Contains(t, out, "INFO: phantom scope", "--strict=false human output must list INFO findings")
+}
+
+// TestValidateCiRejectsStrictFalse_REQ_LNGHZN_S10_T4: --ci --strict=false is
+// a contradiction, not a silent override.
+func TestValidateCiRejectsStrictFalse_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "validate", "--ci", "--strict=false")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--ci")
+	assert.Contains(t, err.Error(), "--strict=false")
 }
 
 func nonEmptyLines(s string) []string {
