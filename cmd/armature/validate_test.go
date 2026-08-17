@@ -119,12 +119,43 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 // strict-only; --strict=false must still print INFO lines.
 func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--scope", "nonexistent/file.go",
+		"--acceptance", testAcceptance,
+	)
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "validate", "--strict=false")
 	require.NoError(t, err)
 	assert.Contains(t, out, "INFO: phantom scope", "--strict=false human output must list INFO findings")
+}
+
+// TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4: --strict=false
+// keeps warnings as warnings but still exits non-zero on hard errors (E-codes).
+func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	longDoD := strings.Repeat("x", 501)
+	_, err = runTrls(t, repo, "create",
+		"--type", "task",
+		"--title", "oversized-dod",
+		"--id", "tsk-e9",
+		"--scope", "internal/ops/*.go",
+		"--dod", longDoD,
+		"--acceptance", testAcceptance,
+	)
+	require.NoError(t, err)
+
+	out, err := runTrls(t, repo, "validate", "--strict=false")
+	require.Error(t, err, "--strict=false must still fail closed on E-codes")
+	assert.Contains(t, err.Error(), "validation failed")
+	assert.Contains(t, out, "ERROR:")
+	assert.Contains(t, out, "definition_of_done exceeds")
 }
 
 // TestValidateCiRejectsStrictFalse_REQ_LNGHZN_S10_T4: --ci --strict=false is

@@ -50,6 +50,29 @@ jobs:
       - name: Census drift-check regression tests
         run: make test-census-drift-check
 
+  # Integration door (D7): whole-graph arm validate --ci. Not part of the
+  # per-task `check` job — that gate must stay worker-local. This job is the
+  # automated path for make validate-graph; it materializes the ops branch
+  # because a PR checkout has no .armature worktree.
+  validate-graph:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+
+      - name: Attach ops worktree
+        run: |
+          git fetch --no-tags origin refs/heads/_armature:refs/remotes/origin/_armature
+          git worktree add .armature origin/_armature
+          git config armature.ops-worktree-path "${GITHUB_WORKSPACE}/.armature"
+
+      - name: Validate issue graph
+        run: make validate-graph
+
   e2eharness:
     runs-on: ubuntu-latest
     steps:
