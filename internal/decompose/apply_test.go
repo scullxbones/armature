@@ -1,6 +1,8 @@
 package decompose
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -202,6 +204,77 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	_, err = DryRunApplyPlan(plan, state)
 	require.Error(t, err, "dry-run must also refuse an uncited plan")
 	assert.Contains(t, err.Error(), "source")
+}
+
+func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-test.log")
+	var batches [][]string
+	appendPlanOpsMu.Lock()
+	orig := appendPlanOps
+	appendPlanOps = func(path string, proposed []ops.Op) error {
+		if path == logPath {
+			types := make([]string, 0, len(proposed))
+			for _, op := range proposed {
+				types = append(types, op.Type)
+			}
+			batches = append(batches, types)
+		}
+		return orig(path, proposed)
+	}
+	appendPlanOpsMu.Unlock()
+	t.Cleanup(func() {
+		appendPlanOpsMu.Lock()
+		appendPlanOps = orig
+		appendPlanOpsMu.Unlock()
+	})
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Atomic plan",
+		Issues: []PlanIssue{
+			taskPlanIssue("PLAN-001", "First"),
+			taskPlanIssue("PLAN-002", "Second"),
+		},
+	}
+	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState())
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+	require.Len(t, batches, 1, "create + source_link (+links) must be one write, not one write per op")
+	assert.Contains(t, batches[0], ops.OpCreate)
+	assert.Contains(t, batches[0], ops.OpSourceLink)
+}
+
+func TestApplyPlan_FailedAppendLeavesNoPartialLog(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-test.log")
+	appendPlanOpsMu.Lock()
+	orig := appendPlanOps
+	appendPlanOps = func(path string, proposed []ops.Op) error {
+		if path == logPath {
+			return errors.New("disk full")
+		}
+		return orig(path, proposed)
+	}
+	appendPlanOpsMu.Unlock()
+	t.Cleanup(func() {
+		appendPlanOpsMu.Lock()
+		appendPlanOps = orig
+		appendPlanOpsMu.Unlock()
+	})
+
+	plan := &Plan{
+		Version: 1,
+		Title:   "Failing plan",
+		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
+	}
+	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState())
+	require.Error(t, err)
+	assert.Equal(t, 0, count)
+	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
+	assert.True(t, os.IsNotExist(statErr), "a failed atomic append must not leave an uncited create")
 }
 
 func TestValidatePlan_DoesNotWarnOnInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {

@@ -16,9 +16,8 @@ import (
 
 // setupRepoWithScopedTasksForDelete creates a temp repo with tasks for scope-delete tests.
 // task-01: scope = ["src/old/foo.go", "src/old/bar.go"]
-// task-02: scope = ["src/old/foo.go"]          (exact match for the path we'll delete)
+// task-02: scope = ["src/old/foo.go", "src/old/keep.go"]
 // task-03: scope = ["src/other/qux.go"]        (no match)
-// task-04: scope = ["src/old/foo.go"]          (will become empty after delete; non-terminal)
 func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -32,17 +31,27 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
+	wellFormed := func(title string, scope []string) ops.Payload {
+		return ops.Payload{
+			Title:            title,
+			NodeType:         "task",
+			Scope:            scope,
+			DefinitionOfDone: title + " is complete and tested",
+			Acceptance:       json.RawMessage(testAcceptance),
+			Confidence:       "draft",
+		}
+	}
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: nowEpoch(), WorkerID: workerID,
-		Payload: ops.Payload{Title: "Task 1", NodeType: "task", Scope: []string{"src/old/foo.go", "src/old/bar.go"}, Confidence: "verified"},
+		Payload: wellFormed("Task 1", []string{"src/old/foo.go", "src/old/bar.go"}),
 	}))
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpCreate, TargetID: "task-02", Timestamp: nowEpoch(), WorkerID: workerID,
-		Payload: ops.Payload{Title: "Task 2", NodeType: "task", Scope: []string{"src/old/foo.go"}, Confidence: "verified"},
+		Payload: wellFormed("Task 2", []string{"src/old/foo.go", "src/old/keep.go"}),
 	}))
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpCreate, TargetID: "task-03", Timestamp: nowEpoch(), WorkerID: workerID,
-		Payload: ops.Payload{Title: "Task 3", NodeType: "task", Scope: []string{"src/other/qux.go"}, Confidence: "verified"},
+		Payload: wellFormed("Task 3", []string{"src/other/qux.go"}),
 	}))
 
 	// Materialize so index.json exists with scope data before scope-delete reads it via ReadIndex.
@@ -106,10 +115,11 @@ func TestScopeDeleteCmd_RematerializesState(t *testing.T) {
 	assert.NotContains(t, issue01.Scope, "src/old/foo.go", "deleted entry should be removed from task-01")
 	assert.Contains(t, issue01.Scope, "src/old/bar.go", "non-deleted entry should remain in task-01")
 
-	// task-02 had only "src/old/foo.go"; scope should now be empty
+	// task-02 keeps its other entry so the delete does not introduce E6
 	issue02, err := materialize.LoadIssue(filepath.Join(workerDir, "issues", "task-02.json"))
 	require.NoError(t, err)
-	assert.Empty(t, issue02.Scope, "task-02 scope should be empty after deletion")
+	assert.NotContains(t, issue02.Scope, "src/old/foo.go")
+	assert.Contains(t, issue02.Scope, "src/old/keep.go")
 
 	// task-03 scope should be unchanged
 	issue03, err := materialize.LoadIssue(filepath.Join(workerDir, "issues", "task-03.json"))
@@ -134,24 +144,34 @@ func TestScopeDeleteCmd_SameTimestampForAllOps(t *testing.T) {
 		"both affected issues should have the same Updated timestamp")
 }
 
-// TestScopeDeleteCmd_EmptyScopeWarningForNonTerminal verifies that a warning is emitted to
-// stderr when a non-terminal issue ends up with an empty scope after deletion.
-func TestScopeDeleteCmd_EmptyScopeWarningForNonTerminal(t *testing.T) {
-	repo := setupRepoWithScopedTasksForDelete(t)
-
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	root.SetErr(errBuf)
-	// task-02 has only "src/old/foo.go" and is open (non-terminal), so should warn
-	root.SetArgs([]string{"scope-delete", "src/old/foo.go", "--repo", repo})
-
-	err := root.Execute()
+func TestScopeDeleteCmd_EmptyingLastTaskScopeIsRefused(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
-	// A warning about the empty scope for task-02 (open, non-terminal) should appear
-	assert.Contains(t, errBuf.String(), "empty scope")
-	assert.Contains(t, errBuf.String(), "task-02")
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-last", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{
+			Title:            "Last scope",
+			NodeType:         "task",
+			Scope:            []string{"src/old/foo.go"},
+			DefinitionOfDone: "Last scope is complete and tested",
+			Acceptance:       json.RawMessage(testAcceptance),
+			Confidence:       "draft",
+		},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "scope-delete", "src/old/foo.go")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing required field")
+	assert.Contains(t, err.Error(), "task-last")
 }
 
 // TestScopeDeleteCmd_HumanOutput verifies human-readable output format.

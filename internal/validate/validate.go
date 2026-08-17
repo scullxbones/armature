@@ -47,7 +47,7 @@ type Finding struct {
 func (f Finding) identity() string {
 	ids := append([]string(nil), f.CitedIDs...)
 	slices.Sort(ids)
-	return f.Rule + "\x00" + strings.Join(ids, "\x00")
+	return f.Rule + "\x00" + strings.Join(ids, "\x00") + "\x00" + f.Message
 }
 
 func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
@@ -161,10 +161,8 @@ func projectState(current *materialize.State, proposed []ops.Op) (*materialize.S
 	if err != nil {
 		return nil, err
 	}
-	for _, op := range proposed {
-		if err := after.ApplyOp(op); err != nil {
-			return nil, fmt.Errorf("project proposed %s %s: %w", op.Type, op.TargetID, err)
-		}
+	if err := materialize.ApplyOpsSorted(after, proposed); err != nil {
+		return nil, fmt.Errorf("project proposed: %w", err)
 	}
 	return after, nil
 }
@@ -280,7 +278,7 @@ func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []Fin
 	slices.Sort(cyclic)
 	return []Finding{{
 		Severity: "error", Rule: "E4",
-		Message:  fmt.Sprintf("cycle detected: %s", cyclic[0]),
+		Message:  fmt.Sprintf("cycle detected: %s", strings.Join(cyclic, ", ")),
 		CitedIDs: cyclic,
 	}}
 }

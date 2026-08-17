@@ -7,7 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -30,16 +32,30 @@ controlling terminal, an interactive type-the-id confirmation, and a
 recorded reason. Agent verbs do not accept a skip flag.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if nonInteractive, _ := cmd.Root().PersistentFlags().GetBool("non-interactive"); nonInteractive {
+			if strings.TrimSpace(reason) == "" {
+				return fmt.Errorf("--reason is required")
+			}
+			nonInteractive, err := cmd.Root().PersistentFlags().GetBool("non-interactive")
+			if err != nil {
+				return fmt.Errorf("non-interactive flag: %w", err)
+			}
+
+			issueID := args[0]
+			state := mustState(cmd)
+			ctx := state.ctx
+			if err := checkOverrideReleaseTarget(cmd, issueID); err != nil {
+				return err
+			}
+			if nonInteractive {
 				return fmt.Errorf("release override requires a controlling terminal")
 			}
+
 			tty, err := openControllingTTY()
 			if err != nil {
 				return fmt.Errorf("release override requires a controlling terminal")
 			}
 			defer tty.Close() //nolint:errcheck
 
-			issueID := args[0]
 			_, _ = fmt.Fprintf(tty, "Type the issue ID %q to confirm release override: ", issueID)
 			line, err := bufio.NewReader(tty).ReadString('\n')
 			if err != nil {
@@ -48,12 +64,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			if strings.TrimSpace(line) != issueID {
 				return fmt.Errorf("typed id does not match %s", issueID)
 			}
-			if strings.TrimSpace(reason) == "" {
-				return fmt.Errorf("--reason is required")
-			}
 
-			state := mustState(cmd)
-			ctx := state.ctx
 			workerID, logPath, err := resolveWorkerAndLog(ctx)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
@@ -84,4 +95,39 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 
 	cmd.Flags().StringVar(&reason, "reason", "", "recorded reason for the release override")
 	return cmd
+}
+
+func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) error {
+	appCtx := currentCtx(cmd)
+	store := newSnapshotStore(appCtx)
+	snap, err := store.Load(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("load snapshot: %w", err)
+	}
+	issue, ok := snap.State.Issues[issueID]
+	if !ok {
+		return fmt.Errorf("issue %s not found", issueID)
+	}
+	if issue.Provenance.Confidence == "verified" {
+		return fmt.Errorf("issue %s is already verified", issueID)
+	}
+	result := validate.Validate(snap.State, materialize.GraphFromState(snap.State), validate.Options{Strict: true})
+	if !hasBlockingFindingOn(result, issueID) {
+		return fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
+	}
+	return nil
+}
+
+func hasBlockingFindingOn(result validate.Result, issueID string) bool {
+	for _, f := range result.Findings {
+		if f.Severity == "info" {
+			continue
+		}
+		for _, id := range f.CitedIDs {
+			if id == issueID {
+				return true
+			}
+		}
+	}
+	return false
 }

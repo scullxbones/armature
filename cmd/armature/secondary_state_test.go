@@ -45,7 +45,7 @@ func TestSecondaryStatePaths(t *testing.T) {
 
 	// dag-summary
 	// Needs a draft node. TASK-1 is verified by default. Let's create a draft.
-	_, err = runTrls(t, repo, "create", "--title", "Draft Issue", "--id", "TASK-2", "--confidence", "draft")
+	_, err = runTrls(t, repo, "create", "--title", "Draft Issue", "--id", "TASK-2")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)

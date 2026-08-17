@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -141,6 +142,54 @@ func TestScopeRenameCmd_SameTimestampForAllOps(t *testing.T) {
 
 	assert.Equal(t, issue01.Updated, issue02.Updated,
 		"both affected issues should have the same Updated timestamp")
+}
+
+func TestScopeRenameCmd_RefusesBatchWhenAnyRenameIntroducesFinding(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	ts := nowEpoch()
+	// task-01 already has W4 (**/*). Renaming src/old → ** on both tasks
+	// would introduce W4 on task-02. Per-op check would land task-01 first.
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{
+			Type: ops.OpCreate, TargetID: "task-01", Timestamp: ts, WorkerID: workerID,
+			Payload: ops.Payload{
+				Title: "Already broad", NodeType: "task",
+				Scope:            []string{"**/*", "src/old/foo.go"},
+				DefinitionOfDone: "Already broad is complete and tested",
+				Acceptance:       json.RawMessage(testAcceptance),
+				Confidence:       "draft",
+			},
+		},
+		{
+			Type: ops.OpCreate, TargetID: "task-02", Timestamp: ts, WorkerID: workerID,
+			Payload: ops.Payload{
+				Title: "Narrow", NodeType: "task",
+				Scope:            []string{"src/old/bar.go"},
+				DefinitionOfDone: "Narrow is complete and tested",
+				Acceptance:       json.RawMessage(testAcceptance),
+				Confidence:       "draft",
+			},
+		},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "scope-rename", "src/old", "**")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Graph Finding")
+
+	workerDir := getTestStateDir(t, repo)
+	issue01, err := materialize.LoadIssue(filepath.Join(workerDir, "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Contains(t, issue01.Scope, "src/old/foo.go", "batch refusal must not land a prefix of the rename")
 }
 
 // TestScopeRenameCmd_HumanOutput verifies human-readable output format.

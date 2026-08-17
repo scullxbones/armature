@@ -216,7 +216,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--acceptance` | create, amend | string | Acceptance criteria as JSON | **kept-evidence** |
 | `--context-file` | create, amend | string[] | Stable reference files | **kept-evidence** |
 | `--id` | create | string | Explicit issue ID (auto-generated if empty) | **kept-evidence** |
-| `--confidence` | create | string | Ignored. Birth is always draft. | **kept-evidence** |
+| `--confidence` | create | string | Rejected. Birth is always draft; promote with dag transition --to verified. | **kept-evidence** |
 | `--source` | create, import | string | Source ID/URL to link at creation | **kept-evidence** |
 
 ### Workflow Flags

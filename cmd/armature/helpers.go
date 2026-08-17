@@ -1,14 +1,12 @@
 package main
 
 import (
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -274,46 +272,50 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 // appendLowStakesOp appends an op, increments the pending counter, and only
 // pushes when the threshold is reached.
 func appendLowStakesOp(state *executionState, logPath string, op ops.Op) error {
+	return appendLowStakesOps(state, logPath, []ops.Op{op})
+}
+
+// appendLowStakesOps Introduction-checks the whole group before appending any
+// of it, so a fan-out verb cannot land a prefix and then refuse the rest.
+func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendLowStakesOp: command context unavailable")
 	}
+	if len(proposed) == 0 {
+		return nil
+	}
 	ctx := state.ctx
 	tracker := state.tracker
-	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
+	if err := refuseIntroduction(ctx, proposed); err != nil {
 		return err
 	}
 	var gc ops.GitCommitter
 	if ctx.WorktreePath != "" {
 		gc = adapters.New(ctx.WorktreePath)
 	}
-	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
-		return err
-	}
-
 	threshold := ctx.Config.LowStakesPushThreshold
 	if threshold <= 0 {
 		threshold = 5
 	}
-
-	n, err := tracker.Increment()
-	if err != nil {
-		return err
-	}
-
-	if n >= threshold {
-		// Push now and reset counter
-		if ctx.WorktreePath != "" {
-			pushGC := adapters.New(ctx.WorktreePath)
-			_ = pushGC // push happens via AppendCommitAndPush on next high-stakes op
+	for _, op := range proposed {
+		if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
+			return err
 		}
-		tracker.Reset() //nolint:errcheck,gosec
+		n, err := tracker.Increment()
+		if err != nil {
+			return err
+		}
+		if n >= threshold {
+			if ctx.WorktreePath != "" {
+				pushGC := adapters.New(ctx.WorktreePath)
+				_ = pushGC
+			}
+			tracker.Reset() //nolint:errcheck,gosec
+		}
 	}
 	return nil
 }
 
-// extractFieldsFromIssue extracts specified fields from an Issue and returns their values
-// as a slice of strings in the order requested. For unknown fields, returns empty string.
-// Fields are comma-separated (e.g., "status,title,outcome").
 func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	if ctx == nil {
 		return fmt.Errorf("refuseIntroduction: command context unavailable")
@@ -335,7 +337,10 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	if err != nil {
 		return fmt.Errorf("load ops for introduction check: %w", err)
 	}
-	state := replayOpsForIntroduction(allOps)
+	state, skipped, firstApplyErr := materialize.ReplayOpsTolerant(allOps)
+	if skipped > 0 {
+		fmt.Fprintf(os.Stderr, "warning: introduction replay skipped %d op(s); first error: %v\n", skipped, firstApplyErr)
+	}
 	manifestData, err := adapters.ReadManifestFile(filepath.Join(ctx.IssuesDir, "sources"))
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
@@ -346,38 +351,9 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	})
 }
 
-// replayOpsForIntroduction mirrors materialize's full-replay order: sort by
-// timestamp (creates first at equal ts), ApplyOp, then RunRollup. Apply errors
-// are skipped so a backdated claim/link does not fail-closed the write door;
-// sort is what keeps I3 same-timestamp links from being dropped.
-func replayOpsForIntroduction(allOps []ops.Op) *materialize.State {
-	slices.SortStableFunc(allOps, func(a, b ops.Op) int {
-		if n := cmp.Compare(a.Timestamp, b.Timestamp); n != 0 {
-			return n
-		}
-		return cmp.Compare(introductionOpSortKey(a), introductionOpSortKey(b))
-	})
-	state := materialize.NewState()
-	for _, existing := range allOps {
-		if applyErr := state.ApplyOp(existing); applyErr != nil {
-			continue
-		}
-	}
-	state.RunRollup()
-	return state
-}
-
-func introductionOpSortKey(op ops.Op) int {
-	switch op.Type {
-	case ops.OpCreate:
-		return 0
-	case ops.OpNoteDelete:
-		return 2
-	default:
-		return 1
-	}
-}
-
+// extractFieldsFromIssue extracts specified fields from an Issue and returns their values
+// as a slice of strings in the order requested. For unknown fields, returns empty string.
+// Fields are comma-separated (e.g., "status,title,outcome").
 func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string {
 	if issue == nil {
 		return []string{}

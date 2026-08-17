@@ -1564,7 +1564,7 @@ func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a draft task
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft work", "--id", "draft-01", "--confidence", "draft")
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft work", "--id", "draft-01")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "ready", "--format", "json")
@@ -1627,12 +1627,12 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a draft task (no parent, so no parent-status gate)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft task", "--id", "task-draft-01", "--confidence", "draft",
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Draft task", "--id", "task-draft-01",
 		"--scope", "cmd/armature/draft_a.go", "--dod", "Draft A is complete and tested",
 		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
 	// Create a second draft task outside the scope (different ID)
-	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Another draft", "--id", "task-draft-02", "--confidence", "draft",
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Another draft", "--id", "task-draft-02",
 		"--scope", "cmd/armature/draft_b.go", "--dod", "Draft B is complete and tested",
 		"--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)

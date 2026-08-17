@@ -323,3 +323,48 @@ func sortOpsByTimestamp(allOps []ops.Op) {
 		return cmp.Compare(opSortKey(a), opSortKey(b))
 	})
 }
+
+// SortOpsByTimestamp is the materializer's replay order: timestamp ascending,
+// creates before same-timestamp links, note-deletes last. Introduction
+// projection must use this so the write door cannot drift from arm validate.
+func SortOpsByTimestamp(allOps []ops.Op) {
+	sortOpsByTimestamp(allOps)
+}
+
+// ApplyOpsSorted applies proposed ops in SortOpsByTimestamp order, then
+// RunRollup. Callers that project a write (Introduction) and the full
+// materializer share this path so they cannot disagree on parent/link
+// back-edges or rollup-derived status.
+func ApplyOpsSorted(state *State, proposed []ops.Op) error {
+	if state == nil {
+		return fmt.Errorf("ApplyOpsSorted: state is nil")
+	}
+	ordered := append([]ops.Op(nil), proposed...)
+	sortOpsByTimestamp(ordered)
+	for _, op := range ordered {
+		if err := state.ApplyOp(op); err != nil {
+			return fmt.Errorf("%s %s: %w", op.Type, op.TargetID, err)
+		}
+	}
+	state.RunRollup()
+	return nil
+}
+
+// ReplayOpsTolerant replays historical ops in SortOpsByTimestamp order,
+// skipping ApplyOp failures (backdated claim/link) and then running rollup.
+// skipped is the number of apply failures; firstErr is the first of them.
+func ReplayOpsTolerant(allOps []ops.Op) (state *State, skipped int, firstErr error) {
+	ordered := append([]ops.Op(nil), allOps...)
+	sortOpsByTimestamp(ordered)
+	state = NewState()
+	for _, op := range ordered {
+		if err := state.ApplyOp(op); err != nil {
+			skipped++
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	state.RunRollup()
+	return state, skipped, firstErr
+}

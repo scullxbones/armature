@@ -642,6 +642,22 @@ func TestNoteDeleteAtSameTimestampAsAdd_TombstonesViaSort(t *testing.T) {
 	assert.True(t, state.Issues["task-01"].Notes[0].Deleted, "tombstone from w2 must survive same-tick sort")
 }
 
+func TestReplayOpsTolerant_CountsSkippedApplyErrors(t *testing.T) {
+	t.Parallel()
+	allOps := []ops.Op{
+		{Type: ops.OpLink, TargetID: "task-01", Timestamp: 50, WorkerID: "w1",
+			Payload: ops.Payload{Dep: "other", Rel: "blocked_by"}},
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	}
+	state, skipped, firstErr := ReplayOpsTolerant(allOps)
+	require.NotNil(t, state)
+	assert.Equal(t, 1, skipped)
+	require.Error(t, firstErr)
+	assert.Contains(t, firstErr.Error(), "source issue")
+	require.Contains(t, state.Issues, "task-01")
+}
+
 func TestApplyLinkOp(t *testing.T) {
 	t.Parallel()
 	state := NewState()
