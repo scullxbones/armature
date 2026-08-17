@@ -13,7 +13,7 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${G
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check               - Run CI-safe validation: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, crosscompile, arm validate --ci"
+	@echo "  make check               - Run publish gate: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, crosscompile"
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
@@ -27,6 +27,7 @@ help:
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
 	@echo "  make validate-skills     - Validate embedded skills and canonical CLI documentation"
 	@echo "  make validate-doc-examples - Validate JSON examples in docs/skills against schemas"
+	@echo "  make validate-graph      - arm validate --ci (story integration / CI; not part of make check)"
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
@@ -37,7 +38,7 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile validate-graph
+check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
 
 validate-graph: build
 	@./bin/arm validate --ci

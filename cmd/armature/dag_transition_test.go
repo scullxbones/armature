@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,4 +91,78 @@ func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
 	out, err := runTrls(t, repo, "dag", "transition", "--issue", "draft-a", "--to", "verified")
 	require.NoError(t, err)
 	assert.Contains(t, out, "draft-a")
+}
+
+// TestDagTransitionSkipValidateGate_REQ_LNGHZN_S10_T4: a recorded override
+// promotes on a dirty graph and stamps skipped_validate_gate on the op.
+func TestDagTransitionSkipValidateGate_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--type", "task",
+		"--title", "Draft overlap A",
+		"--id", "draft-a",
+		"--confidence", "draft",
+		"--scope", "internal/ops/*.go",
+		"--dod", "Implement first overlapping draft",
+		"--acceptance", testAcceptance,
+	)
+	require.NoError(t, err)
+	createOverlappingTask(t, repo, "open-b", "Implement second overlapping task")
+
+	out, err := runTrls(t, repo, "dag", "transition", "--issue", "draft-a", "--to", "verified", "--skip-validate-gate")
+	require.NoError(t, err)
+	assert.Contains(t, out, "draft-a")
+
+	allOps, err := readAllOpsFromDir(getTestContext(t, repo).IssuesDir + "/ops")
+	require.NoError(t, err)
+	for _, op := range allOps {
+		if op.Type == ops.OpDAGTransition && op.TargetID == "draft-a" {
+			assert.True(t, op.Payload.SkippedValidateGate)
+			assert.Equal(t, "verified", op.Payload.To)
+			return
+		}
+	}
+	t.Fatal("expected a dag-transition op with the recorded validate-gate override")
+}
+
+// TestDagTransitionSkipValidateGateRejectedForDraft_REQ_LNGHZN_S10_T4
+func TestDagTransitionSkipValidateGateRejectedForDraft_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := setupRepoWithValidDraftNode(t)
+	_, err := runTrls(t, repo, "dag", "transition", "--issue", "draft-task-01", "--to", "draft", "--skip-validate-gate")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--skip-validate-gate")
+	assert.Contains(t, err.Error(), "verified")
+}
+
+// TestDagTransitionValidateFailureDistinguishesWarnings_REQ_LNGHZN_S10_T4
+func TestDagTransitionValidateFailureDistinguishesWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, repo, "create",
+		"--type", "task",
+		"--title", "Draft overlap A",
+		"--id", "draft-a",
+		"--confidence", "draft",
+		"--scope", "internal/ops/*.go",
+		"--dod", "Implement first overlapping draft",
+		"--acceptance", testAcceptance,
+	)
+	require.NoError(t, err)
+	createOverlappingTask(t, repo, "open-b", "Implement second overlapping task")
+
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "draft-a", "--to", "verified")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "warning(s)")
+	assert.NotContains(t, err.Error(), "--skip-validate-gate", "happy-path errors must not advertise the override")
 }

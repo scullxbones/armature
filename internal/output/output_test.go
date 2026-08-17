@@ -351,6 +351,17 @@ func TestRenderValidation_AcceptedRiskCoverage(t *testing.T) {
 	assert.Contains(t, output, "accepted-risk")
 }
 
+func TestCoverageLine_FormatsBothVariants(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "", CoverageLine(validate.Result{}))
+	assert.Equal(t, "COVERAGE: 3/4 cited", CoverageLine(validate.Result{
+		Coverage: &traceability.Coverage{TotalNodes: 4, CitedNodes: 3},
+	}))
+	assert.Equal(t, "COVERAGE: 4/4 cited (3 source-linked, 1 accepted-risk)", CoverageLine(validate.Result{
+		Coverage: &traceability.Coverage{TotalNodes: 4, CitedNodes: 3, AcceptedRiskNodes: 1},
+	}))
+}
+
 func TestRenderIssue_MinimalIssue(t *testing.T) {
 	t.Parallel()
 	issue := &materialize.Issue{

@@ -134,6 +134,10 @@ type Payload struct {
 	Branch              string `json:"branch,omitempty"`
 	PR                  string `json:"pr,omitempty"`
 	SkippedDeliveryGate bool   `json:"skipped_delivery_gate,omitempty"`
+	// SkippedValidateGate records that a dag-transition to verified bypassed
+	// the plan-release validate gate. Absent (false) on every ordinary
+	// dag-transition and every legacy op.
+	SkippedValidateGate bool `json:"skipped_validate_gate,omitempty"`
 	// IfClaimToken marks a transition op as a conditional compensating rollback
 	// (see cmd/armature's rollbackClaim). When non-empty, materialize.applyTransition
 	// applies the op ONLY IF materialize.Issue.ClaimHeldBy(WorkerID, IfClaimToken)

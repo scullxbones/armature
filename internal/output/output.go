@@ -382,18 +382,9 @@ func RenderValidation(w io.Writer, result validate.Result, quiet bool) error {
 			}
 		}
 	}
-	if result.Coverage != nil {
-		cov := result.Coverage
-		totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
-		if cov.AcceptedRiskNodes > 0 {
-			if _, err := fmt.Fprintf(w, "COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk)\n",
-				totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintf(w, "COVERAGE: %d/%d cited\n", totalCited, cov.TotalNodes); err != nil {
-				return err
-			}
+	if line := CoverageLine(result); line != "" {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
 		}
 	}
 	if result.OK {
@@ -402,4 +393,18 @@ func RenderValidation(w io.Writer, result validate.Result, quiet bool) error {
 		}
 	}
 	return nil
+}
+
+// CoverageLine formats the COVERAGE clause for a validate result, or "" if coverage is nil.
+func CoverageLine(result validate.Result) string {
+	if result.Coverage == nil {
+		return ""
+	}
+	cov := result.Coverage
+	totalCited := cov.CitedNodes + cov.AcceptedRiskNodes
+	if cov.AcceptedRiskNodes > 0 {
+		return fmt.Sprintf("COVERAGE: %d/%d cited (%d source-linked, %d accepted-risk)",
+			totalCited, cov.TotalNodes, cov.CitedNodes, cov.AcceptedRiskNodes)
+	}
+	return fmt.Sprintf("COVERAGE: %d/%d cited", totalCited, cov.TotalNodes)
 }

@@ -112,13 +112,31 @@ by path.
 
 ### D7 — Strict validation, enforced at introduction
 
-- `arm validate` runs strict **by default**: warnings are errors, green means
-  silent. No scoping flags — the system validates whole or not at all
-  (partial validation rejected by decision). Rules that fire on intentional
-  states get fixed or deleted, not waived.
+Three doors, three jobs. Partial/`--scope` audit is still rejected.
+
+- **Audit** (`arm validate`): strict **by default** — warnings fail the run,
+  green means a single summary line. No scoping flags; the audit validates
+  the whole graph or not at all. Rules that fire on intentional states get
+  fixed or deleted, not waived. JSON keeps findings in their native
+  `errors` / `warnings` / `infos` buckets; `Strict` drives only `OK` and
+  the exit code.
+- **Introduction (now):** `dag transition` to `verified` requires
+  validate-green so a planner cannot release a dirty plan. Keep this
+  whole-graph: the planner is about to add work to the union and can still
+  stop. A recorded `--skip-validate-gate` exists for humans (I7); happy-path
+  errors name the finding, not the escape.
+- **Introduction (follow-up, T6):** write-time refusal on `dag apply` /
+  `create` / `amend` / `link` so a node that already fails the rules cannot
+  land. Fail only on findings that cite IDs the command touched. Default
+  fail-closed; recorded override; do not advertise the override in the
+  error. That is how birth defects die before plan release, without
+  conscripting the next feature worker as janitor.
+- **Integration:** whole-graph `arm validate --ci` belongs at **story
+  close** and in CI (`make validate-graph`). The per-task publish gate
+  (`make check`) does **not** run it. Wiring the union graph into every
+  worker's `make check` couples delivery to everyone else's in-flight
+  nodes (I3 in spirit) and trains agents onto `check-fast`.
 - Rollout includes burning down all existing warnings.
-- Validate-green is enforced at **plan release** (findings die at the point of
-  introduction) and inside the `full` gate.
 
 ### D8 — Vertical-slice planning validation
 

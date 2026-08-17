@@ -93,7 +93,7 @@
       "scope": "cmd/armature/validate.go, cmd/armature/validate_test.go, internal/validate/validate.go, internal/validate/validate_test.go, cmd/armature/dag_transition.go, cmd/armature/dag_transition_test.go, docs/commands.md, docs/design/surface-census.md",
       "context_files": ["docs/design/gate-efficiency.md"],
       "priority": "medium",
-      "dod": "arm validate runs strict by default: warnings are errors, green output is silent (summary line only). All pre-existing warnings in this repo are fixed or their rules corrected — no waivers, no scoping. dag transition to released/verified states requires validate green, so findings die at plan release. Full gate includes arm validate --ci.",
+      "dod": "arm validate runs strict by default: warnings are errors, green output is silent (summary line only). All pre-existing warnings in this repo are fixed or their rules corrected — no waivers, no scoping. dag transition to released/verified states requires validate green, so findings die at plan release. Story close and CI run arm validate --ci (make validate-graph); the per-task full gate does not.",
       "parent": "LNGHZN-S10",
       "blocked_by": ["LNGHZN-S10-T3"],
       "notes": [
