@@ -55,7 +55,9 @@ func newCreateCmd() *cobra.Command {
 				return err
 			}
 
-			_ = confidence // birth is always draft; flag kept so existing invocations still parse
+			if strings.TrimSpace(confidence) != "" {
+				return fmt.Errorf("--confidence is not set at birth (always draft); promote later with arm dag transition --to verified")
+			}
 			payload := ops.Payload{
 				Title:            title,
 				NodeType:         nodeType,
@@ -148,7 +150,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dod, "dod", "", "definition of done")
 	cmd.Flags().StringSliceVar(&scope, "scope", nil, "file scope globs")
 	cmd.Flags().StringSliceVar(&contextFiles, "context-file", nil, "stable reference file to render before work; may be repeated")
-	cmd.Flags().StringVar(&confidence, "confidence", "", "ignored at birth (always draft); confidence level: draft or verified")
+	cmd.Flags().StringVar(&confidence, "confidence", "", "rejected at birth; confidence level: draft or verified")
 	cmd.Flags().StringVar(&acceptanceJSON, "acceptance", "", "acceptance criteria as JSON array")
 	cmd.Flags().StringVar(&sourceRef, "source", "", "source ID (UUID) or URL/path to source-link at creation time")
 	_ = cmd.MarkFlagRequired("title")

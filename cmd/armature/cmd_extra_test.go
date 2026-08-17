@@ -105,8 +105,7 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 	cmd0 := newRootCmd()
 	cmd0.SetOut(new(bytes.Buffer))
 	cmd0.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo,
-		"--title", "Draft feature", "--type", "task", "--id", "draft-01",
-		"--confidence", "draft"}))
+		"--title", "Draft feature", "--type", "task", "--id", "draft-01"}))
 	require.NoError(t, cmd0.Execute())
 
 	buf := new(bytes.Buffer)

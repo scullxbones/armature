@@ -17,7 +17,6 @@ func setupRepoWithDraftNode(t *testing.T) string {
 		"--title", "Draft task",
 		"--type", "task",
 		"--id", "draft-task-01",
-		"--confidence", "draft",
 		"--scope", "cmd/armature/draft.go",
 		"--dod", "Draft task is complete and tested",
 		"--acceptance", `[{"type":"test_passes"}]`,
@@ -68,7 +67,6 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 		"--title", "Draft epic",
 		"--type", "epic",
 		"--id", "epic-draft-01",
-		"--confidence", "draft",
 	)
 	require.NoError(t, err)
 	// Materialize so issues/epic-draft-01.json exists for ReadIssue in create --parent.
@@ -79,7 +77,6 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 		"--type", "task",
 		"--id", "task-draft-sub-01",
 		"--parent", "epic-draft-01",
-		"--confidence", "draft",
 	)
 	require.NoError(t, err)
 

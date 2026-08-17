@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/clock"
@@ -188,17 +189,30 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 	}
 
 	logPath := filepath.Join(issuesDir, workerID+".log")
+	if err := writePlanOps(logPath, proposed); err != nil {
+		return 0, fmt.Errorf("append plan ops: %w", err)
+	}
 	count := 0
 	for _, op := range proposed {
-		if err := ops.AppendOp(logPath, op); err != nil {
-			return count, fmt.Errorf("append op for issue %s: %w", op.TargetID, err)
-		}
 		if op.Type == ops.OpCreate {
 			count++
 		}
 	}
-
 	return count, nil
+}
+
+// appendPlanOps writes a plan's ops in one append so a create cannot land
+// without its source_link (apply is source-atomic). Tests replace this.
+var (
+	appendPlanOpsMu sync.Mutex
+	appendPlanOps   = ops.AppendOps
+)
+
+func writePlanOps(logPath string, proposed []ops.Op) error {
+	appendPlanOpsMu.Lock()
+	fn := appendPlanOps
+	appendPlanOpsMu.Unlock()
+	return fn(logPath, proposed)
 }
 
 func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Clock) ([]ops.Op, error) {

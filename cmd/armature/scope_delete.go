@@ -68,8 +68,9 @@ func newScopeDeleteCmd() *cobra.Command {
 			// Use the same timestamp for all ops.
 			ts := nowEpoch()
 
+			proposed := make([]ops.Op, 0, len(affected))
 			for _, id := range affected {
-				op := ops.Op{
+				proposed = append(proposed, ops.Op{
 					Type:      ops.OpScopeDelete,
 					TargetID:  id,
 					Timestamp: ts,
@@ -77,10 +78,10 @@ func newScopeDeleteCmd() *cobra.Command {
 					Payload: ops.Payload{
 						DeletedPath: deletedPath,
 					},
-				}
-				if err := appendLowStakesOp(state, logPath, op); err != nil {
-					return fmt.Errorf("append op for %s: %w", id, err)
-				}
+				})
+			}
+			if err := appendLowStakesOps(state, logPath, proposed); err != nil {
+				return err
 			}
 
 			// Refresh snapshot to apply the ops to state.

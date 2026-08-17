@@ -29,10 +29,11 @@ var classifiedValidity = map[string]bool{
 }
 
 // AffectsValidity reports whether appending this op type can change what
-// arm validate reports. Unclassified types return false; the census test
-// fails on the omission.
+// arm validate reports. Unclassified types fail closed (treated as
+// validity-affecting); the census test still fails on the omission.
 func AffectsValidity(opType string) bool {
-	return classifiedValidity[opType]
+	affects, classified := classifiedValidity[opType]
+	return affects || !classified
 }
 
 // ClassifiedValidity reports the census entry for opType. classified is

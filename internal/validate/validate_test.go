@@ -1506,3 +1506,111 @@ func TestIntroductionAllowsCiteAfterE7_REQ_LNGHZN_S10_T12(t *testing.T) {
 	err = CheckIntroduction(state, proposed, Options{Strict: true, ManifestData: manifest})
 	require.NoError(t, err, "cite-after remains legal: E7/E8 must not refuse Introduction")
 }
+
+func TestIntroductionRefusesAliasedW8Finding(t *testing.T) {
+	t.Parallel()
+	existing := wellFormedTask("DECIDE", "internal/decide.go")
+	existing.Decisions = []materialize.Decision{
+		{Topic: "storage", Choice: "postgres"},
+		{Topic: "storage", Choice: "sqlite"},
+		{Topic: "cache", Choice: "redis"},
+	}
+	state := makeState(existing)
+	proposed := []ops.Op{{
+		Type:     ops.OpDecision,
+		TargetID: "DECIDE",
+		Payload: ops.Payload{
+			Topic:  "cache",
+			Choice: "memcached",
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.Error(t, err, "a new W8 on a different topic must not alias an existing W8 on the same issue")
+	assert.Contains(t, err.Error(), "cache")
+}
+
+func TestIntroductionProjectsLinkBeforeSameTimestampCreate(t *testing.T) {
+	t.Parallel()
+	state := makeState(wellFormedTask("EXISTING", "internal/existing.go"))
+	proposed := []ops.Op{
+		{
+			Type:      ops.OpLink,
+			TargetID:  "NEW",
+			Timestamp: 100,
+			Payload: ops.Payload{
+				Dep: "EXISTING",
+				Rel: "blocked_by",
+			},
+		},
+		{
+			Type:      ops.OpCreate,
+			TargetID:  "NEW",
+			Timestamp: 100,
+			Payload: ops.Payload{
+				Title:            "Forward-referenced create",
+				NodeType:         "task",
+				Scope:            []string{"internal/new.go"},
+				DefinitionOfDone: "Forward-referenced create is complete and tested",
+				Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+				Confidence:       "draft",
+			},
+		},
+	}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err, "same-timestamp link-before-create must project via create-first sort, not fail ApplyOp")
+}
+
+func TestIntroductionRollsUpProposedOps(t *testing.T) {
+	t.Parallel()
+	proposed := []ops.Op{
+		{
+			Type:      ops.OpCreate,
+			TargetID:  "STORY",
+			Timestamp: 100,
+			Payload: ops.Payload{
+				Title:    "Rolled-up story",
+				NodeType: "story",
+				Scope:    []string{"**/*"},
+			},
+		},
+		{
+			Type:      ops.OpCreate,
+			TargetID:  "CHILD",
+			Timestamp: 100,
+			Payload: ops.Payload{
+				Title:            "Sole child",
+				NodeType:         "task",
+				Parent:           "STORY",
+				Scope:            []string{"internal/child.go"},
+				DefinitionOfDone: "Sole child is complete and tested",
+				Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+				Confidence:       "draft",
+			},
+		},
+		{
+			Type:      ops.OpTransition,
+			TargetID:  "CHILD",
+			Timestamp: 101,
+			Payload: ops.Payload{
+				To:      ops.StatusMerged,
+				Outcome: "Child delivered with tests and a review",
+			},
+		},
+	}
+	err := CheckIntroduction(materialize.NewState(), proposed, Options{Strict: true})
+	require.NoError(t, err, "rollup must run on the projected state so a now-terminal story does not introduce W4")
+}
+
+func TestValidate_CircularDepNamesParticipants(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{ID: "A", BlockedBy: []string{"B"}, Children: []string{}},
+		&materialize.Issue{ID: "B", BlockedBy: []string{"A"}, Children: []string{}},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	require.False(t, result.OK)
+	require.NotEmpty(t, result.Errors)
+	assert.Contains(t, result.Errors[0], "cycle detected")
+	assert.Contains(t, result.Errors[0], "A")
+	assert.Contains(t, result.Errors[0], "B")
+}
