@@ -110,6 +110,7 @@ func (tr *TestRepo) CreateTask(t *testing.T, parent, title string, scope []strin
 		"--title", title,
 		"--parent", parent,
 		"--dod", "Code reviewed and merged",
+		"--acceptance", `[{"type":"test_passes"}]`,
 		"--format", "json",
 	}
 
@@ -133,6 +134,8 @@ func (tr *TestRepo) CreateTask(t *testing.T, parent, title string, scope []strin
 
 	// Materialize state so the issue can be found by subsequent commands
 	tr.runArm(t, "materialize")
+	// Birth is always draft; promote so the task can appear in ready.
+	tr.runArm(t, "dag", "transition", "--issue", issueID, "--to", "verified")
 
 	return issueID
 }
