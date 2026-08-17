@@ -18,3 +18,4 @@
 ["transition","LNGHZN-S10-T12",1786969791,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t12",{"to":"done","outcome":"Introduction refuses E6, W8, and W11 Graph Findings on targeted writes; E7/E8 cite-after remains legal. make check green at remediating HEAD."}]
 ["transition","LNGHZN-S10-T12",1786970454,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t12",{"to":"open"}]
 ["claim","LNGHZN-S10-T12",1786970454,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t12",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S10-T12","claim_token":"ea53888157d5e673bdef0f848cbbfcb4"}]
+["note","LNGHZN-S10-T12",1786970808,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t12",{"msg":"Remediation: refuseIntroduction must replay via sort+rollup so Introduction matches arm validate under I3 multi-log interleaving.","note_id":"note-1786970808524141242"}]
