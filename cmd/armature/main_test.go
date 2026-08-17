@@ -150,7 +150,74 @@ func TestStateDirFor(t *testing.T) {
 	assert.Equal(t, "/repo/.arm/state/w1", stateDirFor(ctx2, "w1"))
 }
 
-// runTrls invokes the armature cobra command tree with --repo injected and returns stdout + error.
+const testIntroductionOutcome = "Completed the work described in the task"
+
+// enrichTestCLIArgs supplies task required fields and a non-vague outcome
+// so fixture commands do not trip write-time Introduction (E6 / W11).
+func enrichTestCLIArgs(args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+	switch args[0] {
+	case "create":
+		return enrichTestCreateArgs(args)
+	case "transition":
+		return enrichTestTransitionArgs(args)
+	default:
+		return args
+	}
+}
+
+func enrichTestCreateArgs(args []string) []string {
+	nodeType := "task"
+	id := ""
+	hasScope, hasDoD, hasAcceptance := false, false, false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--type":
+			if i+1 < len(args) {
+				nodeType = args[i+1]
+			}
+		case "--id":
+			if i+1 < len(args) {
+				id = args[i+1]
+			}
+		case "--scope":
+			hasScope = true
+		case "--dod":
+			hasDoD = true
+		case "--acceptance":
+			hasAcceptance = true
+		}
+	}
+	if nodeType != "task" {
+		return args
+	}
+	if !hasScope {
+		if id == "" {
+			id = fmt.Sprintf("anon-%d", time.Now().UnixNano())
+		}
+		args = append(args, "--scope", "testdata/"+id+".go")
+	}
+	if !hasDoD {
+		args = append(args, "--dod", "Task implementation is complete and verified")
+	}
+	if !hasAcceptance {
+		args = append(args, "--acceptance", testAcceptance)
+	}
+	return args
+}
+
+func enrichTestTransitionArgs(args []string) []string {
+	out := append([]string(nil), args...)
+	for i := 0; i < len(out); i++ {
+		if out[i] == "--outcome" && i+1 < len(out) && len(strings.TrimSpace(out[i+1])) < 20 {
+			out[i+1] = testIntroductionOutcome
+		}
+	}
+	return out
+}
+
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
 	runTrlsMu.Lock()
@@ -160,7 +227,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(args, "--repo", repo))
+	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), err
 }
@@ -175,7 +242,7 @@ func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, strin
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(args, "--repo", repo))
+	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), errBuf.String(), err
 }
@@ -327,7 +394,7 @@ func TestCreateCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf)
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-99"})
+	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-99"}))
 
 	err := cmd2.Execute()
 	assert.NoError(t, err)
@@ -394,7 +461,10 @@ func TestTransitionCommand(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Fixed", "--force"})
+	cmd.SetArgs(enrichTestCLIArgs([]string{
+		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
+		"--skip-delivery-gate", "--outcome", "Fixed", "--force",
+	}))
 
 	err := cmd.Execute()
 	assert.NoError(t, err)
@@ -404,7 +474,7 @@ func TestTransitionCommand_InvalidStatus(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	cmd := newRootCmd()
-	cmd.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in_progress"})
+	cmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in_progress"}))
 
 	err := cmd.Execute()
 	assert.Error(t, err)
@@ -514,7 +584,7 @@ func TestRenderContextCommand(t *testing.T) {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test render", "--type", "task", "--id", "TST-001"})
+	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test render", "--type", "task", "--id", "TST-001"}))
 	require.NoError(t, cmd2.Execute())
 
 	buf := new(bytes.Buffer)
@@ -602,10 +672,10 @@ func TestValidateCommand(t *testing.T) {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
+	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
 		"--dod", "Task implementation is complete and verified",
 		"--scope", "cmd/armature/main.go",
-		"--acceptance", `[{"type":"test_passes"}]`})
+		"--acceptance", `[{"type":"test_passes"}]`}))
 	require.NoError(t, cmd2.Execute())
 
 	cmd3 := newRootCmd()
@@ -635,7 +705,10 @@ func TestDecomposeApplyCommand(t *testing.T) {
 	require.NoError(t, cmd2.Execute())
 
 	// Write a temp plan file
-	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task","source":"src-test"}]}`
+	planData := `{"version":1,"title":"Test Plan","issues":[{` +
+		`"id":"PLAN-001","title":"First issue","type":"task","source":"src-test",` +
+		`"scope":"internal/PLAN-001.go","dod":"First issue is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
@@ -862,8 +935,12 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 		"version": 1,
 		"title": "Test Plan",
 		"issues": [
-			{"id": "PLAN-001", "title": "First issue", "type": "task", "dod": "done", "source": "src-test"},
-			{"id": "PLAN-002", "title": "Second issue", "type": "task", "dod": "done", "source": "src-test"}
+			{"id": "PLAN-001", "title": "First issue", "type": "task",
+			 "dod": "First issue is complete and tested", "source": "src-test",
+			 "scope": "internal/PLAN-001.go", "acceptance":[{"type":"test_passes"}]},
+			{"id": "PLAN-002", "title": "Second issue", "type": "task",
+			 "dod": "Second issue is complete and tested", "source": "src-test",
+			 "scope": "internal/PLAN-002.go", "acceptance":[{"type":"test_passes"}]}
 		]
 	}`
 	planPath := filepath.Join(repo, "test-plan.json")
@@ -3217,7 +3294,7 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 	root := newRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
-	root.SetArgs([]string{"transition", "--repo", repo, "--issue", "task-04", "--to", "done", "--skip-delivery-gate", "--outcome", "completed"})
+	root.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-04", "--to", "done", "--skip-delivery-gate", "--outcome", "completed"}))
 	err = root.Execute()
 	assert.NoError(t, err)
 

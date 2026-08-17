@@ -104,9 +104,9 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 	// Create a draft task so dag-summary has items to report.
 	cmd0 := newRootCmd()
 	cmd0.SetOut(new(bytes.Buffer))
-	cmd0.SetArgs([]string{"create", "--repo", repo,
+	cmd0.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo,
 		"--title", "Draft feature", "--type", "task", "--id", "draft-01",
-		"--confidence", "draft"})
+		"--confidence", "draft"}))
 	require.NoError(t, cmd0.Execute())
 
 	buf := new(bytes.Buffer)
@@ -182,7 +182,7 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 	// that parent must not leak into a --parent-scoped ready call.
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "E7"})
+	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "E7"}))
 	require.NoError(t, cmd.Execute())
 
 	_, err := runTrls(t, repo, "materialize")
@@ -190,7 +190,7 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Unrelated task", "--type", "task", "--id", "task-outside"})
+	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Unrelated task", "--type", "task", "--id", "task-outside"}))
 	require.NoError(t, cmd2.Execute())
 
 	_, err = runTrls(t, repo, "materialize")
@@ -232,7 +232,7 @@ func TestImportCommand_DryRun_CSV(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	csvFile := filepath.Join(t.TempDir(), "issues.csv")
-	err := os.WriteFile(csvFile, []byte("id,title,type\nimp-1,Imported Task,task\n"), 0644)
+	err := os.WriteFile(csvFile, []byte("id,title,type\nimp-1,Imported Story,story\n"), 0644)
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
@@ -263,7 +263,7 @@ func TestImportCommand_ActualImport(t *testing.T) {
 	require.NoError(t, err)
 
 	csvFile := filepath.Join(t.TempDir(), "issues.csv")
-	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nimp-1,Imported Task,task\n"), 0644))
+	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nimp-1,Imported Story,story\n"), 0644))
 
 	out, err := runTrls(t, repo, "import", csvFile)
 	require.NoError(t, err)
@@ -277,7 +277,7 @@ func TestImportCommand_WithSource(t *testing.T) {
 	require.NoError(t, err)
 
 	csvFile := filepath.Join(t.TempDir(), "issues.csv")
-	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nwith-src-1,With Source Task,task\n"), 0644))
+	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nwith-src-1,With Source Story,story\n"), 0644))
 
 	out, err := runTrls(t, repo, "import", "--source", "src-import-01", csvFile)
 	require.NoError(t, err)
@@ -367,7 +367,10 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	planData := `{"version":1,"title":"Test Plan","issues":[{"id":"REV-001","title":"Revertable","type":"task","source":"src-test"}]}`
+	planData := `{"version":1,"title":"Test Plan","issues":[{` +
+		`"id":"REV-001","title":"Revertable","type":"task","source":"src-test",` +
+		`"scope":"internal/REV-001.go","dod":"Revertable task is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
@@ -598,7 +601,7 @@ func TestListCmd_Group_WithStatusFilter(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"})
+	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"}))
 	require.NoError(t, cmd.Execute())
 
 	cmd2 := newRootCmd()
@@ -617,7 +620,7 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
-	cmd.SetArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"})
+	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"}))
 	require.NoError(t, cmd.Execute())
 
 	// Materialize so issues/E6.json exists for ReadIssue in create --parent.
@@ -626,7 +629,7 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-child", "--parent", "E6"})
+	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-child", "--parent", "E6"}))
 	require.NoError(t, cmd2.Execute())
 
 	out, err := runTrls(t, repo, "--format", "human", "list", "--group", "--parent", "E6")
@@ -702,7 +705,7 @@ func TestImportCommand_DryRun_JSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	csvFile := filepath.Join(t.TempDir(), "issues.csv")
-	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nimp-1,Imported Task,task\n"), 0644))
+	require.NoError(t, os.WriteFile(csvFile, []byte("id,title,type\nimp-1,Imported Story,story\n"), 0644))
 
 	out, err := runTrls(t, repo, "import", "--dry-run", "--format", "json", csvFile)
 	require.NoError(t, err)
@@ -1008,7 +1011,7 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
-	cmd2.SetArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"})
+	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"}))
 	require.NoError(t, cmd2.Execute())
 
 	ctx := getTestContext(t, repo)
@@ -1117,8 +1120,12 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	require.NoError(t, err)
 
 	planData := `{"version":1,"title":"Dry Run Plan","issues":[` +
-		`{"id":"DRY-001","title":"Dry run task one","type":"task","source":"src-test"},` +
-		`{"id":"DRY-002","title":"Dry run task two","type":"task","source":"src-test"}` +
+		`{"id":"DRY-001","title":"Dry run task one","type":"task","source":"src-test",` +
+		`"scope":"internal/DRY-001.go","dod":"Dry run task one is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]},` +
+		`{"id":"DRY-002","title":"Dry run task two","type":"task","source":"src-test",` +
+		`"scope":"internal/DRY-002.go","dod":"Dry run task two is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -1252,7 +1259,9 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 
 	planData := `{"version":1,"title":"GenIDs Test","issues":[` +
 		`{"id":"GEN-001","title":"Story one","type":"story","source":"src-test"},` +
-		`{"id":"GEN-002","title":"Task two","type":"task","parent":"GEN-001","source":"src-test"}` +
+		`{"id":"GEN-002","title":"Task two","type":"task","parent":"GEN-001","source":"src-test",` +
+		`"scope":"internal/GEN-002.go","dod":"Task two is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
@@ -1294,7 +1303,9 @@ func TestDecomposeApplyRoot(t *testing.T) {
 
 	// Plan with no parent set — top-level issues should become children of root-story-01.
 	planData := `{"version":1,"title":"Root Test","issues":[` +
-		`{"id":"ROOT-001","title":"Task under root","type":"task","source":"src-test"}` +
+		`{"id":"ROOT-001","title":"Task under root","type":"task","source":"src-test",` +
+		`"scope":"internal/ROOT-001.go","dod":"Task under root is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}` +
 		`]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))

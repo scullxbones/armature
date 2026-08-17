@@ -14,6 +14,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func taskPlanIssue(id, title string) PlanIssue {
+	return PlanIssue{
+		ID:         id,
+		Title:      title,
+		Type:       "task",
+		Scope:      "internal/" + id + ".go",
+		DoD:        title + " is complete and tested",
+		Acceptance: json.RawMessage(`[{"type":"test_passes"}]`),
+		Source:     "src-test",
+	}
+}
+
 // --- Task 26: ApplyPlan tests ---
 
 func TestApplyPlan_CreatesOps(t *testing.T) {
@@ -25,8 +37,8 @@ func TestApplyPlan_CreatesOps(t *testing.T) {
 		Version: 1,
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "First issue", Type: "task", Source: "src-test"},
-			{ID: "PLAN-002", Title: "Second issue", Type: "task", Source: "src-test"},
+			taskPlanIssue("PLAN-001", "First issue"),
+			taskPlanIssue("PLAN-002", "Second issue"),
 		},
 	}
 
@@ -51,7 +63,7 @@ func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
 		Version: 1,
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "First issue", Type: "task", Source: "src-test"},
+			taskPlanIssue("PLAN-001", "First issue"),
 		},
 	}
 
@@ -72,12 +84,12 @@ func TestApplyPlan_PreservesContextFiles(t *testing.T) {
 	dir := t.TempDir()
 	workerID := "worker-test"
 
+	issue := taskPlanIssue("PLAN-001", "First issue")
+	issue.ContextFiles = []string{"docs/adr.md", "docs/design.md"}
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
-		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "First issue", Type: "task", Source: "src-test", ContextFiles: []string{"docs/adr.md", "docs/design.md"}},
-		},
+		Issues:  []PlanIssue{issue},
 	}
 
 	state := materialize.NewState()
@@ -101,8 +113,8 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 		Version: 1,
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "First issue", Type: "task", Source: "src-test"},
-			{ID: "PLAN-002", Title: "Second issue", Type: "task", Source: "src-test"},
+			taskPlanIssue("PLAN-001", "First issue"),
+			taskPlanIssue("PLAN-002", "Second issue"),
 		},
 	}
 
@@ -321,18 +333,12 @@ func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
 	workerID := "worker-test"
 
 	acceptance := json.RawMessage(`[{"type":"test_passes","cmd":"make check"}]`)
+	issue := taskPlanIssue("PLAN-001", "First issue")
+	issue.Acceptance = acceptance
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
-		Issues: []PlanIssue{
-			{
-				ID:         "PLAN-001",
-				Title:      "First issue",
-				Type:       "task",
-				Source:     "src-test",
-				Acceptance: acceptance,
-			},
-		},
+		Issues:  []PlanIssue{issue},
 	}
 
 	state := materialize.NewState()
@@ -353,30 +359,18 @@ func TestApplyPlan_HandlesEmptyAcceptance(t *testing.T) {
 	dir := t.TempDir()
 	workerID := "worker-test"
 
+	issue := taskPlanIssue("PLAN-001", "First issue")
+	issue.Acceptance = nil
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
-		Issues: []PlanIssue{
-			{
-				ID:     "PLAN-001",
-				Title:  "First issue",
-				Type:   "task",
-				Source: "src-test",
-				// Acceptance not set
-			},
-		},
+		Issues:  []PlanIssue{issue},
 	}
 
 	state := materialize.NewState()
 
 	count, err := ApplyPlan(plan, dir, workerID, state)
-	require.NoError(t, err)
-	assert.Equal(t, 1, count)
-
-	logPath := filepath.Join(dir, workerID+".log")
-	readOps, err := ops.ReadLog(logPath)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(readOps), 1)
-	// When acceptance is not provided, it should be empty or null
-	assert.Equal(t, "", string(readOps[0].Payload.Acceptance), "acceptance should be empty when not provided")
+	require.Error(t, err, "Introduction must refuse a task create that introduces E6")
+	assert.Equal(t, 0, count)
+	assert.Contains(t, err.Error(), "missing required field")
 }

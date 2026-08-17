@@ -141,13 +141,9 @@ func IntroducedOnTargets(before, after Result, targeted []string) []Finding {
 		if f.Severity == "info" {
 			continue
 		}
-		// Completeness and prose-quality findings stay with Plan Release /
-		// audit. Birth is always draft; cite-after remains legal on create;
-		// a status transition is not conscripted as copy-editor (W11).
-		// Introduction owns structural dirt (E2–E5, E9, E10) and
-		// structural W-codes (W1, W4, W5, …).
+		// Cite-after remains legal on create (Plan Release / Integration).
 		switch f.Rule {
-		case "E6", "E7", "E8", "W8", "W11":
+		case "E7", "E8":
 			continue
 		}
 		if _, ok := prior[f.identity()]; ok {
