@@ -58,6 +58,7 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 				"id":         "TEST-001",
 				"title":      "Test task",
 				"type":       "task",
+				"source":     "src-e2e",
 				"dod":        "Task implementation is complete",
 				"scope":      "cmd/armature/test_001.go",
 				"acceptance": []map[string]any{{"type": "test_passes"}},

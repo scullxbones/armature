@@ -31,6 +31,7 @@ func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 		"title":   "CLI artifact pipeline",
 		"issues": []map[string]any{{
 			"id": "PIPE-001", "title": "artifact pipeline", "type": "task",
+			"source":     "src-e2e",
 			"dod":        "CLI artifacts round-trip under strict decoding",
 			"scope":      "pipeline.go",
 			"acceptance": []map[string]any{{"type": "test_passes"}},
