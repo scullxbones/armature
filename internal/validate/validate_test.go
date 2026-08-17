@@ -1421,3 +1421,88 @@ func TestIntroductionIgnoresForeignFindings_REQ_LNGHZN_S10_T12(t *testing.T) {
 	err := CheckIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "pre-existing findings on foreign IDs must not block an unrelated write")
 }
+
+func TestIntroductionRefusesE6W8W11_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+
+	t.Run("E6 missing required field on create", func(t *testing.T) {
+		t.Parallel()
+		state := makeState(wellFormedTask("EXISTING", "internal/foo.go"))
+		proposed := []ops.Op{{
+			Type:     ops.OpCreate,
+			TargetID: "NEW-INCOMPLETE",
+			Payload: ops.Payload{
+				Title:      "Missing required fields",
+				NodeType:   "task",
+				Confidence: "draft",
+			},
+		}}
+		err := CheckIntroduction(state, proposed, Options{Strict: true})
+		require.Error(t, err, "Introduction must refuse a write that introduces E6 on a targeted issue")
+		assert.Contains(t, err.Error(), "missing required field")
+		assert.Contains(t, err.Error(), "NEW-INCOMPLETE")
+	})
+
+	t.Run("W8 conflicting decision", func(t *testing.T) {
+		t.Parallel()
+		existing := wellFormedTask("DECIDE", "internal/decide.go")
+		existing.Decisions = []materialize.Decision{
+			{Topic: "storage", Choice: "postgres"},
+		}
+		state := makeState(existing)
+		proposed := []ops.Op{{
+			Type:     ops.OpDecision,
+			TargetID: "DECIDE",
+			Payload: ops.Payload{
+				Topic:  "storage",
+				Choice: "sqlite",
+			},
+		}}
+		err := CheckIntroduction(state, proposed, Options{Strict: true})
+		require.Error(t, err, "Introduction must refuse a write that introduces W8 on a targeted issue")
+		assert.Contains(t, err.Error(), "conflicting decisions")
+		assert.Contains(t, err.Error(), "DECIDE")
+	})
+
+	t.Run("W11 vague outcome on transition", func(t *testing.T) {
+		t.Parallel()
+		state := makeState(wellFormedTask("SHIP", "internal/ship.go"))
+		proposed := []ops.Op{{
+			Type:     ops.OpTransition,
+			TargetID: "SHIP",
+			Payload: ops.Payload{
+				To:      ops.StatusDone,
+				Outcome: "done",
+			},
+		}}
+		err := CheckIntroduction(state, proposed, Options{Strict: true})
+		require.Error(t, err, "Introduction must refuse a write that introduces W11 on a targeted issue")
+		assert.Contains(t, err.Error(), "vague outcome")
+		assert.Contains(t, err.Error(), "SHIP")
+	})
+}
+
+func TestIntroductionAllowsCiteAfterE7_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	existing := wellFormedTask("EXISTING", "internal/foo.go")
+	existing.CitationAcceptances = []materialize.CitationAcceptance{{WorkerID: "w", Timestamp: 1}}
+	state := makeState(existing)
+	proposed := []ops.Op{{
+		Type:     ops.OpCreate,
+		TargetID: "NEW-UNCITED",
+		Payload: ops.Payload{
+			Title:            "Uncited draft",
+			NodeType:         "task",
+			Scope:            []string{"internal/new.go"},
+			DefinitionOfDone: "New uncited task is complete and tested",
+			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+			Confidence:       "draft",
+		},
+	}}
+	manifest, err := json.Marshal(map[string]any{
+		"entries": map[string]map[string]string{"src-1": {"id": "src-1"}},
+	})
+	require.NoError(t, err)
+	err = CheckIntroduction(state, proposed, Options{Strict: true, ManifestData: manifest})
+	require.NoError(t, err, "cite-after remains legal: E7/E8 must not refuse Introduction")
+}

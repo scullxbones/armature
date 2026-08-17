@@ -23,11 +23,13 @@ func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
 			{
-				ID:     "PLAN-001",
-				Title:  "Multi-scope issue",
-				Type:   "task",
-				Scope:  "internal/foo/bar.go, internal/baz/qux.go",
-				Source: "src-test",
+				ID:         "PLAN-001",
+				Title:      "Multi-scope issue",
+				Type:       "task",
+				Scope:      "internal/foo/bar.go, internal/baz/qux.go",
+				DoD:        "Multi-scope issue is complete and tested",
+				Acceptance: []byte(`[{"type":"test_passes"}]`),
+				Source:     "src-test",
 			},
 		},
 	}
@@ -59,11 +61,13 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
 			{
-				ID:     "PLAN-001",
-				Title:  "Single-scope issue",
-				Type:   "task",
-				Scope:  "internal/foo/bar.go",
-				Source: "src-test",
+				ID:         "PLAN-001",
+				Title:      "Single-scope issue",
+				Type:       "task",
+				Scope:      "internal/foo/bar.go",
+				DoD:        "Single-scope issue is complete and tested",
+				Acceptance: []byte(`[{"type":"test_passes"}]`),
+				Source:     "src-test",
 			},
 		},
 	}
@@ -94,12 +98,7 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 		Version: 1,
 		Title:   "Test Plan",
 		Issues: []PlanIssue{
-			{
-				ID:     "PLAN-001",
-				Title:  "Issue with injected clock",
-				Type:   "task",
-				Source: "src-test",
-			},
+			taskPlanIssue("PLAN-001", "Issue with injected clock"),
 		},
 	}
 
@@ -127,7 +126,7 @@ func TestApplyPlanWithOptions_AppliesRootToTopLevelIssues(t *testing.T) {
 		Version: 1,
 		Title:   "Rooted plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "Top-level task", Type: "task", Source: "src-test"},
+			taskPlanIssue("PLAN-001", "Top-level task"),
 		},
 	}
 
@@ -151,8 +150,8 @@ func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
 		Version: 1,
 		Title:   "Dry Run Plan",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "New issue", Type: "task", Source: "src-test"},
-			{ID: "PLAN-002", Title: "Another issue", Type: "task", Source: "src-test"},
+			taskPlanIssue("PLAN-001", "New issue"),
+			taskPlanIssue("PLAN-002", "Another issue"),
 		},
 	}
 	state := materialize.NewState()
@@ -169,8 +168,8 @@ func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
 		Version: 1,
 		Title:   "Plan with existing",
 		Issues: []PlanIssue{
-			{ID: "PLAN-001", Title: "New issue", Type: "task", Source: "src-test"},
-			{ID: "PLAN-EXISTING", Title: "Already exists", Type: "task", Source: "src-test"},
+			taskPlanIssue("PLAN-001", "New issue"),
+			taskPlanIssue("PLAN-EXISTING", "Already exists"),
 		},
 	}
 	state := materialize.NewState()

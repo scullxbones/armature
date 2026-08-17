@@ -93,7 +93,7 @@ func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	run(t, wt, "git", "add", "foo.go")
 	run(t, wt, "git", "commit", "-m", "no conventional reference here")
 
-	_, err = runTrls(t, wt, "transition", "--issue", "gate-03", "--to", "done", "--outcome", "test", "--skip-delivery-gate", "--force")
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-03", "--to", "done", "--outcome", testIntroductionOutcome, "--skip-delivery-gate", "--force")
 	require.NoError(t, err)
 
 	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
@@ -101,7 +101,7 @@ func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	for _, op := range allOps {
 		if op.Type == ops.OpTransition && op.TargetID == "gate-03" {
 			assert.Equal(t, "done", op.Payload.To)
-			assert.Equal(t, "test", op.Payload.Outcome)
+			assert.Equal(t, testIntroductionOutcome, op.Payload.Outcome)
 			assert.True(t, op.Payload.SkippedDeliveryGate)
 			return
 		}

@@ -202,7 +202,7 @@ func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
 
 	// Create a real task with the scope path we'll delete.
 	_, err = runTrls(t, repo, "create", "--id", "task-real", "--title", "Real task", "--type", "task",
-		"--scope", "src/old/foo.go")
+		"--scope", "src/old/foo.go", "--scope", "src/keep/bar.go")
 	require.NoError(t, err)
 
 	// Materialize to write index.json containing task-real.
