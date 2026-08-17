@@ -17,6 +17,8 @@ Using git worktrees for agent isolation (particularly when placed outside the pr
 
 - [LSP (gopls) repeatedly reported false-positive diagnostics for code that built and tested cleanly](../../raw/2026-07-23T2220Z-claude-tooling-lsp-false-positives-in-worktree.md) — At least five times in one session: "undefined" symbols and "unknown field" errors on code `go build ./...` had just compiled. Consistently accompanied by the workspace-boundary warning for files inside an `arm claim --worktree` path outside the main module's workspace.
 - [Stale LSP diagnostics fire false compiler errors after subagent edits](../../raw/2026-08-08T1930Z-claude-tooling-stale-lsp-diagnostics-false-alarm.md) — Twice in one session the harness injected `<new-diagnostics>` reporting serious-looking breakage immediately after a subagent finished editing; `make build` and `go vet` were clean both times. The false alarm arrives at exactly the moment the coordinator is deciding whether to trust the subagent's result.
+- [`arm` in a linked worktree writes materialized state into the main tree](../../raw/2026-08-14T2330Z-claude-tooling-arm-worktree-writes-main-tree-state.md) — Read-only `arm validate` and `arm dag apply --dry-run` from a planner worktree materialized snapshot state at the *main* tree path, colliding with a concurrent coordinator.
+- [Agent default cwd is the story checkout, not the task worktree](../../raw/2026-08-15T1300Z-5207ee28-tooling-prfix-default-cwd-is-story-tree.md) — `git merge origin/main` during T3 remedia ran in the repo root. Cross-listed under [worker-worktree-bypass](../worker-worktree-bypass/README.md): the harness starts in the story tree even when a claimed worktree exists.
 
 ## Pattern
 
