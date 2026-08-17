@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -169,4 +172,58 @@ func nonEmptyLines(s string) []string {
 		}
 	}
 	return lines
+}
+
+// TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12 plants an I3 two-log
+// interleave where worker B's file (name-sorts first) holds a same-timestamp
+// create+link whose source is created in worker A's later file. File-concat
+// replay drops that link; sort (creates before same-timestamp links) keeps it.
+// Closing the cycle must then be refused, matching whole-graph validate.
+func TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	opsDir := filepath.Join(ctx.IssuesDir, "ops")
+	ts := nowEpoch()
+
+	plantSortedReplayCreate := func(logPath, workerID, id, scope string) {
+		t.Helper()
+		require.NoError(t, ops.AppendOp(logPath, ops.Op{
+			Type:      ops.OpCreate,
+			TargetID:  id,
+			Timestamp: ts,
+			WorkerID:  workerID,
+			Payload: ops.Payload{
+				Title:            id,
+				NodeType:         "task",
+				Scope:            []string{scope},
+				DefinitionOfDone: "Task " + id + " is complete and tested",
+				Acceptance:       json.RawMessage(testAcceptance),
+				Confidence:       "draft",
+			},
+		}))
+	}
+
+	// aaa-worker.log concatenates before zzz-worker.log (os.ReadDir name order).
+	bLog := filepath.Join(opsDir, "aaa-worker.log")
+	plantSortedReplayCreate(bLog, "aaa-worker", "cycle-b", "cmd/armature/cycle_b.go")
+	require.NoError(t, ops.AppendOp(bLog, ops.Op{
+		Type:      ops.OpLink,
+		TargetID:  "cycle-a",
+		Timestamp: ts,
+		WorkerID:  "aaa-worker",
+		Payload:   ops.Payload{Dep: "cycle-b", Rel: "blocked_by"},
+	}))
+
+	aLog := filepath.Join(opsDir, "zzz-worker.log")
+	plantSortedReplayCreate(aLog, "zzz-worker", "cycle-a", "cmd/armature/cycle_a.go")
+
+	_, err = runTrls(t, repo, "link", "--source", "cycle-b", "--dep", "cycle-a")
+	require.Error(t, err, "Introduction must refuse a cycle that sorted+rolled-up validate would report")
+	assert.Contains(t, err.Error(), "cycle")
 }

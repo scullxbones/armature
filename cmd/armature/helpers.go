@@ -1,12 +1,14 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -325,19 +327,15 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	if len(check) == 0 {
 		return nil
 	}
-	// Replay ops in memory so Introduction does not rewrite checkpoint.json
-	// (write handlers must not rematerialize as a side effect of append).
+	// Replay in memory (no checkpoint rewrite) with the same timestamp sort
+	// (creates before same-timestamp links) and rollup validate uses. File-concat
+	// ApplyOp can drop a later-file create's inbound link under I3 interleaving.
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
 	allOps, err := readAllOpsFromDir(opsDir)
 	if err != nil {
 		return fmt.Errorf("load ops for introduction check: %w", err)
 	}
-	state := materialize.NewState()
-	for _, existing := range allOps {
-		if applyErr := state.ApplyOp(existing); applyErr != nil {
-			continue
-		}
-	}
+	state := replayOpsForIntroduction(allOps)
 	manifestData, err := adapters.ReadManifestFile(filepath.Join(ctx.IssuesDir, "sources"))
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
@@ -346,6 +344,38 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 		Strict:       true,
 		ManifestData: manifestData,
 	})
+}
+
+// replayOpsForIntroduction mirrors materialize's full-replay order: sort by
+// timestamp (creates first at equal ts), ApplyOp, then RunRollup. Apply errors
+// are skipped so a backdated claim/link does not fail-closed the write door;
+// sort is what keeps I3 same-timestamp links from being dropped.
+func replayOpsForIntroduction(allOps []ops.Op) *materialize.State {
+	slices.SortStableFunc(allOps, func(a, b ops.Op) int {
+		if n := cmp.Compare(a.Timestamp, b.Timestamp); n != 0 {
+			return n
+		}
+		return cmp.Compare(introductionOpSortKey(a), introductionOpSortKey(b))
+	})
+	state := materialize.NewState()
+	for _, existing := range allOps {
+		if applyErr := state.ApplyOp(existing); applyErr != nil {
+			continue
+		}
+	}
+	state.RunRollup()
+	return state
+}
+
+func introductionOpSortKey(op ops.Op) int {
+	switch op.Type {
+	case ops.OpCreate:
+		return 0
+	case ops.OpNoteDelete:
+		return 2
+	default:
+		return 1
+	}
 }
 
 func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string {

@@ -1532,6 +1532,17 @@ func TestReopenCommand(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
+	// Plant acceptance so reopen (done → open) does not introduce E6.
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpAmend,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Acceptance: json.RawMessage(testAcceptance)},
+	}))
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "done")
