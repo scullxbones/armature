@@ -502,6 +502,11 @@ func TestSourcesVerifyCommand_AfterSync_OK(t *testing.T) {
 
 func TestValidateCommand_JSON(t *testing.T) {
 	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--scope", "internal/ops/*.go",
+		"--acceptance", testAcceptance,
+	)
+	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
 	require.NoError(t, err)
@@ -667,7 +672,10 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	// Amend task-01 to have scope pointing to a non-existent file
-	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--scope", "nonexistent/file.go",
+		"--acceptance", testAcceptance,
+	)
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
@@ -679,7 +687,10 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	_, err := runTrls(t, repo, "amend", "--issue", "task-01", "--scope", "nonexistent/file.go")
+	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
+		"--scope", "nonexistent/file.go",
+		"--acceptance", testAcceptance,
+	)
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
