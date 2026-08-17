@@ -229,6 +229,11 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 						"status":    "satisfied",
 						"rationale": "Golden transcript test validation",
 					},
+					{
+						"id":        "acceptance[0]",
+						"status":    "satisfied",
+						"rationale": "Acceptance criterion covered by golden transcript",
+					},
 				},
 			}
 
