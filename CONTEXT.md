@@ -90,12 +90,28 @@ The provenance state describing how certain Armature is that an issue is valid f
 _Avoid_: Status, readiness
 
 **Draft**:
-A confidence state meaning an issue exists in a not-yet-confirmed form. Draft issues remain outside the normal ready-flow until they are promoted.
-_Avoid_: Verified, ready
+A confidence state meaning an issue is well-formed but not yet confirmed for normal workflow use. Draft issues remain outside the ready-flow until they are promoted.
+_Avoid_: Incomplete, scratchpad, verified, ready
 
 **Verified**:
 A confidence state meaning an issue is confirmed for normal workflow use. Verified issues participate in the ready-flow and ordinary execution rules.
 _Avoid_: Draft, inferred
+
+**Introduction**:
+The birth of a Graph Finding on issues a command just created or targeted. Distinct from Plan Release, which only changes confidence.
+_Avoid_: Audit, integration, scoped validate
+
+**Plan Release**:
+The promotion of a draft subtree to verified, which adds that work to the ready-flow union. Plan release is a confidence transition, not a write of new issues.
+_Avoid_: Introduction, create, merge
+
+**Release Override**:
+A recorded Plan Release that skipped the whole-graph validate gate. It is a human break-glass act, never a green release.
+_Avoid_: Skip, bypass, waiver, `--skip-validate-gate`
+
+**Graph Finding**:
+A rule violation `arm validate` reports, identified by a rule and the issue IDs it cites.
+_Avoid_: Finding, warning, error, Dogfood Finding, Review Finding
 
 **Inferred**:
 A confidence state meaning an issue was derived or imported with weaker certainty than a normal verified issue. Inferred issues belong to the confidence vocabulary, not the status vocabulary.
@@ -119,7 +135,7 @@ _Avoid_: Installation, dispatch
 
 **Dogfood Finding**:
 A concise observation captured while Armature is used on Armature itself. A dogfood finding is a repository-maintenance artifact for later triage; it is not an Armature product feature or automatically a planned issue.
-_Avoid_: Issue, note, retrospective
+_Avoid_: Issue, note, retrospective, Graph Finding, Review Finding
 
 **Assignment**:
 The routing of an issue toward an intended worker. Assignment expresses intended ownership before or apart from an active claim.
@@ -227,7 +243,11 @@ _Avoid_: Verification evidence, acceptance, outcome
 
 **Criterion Result**:
 The evidence-cited assessment of one definition-of-done or acceptance criterion as `satisfied`, `partially_satisfied`, `not_satisfied`, or `indeterminate`. Criterion results are the authoritative semantic judgments within a conformance assessment.
-_Avoid_: Conformance rating, verification result
+_Avoid_: Conformance rating, verification result, Review Finding
+
+**Review Finding**:
+An actionable defect a reviewer reports in chat for remediation, including a severity. Confirmation is hard-scoped to that list. The assessment JSON stores Criterion Results; the chat list is the remediation work order.
+_Avoid_: Graph Finding, Dogfood Finding, Criterion Result
 
 **Conformance Rating**:
 The reviewer-facing green, yellow, or red summary derived from criterion results. Green means all criteria are satisfied; yellow means at least one is partial or indeterminate and none are unsatisfied; red means at least one is not satisfied.

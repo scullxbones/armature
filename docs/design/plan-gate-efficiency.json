@@ -8,7 +8,7 @@
       "type": "story",
       "scope": "",
       "priority": "high",
-      "dod": "All ratified decisions in docs/design/gate-efficiency.md (D1-D8) are delivered: two-tier gates are normative, check-fast exists with deterministic routing, gate evidence is recorded and consumed in review, validate is strict by default and enforced at plan release, and vertical-slice coupling is detected at planning time.",
+      "dod": "All ratified decisions in docs/design/gate-efficiency.md (D1-D8) and ADR 0016 are delivered: two-tier gates are normative, check-fast exists with deterministic routing, gate evidence is recorded and consumed in review, validate is strict by default and enforced at introduction and plan release, and vertical-slice coupling is detected at planning time.",
       "parent": "",
       "blocked_by": null,
       "notes": [
@@ -125,6 +125,32 @@
       "acceptance": [
         "TestPlanCouplingDetection_REQ_LNGHZN_S10_T5 passes",
         "TestPlanCouplingCoLocatedScopePasses_REQ_LNGHZN_S10_T5 passes",
+        "make check green at task head"
+      ]
+    },
+    {
+      "id": "LNGHZN-S10-T12",
+      "title": "Write-time Introduction check: refuse Graph Findings on touched issues",
+      "type": "task",
+      "scope": "internal/validate/validate.go, internal/validate/validate_test.go, internal/ops/validity.go (new), internal/ops/validity_test.go (new), internal/decompose/apply.go, internal/decompose/apply_test.go, internal/decompose/plan.go, cmd/armature/create.go, cmd/armature/amend.go, cmd/armature/link.go, cmd/armature/unlink.go, cmd/armature/reparent.go, cmd/armature/confirm.go, cmd/armature/decision.go, cmd/armature/source_link.go, cmd/armature/helpers.go, cmd/armature/dag.go, cmd/armature/dag_transition.go, cmd/armature/dag_transition_test.go, cmd/armature/dag_override_release.go (new), cmd/armature/dag_override_release_test.go (new), docs/commands.md, docs/design/surface-census.md, docs/design/plan-gate-efficiency.json, CONTEXT.md, docs/adr/0016-three-door-validation.md, internal/skillsembed/skills/armature-planner/SKILL.md, internal/skillsembed/skills/armature-worker/SKILL.md",
+      "context_files": ["docs/adr/0016-three-door-validation.md", "docs/design/gate-efficiency.md", "CONTEXT.md"],
+      "priority": "high",
+      "dod": "Writes that introduce a Graph Finding on a targeted issue are refused. Plan Release stays whole-graph on dag transition and confirm. Birth is always draft. Release Override is arm dag override-release (TTY, type-the-id, reason), not a flag on agent verbs. Apply is source-atomic. AffectsValidity census fails CI on an unclassified op type. apply --strict is deleted.",
+      "parent": "LNGHZN-S10",
+      "blocked_by": ["LNGHZN-S10-T4"],
+      "notes": [
+        "Spec: docs/adr/0016-three-door-validation.md; D7 in docs/design/gate-efficiency.md. ID is T12 because LNGHZN-S10-T6 is the merged overlap-matcher task.",
+        "Parallel with T5 after T4. Do not touch docs/design/gate-efficiency.md (T5 scope).",
+        "Remove --skip-validate-gate from dag transition/confirm. Override is a separate command."
+      ],
+      "acceptance": [
+        "TestIntroductionRefusesDirtyWrite_REQ_LNGHZN_S10_T12 passes",
+        "TestIntroductionIgnoresForeignFindings_REQ_LNGHZN_S10_T12 passes",
+        "TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12 passes",
+        "TestCreateEmitsDraft_REQ_LNGHZN_S10_T12 passes",
+        "TestOverrideReleaseRequiresTty_REQ_LNGHZN_S10_T12 passes",
+        "TestAffectsValidityCensus_REQ_LNGHZN_S10_T12 passes",
+        "TestConfirmRunsPlanReleaseGate_REQ_LNGHZN_S10_T12 passes",
         "make check green at task head"
       ]
     }
