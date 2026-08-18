@@ -162,9 +162,9 @@ ownership is co-location, not coupling. Only tasks in a non-terminal status
 scope-overlap check, so E13 does not fire against already-merged history; a
 coupled pair is reported once regardless of which sibling is scanned first.
 
-E13 is not yet documented in `docs/validation-codes.md`'s catalog — follow-up
-task needed to add it there and to update the E1–E12 range references in
-`docs/concepts.md`.
+E13 is not yet documented in `docs/validation-codes.md`'s catalog; follow-up
+task `task-1787058254` (parent `LNGHZN-S10`) tracks adding the E13 row there
+and updating the E-range references on lines 3 and 38 and the summary table.
 
 ## Story shape
 
