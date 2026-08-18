@@ -72,6 +72,7 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	findings = append(findings, checkE9DoDLength(targets)...)
 	findings = append(findings, checkE10ScopeGlobs(targets)...)
 	// TODO(E4-S3): E11 check not yet implemented — spec definition pending.
+	findings = append(findings, checkE13VerticalSliceCoupling(targets)...)
 
 	if len(opts.ManifestData) > 0 {
 		findings = append(findings, checkE7E8E12Citations(targets, opts.ManifestData)...)

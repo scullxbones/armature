@@ -147,6 +147,18 @@ census files that surface's drift check reads (`docs/commands.md`,
 and command documentation belong to the task adding the flag. Stories deliver
 vertical slices, not horizontal layers.
 
+**Delivered (LNGHZN-S10-T5):** `internal/validate.checkE13VerticalSliceCoupling`
+groups sibling tasks by parent story, then for each censused surface glob
+(currently `cmd/**`) checks whether one sibling's scope touches that surface
+while a different sibling's scope owns one of the census/doc files its drift
+check reads. A match raises an `E13` error-severity Finding, so it fails plan
+release the same way any other `error` Finding does under `Validate`'s
+`Strict` mode (`arm dag transition --to verified`, D7's plan-release gate).
+The error message names both task IDs, the surface glob, and the specific
+coupled file(s), and states the co-location remedy. A single task whose own
+scope covers both the code and the census/doc lines is unaffected: same-task
+ownership is co-location, not coupling.
+
 ## Story shape
 
 | Task | Scope theme | Depends on |
