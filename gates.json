@@ -1,0 +1,8 @@
+{
+  "fast": {
+    "command": ["make", "check-fast"]
+  },
+  "full": {
+    "command": ["make", "check"]
+  }
+}
