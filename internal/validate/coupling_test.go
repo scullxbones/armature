@@ -1,38 +1,60 @@
 package validate
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPlanCouplingDetection_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
-			ID:     "TSK-CODE",
-			Type:   "task",
-			Parent: "STORY-1",
-			Scope:  []string{"cmd/armature/flag.go (new)"},
+			ID:               "STORY-1",
+			Type:             "story",
+			DefinitionOfDone: "Deliver the vertical slice end to end, covering both implementation and documentation.",
 		},
 		&materialize.Issue{
-			ID:     "TSK-DOCS",
-			Type:   "task",
-			Parent: "STORY-1",
-			Scope:  []string{"docs/commands.md"},
+			ID:               "TSK-CODE",
+			Type:             "task",
+			Parent:           "STORY-1",
+			Scope:            []string{"cmd/armature/flag.go (new)"},
+			DefinitionOfDone: "The new flag is implemented and wired up.",
+			Acceptance:       json.RawMessage(`["flag works as documented"]`),
+		},
+		&materialize.Issue{
+			ID:               "TSK-DOCS",
+			Type:             "task",
+			Parent:           "STORY-1",
+			Scope:            []string{"docs/commands.md"},
+			DefinitionOfDone: "docs/commands.md documents the new flag.",
+			Acceptance:       json.RawMessage(`["docs/commands.md mentions the new flag"]`),
 		},
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
 
 	assert.False(t, result.OK)
-	assert.True(t, containsError(result, "TSK-CODE"), "error should name the code task, got: %v", result.Errors)
-	assert.True(t, containsError(result, "TSK-DOCS"), "error should name the docs task, got: %v", result.Errors)
-	assert.True(t, containsError(result, "docs/commands.md"), "error should name the coupled file, got: %v", result.Errors)
-	assert.True(t, containsError(result, "co-locate"), "error should state the remedy, got: %v", result.Errors)
+	e13 := findErrorContaining(result, "E13:")
+	require.NotEmpty(t, e13, "expected an E13 error, got: %v", result.Errors)
+	assert.Contains(t, e13, "TSK-CODE", "E13 message should name the code task, got: %s", e13)
+	assert.Contains(t, e13, "TSK-DOCS", "E13 message should name the docs task, got: %s", e13)
+	assert.Contains(t, e13, "docs/commands.md", "E13 message should name the coupled file, got: %s", e13)
+	assert.Contains(t, e13, "co-locate", "E13 message should state the remedy, got: %s", e13)
+}
+
+func findErrorContaining(r Result, substr string) string {
+	for _, e := range r.Errors {
+		if strings.Contains(e, substr) {
+			return e
+		}
+	}
+	return ""
 }
 
 func TestPlanCouplingCoLocatedScopePasses_REQ_LNGHZN_S10_T5(t *testing.T) {
