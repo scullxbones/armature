@@ -1,6 +1,7 @@
 package decompose
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/validate"
 )
 
@@ -36,6 +38,10 @@ type ApplyOptions struct {
 	// Root, when non-empty, is used as the parent for any top-level plan
 	// issues (those whose Parent field is empty).
 	Root string
+	// ManifestData is the sources manifest used to resolve per-issue source
+	// IDs and to run citation checks on the Introduction door. Empty skips
+	// membership checks (unit tests); the CLI always supplies the file.
+	ManifestData []byte
 }
 
 // ValidatePlan returns a list of advisory warnings for the plan.
@@ -51,13 +57,37 @@ func ValidatePlan(plan *Plan) []string {
 	return warnings
 }
 
-func validateSources(plan *Plan) error {
+func validateSources(plan *Plan, manifestData []byte) error {
 	for _, issue := range plan.Issues {
 		if strings.TrimSpace(issue.Source) == "" {
 			return fmt.Errorf("plan issue %s (%s) is missing source; apply is source-atomic", issue.ID, issue.Title)
 		}
 	}
+	if len(manifestData) == 0 {
+		return nil
+	}
+	known, err := sourceIDsFromManifest(manifestData)
+	if err != nil {
+		return fmt.Errorf("parse source manifest: %w", err)
+	}
+	for _, issue := range plan.Issues {
+		if _, ok := known[issue.Source]; !ok {
+			return fmt.Errorf("plan issue %s (%s) cites unknown source %s", issue.ID, issue.Title, issue.Source)
+		}
+	}
 	return nil
+}
+
+func sourceIDsFromManifest(data []byte) (map[string]struct{}, error) {
+	var m sources.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	known := make(map[string]struct{}, len(m.Entries))
+	for id := range m.Entries {
+		known[id] = struct{}{}
+	}
+	return known, nil
 }
 
 // validateTypes rejects a plan containing any issue with an unrecognized
@@ -142,14 +172,14 @@ func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts Apply
 	if err := validateIssueIDs(plan); err != nil {
 		return nil, err
 	}
-	if err := validateSources(plan); err != nil {
+	if err := validateSources(plan, opts.ManifestData); err != nil {
 		return nil, err
 	}
 
 	warnings := ValidatePlan(plan)
 
 	transformed := preparePlan(plan, opts)
-	if _, err := planOps(transformed, state, "dry-run", clock.System); err != nil {
+	if _, err := planOps(transformed, state, "dry-run", clock.System, opts); err != nil {
 		return nil, err
 	}
 
@@ -178,12 +208,12 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 	if err := validateIssueIDs(plan); err != nil {
 		return 0, err
 	}
-	if err := validateSources(plan); err != nil {
+	if err := validateSources(plan, opts.ManifestData); err != nil {
 		return 0, err
 	}
 
 	transformed := preparePlan(plan, opts)
-	proposed, err := planOps(transformed, state, workerID, clk)
+	proposed, err := planOps(transformed, state, workerID, clk, opts)
 	if err != nil {
 		return 0, err
 	}
@@ -215,7 +245,7 @@ func writePlanOps(logPath string, proposed []ops.Op) error {
 	return fn(logPath, proposed)
 }
 
-func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Clock) ([]ops.Op, error) {
+func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Clock, opts ApplyOptions) ([]ops.Op, error) {
 	var proposed []ops.Op
 	for _, issue := range plan.Issues {
 		if _, exists := state.Issues[issue.ID]; exists {
@@ -266,7 +296,7 @@ func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Cl
 			})
 		}
 	}
-	if err := validate.CheckIntroduction(state, proposed, validate.Options{Strict: true}); err != nil {
+	if err := validate.CheckIntroduction(state, proposed, validate.Options{Strict: true, ManifestData: opts.ManifestData}); err != nil {
 		return nil, err
 	}
 	return proposed, nil

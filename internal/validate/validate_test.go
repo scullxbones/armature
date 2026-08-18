@@ -3,6 +3,8 @@ package validate
 import (
 	"encoding/json"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1360,6 +1362,84 @@ func TestAffectsValidityCensus_REQ_LNGHZN_S10_T12(t *testing.T) {
 		_, classified := ops.ClassifiedValidity(typ)
 		assert.True(t, classified, "unclassified op type %q: every RegisteredOpTypes() entry must be classified AffectsValidity", typ)
 	}
+}
+
+// Production writers of ops.Append* that are allowed to skip refuseIntroduction.
+// Each entry must state why. A new production call site fails this test until
+// it is routed through an Introduction wrapper or added here with a reason.
+var introductionWriterAllowlist = map[string]string{
+	"cmd/armature/helpers.go":      "Introduction wrappers: refuseIntroduction then AppendAndCommit",
+	"cmd/armature/harness_hook.go": "heartbeat only; OpHeartbeat is classified AffectsValidity=false",
+	"internal/decompose/apply.go":  "CheckIntroduction on the plan batch, then one AppendOps write",
+	"internal/decompose/revert.go": "exempt: recommended Introduction remedy; cancel withdraws drafts",
+	"internal/doctor/fix.go":       "exempt: recovery compensating transitions must remain landable",
+}
+
+func TestIntroductionWritersAreAllowlisted_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..")
+	var unexpected []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "vendor", "testdata", ".git", "bin", "dist":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(rel, "cmd"+string(filepath.Separator)) && !strings.HasPrefix(rel, "internal"+string(filepath.Separator)) {
+			return nil
+		}
+		if !productionFileCallsOpsAppend(t, path) {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if _, ok := introductionWriterAllowlist[rel]; !ok {
+			unexpected = append(unexpected, rel)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Empty(t, unexpected, "production ops.Append* call site is not on the Introduction allowlist: %v", unexpected)
+}
+
+func productionFileCallsOpsAppend(t *testing.T, path string) bool {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	require.NoError(t, err, path)
+	opsAlias := ""
+	for _, imp := range file.Imports {
+		if strings.Trim(imp.Path.Value, `"`) != "github.com/scullxbones/armature/internal/ops" {
+			continue
+		}
+		if imp.Name != nil {
+			opsAlias = imp.Name.Name
+		} else {
+			opsAlias = "ops"
+		}
+	}
+	if opsAlias == "" || opsAlias == "_" {
+		return false
+	}
+	src, err := os.ReadFile(path)
+	require.NoError(t, err, path)
+	for _, name := range []string{"AppendOp", "AppendOps", "AppendAndCommit"} {
+		if strings.Contains(string(src), opsAlias+"."+name) {
+			return true
+		}
+	}
+	return false
 }
 
 func wellFormedTask(id, scope string) *materialize.Issue {

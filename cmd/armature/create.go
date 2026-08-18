@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/ops"
@@ -85,36 +86,13 @@ func newCreateCmd() *cobra.Command {
 				Payload:   payload,
 			}
 
-			if err := appendOp(ctx, logPath, op); err != nil {
-				return err
-			}
-
-			// If --source was provided, resolve it from the manifest and emit a
-			// source-link op so the issue is fully cited in a single invocation.
+			// Resolve --source before any write so a missing source cannot
+			// leave a durable uncited create (create is source-atomic).
 			if sourceRef != "" {
-				dir := sourcesDir(ctx)
-				lc := sources.NewLifecycle(dir)
-
-				var entry *sources.SourceEntry
-				var resolvedID string
-				var resolveErr error
-
-				// Treat the ref as a UUID first; fall back to URL/path lookup.
-				if _, parseErr := uuid.Parse(sourceRef); parseErr == nil {
-					entry, resolveErr = lc.Get(sourceRef)
-					if resolveErr != nil {
-						return fmt.Errorf("source %q not found in manifest: %w", sourceRef, resolveErr)
-					}
-					resolvedID = sourceRef
-				} else {
-					// Fall back to URL lookup in the manifest.
-					entry, resolveErr = lc.GetByURL(sourceRef)
-					if resolveErr != nil {
-						return fmt.Errorf("source %q not found in manifest", sourceRef)
-					}
-					resolvedID = entry.ID
+				entry, resolvedID, resolveErr := resolveCreateSource(ctx, sourceRef)
+				if resolveErr != nil {
+					return resolveErr
 				}
-
 				slOp := ops.Op{
 					Type:      ops.OpSourceLink,
 					TargetID:  id,
@@ -125,9 +103,11 @@ func newCreateCmd() *cobra.Command {
 						SourceURL: entry.URL,
 					},
 				}
-				if err := appendLowStakesOp(state, logPath, slOp); err != nil {
+				if err := appendLowStakesOps(state, logPath, []ops.Op{op, slOp}); err != nil {
 					return err
 				}
+			} else if err := appendOp(ctx, logPath, op); err != nil {
+				return err
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -156,4 +136,20 @@ func newCreateCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("title")
 
 	return cmd
+}
+
+func resolveCreateSource(ctx *config.Context, sourceRef string) (*sources.SourceEntry, string, error) {
+	lc := sources.NewLifecycle(sourcesDir(ctx))
+	if _, parseErr := uuid.Parse(sourceRef); parseErr == nil {
+		entry, err := lc.Get(sourceRef)
+		if err != nil {
+			return nil, "", fmt.Errorf("source %q not found in manifest: %w", sourceRef, err)
+		}
+		return entry, sourceRef, nil
+	}
+	entry, err := lc.GetByURL(sourceRef)
+	if err != nil {
+		return nil, "", fmt.Errorf("source %q not found in manifest", sourceRef)
+	}
+	return entry, entry.ID, nil
 }

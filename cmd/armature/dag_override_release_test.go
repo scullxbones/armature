@@ -90,6 +90,25 @@ func TestOverrideReleaseRequiresExistingDirtyDraft(t *testing.T) {
 	assert.Contains(t, err.Error(), "no blocking findings")
 }
 
+func TestOverrideReleaseAllowsWhenForeignFindingBlocksPlanRelease(t *testing.T) {
+	repo := setupRepoWithValidDraftNode(t)
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendRawCreate(logPath, workerID, "OTHER-9", "Do this properly for the foreign draft", "internal/other.go"))
+
+	orig := openControllingTTY
+	t.Cleanup(func() { openControllingTTY = orig })
+	openControllingTTY = func() (*os.File, error) {
+		return nil, errors.New("no controlling terminal")
+	}
+
+	_, err = runTrls(t, repo, "dag", "override-release", "draft-task-01", "--reason", "waive foreign W4")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "controlling terminal")
+	assert.NotContains(t, err.Error(), "no blocking findings")
+}
+
 func TestCreateEmitsDraft_REQ_LNGHZN_S10_T12(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

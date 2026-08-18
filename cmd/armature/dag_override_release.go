@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +43,8 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			issueID := args[0]
 			state := mustState(cmd)
 			ctx := state.ctx
-			if err := checkOverrideReleaseTarget(cmd, issueID); err != nil {
+			result, err := checkOverrideReleaseTarget(cmd, issueID)
+			if err != nil {
 				return err
 			}
 			if nonInteractive {
@@ -56,6 +57,9 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			}
 			defer tty.Close() //nolint:errcheck
 
+			if renderErr := output.RenderValidation(tty, result, false); renderErr != nil {
+				return fmt.Errorf("render findings: %w", renderErr)
+			}
 			_, _ = fmt.Fprintf(tty, "Type the issue ID %q to confirm release override: ", issueID)
 			line, err := bufio.NewReader(tty).ReadString('\n')
 			if err != nil {
@@ -86,8 +90,8 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 				return err
 			}
 
-			result := map[string]string{"issue": issueID, "promoted_to": "verified", "override": "recorded"}
-			data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
+			out := map[string]string{"issue": issueID, "promoted_to": "verified", "override": "recorded"}
+			data, _ := json.Marshal(out) //nolint:errcheck // result struct contains only serializable values
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			return nil
 		},
@@ -97,37 +101,26 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 	return cmd
 }
 
-func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) error {
+func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Result, error) {
 	appCtx := currentCtx(cmd)
 	store := newSnapshotStore(appCtx)
 	snap, err := store.Load(cmd.Context())
 	if err != nil {
-		return fmt.Errorf("load snapshot: %w", err)
+		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
 	}
 	issue, ok := snap.State.Issues[issueID]
 	if !ok {
-		return fmt.Errorf("issue %s not found", issueID)
+		return validate.Result{}, fmt.Errorf("issue %s not found", issueID)
 	}
 	if issue.Provenance.Confidence == "verified" {
-		return fmt.Errorf("issue %s is already verified", issueID)
+		return validate.Result{}, fmt.Errorf("issue %s is already verified", issueID)
 	}
-	result := validate.Validate(snap.State, materialize.GraphFromState(snap.State), validate.Options{Strict: true})
-	if !hasBlockingFindingOn(result, issueID) {
-		return fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
+	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true})
+	if valErr != nil {
+		return validate.Result{}, valErr
 	}
-	return nil
-}
-
-func hasBlockingFindingOn(result validate.Result, issueID string) bool {
-	for _, f := range result.Findings {
-		if f.Severity == "info" {
-			continue
-		}
-		for _, id := range f.CitedIDs {
-			if id == issueID {
-				return true
-			}
-		}
+	if result.OK {
+		return result, fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
 	}
-	return false
+	return result, nil
 }

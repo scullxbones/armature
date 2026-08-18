@@ -206,6 +206,35 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	assert.Contains(t, err.Error(), "source")
 }
 
+func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Fabricated source",
+		Issues: []PlanIssue{{
+			ID:         "PLAN-001",
+			Title:      "Cited against a missing source",
+			Type:       "task",
+			Scope:      "internal/PLAN-001.go",
+			DoD:        "Cited against a missing source is complete and tested",
+			Acceptance: []byte(`[{"type":"test_passes"}]`),
+			Source:     "00000000-0000-0000-0000-000000000001",
+		}},
+	}
+	opts := ApplyOptions{ManifestData: []byte(`{"entries":{"src-real":{"id":"src-real"}}}`)}
+	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	require.Error(t, err, "apply must refuse a source ID that is not in the manifest")
+	assert.Equal(t, 0, count)
+	assert.Contains(t, err.Error(), "00000000-0000-0000-0000-000000000001")
+	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
+	assert.True(t, os.IsNotExist(statErr), "a refused apply must not land an uncited create")
+
+	_, err = DryRunApplyPlanWithOptions(plan, materialize.NewState(), opts)
+	require.Error(t, err, "dry-run must also refuse an unknown source")
+	assert.Contains(t, err.Error(), "00000000-0000-0000-0000-000000000001")
+}
+
 func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

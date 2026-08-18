@@ -182,6 +182,8 @@ func reportAmbiguousWorktreeBinding(id string) FixAction {
 func ApplyFixes(logPath, worktreePath string, actions []FixAction, gc ops.GitCommitter) error {
 	for _, a := range actions {
 		for _, op := range a.Ops {
+			// Exempt from refuseIntroduction: recovery compensating
+			// transitions must remain landable on a dirty graph.
 			if err := ops.AppendAndCommit(logPath, worktreePath, op, gc); err != nil {
 				return err
 			}

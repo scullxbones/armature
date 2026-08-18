@@ -3592,6 +3592,9 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 		)
 		require.Error(t, err, "should fail when source ref is not found in manifest")
 		assert.Contains(t, err.Error(), "not found")
+
+		_, showErr := runTrls(t, repo, "show", "--issue", "src-bad-01")
+		require.Error(t, showErr, "create --source must not land the create when source resolution fails")
 	})
 }
 
