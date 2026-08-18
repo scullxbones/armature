@@ -157,7 +157,14 @@ release the same way any other `error` Finding does under `Validate`'s
 The error message names both task IDs, the surface glob, and the specific
 coupled file(s), and states the co-location remedy. A single task whose own
 scope covers both the code and the census/doc lines is unaffected: same-task
-ownership is co-location, not coupling.
+ownership is co-location, not coupling. Only tasks in a non-terminal status
+(not `merged`, `done`, or `cancelled`) are considered, mirroring the W1
+scope-overlap check, so E13 does not fire against already-merged history; a
+coupled pair is reported once regardless of which sibling is scanned first.
+
+E13 is not yet documented in `docs/validation-codes.md`'s catalog — follow-up
+task needed to add it there and to update the E1–E12 range references in
+`docs/concepts.md`.
 
 ## Story shape
 
