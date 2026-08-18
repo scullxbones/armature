@@ -42,12 +42,22 @@ type Finding struct {
 	Rule     string
 	Message  string
 	CitedIDs []string
+	// Key is a rule-specific, stable discriminator used (alongside Rule and
+	// CitedIDs) to identify a Finding across writes. It exists so a rule that
+	// can emit more than one Finding per (Rule, CitedIDs) pair — currently
+	// checkE6RequiredFields, checkE10ScopeGlobs, and checkW8ConflictingDecisions
+	// — doesn't alias its distinct findings together. Key must never be
+	// derived from mutable detail (counts, overlap file lists, char lengths):
+	// Message is intentionally excluded from identity so a write that
+	// strictly narrows an existing finding's residual detail isn't treated
+	// as introducing a new one.
+	Key string
 }
 
 func (f Finding) identity() string {
 	ids := append([]string(nil), f.CitedIDs...)
 	slices.Sort(ids)
-	return f.Rule + "\x00" + strings.Join(ids, "\x00") + "\x00" + f.Message
+	return f.Rule + "\x00" + strings.Join(ids, "\x00") + "\x00" + f.Key
 }
 
 func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
@@ -106,6 +116,13 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 // CheckIntroduction refuses a proposed write that introduces a Graph Finding
 // on an issue the write created or targeted. Pre-existing findings on
 // foreign IDs do not block.
+//
+// The baseline used to decide what counts as "pre-existing" is widened by an
+// un-suppression projection: several rules (E5, E6, W1, W4, W10) deliberately
+// suppress themselves once an issue reaches a terminal status, so a write
+// that only reverses that terminal status (e.g. arm reopen) is not itself an
+// introduction of whatever those rules find once un-suppressed. See
+// unsuppressionBaseline.
 func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Options) error {
 	if current == nil {
 		current = materialize.NewState()
@@ -116,11 +133,58 @@ func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Optio
 		return err
 	}
 	after := Validate(afterState, materialize.GraphFromState(afterState), opts)
-	introduced := IntroducedOnTargets(before, after, targetedIDs(proposed))
+	priorIdentities := make(map[string]struct{}, len(before.Findings))
+	for _, f := range before.Findings {
+		priorIdentities[f.identity()] = struct{}{}
+	}
+	widened, werr := unsuppressionBaseline(current, proposed, opts)
+	if werr != nil {
+		return werr
+	}
+	for _, f := range widened {
+		priorIdentities[f.identity()] = struct{}{}
+	}
+	introduced := introducedOnTargets(before, after, priorIdentities, targetedIDs(proposed))
 	if len(introduced) == 0 {
 		return nil
 	}
 	return formatIntroductionError(introduced)
+}
+
+// unsuppressionBaseline returns the findings that would appear on a
+// projection of current where ONLY the proposed write's terminal-to-open (or
+// otherwise non-terminal) status transitions are applied — i.e. current with
+// suppression lifted but nothing else changed. Those findings are folded
+// into the baseline so a status transition alone never reads as "introducing"
+// them: they existed in latent form the moment the issue went terminal, the
+// write just made the suppressing rules look at them again.
+func unsuppressionBaseline(current *materialize.State, proposed []ops.Op, opts Options) ([]Finding, error) {
+	var unsuppressing []ops.Op
+	for _, op := range proposed {
+		if op.Type != ops.OpTransition {
+			continue
+		}
+		issue, ok := current.Issues[op.TargetID]
+		if !ok || !isTerminalStatus(issue.Status) {
+			continue
+		}
+		if isTerminalStatus(op.Payload.To) {
+			continue
+		}
+		unsuppressing = append(unsuppressing, op)
+	}
+	if len(unsuppressing) == 0 {
+		return nil, nil
+	}
+	projected, err := cloneState(current)
+	if err != nil {
+		return nil, err
+	}
+	if err := materialize.ApplyOpsSorted(projected, unsuppressing); err != nil {
+		return nil, fmt.Errorf("project un-suppression baseline: %w", err)
+	}
+	result := Validate(projected, materialize.GraphFromState(projected), opts)
+	return result.Findings, nil
 }
 
 // IntroducedOnTargets returns after-findings that were not present before
@@ -130,11 +194,31 @@ func IntroducedOnTargets(before, after Result, targeted []string) []Finding {
 	for _, f := range before.Findings {
 		prior[f.identity()] = struct{}{}
 	}
+	return introducedOnTargets(before, after, prior, targeted)
+}
+
+func introducedOnTargets(before, after Result, prior map[string]struct{}, targeted []string) []Finding {
 	targetSet := make(map[string]struct{}, len(targeted))
 	for _, id := range targeted {
 		if id != "" {
 			targetSet[id] = struct{}{}
 		}
+	}
+	// E4 cites the entire cyclic node set, so breaking one node out of a
+	// pre-existing cycle changes CitedIDs and would otherwise still read as
+	// new. Treat an after-E4 finding as pre-existing when its CitedIDs are a
+	// subset of some before-E4 finding's CitedIDs: a cycle that shrinks was
+	// not introduced; a cycle that grows or is disjoint still blocks.
+	var beforeE4Sets []map[string]struct{}
+	for _, f := range before.Findings {
+		if f.Rule != "E4" {
+			continue
+		}
+		set := make(map[string]struct{}, len(f.CitedIDs))
+		for _, id := range f.CitedIDs {
+			set[id] = struct{}{}
+		}
+		beforeE4Sets = append(beforeE4Sets, set)
 	}
 	var out []Finding
 	for _, f := range after.Findings {
@@ -149,11 +233,32 @@ func IntroducedOnTargets(before, after Result, targeted []string) []Finding {
 		if _, ok := prior[f.identity()]; ok {
 			continue
 		}
+		if f.Rule == "E4" && citedIDsSubsetOfAny(f.CitedIDs, beforeE4Sets) {
+			continue
+		}
 		if citesAny(f.CitedIDs, targetSet) {
 			out = append(out, f)
 		}
 	}
 	return out
+}
+
+// citedIDsSubsetOfAny reports whether ids is a subset of at least one of the
+// given sets.
+func citedIDsSubsetOfAny(ids []string, sets []map[string]struct{}) bool {
+	for _, set := range sets {
+		subset := true
+		for _, id := range ids {
+			if _, ok := set[id]; !ok {
+				subset = false
+				break
+			}
+		}
+		if subset {
+			return true
+		}
+	}
+	return false
 }
 
 func projectState(current *materialize.State, proposed []ops.Op) (*materialize.State, error) {
@@ -327,6 +432,7 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 						Severity: "error", Rule: "E6",
 						Message:  fmt.Sprintf("missing required field: scope on %s %s", issue.Type, id),
 						CitedIDs: []string{id},
+						Key:      field,
 					})
 				}
 			case "acceptance":
@@ -335,6 +441,7 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 						Severity: "error", Rule: "E6",
 						Message:  fmt.Sprintf("missing required field: acceptance on %s %s", issue.Type, id),
 						CitedIDs: []string{id},
+						Key:      field,
 					})
 				}
 			case "definition_of_done":
@@ -343,6 +450,7 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 						Severity: "error", Rule: "E6",
 						Message:  fmt.Sprintf("missing required field: definition_of_done on %s %s", issue.Type, id),
 						CitedIDs: []string{id},
+						Key:      field,
 					})
 				}
 			}
@@ -422,6 +530,7 @@ func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []Finding {
 					Severity: "error", Rule: "E10",
 					Message:  fmt.Sprintf("invalid glob: %s on %s", glob, id),
 					CitedIDs: []string{id},
+					Key:      glob,
 				})
 			}
 		}
@@ -746,6 +855,7 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []Finding
 					Message: fmt.Sprintf(`conflicting decisions: topic "%s" has %d choices: %s on %s`,
 						topic, len(choices), strings.Join(choices, ", "), id),
 					CitedIDs: []string{id},
+					Key:      topic,
 				})
 			}
 		}

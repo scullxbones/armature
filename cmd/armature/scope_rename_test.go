@@ -172,7 +172,7 @@ func TestScopeRenameCmd_RefusesBatchWhenAnyRenameIntroducesFinding(t *testing.T)
 			Type: ops.OpCreate, TargetID: "task-02", Timestamp: ts, WorkerID: workerID,
 			Payload: ops.Payload{
 				Title: "Narrow", NodeType: "task",
-				Scope:            []string{"src/old/bar.go"},
+				Scope:            []string{"src/old"},
 				DefinitionOfDone: "Narrow is complete and tested",
 				Acceptance:       json.RawMessage(testAcceptance),
 				Confidence:       "draft",
