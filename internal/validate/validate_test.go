@@ -1694,3 +1694,263 @@ func TestValidate_CircularDepNamesParticipants(t *testing.T) {
 	assert.Contains(t, result.Errors[0], "A")
 	assert.Contains(t, result.Errors[0], "B")
 }
+
+// --- Fix 1: Finding.identity() must use a structured Key, not Message ---
+
+func TestIntroductionAllowsW1NarrowingResidualOverlap_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	x := wellFormedTask("X", "a.go")
+	x.Scope = []string{"a.go", "b.go"}
+	y := wellFormedTask("Y", "a.go")
+	y.Scope = []string{"a.go", "b.go"}
+	state := makeState(x, y)
+
+	// Sanity: before the narrowing write, W1 fires citing both files.
+	before := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsWarning(before, "scope overlap"))
+
+	proposed := []ops.Op{{
+		Type:     ops.OpAmend,
+		TargetID: "X",
+		Payload: ops.Payload{
+			Scope: []string{"a.go"},
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err, "narrowing a foreign overlap down (still overlapping on a.go) must not read as newly introduced")
+}
+
+func TestIntroductionAllowsCountOnlyMessageChange_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	// W11's message embeds the outcome's char count ("vague outcome: %s
+	// outcome is %d chars"). Two W11 findings on the same issue with
+	// different counts must still be the same identity (Key empty, Message
+	// excluded), so a residual count change is not a re-introduction.
+	before := Result{Findings: []Finding{
+		{Severity: "warning", Rule: "W11", CitedIDs: []string{"SHIP"}, Message: "vague outcome: SHIP outcome is 5 chars"},
+	}}
+	after := Result{Findings: []Finding{
+		{Severity: "warning", Rule: "W11", CitedIDs: []string{"SHIP"}, Message: "vague outcome: SHIP outcome is 8 chars"},
+	}}
+	introduced := IntroducedOnTargets(before, after, []string{"SHIP"})
+	assert.Empty(t, introduced, "a finding whose message embeds a changing detail (not its Key) must not be re-introduced")
+}
+
+func TestIntroductionE4PartialCycleBreakNotIntroduced_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	// Two overlapping 2-cycles sharing node B: A<->B and B<->C.
+	a := &materialize.Issue{ID: "A", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"B"}}
+	b := &materialize.Issue{ID: "B", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"A", "C"}}
+	c := &materialize.Issue{ID: "C", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"B"}}
+	state := makeState(a, b, c)
+
+	before := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsError(before, "cycle detected"))
+
+	// Break C out of the cycle: remove C's blocked_by edge to B.
+	proposed := []ops.Op{{
+		Type:     ops.OpUnlink,
+		TargetID: "C",
+		Payload: ops.Payload{
+			Dep: "B",
+			Rel: "blocked_by",
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err, "a cycle that shrinks (residual CitedIDs subset of a pre-existing cycle) must not be reported as introduced")
+}
+
+func TestIntroductionE4GrowingCycleStillIntroduced_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	a := &materialize.Issue{ID: "A", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"B"}}
+	b := &materialize.Issue{ID: "B", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"A"}}
+	c := &materialize.Issue{ID: "C", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{}}
+	state := makeState(a, b, c)
+
+	before := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsError(before, "cycle detected"))
+
+	// Pull C into the cycle: B<->C, overlapping the existing A<->B cycle.
+	proposed := []ops.Op{
+		{
+			Type:     ops.OpLink,
+			TargetID: "B",
+			Payload:  ops.Payload{Dep: "C", Rel: "blocked_by"},
+		},
+		{
+			Type:     ops.OpLink,
+			TargetID: "C",
+			Payload:  ops.Payload{Dep: "B", Rel: "blocked_by"},
+		},
+	}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.Error(t, err, "a cycle that grows to include a new node must still be refused as introduced")
+	assert.Contains(t, err.Error(), "cycle detected")
+}
+
+func TestIntroductionRefusesSecondE6OnDifferentField_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	// E6 always cites just [id], so this exercises identity aliasing directly:
+	// a scope-missing finding before, a definition_of_done-missing finding
+	// after — same (Rule, CitedIDs), different Key — must not alias.
+	before := Result{Findings: []Finding{
+		{Severity: "error", Rule: "E6", CitedIDs: []string{"BARE2"}, Key: "scope", Message: "missing required field: scope on task BARE2"},
+	}}
+	after := Result{Findings: []Finding{
+		{Severity: "error", Rule: "E6", CitedIDs: []string{"BARE2"}, Key: "definition_of_done", Message: "missing required field: definition_of_done on task BARE2"},
+	}}
+	introduced := IntroducedOnTargets(before, after, []string{"BARE2"})
+	require.Len(t, introduced, 1, "a second E6 finding on the same issue for a different required field must still be introduced")
+	assert.Contains(t, introduced[0].Message, "definition_of_done")
+}
+
+func TestIntroductionRefusesSecondE10OnDifferentGlob_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	existing := wellFormedTask("GLOB", "internal/glob.go")
+	existing.Scope = []string{"[invalid"}
+	state := makeState(existing)
+
+	before := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsError(before, "invalid glob"))
+
+	proposed := []ops.Op{{
+		Type:     ops.OpAmend,
+		TargetID: "GLOB",
+		Payload: ops.Payload{
+			Scope: []string{"[invalid", "[alsoinvalid"},
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.Error(t, err, "a second E10 finding on the same issue for a different glob must still be introduced")
+	assert.Contains(t, err.Error(), "[alsoinvalid")
+}
+
+func TestIntroductionRefusesSecondW8OnDifferentTopic_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	existing := wellFormedTask("DECIDE2", "internal/decide2.go")
+	existing.Decisions = []materialize.Decision{
+		{Topic: "storage", Choice: "postgres"},
+		{Topic: "storage", Choice: "sqlite"},
+	}
+	state := makeState(existing)
+
+	before := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsWarning(before, "conflicting decisions"))
+
+	proposed := []ops.Op{
+		{
+			Type:     ops.OpDecision,
+			TargetID: "DECIDE2",
+			Payload:  ops.Payload{Topic: "cache", Choice: "redis"},
+		},
+		{
+			Type:     ops.OpDecision,
+			TargetID: "DECIDE2",
+			Payload:  ops.Payload{Topic: "cache", Choice: "memcached"},
+		},
+	}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.Error(t, err, "a second W8 finding on the same issue for a different topic must still be introduced")
+	assert.Contains(t, err.Error(), "cache")
+}
+
+// --- Fix 2: un-suppression by reversing terminal status is not an introduction ---
+
+func TestIntroductionAllowsReopenOfLegacyDoneIssueMissingRequiredFields_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	legacy := &materialize.Issue{
+		ID:         "LEGACY",
+		Type:       "task",
+		Status:     ops.StatusDone,
+		Title:      "LEGACY",
+		Outcome:    "Delivered with tests and a full review of the change",
+		Provenance: materialize.Provenance{Confidence: "draft"},
+		// No Scope, no Acceptance, no DefinitionOfDone — pre-dates E6.
+	}
+	state := makeState(legacy)
+
+	proposed := []ops.Op{{
+		Type:     ops.OpTransition,
+		TargetID: "LEGACY",
+		Payload: ops.Payload{
+			To: ops.StatusOpen,
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err, "reopening a legacy issue must not be blocked by E6 findings that only exist because terminal suppression was lifted")
+
+	// The door lets it land; it does not silence the rule afterward.
+	afterState, perr := projectState(state, proposed)
+	require.NoError(t, perr)
+	after := Validate(afterState, materialize.GraphFromState(afterState), Options{})
+	assert.True(t, containsError(after, "missing required field"), "arm validate must still surface E6 on the reopened issue")
+}
+
+func TestIntroductionAllowsReopenReenteringW1Overlap_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	reopened := wellFormedTask("REENTER", "shared.go")
+	reopened.Status = ops.StatusDone
+	foreign := wellFormedTask("INFLIGHT", "shared.go")
+	state := makeState(reopened, foreign)
+
+	proposed := []ops.Op{{
+		Type:     ops.OpTransition,
+		TargetID: "REENTER",
+		Payload: ops.Payload{
+			To: ops.StatusOpen,
+		},
+	}}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err, "reopening a task back into a scope overlap with a foreign in-flight task must not be blocked")
+}
+
+func TestIntroductionTransitionIntoTerminalDoesNotWidenBaseline_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	incomplete := &materialize.Issue{
+		ID:         "INCOMPLETE",
+		Type:       "task",
+		Status:     ops.StatusOpen,
+		Title:      "INCOMPLETE",
+		Provenance: materialize.Provenance{Confidence: "draft"},
+		// Missing scope/acceptance/definition_of_done — E6 fires while open,
+		// but is suppressed once terminal.
+	}
+	state := makeState(incomplete)
+
+	proposed := []ops.Op{{
+		Type:     ops.OpTransition,
+		TargetID: "INCOMPLETE",
+		Payload: ops.Payload{
+			To:      ops.StatusDone,
+			Outcome: "Delivered with tests and a full review of the change",
+		},
+	}}
+	// Transitioning INTO terminal doesn't need the widened baseline: E6 fires
+	// on the before-state too (issue was open), so this isn't newly introduced
+	// either way, but the widening projection must only trigger on unsuppression.
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.NoError(t, err)
+}
+
+func TestIntroductionRefusesReopenBatchWithGenuinelyNewFinding_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	legacy := wellFormedTask("BATCH", "internal/batch.go")
+	legacy.Status = ops.StatusDone
+	state := makeState(legacy)
+
+	proposed := []ops.Op{
+		{
+			Type:     ops.OpTransition,
+			TargetID: "BATCH",
+			Payload:  ops.Payload{To: ops.StatusOpen},
+		},
+		{
+			Type:     ops.OpAmend,
+			TargetID: "BATCH",
+			Payload:  ops.Payload{Scope: []string{"[invalid"}},
+		},
+	}
+	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	require.Error(t, err, "a batch that reopens AND introduces a genuinely new finding on the target must still be refused")
+	assert.Contains(t, err.Error(), "invalid glob")
+}
