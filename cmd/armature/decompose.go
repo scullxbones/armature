@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/scullxbones/armature/internal/issuetype"
@@ -209,9 +211,14 @@ plan, or --schema to view the JSON schema.`,
 				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 
+			manifestData, err := adapters.ReadManifestFile(filepath.Join(issuesDir, "sources"))
+			if err != nil {
+				return fmt.Errorf("read manifest: %w", err)
+			}
 			applyOpts := decompose.ApplyOptions{
-				GenerateIDs: generateIDsFlag,
-				Root:        rootFlag,
+				GenerateIDs:  generateIDsFlag,
+				Root:         rootFlag,
+				ManifestData: manifestData,
 			}
 
 			if dryRunFlag {

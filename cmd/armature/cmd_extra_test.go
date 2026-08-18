@@ -1245,6 +1245,36 @@ func TestDecomposeApplyUncitedPlan(t *testing.T) {
 	require.Error(t, err, "apply --strict is deleted")
 }
 
+func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	tmpFile := filepath.Join(t.TempDir(), "known.md")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("known\n"), 0o600))
+	_, err = runTrls(t, repo, "sources", "add", "--url", tmpFile, "--type", "filesystem", "--title", "Known")
+	require.NoError(t, err)
+
+	planData := `{"version":1,"title":"Unknown source","issues":[` +
+		`{"id":"UNK-001","title":"Fabricated citation","type":"task",` +
+		`"source":"00000000-0000-0000-0000-000000000001",` +
+		`"scope":"cmd/armature/unk.go","dod":"Fabricated citation is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
+
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
+	require.Error(t, err, "apply must refuse a source ID that is not in the manifest")
+	assert.Contains(t, err.Error(), "00000000-0000-0000-0000-000000000001")
+
+	_, showErr := runTrls(t, repo, "show", "--issue", "UNK-001")
+	require.Error(t, showErr, "a refused apply must not create the issue")
+}
+
 // TestDecomposeApplyGenerateIds verifies that --generate-ids replaces the
 // plan-specified IDs with system-generated UUIDs in the created issues.
 func TestDecomposeApplyGenerateIds(t *testing.T) {

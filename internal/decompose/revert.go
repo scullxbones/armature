@@ -61,6 +61,8 @@ func RevertPlanWithOptions(plan *Plan, issuesDir string, workerID string, state 
 			},
 		}
 
+		// Exempt from refuseIntroduction: dag revert is the documented
+		// Introduction remedy and only emits cancel transitions.
 		if err := ops.AppendOp(logPath, op); err != nil {
 			return count, fmt.Errorf("append revert op for issue %s: %w", issue.ID, err)
 		}
