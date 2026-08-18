@@ -4282,3 +4282,4 @@
 ["claim","LNGHZN-S10-T5",1787054646,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S10-T5","claim_token":"56e3b9e74a0a2b38eeb84a4bd80687be"}]
 ["transition","LNGHZN-S10-T5",1787054650,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"restore_claim":true,"clear_worktree_path":true,"to":"open","if_claim_token":"56e3b9e74a0a2b38eeb84a4bd80687be"}]
 ["claim","LNGHZN-S10-T5",1787054668,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S10-T5","claim_token":"f9ce313c3e971fb21e66620f57d25e8c"}]
+["amend","LNGHZN-S10-T5",1787055242,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/validate/coupling.go (new)","internal/validate/coupling_test.go (new)","docs/design/gate-efficiency.md","internal/validate/validate.go"]}]
