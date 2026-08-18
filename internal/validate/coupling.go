@@ -18,16 +18,31 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 
 	byStory := make(map[string][]*materialize.Issue)
 	for _, issue := range issues {
-		if issue.Type != "task" || issue.Parent == "" {
+		if issue.Type != "task" || issue.Parent == "" || isTerminalStatus(issue.Status) {
 			continue
 		}
 		byStory[issue.Parent] = append(byStory[issue.Parent], issue)
 	}
 
-	for _, tasks := range byStory {
+	storyIDs := make([]string, 0, len(byStory))
+	for storyID := range byStory {
+		storyIDs = append(storyIDs, storyID)
+	}
+	sort.Strings(storyIDs)
+
+	surfaceGlobs := make([]string, 0, len(censusedSurfaces))
+	for surfaceGlob := range censusedSurfaces {
+		surfaceGlobs = append(surfaceGlobs, surfaceGlob)
+	}
+	sort.Strings(surfaceGlobs)
+
+	for _, storyID := range storyIDs {
+		tasks := byStory[storyID]
 		sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
 
-		for surfaceGlob, docFiles := range censusedSurfaces {
+		for _, surfaceGlob := range surfaceGlobs {
+			docFiles := censusedSurfaces[surfaceGlob]
+
 			var codeTasks []*materialize.Issue
 			for _, t := range tasks {
 				if scopeTouchesSurface(t.Scope, surfaceGlob) {
@@ -51,11 +66,19 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 				continue
 			}
 
+			seen := make(map[string]bool)
 			for _, codeTask := range codeTasks {
 				for _, docTask := range docTasks {
 					if codeTask.ID == docTask.ID {
 						continue
 					}
+					pairIDs := sortedIDs(codeTask.ID, docTask.ID)
+					pairKey := surfaceGlob + "\x00" + pairIDs[0] + "\x00" + pairIDs[1]
+					if seen[pairKey] {
+						continue
+					}
+					seen[pairKey] = true
+
 					owned := ownedDocFiles(docTask.Scope, docFiles)
 					findings = append(findings, Finding{
 						Severity: "error",
@@ -64,8 +87,8 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 							"E13: %s touches censused surface %q while %s owns %s that surface's drift check reads; co-locate the census/doc lines with the code task",
 							codeTask.ID, surfaceGlob, docTask.ID, strings.Join(owned, ", "),
 						),
-						CitedIDs: sortedIDs(codeTask.ID, docTask.ID),
-						Key:      surfaceGlob + "\x00" + codeTask.ID + "\x00" + docTask.ID,
+						CitedIDs: pairIDs,
+						Key:      pairKey,
 					})
 				}
 			}
