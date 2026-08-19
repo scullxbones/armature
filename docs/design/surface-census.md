@@ -445,3 +445,15 @@ To reproduce this census in the future:
 - **All statuses validated**: ValidTransitionTargets map in ops.go:47 is the canonical source of valid transition targets.
 - **All issue types validated**: issuetype.validTypes map is the canonical enumeration.
 - **All op types included**: Checked against materialize/engine.go handler registry in RegisteredOpTypes.
+
+## Censused Surfaces
+
+This table is the authoritative list of surfaces this census covers, and the
+documentation files each surface's drift check reads. `internal/validate`'s E13
+vertical-slice check restates it in `censusedSurfaces` (internal/validate/coupling.go);
+`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if the two drift
+apart, so adding a row here without updating the map is caught at `make check`.
+
+| Surface | Doc Files | Notes |
+|---------|-----------|-------|
+| `cmd/**` | `docs/commands.md`, `docs/design/surface-census.md` | CLI commands and flags. A task adding a flag owns its census row and its command documentation. |

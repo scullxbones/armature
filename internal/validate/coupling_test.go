@@ -2,6 +2,8 @@ package validate
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -141,7 +143,10 @@ func TestPlanCouplingSkipsTerminalStatusTasks_REQ_LNGHZN_S10_T5(t *testing.T) {
 	assert.False(t, containsError(result, "E13"), "merged sibling tasks should not trigger coupling error, got: %v", result.Errors)
 }
 
-func TestPlanCouplingDeduplicatesPairAcrossDirections_REQ_LNGHZN_S10_T5(t *testing.T) {
+// TestPlanCouplingExemptsSelfCoLocatedSiblings asserts the shape E13 exists to
+// reward: two siblings that each carry their own code AND their own census/doc
+// lines are vertical slices, not a horizontal split, and must not be flagged.
+func TestPlanCouplingExemptsSelfCoLocatedSiblings_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	state := makeState(
 		&materialize.Issue{
@@ -160,11 +165,148 @@ func TestPlanCouplingDeduplicatesPairAcrossDirections_REQ_LNGHZN_S10_T5(t *testi
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
 
-	e13Count := 0
+	assert.False(t, containsError(result, "E13"),
+		"self-co-located siblings are vertical slices, not coupling, got: %v", result.Errors)
+}
+
+// TestPlanCouplingIgnoresRepoWideScope asserts a repo-wide task (a lint sweep, a
+// dependency bump) is not read as a phantom cmd/** code task. scopeTouchesSurface
+// asks whether the entry definitely lands inside the surface, not whether the two
+// globs could conceivably intersect.
+func TestPlanCouplingIgnoresRepoWideScope_REQ_LNGHZN_S10_T5(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []string{".", "**", "internal/**"} {
+		state := makeState(
+			&materialize.Issue{
+				ID:     "TSK-BROAD",
+				Type:   "task",
+				Parent: "STORY-1",
+				Scope:  []string{scope},
+			},
+			&materialize.Issue{
+				ID:     "TSK-DOCS",
+				Type:   "task",
+				Parent: "STORY-1",
+				Scope:  []string{"docs/commands.md"},
+			},
+		)
+		result := Validate(state, graphFromState(state), Options{})
+		assert.False(t, containsError(result, "E13"),
+			"scope %q does not definitely land inside cmd/**, got: %v", scope, result.Errors)
+	}
+}
+
+// TestPlanCouplingReportsOncePerCodeTask asserts findings scale with the number of
+// offending tasks, not with the code x doc cross product. Per I4 the agent reading
+// this output is the primary user: one finding per offending task, citing every
+// implicated sibling, says the same thing once.
+func TestPlanCouplingReportsOncePerCodeTask_REQ_LNGHZN_S10_T5(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{ID: "TSK-C1", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/c1.go (new)"}},
+		&materialize.Issue{ID: "TSK-C2", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/c2.go (new)"}},
+		&materialize.Issue{ID: "TSK-C3", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/c3.go (new)"}},
+		&materialize.Issue{ID: "TSK-D1", Type: "task", Parent: "STORY-1", Scope: []string{"docs/commands.md"}},
+		&materialize.Issue{ID: "TSK-D2", Type: "task", Parent: "STORY-1", Scope: []string{"docs/design/surface-census.md"}},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+
+	var e13 []string
 	for _, err := range result.Errors {
 		if strings.Contains(err, "E13") {
-			e13Count++
+			e13 = append(e13, err)
 		}
 	}
-	assert.Equal(t, 1, e13Count, "coupled pair should be reported once, not once per direction, got: %v", result.Errors)
+	assert.Len(t, e13, 3, "one finding per offending code task, not the 3x2 cross product, got: %v", e13)
+	for _, msg := range e13 {
+		assert.Contains(t, msg, "TSK-D1", "finding should cite every implicated sibling, got: %s", msg)
+		assert.Contains(t, msg, "TSK-D2", "finding should cite every implicated sibling, got: %s", msg)
+	}
+}
+
+// TestCensusedSurfacesMatchesCensusDoc is the drift gate for E13's own census
+// copy. docs/design/surface-census.md is authoritative; censusedSurfaces restates
+// it. Without this test, adding a surface to the census silently stops E13 from
+// covering it -- a false negative, the failure mode a gate never announces.
+func TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5(t *testing.T) {
+	t.Parallel()
+	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "design", "surface-census.md"))
+	require.NoError(t, err)
+
+	fromDoc := parseCensusedSurfaceTable(t, string(doc))
+	require.NotEmpty(t, fromDoc, "no Censused Surfaces table found in docs/design/surface-census.md")
+	assert.Equal(t, fromDoc, censusedSurfaces,
+		"censusedSurfaces has drifted from the Censused Surfaces table in docs/design/surface-census.md")
+}
+
+// parseCensusedSurfaceTable reads the "## Censused Surfaces" markdown table,
+// whose rows are | `<surface glob>` | `<doc file>`, `<doc file>` | <notes> |.
+func parseCensusedSurfaceTable(t *testing.T, doc string) map[string][]string {
+	t.Helper()
+	out := make(map[string][]string)
+	inSection := false
+	for _, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			inSection = trimmed == "## Censused Surfaces"
+			continue
+		}
+		if !inSection || !strings.HasPrefix(trimmed, "|") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(trimmed, "|"), "|")
+		if len(cells) < 2 {
+			continue
+		}
+		surface := strings.Trim(strings.TrimSpace(cells[0]), "`")
+		if surface == "" || surface == "Surface" || strings.HasPrefix(surface, "---") {
+			continue
+		}
+		var docFiles []string
+		for _, f := range strings.Split(cells[1], ",") {
+			if cleaned := strings.Trim(strings.TrimSpace(f), "`"); cleaned != "" {
+				docFiles = append(docFiles, cleaned)
+			}
+		}
+		out[surface] = docFiles
+	}
+	return out
+}
+
+// TestCheckIntroductionDoesNotBlockOnE13 asserts E13 is a plan-release gate, not a
+// write-time refusal. A planner decomposes a story one task at a time and the graph
+// is transiently ill-shaped between writes; refusing the create forbids ever
+// reaching the intermediate state. E13 still fails Validate for arm validate and
+// arm dag transition --to verified.
+func TestCheckIntroductionDoesNotBlockOnE13_REQ_LNGHZN_S10_T5(t *testing.T) {
+	t.Parallel()
+	current := makeState(
+		&materialize.Issue{
+			ID:               "STORY-1",
+			Type:             "story",
+			DefinitionOfDone: "Deliver the vertical slice end to end, covering implementation and documentation.",
+		},
+		&materialize.Issue{
+			ID:               "TSK-CODE",
+			Type:             "task",
+			Parent:           "STORY-1",
+			Scope:            []string{"cmd/armature/flag.go (new)"},
+			DefinitionOfDone: "The new flag is implemented and wired up.",
+			Acceptance:       json.RawMessage(`["flag works as documented"]`),
+		},
+	)
+	proposed := []ops.Op{{
+		Type:     ops.OpCreate,
+		TargetID: "TSK-DOCS",
+		Payload: ops.Payload{
+			NodeType:         "task",
+			Parent:           "STORY-1",
+			Scope:            []string{"docs/commands.md"},
+			DefinitionOfDone: "docs/commands.md documents the new flag.",
+			Acceptance:       json.RawMessage(`["docs/commands.md mentions the new flag"]`),
+		},
+	}}
+
+	err := CheckIntroduction(current, proposed, Options{Strict: true})
+	assert.NoError(t, err, "E13 is a plan-release gate, not a write-time refusal")
 }
