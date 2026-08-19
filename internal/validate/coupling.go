@@ -115,10 +115,27 @@ func scopeTouchesSurface(scope []string, surfaceGlob string) bool {
 	return false
 }
 
+// ownedDocFiles reports which of docFiles this scope owns the lines of. Repo-wide
+// entries are dropped first: Allows short-circuits to true for any entry whose
+// canonical form is "**" (i.e. "." , "./" and "**"), so a lint sweep or dependency
+// bump would otherwise read as owning every census/doc file by construction. That
+// is the ownership-side twin of the phantom-code-task hole scopeTouchesSurface
+// closes -- and a phantom owner is worse, because it makes every genuinely
+// well-formed sibling in the story an E13 offender with no coherent remedy. A
+// scope that actually names a directory containing the doc files (docs/**) is a
+// real owner and stays one: that is the horizontal split E13 exists to catch.
 func ownedDocFiles(scope []string, docFiles []string) []string {
+	named := make([]string, 0, len(scope))
+	for _, entry := range scope {
+		if cleaned, _ := scopematch.CleanScope(entry); cleaned == "." || cleaned == "**" {
+			continue
+		}
+		named = append(named, entry)
+	}
+
 	var owned []string
 	for _, docFile := range docFiles {
-		if scopematch.Allows(scope, docFile) {
+		if scopematch.Allows(named, docFile) {
 			owned = append(owned, docFile)
 		}
 	}

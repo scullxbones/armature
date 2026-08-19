@@ -224,6 +224,13 @@ flag's census row and command documentation belong to the task adding the flag.
 The censused surfaces and the doc files each one reads are listed in the Censused
 Surfaces table in `docs/design/surface-census.md`.
 
+A repo-wide scope (`.`, `./`, `**` - a lint sweep, a dependency bump) is neither a
+code task on a censused surface nor an owner of its doc lines: it covers the repo by
+construction rather than naming anything. Such a task is ignored on both sides of the
+rule, so it neither trips E13 itself nor makes well-formed siblings trip it. A scope
+that names a directory actually containing the doc files (`docs/**`) *is* an owner -
+that is the horizontal split E13 exists to catch.
+
 **Message:** `E13: <task-a> touches censused surface "cmd/**" while <task-b> owns <file-list> that surface's drift check reads; co-locate the census/doc lines with the code task`
 
 **Scope:** E13 is a plan-release gate. It fails `arm validate` and
