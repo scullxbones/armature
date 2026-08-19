@@ -310,3 +310,30 @@ func TestCheckIntroductionDoesNotBlockOnE13_REQ_LNGHZN_S10_T5(t *testing.T) {
 	err := CheckIntroduction(current, proposed, Options{Strict: true})
 	assert.NoError(t, err, "E13 is a plan-release gate, not a write-time refusal")
 }
+
+// TestPlanCouplingRepoWideScopeIsNotADocOwner asserts the same rule that keeps a
+// repo-wide task from being read as a phantom cmd/** code task also keeps it from
+// being read as a phantom doc *owner*. A lint sweep scoped "." covers the census
+// docs by construction; it does not own their lines, and treating it as an owner
+// makes every well-formed sibling in the story an E13 offender. A directory scope
+// that actually names the docs tree (docs/**) is a real owner and stays one.
+func TestPlanCouplingRepoWideScopeIsNotADocOwner_REQ_LNGHZN_S10_T5(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		scope string
+		owns  bool
+	}{
+		{".", false},
+		{"**", false},
+		{"./", false},
+		{"docs/**", true},
+	} {
+		state := makeState(
+			&materialize.Issue{ID: "TSK-SWEEP", Type: "task", Parent: "STORY-1", Scope: []string{tc.scope}},
+			&materialize.Issue{ID: "TSK-CODE", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/flag.go (new)"}},
+		)
+		result := Validate(state, graphFromState(state), Options{})
+		assert.Equal(t, tc.owns, containsError(result, "E13"),
+			"scope %q as doc owner, got: %v", tc.scope, result.Errors)
+	}
+}
