@@ -119,7 +119,7 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 // foreign IDs do not block.
 //
 // The baseline used to decide what counts as "pre-existing" is widened by an
-// un-suppression projection: several rules (E5, E6, W1, W4, W10) deliberately
+// un-suppression projection: several rules (E5, E6, E13, W1, W4, W10) deliberately
 // suppress themselves once an issue reaches a terminal status, so a write
 // that only reverses that terminal status (e.g. arm reopen) is not itself an
 // introduction of whatever those rules find once un-suppressed. See
@@ -229,6 +229,15 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 		// Cite-after remains legal on create (Plan Release / Integration).
 		switch f.Rule {
 		case "E7", "E8":
+			continue
+		// E13 is a story-shape rule evaluated at plan release, not at write
+		// time. Decomposition adds tasks one at a time and the graph is
+		// transiently ill-shaped between writes, so refusing the create would
+		// forbid ever reaching the intermediate state a planner must pass
+		// through. E13 still fails every Validate call -- arm validate and
+		// arm dag transition --to verified -- it just does not refuse the
+		// write that produces the shape.
+		case "E13":
 			continue
 		}
 		if _, ok := prior[f.identity()]; ok {

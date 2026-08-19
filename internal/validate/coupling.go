@@ -9,10 +9,19 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
+// censusedSurfaces restates the Censused Surfaces table in
+// docs/design/surface-census.md, which is authoritative. The two are held
+// together by TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5 -- without
+// that gate, adding a surface to the census would silently stop E13 covering it.
 var censusedSurfaces = map[string][]string{
 	"cmd/**": {"docs/commands.md", "docs/design/surface-census.md"},
 }
 
+// checkE13VerticalSliceCoupling asks a per-task question: does this task touch a
+// censused surface without owning any of the doc lines that surface's drift check
+// reads, while a sibling in the same story owns them? A task that carries both its
+// code and its own census/doc lines is a vertical slice and is exempt by
+// construction. One finding per offending task, citing every implicated sibling.
 func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 
@@ -43,54 +52,47 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 		for _, surfaceGlob := range surfaceGlobs {
 			docFiles := censusedSurfaces[surfaceGlob]
 
-			var codeTasks []*materialize.Issue
+			var docOwners []*materialize.Issue
 			for _, t := range tasks {
-				if scopeTouchesSurface(t.Scope, surfaceGlob) {
-					codeTasks = append(codeTasks, t)
+				if len(ownedDocFiles(t.Scope, docFiles)) > 0 {
+					docOwners = append(docOwners, t)
 				}
 			}
-			if len(codeTasks) == 0 {
+			if len(docOwners) == 0 {
 				continue
 			}
 
-			var docTasks []*materialize.Issue
 			for _, t := range tasks {
-				for _, docFile := range docFiles {
-					if scopematch.Allows(t.Scope, docFile) {
-						docTasks = append(docTasks, t)
-						break
-					}
+				if !scopeTouchesSurface(t.Scope, surfaceGlob) {
+					continue
 				}
-			}
-			if len(docTasks) == 0 {
-				continue
-			}
-
-			seen := make(map[string]bool)
-			for _, codeTask := range codeTasks {
-				for _, docTask := range docTasks {
-					if codeTask.ID == docTask.ID {
-						continue
-					}
-					pairIDs := sortedIDs(codeTask.ID, docTask.ID)
-					pairKey := surfaceGlob + "\x00" + pairIDs[0] + "\x00" + pairIDs[1]
-					if seen[pairKey] {
-						continue
-					}
-					seen[pairKey] = true
-
-					owned := ownedDocFiles(docTask.Scope, docFiles)
-					findings = append(findings, Finding{
-						Severity: "error",
-						Rule:     "E13",
-						Message: fmt.Sprintf(
-							"E13: %s touches censused surface %q while %s owns %s that surface's drift check reads; co-locate the census/doc lines with the code task",
-							codeTask.ID, surfaceGlob, docTask.ID, strings.Join(owned, ", "),
-						),
-						CitedIDs: pairIDs,
-						Key:      pairKey,
-					})
+				// Same-task ownership is co-location, not coupling.
+				if len(ownedDocFiles(t.Scope, docFiles)) > 0 {
+					continue
 				}
+
+				ownerIDs := make([]string, 0, len(docOwners))
+				var owned []string
+				for _, owner := range docOwners {
+					ownerIDs = append(ownerIDs, owner.ID)
+					owned = append(owned, ownedDocFiles(owner.Scope, docFiles)...)
+				}
+				if len(ownerIDs) == 0 {
+					continue
+				}
+
+				cited := append([]string{t.ID}, ownerIDs...)
+				sort.Strings(cited)
+				findings = append(findings, Finding{
+					Severity: "error",
+					Rule:     "E13",
+					Message: fmt.Sprintf(
+						"E13: %s touches censused surface %q while %s owns %s that surface's drift check reads; co-locate the census/doc lines with the code task",
+						t.ID, surfaceGlob, strings.Join(ownerIDs, ", "), strings.Join(dedupeSorted(owned), ", "),
+					),
+					CitedIDs: cited,
+					Key:      surfaceGlob + "\x00" + t.ID,
+				})
 			}
 		}
 	}
@@ -98,9 +100,15 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 	return findings
 }
 
+// scopeTouchesSurface reports whether a scope entry definitely lands inside the
+// censused surface. This is Allows-shaped (does the surface glob cover this
+// entry), deliberately not Overlaps-shaped: Overlaps documents itself as an
+// over-approximation calibrated for a warning with a --force escape, and would
+// read a repo-wide scope such as "." or "**" as a phantom cmd/** code task.
 func scopeTouchesSurface(scope []string, surfaceGlob string) bool {
 	for _, entry := range scope {
-		if scopematch.Overlaps(entry, surfaceGlob) {
+		cleaned, _ := scopematch.CleanScope(entry)
+		if scopematch.Allows([]string{surfaceGlob}, cleaned) {
 			return true
 		}
 	}
@@ -117,8 +125,15 @@ func ownedDocFiles(scope []string, docFiles []string) []string {
 	return owned
 }
 
-func sortedIDs(a, b string) []string {
-	ids := []string{a, b}
-	sort.Strings(ids)
-	return ids
+func dedupeSorted(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

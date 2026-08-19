@@ -149,22 +149,43 @@ vertical slices, not horizontal layers.
 
 **Delivered (LNGHZN-S10-T5):** `internal/validate.checkE13VerticalSliceCoupling`
 groups sibling tasks by parent story, then for each censused surface glob
-(currently `cmd/**`) checks whether one sibling's scope touches that surface
-while a different sibling's scope owns one of the census/doc files its drift
-check reads. A match raises an `E13` error-severity Finding, so it fails plan
-release the same way any other `error` Finding does under `Validate`'s
-`Strict` mode (`arm dag transition --to verified`, D7's plan-release gate).
-The error message names both task IDs, the surface glob, and the specific
-coupled file(s), and states the co-location remedy. A single task whose own
-scope covers both the code and the census/doc lines is unaffected: same-task
-ownership is co-location, not coupling. Only tasks in a non-terminal status
-(not `merged`, `done`, or `cancelled`) are considered, mirroring the W1
-scope-overlap check, so E13 does not fire against already-merged history; a
-coupled pair is reported once regardless of which sibling is scanned first.
+(currently `cmd/**`) asks a per-task question: does this task's scope touch
+that surface without owning any of the census/doc files the surface's drift
+check reads, while a sibling in the same story owns them? A match raises an
+`E13` error-severity Finding. The error message names the offending task, the
+surface glob, every implicated sibling, and the specific coupled file(s), and
+states the co-location remedy.
 
-E13 is not yet documented in `docs/validation-codes.md`'s catalog; follow-up
-task `task-1787058254` (parent `LNGHZN-S10`) tracks adding the E13 row there
-and updating the E-range references on lines 3 and 38 and the summary table.
+`error` severity means E13 fails **every** `Validate` call, not only strict
+ones: `Validate` computes `ok := len(errors) == 0` unconditionally and `Strict`
+only additionally folds in warnings. In practice E13 therefore fails
+`arm validate` and `arm dag transition --to verified` (D7's plan-release gate).
+It is deliberately **exempt from the write-time introduction check**
+(`validate.CheckIntroduction`, which every `create` / `amend` / `link` runs), in
+the same manner as the E7/E8 cite-after carve-out: decomposition adds tasks one
+at a time and the graph is transiently ill-shaped between writes, so refusing
+the write would forbid ever reaching an intermediate state a planner must pass
+through. E13 judges a plan being released, not a plan being built.
+
+A task whose own scope covers both the code and the census/doc lines is exempt
+by construction: same-task ownership is co-location, not coupling, so two
+siblings that each carry their own code and doc lines — the vertical slice this
+rule exists to reward — raise nothing. `scopeTouchesSurface` asks whether a
+scope entry *definitely lands inside* the surface (`scopematch.Allows`), not
+whether the two globs could conceivably intersect (`scopematch.Overlaps`, which
+documents itself as an over-approximation calibrated for a warning with a
+`--force` escape), so a repo-wide task — a lint sweep, a dependency bump — is
+not read as a phantom `cmd/**` code task. Only tasks in a non-terminal status
+(not `merged`, `done`, or `cancelled`) are considered, mirroring the W1
+scope-overlap check, so E13 does not fire against already-merged history.
+Findings are one per offending task, citing every implicated sibling, rather
+than one per (code task, doc task) pair.
+
+The censused surfaces and the doc files each one reads are authoritative in the
+Censused Surfaces table in `docs/design/surface-census.md`;
+`internal/validate`'s `censusedSurfaces` map restates it and
+`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if the two drift
+apart. E13 is catalogued in `docs/validation-codes.md`.
 
 ## Story shape
 

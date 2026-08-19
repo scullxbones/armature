@@ -1,6 +1,6 @@
 # Validation & Doctor Codes Reference
 
-This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D6).
+This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D6).
 
 ## Validation Codes (arm validate)
 
@@ -35,7 +35,7 @@ OK: no issues found
 
 ---
 
-### Errors (E2–E10, E12)
+### Errors (E2–E10, E12–E13)
 
 #### E2: Unresolved Parent Link
 
@@ -211,6 +211,35 @@ arm amend TASK-001 --scope 'cmd/**/*.go'  # fixes invalid patterns
 2. If source was deleted, remove the citation: `arm sources link <issue-id>` (no --source-id)
 3. If you need to cite a source, add it first: `arm sources add --url <url> --type <type>`
 4. Then link: `arm sources link <issue-id> --source-id <source-id>`
+
+---
+
+#### E13: Cross-Task Gate Coupling
+
+**Trigger:** A task's scope touches a censused surface (`cmd/**`) without owning any
+of the documentation files that surface's drift check reads, while a sibling task in
+the same story owns them. Stories deliver vertical slices, not horizontal layers: the
+flag's census row and command documentation belong to the task adding the flag.
+
+The censused surfaces and the doc files each one reads are listed in the Censused
+Surfaces table in `docs/design/surface-census.md`.
+
+**Message:** `E13: <task-a> touches censused surface "cmd/**" while <task-b> owns <file-list> that surface's drift check reads; co-locate the census/doc lines with the code task`
+
+**Scope:** E13 is a plan-release gate. It fails `arm validate` and
+`arm dag transition --to verified`, but is deliberately exempt from the write-time
+introduction check, so `arm create` / `arm amend` / `arm link` are never refused for
+it - decomposition adds tasks one at a time and the graph is transiently ill-shaped
+between writes. A task in a terminal status (`merged`, `done`, `cancelled`) is not
+considered, so E13 does not fire against already-merged history.
+
+**Fix:**
+1. Preferred - co-locate: widen the code task's scope to own its own doc lines, and
+   narrow the doc task's: `arm amend <task-a> --scope 'cmd/armature/flag.go,docs/commands.md'`
+2. If the documentation genuinely stands alone (a catalog rewrite, a design note),
+   move it out of the story: `arm reparent <task-b> --parent <other-story>`
+3. If the split is deliberate and reviewed, release the plan with
+   `arm dag override-release` and record why.
 
 ---
 
@@ -581,6 +610,7 @@ arm doctor [flags]
 | E9 | Error | Critical | DoD length |
 | E10 | Error | Critical | Scope syntax |
 | E12 | Error | Critical | Citation/sources |
+| E13 | Error | Critical | Plan shape (vertical slice) |
 | W1 | Warning | Medium | Scope conflict |
 | W2 | Warning | Medium | Testing |
 | W3 | Warning | Medium | Token budget |
