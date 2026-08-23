@@ -25,6 +25,10 @@ after the PR is on main.
 
 Related display hole (write lands, agent cannot see it): [agent-facing-views-omit-state](../agent-facing-views-omit-state/README.md).
 
+The inverse failure — `merged` recorded for work never on main, and "No merged
+branches detected" printed for a population that was never examined — is curated
+under [unknown-recorded-as-answered](../unknown-recorded-as-answered/README.md).
+
 ## Candidate Follow-Ups
 
 - Persist the derived branch on the claim op. Do not ask agents for `--branch`.

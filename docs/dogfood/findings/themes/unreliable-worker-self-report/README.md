@@ -22,6 +22,10 @@ The mitigation the corpus actually validates is structural, not motivational: an
 - [Worker committed directly to the story branch again, bypassing its isolated task worktree](../../raw/2026-07-20T0140Z-claude-workflow-worker-committed-to-story-branch-again.md) — Cross-listed with [worker-worktree-bypass](../worker-worktree-bypass/README.md). Notable here because `arm transition` succeeded and **recorded a concrete, accurate-sounding outcome** for work that was not on the branch it claimed.
 - [Hollow tests let a dead worktree-lifecycle code path survive multiple PR review rounds](../../raw/2026-08-08T1900Z-claude-validation-hollow-tests-masked-dead-worktree-path.md) — The self-report problem one level down: tests asserted against a path the test itself computed the same wrong way the production code did, so `arm worktree list`/`gc` were a no-op in a real repo while their tests passed. Machine-checkable evidence can be hollow too.
 
+The record-side consequence — an unverified self-report stored in `outcome` and then
+promoted to `merged` without any git check, including transitively via rollup — is
+curated under [unknown-recorded-as-answered](../unknown-recorded-as-answered/README.md).
+
 Prior instance, curated under [session-recovery-gaps](../session-recovery-gaps/README.md):
 
 - [Worker left task in `claimed` state despite reporting success](../../raw/2026-06-28T2200Z-claude-workflow-worker-left-task-claimed.md)

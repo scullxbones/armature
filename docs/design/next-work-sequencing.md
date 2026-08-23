@@ -1,6 +1,6 @@
 # Next-Work Sequencing — A Cross-Document Execution Order
 
-**Date:** 2026-07-07 (updated 2026-07-08 — F2 grilling session added `TOPTIER-S17` and `LNGHZN-S2`; updated 2026-07-19 — Tier S delivered; Tier A's remaining items decomposed as `LNGHZN-S3`–`S8` and `NXTTN-S3`/`S4`; updated 2026-08-11 — Tier A status audit: items 10–14 and 17 delivered, `LNGHZN-S9` filed as item 14a)
+**Date:** 2026-07-07 (updated 2026-07-08 — F2 grilling session added `TOPTIER-S17` and `LNGHZN-S2`; updated 2026-07-19 — Tier S delivered; Tier A's remaining items decomposed as `LNGHZN-S3`–`S8` and `NXTTN-S3`/`S4`; updated 2026-08-11 — Tier A status audit: items 10–14 and 17 delivered, `LNGHZN-S9` filed as item 14a; updated 2026-08-23 — Tier S closed out (items 8–9 merged), gate-efficiency work recorded as item 27 pulled forward from Tier B, Tier A statuses re-audited)
 **Purpose:** A single execution order across all proposals from the three planning rounds — `docs/design/top-tier-gap-analysis.md` (GAP), `docs/design/long-horizon-proposals.md` (LH), `docs/design/the-next-ten.html` (Round Three) — plus the `docs/design/narrow-gaps-addendum.md` items (G1–G6, tracked as `TOPTIER-S11`–`S16`), which are now woven into the tiers below at the rough tier each was originally recommended for, rather than listed separately.
 
 **Why this lives in markdown, not in Armature:** Armature's DAG models dependency and scope within a single epic/story tree — `blocked_by` edges, scope overlap, wave dispatch. It has no concept of *cross-document, cross-epic priority ordering* across independent proposals that don't share a scope or a `blocked_by` edge but still have a preferred execution order (e.g., "write the constitution before the census, even though nothing blocks the census on it"). Only the gap-analysis items are currently modeled as `TOPTIER` stories; the long-horizon and Round Three items are not yet decomposed into issues at all, and several of them (documents, policies, an internal memo) are not naturally issue-shaped work in the first place. Forcing this ordering into `blocked_by` edges would either be false precision (most of these items are *not* hard-blocked on each other) or would require inventing an epic spanning three separate planning documents that don't share a DAG today. This document is the citable ordering until — if ever — that changes.
@@ -22,36 +22,42 @@ Ranking combines each document's own scoring (Round Three's Σ/30, LH's six-axis
 | 5 | Envelope/schema documentation | GAP D2 | `TOPTIER-S2` |
 | 6 | Collapse `.arm/.armature/` dotdir | LH D5 | `LNGHZN-S1` (precursor bug `LNGHZN-B1`; release-gates `TOPTIER-S6-T3`) |
 | 7 | The CLI Grammar Contract | Next-Ten №05 | `NXTTN-S5` |
-| 8 | Scope-overlap validation gaps (plan-time scope-overlap checker) | Dogfood theme `scope-overlap-validation-gaps` | `TOPTIER-S17` (decomposed: T1 leading/unblocked, T2→T3→T4 sequenced on shared `validate.go` scope, T5 blocked by T1–T4) |
-| 9 | Scope-disjoint wave planning (`arm ready --waves`) | LH F2 | `LNGHZN-S2` (decomposed: T1 blocked by `TOPTIER-S17-T1`, T2 unblocked, T3 blocked by T1; existing `TOPTIER-S1-T2` golden-transcript task now also blocked by `LNGHZN-S2-T1`/`T3`) |
+| 8 | Scope-overlap validation gaps (plan-time scope-overlap checker) | Dogfood theme `scope-overlap-validation-gaps` | `TOPTIER-S17` — **merged**; residual overlap defects (glob-vs-directory matching, duplicate matcher in `validate`, story-as-claimant) closed later under `LNGHZN-S10-T6`/`T7`/`T8` |
+| 9 | Scope-disjoint wave planning (`arm ready --waves`) | LH F2 | `LNGHZN-S2` — **merged** (ADR 0012 `scope-disjoint-wave-planning`) |
 
 Note: D5 is pulled forward from Tier C because its ADR-hygiene sub-item (D5.2) creates the ADR template the Constitution's "principles touched" field rides on — see Next-Ten №01. D5.1 and D5.3 travel with it since D5 is treated as one coherent unit (doc-corpus hygiene is small enough not to warrant splitting).
 
 Note on items 8–9 (added 2026-07-08, F2 grilling session): F2 (`arm ready --waves`, item 9) partitions the ready queue into scope-disjoint dispatch waves using the same glob-aware overlap primitive (`claimPkg.ScopesOverlap`, `internal/claim/overlap.go`) that `arm claim` already uses at claim time. That primitive has a known blind spot — documented in the `scope-overlap-validation-gaps` dogfood theme — where it misreads parent/child scope containment (a story's scope is the union of its children's by design) as a conflict. `story` is a ready-eligible type (`internal/issuetype/issuetype.go`), so a parent story and its own ready child task can co-occur in the ready queue, meaning F2's wave-partitioning would inherit this bug and manufacture false conflicts between every story and its children. **Item 8 (`TOPTIER-S17`) is therefore sequenced immediately before item 9 and is a hard prerequisite**, not an optional adjacent cleanup. The theme documents four distinct defects; only one of them (parent/child containment) blocks F2 — the grilling session concluded the other three do not apply to wave-partitioning (see full rationale below the tables). `TOPTIER-S17`'s leading task should fix the parent/child containment blind spot in `ScopesOverlap` itself (using `dag.Graph`'s existing ancestor/descendant queries), benefiting both the existing `arm claim` check and F2 — `LNGHZN-S2` blocks on that task specifically, not on the full `TOPTIER-S17` story.
 
+**Tier S is closed as of 2026-08-23:** all nine items are merged. `TOPTIER-S2` (item 5) is `done` but not yet `merged` — the only Tier S row not fully on `main`.
+
 ### Tier A — high impact, second wave
 
-| # | Item | Source | Armature story | Status (2026-08-11) |
+| # | Item | Source | Armature story | Status (2026-08-23) |
 |---|---|---|---|---|
 | 10 | End-to-end workflow test harness | GAP T2 | `TOPTIER-S3` | delivered |
 | 11 | Crash/recovery resilience | GAP T3 | `TOPTIER-S4` | delivered |
 | 12 | Autonomic heartbeats via harness hook | LH C1 | `LNGHZN-S3` | delivered |
 | 13 | Transition-time delivery gate | LH C4 | `LNGHZN-S4` | delivered |
 | 14 | Managed worktree lifecycle | LH F1 | `LNGHZN-S5` | delivered (PR #89) |
-| 14a | `arm claim --from` for sub-task worktrees | LH F1.1 (F1 follow-on) | `LNGHZN-S9` | open |
-| 15 | Context Economics | Next-Ten №03 | `NXTTN-S3` | open |
-| 16 | Agent-grade error contract | LH C3 | `LNGHZN-S6` | open |
+| 14a | `arm claim --from` for sub-task worktrees | LH F1.1 (F1 follow-on) | `LNGHZN-S9` | delivered (PRs #97, #98) |
+| 15 | Context Economics | Next-Ten №03 | `NXTTN-S3` | open (T1–T3 all open) |
+| 16 | Agent-grade error contract | LH C3 | `LNGHZN-S6` | open (T1 ready; T2, T3 blocked on T1) |
 | 17 | Scope enforcement hardening | GAP T4 | `TOPTIER-S5` | delivered |
-| 18 | The Paved Road | Next-Ten №04 | `NXTTN-S4` | open (T2 cancelled) |
-| 19 | Make configuration honest | LH D1 | `LNGHZN-S7` | open |
-| 20 | Reviewer self-validation (`arm review validate`) | LH C6 | `LNGHZN-S8` | open |
-| 21 | Reviewer disagreement / consensus policy | Addendum G3 | `TOPTIER-S13` | open |
+| 18 | The Paved Road | Next-Ten №04 | `NXTTN-S4` | open (T1, T3 open; T2 cancelled) |
+| 19 | Make configuration honest | LH D1 | `LNGHZN-S7` | in-progress — T1 merged; T2 ready, T3 open |
+| 20 | Reviewer self-validation (`arm review validate`) | LH C6 | `LNGHZN-S8` | open (T1, T2 open) |
+| 21 | Reviewer disagreement / consensus policy | Addendum G3 | `TOPTIER-S13` | open (T1, T2 open) |
+| 27 (pulled forward) | Tiered Quality Gates / gate efficiency | Next-Ten №07 + `docs/design/gate-efficiency.md` D1–D8 | `LNGHZN-S10` | delivered (PR #112; T9 and `task-1787058254` cancelled as redundant) |
+| 27a | TUI seam so interactive code is excludable from coverage/mutation gates | `LNGHZN-S10` follow-on (ADR 0015) | `LNGHZN-S10-T11` (reparented to `LNGHZN`) | open |
 
 Note: item 21 (G3) sits at the A/B boundary in the addendum's own scoring (high evidence, moderate cost) and is placed at the tail of Tier A rather than the head of Tier B; treat its position as a tie with the adjacent Tier B items, not a strict ranking.
 
-Note on item 14a (added 2026-08-11): `LNGHZN-S9` was filed during `LNGHZN-S5`'s PR #89 review (thread `claim.go:666`) and is direct spillover from F1 — it closes the case F1's managed-provisioning path does not cover, cutting a sub-task branch live from an already-open story worktree rather than adopting an externally pre-created branch after the fact. It is numbered `14a` rather than inserted as a new ordinal so the existing 1–47 numbering (cited from the source documents) does not shift. It carries no `blocked_by` edge and is not a prerequisite for anything else in Tier A; its position reflects topical adjacency to item 14, not a claim that it must precede items 15–21.
+Note on item 14a (added 2026-08-11; closed 2026-08-23): `LNGHZN-S9` was filed during `LNGHZN-S5`'s PR #89 review (thread `claim.go:666`) and is direct spillover from F1 — it closes the case F1's managed-provisioning path does not cover, cutting a sub-task branch live from an already-open story worktree rather than adopting an externally pre-created branch after the fact. It is numbered `14a` rather than inserted as a new ordinal so the existing 1–47 numbering (cited from the source documents) does not shift. Delivered via PRs #97 (T1) and #98 (T2); story `merged` 2026-08-23.
 
-Note on Tier A status (audited 2026-08-11): items 10–14 and 17 are merged; `LNGHZN-S5` (item 14) was closed out on this date after all ten of its child tasks and PR #89 had merged. The six remaining open items — 14a, 15, 16, 18, 19, 20, 21 — carry **no `blocked_by` edges between them and are all simultaneously in the ready queue**, so their order is governed by this document alone, not by the DAG. Recommended order among them, by impact: 16 (`LNGHZN-S6`, LH's highest-scoring undelivered item at Σ27, and it compounds across every future command), then 20 (`LNGHZN-S8`, best leverage-to-cost ratio left — cost score 5, and it exposes validation `arm review record` already performs), then 15 (`NXTTN-S3`, ratchet-shaped: budgets get harder to adopt as agent-facing surface grows), then 19 (`LNGHZN-S7`, smallest blast radius and fully scoped — but note its `doctor` config-health check in T2 should speak item 16's error contract, so 16 first avoids a rewrite), then 14a, then 18 (`NXTTN-S4`, adopter-facing payoff with zero adopters), then 21 (`TOPTIER-S13`, gated on multi-reviewer dispatch running at volume).
+Note on Tier A status (audited 2026-08-11, re-audited 2026-08-23): items 10–14, 14a, 17, and 27 are merged. As of 2026-08-23 one Tier A row is in flight — 19 (`LNGHZN-S7`, T1 merged) — and four are untouched: 15, 16, 18, 20, plus 21 at the tier tail. None of the untouched items carry `blocked_by` edges between them; they are all simultaneously in the ready queue, so their order is governed by this document alone, not by the DAG. See "Recommended Tier A sequence (2026-08-23)" below for the current order.
+
+Note on item 27 being pulled forward (added 2026-08-23): `LNGHZN-S10` ("Gate efficiency") delivers Next-Ten №07 (Tiered Quality Gates), a Tier B item, ahead of most of Tier A. This was not a re-ranking — the work was forced by a dogfooding finding that the full gate was too slow to run per-task, which made every other Tier A item more expensive to deliver. It ratified four ADRs (0014 two-tier gates and evidence-based acceptance, 0015 mutation/coverage recalibration, 0016 three-door validation, plus the D1–D8 decisions in `docs/design/gate-efficiency.md`) and absorbed the residual `scope-overlap-validation-gaps` defects left over from item 8 (T6, T7, T8). Its row stays numbered 27 so the source-document numbering does not shift; its Tier B row below is marked delivered-early rather than removed. `LNGHZN-S10-T11` was reparented out of the story to `LNGHZN` directly and is recorded here as item 27a — it is ADR 0015 follow-on, not part of D1–D8.
 
 ### Tier B — solid, sequence after foundation
 
@@ -62,7 +68,7 @@ Note on Tier A status (audited 2026-08-11): items 10–14 and 17 are merged; `LN
 | 24 | One merged-promotion path | LH D4 | not yet decomposed |
 | 25 | Redesign transition hooks | LH D2 | not yet decomposed |
 | 26 | Event stream (`arm events --follow`) | LH F3 | not yet decomposed |
-| 27 | Tiered Quality Gates | Next-Ten №07 | not yet decomposed |
+| 27 | Tiered Quality Gates | Next-Ten №07 | `LNGHZN-S10` — **pulled forward into Tier A**, see item 27 above |
 | 28 | The Harness Compatibility Contract | Next-Ten №08 | not yet decomposed |
 | 29 | Model-tier dispatch policy | LH C8 | not yet decomposed |
 | 30 | README quickstart rewrite | GAP D1 | `TOPTIER-S7` |
@@ -97,6 +103,28 @@ Note: G4 and G5 are placed at the tail of Tier C consistent with the addendum's 
 
 ---
 
+## Recommended Tier A sequence (2026-08-23)
+
+Ordered by impact-per-unit-effort: cheap-and-high-impact first, expensive-and-low-immediate-impact last. This supersedes the by-impact order given in the 2026-08-11 audit note.
+
+| Order | Work | Item | Why here |
+|---|---|---|---|
+| 1 | Close out `LNGHZN-S10` (merge T5/PR #112, close the story) and `LNGHZN-S9` (both tasks `done`) | 27, 14a | **Delivered 2026-08-23.** Stories `merged`; leftover `task/LNGHZN-S10-T5` worktree/branch removed. |
+| 2 | `LNGHZN-S6-T1` — structured error type | 16 | LH's highest-scoring undelivered item (Σ27), one ready task, and it compounds across every future command. Must precede item 19's `doctor` check (below) or that check gets rewritten. |
+| 3 | `LNGHZN-S7-T2`, `T3` — strict config decode, doctor config-health, doc purge | 19 | Smallest blast radius left, fully scoped, story already half-delivered. T2's `doctor` output should speak the item-16 contract, hence its position after step 2. |
+| 4 | `LNGHZN-S8` — `arm review validate` | 20 | Best leverage-to-cost ratio remaining (cost score 5): it exposes validation `arm review record` already performs, and it removes a whole class of reviewer round-trips. |
+| 5 | `LNGHZN-S6-T2`, `T3` — migrate high-traffic errors, test-enforce the contract | 16 | The bulk of item 16's effort. Deliberately split from T1 so the contract lands early and the migration proceeds behind it. |
+| 6 | `LNGHZN-S10-T11` — TUI coverage/mutation seam | 27a | Moderate effort, but it buys ratchet headroom for every subsequent story's gate run. Cheaper the sooner it lands. |
+| 7 | `NXTTN-S3` — Context Economics | 15 | Ratchet-shaped: budgets get strictly harder to adopt as agent-facing surface grows, so it should not slide much further. Higher effort than 1–6 (three tasks, one of them a policy gate). |
+| 8 | `NXTTN-S4` — The Paved Road | 18 | High effort (docs + skills restructure) with adopter-facing payoff and zero adopters today. Real work, wrong time. |
+| 9 | `TOPTIER-S13` — reviewer disagreement/consensus policy | 21 | Highest effort-to-current-impact of the open set: it is gated on a precondition — multi-reviewer dispatch running at volume — that does not exist yet. Tier A/B boundary item; defer to the boundary. |
+
+Opportunistic, outside the ordering: `bug-1783480206` (residual `trls` references in `internal/tui`, `doctor`, `worker`) is a minutes-long sweep with no dependents — fold it into whichever step next touches those packages rather than scheduling it.
+
+Not in this sequence but sitting in `arm ready` alongside it: `TOPTIER-S6-T2` (ops-schema versioning) and `TOPTIER-S7-T1` (README quickstart) are Tier B. See the interleaving note above — do not pull them forward off the ready queue.
+
+---
+
 ## F2 grilling session — resolved decisions (2026-07-08)
 
 A grilling pass on LH F2 (`arm ready --waves`) resolved the following, ahead of decomposition. These should carry into F2's eventual ADR (per the constitution's ADR-template field) and into `LNGHZN-S2`'s definition of done:
@@ -123,3 +151,5 @@ A grilling pass on LH F2 (`arm ready --waves`) resolved the following, ahead of 
 - **The "Armature story" column** is this document's link into the DAG: it names the epic-level story an item has been decomposed into, where one exists, so the ranked order above can drive cross-story dispatch priority even though `blocked_by` edges can't express it. As of this writing every GAP item (T1–T5, D1–D5) has a 1:1 `TOPTIER-S1`–`S10` story (in that same order — `S1`=T1, `S2`=D2, `S3`=T2, `S4`=T3, `S5`=T4, `S6`=T5, `S7`=D1, `S8`=D3, `S9`=D4, `S10`=D5); the six narrow-gaps addendum items (G1–G6) are `TOPTIER-S11`–`S16` respectively; the `scope-overlap-validation-gaps` dogfood theme is `TOPTIER-S17` (filed and decomposed 2026-07-08), independently of the three planning rounds (same category as G1–G6 — a real gap discovered outside the original documents) during F2's grilling session, as a hard prerequisite for `LNGHZN-S2`; three Next-Ten items (№01, №02, №05) are decomposed under the `NXTTN` epic (story# = item#, except №01: `NXTTN-S1` was a cancelled duplicate, and the one remaining genuine piece of that item's work is tracked as `NXTTN-S1B`); LH D5 and LH F2 are decomposed under the `LNGHZN` epic (`LNGHZN-S1` for D5, blocked by precursor bug `LNGHZN-B1`; `LNGHZN-S2` for F2, decomposed and filed 2026-07-08, blocked by `TOPTIER-S17-T1` specifically) — the epic is the standing home for future LH items, same pattern as `NXTTN`/`TOPTIER`. On 2026-07-19, with Tier S delivered, the eight remaining Tier A items were decomposed in ordinal order: LH C1/C4/F1/C3/D1/C6 as `LNGHZN-S3`–`S8` respectively, and Next-Ten №03/№04 as `NXTTN-S3`/`NXTTN-S4` (story# = item#, matching the existing NXTTN convention). Cross-story same-file scope overlaps against still-open `TOPTIER` tasks (harness-hook docs/evaluator vs `TOPTIER-S5`, Makefile vs `TOPTIER-S3-T1`/`TOPTIER-S6-T1`, workflow.md vs `TOPTIER-S4-T1`) were serialized with `blocked_by` edges following this document's ordinal order. On 2026-08-11 a status audit added the Status column to Tier A and recorded `LNGHZN-S9` as item 14a — a story filed from `LNGHZN-S5`'s PR-review thread rather than from any of the four planning documents, and therefore the first entry in this table whose source is the DAG itself (LH F1.1 is a back-reference added to `long-horizon-proposals.md` to give it a citable source ID, not an item from the original round). Update this column, not just the source doc, whenever an item crosses from "proposed" to "filed" **or from "filed" to "delivered"** — it is the only place this ordering and the DAG's IDs are cross-referenced, and an un-updated Status column makes the whole tier read as pending.
 
 - **Work filed outside the four planning documents needs a home here too.** `LNGHZN-S9` sat in the DAG untiered and uncited between its filing and the 2026-08-11 audit, which made it invisible to this ordering — it appeared in `arm ready` with no tier and no priority argument attached to it. Any story filed from a PR review, a dogfood theme, or a grilling session (as `TOPTIER-S17` was) should get a row here at filing time, using a sub-ordinal (`14a`) when it is a follow-on to an existing item, so the numbering cited from the source documents stays stable.
+
+- **Delivery pulled forward from a lower tier still gets a row in its own tier's position** (see item 27). Tier order is a recommendation, not a contract: when dogfooding forces a lower-tier item early because it is making the higher-tier items more expensive, record the reason rather than silently re-tiering the item.
