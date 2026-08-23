@@ -4304,3 +4304,4 @@
 ["transition","LNGHZN-S10-T5",1787510900,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"112"}]
 ["transition","LNGHZN-S9-T1",1787510958,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"97"}]
 ["transition","LNGHZN-S9-T2",1787510958,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"98"}]
+["transition","LNGHZN-S10",1787510977,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"D1-D8 of docs/design/gate-efficiency.md delivered: two-tier gates normative, make check-fast with deterministic routing, gate evidence recorded and consumed in review, validate strict by default and enforced at plan release, vertical-slice coupling detected at planning time. 10 tasks merged; T9 and task-1787058254 cancelled as redundant. Full gate green at 80dee97c."}]
