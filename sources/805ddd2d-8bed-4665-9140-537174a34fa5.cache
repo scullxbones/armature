@@ -1,0 +1,188 @@
+# Claim overlap planning seam
+
+Citable spec for `ARCHIMP-S20`. Workers implement this document, not discarded
+`ARCHIMP-S15` branches or out-of-repo handoffs.
+
+## Problem
+
+`arm claim` decides overlapping-scope Claims in `cmd/armature/claim.go`: block
+a foreign-Worker overlap, dismiss a same-Worker overlap, or force-override.
+`internal/claim` only supplies predicates (`ScopesOverlapEx`,
+`HasOverlapDismissalNote`). The policy has no module, so tests must cross
+Cobra, git, and worktree setup.
+
+The command loop also:
+
+- ranges a Go map, so diagnostic and Op order depend on insertion luck
+- returns on the first foreign overlap instead of collecting every block
+- can append a same-Worker dismissal note and then fail on a later foreign
+  overlap
+- ignores `appendOp` errors for overlap notes, so missing evidence does not
+  stop the Claim
+
+## Seam
+
+One pure in-process planning module in `internal/claim`. `cmd/armature` adapts
+Materialized State into Claim facts and performs stderr writes and Op appends.
+
+Keep `internal/claim` independent of `internal/materialize`. Depguard already
+forbids that import. Add no child policy package, writer port, rule interface,
+or hypothetical adapter. Existing predicates (`ScopesOverlapEx`,
+`IsClaimStale`, `ResolveClaim`, `IsWithinScope`) stay; overlap *policy* moves
+behind the new interface.
+
+Names:
+
+```go
+type IssueFacts struct {
+    Type      string
+    Status    string
+    ClaimedBy string
+    Title     string
+    Scope     []string
+}
+
+type PlanInput struct {
+    TargetID    string
+    TargetScope []string
+    WorkerID    string
+    Force       bool
+    Issues      map[string]IssueFacts
+    Graph       HierarchyGraph
+    PriorOps    []ops.Op
+}
+
+type NoteIntent struct {
+    IssueID string
+    Message string
+}
+
+type ClaimPlan struct {
+    BlockReasons []string
+    Warnings     []string
+    Notes        []NoteIntent
+}
+
+func PlanClaim(PlanInput) (ClaimPlan, error)
+```
+
+`HierarchyGraph` is the existing `Descendants` interface in this package.
+Inputs are borrowed and read-only.
+
+## Glossary term
+
+Add to `CONTEXT.md` in the planning task:
+
+**Claim Plan**: The overlap decision for a proposed Claim, produced before any
+Op is appended. It names block reasons, warnings, and note intents. Distinct
+from the Claim Op itself.
+_Avoid_: Resolver, overlap check, claim result
+
+## Behavior
+
+`PlanClaim` owns all of the following.
+
+1. Empty `TargetID`, empty `WorkerID`, or a nil `Graph` is an input error.
+   Never panic. A nil `Issues` map or nil `PriorOps` is a valid empty
+   collection and yields an empty plan when the rest of the input is valid.
+2. Sort candidate Issue IDs before evaluation. Map insertion order must not
+   affect diagnostics or note order.
+3. Ignore the target itself.
+4. Only another Task in `claimed` or `in-progress` competes. Stories, epics,
+   features, bugs, and non-active Tasks do not.
+5. Overlap uses `ScopesOverlapEx` so ancestor and descendant pairs remain
+   excluded in both directions.
+6. Diagnostics name the conflicting Issue ID, title, type, status, and Claimed
+   By. Empty Claimed By renders as `unknown`.
+7. Exact same-Worker overlap is a dismissal, including when `Force` is set.
+8. Deduplicate dismissal evidence by target Issue, conflicting Issue, and
+   current Worker identity. A prior `OpNote` counts when it targets the
+   claiming Issue, carries the canonical dismissal message for that pair, and
+   was written by this Worker.
+9. Without `Force`, evaluate every candidate and return every sorted
+   foreign-Worker block reason. A blocked plan is atomic: `Warnings` and
+   `Notes` are empty, including no same-Worker dismissal notes.
+10. With `Force`, return a warning and two reciprocal note intents for every
+    foreign-Worker overlap, in candidate-ID order. Same-Worker overlaps remain
+    dismissals.
+11. Canonical messages, preserved:
+    - dismissal note: `Serial claim: scope overlap with {id} (same worker, dismissed)`
+    - force notes: `Scope overlap with {id} detected at claim time` on each
+      of the two Issues
+    - reason text: `scope overlap with {id} ({title}), a {type} {status} held by {holder}`
+
+Force notes are not deduplicated. Dismissal notes are.
+
+## Command adapter
+
+`cmd/armature` maps Materialized State into `PlanInput` using `Claimed By`
+(not Assignment). It passes the existing hierarchy graph and the raw Op log
+already loaded for this command.
+
+- If `PlanClaim` returns an error: print it, write nothing, do not Claim.
+- If `BlockReasons` is non-empty: print each as `Error:` on stderr, return
+  `cannot claim {id}: {reason} — use --force to override` for each reason
+  (existing phrasing), write nothing, do not create a worktree, do not append
+  a Claim Op.
+- If `Warnings` is non-empty: print each as `Warning:` on stderr.
+- Persist `Notes` with `appendLowStakesOps` so the group is
+  Introduction-checked together and append errors are returned. If that batch
+  fails, the Claim does not proceed: no Claim Op, no worktree.
+- Only then run the existing exclude / Claim-token / `appendHighStakesOp` /
+  worktree path.
+
+Do not ignore overlap-note errors. Do not append overlap notes one-by-one with
+`appendOp`. Do not change lock ordering, worktree provisioning, claim-token
+rollback, or parent auto-advance.
+
+## Tests
+
+Prefer `package claim_test` against the exported interface:
+
+- invalid input returns an error and never panics
+- nil `Issues` and nil `PriorOps` produce an empty plan for otherwise valid input
+- target, Story, and non-active Tasks are ignored
+- claimed and in-progress Tasks compete
+- ancestor and descendant overlaps are excluded in both directions
+- same-Worker dismissal and Worker-specific deduplication
+- empty Claimed By renders as `unknown`
+- every foreign conflict is returned, sorted, without `Force`
+- blocked mixed overlaps produce no partial note intents
+- `Force` produces a warning plus reciprocal notes for every foreign conflict
+- same-Worker overlaps remain dismissals under `Force`
+- equivalent maps with different insertion orders produce identical plans
+- inputs remain unchanged
+
+Keep thin Cobra tests for Materialized State adaptation, stderr labels, exact
+Op targets and order, evidence-write failures, and the invariant that a
+blocked Claim creates no worktree and no Claim Op.
+
+New tests that verify this spec use `_REQ_ARCHIMP_S20_T1` or
+`_REQ_ARCHIMP_S20_T2` in the function name.
+
+## Split
+
+Two Tasks, in order:
+
+1. Pure module, glossary term, and `claim_test` coverage. Command still uses
+   the old loop until Task 2 lands.
+2. Command adaptation and Cobra tests. Blocked by Task 1.
+
+## Out of scope
+
+- Recreating `ARCHIMP-S15` / `ARCHIMP-S15-T1` / `ARCHIMP-S15-T2`, or citing
+  discarded branches as implementation sources
+- Importing `internal/materialize` into `internal/claim`
+- Splitting staleness, heartbeat, or race-winner out of `internal/claim`
+- Promotion redesign
+
+## How `ARCHIMP` closes
+
+`ARCHIMP-S15` stays `cancelled`. This replacement is a new child of `ARCHIMP`.
+Materialization rollup promotes a parent only when every child is `merged`.
+Cancelled children count as unmerged, so a merged replacement will not
+auto-promote `ARCHIMP` while `ARCHIMP-S15` remains cancelled.
+
+That is expected. `ARCHIMP` is an open epic that still collects architecture
+work. Closing it is a later, explicit human transition — not a side effect of
+this story, and not a force of epic status after a cancelled child.
