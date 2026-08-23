@@ -4312,3 +4312,4 @@
 ["link","LNGHZN-S6-T4",1787512384,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"LNGHZN-S6-T2","rel":"blocked_by"}]
 ["dag-transition","LNGHZN-S6-T4",1787512394,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"verified","issue_id":"LNGHZN-S6-T4"}]
 ["note","LNGHZN-S6-T4",1787512407,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Filed under LNGHZN-S6 to replace cancelled LNGHZN-S10-T11. Same TUI-seam payload (ADR 0015); blocked_by S6-T2 for ready.go overlap. Extra remaining S6 work, not part of the LH C3 error-contract DoD.","note_id":"note-1787512407655385825"}]
+["note","LNGHZN-S6",1787512407,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Adopted LNGHZN-S6-T4 (TUI seam, ADR 0015 follow-on; supersedes cancelled LNGHZN-S10-T11). Story DoD remains the error contract; T4 is extra remaining work. S6 cannot roll up until T4 is merged.","note_id":"note-1787512407792596886"}]
