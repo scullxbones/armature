@@ -4306,3 +4306,4 @@
 ["transition","LNGHZN-S9-T2",1787510958,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"98"}]
 ["transition","LNGHZN-S10",1787510977,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"D1-D8 of docs/design/gate-efficiency.md delivered: two-tier gates normative, make check-fast with deterministic routing, gate evidence recorded and consumed in review, validate strict by default and enforced at plan release, vertical-slice coupling detected at planning time. 10 tasks merged; T9 and task-1787058254 cancelled as redundant. Full gate green at 80dee97c."}]
 ["transition","LNGHZN-S10",1787511089,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["transition","LNGHZN-S10-T11",1787512331,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"cancelled","outcome":"Superseded by LNGHZN-S6-T4: same TUI-seam work (ADR 0015), refiled under LNGHZN-S6 so parentage matches the live ready.go overlap with S6-T2. Not implemented on this issue."}]
