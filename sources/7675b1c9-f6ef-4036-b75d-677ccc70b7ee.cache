@@ -112,13 +112,31 @@ by path.
 
 ### D7 — Strict validation, enforced at introduction
 
-- `arm validate` runs strict **by default**: warnings are errors, green means
-  silent. No scoping flags — the system validates whole or not at all
-  (partial validation rejected by decision). Rules that fire on intentional
-  states get fixed or deleted, not waived.
+Three doors, three jobs. Partial/`--scope` audit is still rejected.
+
+- **Audit** (`arm validate`): strict **by default** — warnings fail the run,
+  green means a single summary line. No scoping flags; the audit validates
+  the whole graph or not at all. Rules that fire on intentional states get
+  fixed or deleted, not waived. JSON keeps findings in their native
+  `errors` / `warnings` / `infos` buckets; `Strict` drives only `OK` and
+  the exit code.
+- **Introduction (now):** `dag transition` to `verified` requires
+  validate-green so a planner cannot release a dirty plan. Keep this
+  whole-graph: the planner is about to add work to the union and can still
+  stop. A recorded `--skip-validate-gate` exists for humans (I7); happy-path
+  errors name the finding, not the escape.
+- **Introduction (follow-up, T6):** write-time refusal on `dag apply` /
+  `create` / `amend` / `link` so a node that already fails the rules cannot
+  land. Fail only on findings that cite IDs the command touched. Default
+  fail-closed; recorded override; do not advertise the override in the
+  error. That is how birth defects die before plan release, without
+  conscripting the next feature worker as janitor.
+- **Integration:** whole-graph `arm validate --ci` belongs at **story
+  close** and in CI (`make validate-graph`). The per-task publish gate
+  (`make check`) does **not** run it. Wiring the union graph into every
+  worker's `make check` couples delivery to everyone else's in-flight
+  nodes (I3 in spirit) and trains agents onto `check-fast`.
 - Rollout includes burning down all existing warnings.
-- Validate-green is enforced at **plan release** (findings die at the point of
-  introduction) and inside the `full` gate.
 
 ### D8 — Vertical-slice planning validation
 
@@ -128,6 +146,46 @@ census files that surface's drift check reads (`docs/commands.md`,
 `docs/design/surface-census.md`). Remedy is co-location: the flag's census row
 and command documentation belong to the task adding the flag. Stories deliver
 vertical slices, not horizontal layers.
+
+**Delivered (LNGHZN-S10-T5):** `internal/validate.checkE13VerticalSliceCoupling`
+groups sibling tasks by parent story, then for each censused surface glob
+(currently `cmd/**`) asks a per-task question: does this task's scope touch
+that surface without owning any of the census/doc files the surface's drift
+check reads, while a sibling in the same story owns them? A match raises an
+`E13` error-severity Finding. The error message names the offending task, the
+surface glob, every implicated sibling, and the specific coupled file(s), and
+states the co-location remedy.
+
+`error` severity means E13 fails **every** `Validate` call, not only strict
+ones: `Validate` computes `ok := len(errors) == 0` unconditionally and `Strict`
+only additionally folds in warnings. In practice E13 therefore fails
+`arm validate` and `arm dag transition --to verified` (D7's plan-release gate).
+It is deliberately **exempt from the write-time introduction check**
+(`validate.CheckIntroduction`, which every `create` / `amend` / `link` runs), in
+the same manner as the E7/E8 cite-after carve-out: decomposition adds tasks one
+at a time and the graph is transiently ill-shaped between writes, so refusing
+the write would forbid ever reaching an intermediate state a planner must pass
+through. E13 judges a plan being released, not a plan being built.
+
+A task whose own scope covers both the code and the census/doc lines is exempt
+by construction: same-task ownership is co-location, not coupling, so two
+siblings that each carry their own code and doc lines — the vertical slice this
+rule exists to reward — raise nothing. `scopeTouchesSurface` asks whether a
+scope entry *definitely lands inside* the surface (`scopematch.Allows`), not
+whether the two globs could conceivably intersect (`scopematch.Overlaps`, which
+documents itself as an over-approximation calibrated for a warning with a
+`--force` escape), so a repo-wide task — a lint sweep, a dependency bump — is
+not read as a phantom `cmd/**` code task. Only tasks in a non-terminal status
+(not `merged`, `done`, or `cancelled`) are considered, mirroring the W1
+scope-overlap check, so E13 does not fire against already-merged history.
+Findings are one per offending task, citing every implicated sibling, rather
+than one per (code task, doc task) pair.
+
+The censused surfaces and the doc files each one reads are authoritative in the
+Censused Surfaces table in `docs/design/surface-census.md`;
+`internal/validate`'s `censusedSurfaces` map restates it and
+`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if the two drift
+apart. E13 is catalogued in `docs/validation-codes.md`.
 
 ## Story shape
 
