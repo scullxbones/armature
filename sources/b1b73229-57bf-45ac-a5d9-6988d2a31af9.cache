@@ -77,7 +77,7 @@ reader, not a write door.
   how often Introduction, Plan Release, and Release Override fire is a
   later measurement pass, not a fourth door.
 - Story spec remains D7 in `docs/design/gate-efficiency.md`. Implementation
-  is T6.
+  is T12.
 
 ## Considered and rejected
 
