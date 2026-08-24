@@ -1,3 +1,4 @@
 ["transition","AOC-S1-T2",1787591466,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-AOC-S1-T2",{"to":"open"}]
 ["claim","AOC-S1-T2",1787591467,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-AOC-S1-T2",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/AOC-S1-T2","claim_token":"c06a8f04bf7128d9727024856dd820f5"}]
 ["note","AOC-S1-T2",1787591654,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-AOC-S1-T2",{"msg":"Remediation: reject []byte/json.RawMessage in NewEnvelope (N2 array invariant); assert harness-hook is sole Protocol Output on the cobra command tree.","note_id":"note-1787591654453377553"}]
+["amend","AOC-S1-T2",1787591663,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-AOC-S1-T2",{"scope":["internal/output/envelope.go (new)","internal/output/envelope_test.go (new)","internal/output/classify.go (new)","internal/output/classify_test.go (new)","cmd/armature/harness_hook.go","cmd/armature/harness_hook_test.go"]}]
