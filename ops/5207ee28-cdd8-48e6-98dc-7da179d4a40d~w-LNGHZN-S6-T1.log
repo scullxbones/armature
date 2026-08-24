@@ -1,2 +1,3 @@
 ["claim","LNGHZN-S6-T1",1787600835,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S6-T1",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T1","claim_token":"fbfb2e4ef1568b6a6398c207d3ff4460"}]
 ["transition","LNGHZN-S6",1787600837,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S6-T1",{"to":"in-progress"}]
+["note","LNGHZN-S6-T1",1787601186,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S6-T1",{"msg":"Starting T1: StructuredError type, envelope nesting on stdout, SilenceErrors. TDD against named acceptance tests.","note_id":"note-1787601186388821748"}]
