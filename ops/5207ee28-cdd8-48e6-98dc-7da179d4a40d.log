@@ -4615,3 +4615,4 @@
 ["amend","AOC-S2-T1",1787543257,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/ready.go","cmd/armature/ready_test.go","docs/commands.md"]}]
 ["amend","AOC-S2-T3",1787543257,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/show.go","cmd/armature/show_test.go","docs/commands.md"]}]
 ["amend","AOC-S2-T4",1787543257,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/workers.go","cmd/armature/workers_test.go","cmd/armature/validate.go","cmd/armature/worktree.go","docs/commands.md"]}]
+["amend","AOC-S2-T5",1787543258,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/main.go","cmd/armature/main_test.go","cmd/armature/version.go","docs/commands.md","docs/design/surface-census.md"]}]
