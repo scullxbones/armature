@@ -358,8 +358,16 @@ An unstructured annotation attached to an issue for progress, observations, or r
 _Avoid_: Decision, rationale record
 
 **Surface**:
-A user-facing point of the product: an issue type, status, confidence state, field, command, or flag. Surface is the general concept; specific processes (the subtractive-release census, the CLI grammar contract) each govern a subset of surfaces for their own purpose. A surface is distinct from a config knob (operator-facing, not user-facing) and from a skill (agent-facing prose, not a typed interface point).
+A user-facing point of the product: an issue type, status, confidence state, field, command, flag, or the shape of a command's structured output. Surface is the general concept; specific processes (the subtractive-release census, the CLI grammar contract) each govern a subset of surfaces for their own purpose. A surface is distinct from a config knob (operator-facing, not user-facing) and from a skill (agent-facing prose, not a typed interface point).
 _Avoid_: Feature, config knob, endpoint
+
+**Agent Output Contract**:
+The guarantees Armature gives whenever a command emits structured output: envelope shape, the single channel it arrives on, which fields a default view carries, and the next-step disclosure that trails it. The contract binds the output an agent reads and reasons about; it is not a serialization format choice.
+_Avoid_: Agent format, JSON output, machine format
+
+**Protocol Output**:
+Output whose shape is dictated by an external runtime and parsed without judgment, such as the harness-hook decisions Claude Code and Codex consume. Protocol output is exempt from the Agent Output Contract because its consumer is a runtime acting mechanically, not an agent reasoning about state.
+_Avoid_: Agent output, hook output
 
 **Deep Module**:
 A package or command group with a narrow public interface hiding substantial implementation, per ADR 0004. Deep modules exist at two layers that should stay aligned: the Go package (`internal/sources`, `internal/validate`, etc.) and, where a package has a CLI-facing counterpart, the command group (`sources`, `validate`) that exposes it. A hyphenated command with no corresponding deep module is a signal that either a module boundary needs drawing or the command doesn't deserve group status.
