@@ -1,2 +1,3 @@
 ["transition","LNGHZN-S6-T1",1787603842,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"to":"open"}]
 ["claim","LNGHZN-S6-T1",1787603843,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T1","claim_token":"a8f9b283bd3bb0467261159ff768d825"}]
+["note","LNGHZN-S6-T1",1787603982,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"msg":"Remediation: reject empty next_actions at StructuredError.New (AOC help[] invariant) and stop runRoot from concatenating an error envelope onto stdout that a command already wrote.","note_id":"note-1787603982335860349"}]
