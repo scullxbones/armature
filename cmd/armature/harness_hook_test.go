@@ -15,8 +15,10 @@ import (
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -155,6 +157,29 @@ func TestAdapterExitError(t *testing.T) {
 func TestHarnessHookCmdSilencesErrors(t *testing.T) {
 	cmd := newHarnessHookCmd()
 	assert.True(t, cmd.SilenceErrors, "harness-hook command must have SilenceErrors: true to suppress cobra error output")
+}
+
+func TestHarnessHookIsSoleProtocolOutput_REQ_AOC_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	cmd := newHarnessHookCmd()
+	require.Equal(t, output.ChannelProtocolOutput, output.Classify(cmd.Annotations),
+		"harness-hook must declare itself Protocol Output at the cobra constructor")
+
+	root := newRootCmd()
+	var protocol []string
+	var walk func(*cobra.Command)
+	walk = func(c *cobra.Command) {
+		if output.Classify(c.Annotations) == output.ChannelProtocolOutput {
+			protocol = append(protocol, c.Name())
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(root)
+	require.Equal(t, []string{"harness-hook"}, protocol,
+		"harness-hook must be the sole Protocol Output command on the tree")
 }
 
 // TestApplyRunResult_PropagatesExitCode verifies that applyRunResult correctly
