@@ -121,3 +121,35 @@ so a command could be added, censused, pass drift-check, and still emit a bare a
 with data on stderr. Decision 13 gives the census jurisdiction; decision 16 makes the
 shape lint enumerate from the same source. Both are required — either alone leaves the
 hole open one level down.
+
+## How the work is decomposed
+
+Epic `AOC`, four stories, 14 tasks. `arm dag apply` and `arm validate` are both green
+against this shape; the plan is checked in at `docs/design/agent-output-contract-plan.json`
+and regenerated from the graph so the two cannot drift silently.
+
+Two adjustments came out of applying it, and both are worth keeping visible because
+they were forced by the repo's own rules rather than chosen:
+
+**The S2 migrations run as a chain, not a parallel wave.** The first draft put every
+command's `docs/commands.md` update in one doc-sweep task so the code tasks would stay
+scope-disjoint. `arm validate` rejected that with E13 — "stories deliver vertical
+slices, not horizontal layers" — and E13 is right: the doc belongs with the code that
+changes it. But only one task may own a file at a time, so co-locating forces
+`AOC-S2-T2 → T1 → T3 → T4 → T5` into a sequence. The parallelism was never real; it
+was purchased by deferring documentation, which is the trade E13 exists to refuse.
+
+**The error-channel move folded into `LNGHZN-S6-T1`.** It was drafted as its own task
+(`AOC-S2-T6`, now cancelled) on the reasoning that chaining to `LNGHZN-S6` would stall
+behind an unrelated queue. Two facts corrected that: `LNGHZN-S10-T12` is already
+merged so `LNGHZN-S6-T1` is ready now, and the two tasks edit the same four files to
+do overlapping work. `LNGHZN-S6-T1` now carries the channel move in its definition of
+done and is blocked by `AOC-S1-T2` so the envelope exists before the error type nests
+into it.
+
+`AOC` also has 17 dependency edges into the existing backlog — `LNGHZN-S6`, `NXTTN-S4-T1`,
+`TOPTIER-S11`, `TOPTIER-S15`, `ARCHIMP-S20-T2`. That density is inherent: the contract
+touches every command, and open work already exists on most of them. `doctor`, `dagsum`
+and `render-context` are deliberately excluded from `AOC-S2-T4` for this reason and
+migrate after their owners land, caught by the `AOC-S3-T3` lint rather than scheduled
+by hand.
