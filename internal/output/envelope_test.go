@@ -92,6 +92,12 @@ func TestEnvelopeRejectsInvalidInput_REQ_AOC_S1_T2(t *testing.T) {
 	require.Error(t, err)
 	_, err = NewEnvelope("issues", []contractListRow{}, []string{""})
 	require.Error(t, err)
+	_, err = NewEnvelope("issues", []byte("not-an-array"), help)
+	require.Error(t, err, "[]byte must not be accepted: encoding/json marshals it as a string")
+	_, err = NewEnvelope("issues", json.RawMessage(`[{"id":"x"}]`), help)
+	require.Error(t, err, "json.RawMessage must not be accepted: it is a []byte alias")
+	_, err = NewEnvelope("issues", [4]byte{1, 2, 3, 4}, help)
+	require.Error(t, err, "byte array must not be accepted: encoding/json marshals it as a string")
 	require.Error(t, WriteEnvelope(&bytes.Buffer{}, nil))
 
 	env, err := NewEnvelope("issues", []contractListRow{}, help)

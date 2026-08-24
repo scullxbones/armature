@@ -28,6 +28,12 @@ func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error)
 	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
 		return nil, fmt.Errorf("envelope payload must be an array")
 	}
+	// encoding/json marshals []byte, [N]byte, and aliases such as json.RawMessage
+	// as a base64 string (or raw JSON), not a JSON array. Reject those so count
+	// equals payload length and the payload key is always an array (N2).
+	if rv.Type().Elem().Kind() == reflect.Uint8 {
+		return nil, fmt.Errorf("envelope payload must be an array")
+	}
 	for i, h := range help {
 		if h == "" {
 			return nil, fmt.Errorf("envelope help[%d] must be a non-empty string", i)
