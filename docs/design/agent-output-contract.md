@@ -84,25 +84,34 @@ empty-outcome `done`s in 15 minutes). True duplicates are 0.153% of the log.
    append it does not rewrite anything (I2). Suppressed duplicates leave no trace —
    worker thrash is a harness defect belonging in the dogfood corpus, and a counter
    on an existing op would both rewrite history and race under I3.
-10. **Protocol Output is exempt.** `arm harness-hook` writes decisions to stdout that
-    a runtime parses without judgment; its shape is dictated by Claude Code and Codex,
-    not by us. Commands are explicitly classified in code.
+10. **Two carve-outs, both cited.** `arm harness-hook` is **Protocol Output**: it
+    writes decisions to stdout that a runtime parses without judgment, in a shape
+    dictated by Claude Code and Codex. Separately, some commands emit a **canonical
+    artifact** on stdout — `review prepare` writes a ReviewBundle whose schema
+    requires its own top-level fields, `completion` writes a shell script, and
+    `dag apply --schema|--example` writes a JSON Schema document. Enveloping those
+    would break the documented redirect-to-file flows, so they are **Artifact
+    Output**. Because two of the three qualify only under particular flags, the
+    class attaches to a command *mode*, and admission requires citing the governing
+    schema or consumer. Both carve-outs are explicitly classified in code and
+    censused; neither is available by name or by omission.
 11. **Content first, repo-gated.** Bare `arm` in a non-TTY shows the ready queue when
     the cwd is an Armature repo; otherwise a definitive empty state, not a manual.
 12. **One envelope everywhere**: `{count, <payload>[], help[]}`, including single-item
     responses. Per-command envelope shapes are what produced the `show`-ignores-`agent`
     bug.
-13. **Named**: `Agent Output Contract` and `Protocol Output` enter the glossary, and
-    `Surface` is amended to include output shape — which brings the envelope under the
-    subtractive-release census.
+13. **Named**: `Agent Output Contract`, `Protocol Output` and `Artifact Output` enter
+    the glossary, and `Surface` is amended to include output shape — which brings the
+    envelope under the subtractive-release census.
 14. **Two gates, sequenced.** Size (byte budgets, extending `internal/contextreport`)
     then shape (a lint). A byte budget catches neither an ignored flag nor data on
     stderr.
 15. **New epic**, four stories.
 16. **The fixture corpus is walked from the cobra command tree**, never hand-listed.
     A gate over commands somebody remembered to fixture is not a guardrail. The
-    agent-facing/Protocol classification is explicit in code and censused, so
-    "mark it Protocol" cannot become an escape hatch.
+    three-way classification is explicit in code and censused, and a carve-out must
+    cite the harness protocol or governing schema that makes the envelope impossible,
+    so neither "mark it Protocol" nor "mark it Artifact" can become an escape hatch.
 17. **Three ADRs**: 0017 the contract, 0018 payload-keyed idempotency, 0019 the TOON
     park. The park gets its own file so its re-entry criterion stays findable.
 18. **Deliberately unversioned pre-1.0.** No `contract`/`v` field. `TOPTIER-S6-T3`
@@ -168,9 +177,10 @@ Keywords MUST / MUST NOT / SHOULD / MAY are used as in RFC 2119.
 
 ### N1. Applicability
 
-1. The contract applies to every **agent-facing** command when
+1. The contract applies to every **agent-facing** command mode when
    `--format=json` or `--format=agent` is in effect, including when that
-   format is implied (`--non-interactive`, non-TTY auto-detect).
+   format is implied (`--non-interactive`, non-TTY auto-detect). Modes
+   classified Protocol Output (N7) or Artifact Output (N8) are outside it.
 2. `--format=json` and `--format=agent` MUST emit the same envelope object:
    same required keys, types, and semantics. Whitespace MAY differ.
 3. `--format=human` is unconstrained by this spec.
@@ -259,21 +269,68 @@ an empty state.
 ### N7. Protocol Output carve-out
 
 A command classified **Protocol Output** MUST NOT emit this envelope. It
-speaks its own stdin/stdout protocol with the host harness.
+speaks its own bidirectional stdin/stdout protocol with the host harness,
+and the wire shape is dictated by that harness rather than by us.
 
 Exemption from envelope lint is by that classification, never by command
 name, path, or `Use` string.
 
 The sole Protocol Output command is `harness-hook`.
 
-### N8. Command classification
+### N8. Artifact Output carve-out
 
-Every CLI command is **agent-facing** or **Protocol Output**.
+A command mode classified **Artifact Output** MUST NOT emit this envelope.
+Its stdout *is* a canonical artifact: a document whose shape is fixed by a
+schema or by a consumer that is not this contract, and which a downstream
+tool reads verbatim.
+
+A mode qualifies as Artifact Output only if all three hold:
+
+1. **Named consumer.** Something other than a general-purpose agent reads
+   it — a JSON Schema validator, a shell, another `arm` subcommand.
+2. **Foreign shape.** A required top-level shape already governs the output,
+   and wrapping it in `{count, <payload>[], help[]}` would break that shape.
+   The governing schema or consumer MUST be cited in the classification.
+3. **Verbatim redirect is a documented flow.** The output is meant to be
+   redirected to a file or piped, not read as a result set.
+
+Prose that is merely long, or a result set that happens to be large, does
+NOT qualify. Neither does a shape this contract could own — those are
+migration targets, not exemptions. `render-context` is the worked negative
+example: its `--format=agent` shape is ours, so it stays agent-facing and
+migrates on schedule.
+
+Because two of the three current members produce an artifact only under
+particular flags, Artifact Output attaches to a **command mode**, not to a
+command. The classification MUST name the selecting flags, and every other
+structured invocation of the same command MUST conform to the envelope.
+
+The Artifact Output modes are:
+
+| Command mode | Consumer | Governing shape |
+|---|---|---|
+| `review prepare` with `--output` unset | the reviewer skill | `docs/schemas/review-bundle.schema.json` — requires top-level `schema_version`, `bundle_id`, `issue`, `contract`, `delivery`, `fingerprints` |
+| `completion <shell>` (all modes) | bash / zsh / fish / powershell | the shell's own completion-script grammar; not JSON at all |
+| `dag apply --schema`, `dag apply --example` | JSON Schema validators, plan authors | a JSON Schema document / a plan instance, each governed by the plan format |
+
+`review prepare --output <file>` and `dag apply` without those flags are
+agent-facing and MUST conform.
+
+### N9. Command classification
+
+Every CLI command mode is **agent-facing**, **Protocol Output**, or
+**Artifact Output**.
 
 1. The default is agent-facing.
-2. Protocol Output MUST be an explicit classification on the command.
-3. A new command MUST NOT become Protocol Output by omission, by copying a
+2. Protocol Output and Artifact Output MUST each be an explicit
+   classification in code, and MUST appear in the surface census.
+3. A new command MUST NOT enter either carve-out by omission, by copying a
    name pattern, or by skipping a fixture.
+4. An Artifact Output classification MUST cite the governing schema or
+   consumer that makes the envelope impossible (N8.2). A classification
+   that cites nothing is not admissible.
+5. Where a command has both artifact and result modes, the classification
+   MUST name the selecting flags, and the shape lint MUST fixture both.
 
 ## Worked examples
 
