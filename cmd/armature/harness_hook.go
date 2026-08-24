@@ -18,6 +18,7 @@ import (
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
@@ -349,6 +350,7 @@ func newHarnessHookCmd() *cobra.Command {
 		Short:         "Internal harness hook entrypoint",
 		Hidden:        true,
 		SilenceErrors: true,
+		Annotations:   output.MarkProtocolOutput(nil),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			appCtx := currentCtx(cmd)
 			// Resolve the worktree's own git dir (e.g., <parent>/.git/worktrees/<name>),
