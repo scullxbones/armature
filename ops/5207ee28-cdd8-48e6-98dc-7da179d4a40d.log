@@ -4611,3 +4611,4 @@
 ["unlink","AOC-S3-T1",1787543255,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"AOC-S2-T4","rel":"blocked_by"}]
 ["unlink","AOC-S3-T1",1787543256,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"AOC-S2-T6","rel":"blocked_by"}]
 ["amend","AOC-S3-T1",1787543256,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["internal/output/output.go","internal/output/output_test.go"]}]
+["amend","AOC-S2-T2",1787543256,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/list.go","cmd/armature/list_test.go","docs/commands.md"]}]
