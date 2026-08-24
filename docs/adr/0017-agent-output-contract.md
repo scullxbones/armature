@@ -26,10 +26,15 @@ is ~86k estimated tokens; the same inventory under a four-field default row
 is ~22k. Agents cannot compile against a shape that is not written down, and
 a later deterministic lint (I5) cannot exist until the shape is named.
 
-`arm harness-hook` is a different kind of command: it speaks a
-platform-native allow/block protocol on stdin/stdout with the host harness,
-not an inventory of Armature issues. Folding it into the same envelope would
-break hook integration.
+Two kinds of command sit outside that inventory framing. `arm harness-hook`
+speaks a platform-native allow/block protocol on stdin/stdout with the host
+harness; folding it into the same envelope would break hook integration.
+Separately, several commands emit a **canonical artifact** on stdout rather
+than a result set: `arm review prepare` writes a ReviewBundle whose schema
+requires top-level `schema_version` and `bundle_id`, `arm completion` writes
+a shell script, and `arm dag apply --schema|--example` writes a JSON Schema
+document. `docs/concepts.md` documents redirecting the first straight to a
+file, so an envelope would make that flow fail schema validation.
 
 ## Decision
 
@@ -41,10 +46,17 @@ Agent-facing structured output follows one **Agent Output Contract**:
    `count` is the true length of the command's payload array. The payload
    key is named for its contents (`issues`, `workers`, …), not the literal
    key `payload`. `help` is always an array of strings.
-3. **Protocol Output carve-out.** A command classified Protocol Output does
-   not emit this envelope. Classification is explicit. The default is
-   agent-facing, so a new command cannot silently opt out. The sole Protocol
-   Output command is `harness-hook`.
+3. **Two carve-outs.** A command mode classified **Protocol Output** (its
+   own bidirectional protocol with a host harness) or **Artifact Output**
+   (its stdout is a canonical artifact governed by a foreign schema or
+   consumer) does not emit this envelope. `harness-hook` is the sole
+   Protocol Output command. The Artifact Output modes are `review prepare`
+   with `--output` unset, `completion`, and `dag apply --schema|--example`;
+   because two of those qualify only under particular flags, the class
+   attaches to a command *mode* and the other modes of the same command
+   still conform. Classification is explicit in code and censused, an
+   Artifact Output claim must cite the governing schema or consumer, and
+   the default is agent-facing — so a new command cannot silently opt out.
 
 The normative rules — envelope members, default list schema, `help[]`,
 empty-state, channel, and classification — live in
@@ -67,9 +79,15 @@ until later stories migrate and then delete them.
   ships without a conforming fixture.
 - Token cost of inventory commands is bounded by the default list row, with
   `help[]` pointing at `arm show` for detail.
-- `harness-hook` stays on its platform protocol. Exemption is by
-  classification, never by name, so a renamed hook does not accidentally
-  become agent-facing, and a new command cannot hide from the lint by
-  copying the hook's name pattern.
+- `harness-hook` stays on its platform protocol, and canonical artifact
+  producers keep emitting their artifacts verbatim, so the documented
+  `arm review prepare … > bundle.json` flow and `completion` scripts keep
+  validating. Exemption is by classification, never by name, so a renamed
+  hook does not accidentally become agent-facing, and a new command cannot
+  hide from the lint by copying the hook's name pattern.
+- The Artifact Output admission test — named consumer, foreign shape,
+  documented verbatim redirect — is what keeps the second carve-out from
+  widening into "my output is awkward to envelope". A command whose shape
+  this contract could own is a migration target, not an exemption.
 - Alternate encodings (TOON and others) are out of this ADR; parking or
   adopting them is a later decision.
