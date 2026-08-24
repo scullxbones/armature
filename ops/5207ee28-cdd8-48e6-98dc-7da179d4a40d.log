@@ -4600,3 +4600,4 @@
 ["transition","AOC-S3-T5",1787543217,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
 ["transition","AOC-S4",1787543217,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
 ["transition","AOC-S4-T1",1787543218,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
+["amend","AOC-S2-T1",1787543218,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/ready.go","cmd/armature/ready_test.go","docs/commands.md"]}]
