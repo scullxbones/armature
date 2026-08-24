@@ -1,6 +1,14 @@
 # The Agent Output Contract
 
 Decision record for `arm`'s structured output surface. Settled 2026-08-23.
+Ratified by [ADR 0017](../adr/0017-agent-output-contract.md).
+
+This file is the lint target. A later shape lint walks the cobra command
+tree and checks a golden fixture per agent-facing command against **Normative
+spec** only. A rule that is not in that section is not a lint rule.
+
+The contract is the expand-contract *target*. Current CLI writers are not
+required to conform until they are migrated.
 
 ## Why
 
@@ -153,3 +161,180 @@ touches every command, and open work already exists on most of them. `doctor`, `
 and `render-context` are deliberately excluded from `AOC-S2-T4` for this reason and
 migrate after their owners land, caught by the `AOC-S3-T3` lint rather than scheduled
 by hand.
+
+## Normative spec
+
+Keywords MUST / MUST NOT / SHOULD / MAY are used as in RFC 2119.
+
+### N1. Applicability
+
+1. The contract applies to every **agent-facing** command when
+   `--format=json` or `--format=agent` is in effect, including when that
+   format is implied (`--non-interactive`, non-TTY auto-detect).
+2. `--format=json` and `--format=agent` MUST emit the same envelope object:
+   same required keys, types, and semantics. Whitespace MAY differ.
+3. `--format=human` is unconstrained by this spec.
+4. Failure reporting (non-zero exit, error object) is out of scope here.
+   Result data still MUST NOT be moved to stderr because an error path
+   exists.
+
+### N2. Envelope
+
+On a successful structured invocation, stdout MUST contain exactly one JSON
+value: a single object, then one terminating newline. That object MUST
+contain:
+
+| Key | Type | Rule |
+|---|---|---|
+| `count` | JSON number | Integer ≥ 0. MUST equal the length of the payload array. MUST be the true total; the payload MUST NOT be silently capped or paginated. |
+| *payload key* | JSON array | Command-declared plural name for the contents (`issues`, `workers`, `worktrees`, …). MUST NOT be the literal key `payload` unless the contents are themselves named payload. MUST be present. MUST NOT be `null`. |
+| `help` | JSON array of strings | MUST be present. MUST NOT be `null`. Each element MUST be a non-empty string. |
+
+The payload key is per-command. Issue-inventory commands (`list`, `ready`,
+and any new issue list) declare `issues`. `show` is a detail view of one
+issue: same envelope, payload key `issues`, `count` 1. A missing issue is
+an error, not an empty state.
+
+Additional members MAY exist (adjuncts). An adjunct MUST NOT replace
+`count`, the payload array, or `help`, and MUST NOT be the only place a
+result row is represented. Adjuncts are how `--waves` and expired claims
+fold into the same object (see N3, examples).
+
+JSONL, a top-level array, a top-level string, or more than one JSON value
+on stdout MUST NOT be used for agent-facing structured output.
+
+### N3. Channel
+
+1. The envelope MUST be written to stdout.
+2. Result data MUST NOT be written to stderr. stderr is not a second
+   structured results channel.
+3. Diagnostics that are part of the result (expired claims, wave grouping,
+   truncation notices that describe the payload) MUST appear as envelope
+   members, not as a sibling JSON value on stderr.
+
+### N4. Default list schema
+
+The default issue-inventory row (`arm list`) MUST be a JSON object with
+exactly these keys, all strings:
+
+- `id`
+- `type`
+- `status`
+- `title`
+
+`outcome` MUST NOT appear on a list row. Truncating it is not a substitute
+for omitting it. Detail lives on `arm show`.
+
+Additional row keys MUST NOT appear on the default `arm list` row. Other
+commands that use the `issues` payload key MUST include those four keys and
+MAY extend the row with command-specific keys documented in the fixture the
+shape lint will check. They MUST NOT add `outcome` to a list row.
+
+### N5. `help[]`
+
+1. `help` trails the payload. It is next-action text, not a second copy of
+   the rows.
+2. Elements SHOULD be one line each and SHOULD name a concrete command when
+   a next step exists.
+3. Issue-list commands MUST include an element that points at `arm show`
+   for detail.
+4. `help` MUST NOT embed payload rows, stack traces, or debug dumps.
+5. Order is stable: index 0 is the most actionable hint.
+
+### N6. Empty state
+
+A successful match of zero items is still the envelope:
+
+- `count` MUST be `0`.
+- The payload array MUST be present and empty (`[]`), not omitted, not
+  `null`.
+- `help` MUST be non-empty and MUST name the reason the result is empty
+  (filter, queue, or environment). That reason MUST NOT live only on
+  stderr or only in a human-prose line.
+
+A bare `[]`, an omitted payload key, a missing envelope, or exit 0 with no
+stdout MUST NOT represent emptiness. A failed invocation is an error, not
+an empty state.
+
+### N7. Protocol Output carve-out
+
+A command classified **Protocol Output** MUST NOT emit this envelope. It
+speaks its own stdin/stdout protocol with the host harness.
+
+Exemption from envelope lint is by that classification, never by command
+name, path, or `Use` string.
+
+The sole Protocol Output command is `harness-hook`.
+
+### N8. Command classification
+
+Every CLI command is **agent-facing** or **Protocol Output**.
+
+1. The default is agent-facing.
+2. Protocol Output MUST be an explicit classification on the command.
+3. A new command MUST NOT become Protocol Output by omission, by copying a
+   name pattern, or by skipping a fixture.
+
+## Worked examples
+
+Successful list (default row, `help[]` points at detail):
+
+```json
+{
+  "count": 2,
+  "issues": [
+    {"id": "AOC-S1-T1", "type": "task", "status": "claimed", "title": "Contract definition: ADR 0017 and the normative output spec"},
+    {"id": "AOC-S1-T2", "type": "task", "status": "open", "title": "Envelope and channel helpers, added alongside existing output"}
+  ],
+  "help": ["arm show <id> for outcome, scope, and acceptance"]
+}
+```
+
+Definitive empty ready queue:
+
+```json
+{
+  "count": 0,
+  "issues": [],
+  "help": ["no issues are ready to claim; blockers are unmerged or claims are active"]
+}
+```
+
+Ready queue with adjuncts (waves and expired claims stay on stdout):
+
+```json
+{
+  "count": 2,
+  "issues": [
+    {"id": "AOC-S2-T2", "type": "task", "status": "open", "title": "arm list conforms to the contract"},
+    {"id": "AOC-S2-T1", "type": "task", "status": "open", "title": "arm ready conforms to the contract"}
+  ],
+  "waves": [
+    ["AOC-S2-T2"],
+    ["AOC-S2-T1"]
+  ],
+  "expired_claims": [
+    {"id": "AOC-S9-T1", "status": "claimed", "claimed_by": "worker-1"}
+  ],
+  "help": [
+    "dispatch one wave at a time",
+    "arm show <id> for detail"
+  ]
+}
+```
+
+Non-conforming shapes (lint MUST reject for agent-facing commands):
+
+- `[{"id":"X","title":"…"}]` — top-level array, no envelope, no `count`/`help`.
+- `{"count":1,"issues":[]}` — `count` ≠ payload length; `help` omitted.
+- `{"count":0}` — payload key omitted; empty state is not definitive.
+- Two JSON values, stdout array plus stderr array — second channel.
+
+## Sequencing
+
+- **AOC-S1-T2** adds envelope constructors and classification beside existing
+  writers. No command migrates there.
+- **AOC-S2** migrates agent-facing commands onto this envelope.
+- **AOC-S3** deletes the legacy writers and installs the cobra-enumerated
+  shape lint against this document.
+- Alternate encodings are out of this spec.
