@@ -34,6 +34,36 @@ func (e adapterExitError) Error() string {
 	return fmt.Sprintf("hook blocked with exit code %d", e.code)
 }
 
+// protocolExitError means RunE already completed its wire protocol: a graph or
+// doctor report, bootstrap JSON already written, or the git-hook stderr
+// protocol (ADR 0020 §6–7). handleRootError must not append a Command Failure.
+type protocolExitError struct {
+	err  error
+	code int
+}
+
+func (e protocolExitError) Error() string {
+	if e.err == nil {
+		return ""
+	}
+	return e.err.Error()
+}
+
+func (e protocolExitError) Unwrap() error {
+	return e.err
+}
+
+func skipCommandFailure(err error) error {
+	return skipCommandFailureCode(err, 1)
+}
+
+func skipCommandFailureCode(err error, code int) error {
+	if err == nil {
+		return nil
+	}
+	return protocolExitError{err: err, code: code}
+}
+
 type commandFailureEnvelope struct {
 	Error *armerrors.CommandFailure `json:"error"`
 }
@@ -63,13 +93,23 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 // handleRootError maps a root Execute error to a Command Failure, writes it
 // to stdout, optionally dumps --debug on stderr, and returns the process exit
 // code. adapterExitError is the harness-hook platform integer and is not a
-// Command Failure on the wire.
+// Command Failure on the wire. protocolExitError is the same for reports and
+// git hooks that already wrote their payload.
 func handleRootError(stdout, stderr io.Writer, format string, debug bool, err error) int {
 	if err == nil {
 		return exitcodes.ExitSuccess.Int()
 	}
 	if ace, ok := errors.AsType[adapterExitError](err); ok {
 		return ace.code
+	}
+	if pe, ok := errors.AsType[protocolExitError](err); ok {
+		if debug {
+			fmt.Fprintf(stderr, "DEBUG: %+v\n", err)
+		}
+		if pe.code == 0 {
+			return 1
+		}
+		return pe.code
 	}
 	cf := armerrors.Unmapped(err)
 	renderCommandFailure(stdout, format, cf)

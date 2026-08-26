@@ -107,3 +107,106 @@ func TestHandleRootErrorWritesAgentEnvelopeToStdout_REQ_LNGHZN_S6_T1(t *testing.
 	assert.Contains(t, stderr.String(), "DEBUG:")
 	assert.NotContains(t, stderr.String(), `"error"`)
 }
+
+func executeThenHandleRootError(t *testing.T, stdout, stderr *bytes.Buffer, args ...string) int {
+	t.Helper()
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
+	root := newRootCmd()
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	root.SetArgs(args)
+	err := root.Execute()
+	format, _ := root.PersistentFlags().GetString("format")
+	return handleRootError(stdout, stderr, format, false, err)
+}
+
+func assertSingleJSONObject(t *testing.T, stdout string) map[string]any {
+	t.Helper()
+	raw := strings.TrimSpace(stdout)
+	require.True(t, json.Valid([]byte(raw)), "stdout must be exactly one JSON object, got %q", stdout)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &payload))
+	return payload
+}
+
+func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
+	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr, "validate", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasError := payload["error"]
+	assert.False(t, hasError, "graph findings must not be presented as a Command Failure")
+	_, hasWarnings := payload["warnings"]
+	assert.True(t, hasWarnings, "stdout must remain the validation report")
+
+	humanOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, humanOut, new(bytes.Buffer), "validate", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	assert.Contains(t, humanOut.String(), "WARNING:")
+	assert.NotContains(t, humanOut.String(), `"code":"GENERAL-1"`)
+	assert.NotContains(t, humanOut.String(), "Error [GENERAL-1]")
+}
+
+func TestDoctorFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	plantVerifiedTaskUnder(t, repo, "task-orphan", "src/orphan.go", "NO-SUCH-PARENT")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "doctor", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasError := payload["error"]
+	assert.False(t, hasError, "doctor checks must not be presented as a Command Failure")
+	_, hasChecks := payload["checks"]
+	assert.True(t, hasChecks, "stdout must remain the doctor report")
+}
+
+func TestBootstrapJSONFailureIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	writeFile(t, repo, "tracked.txt", "v1")
+	run(t, repo, "git", "add", "tracked.txt")
+	run(t, repo, "git", "commit", "-m", "add tracked")
+	writeFile(t, repo, "tracked.txt", "dirty")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "bootstrap", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasErrorEnvelope := payload["error"]
+	assert.False(t, hasErrorEnvelope, "bootstrap JSON result must not be concatenated with a Command Failure")
+	_, hasRepoSetup := payload["repo_setup"]
+	assert.True(t, hasRepoSetup, "stdout must remain the BootstrapResult")
+}
+
+func TestHookErrorsSkipCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	unknownOut := new(bytes.Buffer)
+	unknownErr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, unknownOut, unknownErr, "hook", "run", "unknown-hook", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, unknownOut.String(), "arm hook stays on the git protocol; stdout must not get a Command Failure")
+	assert.NotContains(t, unknownErr.String(), `"code":"GENERAL-1"`)
+
+	writeFile(t, repo, ".armature/ops/test.log", "test ops content")
+	run(t, repo, "git", "add", filepath.Join(".armature", "ops", "test.log"))
+
+	refuseOut := new(bytes.Buffer)
+	refuseErr := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, refuseOut, refuseErr, "hook", "run", "pre-commit", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, refuseOut.String(), "pre-commit refusal must not write a Command Failure to stdout")
+	assert.Contains(t, refuseErr.String(), "Refusing to commit .armature/ops/")
+}

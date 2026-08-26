@@ -148,6 +148,18 @@ func TestHandleRootError_AdapterExitError(t *testing.T) {
 	assert.Empty(t, stdout.String())
 }
 
+// TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1 verifies reports and
+// git-hook errors that already wrote their payload skip the Command Failure.
+func TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	err := skipCommandFailure(fmt.Errorf("validation failed with 1 error(s) and 0 warning(s)"))
+	code := handleRootError(stdout, stderr, "json", true, err)
+	assert.Equal(t, 1, code)
+	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "DEBUG:")
+}
+
 // TestRenderStringSlice_NonEmpty verifies non-empty slices produce JSON arrays.
 func TestRenderStringSlice_NonEmpty(t *testing.T) {
 	result := renderStringSlice([]string{"a", "b", "c"})
