@@ -28,6 +28,25 @@ func newHookCmd() *cobra.Command {
 	return cmd
 }
 
+func isGitHookCommand(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Name() == "hook" {
+			return true
+		}
+	}
+	return false
+}
+
+func gitHookProtocol(cmd *cobra.Command, err error) error {
+	if err == nil {
+		return nil
+	}
+	if isGitHookCommand(cmd) {
+		return skipCommandFailure(err)
+	}
+	return err
+}
+
 func newHookRunCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "run <hook-name> [args...]",
@@ -45,7 +64,12 @@ Examples:
   arm hook run post-commit
   arm hook run post-merge
   arm hook run prepare-commit-msg .git/COMMIT_EDITMSG`,
-		Args: cobra.MinimumNArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
+				return skipCommandFailure(err)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			hookName := args[0]
 			hookArgs := args[1:]

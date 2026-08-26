@@ -103,6 +103,9 @@ func handleRootError(stdout, stderr io.Writer, format string, debug bool, err er
 		return ace.code
 	}
 	if pe, ok := errors.AsType[protocolExitError](err); ok {
+		if pe.err != nil {
+			fmt.Fprintln(stderr, pe.err.Error())
+		}
 		if debug {
 			fmt.Fprintf(stderr, "DEBUG: %+v\n", err)
 		}
