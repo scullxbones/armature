@@ -38,15 +38,15 @@
       "id": "AOC-S1-T1",
       "title": "Contract definition: ADR 0017 and the normative output spec",
       "type": "task",
-      "scope": "docs/adr/0017-agent-output-contract.md (new), docs/design/agent-output-contract.md",
+      "scope": "docs/adr/0017-agent-output-contract.md (new), docs/design/agent-output-contract.md, docs/design/agent-output-contract-plan.json",
       "priority": "high",
       "parent": "AOC-S1",
       "blocked_by": [],
       "notes": [
-        "Glossary terms Agent Output Contract and Protocol Output, and the Surface amendment covering output shape, landed with the decision record. This task adds the ADR and the normative spec section.",
-        "ADR 0017 covers one decision with three faces: single channel (stdout, errors included, stderr diagnostics-only), uniform envelope including single-item responses, and the Protocol Output carve-out for harness-hook. It also records that the contract is deliberately unversioned pre-1.0 with TOPTIER-S6-T3 as the freeze point, and cites AXI as prior art rather than a conformed-to standard."
+        "Glossary terms Agent Output Contract, Protocol Output and Artifact Output, and the Surface amendment covering output shape, landed with the decision record. This task adds the ADR and the normative spec section.",
+        "ADR 0017 covers one decision with three faces: single channel (stdout, errors included, stderr diagnostics-only), uniform envelope including single-item responses, and explicit Protocol Output and mode-sensitive Artifact Output carve-outs. It also records that the contract is deliberately unversioned pre-1.0 with TOPTIER-S6-T3 as the freeze point, and cites AXI as prior art rather than a conformed-to standard."
       ],
-      "dod": "ADR 0017 records the Agent Output Contract: single channel, uniform envelope {count, payload[], help[]}, and the Protocol Output carve-out. docs/design/agent-output-contract.md gains a normative section stating the envelope, channel, default list schema, help[] rules and empty-state rules precisely enough for a lint to be written against it.",
+      "dod": "ADR 0017 records the Agent Output Contract: single channel, uniform envelope {count, payload[], help[]}, and the Protocol Output and Artifact Output carve-outs. docs/design/agent-output-contract.md gains a normative section stating the envelope, channel, default list schema, help[] rules, empty-state rules and mode-sensitive classification precisely enough for a lint to be written against it. The implementation plan carries those classifications into the downstream helper, lint and census tasks.",
       "acceptance": [
         "ADR 0017 exists and is referenced from docs/design/agent-output-contract.md",
         "make validate-doc-examples green",
@@ -86,6 +86,35 @@
       ]
     },
     {
+      "id": "AOC-S1-T3",
+      "title": "Mode-sensitive Artifact Output classification",
+      "type": "task",
+      "scope": "internal/output/classify.go, internal/output/classify_test.go, cmd/armature/review.go, cmd/armature/review_test.go, cmd/armature/cmd_completion.go, cmd/armature/cmd_completion_test.go, cmd/armature/decompose.go, cmd/armature/cmd_extra_test.go",
+      "priority": "high",
+      "parent": "AOC-S1",
+      "blocked_by": [
+        "AOC-S1-T2",
+        "LNGHZN-S6-T2"
+      ],
+      "notes": [
+        "Remediation added after AOC-S1-T2 completed with only agent-facing and Protocol Output classifications. Preserve that history; this task extends the classifier rather than retroactively claiming T2 delivered the third class.",
+        "Artifact Output applies to review prepare with --output unset, completion, and dag apply --schema|--example. Each mark cites its governing schema or consumer; review prepare --output <file> and ordinary dag apply remain agent-facing."
+      ],
+      "dod": "The output classifier adds explicit, cited Artifact Output alongside agent-facing and Protocol Output. Classification is mode-sensitive: the three normative artifact modes opt out, while other modes of the same commands remain agent-facing. Existing output bytes do not change.",
+      "acceptance": [
+        "TestArtifactOutputClassificationIsModeSensitive_REQ_AOC_S1_T3 passes",
+        "TestArtifactOutputModesCiteGoverningShape_REQ_AOC_S1_T3 passes",
+        "TestArtifactCommandsKeepResultModesAgentFacing_REQ_AOC_S1_T3 passes",
+        "make check green"
+      ],
+      "source": "63be1d55-5014-47cf-ac51-eea876931e93",
+      "context_files": [
+        "docs/design/agent-output-contract.md",
+        "docs/schemas/review-bundle.schema.json",
+        "docs/commands.md"
+      ]
+    },
+    {
       "id": "AOC-S2",
       "title": "Migrate commands to the Agent Output Contract",
       "type": "story",
@@ -109,7 +138,7 @@
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
-        "AOC-S1-T2"
+        "AOC-S1-T3"
       ],
       "notes": [
         "Carries the measured saving: 342,560 bytes to roughly 89,000 on a 738-issue graph.",
@@ -137,7 +166,7 @@
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
-        "AOC-S1-T2",
+        "AOC-S1-T3",
         "LNGHZN-S6-T2",
         "LNGHZN-S6-T4",
         "AOC-S2-T2"
@@ -323,13 +352,14 @@
       ],
       "notes": [
         "This is the guardrail. The enumeration source must be the command tree itself: a fixture list maintained by hand is a gate over the commands somebody remembered to fixture, which is the hole this task exists to close.",
-        "Conformance means: envelope present, payload key named, count present on collections, help[] present where required, nothing written to stderr, definitive empty state."
+        "Conformance means: envelope present, payload key named, count present on collections, help[] present where required, nothing written to stderr, definitive empty state. Protocol Output and Artifact Output are exempt only through explicit classification; mode-sensitive Artifact Output commands fixture both their artifact and agent-facing modes."
       ],
-      "dod": "A lint walks every registered cobra command and asserts that each agent-facing command has a golden fixture conforming to the contract. A command with no fixture fails the lint rather than being skipped, so adding a command without a fixture fails make check. Protocol Output commands are exempted only via their explicit classification, never by name.",
+      "dod": "A lint enumerates every registered cobra command mode. Each agent-facing mode requires a conforming golden; a missing fixture fails make check. Protocol Output and Artifact Output modes are exempt only by explicit classification, never by name. Each Artifact Output mode is checked against its cited foreign shape, while other modes of the same command require envelope fixtures.",
       "acceptance": [
         "TestEveryAgentFacingCommandHasConformingFixture_REQ_AOC_S3_T3 passes",
         "TestNewCommandWithoutFixtureFailsLint_REQ_AOC_S3_T3 passes",
         "TestProtocolOutputExemptedByClassificationNotName_REQ_AOC_S3_T3 passes",
+        "TestArtifactOutputModesUseForeignShapeAndOtherModesConform_REQ_AOC_S3_T3 passes",
         "make check green"
       ],
       "source": "63be1d55-5014-47cf-ac51-eea876931e93",
@@ -350,9 +380,10 @@
       "notes": [
         "census-drift-check already compares CLI commands and flags bidirectionally; this extends the same mechanism to the surfaces the Surface glossary amendment brought into scope."
       ],
-      "dod": "surface-census.md gains rows for structured output shape per agent-facing command and for each command's agent-facing / Protocol Output classification. census-drift-check.sh compares both against code bidirectionally, so a classification changed in code without a census row fails, and a census row with no code counterpart fails. The existing census drift self-test covers the new sections.",
+      "dod": "surface-census.md records structured shape and agent-facing / Protocol Output / Artifact Output classification per command mode, including selecting flags and cited shape for Artifact modes. census-drift-check compares rows with code bidirectionally, failing changed classifications or flags without rows and phantom rows without code. The self-test covers the new sections.",
       "acceptance": [
         "TestCensusCoversOutputShape_REQ_AOC_S3_T4 passes",
+        "TestCensusCoversModeSensitiveArtifactOutput_REQ_AOC_S3_T4 passes",
         "make census-drift-check green",
         "make test-census-drift-check green",
         "make check green"
