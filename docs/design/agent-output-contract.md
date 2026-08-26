@@ -141,7 +141,7 @@ hole open one level down.
 
 ## How the work is decomposed
 
-Epic `AOC`, four stories, 14 tasks. `arm dag apply` and `arm validate` are both green
+Epic `AOC`, four stories, 15 tasks. `arm dag apply` and `arm validate` are both green
 against this shape; the plan is checked in at `docs/design/agent-output-contract-plan.json`
 and regenerated from the graph so the two cannot drift silently.
 
@@ -391,6 +391,8 @@ Non-conforming shapes (lint MUST reject for agent-facing commands):
 
 - **AOC-S1-T2** adds envelope constructors and classification beside existing
   writers. No command migrates there.
+- **AOC-S1-T3** adds the cited, mode-sensitive Artifact Output classification
+  omitted from T2. Existing output remains byte-identical.
 - **AOC-S2** migrates agent-facing commands onto this envelope.
 - **AOC-S3** deletes the legacy writers and installs the cobra-enumerated
   shape lint against this document.
