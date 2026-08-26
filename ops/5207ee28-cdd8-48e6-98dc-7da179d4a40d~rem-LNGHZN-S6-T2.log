@@ -7,3 +7,4 @@
 ["transition","LNGHZN-S6-T2",1787777818,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"to":"done","outcome":"Ready mapping is asserted on a real snapshot-load failure; specific codes no longer cop out to --help; claim/review/transition classifiers attach discovery, prepare --output, or doctor instead of skip/help."}]
 ["transition","LNGHZN-S6-T2",1787778409,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"to":"open"}]
 ["claim","LNGHZN-S6-T2",1787778410,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T2","claim_token":"0536067c28013d14e06c1bc186e287d4"}]
+["note","LNGHZN-S6-T2",1787778618,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"msg":"Cobra pre-RunE usage (required --to, MaximumNArgs) never hit command mappers; wrapping Args and checking --to in RunE so missing/extra usage is USAGE/exit 2.","note_id":"note-1787778618525930500"}]
