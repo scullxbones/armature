@@ -6,3 +6,4 @@
 ["transition","LNGHZN-S6-T1",1787766597,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"to":"open"}]
 ["claim","LNGHZN-S6-T1",1787766598,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T1","claim_token":"05d647a8a27abdfb4711e1b94231fc51"}]
 ["note","LNGHZN-S6-T1",1787766613,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"msg":"Remediation start: stop handleRootError concatenating Command Failure onto stdout already written by validate/doctor/bootstrap; keep arm hook on platform/git protocol (no GENERAL-1 stdout wrap).","note_id":"note-1787766613066494443"}]
+["note","LNGHZN-S6-T1",1787766922,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"msg":"handleRootError skips protocolExitError so validate/doctor reports, bootstrap JSON, and arm hook git protocol stay one payload; unmapped RunE still wraps GENERAL-1.","note_id":"note-1787766922597543377"}]
