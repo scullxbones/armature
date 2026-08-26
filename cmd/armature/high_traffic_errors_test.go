@@ -75,6 +75,15 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.NotContains(t, gitJoined, "arm list")
 	assert.True(t, strings.Contains(gitJoined, "arm doctor") || strings.Contains(gitJoined, "arm show"),
 		"git/worktree misses must not reuse issue-discovery recovery, next_actions=%v", gitCF.NextActions)
+
+	extra := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, extra, new(bytes.Buffer),
+		"claim", "--repo", repo, "a", "b", "c", "--format", "agent")
+	assert.Equal(t, 2, code)
+	extraCF := agentFailureFromStdout(t, extra.String())
+	assert.Equal(t, armerrors.CodeUSAGE, extraCF.Code)
+	assert.Contains(t, extraCF.Cause, "accepts at most")
+	require.NotEmpty(t, extraCF.NextActions)
 }
 
 func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -169,6 +178,25 @@ func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, cf.Cause, round.Cause)
 	assert.Equal(t, cf.NextActions, round.NextActions)
 	assert.Equal(t, cf.ExitCode, round.ExitCode)
+
+	missingTo := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, missingTo, new(bytes.Buffer),
+		"transition", "--repo", repo, "--issue", "task-01", "--format", "agent")
+	assert.Equal(t, 2, code)
+	toCF := agentFailureFromStdout(t, missingTo.String())
+	assert.Equal(t, armerrors.CodeUSAGE, toCF.Code)
+	assert.Contains(t, toCF.Cause, `"to"`)
+	require.NotEmpty(t, toCF.NextActions)
+	assert.Equal(t, 2, toCF.ExitCode)
+
+	extraArgs := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, extraArgs, new(bytes.Buffer),
+		"transition", "--repo", repo, "task-01", "extra", "--to", "done", "--format", "agent")
+	assert.Equal(t, 2, code)
+	extraCF := agentFailureFromStdout(t, extraArgs.String())
+	assert.Equal(t, armerrors.CodeUSAGE, extraCF.Code)
+	assert.Contains(t, extraCF.Cause, "accepts at most")
+	require.NotEmpty(t, extraCF.NextActions)
 }
 
 func TestReadyAndRenderContextErrorsMapped_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -189,6 +217,15 @@ func TestReadyAndRenderContextErrorsMapped_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, 2, code)
 	usage := agentFailureFromStdout(t, usageOut.String())
 	assert.Equal(t, armerrors.CodeUSAGE, usage.Code)
+
+	extraRC := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, extraRC, new(bytes.Buffer),
+		"render-context", "--repo", repo, "a", "b", "--format", "agent")
+	assert.Equal(t, 2, code)
+	extra := agentFailureFromStdout(t, extraRC.String())
+	assert.Equal(t, armerrors.CodeUSAGE, extra.Code)
+	assert.Contains(t, extra.Cause, "accepts at most")
+	require.NotEmpty(t, extra.NextActions)
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	require.NoError(t, os.RemoveAll(opsDir))

@@ -1138,7 +1138,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
 
   # Claim using flag style
   $ arm claim --issue another-task-id --worktree`,
-		Args: cobra.MaximumNArgs(2),
+		Args: func(cmd *cobra.Command, args []string) error {
+			return mapClaimError(cobra.MaximumNArgs(2)(cmd, args))
+		},
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer func() { err = mapClaimError(err) }()
 			ctx := currentCtx(cmd)
