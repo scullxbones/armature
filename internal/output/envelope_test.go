@@ -151,6 +151,110 @@ func TestEnvelopeWritesToStdout_REQ_AOC_S1_T2(t *testing.T) {
 	require.Equal(t, []any{"no issues are ready to claim; blockers are unmerged or claims are active"}, help)
 }
 
+func TestEnvelopeMemberOrder_REQ_AOC_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	// Payload keys chosen to straddle "count" and "help" lexicographically:
+	// map-backed marshaling sorts "artifacts" ahead of "count" and "help"
+	// ahead of "issues", so only ordered marshaling passes for all three.
+	for _, payloadKey := range []string{"issues", "workers", "artifacts"} {
+		t.Run(payloadKey, func(t *testing.T) {
+			t.Parallel()
+
+			env, err := NewEnvelope(payloadKey, []contractListRow{{ID: "AOC-S1-T2"}},
+				[]string{"arm show <id> for detail"})
+			require.NoError(t, err)
+
+			marshaled, err := env.MarshalJSON()
+			require.NoError(t, err)
+			require.Equal(t, []string{"count", payloadKey, "help"}, topLevelKeyOrder(t, marshaled),
+				"help must trail the payload (N5.1)")
+
+			var stdout bytes.Buffer
+			require.NoError(t, WriteEnvelope(&stdout, env))
+			require.Equal(t, []string{"count", payloadKey, "help"}, topLevelKeyOrder(t, stdout.Bytes()),
+				"stdout bytes must carry the same member order")
+		})
+	}
+}
+
+func TestEnvelopeDoesNotEscapeContractText_REQ_AOC_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	env, err := NewEnvelope("issues",
+		[]contractListRow{{ID: "AOC-S1-T2", Title: "<hold> & wait"}},
+		[]string{"arm show <id> for outcome, scope, and acceptance"})
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	require.NoError(t, WriteEnvelope(&stdout, env))
+	raw := stdout.String()
+
+	require.NotContains(t, raw, "\\u003c", "< must survive verbatim, not as an escape")
+	require.NotContains(t, raw, "\\u003e", "> must survive verbatim, not as an escape")
+	require.NotContains(t, raw, "\\u0026", "& must survive verbatim, not as an escape")
+	require.Contains(t, raw, "arm show <id> for outcome, scope, and acceptance")
+	require.Contains(t, raw, "<hold> & wait")
+
+	// Escaping is a serialization detail, never a semantic one: the bytes
+	// must still decode back to exactly the strings that went in.
+	var decoded struct {
+		Issues []contractListRow `json:"issues"`
+		Help   []string          `json:"help"`
+	}
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+	require.Equal(t, "<hold> & wait", decoded.Issues[0].Title)
+	require.Equal(t, []string{"arm show <id> for outcome, scope, and acceptance"}, decoded.Help)
+}
+
+func TestEnvelopeEmptyStateRequiresHelp_REQ_AOC_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewEnvelope("issues", []contractListRow{}, nil)
+	require.Error(t, err, "N6: zero items with nil help must be rejected")
+	_, err = NewEnvelope("issues", []contractListRow{}, []string{})
+	require.Error(t, err, "N6: zero items with empty help must be rejected")
+
+	var nilSlice []contractListRow
+	_, err = NewEnvelope("issues", nilSlice, nil)
+	require.Error(t, err, "N6: a nil payload slice is an empty state too")
+
+	env, err := NewEnvelope("issues", []contractListRow{}, []string{"no issues match the filter"})
+	require.NoError(t, err, "zero items plus a reason is the conforming empty state")
+	got, err := env.MarshalJSON()
+	require.NoError(t, err)
+	assertJSONEqual(t, []byte(`{"count":0,"issues":[],"help":["no issues match the filter"]}`), got)
+
+	// The helper enforces N6 only. A non-empty result may carry empty help;
+	// N5.3's "point at arm show" rule is per-command and not decidable here.
+	_, err = NewEnvelope("issues", []contractListRow{{ID: "AOC-S1-T2"}}, nil)
+	require.NoError(t, err, "help is mandatory only on the empty state")
+}
+
+// topLevelKeyOrder returns the envelope's member names in serialized order.
+// Unmarshaling into a map would discard exactly the property under test.
+func topLevelKeyOrder(t *testing.T, raw []byte) []string {
+	t.Helper()
+
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	tok, err := dec.Token()
+	require.NoError(t, err)
+	require.Equal(t, json.Delim('{'), tok, "envelope must be a JSON object")
+
+	var keys []string
+	for dec.More() {
+		tok, err := dec.Token()
+		require.NoError(t, err)
+		key, ok := tok.(string)
+		require.True(t, ok, "object member name must be a string")
+		keys = append(keys, key)
+
+		var discard json.RawMessage
+		require.NoError(t, dec.Decode(&discard))
+	}
+	return keys
+}
+
 func assertJSONEqual(t *testing.T, want, got []byte) {
 	t.Helper()
 	var wantV, gotV any
