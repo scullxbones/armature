@@ -167,7 +167,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	for _, a := range actions {
 		for _, op := range a.Ops {
 			if err := appendHighStakesOp(state, logPath, op); err != nil {
-				return err
+				return skipCommandFailure(err)
 			}
 		}
 	}

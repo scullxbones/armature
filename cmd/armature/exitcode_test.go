@@ -157,6 +157,7 @@ func TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1(t *testing.T) {
 	code := handleRootError(stdout, stderr, "json", true, err)
 	assert.Equal(t, 1, code)
 	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "validation failed with 1 error(s) and 0 warning(s)")
 	assert.Contains(t, stderr.String(), "DEBUG:")
 }
 

@@ -9,8 +9,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -199,6 +201,7 @@ func TestHookErrorsSkipCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.Equal(t, 1, code)
 	assert.Empty(t, unknownOut.String(), "arm hook stays on the git protocol; stdout must not get a Command Failure")
 	assert.NotContains(t, unknownErr.String(), `"code":"GENERAL-1"`)
+	assert.Contains(t, unknownErr.String(), "unknown hook", "git protocol is non-zero exit plus a stderr reason")
 
 	writeFile(t, repo, ".armature/ops/test.log", "test ops content")
 	run(t, repo, "git", "add", filepath.Join(".armature", "ops", "test.log"))
@@ -209,4 +212,112 @@ func TestHookErrorsSkipCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.Equal(t, 1, code)
 	assert.Empty(t, refuseOut.String(), "pre-commit refusal must not write a Command Failure to stdout")
 	assert.Contains(t, refuseErr.String(), "Refusing to commit .armature/ops/")
+}
+
+func TestHookPreRunAndArgsStayOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	argsOut := new(bytes.Buffer)
+	argsErr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, argsOut, argsErr, "hook", "run", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, argsOut.String(), `"code":"GENERAL-1"`)
+	assert.NotContains(t, argsOut.String(), "Error [GENERAL-1]")
+	assert.Empty(t, argsOut.String(), "MinimumNArgs must not emit a Command Failure on stdout")
+	assert.NotEmpty(t, argsErr.String(), "git protocol requires a stderr reason when args are missing")
+	assert.NotContains(t, argsErr.String(), `"code":"GENERAL-1"`)
+
+	notRepo := t.TempDir()
+	preOut := new(bytes.Buffer)
+	preErr := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, preOut, preErr, "hook", "run", "pre-commit", "--repo", notRepo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, preOut.String(), `"code":"GENERAL-1"`)
+	assert.NotContains(t, preOut.String(), "Error [GENERAL-1]")
+	assert.Empty(t, preOut.String(), "hook PersistentPreRunE failures must stay on the git protocol")
+	assert.NotEmpty(t, preErr.String(), "git protocol requires a stderr reason when context resolution fails")
+	assert.NotContains(t, preErr.String(), `"code":"GENERAL-1"`)
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}))
+
+	ioOut := new(bytes.Buffer)
+	ioErr := new(bytes.Buffer)
+	missing := filepath.Join(notRepo, "COMMIT_EDITMSG")
+	code = executeThenHandleRootError(t, ioOut, ioErr, "hook", "run", "prepare-commit-msg", missing, "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, ioOut.String(), "prepare-commit-msg IO must not emit a Command Failure on stdout")
+	assert.Contains(t, ioErr.String(), "commit message file")
+	assert.NotContains(t, ioErr.String(), `"code":"GENERAL-1"`)
+}
+
+func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	logPath := filepath.Join(opsDir, "stale-worker.log")
+	staleClaim := time.Now().Add(-2 * time.Hour).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "fixconcat-01", Timestamp: staleClaim, WorkerID: "stale-worker",
+			Payload: ops.Payload{Title: "Doctor fix concat test", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "fixconcat-01", Timestamp: staleClaim, WorkerID: "stale-worker",
+			Payload: ops.Payload{TTL: 5}},
+	}))
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NoError(t, os.Chmod(filepath.Join(opsDir, e.Name()), 0o444))
+	}
+	require.NoError(t, os.Chmod(opsDir, 0o555))
+	t.Cleanup(func() {
+		if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
+			t.Logf("restore ops dir perms: %v", chmodErr)
+		}
+		restored, readErr := os.ReadDir(opsDir)
+		if readErr != nil {
+			t.Logf("readdir ops after restore: %v", readErr)
+			return
+		}
+		for _, e := range restored {
+			p := filepath.Join(opsDir, e.Name())
+			mode := os.FileMode(0o644)
+			if e.IsDir() {
+				mode = 0o755
+			}
+			if chmodErr := os.Chmod(p, mode); chmodErr != nil {
+				t.Logf("restore perms %s: %v", p, chmodErr)
+			}
+			if !e.IsDir() {
+				continue
+			}
+			children, childErr := os.ReadDir(p)
+			if childErr != nil {
+				t.Logf("readdir %s: %v", p, childErr)
+				continue
+			}
+			for _, child := range children {
+				cp := filepath.Join(p, child.Name())
+				if chmodErr := os.Chmod(cp, 0o644); chmodErr != nil {
+					t.Logf("restore perms %s: %v", cp, chmodErr)
+				}
+			}
+		}
+	})
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr, "doctor", "--fix", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	raw := strings.TrimSpace(stdout.String())
+	require.True(t, json.Valid([]byte(raw)), "doctor --fix must emit exactly one JSON value on stdout, got %q", stdout.String())
+	assert.NotContains(t, raw, `"code":"GENERAL-1"`)
+	assert.NotContains(t, raw, `"error"`)
+	assert.NotEmpty(t, stderr.String(), "apply failure after the plan is written must still have a stderr cause")
 }
