@@ -13,3 +13,4 @@
 ["transition","LNGHZN-S6-T2",1787779590,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"to":"done","outcome":"Cobra pre-RunE usage on transition --to and extra positionals now maps to USAGE/exit 2 via command mappers."}]
 ["transition","LNGHZN-S6-T2",1787780055,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"to":"open"}]
 ["claim","LNGHZN-S6-T2",1787780055,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T2","claim_token":"7f7003e14654fd801e692cc2f3ab5333"}]
+["note","LNGHZN-S6-T2",1787780093,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T2",{"msg":"Remediating hi: review commits extra args still GENERAL-1; med: claim issue+not-found classifier matches after-claim rematerialize miss.","note_id":"note-1787780093086549466"}]
