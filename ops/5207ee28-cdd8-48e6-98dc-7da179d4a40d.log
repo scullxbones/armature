@@ -4635,3 +4635,4 @@
 ["unlink","AOC-S2-T2",1787745907,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"AOC-S1-T2","rel":"blocked_by"}]
 ["link","AOC-S2-T1",1787745908,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"AOC-S1-T3","rel":"blocked_by"}]
 ["unlink","AOC-S2-T1",1787745908,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"AOC-S1-T2","rel":"blocked_by"}]
+["source-fingerprint","33618e19-bf05-4a9e-bba3-85dbb215e720",1787747754,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"sha":"a6ac4428c6db9e01ec87901a3d5974b87743dafcbda8dd2eaf39fd84b8198d34","provider":"filesystem"}]
