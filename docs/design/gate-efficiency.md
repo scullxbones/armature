@@ -199,3 +199,41 @@ apart. E13 is catalogued in `docs/validation-codes.md`.
 
 T1–T4 are parallelizable. T1 is text-only and pays off on the next story even
 before tooling lands.
+
+## TUI seam extraction (LNGHZN-S6-T4)
+
+Interactive terminal-entry code in `cmd/armature` lives in `*_tui.go` files
+(`ready_tui.go`, `stalereview_tui.go`, `dagsum_tui.go`, `tui_tui.go`): program
+construction, model wiring, `tea.NewProgram`. Non-interactive logic and
+post-TUI side effects (claim/note/dag-transition ops) stay in the host files
+and remain covered. `.gremlins.yaml` excludes `_tui\\.go$` on the same
+precedent as `_windows.go`, so mutation no longer treats unreachable
+interactive sites as test-quality misses.
+
+`make coverage-check` still counts `*_tui.go` statements (that script is
+outside this task's scope). Extracting 0%-covered seam files therefore
+slightly lowers the cmd aggregate even as the host files rise.
+
+Measured on `task/LNGHZN-S6-T4` immediately before and after the extract
+(same worktree; statement coverage via `make coverage` / `scripts/coverage-check.sh`;
+cmd mutant-coverage via `gremlins unleash ./cmd`).
+
+| Metric | Before | After |
+|---|---|---|
+| cmd statement coverage | 83.86% | 83.56% |
+| internal statement coverage | 87.11% | 87.12% |
+| cmd mutant-coverage | 95.15% (nearest prior `./cmd` gremlins report: killed 1274, lived 0, not_covered 65; not re-run on this HEAD while the seam tests were red) | 95.35% (this HEAD after extract+exclude: killed 1292, lived 0, not_covered 63) |
+| cmd efficacy | 100.00% | 100.00% |
+
+Host-file statement coverage (the non-interactive remainder):
+
+| File | Before | After |
+|---|---|---|
+| `cmd/armature/ready.go` (`newReadyCmd`) | 62.6% | 66.0% |
+| `cmd/armature/stalereview.go` (`newStaleReviewCmd`) | 65.4% | 68.0% |
+| `cmd/armature/dagsum.go` (`newDAGSummaryCmd`) | 64.6% | 67.1% |
+| `cmd/armature/tui.go` (`newTUICmd`) | 68.2% | 78.9% |
+
+Seam files `runReadyTUI`, `runStaleReviewTUI`, `runDAGSummaryTUI`, and
+`runBoardTUI` measure 0.0% statement coverage — they are the excluded
+mutation boundary, not a coverage-check exclusion.

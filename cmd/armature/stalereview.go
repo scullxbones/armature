@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
@@ -133,13 +132,10 @@ func newStaleReviewCmd() *cobra.Command {
 				return nil
 			}
 
-			m := stalereview.New(reviewItems, workerID)
-			p := tea.NewProgram(m)
-			finalModel, err := p.Run()
+			final, err := runStaleReviewTUI(reviewItems, workerID)
 			if err != nil {
-				return fmt.Errorf("stale-review TUI: %w", err)
+				return err
 			}
-			final := finalModel.(stalereview.Model) //nolint:errcheck // map of serializable values
 
 			decisions := final.Decisions()
 			items := final.Items()

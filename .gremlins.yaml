@@ -19,9 +19,14 @@ unleash:
   # filelock_other.go by its explicit `!unix && !windows` tag. That these files
   # compile is gated separately by `make crosscompile`; their behavior is
   # exercised on the platforms that actually build them.
+  # `*_tui.go` is the cmd/armature interactive boundary (program construction,
+  # model wiring). Tests do not drive a real terminal, so those sites are
+  # unreachable by construction; excluding them measures test quality of the
+  # remaining non-interactive logic (LNGHZN-S6-T4).
   exclude-files:
     - "_windows\\.go$"
     - "filelock_other\\.go$"
+    - "_tui\\.go$"
 
   # Quality gates. mutant-coverage is a de-emphasized SECONDARY reachability
   # proxy: it measures the same thing as `make coverage-check` (statement
