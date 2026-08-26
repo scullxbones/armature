@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	ctxpkg "github.com/scullxbones/armature/internal/context"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/spf13/cobra"
 )
@@ -24,7 +27,8 @@ func newRenderContextCmd() *cobra.Command {
 		Use:   "render-context [issue-id]",
 		Short: "Render assembled context for an issue",
 		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			defer func() { err = mapRenderContextError(err) }()
 			if rcIssue == "" && len(args) > 0 {
 				rcIssue = args[0]
 			}
@@ -109,4 +113,28 @@ func newRenderContextCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&rcRaw, "raw", false, "Skip truncation")
 	cmd.Flags().StringVar(&rcAt, "at", "", "Replay context as of this git commit SHA")
 	return cmd
+}
+
+const codeRenderContext1 = "RENDER-CONTEXT-1"
+
+func init() {
+	armerrors.Register(codeRenderContext1)
+}
+
+func mapRenderContextError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return cf
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "issue ID is required") {
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, 2, err)
+	}
+	if strings.Contains(msg, "not found") {
+		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
+	}
+	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm render-context --help"}, 1, err)
 }

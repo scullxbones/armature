@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -24,6 +26,37 @@ import (
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worktree"
 )
+
+const codeClaim1 = "CLAIM-1"
+
+func init() {
+	armerrors.Register(codeClaim1)
+}
+
+// mapClaimError presents claim RunE errors as a Command Failure at the CLI
+// port. Core helpers still return ordinary errors.
+func mapClaimError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return cf
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "issue ID is required"),
+		strings.Contains(msg, "--worktree is required"),
+		strings.Contains(msg, "accepts at most"):
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm claim --help"}, 2, err)
+	case strings.Contains(msg, "not found"):
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm ready", "arm list"}, 1, err)
+	case strings.Contains(msg, "use --force"):
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --force --worktree"}, 1, err)
+	default:
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --help"}, 1, err)
+	}
+}
 
 // defaultWorktreeFlagValue preserves the established value-less --worktree
 // form while allowing --worktree <path> for a caller-selected new worktree.
@@ -1106,9 +1139,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
   # Claim using flag style
   $ arm claim --issue another-task-id --worktree`,
 		Args: cobra.MaximumNArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			defer func() { err = mapClaimError(err) }()
 			ctx := currentCtx(cmd)
-			var err error
 			// default_ttl in config.json is the single source of --ttl's default;
 			// an explicit --ttl always overrides it. It already governs staleness
 			// detection elsewhere (hook.go, workers.go) — this makes claim's

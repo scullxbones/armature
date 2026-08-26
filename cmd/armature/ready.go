@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/dag"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
@@ -46,7 +48,8 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
   # Diagnose why open tasks are not in the ready queue
   $ arm ready --explain`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			defer func() { err = mapReadyError(err) }()
 			ctx := currentCtx(cmd)
 
 			store := newSnapshotStore(ctx)
@@ -226,4 +229,21 @@ func filterExpiredClaimsByAssignedWorker(
 		}
 	}
 	return filtered
+}
+
+const codeReady1 = "READY-1"
+
+func init() {
+	armerrors.Register(codeReady1)
+}
+
+func mapReadyError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return cf
+	}
+	return armerrors.Wrap(codeReady1, err.Error(), []string{"arm doctor"}, 1, err)
 }
