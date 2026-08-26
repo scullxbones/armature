@@ -4738,3 +4738,4 @@
 ["source-link","LNGHZN-S6-T4",1787747928,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"b4a0f051-02c1-4561-9ca2-0e87e4164b71","source_url":"docs/adr/0020-agent-error-contract.md"}]
 ["citation-accepted","LNGHZN-S6",1787747928,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"ADR 0020 is the grill-ratified error contract this story implements; LH C3 remains the originating proposal."}]
 ["citation-accepted","LNGHZN-S6-T1",1787747928,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"ADR 0020 is the grill-ratified error contract this story implements; LH C3 remains the originating proposal."}]
+["citation-accepted","LNGHZN-S6-T2",1787747928,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"ADR 0020 is the grill-ratified error contract this story implements; LH C3 remains the originating proposal."}]
