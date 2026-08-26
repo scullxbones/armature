@@ -2,12 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
@@ -40,7 +43,7 @@ func newReviewPrepareCmd() *cobra.Command {
 
 The bundle is output as JSON to stdout or to a file specified by --output.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReviewPrepare(cmd, issueID, base, head, outputFile)
+			return mapReviewError(runReviewPrepare(cmd, issueID, base, head, outputFile))
 		},
 	}
 
@@ -171,7 +174,7 @@ When --bundle is provided, the command additionally validates that all assessmen
 citation coordinates reference lines present in the delivery diff, and that the
 assessment contract fingerprint matches the bundle contract fingerprint.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReviewRecord(cmd, issueID, assessmentFile, bundleFile)
+			return mapReviewError(runReviewRecord(cmd, issueID, assessmentFile, bundleFile))
 		},
 	}
 
@@ -201,11 +204,11 @@ merge, pass --branch, e.g. --branch task/TASK-ID or --branch story/STORY-ID.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				if issueID != "" && issueID != args[0] {
-					return fmt.Errorf("conflicting issue ID: positional argument %q and --issue %q disagree", args[0], issueID)
+					return mapReviewError(fmt.Errorf("conflicting issue ID: positional argument %q and --issue %q disagree", args[0], issueID))
 				}
 				issueID = args[0]
 			}
-			return runReviewCommits(cmd, issueID, branch)
+			return mapReviewError(runReviewCommits(cmd, issueID, branch))
 		},
 	}
 
@@ -274,6 +277,9 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	}
 	if assessmentFile == "" {
 		return fmt.Errorf("--assessment is required")
+	}
+	if looksLikeJSONArg(bundleFile) {
+		return fmt.Errorf("--bundle expects a file path, not JSON content")
 	}
 
 	// Decode input: read and parse assessment JSON
@@ -399,4 +405,42 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	}
 
 	return nil
+}
+
+const codeReview1 = "REVIEW-1"
+
+func init() {
+	armerrors.Register(codeReview1)
+}
+
+func looksLikeJSONArg(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+}
+
+func mapReviewError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return cf
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "--issue is required"),
+		strings.Contains(msg, "--base is required"),
+		strings.Contains(msg, "--head is required"),
+		strings.Contains(msg, "--assessment is required"),
+		strings.Contains(msg, "issue ID is required"):
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm review --help"}, 2, err)
+	case strings.Contains(msg, "not JSON content"),
+		strings.Contains(msg, "read bundle file"):
+		return armerrors.Wrap(codeReview1, msg, []string{
+			"arm review prepare --output <bundle.json>",
+			"arm review record --bundle <bundle.json>",
+		}, 1, err)
+	default:
+		return armerrors.Wrap(codeReview1, msg, []string{"arm review prepare --help"}, 1, err)
+	}
 }

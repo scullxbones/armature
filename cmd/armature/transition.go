@@ -12,6 +12,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -44,7 +45,8 @@ This enforces branch + PR discipline.`,
   # Override branch check with --force
   $ arm transition E6-S4-T2 --to done --outcome "..." --force`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			defer func() { err = mapTransitionError(err) }()
 			if issueID == "" && len(args) > 0 {
 				issueID = args[0]
 			}
@@ -638,4 +640,31 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 	}
 
 	return nil
+}
+
+const codeTransition1 = "TRANSITION-1"
+
+func init() {
+	armerrors.Register(codeTransition1)
+}
+
+func mapTransitionError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return cf
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "issue ID is required"):
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
+	case strings.Contains(msg, "skip-delivery-gate is only valid"):
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
+	case strings.Contains(msg, "delivery gate"), strings.Contains(msg, "skip-delivery-gate"):
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --skip-delivery-gate"}, 1, err)
+	default:
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --help"}, 1, err)
+	}
 }
