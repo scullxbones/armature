@@ -44,7 +44,9 @@ This enforces branch + PR discipline.`,
 
   # Override branch check with --force
   $ arm transition E6-S4-T2 --to done --outcome "..." --force`,
-		Args: cobra.MaximumNArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			return mapTransitionError(cobra.MaximumNArgs(1)(cmd, args))
+		},
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer func() { err = mapTransitionError(err) }()
 			if issueID == "" && len(args) > 0 {
@@ -52,6 +54,9 @@ This enforces branch + PR discipline.`,
 			}
 			if issueID == "" {
 				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
+			if to == "" {
+				return fmt.Errorf(`required flag(s) "to" not set`)
 			}
 
 			if !ops.ValidTransitionTargets[to] {
@@ -256,7 +261,6 @@ This enforces branch + PR discipline.`,
 	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status)")
 	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
 	cmd.Flags().BoolVar(&skipDeliveryGate, "skip-delivery-gate", false, "skip delivery gate check when transitioning to done")
-	_ = cmd.MarkFlagRequired("to")
 	return cmd
 }
 
@@ -658,9 +662,10 @@ func mapTransitionError(err error) error {
 	}
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "issue ID is required"):
-		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
-	case strings.Contains(msg, "skip-delivery-gate is only valid"):
+	case strings.Contains(msg, "issue ID is required"),
+		strings.Contains(msg, "required flag"),
+		strings.Contains(msg, "accepts at most"),
+		strings.Contains(msg, "skip-delivery-gate is only valid"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
 	case strings.Contains(msg, "invalid status"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to done", "arm show"}, 1, err)

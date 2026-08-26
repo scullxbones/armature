@@ -26,7 +26,9 @@ func newRenderContextCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "render-context [issue-id]",
 		Short: "Render assembled context for an issue",
-		Args:  cobra.MaximumNArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			return mapRenderContextError(cobra.MaximumNArgs(1)(cmd, args))
+		},
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer func() { err = mapRenderContextError(err) }()
 			if rcIssue == "" && len(args) > 0 {
@@ -130,7 +132,7 @@ func mapRenderContextError(err error) error {
 		return cf
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "issue ID is required") {
+	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, 2, err)
 	}
 	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
