@@ -23,6 +23,15 @@ var seamHosts = []string{
 	"tui.go",
 }
 
+// requiredSeamWiring is the model-wiring + program-construction each seam
+// file must contain. Kinds match classifyTUISeamCall.
+var requiredSeamWiring = map[string][]string{
+	"ready_tui.go":       {"readytui.New", "tea.NewProgram"},
+	"stalereview_tui.go": {"stalereview.New", "tea.NewProgram"},
+	"dagsum_tui.go":      {"dagsummary.New", "tea.NewProgram"},
+	"tui_tui.go":         {"app.New", "WithScreens", "tea.NewProgram"},
+}
+
 func cmdArmatureDir(t *testing.T) string {
 	t.Helper()
 	_, thisTestFile, _, ok := runtime.Caller(0)
@@ -39,6 +48,22 @@ func tuiSeamFile(host string) string {
 	return strings.TrimSuffix(host, ".go") + "_tui.go"
 }
 
+func cmdArmatureProductionGoFiles(t *testing.T) []string {
+	t.Helper()
+	entries, err := os.ReadDir(cmdArmatureDir(t))
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		names = append(names, name)
+	}
+	require.NotEmpty(t, names, "expected production Go files in cmd/armature")
+	return names
+}
+
 // TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4 is the
 // architecture guard for the TUI seam: interactive program construction and
 // model wiring live only in cmd/armature/*_tui.go, so coverage and mutation
@@ -49,22 +74,32 @@ func TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4(t *testing.T
 	dir := cmdArmatureDir(t)
 	fset := token.NewFileSet()
 
+	for _, name := range cmdArmatureProductionGoFiles(t) {
+		file := parseGoFile(t, fset, filepath.Join(dir, name))
+		hits := tuiSeamCalls(fset, file)
+		if strings.HasSuffix(name, "_tui.go") {
+			continue
+		}
+		require.Empty(t, hits, "%s must not construct a bubbletea program or wire TUI models; move to *_tui.go: %v", name, hits)
+	}
+
 	for _, host := range seamHosts {
 		seam := tuiSeamFile(host)
-		hostPath := filepath.Join(dir, host)
 		seamPath := filepath.Join(dir, seam)
-
 		_, err := os.Stat(seamPath)
 		require.NoError(t, err, "expected TUI seam file %s next to %s", seam, host)
 
-		hostFile := parseGoFile(t, fset, hostPath)
-		seamFile := parseGoFile(t, fset, seamPath)
+		required, ok := requiredSeamWiring[seam]
+		require.True(t, ok, "requiredSeamWiring must list %s", seam)
 
-		hostHits := teaNewProgramCalls(fset, hostFile)
-		require.Empty(t, hostHits, "%s must not construct a bubbletea program; move tea.NewProgram to %s", host, seam)
-
-		seamHits := teaNewProgramCalls(fset, seamFile)
-		require.NotEmpty(t, seamHits, "%s must contain tea.NewProgram (the TUI boundary)", seam)
+		hits := tuiSeamCalls(fset, parseGoFile(t, fset, seamPath))
+		got := make(map[string]bool, len(hits))
+		for _, hit := range hits {
+			got[hit.kind] = true
+		}
+		for _, kind := range required {
+			require.True(t, got[kind], "%s must contain %s (TUI construction / model wiring)", seam, kind)
+		}
 	}
 }
 
@@ -92,23 +127,70 @@ func parseGoFile(t *testing.T, fset *token.FileSet, path string) *ast.File {
 	return file
 }
 
-func teaNewProgramCalls(fset *token.FileSet, file *ast.File) []string {
-	var hits []string
+type tuiSeamHit struct {
+	kind string
+	pos  string
+}
+
+func tuiSeamCalls(fset *token.FileSet, file *ast.File) []tuiSeamHit {
+	aliases := importAliases(file)
+	var hits []tuiSeamHit
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "NewProgram" {
+		if !ok {
 			return true
 		}
-		ident, ok := sel.X.(*ast.Ident)
-		if !ok || ident.Name != "tea" {
+		kind, ok := classifyTUISeamCall(sel, aliases)
+		if !ok {
 			return true
 		}
-		hits = append(hits, fset.Position(call.Pos()).String())
+		hits = append(hits, tuiSeamHit{kind: kind, pos: fset.Position(call.Pos()).String()})
 		return true
 	})
 	return hits
+}
+
+func importAliases(file *ast.File) map[string]string {
+	aliases := make(map[string]string, len(file.Imports))
+	for _, imp := range file.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		name := path[strings.LastIndex(path, "/")+1:]
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		aliases[name] = path
+	}
+	return aliases
+}
+
+func classifyTUISeamCall(sel *ast.SelectorExpr, aliases map[string]string) (string, bool) {
+	if sel.Sel.Name == "WithScreens" {
+		return "WithScreens", true
+	}
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	pkgPath, ok := aliases[ident.Name]
+	if !ok {
+		return "", false
+	}
+	switch {
+	case sel.Sel.Name == "NewProgram" && strings.HasSuffix(pkgPath, "github.com/charmbracelet/bubbletea"):
+		return "tea.NewProgram", true
+	case sel.Sel.Name == "New" && pkgPath == "github.com/scullxbones/armature/internal/tui/ready":
+		return "readytui.New", true
+	case sel.Sel.Name == "New" && pkgPath == "github.com/scullxbones/armature/internal/tui/app":
+		return "app.New", true
+	case sel.Sel.Name == "New" && pkgPath == "github.com/scullxbones/armature/internal/tui/dagsummary":
+		return "dagsummary.New", true
+	case sel.Sel.Name == "New" && pkgPath == "github.com/scullxbones/armature/internal/tui/stalereview":
+		return "stalereview.New", true
+	default:
+		return "", false
+	}
 }

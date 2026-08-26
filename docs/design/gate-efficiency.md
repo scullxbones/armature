@@ -214,16 +214,25 @@ interactive sites as test-quality misses.
 outside this task's scope). Extracting 0%-covered seam files therefore
 slightly lowers the cmd aggregate even as the host files rise.
 
-Measured on `task/LNGHZN-S6-T4` immediately before and after the extract
-(same worktree; statement coverage via `make coverage` / `scripts/coverage-check.sh`;
-cmd mutant-coverage via `gremlins unleash ./cmd`).
+Statement coverage was measured on `task/LNGHZN-S6-T4` immediately before
+and after the extract (same worktree; `make coverage` /
+`scripts/coverage-check.sh`). Cmd mutant-coverage was re-run as
+`gremlins unleash ./cmd` on this extract's parent and extract commits
+(not a prior-HEAD proxy):
+
+- before: `cb0e4fb2` (pre-extract tree; `.gremlins.yaml` has no `_tui.go` exclude)
+- after: `350f3017` (extract + `_tui.go` exclude)
 
 | Metric | Before | After |
 |---|---|---|
 | cmd statement coverage | 83.86% | 83.56% |
 | internal statement coverage | 87.11% | 87.12% |
-| cmd mutant-coverage | 95.15% (nearest prior `./cmd` gremlins report: killed 1274, lived 0, not_covered 65; not re-run on this HEAD while the seam tests were red) | 95.35% (this HEAD after extract+exclude: killed 1292, lived 0, not_covered 63) |
+| cmd mutant-coverage | 95.35% (`cb0e4fb2`, re-run: killed 1292, lived 0, not_covered 63) | 95.35% (`350f3017`, re-run: killed 1292, lived 0, not_covered 63) |
 | cmd efficacy | 100.00% | 100.00% |
+
+The extract does not change cmd mutant-coverage: both HEADs have 1355
+sites. A 95.15% (killed 1274 / not_covered 65, 1339 sites) figure from an
+older `./cmd` tree is not this extract's before.
 
 Host-file statement coverage (the non-interactive remainder):
 
