@@ -1,2 +1,3 @@
 ["transition","LNGHZN-S6-T4",1787786458,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T4",{"to":"open"}]
 ["claim","LNGHZN-S6-T4",1787786459,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T4",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T4","claim_token":"32f6a6e89008234f2aca37598af7c9b0"}]
+["note","LNGHZN-S6-T4",1787786582,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T4",{"msg":"Remediation: tighten tui_seam REQ tests to walk all cmd/armature production files and lock model wiring; remeasure cmd mutant-coverage at extract parent vs this HEAD (not a prior-HEAD proxy).","note_id":"note-1787786582938651936"}]
