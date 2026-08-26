@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -32,54 +34,49 @@ func (e adapterExitError) Error() string {
 	return fmt.Sprintf("hook blocked with exit code %d", e.code)
 }
 
-// jsonErrorPayload is the structured JSON error format emitted to stderr when
-// --format=json or --format=agent is active.
-type jsonErrorPayload struct {
-	Error    string `json:"error"`
-	Code     string `json:"code"`
-	ExitCode int    `json:"exit_code"`
+type commandFailureEnvelope struct {
+	Error *armerrors.CommandFailure `json:"error"`
 }
 
-// writeJSONError writes a structured JSON error to w.
-// The format is: {"error": "...", "code": "...", "exit_code": N}
-func writeJSONError(w io.Writer, msg string, code exitcodes.Code) {
-	payload := jsonErrorPayload{
-		Error:    msg,
-		Code:     code.String(),
-		ExitCode: code.Int(),
+// renderCommandFailure writes a Command Failure to w. json/agent emit
+// {error:{code,cause,next_actions,exit_code}} on the writer (stdout at the
+// port). Human is Error [CODE]: cause plus Try: lines. Not nested in AOC.
+func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailure) {
+	if cf == nil {
+		return
 	}
-	b, _ := json.Marshal(payload) //nolint:errcheck // payload contains only serializable values
-	fmt.Fprintln(w, string(b))
+	if format == "json" || format == "agent" {
+		b, err := json.Marshal(commandFailureEnvelope{Error: cf})
+		if err != nil {
+			fallback := armerrors.Unmapped(err)
+			b, _ = json.Marshal(commandFailureEnvelope{Error: fallback}) //nolint:errcheck // fallback fields are always serializable
+		}
+		fmt.Fprintln(w, string(b))
+		return
+	}
+	fmt.Fprintf(w, "Error [%s]: %s\n", cf.Code, cf.Cause)
+	for _, action := range cf.NextActions {
+		fmt.Fprintf(w, "Try: %s\n", action)
+	}
 }
 
-// classifyError maps a Go error to the most specific exitcodes.Code.
-// It performs simple substring matching on the error message.
-func classifyError(err error) exitcodes.Code {
+// handleRootError maps a root Execute error to a Command Failure, writes it
+// to stdout, optionally dumps --debug on stderr, and returns the process exit
+// code. adapterExitError is the harness-hook platform integer and is not a
+// Command Failure on the wire.
+func handleRootError(stdout, stderr io.Writer, format string, debug bool, err error) int {
 	if err == nil {
-		return exitcodes.ExitSuccess
+		return exitcodes.ExitSuccess.Int()
 	}
-	msg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(msg, "not found"):
-		return exitcodes.ExitNotFound
-	case strings.Contains(msg, "already claimed"),
-		strings.Contains(msg, "already exists"),
-		strings.Contains(msg, "conflict"):
-		return exitcodes.ExitConflict
-	case strings.Contains(msg, "invalid") && strings.Contains(msg, "transition"):
-		return exitcodes.ExitInvalidState
-	case strings.Contains(msg, "invalid state"),
-		strings.Contains(msg, "broken") && strings.Contains(msg, "dep"):
-		return exitcodes.ExitInvalidState
-	case strings.Contains(msg, "usage") || strings.Contains(msg, "required flag"):
-		return exitcodes.ExitUsageError
-	case strings.Contains(msg, "permission denied") ||
-		strings.Contains(msg, "no such file") ||
-		strings.Contains(msg, "i/o error"):
-		return exitcodes.ExitIOError
-	default:
-		return exitcodes.ExitGeneralError
+	if ace, ok := errors.AsType[adapterExitError](err); ok {
+		return ace.code
 	}
+	cf := armerrors.Unmapped(err)
+	renderCommandFailure(stdout, format, cf)
+	if debug {
+		fmt.Fprintf(stderr, "DEBUG: %+v\n", err)
+	}
+	return cf.ExitCode
 }
 
 type executionState struct {

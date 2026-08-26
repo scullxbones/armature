@@ -1,43 +1,93 @@
-// Package errors defines armature's typed error values and wrapping helpers so callers can distinguish user-facing failures from internal ones.
+// Package errors defines the port-level Command Failure type and Failure Code
+// registry used by cmd/ to present agent-facing arm failures.
 package errors
 
-import "fmt"
+import (
+	stderrors "errors"
+	"fmt"
+	"strings"
+)
 
-// ArmatureError is a structured error with a code and optional context
-type ArmatureError struct {
-	Code    string
-	Message string
-	Context map[string]string
-	Cause   error
+// Failure Code constants reserved by ADR 0020. GENERAL-1 is the expand-step
+// wrap for unmapped port errors; USAGE and IO are reserved prefixes/codes.
+const (
+	CodeGeneral1 = "GENERAL-1"
+	CodeUSAGE    = "USAGE"
+	CodeIO       = "IO"
+)
+
+var registeredCodes = map[string]struct{}{}
+
+func init() {
+	Register(CodeGeneral1)
+	Register(CodeUSAGE)
+	Register(CodeIO)
 }
 
-func (e *ArmatureError) Error() string {
-	if e.Cause != nil {
-		return fmt.Sprintf("[%s] %s: %v", e.Code, e.Message, e.Cause)
+// Register records a Failure Code. Duplicate codes panic; retired codes stay
+// reserved and must never be reused.
+func Register(code string) {
+	if _, exists := registeredCodes[code]; exists {
+		panic("duplicate failure code: " + code)
 	}
-	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
+	registeredCodes[code] = struct{}{}
 }
 
-func (e *ArmatureError) Unwrap() error {
-	return e.Cause
+// Prefix returns the Failure Code prefix for a deep-module basename or a
+// top-level cobra Use string (ADR 0020).
+func Prefix(moduleOrUse string) string {
+	return strings.ToUpper(moduleOrUse)
 }
 
-// NotFound returns an ArmatureError indicating an issue was not found.
-func NotFound(id string) *ArmatureError {
-	return &ArmatureError{Code: "NOT_FOUND", Message: fmt.Sprintf("issue %s not found", id)}
+// CommandFailure is the agent-facing presentation of a CLI invocation that
+// could not do the job it was asked to do. It is constructed at the CLI port
+// from a domain error; it is not itself a domain type.
+type CommandFailure struct {
+	Code        string   `json:"code"`
+	Cause       string   `json:"cause"`
+	NextActions []string `json:"next_actions"`
+	ExitCode    int      `json:"exit_code"`
+	wrapped     error
 }
 
-// InvalidState returns an ArmatureError indicating an invalid state.
-func InvalidState(msg string) *ArmatureError {
-	return &ArmatureError{Code: "INVALID_STATE", Message: msg}
+// New constructs a CommandFailure. A nil nextActions slice is stored as empty
+// so JSON encoding emits [] rather than null. Empty next_actions is allowed
+// on IO and GENERAL-1 (ADR 0020).
+func New(code, cause string, nextActions []string, exitCode int) *CommandFailure {
+	return Wrap(code, cause, nextActions, exitCode, nil)
 }
 
-// HookFailed returns an ArmatureError indicating a hook failure.
-func HookFailed(hook string, msg string) *ArmatureError {
-	return &ArmatureError{Code: "HOOK_FAILED", Message: fmt.Sprintf("hook %s failed: %s", hook, msg)}
+// Wrap is New plus an unwrap target for errors.Is / errors.As.
+func Wrap(code, cause string, nextActions []string, exitCode int, err error) *CommandFailure {
+	if nextActions == nil {
+		nextActions = []string{}
+	}
+	return &CommandFailure{
+		Code:        code,
+		Cause:       cause,
+		NextActions: nextActions,
+		ExitCode:    exitCode,
+		wrapped:     err,
+	}
 }
 
-// IOError returns an ArmatureError indicating an IO error with a cause.
-func IOError(op string, cause error) *ArmatureError {
-	return &ArmatureError{Code: "IO_ERROR", Message: fmt.Sprintf("IO error during %s", op), Cause: cause}
+// Unmapped wraps an ordinary port error as GENERAL-1. A CommandFailure is
+// returned unchanged so later mapped codes survive the expand-step wrap.
+func Unmapped(err error) *CommandFailure {
+	if err == nil {
+		return nil
+	}
+	var cf *CommandFailure
+	if stderrors.As(err, &cf) {
+		return cf
+	}
+	return Wrap(CodeGeneral1, err.Error(), nil, 1, err)
+}
+
+func (e *CommandFailure) Error() string {
+	return fmt.Sprintf("[%s] %s", e.Code, e.Cause)
+}
+
+func (e *CommandFailure) Unwrap() error {
+	return e.wrapped
 }

@@ -421,7 +421,7 @@ func TestClaimWithoutWorktreeFlag(t *testing.T) {
 
 	err := cmd.Execute()
 	assert.Error(t, err)
-	assert.Contains(t, errBuf.String()+buf.String(), "worktree")
+	assert.Contains(t, err.Error()+errBuf.String()+buf.String(), "worktree")
 }
 
 // TestClaimCreatesWorktreeIfAbsent verifies that claim creates a worktree at the path
@@ -510,7 +510,7 @@ func TestClaimWithEpicReturnsError(t *testing.T) {
 
 	err := cmd.Execute()
 	assert.Error(t, err)
-	assert.Contains(t, errBuf.String()+buf.String(), "epic")
+	assert.Contains(t, err.Error()+errBuf.String()+buf.String(), "epic")
 }
 
 // TestClaimCreatesTaskBranch verifies that claim creates a task branch from HEAD with the
@@ -757,7 +757,7 @@ func TestCreateWorktreeAndBranchRejectsEmptyBranchName(t *testing.T) {
 	err := cmd.Execute()
 	assert.Error(t, err)
 	// The error should come from the epic check in newClaimCmd, not from createWorktreeAndBranch
-	assert.Contains(t, errBuf.String()+buf.String(), "epic")
+	assert.Contains(t, err.Error()+errBuf.String()+buf.String(), "epic")
 }
 
 // TestClaimFailsWhenWorktreeCreationFails tests that the claim command returns an error
