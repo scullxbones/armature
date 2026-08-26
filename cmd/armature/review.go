@@ -189,8 +189,10 @@ func newReviewCommitsCmd() *cobra.Command {
 	var issueID, branch string
 
 	cmd := &cobra.Command{
-		Use:   "commits [issue-id]",
-		Args:  cobra.MaximumNArgs(1),
+		Use: "commits [issue-id]",
+		Args: func(cmd *cobra.Command, args []string) error {
+			return mapReviewError(cobra.MaximumNArgs(1)(cmd, args))
+		},
 		Short: "List delivery commits for an issue across all conventional-commit types",
 		Long: `List delivery commits for an issue by scanning conventional-commit-style commit
 messages that reference the issue ID in their scope (e.g., feat(ISSUE-ID): ..., fix(ISSUE-ID): ..., etc.).
@@ -432,7 +434,8 @@ func mapReviewError(err error) error {
 		strings.Contains(msg, "--base is required"),
 		strings.Contains(msg, "--head is required"),
 		strings.Contains(msg, "--assessment is required"),
-		strings.Contains(msg, "issue ID is required"):
+		strings.Contains(msg, "issue ID is required"),
+		strings.Contains(msg, "accepts at most"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm review --help"}, 2, err)
 	case strings.Contains(msg, "not JSON content"),
 		strings.Contains(msg, "read bundle file"):
