@@ -7,79 +7,83 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/exitcodes"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestExitJSON_Format verifies exitJSON produces valid JSON on stderr.
+// TestExitJSON_Format verifies the Command Failure agent envelope on stdout.
 func TestExitJSON_Format(t *testing.T) {
 	buf := new(bytes.Buffer)
-	writeJSONError(buf, "something went wrong", exitcodes.ExitGeneralError)
+	renderCommandFailure(buf, "json", armerrors.New("GENERAL-1", "something went wrong", nil, 1))
 
-	out := buf.String()
-	require.True(t, json.Valid([]byte(strings.TrimSpace(out))), "must be valid JSON: %q", out)
+	out := strings.TrimSpace(buf.String())
+	require.True(t, json.Valid([]byte(out)), "must be valid JSON: %q", out)
 
 	var m map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &m))
-	assert.Equal(t, "something went wrong", m["error"])
-	assert.Equal(t, "general_error", m["code"])
-	assert.Equal(t, float64(1), m["exit_code"])
+	require.NoError(t, json.Unmarshal([]byte(out), &m))
+	errObj, ok := m["error"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "something went wrong", errObj["cause"])
+	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestExitJSON_UsageError verifies usage_error code and exit_code 2.
+// TestExitJSON_UsageError verifies a mapped USAGE Command Failure keeps exit_code 2.
 func TestExitJSON_UsageError(t *testing.T) {
 	buf := new(bytes.Buffer)
-	writeJSONError(buf, "bad flag", exitcodes.ExitUsageError)
+	renderCommandFailure(buf, "json", armerrors.New("USAGE", "bad flag", []string{"arm --help"}, 2))
 
 	var m map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &m))
-	assert.Equal(t, "bad flag", m["error"])
-	assert.Equal(t, "usage_error", m["code"])
-	assert.Equal(t, float64(2), m["exit_code"])
+	errObj, ok := m["error"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "bad flag", errObj["cause"])
+	assert.Equal(t, "USAGE", errObj["code"])
+	assert.Equal(t, float64(2), errObj["exit_code"])
 }
 
-// TestExitJSON_NotFound verifies not_found code and exit_code 3.
+// TestExitJSON_NotFound verifies unmapped "not found" errors wrap as GENERAL-1.
 func TestExitJSON_NotFound(t *testing.T) {
-	buf := new(bytes.Buffer)
-	writeJSONError(buf, "issue not found", exitcodes.ExitNotFound)
+	stdout := new(bytes.Buffer)
+	code := handleRootError(stdout, new(bytes.Buffer), "json", false, fmt.Errorf("issue not found"))
+	assert.Equal(t, 1, code)
 
 	var m map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &m))
-	assert.Equal(t, "issue not found", m["error"])
-	assert.Equal(t, "not_found", m["code"])
-	assert.Equal(t, float64(3), m["exit_code"])
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &m))
+	errObj, ok := m["error"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "issue not found", errObj["cause"])
+	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestClassifyError_GeneralError verifies unknown errors map to ExitGeneralError.
-func TestClassifyError_GeneralError(t *testing.T) {
-	err := fmt.Errorf("some unexpected problem")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitGeneralError, code)
+// TestUnmappedPortErrorsWrapAsGeneral1 verifies substring classification is gone.
+func TestUnmappedPortErrorsWrapAsGeneral1(t *testing.T) {
+	cases := []string{
+		"some unexpected problem",
+		"issue E1-S1-T1 not found",
+		"issue is already claimed by another worker",
+		"invalid status transition from done to ready",
+		"issue already exists",
+		"merge conflict detected",
+		"invalid state for this operation",
+		"required flag: --issue",
+		"permission denied: /etc/shadow",
+		"no such file or directory",
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			cf := armerrors.Unmapped(fmt.Errorf("%s", msg))
+			require.NotNil(t, cf)
+			assert.Equal(t, "GENERAL-1", cf.Code)
+			assert.Equal(t, 1, cf.ExitCode)
+			assert.Equal(t, msg, cf.Cause)
+		})
+	}
 }
 
-// TestClassifyError_NotFound verifies "not found" errors map to ExitNotFound.
-func TestClassifyError_NotFound(t *testing.T) {
-	err := fmt.Errorf("issue E1-S1-T1 not found")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitNotFound, code)
-}
-
-// TestClassifyError_Conflict verifies "already claimed" errors map to ExitConflict.
-func TestClassifyError_Conflict(t *testing.T) {
-	err := fmt.Errorf("issue is already claimed by another worker")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitConflict, code)
-}
-
-// TestClassifyError_InvalidState verifies "invalid transition" maps to ExitInvalidState.
-func TestClassifyError_InvalidState(t *testing.T) {
-	err := fmt.Errorf("invalid status transition from done to ready")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitInvalidState, code)
-}
-
-// TestMain_JSONFormatError verifies that --format=json writes structured JSON to stderr on error.
+// TestMain_JSONFormatError verifies Execute errors map to the stdout envelope.
 func TestMain_JSONFormatError(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -91,21 +95,20 @@ func TestMain_JSONFormatError(t *testing.T) {
 
 	err := root.Execute()
 	assert.Error(t, err)
+	assert.Empty(t, errBuf.String(), "SilenceErrors must suppress cobra Error: on stderr")
 
-	errOut := strings.TrimSpace(errBuf.String())
-	// stderr should contain JSON error structure
-	if errOut != "" && json.Valid([]byte(errOut)) {
-		var m map[string]interface{}
-		require.NoError(t, json.Unmarshal([]byte(errOut), &m))
-		assert.Contains(t, m, "error")
-		assert.Contains(t, m, "code")
-		assert.Contains(t, m, "exit_code")
-	}
-	// If not JSON-only on stderr, at minimum the error should be returned
-	// (the test is mainly that we don't panic and the function exists)
+	stdout := new(bytes.Buffer)
+	code := handleRootError(stdout, new(bytes.Buffer), "json", false, err)
+	assert.Equal(t, 1, code)
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &m))
+	errObj, ok := m["error"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestMain_AgentFormatError verifies --format=agent also writes structured JSON to stderr.
+// TestMain_AgentFormatError verifies --format=agent writes the same stdout envelope.
 func TestMain_AgentFormatError(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -118,62 +121,31 @@ func TestMain_AgentFormatError(t *testing.T) {
 	err := root.Execute()
 	assert.Error(t, err)
 
-	errOut := strings.TrimSpace(errBuf.String())
-	if errOut != "" && json.Valid([]byte(errOut)) {
-		var m map[string]interface{}
-		require.NoError(t, json.Unmarshal([]byte(errOut), &m))
-		assert.Contains(t, m, "error")
-		assert.Contains(t, m, "code")
-		assert.Contains(t, m, "exit_code")
-	}
+	stdout := new(bytes.Buffer)
+	code := handleRootError(stdout, new(bytes.Buffer), "agent", false, err)
+	assert.Equal(t, 1, code)
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &m))
+	errObj, ok := m["error"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "GENERAL-1", errObj["code"])
 }
 
-// TestClassifyError_Nil verifies nil maps to ExitSuccess.
-func TestClassifyError_Nil(t *testing.T) {
-	code := classifyError(nil)
-	assert.Equal(t, exitcodes.ExitSuccess, code)
+// TestHandleRootError_Nil verifies nil maps to exit 0 and writes nothing.
+func TestHandleRootError_Nil(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	code := handleRootError(stdout, new(bytes.Buffer), "json", false, nil)
+	assert.Equal(t, 0, code)
+	assert.Empty(t, stdout.String())
 }
 
-// TestClassifyError_AlreadyExists verifies "already exists" maps to ExitConflict.
-func TestClassifyError_AlreadyExists(t *testing.T) {
-	err := fmt.Errorf("issue already exists")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitConflict, code)
-}
-
-// TestClassifyError_Conflict verifies "conflict" maps to ExitConflict.
-func TestClassifyError_ConflictKeyword(t *testing.T) {
-	err := fmt.Errorf("merge conflict detected")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitConflict, code)
-}
-
-// TestClassifyError_InvalidStateKeyword verifies "invalid state" maps to ExitInvalidState.
-func TestClassifyError_InvalidStateKeyword(t *testing.T) {
-	err := fmt.Errorf("invalid state for this operation")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitInvalidState, code)
-}
-
-// TestClassifyError_UsageError verifies "required flag" maps to ExitUsageError.
-func TestClassifyError_UsageError(t *testing.T) {
-	err := fmt.Errorf("required flag: --issue")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitUsageError, code)
-}
-
-// TestClassifyError_IOError verifies "permission denied" maps to ExitIOError.
-func TestClassifyError_IOError(t *testing.T) {
-	err := fmt.Errorf("permission denied: /etc/shadow")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitIOError, code)
-}
-
-// TestClassifyError_NoSuchFile verifies "no such file" maps to ExitIOError.
-func TestClassifyError_NoSuchFile(t *testing.T) {
-	err := fmt.Errorf("no such file or directory")
-	code := classifyError(err)
-	assert.Equal(t, exitcodes.ExitIOError, code)
+// TestHandleRootError_AdapterExitError verifies harness-hook platform integers
+// are not rendered as Command Failures.
+func TestHandleRootError_AdapterExitError(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	code := handleRootError(stdout, new(bytes.Buffer), "json", false, adapterExitError{code: 42})
+	assert.Equal(t, 42, code)
+	assert.Empty(t, stdout.String())
 }
 
 // TestRenderStringSlice_NonEmpty verifies non-empty slices produce JSON arrays.

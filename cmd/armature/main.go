@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
@@ -44,9 +43,10 @@ func autoDetectTTYPolicy(cmd *cobra.Command) (format string, nonInteractive bool
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:          "arm",
-		Short:        "Armature — git-native work orchestration",
-		SilenceUsage: true,
+		Use:           "arm",
+		Short:         "Armature — git-native work orchestration",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			format, nonInteractive := autoDetectTTYPolicy(cmd)
 			tui.SetFormat(format)
@@ -277,22 +277,9 @@ func newRootCmd() *cobra.Command {
 func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
-		// Check if this is an adapter exit error (platform-specific exit code)
-		if ace, ok := errors.AsType[adapterExitError](err); ok {
-			os.Exit(ace.code)
-		}
-
-		code := classifyError(err)
 		format, _ := root.PersistentFlags().GetString("format")
-		if format == "json" || format == "agent" {
-			writeJSONError(os.Stderr, err.Error(), code)
-		} else {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		if debug, _ := root.PersistentFlags().GetBool("debug"); debug {
-			fmt.Fprintf(os.Stderr, "DEBUG: %+v\n", err)
-		}
-		os.Exit(code.Int())
+		debug, _ := root.PersistentFlags().GetBool("debug")
+		os.Exit(handleRootError(os.Stdout, os.Stderr, format, debug, err))
 	}
 	os.Exit(exitcodes.ExitSuccess.Int())
 }

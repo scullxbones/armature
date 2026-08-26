@@ -1359,13 +1359,10 @@ func TestBootstrapPersistentFormatFlagSetOnNonTTY(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err, "bootstrap should fail for unsupported platform")
 
-	// Verify error handling respects the auto-detected format
-	// The error message should be structured, not plain text
-	errOutput := errBuf.String()
-	// In non-TTY with auto-detected JSON format, error output should be structured
-	// (This is harder to test directly since errors go to stderr; we focus on the other tests)
-	// At minimum, verify the error occurred
-	assert.NotEmpty(t, errOutput)
+	// Root SilenceErrors (ADR 0020) suppresses cobra's Error: line; the
+	// Command Failure envelope is written by handleRootError in main.
+	assert.Empty(t, errBuf.String())
+	assert.NotEmpty(t, err.Error())
 }
 
 // TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9 verifies that runRepoSetup detects
