@@ -21,3 +21,6 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0013](0013-managed-worktree-auto-provisioning.md) | Managed Worktree Auto-Provisioning with Boolean Flag | Accepted |
 | [0014](0014-two-tier-gates-and-evidence-based-acceptance.md) | Two-Tier Gates and Evidence-Based Acceptance | Proposed (amended in part by ADR-0015) |
 | [0015](0015-recalibrate-mutation-and-coverage-gates.md) | Recalibrate Mutation and Coverage Gates | Accepted |
+| [0016](0016-three-door-validation.md) | Three-Door Validation | Accepted |
+| 0017–0019 | Agent Output Contract cluster (ADR 0017 in flight as `AOC-S1-T1`; 0018 idempotency and 0019 TOON park planned). Numbering reserved so this table does not collide when those land. | — |
+| [0020](0020-agent-error-contract.md) | Agent-grade error contract | Accepted |

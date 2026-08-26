@@ -111,7 +111,19 @@ _Avoid_: Skip, bypass, waiver, `--skip-validate-gate`
 
 **Graph Finding**:
 A rule violation `arm validate` reports, identified by a rule and the issue IDs it cites.
-_Avoid_: Finding, warning, error, Dogfood Finding, Review Finding
+_Avoid_: Finding, warning, error, Dogfood Finding, Review Finding, Command Failure
+
+**Command Failure**:
+The agent-facing presentation of a CLI invocation that could not do the job it was asked to do. It is constructed at the CLI port from a domain error; it is not itself a domain type. Distinct from a Graph Finding or a doctor check, which are the payload of a successful report.
+_Avoid_: Graph Finding, validation error, doctor check, Review Finding, domain error
+
+**Failure Code**:
+A stable identifier for a Command Failure. Its prefix names the deep module that originated the fact, or the command's Use when no module exists. Never a Graph Finding rule, a doctor check, or a process exit label.
+_Avoid_: exit code, validation code, doctor check, error code
+
+**Next Action**:
+A recovery command offered on a Command Failure so the agent can continue. Exact fully-resolved argv is not required; models are expected to fill gaps. Distinct from the `help` array on a successful structured result, which may be prose.
+_Avoid_: help, hint, suggestion, Try line
 
 **Inferred**:
 A confidence state meaning an issue was derived or imported with weaker certainty than a normal verified issue. Inferred issues belong to the confidence vocabulary, not the status vocabulary.
