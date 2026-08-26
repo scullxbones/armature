@@ -76,6 +76,17 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.True(t, strings.Contains(gitJoined, "arm doctor") || strings.Contains(gitJoined, "arm show"),
 		"git/worktree misses must not reuse issue-discovery recovery, next_actions=%v", gitCF.NextActions)
 
+	afterClaim := mapClaimError(fmt.Errorf("issue %s not found after claim", "task-01"))
+	var afterCF *armerrors.CommandFailure
+	require.ErrorAs(t, afterClaim, &afterCF)
+	assert.Equal(t, "CLAIM-1", afterCF.Code)
+	assertNoHelpCopOut(t, afterCF)
+	afterJoined := strings.Join(afterCF.NextActions, "\n")
+	assert.NotContains(t, afterJoined, "arm ready")
+	assert.NotContains(t, afterJoined, "arm list")
+	assert.True(t, strings.Contains(afterJoined, "arm doctor") || strings.Contains(afterJoined, "arm show"),
+		"post-claim rematerialize misses must not reuse issue-discovery recovery, next_actions=%v", afterCF.NextActions)
+
 	extra := new(bytes.Buffer)
 	code = executeThenHandleRootError(t, extra, new(bytes.Buffer),
 		"claim", "--repo", repo, "a", "b", "c", "--format", "agent")
@@ -141,6 +152,16 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	parseJoined := strings.Join(parseCF.NextActions, "\n")
 	assert.Contains(t, parseJoined, "arm review")
 	assert.NotContains(t, parseJoined, "--help")
+
+	extraCommits := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, extraCommits, new(bytes.Buffer),
+		"review", "commits", "--repo", repo, "task-01", "extra", "--format", "agent")
+	assert.Equal(t, 2, code)
+	extraCF := agentFailureFromStdout(t, extraCommits.String())
+	assert.Equal(t, armerrors.CodeUSAGE, extraCF.Code)
+	assert.Contains(t, extraCF.Cause, "accepts at most")
+	require.NotEmpty(t, extraCF.NextActions)
+	assert.Equal(t, 2, extraCF.ExitCode)
 }
 
 func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
