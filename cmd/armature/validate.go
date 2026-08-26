@@ -82,8 +82,8 @@ Use --quiet to suppress INFO lines on a failing run.`,
 			}
 
 			if !result.OK {
-				return fmt.Errorf("validation failed with %d error(s) and %d warning(s)",
-					len(result.Errors), len(result.Warnings))
+				return skipCommandFailure(fmt.Errorf("validation failed with %d error(s) and %d warning(s)",
+					len(result.Errors), len(result.Warnings)))
 			}
 			return nil
 		},

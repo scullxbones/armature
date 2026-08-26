@@ -108,12 +108,13 @@ func newDoctorCmd() *cobra.Command {
 				}
 			}
 
-			// Determine exit condition.
+			// Determine exit condition. The report is already on stdout;
+			// it is not a Command Failure (ADR 0020 §7).
 			if report.HasErrors() {
-				return fmt.Errorf("doctor: %d error(s) found", countBySeverity(report, doctor.SeverityError))
+				return skipCommandFailure(fmt.Errorf("doctor: %d error(s) found", countBySeverity(report, doctor.SeverityError)))
 			}
 			if strict && report.HasWarnings() {
-				return fmt.Errorf("doctor --strict: %d warning(s) promoted to errors", countBySeverity(report, doctor.SeverityWarning))
+				return skipCommandFailure(fmt.Errorf("doctor --strict: %d warning(s) promoted to errors", countBySeverity(report, doctor.SeverityWarning)))
 			}
 			return nil
 		},

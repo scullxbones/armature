@@ -149,6 +149,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 					if data, merr := json.MarshalIndent(result, "", "  "); merr == nil {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 					}
+					return skipCommandFailure(fmt.Errorf("repo setup failed: %w", err))
 				}
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
@@ -165,6 +166,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 					if data, merr := json.MarshalIndent(result, "", "  "); merr == nil {
 						_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 					}
+					return skipCommandFailure(fmt.Errorf("harness setup failed: %w", err))
 				}
 				return fmt.Errorf("harness setup failed: %w", err)
 			}

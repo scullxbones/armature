@@ -50,18 +50,22 @@ Examples:
 			hookName := args[0]
 			hookArgs := args[1:]
 
+			var err error
 			switch hookName {
 			case "pre-commit":
-				return runPreCommitHook(cmd)
+				err = runPreCommitHook(cmd)
 			case "post-commit":
-				return runPostCommitHook(cmd)
+				runPostCommitHook(cmd)
 			case "post-merge":
-				return runPostMergeHook(cmd)
+				err = runPostMergeHook(cmd)
 			case "prepare-commit-msg":
-				return runPrepareCommitMsgHook(cmd, hookArgs)
+				err = runPrepareCommitMsgHook(cmd, hookArgs)
 			default:
-				return fmt.Errorf("unknown hook %q: supported hooks are pre-commit, post-commit, post-merge, prepare-commit-msg", hookName)
+				err = fmt.Errorf("unknown hook %q: supported hooks are pre-commit, post-commit, post-merge, prepare-commit-msg", hookName)
 			}
+			// ADR 0020 §6: arm hook stays on the git protocol, not the
+			// agent Command Failure wire.
+			return skipCommandFailure(err)
 		},
 	}
 }
@@ -173,23 +177,23 @@ func runPreCommitHook(cmd *cobra.Command) error {
 
 // runPostCommitHook implements the post-commit hook logic natively.
 // Sends a heartbeat for any active claim and, in dual-branch mode, pushes ops.
-func runPostCommitHook(cmd *cobra.Command) error {
+func runPostCommitHook(cmd *cobra.Command) {
 	appCtx := currentCtx(cmd)
 	// Skip on _armature branch
 	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
-		return nil
+		return
 	}
 
 	claimID := hookFindActiveClaimID(appCtx)
 	if claimID == "" {
-		return nil
+		return
 	}
 
 	workerID, logPath, err := resolveWorkerAndLog(appCtx)
 	if err != nil {
 		// Best-effort — don't block the commit
-		return nil
+		return
 	}
 
 	op := ops.Op{
@@ -200,13 +204,12 @@ func runPostCommitHook(cmd *cobra.Command) error {
 	}
 	if err := appendLowStakesOp(mustState(cmd), logPath, op); err != nil {
 		// Best-effort — don't block the commit
-		return nil
+		return
 	}
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Heartbeat recorded for %s\n", claimID)
 
 	hookDetectScopeChanges(cmd, workerID, logPath)
-	return nil
 }
 
 // hookDetectScopeChanges parses HEAD~1..HEAD for file renames and deletions,
