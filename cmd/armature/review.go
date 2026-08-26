@@ -440,7 +440,9 @@ func mapReviewError(err error) error {
 			"arm review prepare --output <bundle.json>",
 			"arm review record --bundle <bundle.json>",
 		}, 1, err)
+	case strings.Contains(msg, "issue") && strings.Contains(msg, "not found"):
+		return armerrors.Wrap(codeReview1, msg, []string{"arm list", "arm show"}, 1, err)
 	default:
-		return armerrors.Wrap(codeReview1, msg, []string{"arm review prepare --help"}, 1, err)
+		return armerrors.Wrap(codeReview1, msg, []string{"arm review prepare --output <bundle.json>"}, 1, err)
 	}
 }

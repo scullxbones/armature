@@ -49,12 +49,12 @@ func mapClaimError(err error) error {
 		strings.Contains(msg, "--worktree is required"),
 		strings.Contains(msg, "accepts at most"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm claim --help"}, 2, err)
-	case strings.Contains(msg, "not found"):
+	case strings.Contains(msg, "issue") && strings.Contains(msg, "not found"):
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm ready", "arm list"}, 1, err)
 	case strings.Contains(msg, "use --force"):
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --force --worktree"}, 1, err)
 	default:
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --help"}, 1, err)
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	}
 }
 

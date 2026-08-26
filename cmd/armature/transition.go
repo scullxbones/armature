@@ -662,9 +662,11 @@ func mapTransitionError(err error) error {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
 	case strings.Contains(msg, "skip-delivery-gate is only valid"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
-	case strings.Contains(msg, "delivery gate"), strings.Contains(msg, "skip-delivery-gate"):
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --skip-delivery-gate"}, 1, err)
+	case strings.Contains(msg, "invalid status"):
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to done", "arm show"}, 1, err)
+	case strings.Contains(msg, "delivery gate"):
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	default:
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --help"}, 1, err)
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	}
 }
