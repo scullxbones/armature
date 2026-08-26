@@ -4,3 +4,4 @@
 ["assign","LNGHZN-S6-T1",1787604393,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{}]
 ["transition","LNGHZN-S6-T1",1787604395,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"to":"open"}]
 ["transition","LNGHZN-S6-T1",1787766597,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"to":"open"}]
+["claim","LNGHZN-S6-T1",1787766598,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T1","claim_token":"05d647a8a27abdfb4711e1b94231fc51"}]
