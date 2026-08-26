@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -167,13 +166,10 @@ mode (agents) to auto-approve all pending draft items.`,
 			}
 
 			rootID := issueID
-			m := dagsummary.New(items, rootID)
-			p := tea.NewProgram(m)
-			finalModel, err := p.Run()
+			final, err := runDAGSummaryTUI(items, rootID)
 			if err != nil {
-				return fmt.Errorf("dag-summary TUI: %w", err)
+				return err
 			}
-			final := finalModel.(dagsummary.Model) //nolint:errcheck // type invariant: dagsummary always returns its own Model
 
 			// Only emit ops if sign-off was confirmed.
 			if !final.Done() {

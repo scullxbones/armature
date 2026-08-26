@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/dag"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -15,7 +14,6 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/tui"
-	readytui "github.com/scullxbones/armature/internal/tui/ready"
 	"github.com/spf13/cobra"
 )
 
@@ -153,17 +151,11 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					}
 				}
 			case tui.IsInteractive():
-				m := readytui.New(entries)
-				p := tea.NewProgram(m)
-				finalModel, err := p.Run()
+				selected, err := runReadyTUI(entries)
 				if err != nil {
 					return err
 				}
-				final, ok := finalModel.(readytui.Model)
-				if !ok {
-					return fmt.Errorf("unexpected model type from TUI")
-				}
-				if final.Selected() != "" {
+				if selected != "" {
 					state := mustState(cmd)
 					ctx := state.ctx
 					workerID, logPath, err := resolveWorkerAndLog(ctx)
@@ -172,7 +164,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					}
 					op := ops.Op{
 						Type:      ops.OpClaim,
-						TargetID:  final.Selected(),
+						TargetID:  selected,
 						Timestamp: nowEpoch(),
 						WorkerID:  workerID,
 						Payload:   ops.Payload{TTL: 60},
@@ -180,7 +172,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					if err := appendHighStakesOp(state, logPath, op); err != nil {
 						return err
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed: %s\n", final.Selected())
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed: %s\n", selected)
 				}
 				return nil
 			default:
