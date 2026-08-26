@@ -133,8 +133,5 @@ func mapRenderContextError(err error) error {
 	if strings.Contains(msg, "issue ID is required") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, 2, err)
 	}
-	if strings.Contains(msg, "not found") {
-		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
-	}
-	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm render-context --help"}, 1, err)
+	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
 }
