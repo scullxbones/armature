@@ -1,1 +1,2 @@
 ["claim","LNGHZN-S6-T4",1787783713,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S6-T4",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T4","claim_token":"ff21865047fb89dba4090ca9e18601c7"}]
+["note","LNGHZN-S6-T4",1787783951,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S6-T4",{"msg":"Starting TUI seam extraction: interactive tea.NewProgram/model wiring moves to *_tui.go; non-interactive paths and post-TUI side effects stay in original files. Measuring cmd coverage/mutant-coverage before the extract.","note_id":"note-1787783951464887882"}]
