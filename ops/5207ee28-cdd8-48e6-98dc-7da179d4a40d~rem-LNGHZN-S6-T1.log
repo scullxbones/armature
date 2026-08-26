@@ -15,3 +15,4 @@
 ["transition","LNGHZN-S6-T1",1787767815,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"to":"done","outcome":"handleRootError skips protocolExitError so validate/doctor reports and bootstrap JSON stay one stdout payload; arm hook stays on the git protocol instead of GENERAL-1."}]
 ["transition","LNGHZN-S6-T1",1787768305,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"to":"open"}]
 ["claim","LNGHZN-S6-T1",1787768306,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S6-T1","claim_token":"06c4ccd86dc559a7ed383504097e3046"}]
+["note","LNGHZN-S6-T1",1787768535,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S6-T1",{"msg":"Remediation: keep arm hook on git protocol for PreRun/args as well as RunE; write protocolExitError cause to stderr; doctor --fix must not concatenate a Command Failure after the plan.","note_id":"note-1787768535472419754"}]
