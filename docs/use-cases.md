@@ -252,10 +252,10 @@ Key settings:
 | Setting | What it controls |
 |---|---|
 | `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
-| `default_ttl` | TTL written to claim ops by some coordinator paths (minutes). Note: `arm claim --ttl` defaults to 60 min independently; this setting does not override that CLI default. |
-| `token_budget` | Context token budget used by the harness context path. Note: standalone `arm render-context` uses its own `--budget` flag (default: 4000) and does not read this config value. |
-| `low_stakes_push_threshold` | After this many low-stakes ops, the counter resets so the next high-stakes op triggers a push. This is a coalescing hint, not an auto-push trigger. |
-| `hooks` | Array of pre-transition hooks: name (label only), command array, and required flag |
+| `default_ttl` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted (explicit `--ttl` always wins). The value is written onto the claim op and drives staleness until a heartbeat or claimant activity extends it. Builtin fallback is 60 if the field is unset or 0. |
+| `token_budget` | Default token budget for `arm render-context`. Used when `--budget` is omitted (explicit `--budget` always wins). Truncation drops lowest-priority context layers until the bundle fits, approximating 4 characters per token. Builtin fallback is 4000 if the field is unset or 0; `arm bootstrap` writes 1600. |
+| `low_stakes_push_threshold` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets so the next high-stakes op (claim, transition, assign) pushes the accumulated batch to `_armature`. Lower values reset sooner; higher values coalesce more writes into each push. Builtin fallback is 5 if the field is unset or 0. |
+| `hooks` | Array of pre-transition hooks: `name`, `command` array, and `required` flag |
 
 ### Hook Configuration
 
@@ -278,7 +278,7 @@ Armature can fire hooks on state transitions. Configure them in `.armature/confi
 }
 ```
 
-Each hook is invoked as `command[0] command[1] ... command[n]` on every `arm transition` call — hooks run unconditionally and are not filtered by name or event type. If any hook exits non-zero, the transition is blocked regardless of the `required` field (the `required` field is reserved for future dispatcher-level filtering and has no effect in the current implementation).
+Each hook is invoked as `command[0] command[1] ... command[n]` on every `arm transition` call. Hooks run in array order and are not filtered by name or event type. A non-zero exit blocks the transition.
 
 ### Routine Operations
 
@@ -306,8 +306,8 @@ arm transition --issue TASK-055 --to ready \
 ### Notes for Wrangler
 
 - If state becomes corrupted, delete `.arm/.armature/` and run `arm bootstrap` to reinitialize. Use `arm doctor` first to diagnose issues.
-- Keep `default_ttl` generous enough that slow tasks do not get falsely flagged as stale.
-- Hooks with `required: true` will block operations if they fail; use sparingly for critical integrations.
+- Keep `default_ttl` generous enough that slow tasks do not expire their claims before heartbeats can renew them.
+- A failing hook (non-zero exit) blocks the transition; use them sparingly for critical integrations.
 
 ---
 
