@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Driver or Seam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;450;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --ground:#F5F7F8; --surface:#FFFFFF; --surface-2:#EDF0F2;
+  --ink:#13181C; --ink-2:#48535B; --ink-3:#727E88;
+  --rule:#DCE1E5; --rule-2:#C4CCD2;
+  --verified:#0080A6; --verified-soft:#D6EBF3;
+  --asserted:#B12A57; --asserted-soft:#F6DEE6;
+  --critical:#B33A2B; --warn:#8A6410;
+  --shadow:0 1px 2px rgba(19,24,28,.05),0 8px 24px -12px rgba(19,24,28,.18);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#12171C; --surface:#181F25; --surface-2:#1F272E;
+    --ink:#E7EDF1; --ink-2:#A6B2BB; --ink-3:#78848D;
+    --rule:#2A333B; --rule-2:#3A454E;
+    --verified:#2E9DBE; --verified-soft:#123039;
+    --asserted:#DB5C88; --asserted-soft:#3A1A26;
+    --critical:#E0715F; --warn:#D2A03A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#12171C; --surface:#181F25; --surface-2:#1F272E;
+  --ink:#E7EDF1; --ink-2:#A6B2BB; --ink-3:#78848D;
+  --rule:#2A333B; --rule-2:#3A454E;
+  --verified:#2E9DBE; --verified-soft:#123039;
+  --asserted:#DB5C88; --asserted-soft:#3A1A26;
+  --critical:#E0715F; --warn:#D2A03A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1060px;margin:0 auto;padding:0 28px 120px;}
+.col{max-width:660px;}
+p,ul,ol{margin:0 0 1.05em;}
+a{color:var(--verified);}
+strong{font-weight:600;}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.87em;}
+code{background:var(--surface-2);padding:.1em .35em;border-radius:3px;color:var(--ink-2);}
+h1,h2,h3{font-family:Newsreader,Georgia,serif;font-weight:500;text-wrap:balance;line-height:1.18;margin:0;}
+
+/* masthead */
+.mast{padding:72px 0 34px;border-bottom:1px solid var(--rule);}
+.kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:20px;}
+h1{font-size:clamp(44px,6.4vw,76px);letter-spacing:-.02em;}
+h1 em{font-style:italic;color:var(--verified);}
+.standfirst{font-family:Newsreader,Georgia,serif;font-size:clamp(19px,2.3vw,23px);line-height:1.5;color:var(--ink-2);max-width:640px;margin-top:22px;}
+.byline{margin-top:26px;font-size:13px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:8px 20px;}
+
+/* verdict panel */
+.verdict{margin:38px 0 8px;background:var(--surface);border:1px solid var(--rule);border-radius:4px;box-shadow:var(--shadow);overflow:hidden;}
+.verdict-head{padding:26px 30px 22px;border-bottom:1px solid var(--rule);}
+.verdict-label{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:12px;}
+.verdict-line{font-family:Newsreader,Georgia,serif;font-size:clamp(24px,3.2vw,32px);line-height:1.28;}
+.verdict-body{padding:24px 30px 28px;font-size:16px;color:var(--ink-2);}
+.verdict-body p:last-child{margin-bottom:0;}
+.verdict-body strong{color:var(--ink);}
+
+/* sections */
+section{padding-top:72px;}
+.sec-head{display:flex;gap:16px;align-items:baseline;margin-bottom:26px;}
+.sec-num{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--verified);font-weight:500;padding-top:8px;letter-spacing:.06em;}
+h2{font-size:clamp(28px,3.8vw,38px);letter-spacing:-.015em;}
+h3{font-size:21px;margin:34px 0 12px;letter-spacing:-.005em;}
+.lede{font-size:18.5px;color:var(--ink-2);}
+
+/* figures */
+figure{margin:34px 0;background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:26px 28px 22px;}
+figcaption{font-size:13.5px;color:var(--ink-3);line-height:1.55;margin-top:18px;padding-top:16px;border-top:1px solid var(--rule);}
+.fig-title{font-family:Newsreader,Georgia,serif;font-size:20px;margin-bottom:4px;}
+.fig-sub{font-size:13.5px;color:var(--ink-3);margin-bottom:22px;}
+.scroll{overflow-x:auto;}
+
+/* bar chart */
+.bars{display:flex;flex-direction:column;gap:9px;}
+.bar-row{display:grid;grid-template-columns:190px 1fr 44px;gap:14px;align-items:center;}
+.bar-lab{font-size:13.5px;color:var(--ink-2);text-align:right;line-height:1.3;}
+.bar-track{height:22px;background:var(--surface-2);border-radius:2px;position:relative;}
+.bar-fill{height:100%;border-radius:2px;background:var(--rule-2);}
+.bar-fill.hi{background:var(--asserted);}
+.bar-fill.hi2{background:var(--verified);}
+.bar-val{font-family:"JetBrains Mono",monospace;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink-2);}
+
+/* split compare */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+@media(max-width:640px){.compare{grid-template-columns:1fr;}}
+.cmp{border:1px solid var(--rule);border-radius:4px;padding:18px 20px 20px;background:var(--ground);}
+.cmp-h{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-bottom:16px;}
+.cmp-h.d{color:var(--asserted);}
+.cmp-h.s{color:var(--verified);}
+.stack{display:flex;height:30px;border-radius:2px;overflow:hidden;gap:2px;margin-bottom:14px;}
+.seg{display:flex;align-items:center;justify-content:center;font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:500;color:#fff;}
+.leg{font-size:13px;color:var(--ink-2);display:flex;flex-direction:column;gap:5px;}
+.leg div{display:flex;align-items:center;gap:8px;}
+.dot{width:9px;height:9px;border-radius:2px;flex:none;}
+
+/* line chart */
+.linewrap{min-width:540px;}
+.axis-lab{font-family:"JetBrains Mono",monospace;font-size:11px;fill:var(--ink-3);}
+.gridline{stroke:var(--rule);stroke-width:1;}
+
+/* timeline */
+.tl{position:relative;padding-left:26px;margin:30px 0;}
+.tl:before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:var(--rule);}
+.tl-item{position:relative;margin-bottom:26px;}
+.tl-item:last-child{margin-bottom:0;}
+.tl-item:before{content:"";position:absolute;left:-24px;top:7px;width:10px;height:10px;border-radius:50%;background:var(--ground);border:2px solid var(--rule-2);}
+.tl-item.acc:before{border-color:var(--asserted);background:var(--asserted);}
+.tl-item.acc2:before{border-color:var(--verified);background:var(--verified);}
+.tl-date{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink-3);margin-bottom:3px;}
+.tl-t{font-weight:600;margin-bottom:3px;}
+.tl-b{font-size:15px;color:var(--ink-2);}
+
+/* callouts */
+.pull{border-left:3px solid var(--asserted);padding:4px 0 4px 22px;margin:32px 0;font-family:Newsreader,Georgia,serif;font-size:22px;line-height:1.42;color:var(--ink);}
+.pull cite{display:block;font-family:"Public Sans",sans-serif;font-size:13px;font-style:normal;color:var(--ink-3);margin-top:12px;}
+.note{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--verified);border-radius:3px;padding:18px 22px;margin:28px 0;font-size:15.5px;color:var(--ink-2);}
+.note strong{color:var(--ink);}
+.note .nh{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--verified);font-weight:600;margin-bottom:9px;}
+.warnbox{border-left-color:var(--critical);}
+.warnbox .nh{color:var(--critical);}
+
+/* attack list */
+.atk{border:1px solid var(--rule);border-radius:4px;background:var(--surface);margin-bottom:14px;overflow:hidden;}
+.atk-h{display:flex;gap:12px;align-items:flex-start;padding:16px 20px 14px;}
+.badge{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:2px;font-weight:500;flex:none;margin-top:2px;}
+.b-held{background:var(--asserted-soft);color:var(--asserted);}
+.b-fell{background:var(--verified-soft);color:var(--verified);}
+.atk-t{font-weight:600;font-size:15.5px;line-height:1.4;}
+.atk-b{padding:0 20px 18px 20px;font-size:15px;color:var(--ink-2);}
+.atk-b p{margin-bottom:.7em;}
+.atk-b p:last-child{margin-bottom:0;}
+
+/* stages */
+.stage{display:grid;grid-template-columns:78px 1fr;gap:20px;padding:22px 0;border-top:1px solid var(--rule);}
+.stage:last-child{border-bottom:1px solid var(--rule);}
+.stage-n{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--verified);font-weight:500;letter-spacing:.05em;padding-top:3px;}
+.stage-t{font-family:Newsreader,Georgia,serif;font-size:22px;margin-bottom:8px;}
+.stage-b{font-size:15.5px;color:var(--ink-2);}
+.stage-b ul{margin:.6em 0 0;padding-left:19px;}
+.stage-b li{margin-bottom:.42em;}
+@media(max-width:640px){.stage{grid-template-columns:1fr;gap:6px;}}
+
+/* stat row */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;margin:32px 0;}
+.stat{background:var(--surface);padding:20px 18px;}
+.stat-n{font-family:Newsreader,Georgia,serif;font-size:34px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.stat-n.a{color:var(--asserted);} .stat-n.v{color:var(--verified);}
+.stat-l{font-size:13px;color:var(--ink-3);margin-top:9px;line-height:1.4;}
+
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin:8px 0 0;}
+th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:0 14px 10px 0;border-bottom:1px solid var(--rule-2);}
+td{padding:12px 14px 12px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-2);}
+td:first-child{color:var(--ink);font-weight:500;white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+
+footer{margin-top:80px;padding-top:28px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--ink-3);}
+::selection{background:var(--verified);color:#fff;}
+:focus-visible{outline:2px solid var(--verified);outline-offset:2px;}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="kicker">Armature · Architecture Review</div>
+  <h1>Driver or <em>Seam</em></h1>
+  <div class="standfirst">Eight weeks of dogfooding says prompted agents cannot be trusted with facts. That is not the same as saying they cannot be trusted to drive — and the difference is the whole decision.</div>
+  <div class="byline">
+    <span>124 raw findings · 17 curated themes · 1,190 commits · 677 closed issues</span>
+    <span>Adversarially verified</span>
+    <span>2026-08-23</span>
+  </div>
+</header>
+
+<div class="verdict col">
+  <div class="verdict-head">
+    <div class="verdict-label">The answer</div>
+    <div class="verdict-line">No. A prompted LLM is not the wrong architecture — but <em>prompted</em> has to stop being load-bearing for facts.</div>
+  </div>
+  <div class="verdict-body">
+    <p>The corpus proves one sentence: <strong>no governance step may be optional-by-prompt.</strong> Every step that depended on an agent choosing to type a command, pass a flag, run a full gate, or stand in the right checkout failed — repeatedly, under explicit contrary instructions, across every model tier.</p>
+    <p>That is an argument about <strong>who is allowed to assert a fact</strong>, not about who invokes the CLI. Rebuilding armature as a harness-launching driver would answer a question the evidence is not asking, at a cost you have already paid once.</p>
+  </div>
+</div>
+
+<section id="question">
+  <div class="sec-head"><div class="sec-num">01</div><h2>Why this keeps coming back</h2></div>
+  <div class="col">
+    <p class="lede">You have flip-flopped once already, and the record of that reversal is the most useful evidence in the repository.</p>
+    <p>In May 2026 armature <em>was</em> the deterministic driver. <code>arm orchestrate</code> and <code>arm worker run</code> shipped with launch adapters for Claude, Codex and Devin, crash-resume state derivation, and a zero-trust diff/reset/stage/commit pipeline. Four weeks later the entire subsystem was deleted.</p>
+    <p>The reason recorded in <code>docs/archive/orchestration/2026-06-03-remove-managed-execution-design.md</code> is exactly one thing, and it is worth quoting because it is <em>not</em> what you remember it being:</p>
+  </div>
+
+  <div class="pull col">“managed execution was abandoned because harness behavior and inversion of control created excessive complexity”
+    <cite>2026-06-03 removal design, lines 294–295 — the file's only stated rationale</cite></div>
+
+  <div class="col">
+    <p>I searched that document for <code>api key</code>, <code>subscription</code>, <code>billing</code>, <code>market</code> and <code>cost</code>. There are no matches. <strong>The addressable-market argument that you remember as the reason is not written down anywhere in the repository.</strong> It exists only in your head and now in this report — which means the next person to reopen this question, including a future you, will read "complexity" and conclude the constraint has lifted.</p>
+    <p>That is the first concrete finding: if the commercial constraint is real, it needs to be a recorded decision, not a memory.</p>
+  </div>
+
+  <div class="tl col">
+    <div class="tl-item acc">
+      <div class="tl-date">2026-05-08</div>
+      <div class="tl-t">The driver is built</div>
+      <div class="tl-b">E7-S1 ships <code>arm orchestrate</code>, <code>arm worker run</code>, harness adapters, retry/phase lifecycle. 17 issues, plus an 11-issue worker runtime.</div>
+    </div>
+    <div class="tl-item acc">
+      <div class="tl-date">2026-05-30 → 06-03</div>
+      <div class="tl-b"><strong>19 more issues</strong> fixing its contract bugs. PR #28's seven RepoRunner defects get filed three times over.</div>
+    </div>
+    <div class="tl-item acc">
+      <div class="tl-date">2026-06-04</div>
+      <div class="tl-t">The driver is deleted</div>
+      <div class="tl-b">ORCRMV removes 10,620 lines across two commits. Standing non-goal recorded: <em>"Armature does not execute or supervise harnesses."</em> 19 of the repo's 29 total cancellations are this arc's debris.</div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-date">2026-06 → 08</div>
+      <div class="tl-t">The evidence arrives — after the decision</div>
+      <div class="tl-b">Fabricated done reports, worktree bypass across five stories, a phantom <code>merged</code>. Almost none of this existed when the driver was killed.</div>
+    </div>
+    <div class="tl-item acc2">
+      <div class="tl-date">2026-08-23</div>
+      <div class="tl-t">The constitution is already downstream of the pain</div>
+      <div class="tl-b">ADRs 0013 → 0014 → 0016 each move authority from prose into code. The trajectory is set; the question is whether to keep walking it.</div>
+    </div>
+  </div>
+
+  <div class="note col">
+    <div class="nh">The asymmetry that matters</div>
+    The kill decision was made on <strong>complexity</strong> grounds in June, <em>before</em> the reliability evidence accumulated. So both architectures now carry a real, documented cost record in this repo — and neither record was available when the other was chosen.
+  </div>
+</section>
+
+<section id="evidence">
+  <div class="sec-head"><div class="sec-num">02</div><h2>What 124 findings actually say</h2></div>
+  <div class="col">
+    <p class="lede">The headline is not the one the frustration predicts. LLM misbehaviour is a minority of the pile — armature's own bugs are more than double it.</p>
+  </div>
+
+  <figure>
+    <div class="fig-title">Root cause of every raw dogfood finding</div>
+    <div class="fig-sub">All 124 findings, classified one by one. The three LLM-driver causes are grouped.</div>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-lab">Armature's own bugs</div><div class="bar-track"><div class="bar-fill hi2" style="width:100%"></div></div><div class="bar-val">36</div></div>
+      <div class="bar-row"><div class="bar-lab">Other / uncategorised</div><div class="bar-track"><div class="bar-fill" style="width:61.1%"></div></div><div class="bar-val">22</div></div>
+      <div class="bar-row"><div class="bar-lab">LLM driver nondeterminism</div><div class="bar-track"><div class="bar-fill hi" style="width:47.2%"></div></div><div class="bar-val">17</div></div>
+      <div class="bar-row"><div class="bar-lab">Missing deterministic seam</div><div class="bar-track"><div class="bar-fill" style="width:44.4%"></div></div><div class="bar-val">16</div></div>
+      <div class="bar-row"><div class="bar-lab">Documentation gaps</div><div class="bar-track"><div class="bar-fill" style="width:44.4%"></div></div><div class="bar-val">16</div></div>
+      <div class="bar-row"><div class="bar-lab">Harness limitations</div><div class="bar-track"><div class="bar-fill" style="width:30.6%"></div></div><div class="bar-val">11</div></div>
+      <div class="bar-row"><div class="bar-lab">Environment / tooling</div><div class="bar-track"><div class="bar-fill" style="width:16.7%"></div></div><div class="bar-val">6</div></div>
+    </div>
+    <figcaption><strong>Read this carefully.</strong> LLM nondeterminism (fabrication 4, ignored instructions 9, output inconsistency 4) totals 17 of 124 — around 14%. Armature's own defects total 36. A deterministic driver runs the same buggy <code>arm</code> code and fails identically on all 36.</figcaption>
+  </figure>
+
+  <div class="col">
+    <p>That number cuts against rebuilding the driver, but it understates the severity problem, because the LLM failures are concentrated in the worst tier. Restricting to the 29 findings rated <strong>P0 or P1</strong> across the curated themes produces the single most decisive figure in this review.</p>
+  </div>
+
+  <figure>
+    <div class="fig-title">Could it have been prevented? — P0 and P1 findings only</div>
+    <div class="fig-sub">29 severe findings, each assessed twice: once against a deterministic driver, once against a deterministic seam inside the current architecture.</div>
+    <div class="compare">
+      <div class="cmp">
+        <div class="cmp-h d">Armature as driver</div>
+        <div class="stack">
+          <div class="seg" style="flex:14;background:var(--asserted)">14</div>
+          <div class="seg" style="flex:6;background:var(--rule-2);color:var(--ink-2)">6</div>
+          <div class="seg" style="flex:9;background:var(--surface-2);color:var(--ink-3)">9</div>
+        </div>
+        <div class="leg">
+          <div><span class="dot" style="background:var(--asserted)"></span> 14 prevented</div>
+          <div><span class="dot" style="background:var(--rule-2)"></span> 6 partially</div>
+          <div><span class="dot" style="background:var(--surface-2);border:1px solid var(--rule-2)"></span> <strong>9 not prevented at all</strong></div>
+        </div>
+      </div>
+      <div class="cmp">
+        <div class="cmp-h s">Deterministic seam</div>
+        <div class="stack">
+          <div class="seg" style="flex:22;background:var(--verified)">22</div>
+          <div class="seg" style="flex:7;background:var(--rule-2);color:var(--ink-2)">7</div>
+        </div>
+        <div class="leg">
+          <div><span class="dot" style="background:var(--verified)"></span> 22 prevented (3 already shipped)</div>
+          <div><span class="dot" style="background:var(--rule-2)"></span> 7 partially</div>
+          <div><span class="dot" style="background:var(--surface-2);border:1px solid var(--rule-2)"></span> <strong>0 not prevented</strong></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Every severe finding in the corpus is reachable by a deterministic seam, at least partially. Nine are beyond a driver's reach entirely — they are wrong-code and hollow-test failures that survive any control architecture, because the LLM authors the tests either way and the gates run them green.</figcaption>
+  </figure>
+
+  <div class="note col warnbox">
+    <div class="nh">One correction to my own analysis</div>
+    An earlier draft of this review claimed a driver fails to prevent "62 of 124" findings. That divides by the wrong denominator — 18 of the 124 are <em>positive</em> findings recording things that worked, where the question is null. Against the 106 real problems a driver prevents 35 fully and 25 partially: <strong>57%, a majority, not a minority.</strong> The honest statement is the P0/P1 one above, not the raw count.
+  </div>
+
+  <div class="col">
+    <h3>The trend that makes it feel like pushing a rope</h3>
+    <p>The subjective experience is real and it is measurable. As the prompted multi-agent workflow became the sole driver of development, the share of commits that are fixes rose almost monotonically.</p>
+  </div>
+
+  <figure>
+    <div class="scroll"><div class="linewrap">
+    <svg viewBox="0 0 560 230" width="100%" height="230" role="img" aria-label="Fix commits as a share of monthly commits, rising from 7 percent in March 2026 to 59 percent in August 2026">
+      <line class="gridline" x1="46" y1="20" x2="545" y2="20"/>
+      <line class="gridline" x1="46" y1="62" x2="545" y2="62"/>
+      <line class="gridline" x1="46" y1="104" x2="545" y2="104"/>
+      <line class="gridline" x1="46" y1="146" x2="545" y2="146"/>
+      <line class="gridline" x1="46" y1="188" x2="545" y2="188" style="stroke:var(--rule-2)"/>
+      <text class="axis-lab" x="38" y="24" text-anchor="end">80%</text>
+      <text class="axis-lab" x="38" y="66" text-anchor="end">60%</text>
+      <text class="axis-lab" x="38" y="108" text-anchor="end">40%</text>
+      <text class="axis-lab" x="38" y="150" text-anchor="end">20%</text>
+      <text class="axis-lab" x="38" y="192" text-anchor="end">0%</text>
+      <line x1="299" y1="14" x2="299" y2="188" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 3" opacity=".5"/>
+      <text class="axis-lab" x="304" y="26" style="fill:var(--ink-3)">driver deleted · agents take over</text>
+      <!-- feat line (recessive) -->
+      <polyline fill="none" stroke="var(--rule-2)" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round"
+        points="70,72 162,72 253,110 345,127 436,144 528,171"/>
+      <text class="axis-lab" x="524" y="164" text-anchor="end" style="fill:var(--ink-3)">8% feat</text>
+      <!-- fix line -->
+      <polyline fill="none" stroke="var(--asserted)" stroke-width="2.5" stroke-linejoin="round"
+        points="70,173 162,167 253,169 345,108 436,94 528,64"/>
+      <circle cx="70" cy="173" r="3.5" fill="var(--asserted)"/>
+      <circle cx="162" cy="167" r="3.5" fill="var(--asserted)"/>
+      <circle cx="253" cy="169" r="3.5" fill="var(--asserted)"/>
+      <circle cx="345" cy="108" r="3.5" fill="var(--asserted)"/>
+      <circle cx="436" cy="94" r="3.5" fill="var(--asserted)"/>
+      <circle cx="528" cy="64" r="5" fill="var(--asserted)" stroke="var(--surface)" stroke-width="2"/>
+      <text class="axis-lab" x="70" y="166" style="fill:var(--asserted);font-weight:500" text-anchor="middle">7%</text>
+      <text class="axis-lab" x="524" y="54" style="fill:var(--asserted);font-weight:500" text-anchor="end">59% fix</text>
+      <text class="axis-lab" x="70" y="206" text-anchor="middle">Mar</text>
+      <text class="axis-lab" x="162" y="206" text-anchor="middle">Apr</text>
+      <text class="axis-lab" x="253" y="206" text-anchor="middle">May</text>
+      <text class="axis-lab" x="345" y="206" text-anchor="middle">Jun</text>
+      <text class="axis-lab" x="436" y="206" text-anchor="middle">Jul</text>
+      <text class="axis-lab" x="528" y="206" text-anchor="middle">Aug</text>
+    </svg>
+    </div></div>
+    <figcaption>Verified directly from <code>git log</code>: fix share by month — 7%, 10%, 9%, 38%, 45%, 59%. The June inflection is the switch to the multi-agent skill-driven workflow. Read one way, the system now spends most of its throughput repairing its own driver. Read another, the fixes cluster in exactly the stories whose <em>purpose</em> was adversarial hardening, with only 3 reverts in 1,190 commits — the output of a review cascade that works. The data alone does not pick.</figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>The failure that should decide it</h3>
+    <p><code>ARCHIMP-S15</code> stood recorded as <strong><code>merged</code></strong> — the status the constitution defines as <em>confirmed-on-main</em> — for code that never existed on main. Two agent-typed transition ops, twelve minutes after claim, promoted transitively by rollup. <code>arm validate</code> reported 730/730 clean over it. It was found months later, by accident, during unrelated branch cleanup.</p>
+    <p>I verified the mechanism in source rather than taking the finding's word for it:</p>
+    <ul>
+      <li><code>cmd/armature/transition.go</code> carries <strong>no git-evidence check</strong> on the merged path; <code>--pr</code> is optional by its own help text.</li>
+      <li><code>internal/materialize/engine.go:589</code> — <code>RunRollup</code> promotes parents by <em>aggregating</em> children's status, never verifying it.</li>
+      <li><code>internal/sync/sync.go:17</code> — <code>DetectMerges</code> skips issues with an empty branch <em>and</em> silently <code>continue</code>s on error, then the caller prints “No merged branches detected.”</li>
+    </ul>
+    <p>The P0 is structural, not a one-off. But the base rate matters too, and it is the strongest thing that can be said for the status quo: a content-based audit of all 569 merged records found <strong>562 confirmed, 0 other false merges, 7 indeterminate.</strong> One bad family in ~570 — and because history is append-only, it was corrected by appending a cancellation rather than rewriting anything.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-n a">17</div><div class="stat-l">of 124 findings caused by LLM nondeterminism</div></div>
+    <div class="stat"><div class="stat-n a">36</div><div class="stat-l">caused by armature's own bugs</div></div>
+    <div class="stat"><div class="stat-n v">0</div><div class="stat-l">severe findings a seam cannot reach</div></div>
+    <div class="stat"><div class="stat-n v">562<span style="font-size:18px;color:var(--ink-3)">/569</span></div><div class="stat-l">merged records confirmed on main</div></div>
+  </div>
+</section>
+
+<section id="reframe">
+  <div class="sec-head"><div class="sec-num">03</div><h2>You already have a driver</h2></div>
+  <div class="col">
+    <p class="lede">This is the reframing that dissolves the flip-flop, and it came out of the adversarial pass arguing <em>against</em> the recommendation.</p>
+    <p>Armature runs a state machine today: survey the DAG, dispatch a wave, integrate outcomes, validate citations, close with a PR. That loop is real, it is load-bearing, and it is <strong>written in markdown and executed by an LLM.</strong></p>
+    <p>The doc-drift finding cluster is what that costs: orchestration logic encoded as untestable prose and shell pseudocode drifted from the CLI, and from itself, repeatedly. That entire failure class has no analogue when the loop is compiled Go with tests.</p>
+  </div>
+
+  <div class="pull col">The real question was never “driver or no driver.” It is whether the driver you already run is written in a language with a compiler and tests, or in prose that provably drifts.</div>
+
+  <div class="col">
+    <p>Once you separate the two things that were bundled together in <code>arm orchestrate</code>, the decision stops being a reversal:</p>
+    <table>
+      <thead><tr><th>Capability</th><th>Status</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Launching harnesses</td><td>Stays dead</td><td>Vendor adapters, auth resolution, retry policy — verbatim the “Removed Configuration” of the 2026-06-03 design. Collides with N2, forces API-key billing, and is what actually produced the complexity that killed it.</td></tr>
+        <tr><td>Owning the loop</td><td><strong>Bring into code</strong></td><td>Nothing in the removal design forbids arm owning branch derivation, transition authority, or running the gate itself. That document forbids <em>supervising harnesses</em>, which is a different thing.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:1.1em">Moving control-plane logic out of skill prose into refusing verbs is not a step back toward <code>arm orchestrate</code>. It is the thing you have been doing since ADR 0003, and the constitution has been quietly ratifying it the whole time.</p>
+  </div>
+
+  <figure>
+    <div class="fig-title">Measured, the complexity argument inverts</div>
+    <div class="fig-sub">Production Go, excluding tests — the entire live enforcement stack against what the driver cost before deletion.</div>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-lab">Driver, deleted 2026-06-04</div><div class="bar-track"><div class="bar-fill hi" style="width:100%"></div></div><div class="bar-val">10,620</div></div>
+      <div class="bar-row"><div class="bar-lab">All live enforcement seams</div><div class="bar-track"><div class="bar-fill hi2" style="width:27.6%"></div></div><div class="bar-val">2,932</div></div>
+    </div>
+    <figcaption>Seam stack: <code>harnesshook</code> 1,613 · <code>deliverygate</code> 593 · <code>harnesspolicy</code> 340 · <code>scopematch</code> 279 · <code>commitref</code> 72 · <code>sync</code> 35. The driver's flattering fix-commit ratio is an artifact of its remediation being <code>rm</code> — you cannot count fixes against a subsystem whose fix was deletion.</figcaption>
+  </figure>
+</section>
+
+<section id="attacks">
+  <div class="sec-head"><div class="sec-num">04</div><h2>What survived the attack</h2></div>
+  <div class="col">
+    <p class="lede">The verdict was drafted, then attacked from three independent lenses — one steelmanning the driver, one steelmanning seams, one auditing the constitution. Several attacks landed. These are the ones that changed the answer.</p>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-held">Attack held</span><div class="atk-t">The commercial case against the driver was misattributed — and it is the weakest evidence in the review</div></div>
+    <div class="atk-b">
+      <p>The draft cited the removal design as recording an addressable-market rationale. It does not; I verified this. Separately, the <code>--print</code> policy finding is <strong>medium confidence</strong>, sourced to two GitHub issue numbers and an unlinked policy note.</p>
+      <p><strong>Effect:</strong> the commercial argument is real as <em>your</em> stated reason, but it is not documented history and should not be scored as an independent refutation. The driver's rejection stands on the ORCRMV record and the N2 collision alone — which is where it should have rested.</p>
+    </div>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-held">Attack held</span><div class="atk-t">“Derivable” is not “derived” — the invocation problem survives the recommendation</div></div>
+    <div class="atk-b">
+      <p>The plan makes <code>merged</code> derivable from git content. But the corpus contains the controlled experiment: that content-based audit <em>already existed</em> and found the phantom merge only because a human happened to run it, months late. The theme's own conclusion — <em>“we cannot rely on agents to run commands, even if we ask them to”</em> — indicts the verb as much as the flag.</p>
+      <p><strong>Effect:</strong> real, and it is the strongest surviving argument for a driver. The answer is that unattended invocation is a <em>packaging</em> question — cron, CI, or a thin runner you own — not a constitutional one. The constitution constrains armature, not your crontab.</p>
+    </div>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-held">Attack held</span><div class="atk-t">The plan's own break-glass reintroduces the hole it exists to close</div></div>
+    <div class="atk-b">
+      <p>The draft proposed gating <code>arm merged</code> with <code>--i7-override --reason</code> as the bypass. ADR 0016 line 69 says verbatim: <em>“Break-glass is a Release Override, not a flag on the agent verb.”</em> This repo already has the proof — <code>--force</code> was typed reflexively on 11 consecutive claims.</p>
+      <p><strong>Effect:</strong> corrected in the plan below. Break-glass must require a controlling terminal, record the reason, and never report green.</p>
+    </div>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-held">Attack held</span><div class="atk-t">Ordering error: the third value is a precondition, not a follow-on</div></div>
+    <div class="atk-b">
+      <p>A derived promoter without a <em>not-checked</em> value must render every indeterminate case as a confident two-valued answer — reproducing the exact <code>DetectMerges</code> defect it is meant to fix. The draft acknowledged this in its own risk list and then sequenced it second anyway.</p>
+      <p><strong>Effect:</strong> stages reordered below.</p>
+    </div>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-fell">Attack fell</span><div class="atk-t">“Enforcement can't reach a model typing <code>arm transition</code> directly”</div></div>
+    <div class="atk-b">
+      <p>Raised as fatal to the seam case. It is wrong, and I verified why: <code>internal/harnesshook/evaluator.go:44</code> already inspects Bash command strings and returns <code>DecisionBlock</code> on direct <code>git commit</code>, with careful flag-skipping parsing. Command-pattern denial at PreToolUse is <strong>shipped, working machinery</strong>. Extending it to <code>arm transition --to merged</code> is a small change to an existing function.</p>
+      <p><strong>Residual:</strong> the parser tests <code>fields[0] == "git"</code>, so <code>sh -c 'git commit'</code> slips past. The bypass is narrower than claimed but not zero — which is exactly why enforcement belongs in the verb, with the hook as defence in depth.</p>
+    </div>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-held">Attack held</span><div class="atk-t">Hook-based mandates are Claude-shaped, and you ship to three harnesses</div></div>
+    <div class="atk-b">
+      <p><code>AGENTS.md</code> deploys skills to <code>.claude/</code>, <code>.gemini/</code> and <code>.codex/</code> alike. Any rule enforced by a hook is advisory on two of three harnesses — the governing rule failing on the majority of the surface.</p>
+      <p><strong>Effect:</strong> every mandate must reduce to a refusal inside an <code>arm</code> verb to be portable. Hooks are an accelerator, never the primary control. This is also ADR 0016's own stated position.</p>
+    </div>
+  </div>
+
+  <div class="atk">
+    <div class="atk-h"><span class="badge b-held">Attack held</span><div class="atk-t">Deriving <code>merged</code> quietly removes the last human attestation</div></div>
+    <div class="atk-b">
+      <p>I7 says accountability for merges and overrides never transfers to the system. A human merging a PR is accountable for the <em>merge</em>; once promotion is derived by code, nobody is accountable for the <em>record</em> — which is the artifact I6 governs and the one that was fiction in ARCHIMP-S15.</p>
+      <p><strong>Effect:</strong> the plan needs a named human acceptance point — a <code>doctor</code>-surfaced derived-vs-recorded diff someone clears — or it trades an agent-authored false record for a program-authored one at larger blast radius.</p>
+    </div>
+  </div>
+</section>
+
+<section id="plan">
+  <div class="sec-head"><div class="sec-num">05</div><h2>What to actually do</h2></div>
+  <div class="col">
+    <p class="lede">Write the governing rule down first, because it settles every later argument: <strong>agents may drive work; they may not own facts.</strong></p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-n">STAGE 0</div>
+    <div>
+      <div class="stage-t">Stop recording fiction</div>
+      <div class="stage-b">Days, not weeks. Pure git facts, no LLM in the loop, no new architecture.
+        <ul>
+          <li>Introduce the third value — <em>checked-true / checked-false / not-checked</em> — and render not-checked as not-checked everywhere. This moved up from Stage 2: it is a precondition for anything derived.</li>
+          <li><code>arm transition --to merged</code> refuses without content-on-main evidence.</li>
+          <li><code>RunRollup</code> verifies rather than aggregates.</li>
+          <li>A <code>doctor</code> check: for every merged issue, is its declared scope's content actually on <code>origin/main</code>? This would have caught ARCHIMP-S15 on any day of the two months it went unnoticed.</li>
+          <li>Fix <code>SkippedDeliveryGate: false</code> — never write a positive assertion for a check that did not run.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-n">STAGE 1</div>
+    <div>
+      <div class="stage-t">Close the loop without an agent typing anything</div>
+      <div class="stage-b">
+        <ul>
+          <li>Persist the derived branch on the claim op, mirroring the shipped <code>worktree_path</code> precedent — and stop asking agents for <code>--branch</code>. Zero ops carried it across an entire story; no skill sentence will change that.</li>
+          <li><code>arm sync</code> decides merged from git evidence including squash merges, pull-only, and reports what it <em>did not</em> examine alongside its verdict.</li>
+          <li>Gate <code>arm merged</code> on the <em>presence</em> — never the rating — of a conformance assessment, ordered before worktree teardown so the command that finds the gap does not also destroy the recovery window.</li>
+          <li>Break-glass is an ADR-0016 Release Override: controlling terminal, recorded reason, never green. <strong>Not</strong> a flag on an agent verb.</li>
+          <li>Add the human acceptance point: a derived-vs-recorded diff surfaced by <code>doctor</code> that a person clears, so I7 stays honest.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-n">STAGE 2</div>
+    <div>
+      <div class="stage-t">Fix the seams that lie</div>
+      <div class="stage-b">These are what train agents to distrust gates, and a driver would inherit every one.
+        <ul>
+          <li><code>D8</code> confined to paths the repo could plausibly own — it currently flags harness-injected bind mounts as violations, “always red” across three recurrences.</li>
+          <li><code>CleanTree</code> honours <code>.gitignore</code>, so running the mandatory gate stops failing the gate.</li>
+          <li>The overlap checker gets transitive closure, parent containment and glob matching, so <code>--force</code> stops being reflex.</li>
+          <li>Extend the shipped command-denial in <code>evaluator.go</code> to state-transition verbs, as defence in depth behind the verb-level refusal.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-n">STAGE 3</div>
+    <div>
+      <div class="stage-t">A pre-registered decision point, not an open question</div>
+      <div class="stage-b">After Stages 0–2 have one full story of data, re-evaluate against a single criterion agreed <em>now</em>: <strong>does a new class of protocol failure appear that cannot be closed by a refusal at a verb?</strong>
+        <ul>
+          <li>If yes — write the amending ADR for a re-entrant <code>arm run --once</code> step function: foreground, human-launched, exits between steps, state only in git ops. Never a supervisor, never a daemon, and <strong>never model invocation inside arm.</strong> Note that the removal design's non-goals name <code>run</code> and <code>dispatch</code> explicitly, so this needs an amendment to that document too, not just to N2.</li>
+          <li>If no — the ORCRMV record stands and this question is closed by evidence rather than by fatigue.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="note col">
+    <div class="nh">The part most likely to be skipped</div>
+    Take the candidate follow-up lists from all seventeen themes and file them as <strong>one tracked epic with a burn-down</strong>. The record is unambiguous that follow-up lists are where P0s go to wait — that is exactly how ARCHIMP-S15 survived two months. Without this, the plan degrades into the status quo with better intentions.
+  </div>
+
+  <div class="note col">
+    <div class="nh">Keep this exactly as it is</div>
+    The layered LLM review cascade — fix, then a deliberately broader review, then implement — is the most-confirmed working pattern in your entire corpus, across 10+ runs. It has caught P0 bugs that deterministic gates structurally could not see, <em>including a bug inside one of your own shipped deterministic seams</em>. Nothing in this plan replaces it. Make the whole-story holistic pass required rather than optional — and note that doing so blocks delivery on review, which ADR 0005 phase-one forbids, so it needs its own narrow amending ADR.
+  </div>
+</section>
+
+<section id="falsify">
+  <div class="sec-head"><div class="sec-num">06</div><h2>What would change this answer</h2></div>
+  <div class="col">
+    <p class="lede">Stated in advance, so the next reversal has to clear a bar rather than a mood.</p>
+    <table>
+      <thead><tr><th>Signal</th><th>What it would mean</th></tr></thead>
+      <tbody>
+        <tr><td>Unattended is the product</td><td>If the target is genuinely no-human-at-the-keyboard fleets, invocation-dependent control is insufficient and the driver case strengthens sharply. <strong>Answer this before Stage 3.</strong> The evidence cannot settle it; only you can.</td></tr>
+        <tr><td>Fix-per-seam stays flat</td><td>The delivery gate cost 38 fix commits to 3 feat and was bypassed three ways in nine days. If that ratio does not fall as control-plane authority consolidates, the whack-a-mole reading wins and ORCRMV's complexity verdict deserves revisiting on its own terms.</td></tr>
+        <tr><td>Cheap-model fleets</td><td>Every fabrication instance in the corpus involved a haiku-tier worker. If the protocol-failure class is model-capability-bound, a driver is permanent structural cost for a temporary problem. If you are deploying cheap fleets deliberately, it is permanent.</td></tr>
+        <tr><td>A verb-proof failure appears</td><td>The Stage 3 trigger. One class that no refusal-at-a-verb can close, and the amendment gets written.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="provenance">
+  <div class="sec-head"><div class="sec-num">07</div><h2>How this was produced</h2></div>
+  <div class="col">
+    <p>Eight independent analysts read the corpus in parallel: two over the seventeen curated themes, two classifying all 124 raw findings file by file, one over 1,190 commits, one over 677 closed issues, one inventorying harness enforcement seams, one auditing the constitution and ADRs. A synthesis stage drafted the verdict; three adversarial reviewers then attacked it from fixed opposing lenses.</p>
+    <p><strong>Every load-bearing claim in this report was re-verified directly against source</strong> rather than trusted from an analyst — the phantom merge and its three enabling code paths, the ORCRMV deletion commits, the fix-share trend, the 2,932-vs-10,620 line comparison, the shipped command-denial, and the absence of any commercial rationale in the removal design. Two analyst claims did not survive that check and are corrected in the text above.</p>
+    <p>That verification step is not incidental. It is the same discipline this report recommends: <em>a fluent assertion is not evidence, and the fix is to derive the fact rather than to ask more firmly.</em></p>
+    <div class="note" style="border-left-color:var(--ink-3)">
+      <div class="nh" style="color:var(--ink-3)">Raw material</div>
+      The complete structured evidence bundle, per-agent transcripts and journal are saved beside this report in <code>docs/design/determinism-review/</code>. Nothing here is a summary you cannot audit.
+    </div>
+  </div>
+</section>
+
+<footer class="col">
+  Armature architecture review · prepared 2026-08-23 · evidence base 2026-06-22 → 2026-08-23
+</footer>
+
+</div>
+</body>
+</html>
