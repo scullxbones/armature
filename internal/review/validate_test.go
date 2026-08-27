@@ -507,6 +507,67 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 		assert.Contains(t, err.Error(), "activity")
 		assert.Contains(t, err.Error(), "(suggestion:")
 	})
+
+	t.Run("activity log digest mismatch", func(t *testing.T) {
+		t.Parallel()
+		logPath := filepath.Join(t.TempDir(), "armature-activity.log")
+		original := []byte(activityLogLineJSON(t, map[string]any{"command": "make build"}) + "\n")
+		require.NoError(t, os.WriteFile(logPath, original, 0o600))
+		input := validValidateInputWithActivity(t, &review.Activity{
+			Digest:     review.FingerprintActivity(original),
+			EntryCount: 1,
+			LogPath:    logPath,
+		})
+		require.NoError(t, os.WriteFile(logPath, []byte(activityLogLineJSON(t, map[string]any{"command": "curl evil.example"})+"\n"), 0o600))
+
+		err := review.ValidateAssessment(input)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "activity log digest mismatch")
+		assert.Contains(t, err.Error(), "(suggestion: re-run arm review prepare so activity.digest matches the on-disk log)")
+		assert.NotContains(t, err.Error(), "fix the assessment to satisfy this check")
+	})
+
+	t.Run("activity log missing or unreadable", func(t *testing.T) {
+		t.Parallel()
+		err := review.ValidateAssessment(validValidateInputWithActivity(t, &review.Activity{
+			Digest:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			EntryCount: 1,
+			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
+		}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "activity log missing or unreadable")
+		assert.Contains(t, err.Error(), "(suggestion: restore the activity log or re-run arm review prepare)")
+		assert.NotContains(t, err.Error(), "fix the assessment to satisfy this check")
+	})
+}
+
+func validValidateInputWithActivity(t *testing.T, activity *review.Activity) review.RecordInput {
+	t.Helper()
+	bundle := &review.ReviewBundle{
+		SchemaVersion: review.SchemaVersion,
+		Issue:         review.IssueInfo{ID: "task-01", Type: "task", Title: "Test"},
+		Contract:      review.Contract{DefinitionOfDone: "Done"},
+		Delivery:      review.Delivery{BaseSHA: "base", HeadSHA: "head", Diff: "--- a/impl.go\n+++ b/impl.go\n@@ -1,0 +1,1 @@\n+package main"},
+		Fingerprints: review.Fingerprints{
+			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		Activity: activity,
+	}
+	bundle.BundleID = review.ComputeBundleID(*bundle)
+	return review.RecordInput{
+		IssueID: "task-01",
+		Bundle:  bundle,
+		Assessment: &review.ConformanceAssessment{
+			SchemaVersion:       review.SchemaVersion,
+			BundleID:            bundle.BundleID,
+			ContractFingerprint: bundle.Fingerprints.Contract,
+			DeliveryFingerprint: bundle.Fingerprints.Delivery,
+			Results: []review.CriterionResult{
+				{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
+			},
+		},
+	}
 }
 
 func TestValidateResultNoDiff_InvalidCriterionIDFormat_REQ_LNGHZN_S8_T1(t *testing.T) {
