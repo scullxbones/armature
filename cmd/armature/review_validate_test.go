@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,15 +84,40 @@ func prepareReviewValidateFixture(t *testing.T) (repo, bundleFile, validAssessme
 	return repo, bundleFile, validAssessment, badCitationAssessment
 }
 
+func countAssessmentAttestedOps(t *testing.T, repo string) int {
+	t.Helper()
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	n := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		logged, err := ops.ReadLog(filepath.Join(opsDir, entry.Name()))
+		require.NoError(t, err)
+		for _, op := range logged {
+			if op.Type == ops.OpAssessmentAttested {
+				n++
+			}
+		}
+	}
+	return n
+}
+
 func TestReviewValidateMatchesRecordValidation_REQ_LNGHZN_S8_T1(t *testing.T) {
 	repo, bundleFile, validAssessment, badCitationAssessment := prepareReviewValidateFixture(t)
 
+	attestedBefore := countAssessmentAttestedOps(t, repo)
 	validOut, err := runTrls(t, repo, "review", "validate", "--bundle", bundleFile, "--assessment", validAssessment)
 	require.NoError(t, err, "validate must accept an assessment record would accept: %s", validOut)
+	assert.Equal(t, attestedBefore, countAssessmentAttestedOps(t, repo), "validate must append no assessment-attested ops")
 
-	recordOut, err := runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", validAssessment, "--bundle", bundleFile)
+	recordOut, err := runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", validAssessment, "--bundle", bundleFile, "--format", "human")
 	require.NoError(t, err)
-	assert.Contains(t, recordOut, "recorded", "first record after validate must append an op (validate is read-only)")
+	assert.Contains(t, recordOut, "recorded with rating", "first record after validate must append an op (validate is read-only)")
+	assert.NotContains(t, recordOut, "already recorded", "idempotent duplicate means validate already attested")
+	assert.Equal(t, attestedBefore+1, countAssessmentAttestedOps(t, repo), "record (not validate) must append the attestation op")
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))

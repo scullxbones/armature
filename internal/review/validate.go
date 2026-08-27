@@ -207,6 +207,10 @@ func SuggestValidateFix(message string) string {
 		return "do not use a failed command as satisfied evidence; lower the status or cite a passing entry"
 	case strings.Contains(msg, "upgrade-only"):
 		return "add a diff citation (path) for this implementation criterion"
+	case strings.Contains(msg, "activity log digest mismatch"):
+		return "re-run arm review prepare so activity.digest matches the on-disk log"
+	case strings.Contains(msg, "activity log missing or unreadable"):
+		return "restore the activity log or re-run arm review prepare"
 	case strings.Contains(msg, "activity log validation"):
 		return "re-run arm review prepare so activity.digest matches the on-disk log"
 	case strings.Contains(msg, "bundle integrity"):
