@@ -381,6 +381,10 @@ _Avoid_: Agent format, JSON output, machine format
 Output whose shape is dictated by an external runtime and parsed without judgment, such as the harness-hook decisions Claude Code and Codex consume. Protocol output is exempt from the Agent Output Contract because its consumer is a runtime acting mechanically, not an agent reasoning about state.
 _Avoid_: Agent output, hook output
 
+**Artifact Output**:
+Output that is itself a canonical artifact whose top-level shape is governed by a named external consumer or schema and is meant to be redirected or piped verbatim. Artifact output is exempt from the Agent Output Contract only for explicitly classified command modes; output whose shape Armature owns remains agent-facing.
+_Avoid_: Protocol output, agent output, arbitrary carve-out
+
 **Deep Module**:
 A package or command group with a narrow public interface hiding substantial implementation, per ADR 0004. Deep modules exist at two layers that should stay aligned: the Go package (`internal/sources`, `internal/validate`, etc.) and, where a package has a CLI-facing counterpart, the command group (`sources`, `validate`) that exposes it. A hyphenated command with no corresponding deep module is a signal that either a module boundary needs drawing or the command doesn't deserve group status.
 _Avoid_: Package, module, component

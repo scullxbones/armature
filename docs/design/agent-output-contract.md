@@ -188,6 +188,12 @@ Keywords MUST / MUST NOT / SHOULD / MAY are used as in RFC 2119.
    Result data still MUST NOT be moved to stderr because an error path
    exists.
 
+Version queries remain agent-facing. In human format, `arm version` and the
+root `--version`, `-v`, and `-V` fast paths MAY print the existing bare version
+line. When `--format=json` or `--format=agent` is explicit or implied, those
+same paths MUST emit the envelope with payload key `versions`, `count` 1, and
+one row whose `version` member contains the version string.
+
 ### N2. Envelope
 
 On a successful structured invocation, stdout MUST contain exactly one JSON
