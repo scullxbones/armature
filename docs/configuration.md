@@ -11,9 +11,9 @@ The `.armature/config.json` file is stored on the `_armature` branch and accesse
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `project_type` | string | auto-detected | Project type, auto-detected from repo markers. Possible values: `go`, `node`, `python`, `rust`, `make`, `unknown`. |
-| `default_ttl` | integer | `60` | Default task time-to-live in minutes. Tasks without an explicit `ttl` use this value. After TTL expires, task status is flagged as stale. |
-| `token_budget` | integer | `1600` | Token budget for context assembly. `arm render-context` respects this budget (approximately `chars / 4`) when truncating large context layers. |
-| `low_stakes_push_threshold` | integer | `5` | Number of ops to accumulate before auto-pushing to the ops branch. Once this threshold is hit, ops are automatically committed and pushed to `_armature`. Lower values = more frequent pushes; higher values = fewer pushes but larger batches. |
+| `default_ttl` | integer | `60` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted; an explicit `--ttl` always wins. The chosen value is written onto the claim op and drives claim staleness (see [Interaction with Stale Detection](#interaction-with-stale-detection)). If unset or 0, the builtin fallback is 60. |
+| `token_budget` | integer | `1600` | Default token budget for `arm render-context`. Used when `--budget` is omitted; an explicit `--budget` always wins. Truncation approximates 4 characters per token (see [Interaction with Context Assembly](#interaction-with-context-assembly)). If unset or 0, the builtin fallback is 4000. `arm bootstrap` writes 1600. |
+| `low_stakes_push_threshold` | integer | `5` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets so the next high-stakes op (claim, transition, assign) pushes the accumulated batch to `_armature`. Lower values reset sooner (smaller batches); higher values coalesce more writes into each push. If unset or 0, the builtin fallback is 5. |
 | `hooks` | array | `[]` | Array of pre-transition hook configurations (see [Hooks](#hooks) below). |
 
 ### Project Type Detection
@@ -41,15 +41,14 @@ Each hook in the `hooks` array has this structure:
 {
   "name": "string",        // Unique hook identifier
   "command": ["string"],   // Shell command as array (e.g., ["bash", "-c", "make test"])
-  "required": boolean      // If true, transition is blocked if hook fails
+  "required": boolean
 }
 ```
 
 ### Hook Behavior
 
-- **Execution:** Hooks run sequentially in array order before the transition is materialized.
-- **Required hooks:** If a required hook exits with non-zero status, the transition is rejected and the op is not appended.
-- **Optional hooks:** If an optional hook fails, a warning is logged but the transition proceeds.
+- **Execution:** Hooks run sequentially in array order on every `arm transition`, before the transition is materialized. They are not filtered by `name` or event type.
+- **Failure:** If any hook exits with non-zero status, the transition is rejected and the op is not appended.
 - **Environment:** Hooks run in the context of the ops worktree (`.armature/`).
 
 ### Example: Require Tests Before Done
@@ -97,22 +96,20 @@ Edit `.armature/config.json` directly with a text editor. Changes take effect im
 
 ## Interaction with Context Assembly
 
-The `token_budget` field controls how `arm render-context` truncates large task contexts. When a task's context exceeds the budget:
+`arm render-context` takes its token budget from, in order: an explicit `--budget` flag, then `token_budget` in config when that value is greater than zero, then the builtin 4000. `--raw` skips truncation.
 
-1. **Fixed layers** (spec, snippets) are never truncated.
-2. **Truncatable layers** (blocker outcomes, parent chain, decisions, notes, sibling outcomes) are dropped in priority order.
-
-Example: With `token_budget: 1600` (approximately 6400 characters), if your spec alone is 4000 characters, only essential blocker information will be included.
+When assembled context exceeds `budget * 4` characters, lowest-priority layers are dropped until the bundle fits. At least one layer is always kept (typically the spec). Bootstrap's `token_budget: 1600` is about 6400 characters; if the spec itself is 4000 characters, only a few additional layers will remain.
 
 ## Interaction with Stale Detection
 
-Tasks with `ttl` fields use this formula to determine staleness:
+`default_ttl` is the default written onto each claim as `claim_ttl` when `arm claim` is run without `--ttl`. Claim staleness uses that recorded TTL:
 
 ```
-is_stale = (now - last_status_change_time) > default_ttl * 60 seconds
+last_activity = max(claimed_at, last_heartbeat, claiming_worker_activity)
+is_stale      = now > last_activity + claim_ttl * 60 seconds
 ```
 
-Update `default_ttl` to adjust when tasks are flagged stale. See `arm list` for staleness indicators.
+An explicit `--ttl` on `arm claim` overrides config for that claim only. Worker idle/stale classification also uses `default_ttl` when a claim recorded no TTL. See `arm list` for staleness indicators.
 
 ## See Also
 
