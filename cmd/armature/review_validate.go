@@ -70,7 +70,7 @@ func runReviewValidate(cmd *cobra.Command, assessmentFile, bundleFile string) er
 
 	assessment, err := review.DecodeConformanceAssessment(assessmentData)
 	if err != nil {
-		return fmt.Errorf("parse assessment JSON: %w", err)
+		return emitReviewValidateResult(cmd, review.AnnotateValidateError(fmt.Errorf("parse assessment JSON: %w", err)))
 	}
 
 	bundleData, err := os.ReadFile(filepath.Clean(bundleFile))
@@ -79,7 +79,7 @@ func runReviewValidate(cmd *cobra.Command, assessmentFile, bundleFile string) er
 	}
 	bundle, err := review.DecodeReviewBundle(bundleData)
 	if err != nil {
-		return fmt.Errorf("parse bundle JSON: %w", err)
+		return emitReviewValidateResult(cmd, review.AnnotateValidateError(fmt.Errorf("parse bundle JSON: %w", err)))
 	}
 
 	issueID := bundle.Issue.ID
@@ -111,7 +111,10 @@ func runReviewValidate(cmd *cobra.Command, assessmentFile, bundleFile string) er
 		IssueID: issueID,
 	}
 
-	validateErr := review.ValidateAssessment(input)
+	return emitReviewValidateResult(cmd, review.ValidateAssessment(input))
+}
+
+func emitReviewValidateResult(cmd *cobra.Command, validateErr error) error {
 	report := reviewValidateReport{Valid: validateErr == nil}
 	if validateErr != nil {
 		report.Failures = parseReviewValidateFailures(validateErr)
@@ -167,10 +170,16 @@ func parseReviewValidateFailures(err error) []reviewValidateFailure {
 			continue
 		}
 		msg, suggestion := splitReviewValidateSuggestion(trimmed)
+		if suggestion == "" {
+			suggestion = review.SuggestValidateFix(msg)
+		}
 		failures = append(failures, reviewValidateFailure{Message: msg, Suggestion: suggestion})
 	}
 	if len(failures) == 0 {
 		msg, suggestion := splitReviewValidateSuggestion(err.Error())
+		if suggestion == "" {
+			suggestion = review.SuggestValidateFix(msg)
+		}
 		failures = append(failures, reviewValidateFailure{Message: msg, Suggestion: suggestion})
 	}
 	return failures

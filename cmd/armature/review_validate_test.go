@@ -118,11 +118,9 @@ func TestReviewValidateSuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T) 
 		"--bundle", bundleFile,
 		"--assessment", badCitationAssessment,
 		"--format", "json")
-	assert.Equal(t, 1, code, "invalid assessment must exit non-zero")
-	out := stdout.String()
-	assert.NotContains(t, out, `"code":"REVIEW-1"`, "advisory validation must not wrap as a Command Failure")
-	assert.Contains(t, strings.ToLower(out), "citation")
-	assert.Contains(t, strings.ToLower(out), "path-level")
+	report := requireAdvisoryValidateReport(t, stdout.String(), code)
+	assert.Contains(t, strings.ToLower(report.Failures[0].Message), "citation")
+	assert.Contains(t, strings.ToLower(report.Failures[0].Suggestion), "path-level")
 
 	validStdout := new(bytes.Buffer)
 	code = executeThenHandleRootError(t, validStdout, new(bytes.Buffer),
@@ -132,4 +130,104 @@ func TestReviewValidateSuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T) 
 		"--assessment", validAssessment,
 		"--format", "json")
 	assert.Equal(t, 0, code, "valid assessment must exit zero")
+	validReport := decodeReviewValidateReport(t, validStdout.String())
+	assert.True(t, validReport.Valid)
+	assert.Empty(t, validReport.Failures)
+}
+
+func TestReviewValidateSuggestsSchemaAndCriterionID_REQ_LNGHZN_S8_T1(t *testing.T) {
+	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
+
+	t.Run("invalid schema_version", func(t *testing.T) {
+		path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_schema.json", func(obj map[string]any) {
+			obj["schema_version"] = 99
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "schema")
+		assert.Contains(t, report.Failures[0].Suggestion, "schema_version")
+	})
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		path := filepath.Join(repo, "assessment_malformed.json")
+		require.NoError(t, os.WriteFile(path, []byte("{"), 0o644))
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "parse")
+		assert.NotEmpty(t, report.Failures[0].Suggestion)
+	})
+
+	t.Run("unknown field is not a Command Failure", func(t *testing.T) {
+		path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_unknown_field.json", func(obj map[string]any) {
+			obj["unexpected_reviewer_field"] = "extra"
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		out := stdout.String()
+		assert.NotContains(t, out, `"code":"REVIEW-1"`)
+		if code != 0 {
+			report := requireAdvisoryValidateReport(t, out, code)
+			assert.NotEmpty(t, report.Failures[0].Suggestion)
+			return
+		}
+		report := decodeReviewValidateReport(t, out)
+		assert.True(t, report.Valid)
+	})
+
+	t.Run("criterion id acceptance_0", func(t *testing.T) {
+		path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_bad_id.json", func(obj map[string]any) {
+			results, ok := obj["results"].([]any)
+			require.True(t, ok)
+			require.NotEmpty(t, results)
+			first, ok := results[0].(map[string]any)
+			require.True(t, ok)
+			first["id"] = "acceptance_0"
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+		assert.Contains(t, joined, "acceptance_0")
+		assert.Contains(t, report.Failures[0].Suggestion, "acceptance[0]")
+	})
+}
+
+func mutateAssessmentJSON(t *testing.T, repo, src, name string, mut func(map[string]any)) string {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	require.NoError(t, err)
+	var obj map[string]any
+	require.NoError(t, json.Unmarshal(data, &obj))
+	mut(obj)
+	out, err := json.MarshalIndent(obj, "", "  ")
+	require.NoError(t, err)
+	path := filepath.Join(repo, name)
+	require.NoError(t, os.WriteFile(path, out, 0o644))
+	return path
+}
+
+func decodeReviewValidateReport(t *testing.T, out string) reviewValidateReport {
+	t.Helper()
+	var report reviewValidateReport
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &report), "stdout must be a reviewValidateReport, got %s", out)
+	return report
+}
+
+func requireAdvisoryValidateReport(t *testing.T, out string, code int) reviewValidateReport {
+	t.Helper()
+	assert.Equal(t, 1, code, "invalid assessment must exit 1")
+	assert.NotContains(t, out, `"code":"REVIEW-1"`, "advisory validation must not wrap as a Command Failure")
+	report := decodeReviewValidateReport(t, out)
+	require.False(t, report.Valid)
+	require.NotEmpty(t, report.Failures)
+	for _, failure := range report.Failures {
+		assert.NotEmpty(t, failure.Suggestion, "each failure must include an auto-fix suggestion: %s", failure.Message)
+	}
+	return report
 }
