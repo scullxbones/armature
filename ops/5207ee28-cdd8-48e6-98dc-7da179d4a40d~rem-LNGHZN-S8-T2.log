@@ -8,3 +8,4 @@
 ["transition","LNGHZN-S8-T2",1787810079,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"to":"done","outcome":"Remediated med findings: write assessment once in 5b (step 6 chat-only), unify 3-attempt validate cap, add exhausted-retry bounded chat shape. --force only skips false-positive main-branch check (this worktree is task/LNGHZN-S8-T2)."}]
 ["transition","LNGHZN-S8-T2",1787810507,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"to":"open"}]
 ["claim","LNGHZN-S8-T2",1787810508,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S8-T2","claim_token":"50aca471109b3599fffb69b1e72fdc86"}]
+["note","LNGHZN-S8-T2",1787810581,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"msg":"Remove leftover reviewer retry loop on arm review record: Error Handling now coordinator-owned; idempotence recovery is validate-only.","note_id":"note-1787810581264896092"}]
