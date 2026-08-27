@@ -603,9 +603,13 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 ```
 
 **Idempotence:**
-- If you record the same bundle twice with the same results, the fingerprints will match
-- `arm review record` detects this and returns the same rating without duplicating the record
-- This allows safe retry logic if the review process is interrupted
+- Fingerprints identify a bundle+results pair. If the coordinator records
+  the same bundle twice with the same results, `arm review record` returns
+  the same rating without duplicating the record.
+- The reviewer never calls `arm review record`. If the review process is
+  interrupted, re-run `arm review validate --assessment "$ASSESSMENT"
+  --bundle "$BUNDLE_FILE"` (apply suggestions and retry per step 5b) and
+  return the validated path — do not retry `arm review record`.
 
 ---
 
@@ -634,13 +638,11 @@ the success bounded-chat shape. If it is still invalid after the cap, return
 the exhausted-retry shape. Do not return a recordable path until the
 command exits 0.
 
-### arm review record Failure
+### `arm review record` is coordinator-owned
 
-- Assessment file not found
-- Assessment JSON is malformed
-- Issue ID does not exist
-
-**Action:** Check the error message and fix the issue, then retry.
+Do **not** call `arm review record`. Record failures (missing file,
+malformed JSON, unknown issue ID) are the coordinator's to handle. Your
+retry loop is only `arm review validate`.
 
 ---
 
