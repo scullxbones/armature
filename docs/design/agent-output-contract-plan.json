@@ -191,23 +191,27 @@
       "id": "AOC-S2-T3",
       "title": "arm show conforms to the contract",
       "type": "task",
-      "scope": "cmd/armature/show.go, cmd/armature/show_test.go, docs/commands.md",
+      "scope": "cmd/armature/show.go, cmd/armature/show_test.go, docs/commands.md, internal/skillsembed/skills/armature-coordinator/SKILL.md, scripts/skill_lint.py, scripts/test_skill_lint.py",
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
         "TOPTIER-S11",
         "TOPTIER-S11-T2",
+        "NXTTN-S3-T3",
+        "NXTTN-S4-T3",
         "AOC-S2-T1"
       ],
       "notes": [
         "arm show currently handles only human and json and silently renders human prose when given --format agent.",
+        "The coordinator remediation loop parses arm show JSON to recover its cycle counter. Migrate that consumer to .issues[0].notes in the same task and lint the path so a later shape change cannot silently reset escalation state.",
         "Owns its own docs/commands.md lines per E13: stories deliver vertical slices, not horizontal layers. Because only one task may own a file at a time, the S2 migrations run as a chain rather than a parallel wave."
       ],
-      "dod": "arm show honours the structured contract instead of falling through to human prose, emitting the envelope on stdout. outcome and other large text fields are truncated by default with the total size stated and a --full escape hatch offered only when content was actually truncated. This is the detail view that arm list's help[] directs agents to, so the truncation limit is chosen to cover the common case in one call.",
+      "dod": "arm show honours the structured contract and emits the envelope on stdout. Large text fields are truncated by default with total size stated and --full offered only when used. The coordinator remediation loop reads cycle notes from .issues[0].notes, and a skill-lint regression prevents a top-level parser from silently resetting the escalation cycle.",
       "acceptance": [
         "TestShowHonoursStructuredFormat_REQ_AOC_S2_T3 passes",
         "TestShowTruncatesOutcomeWithSizeHint_REQ_AOC_S2_T3 passes",
         "TestShowFullFlagReturnsCompleteField_REQ_AOC_S2_T3 passes",
+        "TestCoordinatorShowRecoveryReadsEnvelope_REQ_AOC_S2_T3 passes",
         "make check green"
       ],
       "source": "63be1d55-5014-47cf-ac51-eea876931e93",
@@ -219,7 +223,7 @@
       "id": "AOC-S2-T4",
       "title": "Remaining structured commands conform to the contract",
       "type": "task",
-      "scope": "cmd/armature/workers.go, cmd/armature/workers_test.go, cmd/armature/validate.go, cmd/armature/worktree.go, docs/commands.md",
+      "scope": "cmd/armature/context_history.go, cmd/armature/context_history_test.go, cmd/armature/workers.go, cmd/armature/workers_test.go, cmd/armature/validate.go, cmd/armature/worktree.go, docs/commands.md",
       "priority": "medium",
       "parent": "AOC-S2",
       "blocked_by": [
@@ -227,12 +231,15 @@
       ],
       "notes": [
         "arm workers currently emits JSONL where arm list emits a JSON array; that inconsistency is the reason the envelope must be uniform.",
+        "context-history currently scans only the latest 100 commits by default. Remove that silent boundary; an explicit --limit remains a user-selected query boundary and must be disclosed in the envelope and help[].",
         "doctor, dagsum and render-context are deliberately excluded: each is claimed by an active backlog issue (TOPTIER-S15, LNGHZN-S6-T4, LNGHZN-S6-T2 / LNGHZN-S7). They migrate after those land and are caught by the AOC-S3-T3 lint rather than hand-scheduled here.",
         "Owns its own docs/commands.md lines per E13: stories deliver vertical slices, not horizontal layers. Because only one task may own a file at a time, the S2 migrations run as a chain rather than a parallel wave."
       ],
-      "dod": "Every remaining agent-facing command in this batch emits the contract envelope on stdout: workers (moving off JSONL), validate and worktree. Each keeps its payload key named for its contents. harness-hook is untouched and remains classified as Protocol Output.",
+      "dod": "Every remaining agent-facing command in this batch emits the envelope: workers, validate, worktree and context-history. Each payload key is named. context-history scans complete history by default; explicit --limit defines a disclosed boundary and count equals returned rows within it. harness-hook remains Protocol Output.",
       "acceptance": [
         "TestWorkersEmitsEnvelopeNotJSONL_REQ_AOC_S2_T4 passes",
+        "TestContextHistoryScansFullHistoryByDefault_REQ_AOC_S2_T4 passes",
+        "TestContextHistoryExplicitLimitIsDisclosed_REQ_AOC_S2_T4 passes",
         "TestAllAgentFacingCommandsEmitEnvelope_REQ_AOC_S2_T4 passes",
         "TestHarnessHookOutputUnchanged_REQ_AOC_S2_T4 passes",
         "make check green"
@@ -260,7 +267,7 @@
         "Owns its own docs/commands.md lines per E13: stories deliver vertical slices, not horizontal layers. Because only one task may own a file at a time, the S2 migrations run as a chain rather than a parallel wave.",
         "Version output is agent-facing, not a carve-out: the human/default form stays bare, while explicit or implied json/agent format uses the versions envelope required by N1."
       ],
-      "dod": "Unknown or inapplicable flags are rejected by name at exit 2 with the command's valid flags listed inline, rather than being silently dropped. In human/default format, arm version and the root --version, -v and -V fast paths print the existing bare version line and exit 0. With explicit or implied --format=json|agent, those same version paths emit the Agent Output Contract envelope with payload key versions, count 1, and one row containing the version string. Bare arm in a non-TTY prints the ready queue with a short help[] when the working directory is an Armature repo, and a definitive empty state naming the problem when it is not; a TTY still gets the existing behaviour.",
+      "dod": "Unknown or inapplicable flags fail by name at exit 2 and list valid flags. In human/default format, arm version and root --version, -v and -V print the existing bare version line and exit 0. In explicit or implied json/agent format, those paths emit an Agent Output Contract envelope with payload key versions, count 1, and a row containing the version string. Bare arm non-TTY prints the ready queue in a repo, or a definitive empty state naming the problem outside; TTY keeps existing behaviour.",
       "acceptance": [
         "TestUnknownFlagRejectedWithValidFlagsListed_REQ_AOC_S2_T5 passes",
         "TestVersionFlagVariantsExitZero_REQ_AOC_S2_T5 passes",
