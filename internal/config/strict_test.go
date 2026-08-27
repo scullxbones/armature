@@ -35,3 +35,19 @@ func TestStrictDecodeAcceptsKnownFields(t *testing.T) {
 	require.Contains(t, cfg.Gates, PublishGateProfile)
 	assert.Equal(t, []string{"make", "check"}, cfg.Gates[PublishGateProfile].Command)
 }
+
+func TestStrictDecodeRejectsNonObjectDocument(t *testing.T) {
+	t.Parallel()
+
+	_, err := StrictDecode([]byte(`null`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "object")
+}
+
+func TestStrictDecodeRejectsTrailingJSON(t *testing.T) {
+	t.Parallel()
+
+	_, err := StrictDecode([]byte(`{"project_type":"go"}{"mystery_knob":1}`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing")
+}

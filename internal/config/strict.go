@@ -3,7 +3,9 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"sort"
 )
 
@@ -17,16 +19,43 @@ var validProjectTypes = map[string]struct{}{
 	"unknown": {},
 }
 
-// StrictDecode decodes a config.json document and rejects unknown fields.
-// The returned error names the offending key.
+// StrictDecode decodes exactly one JSON object, rejecting unknown fields,
+// a non-object document (including JSON null), and any trailing JSON value.
+// The returned error names the offending key when the unknown field is in
+// the object itself.
 func StrictDecode(data []byte) (Config, error) {
-	var cfg Config
 	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&cfg); err != nil {
+
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err != nil {
+		return Config{}, fmt.Errorf("strict config decode: %w", err)
+	}
+	if !isJSONObject(raw) {
+		return Config{}, fmt.Errorf("strict config decode: document must be a JSON object")
+	}
+
+	var extra json.RawMessage
+	switch err := dec.Decode(&extra); {
+	case errors.Is(err, io.EOF):
+		// exactly one value
+	case err == nil:
+		return Config{}, fmt.Errorf("strict config decode: unexpected trailing JSON value")
+	default:
+		return Config{}, fmt.Errorf("strict config decode: unexpected trailing JSON data: %w", err)
+	}
+
+	var cfg Config
+	strict := json.NewDecoder(bytes.NewReader(raw))
+	strict.DisallowUnknownFields()
+	if err := strict.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("strict config decode: %w", err)
 	}
 	return cfg, nil
+}
+
+func isJSONObject(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) > 0 && trimmed[0] == '{'
 }
 
 // ValidatePresentFields strictly decodes data and reports a problem for every
