@@ -32,9 +32,10 @@ harness; folding it into the same envelope would break hook integration.
 Separately, several commands emit a **canonical artifact** on stdout rather
 than a result set: `arm review prepare` writes a ReviewBundle whose schema
 requires top-level `schema_version` and `bundle_id`, `arm completion` writes
-a shell script, and `arm dag apply --schema|--example` writes a JSON Schema
-document. `docs/concepts.md` documents redirecting the first straight to a
-file, so an envelope would make that flow fail schema validation.
+a shell script, `arm dag apply --schema` writes a JSON Schema document, and
+`arm dag apply --example` writes a plan instance. `docs/concepts.md` documents
+redirecting the first straight to a file, so an envelope would make that flow
+fail schema validation.
 
 ## Decision
 

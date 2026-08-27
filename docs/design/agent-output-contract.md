@@ -211,6 +211,13 @@ and any new issue list) declare `issues`. `show` is a detail view of one
 issue: same envelope, payload key `issues`, `count` 1. A missing issue is
 an error, not an empty state.
 
+An explicit user-selected query boundary, such as `context-history --limit N`,
+defines the result set for `count`; `count` MUST equal the rows returned within
+that boundary. The envelope MUST disclose the applied boundary as an adjunct,
+and `help` MUST say that the result is bounded. A default MUST NOT impose a
+finite boundary: without `--limit`, the command MUST examine the complete
+result domain.
+
 Additional members MAY exist (adjuncts). An adjunct MUST NOT replace
 `count`, the payload array, or `help`, and MUST NOT be the only place a
 result row is represented. Adjuncts are how `--waves` and expired claims
