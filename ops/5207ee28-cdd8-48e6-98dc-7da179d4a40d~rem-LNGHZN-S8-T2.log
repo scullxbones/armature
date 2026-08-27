@@ -16,3 +16,4 @@
 ["transition","LNGHZN-S8-T2",1787811679,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"to":"open"}]
 ["claim","LNGHZN-S8-T2",1787811679,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S8-T2","claim_token":"57aa2f4666ae1237b74bfcfc92aa6c4b"}]
 ["amend","LNGHZN-S8-T2",1787811755,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"scope":["internal/skillsembed/skills/armature-reviewer/SKILL.md","internal/skillsembed/skills/armature-reviewer/references/field-rules.md"]}]
+["note","LNGHZN-S8-T2",1787811755,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T2",{"msg":"Remediate med: field-rules Step 5a closer treated 5a as the coordinator return gate; point it at 5b (arm review validate) instead.","note_id":"note-1787811755818918653"}]
