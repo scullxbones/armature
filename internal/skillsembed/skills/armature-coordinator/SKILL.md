@@ -463,10 +463,49 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    every reviewer returns, collect those paths. Do
    **not** write any reviewer's chat text to `$RESULT_FILE` — `arm review record`
    will reject a summary as if it were the assessment.
+
+   **Check each reviewer's response shape before collecting anything.** A
+   reviewer returns a recordable path **only** on the success shape. Two
+   shapes deliberately carry no path, and both end in
+   `Assessment: not returned`:
+
+   - `Validation: failed` — the reviewer exhausted its `arm review validate`
+     retries. An assessment file may exist on disk, but it never validated.
+   - `Validation: error` — `arm review validate` failed operationally
+     (unreadable assessment or bundle path, bundle missing an issue ID,
+     snapshot load failure, issue absent from state). Nothing was assessed.
+
+   For either shape, do **not** reconstruct or guess a
+   `.armature/review/<issue>-<bundle8>-<token>.json` path, do **not** add one
+   to `RESULT_FILES`, and do **not** call `arm review record` for that
+   reviewer. A path you assembled yourself is not a validated assessment, and
+   recording one asserts a review that did not happen. Instead:
+
+   - `Validation: error` → repair what the reviewer reported (re-run
+     `arm review prepare` for a fresh `$BUNDLE_FILE`; confirm the issue
+     exists in state), then re-dispatch that reviewer **once**. If it
+     returns the same shape again, escalate rather than looping.
+   - `Validation: failed` → the assessment is not recordable. Record the
+     reported failures on the issue and escalate to a human (Constitution
+     I7); do not treat the issue as reviewed.
+
+   ```bash
+   arm note --issue "$TASK_ID" --msg "review not recorded: <shape> from <reviewer-token>; <reason>"
+   ```
+
+   If **every** reviewer returned a non-path shape, `RESULT_FILES` is empty.
+   Do not proceed to step 4 with an empty array, do not synthesize a rating,
+   and do not treat an empty result as Green. Stop and escalate.
+
    ```bash
    # Each reviewer writes a DISTINCT path and returns it. Confirm each
    # file exists and is JSON. Do not share one .armature/review/ file.
+   # Only paths from success-shape responses belong here.
    RESULT_FILES=(.armature/review/TASK-ID-bundle8-r1.json .armature/review/TASK-ID-bundle8-r2.json)
+   if [ ${#RESULT_FILES[@]} -eq 0 ]; then
+     echo "ERROR: no reviewer returned a validated assessment; escalate (I7)" >&2
+     exit 1
+   fi
    FINDINGS_FILE=$(mktemp)
    # Union every reviewer's chat findings (not the JSON bodies) into
    # $FINDINGS_FILE. Deduplicate by finding text. Confirmation uses

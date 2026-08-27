@@ -6,7 +6,8 @@ description: >
   the delivery diff, records evidence as citations, writes the assessment JSON
   under .armature/review/ once, runs arm review validate and applies suggestions
   for at most 3 attempts after the first failure, then returns rating, findings,
-  and that path — or the exhausted-retry shape, never a recordable path.
+  and that path — or, if validation never succeeded or failed operationally,
+  a no-path shape, never a recordable path.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -18,8 +19,11 @@ results, citations, and ratings, writes that JSON under `.armature/review/`
 **once**, runs `arm review validate` (applying suggestions for at most 3
 attempts after the first failure), and on success returns only the rating,
 actionable findings, and the assessment path. If validation is still failing
-after that cap, return the exhausted-retry shape in step 6; do not return a
-recordable path. The coordinator is responsible for recording a validated
+after that cap, return the exhausted-retry shape in step 6. If `arm review
+validate` instead fails operationally — no validation report at all, because
+a path, the bundle, or issue state is broken — do not retry; return the
+operational-error shape so the coordinator can repair the setup. In neither
+case return a recordable path. The coordinator is responsible for recording a validated
 assessment via `arm review record`. Schema and citation-bound retries belong
 in this skill, not in coordinator post-processing.
 
@@ -56,6 +60,7 @@ Coordinator: arm review record --issue ISSUE-ID --assessment "$RESULT_FILE" --bu
 AssessmentAttestation (durable record)
 
     (still invalid after the cap → exhausted-retry chat; coordinator does not record)
+    (no validation report at all → operational-error chat; coordinator repairs setup)
 ```
 
 ---
@@ -338,17 +343,41 @@ is the ReviewBundle path the coordinator passed.
 
 **Retry loop (inside the reviewer, not the coordinator):**
 
+A non-zero exit means one of two different things, and only one of them is
+retryable. Decide which **before** touching `$ASSESSMENT`.
+
+The discriminator is whether the command produced a validation report at
+all, not the wording of the message:
+
+- **A report was produced** — text mode prints `Assessment is invalid:`
+  followed by `  - <message>` / `    suggestion: <fix>` lines; `--format
+  json` prints an object carrying `valid` and a populated `failures[]`.
+  The assessment was read, parsed, and judged. Retryable.
+- **No report was produced** — nothing on stdout, and under `--format json`
+  there is no `valid` key at all, because the command failed before it
+  could assess anything. The message went to stderr. Not retryable.
+
 1. Exit 0 / `Assessment is valid` → proceed to step 6's **success** bounded
    chat. Do not write `$ASSESSMENT` again.
-2. Non-zero / `Assessment is invalid:` → each failure includes a `suggestion:`
-   line. Apply every suggestion to `$ASSESSMENT` (rewrite ids, citations,
+2. **Non-zero with a report** → each failure includes a `suggestion:` line.
+   Apply every suggestion to `$ASSESSMENT` (rewrite ids, citations,
    fingerprints, statuses, or `missing_evidence` as directed). Do not edit
-   the bundle.
-3. Re-run the same command against the same `$ASSESSMENT` and `$BUNDLE_FILE`.
-4. Repeat until valid, at most 3 attempts after the first failure (four runs
-   total: the initial validate plus three retries). If still invalid, stop
-   and use step 6's **exhausted-retry** shape. Do not return the path as a
-   completed assessment.
+   the bundle. Then:
+   1. Re-run the same command against the same `$ASSESSMENT` and
+      `$BUNDLE_FILE`.
+   2. Repeat until valid, at most 3 attempts after the first failure (four
+      runs total: the initial validate plus three retries). If still
+      invalid, stop and use step 6's **exhausted-retry** shape. Do not
+      return the path as a completed assessment.
+3. **Non-zero with no report** → the failure is operational, not a verdict
+   on your assessment: an unreadable or missing `--assessment` or
+   `--bundle` path, `--bundle` handed JSON content instead of a path, a
+   bundle carrying no issue ID, a snapshot that will not load, or an issue
+   ID absent from state. There is no `failures[]` and no `suggestion:` to
+   apply, so re-running only repeats the same broken invocation. **Do not
+   retry and do not spend retry attempts.** Stop immediately and use step
+   6's **operational-error** shape so the coordinator can repair the setup
+   and re-dispatch.
 
 For machine-readable failures (`valid`, `failures[].message`,
 `failures[].suggestion`):
@@ -357,8 +386,13 @@ For machine-readable failures (`valid`, `failures[].message`,
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE" --format json
 ```
 
+Prefer this form when classifying: a JSON object with a `valid` key is
+case 2, and no JSON object at all is case 3.
+
 This is the retry loop that used to land on the coordinator after
-`arm review record` rejected the file. Keep it here.
+`arm review record` rejected the file. Keep it here. Operational failures
+are the exception — those belong to the coordinator, which owns the bundle,
+the paths, and issue state.
 
 ### 6. Return the ConformanceAssessment
 
@@ -376,8 +410,8 @@ records each distinct **validated** path with
 then uses the conservative path for loop control, so fingerprint
 validation is bound to the exact bundle it dispatched.
 
-**Bounded chat response (normative).** Return **exactly one** of the two
-shapes below. Never both. Never extra prose. Never inline the full
+**Bounded chat response (normative).** Return **exactly one** of the three
+shapes below. Never more than one. Never extra prose. Never inline the full
 assessment JSON. Never restate the bundle contents. Never `cat` the
 assessment file into chat.
 
@@ -401,6 +435,24 @@ failure plus 3 attempts.** Your chat/text response contains **only**:
 Do not include a filesystem path the coordinator could pass to
 `arm review record`. Do not invent a Green / Yellow / Red rating for a
 file that did not validate.
+
+**Operational error — only when step 5b failed with no validation report
+(retry-loop case 3).** Your chat/text response contains **only**:
+
+1. `Validation: error`
+2. the command's stderr message, verbatim
+3. `Assessment: not returned`
+
+Do not include a filesystem path the coordinator could pass to
+`arm review record`. Do not invent a rating. Do not retry, and do not
+report this as `Validation: failed` — that shape means your assessment was
+judged and rejected, which did not happen here. The distinction tells the
+coordinator whether to repair the setup and re-dispatch (this shape) or to
+escalate an assessment that could not be made valid (the exhausted-retry
+shape).
+
+The two non-success shapes both end in `Assessment: not returned`, and in
+neither case does a recordable path exist.
 
 This keeps the coordinator's context free of duplicated JSON it can read
 from disk, and keeps remediation dispatches (see the coordinator's bounded
@@ -538,8 +590,9 @@ Step 5b writes the ConformanceAssessment JSON once to a unique path
 under `.armature/review/` and runs `arm review validate` with the retry
 cap (at most 3 attempts after the first failure). Do not write that path
 again after a successful validate. Then return the matching step 6 shape:
-rating + findings + path if step 5b exited 0, or the exhausted-retry
-shape if the cap was reached. Do **not** call `arm review record` — that
+rating + findings + path if step 5b exited 0, the exhausted-retry shape if
+the cap was reached, or the operational-error shape if validate failed
+without producing a report. Do **not** call `arm review record` — that
 is the coordinator's responsibility. The coordinator records each distinct
 returned (validated) path with `--bundle "$BUNDLE_FILE"`, then uses the
 conservative path for loop control, so fingerprint validation is bound to
@@ -559,7 +612,8 @@ ASSESSMENT=".armature/review/TASK-42-e3b0c442-r1.json"
 #    Do not write this path again in step 6 after validate succeeds.
 
 # 3. Self-validate; apply suggestions to the same $ASSESSMENT and retry
-#    at most 3 times after the first failure (step 5b).
+#    at most 3 times after the first failure (step 5b). Retry ONLY when the
+#    command printed a validation report; an operational failure prints none.
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 
 # 4. Chat response to the coordinator (not the JSON body):
@@ -570,6 +624,10 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 #    After exhausted retries:
 #    Validation: failed
 #    Failures: <remaining messages and suggestions>
+#    Assessment: not returned
+#    After an operational failure (no report; not retried):
+#    Validation: error
+#    Error: <stderr message, e.g. read bundle file: ... no such file>
 #    Assessment: not returned
 
 # The coordinator consolidates parallel findings, then records EACH
@@ -597,6 +655,9 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 # Apply each failure's suggestion, rewrite $ASSESSMENT, and re-run —
 # at most 3 attempts after the first failure. If it still fails, use
 # the exhausted-retry chat shape; do not return a recordable path.
+# Only retry when the command printed a validation report. If it exited
+# non-zero with no report (broken path, unreadable bundle, missing
+# issue), use the operational-error chat shape and do not retry.
 # Do not write a second copy of a pre-validate draft after this
 # command has already exited 0. arm review record remains the
 # coordinator's enforcement gate; this command is read-only.
@@ -625,7 +686,9 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 
 ### Invalid ConformanceAssessment
 
-- `arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"` exits non-zero
+`arm review validate` exits non-zero **and prints a validation report**
+(`Assessment is invalid:`, or `valid: false` with `failures[]`):
+
 - Results array is empty
 - Missing a criterion (e.g., no acceptance[1] when contract has 2 acceptance criteria)
 - `bundle_id` does not match input
@@ -637,6 +700,23 @@ at most 3 attempts after the first failure. If the command exits 0, return
 the success bounded-chat shape. If it is still invalid after the cap, return
 the exhausted-retry shape. Do not return a recordable path until the
 command exits 0.
+
+### `arm review validate` operational failure
+
+`arm review validate` exits non-zero **with no validation report at all**
+— the message is on stderr and stdout carries nothing (under `--format
+json`, no `valid` key):
+
+- `--assessment` or `--bundle` missing, unreadable, or not a file path
+- `--bundle` given JSON content instead of a path
+- Bundle carries no issue ID
+- Snapshot will not load, or the issue ID is absent from state
+
+**Action:** Do **not** apply suggestions (there are none) and do **not**
+retry — the invocation itself is broken, so re-running repeats it. Do not
+consume retry attempts. Return the operational-error shape from step 6 so
+the coordinator can fix the bundle, the paths, or issue state and
+re-dispatch. This is a setup failure, not a verdict on your assessment.
 
 ### `arm review record` is coordinator-owned
 
