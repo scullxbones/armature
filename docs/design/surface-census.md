@@ -188,6 +188,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `review prepare` | review.go:33 | Prepare a review bundle for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --base, --head, --output. |
 | `review record` | review.go:157 | Record a conformance assessment for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --assessment, --bundle. |
 | `review commits` | review.go:185 | List delivery commits for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --branch (default HEAD). |
+| `review validate` | review_validate.go | Read-only assessment validation with auto-fix suggestions | **kept-evidence** | Subcommand of `review`. Flags: --assessment, --bundle (required). Does not append ops. Advisory; record remains the enforcement gate. |
 
 ## Command Flags
 
@@ -310,8 +311,8 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--at` | render-context | string | Replay context at git commit SHA | **kept-evidence** |
 | `--limit` | context-history | int | Max commits to scan (default 100) | **kept-evidence** |
 | `--source` | import | string | Source ID to link imported items to | **kept-evidence** |
-| `--assessment` | review record | string | Assessment file or '-' for stdin | **kept-evidence** |
-| `--bundle` | review record | string | Review bundle file path (optional) | **kept-evidence** |
+| `--assessment` | review record, review validate | string | Assessment file or '-' for stdin | **kept-evidence** |
+| `--bundle` | review record, review validate | string | Review bundle file path (required for review validate; optional for review record) | **kept-evidence** |
 | `--base` | review prepare | string | Base revision for diff | **kept-evidence** |
 | `--head` | review prepare | string | Head revision for diff | **kept-evidence** |
 | `--clear-context-files` | amend | bool | Remove all context_files entries | **kept-evidence** |

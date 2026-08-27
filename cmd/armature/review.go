@@ -28,6 +28,7 @@ func newReviewCmd() *cobra.Command {
 
 	cmd.AddCommand(newReviewPrepareCmd())
 	cmd.AddCommand(newReviewRecordCmd())
+	cmd.AddCommand(newReviewValidateCmd())
 	cmd.AddCommand(newReviewCommitsCmd())
 
 	return cmd
@@ -435,12 +436,17 @@ func mapReviewError(err error) error {
 	if errors.As(err, &cf) {
 		return cf
 	}
+	var skip protocolExitError
+	if errors.As(err, &skip) {
+		return err
+	}
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "--issue is required"),
 		strings.Contains(msg, "--base is required"),
 		strings.Contains(msg, "--head is required"),
 		strings.Contains(msg, "--assessment is required"),
+		strings.Contains(msg, "--bundle is required"),
 		strings.Contains(msg, "issue ID is required"),
 		strings.Contains(msg, "conflicting issue ID"),
 		strings.Contains(msg, "accepts at most"):

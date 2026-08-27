@@ -2,8 +2,15 @@ package review
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 )
+
+// criterionIDPattern is the canonical criterion-ID format: definition_of_done or acceptance[N].
+var criterionIDPattern = regexp.MustCompile(`^definition_of_done$|^acceptance\[\d+\]$`)
+
+var criterionIDAcceptanceIndex = regexp.MustCompile(`(?i)acceptance[^\d]*(\d+)`)
 
 // ValidateResult checks that a ConformanceAssessment is well-formed:
 // - bundle ID is non-empty
@@ -35,12 +42,20 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 			// If Line is omitted (0), validate that the file is in the diff
 			if citation.Line == 0 {
 				if !idx.ContainsFile(citation.Path) {
-					errs = append(errs, fmt.Sprintf("criterion result %s: citation references %s which is not in diff", result.ID, citation.Path))
+					errs = append(errs, fmt.Sprintf(
+						"criterion result %s: citation references %s which is not in diff (suggestion: remove the citation or cite a path present in the delivery diff)",
+						result.ID, citation.Path))
 				}
 			} else {
 				// If Line is specified, validate the specific line
 				if !idx.ContainsLine(citation.Path, citation.Line) {
-					errs = append(errs, fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path, citation.Line))
+					msg := fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path, citation.Line)
+					if idx.ContainsFile(citation.Path) {
+						msg += fmt.Sprintf(" (suggestion: downgrade citation to path-level; omit line %d and cite %s only)", citation.Line, citation.Path)
+					} else {
+						msg += " (suggestion: remove the citation or cite a path present in the delivery diff)"
+					}
+					errs = append(errs, msg)
 				}
 			}
 		}
@@ -63,9 +78,35 @@ func ValidateResultNoDiff(assessment *ConformanceAssessment) []string {
 		if err := result.Valid(); err != nil {
 			errs = append(errs, fmt.Sprintf("criterion result %d: %v", i, err))
 		}
+		if result.ID != "" && !validCriterionID(result.ID) {
+			errs = append(errs, fmt.Sprintf("criterion result %d: invalid criterion ID %q (suggestion: %s)", i, result.ID, suggestCriterionID(result.ID)))
+		}
 	}
 
 	return errs
+}
+
+func validCriterionID(id string) bool {
+	return criterionIDPattern.MatchString(id)
+}
+
+func suggestCriterionID(id string) string {
+	compact := strings.ToLower(strings.NewReplacer("-", "_", " ", "", "[", "", "]", "").Replace(id))
+	if compact == "definition_of_done" || compact == "definitionofdone" || compact == "def_of_done" || compact == "dod" {
+		return `use criterion id "definition_of_done"`
+	}
+	if m := criterionIDAcceptanceIndex.FindStringSubmatch(id); m != nil {
+		return fmt.Sprintf(`use criterion id "acceptance[%s]"`, m[1])
+	}
+	return `use "definition_of_done" or "acceptance[N]" (N is a 0-based integer)`
+}
+
+// ValidateAssessment runs the same checks Record performs. It does not persist
+// an attestation; arm review validate uses this so record remains the sole
+// enforcement gate that appends ops.
+func ValidateAssessment(input RecordInput) error {
+	_, err := Record(input)
+	return err
 }
 
 // NewAttestation creates an AssessmentAttestation from a validated ConformanceAssessment and
