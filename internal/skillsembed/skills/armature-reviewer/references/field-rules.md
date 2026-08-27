@@ -357,7 +357,7 @@ This is valid for `partially_satisfied` and `indeterminate` statuses.
 
 ## Validation Checklist (Step 5a)
 
-Before submitting your ConformanceAssessment, verify each field against these rules:
+Before writing the assessment and running Step 5b (`arm review validate`), verify each field against these rules:
 
 - [ ] `schema_version` is exactly `1`
 - [ ] `bundle_id` matches input ReviewBundle exactly
@@ -375,7 +375,18 @@ Before submitting your ConformanceAssessment, verify each field against these ru
 - [ ] Line numbers are positive integers (≥ 1)
 - [ ] JSON is valid and parseable
 
-**If any check fails, fix the assessment and repeat Step 5a before returning to the coordinator.**
+**If any check fails, fix the assessment and repeat Step 5a.** Then write the
+file and run Step 5b:
+
+```bash
+arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
+```
+
+Apply each failure's `suggestion:` to the same `$ASSESSMENT` and retry per
+SKILL.md step 5b (at most 3 attempts after the first failure). Step 5a is
+not the return gate and is not a substitute for `arm review validate`. Do
+not return to the coordinator until Step 5b exits 0, or use step 6's
+exhausted-retry chat shape if the retry cap is reached.
 
 ---
 
