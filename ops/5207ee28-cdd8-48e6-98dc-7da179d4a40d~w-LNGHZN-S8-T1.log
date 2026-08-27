@@ -7,3 +7,4 @@
 ["link","LNGHZN-S8-T1",1787799399,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S8-T1",{"dep":"AOC-S3-T4","rel":"blocked_by"}]
 ["decision","LNGHZN-S8-T1",1787799399,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S8-T1",{"topic":"overlap-serialization","choice":"link T1 before AOC-S1-T3 and AOC-S3-T4","rationale":"Registering review validate requires review.go (AOC-S1-T3) and a census row (AOC-S3-T4). Serialize those tasks after T1 instead of overlapping in parallel."}]
 ["unlink","LNGHZN-S8-T1",1787799498,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S8-T1",{"dep":"AOC-S1-T3","rel":"blocked_by"}]
+["unlink","LNGHZN-S8-T1",1787799498,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S8-T1",{"dep":"AOC-S3-T4","rel":"blocked_by"}]
