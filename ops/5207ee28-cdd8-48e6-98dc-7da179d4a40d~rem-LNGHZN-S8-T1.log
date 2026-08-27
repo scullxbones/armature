@@ -1,2 +1,3 @@
 ["transition","LNGHZN-S8-T1",1787802403,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T1",{"to":"open"}]
 ["claim","LNGHZN-S8-T1",1787802404,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T1",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S8-T1","claim_token":"b53714aa437bdde592acb6a2120b1e94"}]
+["note","LNGHZN-S8-T1",1787802724,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~rem-LNGHZN-S8-T1",{"msg":"Remediation: attach auto-fix suggestions to every arm review validate failure (schema decode, Valid, fingerprint, coverage, activity), not only citation/ID; lock via JSON report tests and ValidateAssessment.","note_id":"note-1787802724702469202"}]
