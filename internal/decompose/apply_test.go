@@ -238,26 +238,15 @@ func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
 func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	logPath := filepath.Join(dir, "worker-test.log")
 	var batches [][]string
-	appendPlanOpsMu.Lock()
-	orig := appendPlanOps
-	appendPlanOps = func(path string, proposed []ops.Op) error {
-		if path == logPath {
-			types := make([]string, 0, len(proposed))
-			for _, op := range proposed {
-				types = append(types, op.Type)
-			}
-			batches = append(batches, types)
+	opts := ApplyOptions{appendOps: func(path string, proposed []ops.Op) error {
+		types := make([]string, 0, len(proposed))
+		for _, op := range proposed {
+			types = append(types, op.Type)
 		}
-		return orig(path, proposed)
-	}
-	appendPlanOpsMu.Unlock()
-	t.Cleanup(func() {
-		appendPlanOpsMu.Lock()
-		appendPlanOps = orig
-		appendPlanOpsMu.Unlock()
-	})
+		batches = append(batches, types)
+		return ops.AppendOps(path, proposed)
+	}}
 
 	plan := &Plan{
 		Version: 1,
@@ -267,7 +256,7 @@ func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 			taskPlanIssue("PLAN-002", "Second"),
 		},
 	}
-	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState())
+	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 	require.Len(t, batches, 1, "create + source_link (+links) must be one write, not one write per op")
@@ -275,31 +264,35 @@ func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 	assert.Contains(t, batches[0], ops.OpSourceLink)
 }
 
+func TestApplyPlan_UsesRealAppenderWhenUnset(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Default appender",
+		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
+	}
+	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	data, readErr := os.ReadFile(filepath.Join(dir, "worker-test.log"))
+	require.NoError(t, readErr, "an unset appendOps must fall back to ops.AppendOps")
+	assert.Contains(t, string(data), ops.OpCreate)
+}
+
 func TestApplyPlan_FailedAppendLeavesNoPartialLog(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	logPath := filepath.Join(dir, "worker-test.log")
-	appendPlanOpsMu.Lock()
-	orig := appendPlanOps
-	appendPlanOps = func(path string, proposed []ops.Op) error {
-		if path == logPath {
-			return errors.New("disk full")
-		}
-		return orig(path, proposed)
-	}
-	appendPlanOpsMu.Unlock()
-	t.Cleanup(func() {
-		appendPlanOpsMu.Lock()
-		appendPlanOps = orig
-		appendPlanOpsMu.Unlock()
-	})
+	opts := ApplyOptions{appendOps: func(string, []ops.Op) error {
+		return errors.New("disk full")
+	}}
 
 	plan := &Plan{
 		Version: 1,
 		Title:   "Failing plan",
 		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
 	}
-	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState())
+	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.Error(t, err)
 	assert.Equal(t, 0, count)
 	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
