@@ -1,1 +1,2 @@
 ["claim","LNGHZN-S8-T2",1787807025,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S8-T2",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/LNGHZN-S8-T2","claim_token":"7f4c9d4859c05e5f7d098c9a97bab1b4"}]
+["note","LNGHZN-S8-T2",1787807196,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~w-LNGHZN-S8-T2",{"msg":"Starting T2: require arm review validate in reviewer skill loop before return to coordinator; apply suggestions and retry inside the reviewer.","note_id":"note-1787807196382356748"}]
