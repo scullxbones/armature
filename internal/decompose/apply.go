@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/clock"
@@ -42,6 +41,11 @@ type ApplyOptions struct {
 	// IDs and to run citation checks on the Introduction door. Empty skips
 	// membership checks (unit tests); the CLI always supplies the file.
 	ManifestData []byte
+	// appendOps writes a plan's ops in one append so a create cannot land
+	// without its source_link (apply is source-atomic). Nil means
+	// ops.AppendOps. Unexported: this seam exists for in-package tests to
+	// observe batching, and must not become part of the public API.
+	appendOps func(string, []ops.Op) error
 }
 
 // ValidatePlan returns a list of advisory warnings for the plan.
@@ -218,8 +222,12 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 		return 0, err
 	}
 
+	appendOps := opts.appendOps
+	if appendOps == nil {
+		appendOps = ops.AppendOps
+	}
 	logPath := filepath.Join(issuesDir, workerID+".log")
-	if err := writePlanOps(logPath, proposed); err != nil {
+	if err := appendOps(logPath, proposed); err != nil {
 		return 0, fmt.Errorf("append plan ops: %w", err)
 	}
 	count := 0
@@ -229,20 +237,6 @@ func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *
 		}
 	}
 	return count, nil
-}
-
-// appendPlanOps writes a plan's ops in one append so a create cannot land
-// without its source_link (apply is source-atomic). Tests replace this.
-var (
-	appendPlanOpsMu sync.Mutex
-	appendPlanOps   = ops.AppendOps
-)
-
-func writePlanOps(logPath string, proposed []ops.Op) error {
-	appendPlanOpsMu.Lock()
-	fn := appendPlanOps
-	appendPlanOpsMu.Unlock()
-	return fn(logPath, proposed)
 }
 
 func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Clock, opts ApplyOptions) ([]ops.Op, error) {
