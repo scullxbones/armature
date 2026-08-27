@@ -4,9 +4,9 @@ description: >
   Use when receiving a ReviewBundle from arm review prepare and producing a
   ConformanceAssessment JSON. Evaluates each criterion from the contract against
   the delivery diff, records evidence as citations, writes the assessment JSON
-  under .armature/review/, runs arm review validate and applies suggestions until
-  valid, then returns rating, findings, and that path to the coordinator (which
-  records it via arm review record).
+  under .armature/review/ once, runs arm review validate and applies suggestions
+  for at most 3 attempts after the first failure, then returns rating, findings,
+  and that path — or the exhausted-retry shape, never a recordable path.
 compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 ---
 
@@ -14,12 +14,14 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 
 The Reviewer evaluates a prepared ReviewBundle against the contract requirements
 and delivery diff. It produces a ConformanceAssessment JSON with criterion-level
-results, citations, and ratings, writes that JSON under `.armature/review/`,
-runs `arm review validate` (applying suggestions until the command exits 0),
-and returns only the rating, actionable findings, and the assessment path.
-The coordinator is responsible for recording the assessment via `arm review record`.
-Schema and citation-bound retries belong in this skill, not in coordinator
-post-processing.
+results, citations, and ratings, writes that JSON under `.armature/review/`
+**once**, runs `arm review validate` (applying suggestions for at most 3
+attempts after the first failure), and on success returns only the rating,
+actionable findings, and the assessment path. If validation is still failing
+after that cap, return the exhausted-retry shape in step 6; do not return a
+recordable path. The coordinator is responsible for recording a validated
+assessment via `arm review record`. Schema and citation-bound retries belong
+in this skill, not in coordinator post-processing.
 
 ## Prerequisites
 
@@ -41,16 +43,19 @@ Record citations (file paths, line numbers)
     ↓
 Assign status (satisfied, partially_satisfied, not_satisfied, indeterminate)
     ↓
-Produce ConformanceAssessment JSON under .armature/review/
+Write ConformanceAssessment JSON once to a unique $ASSESSMENT path
     ↓
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
-    ↓ (invalid: apply suggestions, rewrite, re-validate)
+    ↓ (invalid: apply suggestions to the same path, rewrite, re-validate;
+       at most 3 attempts after the first failure)
     ↓ (valid)
 Return rating + findings + assessment path to coordinator
     ↓
 Coordinator: arm review record --issue ISSUE-ID --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE"
     ↓
 AssessmentAttestation (durable record)
+
+    (still invalid after the cap → exhausted-retry chat; coordinator does not record)
 ```
 
 ---
@@ -222,8 +227,10 @@ The rating is computed automatically by `arm review record` from the results.
 ### 5. Produce ConformanceAssessment JSON
 
 Assemble all criterion results into a ConformanceAssessment. See `templates/conformance-assessment.json`
-for a complete verbatim template. Machine-validate the draft with `arm review validate` (step 5b);
-do not return until that command exits 0. The same checks are documented in the
+for a complete verbatim template. Write the draft once and machine-validate it
+with `arm review validate` (step 5b). Do not rewrite `$ASSESSMENT` after that
+command exits 0. Do not return a recordable path until it exits 0; if the
+retry cap is reached, use the exhausted-retry shape in step 6. The same checks are documented in the
 [conformance-assessment schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/conformance-assessment.schema.json);
 the input ReviewBundle is validated separately against the [review-bundle schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/review-bundle.schema.json). See
 `docs/json-schema-examples.md` for worked examples.
@@ -299,7 +306,24 @@ file and run step 5b. Step 5a is not a substitute for `arm review validate`.
 
 ### 5b. Self-Validate with `arm review validate` (Mandatory)
 
-Write the drafted assessment to the unique path in step 6 (`$ASSESSMENT`).
+Choose a **unique** path under `.armature/review/` for `$ASSESSMENT` —
+include the issue id, a short bundle-id prefix, **and the reviewer token
+the coordinator assigned** (`r1`, `r2`, … or your `ARM_LOG_SLOT`), for
+example
+`.armature/review/<issue-id>-<bundle-id-8>-<reviewer-token>.json`. Parallel
+reviewers of the same issue and bundle use distinct tokens so they do not
+overwrite each other; the coordinator unions their chat findings into one
+list, then records each distinct path with `arm review record`. Do not reuse
+`.armature/review/<issue-id>.json` or
+`.armature/review/<issue-id>-<bundle-id-8>.json` across reviewers or
+passes; confirmation must not overwrite the first-pass file, and a
+second parallel reviewer must not overwrite the first's file the
+coordinator still has as `$RESULT_FILE` context.
+
+Write the drafted assessment to that path **once**. Retries in this step
+rewrite **only** to apply `arm review validate` suggestions to the same
+`$ASSESSMENT`. Do not keep a second draft to write again in step 6.
+
 Then run the same checks `arm review record` performs — schema, criterion-ID
 format, citation line-bounds, coverage, activity evidence — **without**
 appending an op:
@@ -314,15 +338,17 @@ is the ReviewBundle path the coordinator passed.
 
 **Retry loop (inside the reviewer, not the coordinator):**
 
-1. Exit 0 / `Assessment is valid` → proceed to step 6's bounded chat return.
+1. Exit 0 / `Assessment is valid` → proceed to step 6's **success** bounded
+   chat. Do not write `$ASSESSMENT` again.
 2. Non-zero / `Assessment is invalid:` → each failure includes a `suggestion:`
    line. Apply every suggestion to `$ASSESSMENT` (rewrite ids, citations,
    fingerprints, statuses, or `missing_evidence` as directed). Do not edit
    the bundle.
 3. Re-run the same command against the same `$ASSESSMENT` and `$BUNDLE_FILE`.
-4. Repeat until valid, at most 3 attempts after the first failure. If still
-   invalid, stop and report the remaining failures. Do not return the path
-   as a completed assessment.
+4. Repeat until valid, at most 3 attempts after the first failure (four runs
+   total: the initial validate plus three retries). If still invalid, stop
+   and use step 6's **exhausted-retry** shape. Do not return the path as a
+   completed assessment.
 
 For machine-readable failures (`valid`, `failures[].message`,
 `failures[].suggestion`):
@@ -336,43 +362,49 @@ This is the retry loop that used to land on the coordinator after
 
 ### 6. Return the ConformanceAssessment
 
-Write the full ConformanceAssessment JSON
-to a **unique** path under `.armature/review/` — include the issue id, a
-short bundle-id prefix, **and the reviewer token the coordinator assigned**
-(`r1`, `r2`, … or your `ARM_LOG_SLOT`), for example
-`.armature/review/<issue-id>-<bundle-id-8>-<reviewer-token>.json`. Parallel
-reviewers of the same issue and bundle use distinct tokens so they do not
-overwrite each other; the coordinator unions their chat findings into one
-list, then records each distinct path with `arm review record`. Do not reuse
-`.armature/review/<issue-id>.json` or
-`.armature/review/<issue-id>-<bundle-id-8>.json` across reviewers or
-passes; confirmation must not overwrite the first-pass file, and a
-second parallel reviewer must not overwrite the first's file the
-coordinator still has as `$RESULT_FILE` context. This file is a **local
-recording input**, not the durable record. `arm review record` writes a
+Do **not** write or rewrite `$ASSESSMENT` here. Step 5b already chose the
+unique path, wrote the JSON once, and either validated it or exhausted
+retries. A second write would clobber a suggestion-fixed, validated file
+with a stale pre-validate draft.
+
+This file is a **local recording input**, not the durable record. `arm review record` writes a
 compact `AssessmentAttestation` (fingerprints, rating, counts) to the
 append-only log; it does not commit this JSON. Do **not** `git add` it
-and do **not** call `arm review record` yourself. Complete step 5b against
-this path (`$ASSESSMENT`) before the bounded chat response. The coordinator
-records each distinct path with
+and do **not** call `arm review record` yourself. The coordinator
+records each distinct **validated** path with
 `arm review record --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"`,
 then uses the conservative path for loop control, so fingerprint
 validation is bound to the exact bundle it dispatched.
 
-**Bounded chat response (normative).** Return this only after step 5b exits 0.
-Your chat/text response to the coordinator contains **only**:
+**Bounded chat response (normative).** Return **exactly one** of the two
+shapes below. Never both. Never extra prose. Never inline the full
+assessment JSON. Never restate the bundle contents. Never `cat` the
+assessment file into chat.
+
+**Success — only after step 5b exits 0.** Your chat/text response contains
+**only**:
 
 1. the rating (Green / Yellow / Red)
 2. the actionable findings
 3. the path to the assessment file
 
-Never inline the full assessment JSON. Never restate the bundle contents.
-Never `cat` the assessment file into chat. The coordinator records the
-file at the path you return — it does not treat your chat text as the
-assessment JSON. This keeps the coordinator's context free of duplicated
-JSON it can read from disk, and keeps remediation dispatches (see the
-coordinator's bounded review protocol) working from findings, not
-transcripts.
+The coordinator records the file at the path you return — it does not treat
+your chat text as the assessment JSON.
+
+**Exhausted retries — only when step 5b is still invalid after the first
+failure plus 3 attempts.** Your chat/text response contains **only**:
+
+1. `Validation: failed`
+2. the remaining `arm review validate` failures (each `message` and `suggestion`)
+3. `Assessment: not returned`
+
+Do not include a filesystem path the coordinator could pass to
+`arm review record`. Do not invent a Green / Yellow / Red rating for a
+file that did not validate.
+
+This keeps the coordinator's context free of duplicated JSON it can read
+from disk, and keeps remediation dispatches (see the coordinator's bounded
+review protocol) working from findings, not transcripts.
 
 ---
 
@@ -502,14 +534,16 @@ See `references/rubric.md` for detailed guidance on:
 
 ## Returning Results to the Coordinator
 
-After producing the ConformanceAssessment JSON, write it to a unique path
-under `.armature/review/`, run `arm review validate` until it exits 0
-(step 5b), then return rating + findings + that path. Do
-**not** call `arm review record` — that is the coordinator's
-responsibility. The coordinator records each distinct returned path
-with `--bundle "$BUNDLE_FILE"`, then uses the conservative path for
-loop control, so fingerprint validation is bound to the exact bundle
-it prepared.
+Step 5b writes the ConformanceAssessment JSON once to a unique path
+under `.armature/review/` and runs `arm review validate` with the retry
+cap (at most 3 attempts after the first failure). Do not write that path
+again after a successful validate. Then return the matching step 6 shape:
+rating + findings + path if step 5b exited 0, or the exhausted-retry
+shape if the cap was reached. Do **not** call `arm review record` — that
+is the coordinator's responsibility. The coordinator records each distinct
+returned (validated) path with `--bundle "$BUNDLE_FILE"`, then uses the
+conservative path for loop control, so fingerprint validation is bound to
+the exact bundle it prepared.
 
 **Example Workflow:**
 
@@ -517,20 +551,26 @@ it prepared.
 # 1. Receive ReviewBundle file path (from coordinator)
 # The coordinator passes: $BUNDLE_FILE
 
-# 2. Review and evaluate; write the full assessment to a unique path
+# 2. Review and evaluate; write the full assessment ONCE to a unique path
 ASSESSMENT=".armature/review/TASK-42-e3b0c442-r1.json"
 #    Parallel reviewers of the same bundle use distinct tokens (r1, r2, …).
 #    Confirmation mode: if a findings-scope file was passed, evaluate
 #    only those findings (do not start a new comprehensive review).
+#    Do not write this path again in step 6 after validate succeeds.
 
-# 3. Self-validate; apply suggestions and retry until valid (step 5b)
+# 3. Self-validate; apply suggestions to the same $ASSESSMENT and retry
+#    at most 3 times after the first failure (step 5b).
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 
-# 4. Chat response to the coordinator (not the JSON body) — only after
-#    the command above exits 0:
+# 4. Chat response to the coordinator (not the JSON body):
+#    After exit 0:
 #    Rating: Green
 #    Findings: (none)   # or the confirmation-scope results
 #    Assessment: .armature/review/TASK-42-e3b0c442-r1.json
+#    After exhausted retries:
+#    Validation: failed
+#    Failures: <remaining messages and suggestions>
+#    Assessment: not returned
 
 # The coordinator consolidates parallel findings, then records EACH
 # distinct path, then uses the conservative one for loop control:
@@ -554,9 +594,12 @@ findings list the coordinator passes, not a reread of that file.
 **Validation:**
 ```bash
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
-# Apply each failure's suggestion, rewrite $ASSESSMENT, and re-run until
-# the command exits 0. arm review record remains the coordinator's
-# enforcement gate; this command is read-only.
+# Apply each failure's suggestion, rewrite $ASSESSMENT, and re-run —
+# at most 3 attempts after the first failure. If it still fails, use
+# the exhausted-retry chat shape; do not return a recordable path.
+# Do not write a second copy of a pre-validate draft after this
+# command has already exited 0. arm review record remains the
+# coordinator's enforcement gate; this command is read-only.
 ```
 
 **Idempotence:**
@@ -585,8 +628,11 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 - Fingerprints do not match
 
 **Action:** Apply each reported suggestion to the assessment JSON and re-run
-`arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"`.
-Do not return the path to the coordinator until that command exits 0.
+`arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"`,
+at most 3 attempts after the first failure. If the command exits 0, return
+the success bounded-chat shape. If it is still invalid after the cap, return
+the exhausted-retry shape. Do not return a recordable path until the
+command exits 0.
 
 ### arm review record Failure
 
