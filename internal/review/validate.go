@@ -103,10 +103,138 @@ func suggestCriterionID(id string) string {
 
 // ValidateAssessment runs the same checks Record performs. It does not persist
 // an attestation; arm review validate uses this so record remains the sole
-// enforcement gate that appends ops.
+// enforcement gate that appends ops. Every failure line includes an auto-fix
+// suggestion.
 func ValidateAssessment(input RecordInput) error {
 	_, err := Record(input)
-	return err
+	return AnnotateValidateError(err)
+}
+
+const suggestionMarker = " (suggestion: "
+
+// AnnotateValidateError appends an auto-fix suggestion to each validation
+// failure line that does not already include one.
+func AnnotateValidateError(err error) error {
+	if err == nil {
+		return nil
+	}
+	lines := strings.Split(err.Error(), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		body := trimmed
+		bullet := ""
+		if strings.HasPrefix(trimmed, "- ") {
+			bullet = "- "
+			body = strings.TrimPrefix(trimmed, "- ")
+		}
+		if body == "" || strings.HasSuffix(body, ":") {
+			continue
+		}
+		if strings.Contains(body, suggestionMarker) {
+			continue
+		}
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		lines[i] = indent + bullet + body + suggestionMarker + SuggestValidateFix(body) + ")"
+	}
+	return fmt.Errorf("%s", strings.Join(lines, "\n"))
+}
+
+// SuggestValidateFix returns a reviewer-facing auto-fix for a validation
+// failure message from Record, Valid, or JSON decode.
+func SuggestValidateFix(message string) string {
+	msg := strings.ToLower(message)
+	switch {
+	case strings.Contains(msg, "unsupported schema version"):
+		return fmt.Sprintf("set schema_version to %d", SchemaVersion)
+	case strings.Contains(msg, "unknown field"):
+		return "remove the unknown field or rename it to a documented schema property"
+	case strings.Contains(msg, "parse assessment json"),
+		strings.Contains(msg, "decode conformance assessment"),
+		strings.Contains(msg, "unexpected trailing json"):
+		return fmt.Sprintf("emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d", SchemaVersion)
+	case strings.Contains(msg, "parse bundle json"),
+		strings.Contains(msg, "decode review bundle"):
+		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
+	case strings.Contains(msg, "invalid criterion status"):
+		return `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
+	case strings.Contains(msg, "missing required field"):
+		return "add the required field on the criterion result"
+	case strings.Contains(msg, "missing bundle id"), strings.Contains(msg, "bundle id is empty"):
+		return "copy bundle_id from the prepared review bundle"
+	case strings.Contains(msg, "no results provided"):
+		return "add one results[] entry per contract criterion"
+	case strings.Contains(msg, "missing contract fingerprint"):
+		return "copy fingerprints.contract from the prepared review bundle"
+	case strings.Contains(msg, "missing delivery fingerprint"):
+		return "copy fingerprints.delivery from the prepared review bundle"
+	case strings.Contains(msg, "missing id"):
+		return `set id to "definition_of_done" or "acceptance[N]"`
+	case strings.Contains(msg, "missing rationale"):
+		return "add a rationale explaining the criterion status"
+	case strings.Contains(msg, "missing evidence"):
+		return "set missing_evidence to describe what is absent, or add citations"
+	case strings.Contains(msg, "mutually exclusive"):
+		return "keep either path or activity_entry_id on the citation, not both"
+	case strings.Contains(msg, "delivery_fingerprint") && strings.Contains(msg, "does not match"):
+		return "copy fingerprints.delivery from the prepared review bundle"
+	case strings.Contains(msg, "contract fingerprint") && strings.Contains(msg, "does not match"),
+		strings.Contains(msg, "contract_fingerprint") && strings.Contains(msg, "does not match"):
+		return "copy fingerprints.contract from the prepared review bundle (or re-run arm review prepare)"
+	case strings.Contains(msg, "bundle_id") && strings.Contains(msg, "does not match"):
+		return "set bundle_id to the prepared bundle's bundle_id"
+	case strings.Contains(msg, "bundle was prepared for issue"):
+		return "validate against the bundle's issue or re-run arm review prepare for this issue"
+	case strings.Contains(msg, "duplicate id"):
+		return "keep a single result for this criterion id"
+	case strings.Contains(msg, "unexpected criterion id"):
+		return `rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`
+	case strings.Contains(msg, "missing expected id"):
+		if id := firstQuoted(message); id != "" {
+			return fmt.Sprintf("add a criterion result with id %q", id)
+		}
+		return `add a criterion result with id "definition_of_done" or "acceptance[N]"`
+	case strings.Contains(msg, "no bundle activity section"), strings.Contains(msg, "cites activity log entries"):
+		return "re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations"
+	case strings.Contains(msg, "invalid activity entry id"):
+		return "cite a numeric activity_entry_id from the bundle activity log"
+	case strings.Contains(msg, "unknown activity entry"):
+		return "cite an activity_entry_id present in the activity log"
+	case strings.Contains(msg, "earlier commits"):
+		return "cite an activity entry executed at the delivery head_sha"
+	case strings.Contains(msg, "unknown exit code"):
+		return "do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code"
+	case strings.Contains(msg, "failed exit code"):
+		return "do not use a failed command as satisfied evidence; lower the status or cite a passing entry"
+	case strings.Contains(msg, "upgrade-only"):
+		return "add a diff citation (path) for this implementation criterion"
+	case strings.Contains(msg, "activity log validation"):
+		return "re-run arm review prepare so activity.digest matches the on-disk log"
+	case strings.Contains(msg, "bundle integrity"):
+		return "re-run arm review prepare --output <bundle.json>; do not edit the bundle file"
+	case strings.Contains(msg, "gate evidence"):
+		return "re-run arm review prepare after restoring original gate evidence logs"
+	case strings.Contains(msg, "build diff index"):
+		return "re-run arm review prepare so Delivery.Diff is a well-formed unified diff"
+	case strings.Contains(msg, "acceptance criteria"):
+		return "fix the issue acceptance JSON and re-run arm review prepare"
+	case strings.Contains(msg, "not in diff"):
+		return "remove the citation or cite a path present in the delivery diff"
+	default:
+		return "fix the assessment to satisfy this check, then re-run arm review validate"
+	}
+}
+
+func firstQuoted(s string) string {
+	start := strings.Index(s, `"`)
+	if start < 0 {
+		return ""
+	}
+	rest := s[start+1:]
+	end := strings.Index(rest, `"`)
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
 }
 
 // NewAttestation creates an AssessmentAttestation from a validated ConformanceAssessment and
@@ -180,20 +308,23 @@ func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract
 	submittedIDs := make(map[string]bool)
 	for _, result := range assessment.Results {
 		if submittedIDs[result.ID] {
-			errs = append(errs, fmt.Sprintf("criterion result: duplicate ID %q", result.ID))
+			errs = append(errs, fmt.Sprintf(
+				"criterion result: duplicate ID %q (suggestion: keep a single result for this criterion id)", result.ID))
 		}
 		submittedIDs[result.ID] = true
 
 		// Flag IDs that are not in the expected set.
 		if !expectedIDs[result.ID] {
-			errs = append(errs, fmt.Sprintf("unexpected criterion ID %s: not in contract", result.ID))
+			errs = append(errs, fmt.Sprintf(
+				"unexpected criterion ID %s: not in contract (suggestion: rename to a contract id or remove it)", result.ID))
 		}
 	}
 
 	// Check for missing expected IDs
 	for id := range expectedIDs {
 		if !submittedIDs[id] {
-			errs = append(errs, fmt.Sprintf("criterion result: missing expected ID %q", id))
+			errs = append(errs, fmt.Sprintf(
+				"criterion result: missing expected ID %q (suggestion: add a criterion result with id %q)", id, id))
 		}
 	}
 
@@ -247,13 +378,16 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 				// We only accept raw entry IDs which are numeric strings
 				entryID, err := strconv.Atoi(citation.ActivityEntryID)
 				if err != nil {
-					errs = append(errs, fmt.Sprintf("criterion result %s: invalid activity entry ID %q (must be numeric)", result.ID, citation.ActivityEntryID))
+					errs = append(errs, fmt.Sprintf(
+						"criterion result %s: invalid activity entry ID %q (must be numeric) (suggestion: cite a numeric activity_entry_id from the bundle activity log)",
+						result.ID, citation.ActivityEntryID))
 					continue
 				}
 
 				entry, ok := entries[entryID]
 				if !ok {
-					errs = append(errs, fmt.Sprintf("criterion result %s: unknown activity entry ID %d (not present in the activity log)",
+					errs = append(errs, fmt.Sprintf(
+						"criterion result %s: unknown activity entry ID %d (not present in the activity log) (suggestion: cite an activity_entry_id present in the activity log)",
 						result.ID, entryID))
 					continue
 				}
@@ -269,7 +403,8 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 				if supportsPositiveStatus && deliveryHeadSHA != "" && entry.HeadSHA != deliveryHeadSHA {
 					errs = append(errs, fmt.Sprintf(
 						"criterion result %s: activity entry %d was executed at head_sha=%q but delivery head_sha=%q; "+
-							"entries from earlier commits cannot be used as evidence for the current delivery",
+							"entries from earlier commits cannot be used as evidence for the current delivery "+
+							"(suggestion: cite an activity entry executed at the delivery head_sha)",
 						result.ID, entryID, entry.HeadSHA, deliveryHeadSHA))
 					continue
 				}
@@ -279,7 +414,8 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 				// must remain distinguishable outcomes for verified behavioral evidence.
 				if !entry.ExitCodeKnown && result.Status == Satisfied {
 					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: activity entry %d has an unknown exit code and cannot support satisfied status",
+						"criterion result %s: activity entry %d has an unknown exit code and cannot support satisfied status "+
+							"(suggestion: lower the status or cite an entry with a known zero exit code)",
 						result.ID, entryID))
 				}
 
@@ -287,7 +423,8 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 				// execution and cannot be used as evidence that a criterion passed.
 				if entry.ExitCodeKnown && entry.ExitCode != 0 && result.Status == Satisfied {
 					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: activity entry %d has a failed exit code (%d) and cannot support satisfied status",
+						"criterion result %s: activity entry %d has a failed exit code (%d) and cannot support satisfied status "+
+							"(suggestion: lower the status or cite a passing activity entry)",
 						result.ID, entryID, entry.ExitCode))
 				}
 			}
@@ -328,7 +465,8 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 		// Satisfied or PartiallySatisfied status, reject it.
 		if isImplementationCriterion && (result.Status == Satisfied || result.Status == PartiallySatisfied) {
 			msg := fmt.Sprintf(
-				"criterion result %s: activity citations alone cannot support %s on implementation criterion (upgrade-only rule)",
+				"criterion result %s: activity citations alone cannot support %s on implementation criterion (upgrade-only rule) "+
+					"(suggestion: add a diff citation (path) for this implementation criterion)",
 				result.ID, result.Status,
 			)
 			errs = append(errs, msg)

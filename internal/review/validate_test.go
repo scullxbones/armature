@@ -1,6 +1,7 @@
 package review_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -405,6 +406,107 @@ func TestValidateResultNoDiff_InvalidResult(t *testing.T) {
 
 	errs := review.ValidateResultNoDiff(assessment)
 	assert.NotEmpty(t, errs)
+}
+
+func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unsupported schema version", func(t *testing.T) {
+		t.Parallel()
+		err := review.ValidateAssessment(review.RecordInput{
+			IssueID: "task-01",
+			Assessment: &review.ConformanceAssessment{
+				SchemaVersion:       99,
+				BundleID:            "bundle-123",
+				ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				Results: []review.CriterionResult{
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+				},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "schema version")
+		assert.Contains(t, err.Error(), "(suggestion:")
+		assert.Contains(t, err.Error(), "schema_version")
+	})
+
+	t.Run("fingerprint mismatch", func(t *testing.T) {
+		t.Parallel()
+		bundle := &review.ReviewBundle{
+			SchemaVersion: review.SchemaVersion,
+			Issue:         review.IssueInfo{ID: "task-01", Type: "task", Title: "Test"},
+			Contract:      review.Contract{DefinitionOfDone: "Done"},
+			Delivery:      review.Delivery{BaseSHA: "base", HeadSHA: "head", Diff: "--- a/impl.go\n+++ b/impl.go\n@@ -1,0 +1,1 @@\n+package main"},
+			Fingerprints: review.Fingerprints{
+				Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			},
+		}
+		bundle.BundleID = review.ComputeBundleID(*bundle)
+		err := review.ValidateAssessment(review.RecordInput{
+			IssueID: "task-01",
+			Bundle:  bundle,
+			Assessment: &review.ConformanceAssessment{
+				SchemaVersion:       review.SchemaVersion,
+				BundleID:            bundle.BundleID,
+				ContractFingerprint: bundle.Fingerprints.Contract,
+				DeliveryFingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Results: []review.CriterionResult{
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+				},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "delivery_fingerprint")
+		assert.Contains(t, err.Error(), "(suggestion:")
+	})
+
+	t.Run("coverage missing criterion", func(t *testing.T) {
+		t.Parallel()
+		acceptance := []string{"Feature works correctly"}
+		acceptanceJSON, err := json.Marshal(acceptance)
+		require.NoError(t, err)
+		contract := review.Contract{DefinitionOfDone: "Implementation complete", Acceptance: acceptance}
+		err = review.ValidateAssessment(review.RecordInput{
+			IssueID: "task-01",
+			Issue: &review.IssueData{
+				DefinitionOfDone: contract.DefinitionOfDone,
+				Acceptance:       string(acceptanceJSON),
+			},
+			Assessment: &review.ConformanceAssessment{
+				SchemaVersion:       review.SchemaVersion,
+				BundleID:            "bundle-123",
+				ContractFingerprint: review.FingerprintContract(contract),
+				DeliveryFingerprint: "sha256:bbbb",
+				Results: []review.CriterionResult{
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "Done"},
+				},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "acceptance[0]")
+		assert.Contains(t, err.Error(), "(suggestion:")
+	})
+
+	t.Run("activity citations without activity section", func(t *testing.T) {
+		t.Parallel()
+		err := review.ValidateAssessment(review.RecordInput{
+			IssueID: "task-01",
+			Assessment: &review.ConformanceAssessment{
+				SchemaVersion:       review.SchemaVersion,
+				BundleID:            "bundle-no-activity",
+				ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				Results: []review.CriterionResult{
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{ActivityEntryID: "0"}}},
+				},
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "activity")
+		assert.Contains(t, err.Error(), "(suggestion:")
+	})
 }
 
 func TestValidateResultNoDiff_InvalidCriterionIDFormat_REQ_LNGHZN_S8_T1(t *testing.T) {
