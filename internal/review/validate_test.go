@@ -108,6 +108,43 @@ func TestValidateResult_InvalidCitation(t *testing.T) {
 	assert.True(t, containsError(errs, "file1.go") || containsError(errs, "999"), "Expected file/line reference in error")
 }
 
+func TestValidateResult_SuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "definition_of_done",
+				Status:    review.Satisfied,
+				Rationale: "all requirements met",
+				Citations: []review.Citation{
+					{Path: "file1.go", Line: 104},
+				},
+			},
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
+
+	diff := `--- a/file1.go
++++ b/file1.go
+@@ -1,3 +1,4 @@
++new line
+ line 1
+ line 2
+ line 3
+`
+
+	idx, err := review.BuildDiffIndex(diff)
+	require.NoError(t, err)
+
+	errs := review.ValidateResult(assessment, idx)
+	require.NotEmpty(t, errs)
+	assert.True(t, containsError(errs, "file1.go:104"), "expected out-of-bounds line in the error")
+	assert.True(t, containsError(errs, "path-level"), "expected auto-fix suggestion to downgrade to path-level")
+}
+
 func TestValidateResult_InvalidCriterionResult(t *testing.T) {
 	t.Parallel()
 	assessment := &review.ConformanceAssessment{
@@ -368,6 +405,21 @@ func TestValidateResultNoDiff_InvalidResult(t *testing.T) {
 
 	errs := review.ValidateResultNoDiff(assessment)
 	assert.NotEmpty(t, errs)
+}
+
+func TestValidateResultNoDiff_InvalidCriterionIDFormat_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+	assessment := &review.ConformanceAssessment{
+		BundleID: "sha256:bundle123",
+		Results: []review.CriterionResult{
+			{ID: "acceptance_0", Status: review.Satisfied, Rationale: "ok"},
+		},
+	}
+
+	errs := review.ValidateResultNoDiff(assessment)
+	require.NotEmpty(t, errs)
+	assert.True(t, containsError(errs, "acceptance_0"), "expected invalid id in the error")
+	assert.True(t, containsError(errs, "acceptance[0]"), "expected suggestion of the canonical criterion-ID format")
 }
 
 // Helper function to check if an error message contains a substring
