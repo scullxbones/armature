@@ -105,6 +105,26 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 		assert.Equal(t, "D9", f.Check)
 		assert.Equal(t, doctor.SeverityOK, f.Severity)
 	})
+
+	t.Run("null_document_is_error", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `null`)
+		f := doctor.CheckD9ConfigHealth(path)
+		assert.Equal(t, "D9", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		assert.Contains(t, f.Items[0], "object")
+	})
+
+	t.Run("trailing_extra_json_is_error", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `{"project_type":"go"}{"mystery_knob":1}`)
+		f := doctor.CheckD9ConfigHealth(path)
+		assert.Equal(t, "D9", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		assert.Contains(t, f.Items[0], "trailing")
+	})
 }
 
 func writeConfig(t *testing.T, body string) string {
